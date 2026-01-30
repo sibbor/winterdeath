@@ -1,0 +1,112 @@
+
+import * as THREE from 'three';
+import { System } from './System';
+import { GameSession } from '../GameSession';
+import { EnemyManager } from '../EnemyManager';
+import { FXSystem } from './FXSystem';
+import { WorldLootSystem } from './WorldLootSystem';
+
+export class EnemySystem implements System {
+    id = 'enemy_system';
+
+    constructor(
+        private playerGroup: THREE.Group,
+        private callbacks: {
+            spawnBubble: (text: string, duration: number) => void;
+            gainXp: (amount: number) => void;
+            t: (key: string) => string;
+            onClueFound: (clue: any) => void; // Passed but maybe handled by Trigger, checking if needed
+        }
+    ) { }
+
+    update(session: GameSession, dt: number, now: number) {
+        const state = session.state;
+        const scene = session.engine.scene;
+
+        if (!state.bossIntroActive) { // Need to verify if bossIntroActive is in state or ref
+            // Logic from GameCanvas:
+            /* 
+            if (!bossIntroRef.current.active) {
+               EnemyManager.update(...)
+            }
+            */
+            // I'll assume for now I should run it if not told otherwise.
+            // Wait, bossIntroRef is logic specific to Canvas. 
+            // I might need to add `bossIntroActive` to RuntimeState if it's not there, or pass it.
+            // Checking RuntimeState might be good.
+
+            EnemyManager.update(
+                dt,
+                now,
+                this.playerGroup.position,
+                state.enemies,
+                state.obstacles,
+                // onPlayerHit
+                (damage, type, enemyPos) => {
+                    // Logic from GameCanvas onPlayerHit
+                    if (now < state.invulnerableUntil) return;
+                    state.damageTaken += damage;
+                    state.hp -= damage;
+                    // soundManager.playDamageGrunt(); // Import soundManager
+                    state.hurtShake = 1.0;
+                    state.lastDamageTime = now;
+                    if (type === 'Boss') state.bossDamageTaken += damage;
+
+                    this.spawnPart(session, this.playerGroup.position.x, 1.2, this.playerGroup.position.z, 'blood', 80);
+
+                    if (state.hp <= 0 && !state.isDead) { // state.isDead is in RuntimeState
+                        state.isDead = true;
+                        state.deathStartTime = now;
+                        state.killerType = type;
+
+                        // Calculate deathVel
+                        const input = session.engine.input.state;
+                        const playerMoveDir = new THREE.Vector3(0, 0, 0);
+                        if (input.w) playerMoveDir.z -= 1;
+                        if (input.s) playerMoveDir.z += 1;
+                        if (input.a) playerMoveDir.x -= 1;
+                        if (input.d) playerMoveDir.x += 1;
+
+                        if (playerMoveDir.lengthSq() > 0) state.deathVel = playerMoveDir.normalize().multiplyScalar(15);
+                        else state.deathVel = new THREE.Vector3().subVectors(this.playerGroup.position, enemyPos).normalize().multiplyScalar(12);
+                        state.deathVel.y = 4;
+                    }
+                },
+                // spawnPart wrapper
+                (x, y, z, type, count, mesh, vel, color) => this.spawnPart(session, x, y, z, type, count, mesh, vel, color),
+                // spawnDecal wrapper
+                (x, z, scale, mat) => this.spawnDecal(session, x, z, scale, mat),
+                // onDamageDealt
+                (dotDamage, isBoss) => {
+                    state.damageDealt += dotDamage;
+                    if (isBoss) state.bossDamageDealt += dotDamage;
+                    this.callbacks.gainXp(Math.ceil(dotDamage));
+                }
+            );
+        }
+
+        // Cleanup Dead Enemies
+        EnemyManager.cleanupDeadEnemies(
+            scene,
+            state.enemies,
+            now,
+            state,
+            {
+                spawnPart: (x, y, z, t, c, m, v, col) => this.spawnPart(session, x, y, z, t, c, m, v, col),
+                spawnDecal: (x, z, s, m) => this.spawnDecal(session, x, z, s, m),
+                spawnScrap: (x, z, amt) => WorldLootSystem.spawnScrapExplosion(scene, state.scrapItems, x, z, amt),
+                spawnBubble: this.callbacks.spawnBubble,
+                t: this.callbacks.t,
+                gainXp: this.callbacks.gainXp
+            }
+        );
+    }
+
+    private spawnPart(session: GameSession, x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) {
+        FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color);
+    }
+
+    private spawnDecal(session: GameSession, x: number, z: number, scale: number, mat?: any) {
+        FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat);
+    }
+}

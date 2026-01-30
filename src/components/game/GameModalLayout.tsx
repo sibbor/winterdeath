@@ -1,0 +1,57 @@
+
+import React from 'react';
+
+interface GameModalLayoutProps {
+    title: string | React.ReactNode;
+    children: React.ReactNode;
+    footer?: React.ReactNode;
+    titleColorClass?: string; // e.g. text-red-600
+    maxWidthClass?: string; // e.g. max-w-4xl
+}
+
+const GameModalLayout: React.FC<GameModalLayoutProps> = ({
+    title,
+    children,
+    footer,
+    titleColorClass = "text-white",
+    maxWidthClass = "max-w-xl"
+}) => {
+    return (
+        <div className="absolute inset-0 bg-black/80 z-[60] flex items-center justify-center backdrop-blur-sm p-4">
+            <div className={`w-full ${maxWidthClass} text-center bg-black border-4 border-gray-800 shadow-[0_0_50px_rgba(220,38,38,0.2)] relative overflow-hidden`}>
+
+                {/* Background Decoration */}
+                <div className="absolute top-0 right-0 opacity-10 pointer-events-none">
+                    <svg viewBox="0 0 100 100" width="300" height="300" fill="red"><path d="M10 10 L90 10 L50 90 Z" /></svg>
+                </div>
+
+                {/* Header */}
+                <div className="p-8 pb-0 relative z-10">
+                    <div className={`mb-8 border-b-4 pb-4 ${titleColorClass.includes('blue') ? 'border-blue-600' : 'border-red-900'}`}>
+                        {typeof title === 'string' ? (
+                            <h2 className={`text-5xl md:text-6xl font-black uppercase tracking-tighter inline-block skew-x-[-10deg] ${titleColorClass}`}>
+                                {title}
+                            </h2>
+                        ) : (
+                            title
+                        )}
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="px-8 md:px-16 pb-12 relative z-10">
+                    {children}
+                </div>
+
+                {/* Footer */}
+                {footer && (
+                    <div className="bg-gray-900/50 p-6 border-t-2 border-gray-800 flex justify-center gap-4">
+                        {footer}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default GameModalLayout;

@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OS generated files
+Thumbs.db
+
+# Environment variables
+.env
+
+# Build and test artifacts
+test-output.css
+coverage
