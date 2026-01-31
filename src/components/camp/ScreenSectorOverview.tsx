@@ -1,97 +1,199 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../utils/i18n';
-import { MAP_THEMES } from '../../content/constants';
+import { MAP_THEMES, BOSSES, FAMILY_MEMBERS } from '../../content/constants';
+import { en } from '../../locales/en';
 import CampModalLayout from './CampModalLayout';
+import { PlayerStats } from '../../types';
 
 interface ScreenSectorOverviewProps {
     currentMap: number;
     familyMembersFound: number[];
     bossesDefeated: number[];
     debugMode: boolean;
+    stats: PlayerStats;
     onSelectMap: (mapIndex: number) => void;
+    onStartMission: () => void;
     onClose: () => void;
 }
 
-const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, familyMembersFound, bossesDefeated, debugMode, onSelectMap, onClose }) => {
+const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, familyMembersFound, bossesDefeated, debugMode, stats, onSelectMap, onStartMission, onClose }) => {
     const [selectedMapIndex, setSelectedMapIndex] = useState(currentMap);
+    const [briefingText, setBriefingText] = useState("");
 
-    const handleConfirm = () => {
-        onSelectMap(selectedMapIndex);
+    const mapTheme = MAP_THEMES[selectedMapIndex];
+    const boss = BOSSES[selectedMapIndex] || BOSSES[0];
+    const isRescued = familyMembersFound.includes(selectedMapIndex);
+    const isCleared = bossesDefeated.includes(selectedMapIndex);
+    const isLocked = !debugMode && (selectedMapIndex > 0 && !bossesDefeated.includes(selectedMapIndex - 1));
+
+    // -- Briefing Text Logic --
+    const fullBriefingText = useMemo(() => {
+        const mapName = t(mapTheme.name);
+        const bossName = t(boss.name);
+
+        if (isRescued) { // Using isRescued similar to "isExtracted" in old briefing
+            return t('story.extracted_briefing', { map: mapName, boss: bossName });
+        }
+
+        switch (selectedMapIndex) {
+            case 0: return t('story.prologue_text');
+            case 1: return t('story.intel_bunker_text');
+            case 2: return t('story.intel_mast_text');
+            case 3: return t('story.intel_scrap_text');
+            case 4: return t('story.epilogue_text');
+            default: return t('story.generic_briefing', { map: mapName, boss: bossName });
+        }
+    }, [isRescued, selectedMapIndex, mapTheme, boss]);
+
+    useEffect(() => {
+        // Reset and type-write text when selection changes
+        setBriefingText("");
+        let i = 0;
+        const speed = 5; // Faster typing
+        const interval = setInterval(() => {
+            setBriefingText(fullBriefingText.slice(0, i));
+            i++;
+            if (i > fullBriefingText.length) clearInterval(interval);
+        }, speed);
+        return () => clearInterval(interval);
+    }, [fullBriefingText]);
+
+    // -- Stats Calculation --
+    const { collectibles, clues, pois } = useMemo(() => {
+        // This is a rough estimation based on naming conventions in en.ts
+        // In a real scenario, we'd have a structured list of all IDs per sector.
+        // We'll scan en.clues keys.
+        const sectorPrefix = `s${selectedMapIndex + 1}_`;
+
+        const allKeys = Object.keys(en.clues);
+        const sectorKeys = allKeys.filter(k => k.startsWith(sectorPrefix));
+
+        const collectibleKeys = sectorKeys.filter(k => k.includes('collectible') && !k.endsWith('_description') && !k.endsWith('_icon'));
+        const clueKeys = sectorKeys.filter(k => !k.includes('collectible') && !k.includes('poi')); // "Tracks", "Blood", etc are narrative clues
+        const poiKeys = sectorKeys.filter(k => k.includes('poi'));
+
+        // Count found
+        const foundCollectibles = (stats.cluesFound || []).filter(id => collectibleKeys.includes(id)).length;
+        const foundClues = (stats.cluesFound || []).filter(id => clueKeys.includes(id)).length;
+        const foundPois = (stats.visitedPOIs || []).filter(id => poiKeys.includes(id)).length;
+
+        return {
+            collectibles: { found: foundCollectibles, total: collectibleKeys.length || 0 }, // Fallback if 0 keys (e.g. S3/4 might be empty in en.ts)
+            clues: { found: foundClues, total: clueKeys.length || 0 },
+            pois: { found: foundPois, total: poiKeys.length || 0 }
+        };
+    }, [selectedMapIndex, stats]);
+
+
+    const handleSelect = (index: number) => {
+        if ((!debugMode && (index > 0 && !bossesDefeated.includes(index - 1)))) return; // Locked
+        setSelectedMapIndex(index);
+        onSelectMap(index);
     };
+
+    const handleDeploy = () => {
+        onSelectMap(selectedMapIndex);
+        onStartMission();
+    };
+
+
+    // -- Status Status --
+    let statusText = t('ui.status') + ": " + t('ui.not_completed');
+    let statusColorClass = "text-red-500 border-red-600 bg-red-900/20";
+    if (isCleared && isRescued) {
+        statusText = t('ui.status') + ": " + t('ui.sector_cleared');
+        statusColorClass = "text-green-500 border-green-600 bg-green-900/20";
+    } else if (isCleared) {
+        statusText = t('ui.status') + ": " + t('ui.threat_neutralized');
+        statusColorClass = "text-yellow-500 border-yellow-600 bg-yellow-900/20";
+    } else if (isRescued) {
+        statusText = t('ui.status') + ": " + t('ui.target_extracted');
+        statusColorClass = "text-blue-500 border-blue-600 bg-blue-900/20";
+    }
 
     return (
         <CampModalLayout
             title={t('stations.missions')}
-            borderColorClass="border-green-600"
+            borderColorClass="border-red-600"
             onClose={onClose}
-            onConfirm={handleConfirm}
-            confirmLabel={t('ui.play_sector')}
+            onConfirm={handleDeploy}
+            confirmLabel={t('ui.deploy_sector')}
+            canConfirm={!(!debugMode && (selectedMapIndex > 0 && !bossesDefeated.includes(selectedMapIndex - 1)))} // Lock logic
         >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {MAP_THEMES.map((map, i) => {
-                    const isSelected = selectedMapIndex === i;
-                    const isRescued = familyMembersFound.includes(i);
-                    const isCleared = bossesDefeated.includes(i);
-                    const isLocked = !debugMode && (i > 0 && !bossesDefeated.includes(i - 1));
+            <div className="flex h-full gap-8">
+                {/* LEFT: Sector List */}
+                <div className="w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar">
+                    {MAP_THEMES.map((map, i) => {
+                        const isSel = selectedMapIndex === i;
+                        // re-eval locked for list
+                        const locked = !debugMode && (i > 0 && !bossesDefeated.includes(i - 1));
 
-                    let statusText = t('ui.status') + ": " + t('ui.not_completed');
-                    let statusColorClass = "text-red-500 border-red-600 bg-red-900/20";
+                        return (
+                            <button
+                                key={i}
+                                onClick={() => handleSelect(i)}
+                                disabled={locked}
+                                className={`text-left p-6 border-l-4 transition-all group relative overflow-hidden shrink-0
+                                    ${locked ? 'opacity-50 cursor-not-allowed bg-black border-gray-800' : 'cursor-pointer hover:bg-red-900/10'}
+                                    ${isSel ? 'bg-red-900/20 border-red-500' : 'border-gray-800'}
+                                `}
+                            >
+                                <h3 className={`text-xl font-black uppercase tracking-wider ${isSel ? 'text-red-400' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
+                                    {locked ? `${t('ui.sector')} ${i + 1} - ${t('ui.locked')}` : t(map.name)}
+                                </h3>
+                                {/* No description as requested */}
+                                {isSel && <div className="absolute right-0 top-0 bottom-0 w-2 bg-red-500"></div>}
+                            </button>
+                        );
+                    })}
+                </div>
 
-                    if (isCleared && isRescued) {
-                        statusText = t('ui.status') + ": " + t('ui.sector_cleared');
-                        statusColorClass = "text-green-500 border-green-600 bg-green-900/20";
-                    } else if (isCleared) {
-                        statusText = t('ui.status') + ": " + t('ui.threat_neutralized');
-                        statusColorClass = "text-yellow-500 border-yellow-600 bg-yellow-900/20";
-                    } else if (isRescued) {
-                        statusText = t('ui.status') + ": " + t('ui.target_extracted');
-                        statusColorClass = "text-blue-500 border-blue-600 bg-blue-900/20";
-                    }
-
-                    const familyStatusText = isRescued ? t('ui.found') : t('ui.missing');
-                    const familyBoxColor = !isRescued
-                        ? "text-red-500 border-red-600 bg-red-900/20"
-                        : "text-green-500 border-green-600 bg-green-900/20";
-
-                    return (
-                        <div key={i} onClick={() => !isLocked && setSelectedMapIndex(i)}
-                            className={`relative p-8 border-4 transition-all skew-x-[-5deg] group overflow-hidden ${isLocked ? 'border-gray-900 bg-gray-950 opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-gray-600'} ${isSelected && !isLocked ? 'border-green-500 bg-green-900/20' : (!isLocked ? 'border-gray-800 bg-gray-900/40' : '')}`}>
-
-                            {isSelected && !isLocked && <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-green-500 to-transparent opacity-50"></div>}
-
-                            {isLocked && (
-                                <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/60">
-                                    <div className="skew-x-[5deg] border-2 border-red-900 bg-black/80 px-6 py-3 text-red-700 font-black uppercase tracking-widest text-xl flex items-center gap-3">
-                                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" /></svg>
-                                        {t('ui.locked')}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="skew-x-[5deg] relative z-10">
-                                <div className="flex justify-between items-start mb-4">
-                                    <h3 className={`text-3xl font-black uppercase ${isLocked ? 'text-gray-700' : (isSelected ? 'text-green-400' : 'text-white')}`}>{isLocked ? `${t('ui.sector')} ${i + 1}` : t(map.name)}</h3>
-                                </div>
-
-                                <p className={`font-mono text-sm mb-6 leading-relaxed border-l-2 pl-4 ${isLocked ? 'text-gray-800 border-gray-800' : 'text-slate-400 border-gray-700'}`}>
-                                    {isLocked ? t('ui.complete_prev') : t(map.description)}
-                                </p>
-
-                                {!isLocked && (
-                                    <div className="flex flex-row flex-wrap gap-2">
-                                        <div className={`px-2 py-1 text-[10px] font-bold uppercase border tracking-wider ${statusColorClass}`}>
-                                            {statusText}
-                                        </div>
-                                        <div className={`px-2 py-1 text-[10px] font-bold uppercase border tracking-wider ${familyBoxColor}`}>
-                                            {t('ui.unknown_family')} - {familyStatusText}
-                                        </div>
-                                    </div>
-                                )}
+                {/* RIGHT: Detail View */}
+                <div className="flex-1 flex flex-col bg-black/40 border-2 border-red-900/50 p-8 relative">
+                    {/* Header */}
+                    <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
+                        <div>
+                            <h2 className="text-4xl font-black uppercase tracking-tighter text-gray-400 mb-2">
+                                {t(mapTheme.name)}
+                            </h2>
+                            {/* Stats Row */}
+                            <div className="flex gap-4 text-sm font-bold font-mono text-gray-400 mt-1">
+                                <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total || '?'}</span></span>
+                                <span className="text-gray-600">|</span>
+                                <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total || '?'}</span></span>
+                                <span className="text-gray-600">|</span>
+                                <span>{t('ui.log_poi')}: <span className="text-white">{pois.found}/{pois.total || '?'}</span></span>
                             </div>
                         </div>
-                    );
-                })}
+
+                        <div className="flex gap-4 items-start">
+                            {/* Mission Status Check */}
+                            <div className={`px-4 py-2 text-sm font-black uppercase border tracking-wider ${statusColorClass} text-center min-w-[180px] whitespace-nowrap`}>
+                                {statusText}
+                            </div>
+
+                            {/* Family Status Check */}
+                            {selectedMapIndex < 4 && (
+                                <div className={`px-4 py-2 text-sm font-black uppercase border tracking-wider text-center min-w-[180px] whitespace-nowrap
+                                    ${isRescued ? 'text-green-500 border-green-600 bg-green-900/20' : 'text-red-500 border-red-600 bg-red-900/20'}
+                                `}>
+                                    {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedMapIndex]?.name || 'Unknown') : '???'}
+                                    <span className="text-xs ml-2 opacity-70">
+                                        ({isRescued ? t('ui.rescued') : t('ui.missing')})
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Briefing Text */}
+                    <div className="flex-1 bg-gray-950/50 p-6 border border-gray-600 overflow-y-auto mb-6 shadow-inner font-mono text-base leading-relaxed text-gray-300">
+                        {briefingText}
+                        <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
+                    </div>
+
+                    {/* Footer Actions Removed (Moved to Header) */}
+                </div>
             </div>
         </CampModalLayout>
     );

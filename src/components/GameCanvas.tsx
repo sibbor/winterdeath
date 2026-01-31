@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { Engine } from '../core/engine/Engine';
 import { GameSession } from '../core/GameSession';
@@ -42,7 +42,13 @@ const seededRandom = (seed: number) => {
         return (s = s * 16807 % 2147483647) / 2147483647;
     };
 };
-const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
+// Define handle for parent access
+export interface GameCanvasHandle {
+    requestPointerLock: () => void;
+}
+
+const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, ref) => {
+    const propsRef = useRef(props);
     // Engine Ref instead of individual Three refs
     const engineRef = useRef<Engine | null>(null);
     const gameSessionRef = useRef<GameSession | null>(null);
@@ -56,7 +62,6 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         stateRef.current = GameSession.createInitialState(props);
     }
 
-    const propsRef = useRef(props);
     useEffect(() => { propsRef.current = props; }, [props]);
 
     const [deathPhase, setDeathPhase] = useState<DeathPhase>('NONE');
@@ -181,6 +186,8 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, [isInputEnabled]);
 
+    // Pointer Lock removed from useEffect to avoid NotAllowedError. 
+    // It is now handled via ref.requestPointerLock() called from user gestures in App.tsx.
 
 
     const textures = useMemo(() => createProceduralTextures(), []);
@@ -364,8 +371,18 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         }
     };
 
+    // Expose methods to parent
+    useImperativeHandle(ref, () => ({
+        requestPointerLock: () => {
+            if (containerRef.current) {
+                engineRef.current?.input.requestPointerLock(containerRef.current);
+            }
+        }
+    }));
+
     useEffect(() => {
         if (!containerRef.current) return;
+
 
         // --- ENGINE INIT ---
         // Use shared Engine instance
@@ -605,7 +622,8 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
                     killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: isExtraction ? 500 : 0,
                     familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
                     bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
-                    chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened, distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, isExtraction
+                    chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened, distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, isExtraction,
+                    seenEnemies: state.seenEnemies, seenBosses: state.seenBosses, visitedPOIs: state.visitedPOIs
                 });
             }
         };
@@ -651,7 +669,13 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
 
         const spawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
             const newEnemy = EnemyManager.spawn(scene, playerGroup.position, forcedType, forcedPos, stateRef.current.bossSpawned, stateRef.current.enemies.length);
-            if (newEnemy) stateRef.current.enemies.push(newEnemy);
+            if (newEnemy) {
+                stateRef.current.enemies.push(newEnemy);
+                const type = newEnemy.type; // e.g. 'WALKER'
+                if (!stateRef.current.seenEnemies.includes(type)) {
+                    stateRef.current.seenEnemies.push(type);
+                }
+            }
         };
 
         if (propsRef.current.currentMap === 0) {
@@ -668,6 +692,9 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
             const newBoss = EnemyManager.spawnBoss(scene, { x: bSpawn.x, z: bSpawn.z }, bossData);
             stateRef.current.enemies.push(newBoss);
             stateRef.current.bossSpawned = true;
+            if (!stateRef.current.seenBosses.includes(bossData.id)) {
+                stateRef.current.seenBosses.push(bossData.id);
+            }
 
             // BOSS INTRO SEQUENCE
             setBossIntroActive(true);
@@ -893,7 +920,10 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
 
             TriggerHandler.checkTriggers(playerGroup.position, state, now, {
                 spawnBubble,
-                removeVisual: (id: string) => { const visual = scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual'); if (visual) scene.remove(visual); },
+                removeVisual: (id: string) => {
+                    const visual = scene.getObjectByName(`clue_visual_${id}`) || scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual');
+                    if (visual) scene.remove(visual);
+                },
                 onClueFound: (clue) => {
                     propsRef.current.onClueFound(clue);
                     if (clue.type === 'COLLECTIBLE') {
@@ -977,11 +1007,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
                 className="absolute inset-0 cursor-none"
                 onClick={() => {
                     if (props.isRunning && containerRef.current) {
-                        try {
-                            containerRef.current.requestPointerLock();
-                        } catch (e) {
-                            console.warn("Pointer lock failed", e);
-                        }
+                        engineRef.current?.input.requestPointerLock(containerRef.current);
                     }
                 }}
             />
@@ -1057,5 +1083,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         </div >
     );
 });
+
+
 
 export default GameCanvas;

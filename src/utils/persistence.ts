@@ -64,6 +64,9 @@ export const loadGameState = (): GameState => {
             if (mergedState.stats.cluesFound === undefined) mergedState.stats.cluesFound = [];
             if (mergedState.stats.totalBulletsHit === undefined) mergedState.stats.totalBulletsHit = 0;
             if (mergedState.stats.totalThrowablesThrown === undefined) mergedState.stats.totalThrowablesThrown = 0;
+            if (mergedState.stats.seenEnemies === undefined) mergedState.stats.seenEnemies = [];
+            if (mergedState.stats.seenBosses === undefined) mergedState.stats.seenBosses = [];
+            if (mergedState.stats.visitedPOIs === undefined) mergedState.stats.visitedPOIs = [];
             if (mergedState.familySPAwarded === undefined) mergedState.familySPAwarded = [];
 
             if (mergedState.midRunCheckpoint) {

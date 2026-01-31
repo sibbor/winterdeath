@@ -11,6 +11,7 @@ export interface ScrapItem {
     grounded: boolean;
     magnetized: boolean;
     life: number; // Despawn timer
+    spawnTime: number; // For magnetism delay
 }
 
 export class WorldLootSystem implements System {
@@ -77,8 +78,10 @@ export class WorldLootSystem implements System {
 
             // 2. Magnetism (Attract to player)
             const distSq = item.mesh.position.distanceToSquared(playerPos);
+            const magnetismDelay = 800; // ms to wait before magnetizing
+            const canMagnetize = (now - item.spawnTime) > magnetismDelay;
 
-            if (distSq < magnetRange * magnetRange) {
+            if (canMagnetize && distSq < magnetRange * magnetRange) {
                 item.magnetized = true;
                 item.grounded = false; // Lift off ground
             }
@@ -128,7 +131,8 @@ export class WorldLootSystem implements System {
                 velocity: new THREE.Vector3(Math.cos(angle) * force * 10, 5 + Math.random() * 5, Math.sin(angle) * force * 10),
                 grounded: false,
                 magnetized: false,
-                life: 60.0
+                life: 60.0,
+                spawnTime: performance.now()
             });
         }
     }

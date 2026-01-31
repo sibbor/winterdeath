@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
@@ -12,6 +11,365 @@ interface Textures {
     tacticalMap: THREE.Texture;
 }
 
+// Separate function to avoid circular dependency issues in object literal
+const setupTrees = (scene: THREE.Scene) => {
+    // Seeded random for deterministic layout
+    let seed = 12345;
+    const srandom = () => {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+    };
+
+    const treeInstances: { x: number, z: number, scale: number, darken: number }[] = [];
+
+    // 1. HIGH DARK SILHOUETTES (Denser & Wider)
+    for (let i = 0; i < 10; i++) {
+        const x = (srandom() - 0.5) * 100;
+        const z = -45 - srandom() * 60;
+
+        // Moon Window for silhouettes too
+        let scale = 1.15 + srandom() * 2;
+
+        treeInstances.push({ x, z, scale, darken: 0.12 });
+    }
+
+    // 2. THE FOREST WALL (Deterministic V-Shape - Denser)
+    for (let i = 0; i < 30; i++) {
+        const z = -15 - srandom() * 20;
+        const zFactor = (z + 15) / -45;
+        const maxX = 35 - (zFactor * 20);
+        const x = (srandom() - 0.5) * 2 * maxX;
+        if (Math.abs(x) < 2) continue;
+
+        // Moon Window: Reduce scale for trees in the moon's quadrant (-30 < X < -5)
+        let scale = 1.1 + srandom() * 0.9;
+        if (x < -15 && x > -20) scale *= 0.6;
+
+        treeInstances.push({ x, z, scale, darken: 1.0 });
+    }
+
+    // 3. CAMPFIRE FRAMING & SIDE ANCHORS
+    treeInstances.push({ x: -15, z: 2, scale: 1.8, darken: 1.0 });
+    treeInstances.push({ x: 15, z: 2, scale: 1.8, darken: 1.0 });
+    treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
+
+    // --- MATHEMATICAL OPTIMIZATION ---
+    // Optimization: Use InstancedMesh instead of cloning separate trees.
+    const prototypes = ObjectGenerator.getPrototypes();
+    const firstVariant = prototypes[0].children;
+    const trunkMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'CylinderGeometry') as THREE.Mesh;
+    const foliageMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'BufferGeometry') as THREE.Mesh;
+
+    if (trunkMesh && foliageMesh) {
+        const count = treeInstances.length;
+        const instTrunk = new THREE.InstancedMesh(trunkMesh.geometry, trunkMesh.material, count);
+        const instFoliage = new THREE.InstancedMesh(foliageMesh.geometry, foliageMesh.material, count);
+
+        instTrunk.castShadow = true; instTrunk.receiveShadow = true;
+        instFoliage.castShadow = true; instFoliage.receiveShadow = true;
+
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scaleVec = new THREE.Vector3();
+        const color = new THREE.Color();
+        const rotationY = new THREE.Euler(0, 0, 0);
+
+        for (let i = 0; i < count; i++) {
+            const inst = treeInstances[i];
+            position.set(inst.x, 0, inst.z);
+            rotationY.y = (inst.x * 123.45 + inst.z * 678.9) % (Math.PI * 2);
+            quaternion.setFromEuler(rotationY);
+            scaleVec.setScalar(inst.scale);
+            matrix.compose(position, quaternion, scaleVec);
+
+            instTrunk.setMatrixAt(i, matrix);
+            instFoliage.setMatrixAt(i, matrix);
+
+            color.setScalar(inst.darken);
+            instTrunk.setColorAt(i, color);
+            instFoliage.setColorAt(i, color);
+        }
+
+        scene.add(instTrunk);
+        scene.add(instFoliage);
+    }
+};
+
+const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id: string, pos: THREE.Vector3 }[]) => {
+    const interactables: THREE.Mesh[] = [];
+    const outlines: Record<string, THREE.LineSegments> = {};
+
+    // --- HJÄLPFUNKTIONER ---
+    const createOutline = (geo: THREE.BufferGeometry, color: number) => {
+        const edges = new THREE.EdgesGeometry(geo);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
+        line.visible = false;
+        return line;
+    };
+
+    // Skapar texturer för karta och papper direkt i koden
+    const createCanvasTexture = (width: number, height: number, type: 'map' | 'note') => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = type === 'map' ? '#e3d5b8' : '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.strokeStyle = '#332211'; ctx.lineWidth = 2;
+
+        if (type === 'map') {
+            // Skissad terräng och rött kryss
+            for (let i = 0; i < 8; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 30, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.moveTo(width / 2 - 20, height / 2 - 20); ctx.lineTo(width / 2 + 20, height / 2 + 20); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(width / 2 + 20, height / 2 - 20); ctx.lineTo(width / 2 - 20, height / 2 + 20); ctx.stroke();
+        } else {
+            // Skissade textrader
+            ctx.strokeStyle = '#777777';
+            for (let i = 1; i < 6; i++) {
+                ctx.beginPath(); ctx.moveTo(10, i * 20); ctx.lineTo(width - 10, i * 20); ctx.stroke();
+            }
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+    };
+
+    const warmWoodMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+    const darkerWoodMat = new THREE.MeshStandardMaterial({ color: 0x5A3210, roughness: 0.9 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
+    const ammoGreenMat = new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 });
+
+    // =========================================
+    // 1. ARMORY RACK (Vänster)
+    // =========================================
+    const rackGroup = new THREE.Group();
+    const rackPostGeo = new THREE.BoxGeometry(0.2, 4.0, 0.2);
+    const p1 = new THREE.Mesh(rackPostGeo, darkerWoodMat); p1.position.set(-1.8, 2, -0.4); rackGroup.add(p1);
+    const p2 = new THREE.Mesh(rackPostGeo, darkerWoodMat); p2.position.set(1.8, 2, -0.4); rackGroup.add(p2);
+    for (let i = 0; i < 5; i++) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.3, 0.1), warmWoodMat);
+        slat.position.set(0, 0.8 + i * 0.7, -0.4); rackGroup.add(slat);
+    }
+
+    // Vapen som lutar bakåt
+    for (let i = 0; i < 4; i++) {
+        const gun = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.4, 0.15), metalMat); gun.add(body);
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2), metalMat);
+        barrel.position.y = 1.3; gun.add(barrel);
+        gun.position.set(-1.2 + i * 0.8, 0.7, -0.2);
+        gun.rotation.x = -0.25; // Lutar bakåt mot brädorna
+        rackGroup.add(gun);
+    }
+
+    // Ammolådor
+    const crateGeo = new THREE.BoxGeometry(0.8, 0.5, 0.6);
+    const c1 = new THREE.Mesh(crateGeo, ammoGreenMat); c1.position.set(-2.0, 0.25, 0.6); c1.rotation.y = 0.3; rackGroup.add(c1);
+    const c2 = new THREE.Mesh(crateGeo, ammoGreenMat); c2.position.set(-0.9, 0.25, 0.4); c2.rotation.y = 1.4; rackGroup.add(c2);
+    const c3 = new THREE.Mesh(crateGeo, ammoGreenMat); c3.position.set(-1.8, 0.75, 0.65); c3.rotation.y = 0.6; rackGroup.add(c3);
+
+    // =========================================
+    // 2. DESK (Adventure Log)
+    // =========================================
+    const deskGroup = new THREE.Group();
+    const dW = 2.4, dD = 1.4, dH = 1.1;
+    const dTop = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.1, dD), warmWoodMat);
+    dTop.position.y = dH; deskGroup.add(dTop);
+
+    // Ben
+    const dLegGeo = new THREE.BoxGeometry(0.15, dH, 0.15);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(p => {
+        const l = new THREE.Mesh(dLegGeo, darkerWoodMat);
+        l.position.set(p[0] * (dW / 2 - 0.2), dH / 2, p[1] * (dD / 2 - 0.2));
+        deskGroup.add(l);
+    });
+
+    // Staplade böcker
+    for (let i = 0; i < 3; i++) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.9), new THREE.MeshStandardMaterial({ color: 0x442211 + i * 0x111111 }));
+        b.position.set(-0.6, dH + 0.06 + (i * 0.13), -0.1);
+        b.rotation.y = (Math.random() - 0.5) * 0.4;
+        deskGroup.add(b);
+    }
+
+    // --- ÖPPEN BOK (Adventure Log) ---
+    const openBook = new THREE.Group();
+    const paperMat = new THREE.MeshStandardMaterial({ color: 0xffffee, roughness: 0.9 });
+    const coverMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8 });
+
+    const cover = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.7), coverMat);
+    openBook.add(cover);
+
+    const pageL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.65), paperMat);
+    pageL.position.set(-0.2, 0.15, 0);
+    pageL.rotation.z = 0.15; // Ger den öppna effekten
+    openBook.add(pageL);
+
+    const pageR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.65), paperMat);
+    pageR.position.set(0.2, 0.15, 0);
+    pageR.rotation.z = -0.15;
+    openBook.add(pageR);
+    openBook.position.set(0.6, dH + 0.02, 0.3);
+    openBook.rotation.y = -0.3;
+    deskGroup.add(openBook);
+
+    // =========================================
+    // 3. MAP BOARD
+    // =========================================
+    const mapGroup = new THREE.Group();
+    const bW = 3.5, bH = 2.2;
+
+    // Stolpar som går ner i marken
+    const mLegGeo = new THREE.BoxGeometry(0.2, 4.0, 0.2);
+    const mL = new THREE.Mesh(mLegGeo, darkerWoodMat); mL.position.set(-bW / 2, 2, 0); mapGroup.add(mL);
+    const mR = new THREE.Mesh(mLegGeo, darkerWoodMat); mR.position.set(bW / 2, 2, 0); mapGroup.add(mR);
+
+    const board = new THREE.Mesh(new THREE.BoxGeometry(bW, bH, 0.1), warmWoodMat);
+    board.position.y = 2.8; mapGroup.add(board);
+
+    // Karta med skissad terräng
+    const map = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.4), new THREE.MeshStandardMaterial({ map: createCanvasTexture(256, 256, 'map') }));
+    map.position.set(0, 2.8, 0.06); mapGroup.add(map);
+
+    // Notisar på snedden
+    const noteTex = createCanvasTexture(128, 128, 'note');
+    for (let i = 0; i < 3; i++) {
+        const note = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.5), new THREE.MeshStandardMaterial({ map: noteTex, transparent: true }));
+        const angle = (i / 4) * Math.PI * 2;
+        note.position.set(Math.cos(angle) * 1.2, 2.8 + Math.sin(angle) * 0.7, 0.8);
+        note.rotation.z = (Math.random() - 0.5) * 1.2;
+        mapGroup.add(note);
+    }
+
+    // =========================================
+    // 4. MEDICINE CABINET (Hög, Ihålig, Fylld)
+    // =========================================
+    const medGroup = new THREE.Group();
+    const cH = 5.0, cW = 2.0, cD = 0.8, th = 0.1;
+
+    // Bakstycke
+    const back = new THREE.Mesh(new THREE.BoxGeometry(cW, cH, th), warmWoodMat);
+    back.position.set(0, cH / 2, -cD / 2 + th / 2); medGroup.add(back);
+    // Sidor
+    const sGeo = new THREE.BoxGeometry(th, cH, cD);
+    const sL = new THREE.Mesh(sGeo, warmWoodMat); sL.position.set(-cW / 2 + th / 2, cH / 2, 0); medGroup.add(sL);
+    const sR = new THREE.Mesh(sGeo, warmWoodMat); sR.position.set(cW / 2 - th / 2, cH / 2, 0); medGroup.add(sR);
+    // Topp/Botten
+    const tbGeo = new THREE.BoxGeometry(cW, th, cD);
+    const top = new THREE.Mesh(tbGeo, warmWoodMat); top.position.set(0, cH - th / 2, 0); medGroup.add(top);
+    const bot = new THREE.Mesh(tbGeo, warmWoodMat); bot.position.set(0, th / 2, 0); medGroup.add(bot);
+
+    // Dörrar nertill
+    const cDoor = new THREE.Mesh(new THREE.BoxGeometry(cW - 0.1, cH * 0.3, th), darkerWoodMat);
+    cDoor.position.set(0, cH * 0.15, cD / 2); medGroup.add(cDoor);
+
+    // Hyllplan och Flaskor
+    for (let h = 0; h < 3; h++) {
+        const yBase = cH * 0.4 + (h * 1.0);
+        const shelf = new THREE.Mesh(new THREE.BoxGeometry(cW - th * 2, th / 2, cD - th), darkerWoodMat);
+        shelf.position.set(0, yBase, 0); medGroup.add(shelf);
+
+        for (let f = 0; f < 3; f++) {
+            const isRound = Math.random() > 0.5;
+            const bMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff, transparent: true, opacity: 0.8 });
+            const b = new THREE.Mesh(isRound ? new THREE.SphereGeometry(0.12, 8, 8) : new THREE.BoxGeometry(0.15, 0.4, 0.15), bMat);
+            b.position.set(-0.7 + f * 0.28, yBase + 0.25, 0);
+            medGroup.add(b);
+            if (isRound) {
+                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.2), bMat);
+                neck.position.set(b.position.x, b.position.y + 0.15, b.position.z); medGroup.add(neck);
+            }
+        }
+    }
+
+    // Medicinlåda
+    const medkit = new THREE.Group();
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: 0xcc0000 }));
+    medkit.add(box);
+
+    const crossMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.35, 0.42), crossMat);
+    crossV.position.set(0, 0, 0.01);
+    medkit.add(crossV);
+
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.15, 0.42), crossMat);
+    crossH.position.set(0, 0, 0.01);
+    medkit.add(crossH);
+
+    medkit.position.set(0.5, cH * 0.4 + 0.25, 0);
+    medGroup.add(medkit);
+
+    // =========================================
+    // PLACERING
+    // =========================================
+    const rad = 7.5;
+    rackGroup.position.set(-rad * 0.8, 0, -rad * 0.5); rackGroup.lookAt(0, 0, 0); scene.add(rackGroup);
+    deskGroup.position.set(-rad * 0.3, 0, -rad * 0.95); deskGroup.lookAt(0, 0, 0); scene.add(deskGroup);
+    mapGroup.position.set(rad * 0.3, 0, -rad * 0.95); mapGroup.lookAt(0, 0, 0); scene.add(mapGroup);
+    medGroup.position.set(rad * 0.8, 0, -rad * 0.5); medGroup.lookAt(0, 0, 0); scene.add(medGroup);
+
+    // =========================================
+    // INTERACTION & OUTLINES
+    // =========================================
+
+    // 1. Armory
+    const rackInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), new THREE.MeshBasicMaterial({ visible: false }));
+    rackInteract.position.y = 2;
+    rackInteract.userData = { id: 'armory' };
+    rackGroup.add(rackInteract);
+    interactables.push(rackInteract);
+
+    const rackOutline = createOutline(new THREE.BoxGeometry(4, 4, 2), 0xffff00);
+    rackOutline.position.y = 2;
+    rackGroup.add(rackOutline);
+    outlines['armory'] = rackOutline;
+
+    // 2. Adventure Log (Desk)
+    const logInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.5, 1.5), new THREE.MeshBasicMaterial({ visible: false }));
+    logInteract.position.y = 0.75;
+    logInteract.userData = { id: 'adventure_log' };
+    deskGroup.add(logInteract);
+    interactables.push(logInteract);
+
+    const logOutline = createOutline(new THREE.BoxGeometry(2.5, 1.5, 1.5), 0x00ff00);
+    logOutline.position.y = 0.75;
+    deskGroup.add(logOutline);
+    outlines['adventure_log'] = logOutline;
+
+    // 3. Sectors (Map Board)
+    const mapInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 1), new THREE.MeshBasicMaterial({ visible: false }));
+    mapInteract.position.y = 2;
+    mapInteract.userData = { id: 'sectors' };
+    mapGroup.add(mapInteract);
+    interactables.push(mapInteract);
+
+    const mapOutline = createOutline(new THREE.BoxGeometry(4, 4, 1), 0xff0000);
+    mapOutline.position.y = 2;
+    mapGroup.add(mapOutline);
+    outlines['sectors'] = mapOutline;
+
+    // 4. Skills (Medicine Cabinet)
+    const skillInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2), new THREE.MeshBasicMaterial({ visible: false }));
+    skillInteract.position.y = 2.5;
+    skillInteract.userData = { id: 'skills' };
+    medGroup.add(skillInteract);
+    interactables.push(skillInteract);
+
+    const skillOutline = createOutline(new THREE.BoxGeometry(2.5, 5, 2), 0xaa00ff);
+    skillOutline.position.y = 2.5;
+    medGroup.add(skillOutline);
+    outlines['skills'] = skillOutline;
+
+    [rackGroup, deskGroup, mapGroup, medGroup].forEach(g => g.traverse(c => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; }));
+
+    return { interactables, outlines };
+};
+
 export const CampWorld = {
     setupTerrain: (scene: THREE.Scene, textures: Textures) => {
         // Ground
@@ -20,217 +378,9 @@ export const CampWorld = {
         ground.receiveShadow = true;
         scene.add(ground);
 
-        // Seeded random for deterministic layout
-        let seed = 12345;
-        const srandom = () => {
-            seed = (seed * 9301 + 49297) % 233280;
-            return seed / 233280;
-        };
-
-        const treeInstances: { x: number, z: number, scale: number, darken: number }[] = [];
-
-        // 1. HIGH DARK SILHOUETTES (Denser & Wider)
-        for (let i = 0; i < 10; i++) {
-            const x = (srandom() - 0.5) * 100;
-            const z = -45 - srandom() * 60;
-
-            // Moon Window for silhouettes too
-            let scale = 1.15 + srandom() * 2;
-
-            treeInstances.push({ x, z, scale, darken: 0.12 });
-        }
-
-        // 2. THE FOREST WALL (Deterministic V-Shape - Denser)
-        for (let i = 0; i < 30; i++) {
-            const z = -15 - srandom() * 20;
-            const zFactor = (z + 15) / -45;
-            const maxX = 35 - (zFactor * 20);
-            const x = (srandom() - 0.5) * 2 * maxX;
-            if (Math.abs(x) < 2) continue;
-
-            // Moon Window: Reduce scale for trees in the moon's quadrant (-30 < X < -5)
-            let scale = 1.1 + srandom() * 0.9;
-            if (x < -15 && x > -20) scale *= 0.6;
-
-            treeInstances.push({ x, z, scale, darken: 1.0 });
-        }
-
-        // 3. CAMPFIRE FRAMING & SIDE ANCHORS
-        // Flank the campfire area
-        treeInstances.push({ x: -15, z: 2, scale: 1.8, darken: 1.0 });
-        treeInstances.push({ x: 15, z: 2, scale: 1.8, darken: 1.0 });
-
-        treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
-
-        // --- MATHEMATICAL OPTIMIZATION ---
-        // Optimization: Use InstancedMesh instead of cloning separate trees.
-        // We reuse prototypes directly to avoid CPU overhead of object creation.
-        const prototypes = ObjectGenerator.getPrototypes();
-        const firstVariant = prototypes[0].children;
-        const trunkMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'CylinderGeometry') as THREE.Mesh;
-        const foliageMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'BufferGeometry') as THREE.Mesh;
-
-        if (trunkMesh && foliageMesh) {
-            const count = treeInstances.length;
-            const instTrunk = new THREE.InstancedMesh(trunkMesh.geometry, trunkMesh.material, count);
-            const instFoliage = new THREE.InstancedMesh(foliageMesh.geometry, foliageMesh.material, count);
-
-            // User requested no shadows for performance
-            instTrunk.castShadow = false;
-            instTrunk.receiveShadow = false;
-            instFoliage.castShadow = false;
-            instFoliage.receiveShadow = false;
-
-            // Reuse scratch objects outside the loop to minimize Garbage Collection (GC)
-            const matrix = new THREE.Matrix4();
-            const position = new THREE.Vector3();
-            const quaternion = new THREE.Quaternion();
-            const scaleVec = new THREE.Vector3();
-            const color = new THREE.Color();
-            const rotationY = new THREE.Euler(0, 0, 0);
-
-            for (let i = 0; i < count; i++) {
-                const inst = treeInstances[i];
-
-                // 1. Position
-                position.set(inst.x, 0, inst.z);
-
-                // 2. Rotation (Deterministic Hash)
-                rotationY.y = (inst.x * 123.45 + inst.z * 678.9) % (Math.PI * 2);
-                quaternion.setFromEuler(rotationY);
-
-                // 3. Scale
-                scaleVec.setScalar(inst.scale);
-
-                // 4. Compose Matrix in one step (Translation * Rotation * Scale)
-                matrix.compose(position, quaternion, scaleVec);
-
-                instTrunk.setMatrixAt(i, matrix);
-                instFoliage.setMatrixAt(i, matrix);
-
-                // 5. Apply Color (Darkening)
-                color.setScalar(inst.darken);
-                instTrunk.setColorAt(i, color);
-                instFoliage.setColorAt(i, color);
-            }
-
-            scene.add(instTrunk);
-            scene.add(instFoliage);
-        }
+        setupTrees(scene);
     },
 
-    setupStations: (scene: THREE.Scene, textures: Textures, stationsPos: { id: string, pos: THREE.Vector3 }[]) => {
-        const interactables: THREE.Mesh[] = [];
-        const outlines: Record<string, THREE.LineSegments> = {};
-
-        const createOutline = (geo: THREE.BufferGeometry, color: number) => {
-            const edges = new THREE.EdgesGeometry(geo);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
-            line.visible = false;
-            return line;
-        };
-
-        const furnitureMat = new THREE.MeshStandardMaterial({ map: textures.wood, color: 0x888888, roughness: 0.7 });
-        const furnitureDarkMat = new THREE.MeshStandardMaterial({ map: textures.wood, color: 0x555555, roughness: 0.8 });
-        const ammoGreenMat = new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 });
-
-        // --- ARMORY ---
-        const rackGroup = new THREE.Group();
-        rackGroup.position.copy(stationsPos[0].pos);
-        rackGroup.rotation.y = 0.6;
-
-        // Structure
-        const postGeo = new THREE.BoxGeometry(0.3, 4.5, 0.3);
-        const post1 = new THREE.Mesh(postGeo, furnitureMat); post1.position.set(-2, 2.25, -0.5); rackGroup.add(post1);
-        const post2 = new THREE.Mesh(postGeo, furnitureMat); post2.position.set(2, 2.25, -0.5); rackGroup.add(post2);
-        for (let i = 0; i < 6; i++) {
-            const slat = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.4, 0.1), furnitureMat);
-            slat.position.set(0, 1.0 + i * 0.6, -0.5); rackGroup.add(slat);
-        }
-
-        // Guns
-        const createGunProp = (type: 'rifle' | 'smg') => {
-            const gun = new THREE.Group();
-            const gunMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
-            const stock = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.1), gunMat); stock.position.y = -0.4; gun.add(stock);
-            const bodyLen = type === 'rifle' ? 1.0 : 0.6;
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.15, bodyLen, 0.15), gunMat); gun.add(body);
-            const barrelLen = type === 'rifle' ? 0.8 : 0.4;
-            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, barrelLen), gunMat); barrel.position.y = bodyLen / 2 + barrelLen / 2; gun.add(barrel);
-            const mag = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.08), gunMat); mag.position.set(0.1, -0.1, 0); mag.rotation.z = -0.2; gun.add(mag);
-            gun.rotation.z = Math.PI / 2;
-            return gun;
-        };
-        for (let i = 0; i < 3; i++) { const rifle = createGunProp('rifle'); rifle.position.set(0, 3.5 - 1 * 0.7, -0.3); rackGroup.add(rifle); }
-        const smg1 = createGunProp('smg'); smg1.position.set(-1.0, 1.2, -0.3); rackGroup.add(smg1);
-        const smg2 = createGunProp('smg'); smg2.position.set(1.0, 1.2, -0.3); rackGroup.add(smg2);
-
-        // Crates
-        const crateGeo = new THREE.BoxGeometry(0.8, 0.5, 0.5);
-        const crate1 = new THREE.Mesh(crateGeo, ammoGreenMat); crate1.position.set(-1.2, 0.25, 0.2); crate1.rotation.y = 0.2; rackGroup.add(crate1);
-        const crate2 = new THREE.Mesh(crateGeo, ammoGreenMat); crate2.position.set(0.8, 0.25, 0.0); crate2.rotation.y = -0.1; rackGroup.add(crate2);
-        const crate3 = new THREE.Mesh(crateGeo, ammoGreenMat); crate3.position.set(0.8, 0.75, 0.0); crate3.rotation.y = -0.15; rackGroup.add(crate3);
-
-        const rackBase = new THREE.Mesh(new THREE.BoxGeometry(5, 4.5, 2), new THREE.MeshBasicMaterial({ visible: false }));
-        rackBase.position.y = 2.25; rackBase.userData = { id: 'armory' }; rackGroup.add(rackBase);
-        const rackOutline = createOutline(new THREE.BoxGeometry(5, 4.5, 2), 0xffff00); rackBase.add(rackOutline); outlines['armory'] = rackOutline;
-        interactables.push(rackBase); scene.add(rackGroup);
-
-        // --- MISSIONS TABLE ---
-        const boardGroup = new THREE.Group(); boardGroup.position.copy(stationsPos[1].pos);
-        const tableH = 1.4, tableW = 5, tableD = 3.5;
-        const legGeo = new THREE.BoxGeometry(0.2, tableH, 0.2);
-        [[-tableW / 2 + 0.2, -tableD / 2 + 0.2], [tableW / 2 - 0.2, -tableD / 2 + 0.2], [-tableW / 2 + 0.2, tableD / 2 - 0.2], [tableW / 2 - 0.2, tableD / 2 - 0.2]].forEach(p => {
-            const l = new THREE.Mesh(legGeo, furnitureDarkMat); l.position.set(p[0], tableH / 2, p[1]); boardGroup.add(l);
-        });
-        const tableTop = new THREE.Mesh(new THREE.BoxGeometry(tableW, 0.1, tableD), furnitureMat); tableTop.position.y = tableH; boardGroup.add(tableTop);
-        const mapPlane = new THREE.Mesh(new THREE.PlaneGeometry(tableW - 0.2, tableD - 0.2), new THREE.MeshStandardMaterial({ map: textures.tacticalMap, roughness: 0.8 }));
-        mapPlane.rotation.x = -Math.PI / 2; mapPlane.position.y = tableH + 0.06; boardGroup.add(mapPlane);
-
-        // Props (Knife, Notes)
-        const knifeGroup = new THREE.Group(); knifeGroup.position.set(0.5, tableH, -0.5); knifeGroup.rotation.x = Math.PI / 10;
-        const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.6), new THREE.MeshStandardMaterial({ color: 0x111111 })); hilt.position.y = 0.5; knifeGroup.add(hilt);
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.02), new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 })); blade.position.y = 0.1; knifeGroup.add(blade);
-        boardGroup.add(knifeGroup);
-        for (let i = 0; i < 3; i++) {
-            const note = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-            note.rotation.x = -Math.PI / 2; note.rotation.z = Math.random(); note.position.set(-1.5 + Math.random(), tableH + 0.07, -0.8 + Math.random());
-            boardGroup.add(note);
-        }
-
-        const boardInteract = new THREE.Mesh(new THREE.BoxGeometry(tableW, tableH + 1, tableD), new THREE.MeshBasicMaterial({ visible: false }));
-        boardInteract.position.y = tableH / 2; boardInteract.userData = { id: 'missions' }; boardGroup.add(boardInteract);
-        const boardOutline = createOutline(new THREE.BoxGeometry(tableW, 0.2, tableD), 0x00ff00); boardOutline.position.y = tableH; boardGroup.add(boardOutline); outlines['missions'] = boardOutline;
-        interactables.push(boardInteract); scene.add(boardGroup);
-
-        // --- SKILLS STATION ---
-        const skillsGroup = new THREE.Group(); skillsGroup.position.copy(stationsPos[2].pos); skillsGroup.rotation.y = -0.5;
-        const benchW = 4, benchD = 2, benchH = 1.3;
-        const benchTop = new THREE.Mesh(new THREE.BoxGeometry(benchW, 0.2, benchD), furnitureMat); benchTop.position.y = benchH; skillsGroup.add(benchTop);
-        const bLegGeo = new THREE.BoxGeometry(0.3, benchH, 0.3);
-        [[-1.5, -0.7], [1.5, -0.7], [-1.5, 0.7], [1.5, 0.7]].forEach(p => { const l = new THREE.Mesh(bLegGeo, furnitureDarkMat); l.position.set(p[0], benchH / 2, p[1]); skillsGroup.add(l); });
-
-        const mkGroup = new THREE.Group(); mkGroup.position.set(0, benchH + 0.1, 0.3); mkGroup.rotation.y = 0.2;
-        const mkBox = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 0.8), new THREE.MeshStandardMaterial({ color: 0xcc0000 })); mkBox.position.y = 0.3; mkGroup.add(mkBox);
-        const crossMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        const cV = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.82), crossMat); cV.position.y = 0.3; mkGroup.add(cV);
-        const cH = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.82), crossMat); cH.position.y = 0.3; mkGroup.add(cH); skillsGroup.add(mkGroup);
-
-        // Bottles
-        const bottleGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.4, 8);
-        const redBottle = new THREE.MeshStandardMaterial({ color: 0xff0000, transparent: true, opacity: 0.8, roughness: 0.1 });
-        const greenBottle = new THREE.MeshStandardMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8, roughness: 0.1 });
-        const blueBottle = new THREE.MeshStandardMaterial({ color: 0x0000ff, transparent: true, opacity: 0.8, roughness: 0.1 });
-        for (let i = 0; i < 3; i++) {
-            const b = new THREE.Mesh(bottleGeo, i === 0 ? redBottle : i % 2 === 0 ? greenBottle : blueBottle);
-            b.position.set(-1.6 + i * 0.3, benchH + 0.2, -0.4 + (Math.random() - 0.5) * 0.2); skillsGroup.add(b);
-        }
-
-        const skillsInteract = new THREE.Mesh(new THREE.BoxGeometry(benchW, benchH + 1, benchD), new THREE.MeshBasicMaterial({ visible: false }));
-        skillsInteract.position.y = benchH / 2; skillsInteract.userData = { id: 'skills' }; skillsGroup.add(skillsInteract);
-        const skillsOutline = createOutline(new THREE.BoxGeometry(benchW, 0.2, benchD), 0xaa00ff); skillsOutline.position.y = benchH; skillsGroup.add(skillsOutline); outlines['skills'] = skillsOutline;
-        interactables.push(skillsInteract); scene.add(skillsGroup);
-
-        return { interactables, outlines };
-    }
+    setupTrees,
+    setupStations
 };

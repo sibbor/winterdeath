@@ -25,6 +25,8 @@ export class InputManager {
     public state: InputState;
     private isEnabled: boolean = false;
     private aimAngle: number = -Math.PI / 2; // Start facing Up
+    private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200); // Virtual cursor position relative to player
+
 
     // Callbacks for discrete actions (optional, for UI/Systems)
     public onKeyDown?: (key: string) => void;
@@ -136,15 +138,27 @@ export class InputManager {
         if (document.pointerLockElement) {
             if (!this.isEnabled) return;
 
-            const SENSITIVITY = 0.005;
-            this.aimAngle -= e.movementX * SENSITIVITY;
+            // Accumulate movement into virtual cursor
+            this.virtualAimPos.x += e.movementX;
+            this.virtualAimPos.y += e.movementY;
 
-            // Update aimVector with a large enough radius to act as a direction
-            this.state.aimVector.x = Math.cos(this.aimAngle) * 100;
-            this.state.aimVector.y = Math.sin(this.aimAngle) * 100;
+            // Clamp radius to keep it responsive (like a tether)
+            const maxRadius = 300;
+            const minRadius = 50;
+            const length = this.virtualAimPos.length();
 
-            this.state.mouse.x = Math.cos(this.aimAngle);
-            this.state.mouse.y = Math.sin(this.aimAngle);
+            if (length > maxRadius) {
+                this.virtualAimPos.multiplyScalar(maxRadius / length);
+            } else if (length < minRadius && length > 0) {
+                this.virtualAimPos.multiplyScalar(minRadius / length);
+            }
+
+            // Update aimAngle and vectors from virtual cursor
+            this.aimAngle = Math.atan2(this.virtualAimPos.y, this.virtualAimPos.x);
+
+            this.state.aimVector.copy(this.virtualAimPos);
+            this.state.mouse.x = this.virtualAimPos.x / maxRadius;
+            this.state.mouse.y = this.virtualAimPos.y / maxRadius;
         } else {
             this.state.cursorPos.x = e.clientX;
             this.state.cursorPos.y = e.clientY;
@@ -192,4 +206,17 @@ export class InputManager {
     private handleLockChange = () => {
         this.state.locked = !!document.pointerLockElement;
     };
+
+    public requestPointerLock(element: HTMLElement) {
+        if (this.state.locked) return;
+        try {
+            // Some browsers require a user gesture, which this call should be part of
+            const promise = element.requestPointerLock() as any;
+            if (promise && promise.catch) {
+                promise.catch((e: any) => console.warn("Pointer lock error:", e));
+            }
+        } catch (e) {
+            console.warn("Pointer lock failed:", e);
+        }
+    }
 }

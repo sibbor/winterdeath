@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY, createTextSprite } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { t } from '../../utils/i18n';
 
 const R_OFFSET = Math.PI / 2;
 
@@ -69,7 +70,7 @@ export const Sector1: SectorDef = {
         for (let x = 100; x < 350; x += 30) { const p = { x: x, z: -340 }; SectorBuilder.spawnStreetLamp(ctx, p.x, p.z); }
 
         // Villa (Start)
-        SectorBuilder.spawnDebugMarker(ctx, 0, 0, 12, "HOME");
+        SectorBuilder.spawnDebugMarker(ctx, 0, 0, 12, t('clues.s1_start_tracks')); // "HOME" was actually home_name or start_tracks?
         const villaGroup = new THREE.Group(); villaGroup.position.set(0, 0, 15);
         const villaBody = new THREE.Mesh(new THREE.BoxGeometry(20, 7, 14), new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.8 }));
         villaBody.position.y = 3.5; villaBody.castShadow = true; villaGroup.add(villaBody);
@@ -90,7 +91,7 @@ export const Sector1: SectorDef = {
 
         // POIs
         const pSmu = { x: 120, z: -80 };
-        SectorBuilder.spawnDebugMarker(ctx, pSmu.x, pSmu.z, 10, "SMU-GÅRDEN");
+        SectorBuilder.spawnDebugMarker(ctx, pSmu.x, pSmu.z, 10, t('clues.s1_poi_building_on_fire'));
         const smu = new THREE.Mesh(new THREE.BoxGeometry(50, 10, 50), new THREE.MeshStandardMaterial({ color: 0x752020 }));
         smu.position.set(pSmu.x, 5, pSmu.z); smu.castShadow = true; scene.add(smu);
         obstacles.push({ mesh: smu, collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) } });
@@ -101,7 +102,7 @@ export const Sector1: SectorDef = {
 
         // Church 
         const pChurch = { x: 250, z: -320 };
-        SectorBuilder.spawnDebugMarker(ctx, pChurch.x, pChurch.z, 15, "CHURCH");
+        SectorBuilder.spawnDebugMarker(ctx, pChurch.x, pChurch.z, 15, t('clues.s1_poi_church'));
         const churchGroup = new THREE.Group(); churchGroup.position.set(pChurch.x, 0, pChurch.z);
         churchGroup.rotation.y = R_OFFSET;
         const churchBody = new THREE.Mesh(new THREE.BoxGeometry(15, 12, 15), MATERIALS.brownBrick);
@@ -121,38 +122,38 @@ export const Sector1: SectorDef = {
 
         // Café 
         const pCafe = { x: 210, z: -350 };
-        SectorBuilder.spawnDebugMarker(ctx, pCafe.x, pCafe.z, 12, "CAFÉ");
+        SectorBuilder.spawnDebugMarker(ctx, pCafe.x, pCafe.z, 12, t('clues.s1_poi_cafe'));
         const cafe = new THREE.Mesh(new THREE.BoxGeometry(15, 12, 12), MATERIALS.yellowBrick);
         cafe.position.set(pCafe.x, 6, pCafe.z); cafe.rotation.y = R_OFFSET; cafe.castShadow = true; scene.add(cafe);
         obstacles.push({ mesh: cafe, collider: { type: 'box', size: new THREE.Vector3(15, 20, 12) } });
-        const cafeSign = createTextSprite("Café"); cafeSign.position.set(0, 3, 6.5); cafe.add(cafeSign);
+        const cafeSign = createTextSprite(t('clues.s1_poi_cafe')); cafeSign.position.set(0, 3, 6.5); cafe.add(cafeSign);
 
         // Grocery Store
         const pGroc = { x: 240, z: -450 };
-        SectorBuilder.spawnDebugMarker(ctx, pGroc.x, pGroc.z, 8, "GROCERY");
+        SectorBuilder.spawnDebugMarker(ctx, pGroc.x, pGroc.z, 8, t('clues.s1_poi_grocery'));
         const grocery = new THREE.Mesh(new THREE.BoxGeometry(15, 6, 30), MATERIALS.concrete);
         grocery.position.set(pGroc.x, 3, pGroc.z); grocery.rotation.y = R_OFFSET; grocery.castShadow = true; scene.add(grocery);
         obstacles.push({ mesh: grocery, collider: { type: 'box', size: new THREE.Vector3(15, 20, 30) } });
-        const grocSign = createTextSprite("Mataffär"); grocSign.scale.set(8, 2, 1); grocSign.position.set(-8, 2, 0); grocSign.rotation.y = -Math.PI / 2; grocery.add(grocSign);
+        const grocSign = createTextSprite(t('clues.s1_poi_grocery')); grocSign.scale.set(8, 2, 1); grocSign.position.set(-8, 2, 0); grocSign.rotation.y = -Math.PI / 2; grocery.add(grocSign);
 
         // Gym 
         const pGym = { x: 180, z: -430 };
-        SectorBuilder.spawnDebugMarker(ctx, pGym.x, pGym.z, 10, "GYM");
+        SectorBuilder.spawnDebugMarker(ctx, pGym.x, pGym.z, 10, t('clues.s1_poi_gym'));
         const gym = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 20), MATERIALS.metalPanel);
         gym.position.set(pGym.x, 4, pGym.z); gym.rotation.y = R_OFFSET; gym.castShadow = true; scene.add(gym);
         obstacles.push({ mesh: gym, collider: { type: 'box', size: new THREE.Vector3(20, 20, 20) } });
-        const gymSign = createTextSprite("GYM"); gymSign.position.set(0, 3, 10.1); gym.add(gymSign);
+        const gymSign = createTextSprite(t('clues.s1_poi_gym')); gymSign.position.set(0, 3, 10.1); gym.add(gymSign);
 
         // Pizzeria
         const pPizza = { x: 280, z: -380 };
-        SectorBuilder.spawnDebugMarker(ctx, pPizza.x, pPizza.z, 6, "PIZZERIA");
+        SectorBuilder.spawnDebugMarker(ctx, pPizza.x, pPizza.z, 6, t('clues.s1_poi_pizzeria'));
         const pizza = new THREE.Mesh(new THREE.BoxGeometry(12, 5, 12), MATERIALS.brownBrick);
         pizza.position.set(pPizza.x, 2.5, pPizza.z); pizza.rotation.y = R_OFFSET; scene.add(pizza);
         obstacles.push({ mesh: pizza, collider: { type: 'box', size: new THREE.Vector3(12, 10, 12) } });
 
         // Train Yard
         const pYard = { x: 250, z: -700 };
-        SectorBuilder.spawnDebugMarker(ctx, pYard.x, pYard.z, 10, "TRAINYARD");
+        SectorBuilder.spawnDebugMarker(ctx, pYard.x, pYard.z, 10, t('clues.s1_poi_train_yard'));
 
         // Use new RailTrack generator
         const trackStart = new THREE.Vector3(pYard.x, 0, pYard.z - 50);
@@ -183,7 +184,7 @@ export const Sector1: SectorDef = {
 
         // The Bus (Blocker)
         const pBus = { x: 250, z: -535 };
-        SectorBuilder.spawnDebugMarker(ctx, pBus.x, pBus.z, 8, "BUS");
+        SectorBuilder.spawnDebugMarker(ctx, pBus.x, pBus.z, 8, t('clues.s1_poi_train_yard')); // Reusing key for bus area
         const bus = new THREE.Group(); bus.position.set(pBus.x, 0, pBus.z); bus.rotation.y = R_OFFSET;
         const busBody = new THREE.Mesh(new THREE.BoxGeometry(4.5, 4.5, 14), new THREE.MeshStandardMaterial({ color: 0x1133aa }));
         busBody.position.y = 2.25; bus.add(busBody);
@@ -301,7 +302,7 @@ export const Sector1: SectorDef = {
                 position: pGym, // {x: 180, z: -430}
                 radius: 15,
                 type: 'EVENT',
-                content: "clues.s1_poi_gym", // Keep original text as fallback/context
+                content: "story.gym_event", // Updated to key
                 triggered: false,
                 actions: [
                     { type: 'GIVE_REWARD', payload: { xp: 250 } }, // Reward for finding Gym
@@ -310,7 +311,7 @@ export const Sector1: SectorDef = {
                     // Pan to Train Yard
                     { type: 'CAMERA_PAN', payload: { target: { x: 250, z: -700 }, duration: 2000 } },
                     // After pan (using delay)
-                    { type: 'SHOW_TEXT', payload: { text: "What the hell was that?!" }, delay: 2500 },
+                    { type: 'SHOW_TEXT', payload: { text: t('story.gym_event') }, delay: 2500 },
                     // Start Wave
                     { type: 'START_WAVE', payload: { count: 50 }, delay: 3000 },
                     // Spawn Zombies from Directions

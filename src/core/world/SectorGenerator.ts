@@ -15,6 +15,13 @@ export const SectorBuilder = {
         const lid = new THREE.Mesh(GEOMETRY.chestLid, isBig ? MATERIALS.chestBig : MATERIALS.chestStandard);
         lid.position.y = 1.2; lid.castShadow = true;
         group.add(lid);
+
+        // Yellow Glow for unlooted chests
+        const glow = new THREE.PointLight(0xffcc00, 2, 6);
+        glow.position.set(0, 1.5, 0);
+        glow.name = 'chestLight';
+        group.add(glow);
+
         ctx.scene.add(group);
         ctx.chests.push({ mesh: group, type, scrap: isBig ? 100 : 25, radius: 2, opened: false });
 
@@ -22,7 +29,7 @@ export const SectorBuilder = {
             id: `chest_${Math.random()}`,
             x, z,
             type: 'CHEST',
-            label: isBig ? 'Large Chest' : 'Chest',
+            label: isBig ? 'ui.large_chest' : 'ui.chest',
             icon: '📦',
             color: isBig ? '#ffd700' : '#8b4513'
         });
@@ -32,24 +39,41 @@ export const SectorBuilder = {
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
         group.userData = { id, type: 'clue_visual' };
+        group.name = `clue_visual_${id}`;
 
         if (type === 'phone') {
-            const phone = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.5), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-            const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.4), new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide }));
+            // Enhanced Phone Visuals (Larger, Glowing)
+            const phone = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.8), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 }));
+            const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.65), new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
             screen.rotation.x = -Math.PI / 2;
-            screen.position.y = 0.03;
+            screen.position.y = 0.05;
             phone.add(screen);
+
+            // Pulsing Holographic Glow (simulated via point light for now, specific shader later if needed)
+            const glowPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+            glowPlane.rotation.x = -Math.PI / 2;
+            glowPlane.position.y = 0.02;
+            phone.add(glowPlane);
+
             group.add(phone);
-            const light = new THREE.PointLight(0x00ffff, 2, 5);
-            light.position.y = 0.5;
+            const light = new THREE.PointLight(0x00ffff, 3, 8);
+            light.position.y = 1.0;
             group.add(light);
-            ctx.flickeringLights.push({ light, baseInt: 2, flickerRate: 0.2 });
+            ctx.flickeringLights.push({ light, baseInt: 3, flickerRate: 0.1 }); // Fast flicker for "tech" feel
         } else {
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.05, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffaaaa, emissive: 0xff0000, emissiveIntensity: 0.5 }));
+            // Enhanced Pacifier/Item Visuals
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.08, 16, 32), new THREE.MeshStandardMaterial({ color: 0xffaaaa, emissive: 0xff0000, emissiveIntensity: 2.0 }));
             ring.rotation.x = Math.PI / 2;
             group.add(ring);
-            const light = new THREE.PointLight(0xffaaaa, 2, 3);
-            light.position.y = 0.2;
+
+            // Ground Glow
+            const glowPlane = new THREE.Mesh(new THREE.CircleGeometry(0.8, 32), new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }));
+            glowPlane.rotation.x = -Math.PI / 2;
+            glowPlane.position.y = 0.02;
+            group.add(glowPlane);
+
+            const light = new THREE.PointLight(0xffaaaa, 4, 6);
+            light.position.y = 0.5;
             group.add(light);
         }
         group.rotation.y = Math.random() * Math.PI;
@@ -59,7 +83,7 @@ export const SectorBuilder = {
             id: `clue_${id}`,
             x, z,
             type: 'TRIGGER',
-            label: 'Clue',
+            label: 'ui.clue',
             icon: '🔍',
             color: '#00ffff'
         });

@@ -29,6 +29,24 @@ export const aggregateStats = (prevStats: PlayerStats, missionStats: MissionStat
         s.cluesFound = [...currentClues, ...newUniqueClues];
     }
 
+    if (missionStats.seenEnemies && missionStats.seenEnemies.length > 0) {
+        const current = s.seenEnemies || [];
+        const newUnique = missionStats.seenEnemies.filter(c => !current.includes(c));
+        s.seenEnemies = [...current, ...newUnique];
+    }
+
+    if (missionStats.seenBosses && missionStats.seenBosses.length > 0) {
+        const current = s.seenBosses || [];
+        const newUnique = missionStats.seenBosses.filter(c => !current.includes(c));
+        s.seenBosses = [...current, ...newUnique];
+    }
+
+    if (missionStats.visitedPOIs && missionStats.visitedPOIs.length > 0) {
+        const current = s.visitedPOIs || [];
+        const newUnique = missionStats.visitedPOIs.filter(c => !current.includes(c));
+        s.visitedPOIs = [...current, ...newUnique];
+    }
+
     let gainedXp = missionStats.xpGained + missionStats.bonusXp;
     while (gainedXp > 0 && s.level < LEVEL_CAP) {
         const needed = s.nextLevelXp - s.currentXp;

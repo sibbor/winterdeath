@@ -76,7 +76,10 @@ export interface PlayerStats {
   totalDamageDealt: number;
   totalDamageTaken: number;
   totalDistanceTraveled: number; // New: In meters
-  cluesFound: string[]; // New: List of collected clue names
+  cluesFound: string[]; // List of collected clue names (IDs)
+  seenEnemies: string[]; // New: List of enemy types seen
+  seenBosses: string[]; // New: List of bosses seen
+  visitedPOIs: string[]; // New: List of POI IDs visited
   deaths: number;
   mostUsedWeapon: string;
   chestsOpened: number;
@@ -100,6 +103,9 @@ export interface MissionStats {
   bossDamageTaken?: number; // New
   distanceTraveled: number; // New
   cluesFound: string[]; // New
+  seenEnemies?: string[]; // New
+  seenBosses?: string[]; // New
+  visitedPOIs?: string[]; // New
   isExtraction?: boolean;
   chestsOpened: number;
   bigChestsOpened: number;

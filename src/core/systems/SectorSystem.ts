@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSession } from '../GameSession';
-import { SectorDef } from '../sectors/types';
+import { SectorDef } from '../../types/sectors';
 import { SectorManager } from '../SectorManager';
 import { EnemyManager } from '../EnemyManager';
 

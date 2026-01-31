@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { t } from '../../utils/i18n';
 
 export const Sector3: SectorDef = {
     id: 2,
@@ -112,7 +113,7 @@ export const Sector3: SectorDef = {
 
         scene.add(mastGroup);
         obstacles.push({ mesh: mastGroup, radius: 8 });
-        SectorBuilder.spawnDebugMarker(ctx, 0, -210, 10, "RADIO MAST");
+        SectorBuilder.spawnDebugMarker(ctx, 0, -210, 10, t('maps.mast_name'));
 
         // Fences
         for (let x = -20; x <= 20; x += 4) {
@@ -121,7 +122,7 @@ export const Sector3: SectorDef = {
             scene.add(f);
         }
 
-        SectorBuilder.spawnClueMarker(ctx, -20, -100, 'collectible', 'phone');
+        SectorBuilder.spawnClueMarker(ctx, -20, -100, t('clues.s3_collectible'), 'phone');
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);

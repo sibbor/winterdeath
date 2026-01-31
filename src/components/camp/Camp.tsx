@@ -19,8 +19,8 @@ import ScreenPlayerSkills from './ScreenPlayerSkills';
 import ScreenArmory from './ScreenArmory';
 import ScreenSectorOverview from './ScreenSectorOverview';
 import ScreenSettings from './ScreenSettings';
-import ScreenSectorBriefing from './ScreenSectorBriefing';
 import ScreenResetConfirm from './ScreenResetConfirm';
+import ScreenAdventureLog from './ScreenAdventureLog';
 
 interface CampProps {
     stats: PlayerStats;
@@ -46,18 +46,18 @@ interface CampProps {
 }
 
 const STATIONS = [
-    { id: 'armory', pos: new THREE.Vector3(-7, 0, -4) },
-    { id: 'missions', pos: new THREE.Vector3(0, 0, -12) },
-    { id: 'skills', pos: new THREE.Vector3(8, 0, -4) }
+    { id: 'armory', pos: new THREE.Vector3(-6, 0, -3.75) },
+    { id: 'sectors', pos: new THREE.Vector3(2.25, 0, -7.125) },
+    { id: 'skills', pos: new THREE.Vector3(6, 0, -3.75) },
+    { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
 ];
 
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartMission, currentMap, debugMode, onToggleDebug, showFps, onToggleFps, familyMembersFound, isMapLoaded, bossesDefeated, onResetGame, hasCheckpoint, onFPSUpdate, onSaveGraphics, initialGraphics }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
-    // fpsRef removed as it is now global
 
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
-    const [activeModal, setActiveModal] = useState<'armory' | 'missions' | 'skills' | 'stats' | 'settings' | 'briefing' | 'reset_confirm' | null>(null);
+    const [activeModal, setActiveModal] = useState<'armory' | 'sectors' | 'skills' | 'stats' | 'settings' | 'reset_confirm' | 'adventure_log' | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string } | null>(null);
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || Engine.getInstance().getSettings());
@@ -70,9 +70,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const isIdleRef = useRef(false);
     const lastInputRef = useRef(Date.now());
 
+
+
     const hoveredRef = useRef<string | null>(null);
-    const activeRef = useRef<'armory' | 'missions' | 'skills' | 'stats' | 'settings' | 'briefing' | 'reset_confirm' | null>(null);
-    const activeModalRef = useRef<'armory' | 'missions' | 'skills' | 'stats' | 'settings' | 'briefing' | 'reset_confirm' | null>(null);
+    const activeRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
+    const activeModalRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
 
     const nextChatterTime = useRef<number>(Date.now() + 5000);
     const activeChats = useRef<Array<{ id: string, mesh: THREE.Object3D, text: string, startTime: number, duration: number, element: HTMLDivElement, playedSound: boolean }>>([]);
@@ -394,8 +396,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             {activeModal === 'stats' && <ScreenStatistics stats={stats} onClose={closeModal} />}
             {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} />}
+            {activeModal === 'adventure_log' && <ScreenAdventureLog stats={stats} onClose={closeModal} />}
+            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartMission={onStartMission} />}
             {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} />}
-            {activeModal === 'missions' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} onClose={closeModal} onSelectMap={(id) => { onSelectMap(id); openModal('briefing'); }} />}
             {activeModal === 'settings' && (
                 <ScreenSettings
                     onClose={closeModal}
@@ -409,7 +412,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     }}
                 />
             )}
-            {activeModal === 'briefing' && <ScreenSectorBriefing mapIndex={currentMap} isExtracted={familyMembersFound.includes(currentMap)} isBossDefeated={bossesDefeated.includes(currentMap)} onStart={() => onStartMission()} onCancel={() => openModal('missions')} />}
+
             {activeModal === 'reset_confirm' && <ScreenResetConfirm onConfirm={onResetGame} onCancel={closeModal} />}
         </div>
     );

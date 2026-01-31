@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { t } from '../../utils/i18n';
 
 export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, caveEntrancePos: THREE.Vector3) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
@@ -274,7 +275,7 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
             innerCave.add(doorGroup);
             obstacles.push({ mesh: doorGroup, collider: { type: 'box', size: new THREE.Vector3(4, 14, 20) } });
 
-            SectorBuilder.spawnDebugMarker(ctx, r.x, r.z, 8, "BUNKER VAULT");
+            SectorBuilder.spawnDebugMarker(ctx, r.x, r.z, 8, t('maps.bunker_name')); // Using bunker name as placeholder or appropriate key
         }
     });
 

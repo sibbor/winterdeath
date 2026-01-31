@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect, useCallback } from 'react';
 import { MapItem, MapItemType } from '../../types';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/sound';
@@ -28,11 +28,11 @@ const getItemPriority = (type: MapItemType | string): number => {
 
 const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | null }> = ({ data }) => {
     const ref = useRef<HTMLDivElement>(null);
-    const [pos, setPos] = useState<{ top: number, left: number, align: 'top'|'bottom' }>({ top: -1000, left: -1000, align: 'top' });
+    const [pos, setPos] = useState<{ top: number, left: number, align: 'top' | 'bottom' }>({ top: -1000, left: -1000, align: 'top' });
 
     useLayoutEffect(() => {
         if (!data || !ref.current) return;
-        
+
         const tooltipRect = ref.current.getBoundingClientRect();
         const targetRect = data.rect;
         const gap = 12;
@@ -71,7 +71,7 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
     if (!data) return null;
 
     return (
-        <div 
+        <div
             ref={ref}
             className="fixed z-[100] flex flex-row gap-2 pointer-events-none transition-opacity duration-200"
             style={{ top: pos.top, left: pos.left, opacity: pos.top === -1000 ? 0 : 1 }}
@@ -83,10 +83,10 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
                     </div>
                     {Object.entries(item).map(([key, val]) => {
                         if (key === 'icon' || key === 'label' || key === 'color') return null;
-                        const displayVal = (typeof val === 'number' && !Number.isInteger(val)) 
-                            ? val.toFixed(2) 
+                        const displayVal = (typeof val === 'number' && !Number.isInteger(val))
+                            ? val.toFixed(2)
                             : (typeof val === 'object' ? '...' : String(val));
-                        
+
                         return (
                             <div key={key} className="flex justify-between gap-4 border-b border-white/5 py-1 last:border-0">
                                 <span className="text-gray-500 uppercase font-bold tracking-wider">{key}</span>
@@ -94,9 +94,9 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
                             </div>
                         );
                     })}
-                    
+
                     {/* Arrow Indicator (Visual sugar) */}
-                    <div 
+                    <div
                         className={`absolute left-1/2 -translate-x-1/2 w-3 h-3 bg-black/95 border-r border-b border-white/30 transform rotate-45 ${pos.align === 'top' ? '-bottom-1.5 border-t-0 border-l-0' : '-top-1.5 border-b-0 border-r-0 rotate-[225deg]'}`}
                     ></div>
                 </div>
@@ -105,15 +105,144 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
     );
 };
 
+// --- OPTIMIZED MAP CANVAS COMPONENT ---
+// This component is Memoized so it does NOT re-render when mouseCoords change in the parent
+interface MapCanvasProps {
+    bounds: { minX: number, maxX: number, minZ: number, maxZ: number, width: number, height: number };
+    groupedEntities: MapItem[][];
+    setTooltipData: (data: { rect: DOMRect, items: MapItem[] } | null) => void;
+    onMouseMove: (e: React.MouseEvent, bounds: any) => void;
+    onClick: () => void;
+}
+
+const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouseMove, onClick }: MapCanvasProps) => {
+
+    const toMapPercent = useCallback((x: number, z: number) => {
+        if (!bounds || bounds.width === 0 || bounds.height === 0) return { x: 50, y: 50 };
+        const px = ((x - bounds.minX) / bounds.width) * 100;
+        const py = ((z - bounds.minZ) / bounds.height) * 100;
+        return { x: px, y: py };
+    }, [bounds]);
+
+    // Render Grid Lines
+    const gridLines = useMemo(() => {
+        if (!bounds) return null;
+        const lines = [];
+        const step = 50;
+        for (let x = Math.ceil(bounds.minX / step) * step; x <= bounds.maxX; x += step) {
+            const pos = toMapPercent(x, 0);
+            lines.push(
+                <div key={`v-${x}`} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${pos.x}%` }}>
+                    <span className="absolute top-2 left-1 text-[8px] text-white/30 font-mono">{x}</span>
+                </div>
+            );
+        }
+        for (let z = Math.ceil(bounds.minZ / step) * step; z <= bounds.maxZ; z += step) {
+            const pos = toMapPercent(0, z);
+            lines.push(
+                <div key={`h-${z}`} className="absolute left-0 right-0 border-t border-white/10" style={{ top: `${pos.y}%` }}>
+                    <span className="absolute left-2 top-0 text-[8px] text-white/30 font-mono">{z}</span>
+                </div>
+            );
+        }
+        return lines;
+    }, [bounds, toMapPercent]);
+
+    return (
+        <div
+            className="relative bg-slate-900/80 border-2 border-blue-900/50 shadow-[0_0_50px_rgba(0,0,0,0.5)] cursor-crosshair skew-x-[2deg] w-full h-full"
+            style={{
+                aspectRatio: `${bounds.width} / ${bounds.height}`,
+                width: bounds.width > bounds.height ? '95%' : 'auto',
+                height: bounds.height >= bounds.width ? '95%' : 'auto'
+            }}
+            onMouseMove={(e) => onMouseMove(e, bounds)}
+            onClick={onClick}
+        >
+            {/* Grid */}
+            <div className="absolute inset-0 pointer-events-none">{gridLines}</div>
+
+            {/* Origin Crosshair */}
+            <div className="absolute left-1/2 top-0 bottom-0 border-l border-blue-500/20 pointer-events-none"></div>
+            <div className="absolute top-1/2 left-0 right-0 border-t border-blue-500/20 pointer-events-none"></div>
+
+            {/* Grouped Markers */}
+            {groupedEntities.map((group, i) => {
+                const topItem = group[0];
+                const pos = toMapPercent(topItem.x, topItem.z);
+                const count = group.length;
+
+                // Determine visual style based on top priority item
+                let sizeClass = "w-3 h-3";
+                let zIndex = 10;
+                let content = null;
+
+                switch (topItem.type) {
+                    case 'PLAYER':
+                        zIndex = 100;
+                        content = (
+                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-blue-500 animate-pulse drop-shadow-[0_0_10px_rgba(59,130,246,1)]"></div>
+                        );
+                        break;
+                    case 'BOSS':
+                        zIndex = 90;
+                        content = <span className="text-3xl drop-shadow-md filter drop-shadow-[0_0_5px_rgba(255,0,0,0.8)] animate-pulse">💀</span>;
+                        break;
+                    case 'FAMILY':
+                        zIndex = 80;
+                        content = <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-[0_0_10px_rgba(74,222,128,0.8)] animate-bounce"></div>;
+                        break;
+                    case 'POI':
+                        zIndex = 20; sizeClass = "w-6 h-6";
+                        content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
+                        break;
+                    case 'OBSTACLE':
+                        zIndex = 10; sizeClass = "w-2 h-2";
+                        content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
+                        break;
+                    case 'CHEST':
+                        zIndex = 15; sizeClass = "w-4 h-4";
+                        content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
+                        break;
+                    default:
+                        content = (topItem.icon && topItem.icon.length < 5) ? <span style={{ color: topItem.color }}>{topItem.icon}</span> : <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
+                }
+
+                return (
+                    <div
+                        key={`group-${i}`}
+                        className={`absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-transform hover:scale-125 cursor-help`}
+                        style={{
+                            left: `${pos.x}%`,
+                            top: `${pos.y}%`,
+                            zIndex
+                        }}
+                        onMouseEnter={(e) => setTooltipData({ rect: e.currentTarget.getBoundingClientRect(), items: group })}
+                        onMouseLeave={() => setTooltipData(null)}
+                    >
+                        {content}
+                        {/* Stack indicator if multiple items */}
+                        {count > 1 && (
+                            <div className="absolute -top-3 -right-3 bg-white text-black text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-black shadow-md">
+                                {count}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
+
+
 const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos, bossPos, onClose, onSelectCoords }) => {
     const [tooltipData, setTooltipData] = useState<{ rect: DOMRect, items: MapItem[] } | null>(null);
-    const [mouseCoords, setMouseCoords] = useState<{x: number, z: number} | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
 
     // Merge all entities into a single list for unified rendering
     const allEntities = useMemo(() => {
         const ent: MapItem[] = [...items];
-        
+
         if (playerPos && typeof playerPos.x === 'number') {
             ent.push({ id: 'player', x: playerPos.x, z: playerPos.z, type: 'PLAYER', label: 'ui.player', color: '#3b82f6', icon: 'caret' });
         }
@@ -136,7 +265,7 @@ const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos,
             if (!groups[key]) groups[key] = [];
             groups[key].push(item);
         });
-        
+
         // Sort each group by priority so the most important icon renders
         Object.values(groups).forEach(group => {
             group.sort((a, b) => getItemPriority(b.type) - getItemPriority(a.type));
@@ -162,65 +291,33 @@ const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos,
         };
     }, [allEntities]);
 
-    const toMapPercent = (x: number, z: number) => {
-        if (!bounds || bounds.width === 0 || bounds.height === 0) return { x: 50, y: 50 };
-        const px = ((x - bounds.minX) / bounds.width) * 100;
-        const py = ((z - bounds.minZ) / bounds.height) * 100;
-        return { x: px, y: py };
-    };
-
-    const fromMapPercent = (px: number, py: number) => {
-        if (!bounds) return { x: 0, z: 0 };
-        const x = bounds.minX + (px / 100) * bounds.width;
-        const z = bounds.minZ + (py / 100) * bounds.height;
-        return { x, z };
-    };
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
+    const handleMouseMove = useCallback((e: React.MouseEvent, mapBounds: typeof bounds) => {
+        const rect = e.currentTarget.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
-        
+
         const px = ((e.clientX - rect.left) / rect.width) * 100;
         const py = ((e.clientY - rect.top) / rect.height) * 100;
-        
-        const worldPos = fromMapPercent(px, py);
-        setMouseCoords(worldPos);
-    };
 
-    const handleMapClick = () => {
-        if (!mouseCoords) return;
+        const x = mapBounds.minX + (px / 100) * mapBounds.width;
+        const z = mapBounds.minZ + (py / 100) * mapBounds.height;
+
+        setMouseCoords({ x, z });
+    }, []); // No deps needed if bounds come from arg, though bounds arg ensures freshness
+
+    const mouseCoordsRef = useRef<{ x: number, z: number } | null>(null);
+    useEffect(() => {
+        mouseCoordsRef.current = mouseCoords;
+    }, [mouseCoords]);
+
+    const onMapClick = useCallback(() => {
+        if (!mouseCoordsRef.current) return;
         soundManager.playUiClick();
-        onSelectCoords(mouseCoords.x, mouseCoords.z);
-    };
-
-    // Render Grid Lines
-    const renderGrid = () => {
-        if (!bounds) return null;
-        const lines = [];
-        const step = 50;
-        for (let x = Math.ceil(bounds.minX / step) * step; x <= bounds.maxX; x += step) {
-            const pos = toMapPercent(x, 0);
-            lines.push(
-                <div key={`v-${x}`} className="absolute top-0 bottom-0 border-l border-white/10" style={{ left: `${pos.x}%` }}>
-                    <span className="absolute top-2 left-1 text-[8px] text-white/30 font-mono">{x}</span>
-                </div>
-            );
-        }
-        for (let z = Math.ceil(bounds.minZ / step) * step; z <= bounds.maxZ; z += step) {
-            const pos = toMapPercent(0, z);
-            lines.push(
-                <div key={`h-${z}`} className="absolute left-0 right-0 border-t border-white/10" style={{ top: `${pos.y}%` }}>
-                    <span className="absolute left-2 top-0 text-[8px] text-white/30 font-mono">{z}</span>
-                </div>
-            );
-        }
-        return lines;
-    };
+        onSelectCoords(mouseCoordsRef.current.x, mouseCoordsRef.current.z);
+    }, [onSelectCoords]); // Stable dependency
 
     return (
-        <div className="absolute inset-0 z-[80] bg-black/80 flex items-center justify-center backdrop-blur-sm p-8" onClick={onClose}>
-            <div 
+        <div className="absolute inset-0 z-[80] bg-black/40 flex items-center justify-center backdrop-blur-md p-8" onClick={onClose}>
+            <div
                 className="w-full max-w-6xl h-[90vh] bg-black/95 border-4 border-blue-900/50 flex flex-col relative shadow-[0_0_50px_rgba(0,0,0,0.5)] skew-x-[-2deg]"
                 onClick={(e) => e.stopPropagation()}
             >
@@ -255,89 +352,13 @@ const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos,
 
                 {/* Map Container */}
                 <div className="flex-1 w-full relative overflow-hidden p-8 flex items-center justify-center bg-black/40">
-                    <div 
-                        ref={containerRef}
-                        className="relative bg-slate-900/80 border-2 border-blue-900/50 shadow-[0_0_50px_rgba(0,0,0,0.5)] cursor-crosshair skew-x-[2deg]"
-                        style={{ 
-                            aspectRatio: `${bounds.width} / ${bounds.height}`,
-                            width: bounds.width > bounds.height ? '95%' : 'auto',
-                            height: bounds.height >= bounds.width ? '95%' : 'auto'
-                        }}
+                    <MapCanvas
+                        bounds={bounds}
+                        groupedEntities={groupedEntities}
+                        setTooltipData={setTooltipData}
                         onMouseMove={handleMouseMove}
-                        onClick={handleMapClick}
-                    >
-                        {/* Grid */}
-                        <div className="absolute inset-0 pointer-events-none">{renderGrid()}</div>
-
-                        {/* Origin Crosshair */}
-                        <div className="absolute left-1/2 top-0 bottom-0 border-l border-blue-500/20 pointer-events-none"></div>
-                        <div className="absolute top-1/2 left-0 right-0 border-t border-blue-500/20 pointer-events-none"></div>
-
-                        {/* Grouped Markers */}
-                        {groupedEntities.map((group, i) => {
-                            const topItem = group[0];
-                            const pos = toMapPercent(topItem.x, topItem.z);
-                            const count = group.length;
-                            
-                            // Determine visual style based on top priority item
-                            let sizeClass = "w-3 h-3";
-                            let zIndex = 10;
-                            let content = null;
-
-                            switch (topItem.type) {
-                                case 'PLAYER':
-                                    zIndex = 100;
-                                    content = (
-                                        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-blue-500 animate-pulse drop-shadow-[0_0_10px_rgba(59,130,246,1)]"></div>
-                                    );
-                                    break;
-                                case 'BOSS':
-                                    zIndex = 90;
-                                    content = <span className="text-3xl drop-shadow-md filter drop-shadow-[0_0_5px_rgba(255,0,0,0.8)] animate-pulse">💀</span>;
-                                    break;
-                                case 'FAMILY':
-                                    zIndex = 80;
-                                    content = <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-[0_0_10px_rgba(74,222,128,0.8)] animate-bounce"></div>;
-                                    break;
-                                case 'POI':
-                                    zIndex = 20; sizeClass = "w-6 h-6";
-                                    content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
-                                    break;
-                                case 'OBSTACLE':
-                                    zIndex = 10; sizeClass = "w-2 h-2";
-                                    content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
-                                    break;
-                                case 'CHEST':
-                                    zIndex = 15; sizeClass = "w-4 h-4";
-                                    content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
-                                    break;
-                                default:
-                                    content = (topItem.icon && topItem.icon.length < 5) ? <span style={{color: topItem.color}}>{topItem.icon}</span> : <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
-                            }
-
-                            return (
-                                <div 
-                                    key={`group-${i}`}
-                                    className={`absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-transform hover:scale-125 cursor-help`}
-                                    style={{ 
-                                        left: `${pos.x}%`, 
-                                        top: `${pos.y}%`, 
-                                        zIndex 
-                                    }}
-                                    onMouseEnter={(e) => setTooltipData({ rect: e.currentTarget.getBoundingClientRect(), items: group })}
-                                    onMouseLeave={() => setTooltipData(null)}
-                                >
-                                    {content}
-                                    {/* Stack indicator if multiple items */}
-                                    {count > 1 && (
-                                        <div className="absolute -top-3 -right-3 bg-white text-black text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-black shadow-md">
-                                            {count}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                        onClick={onMapClick}
+                    />
                 </div>
 
                 {/* Footer Legend */}

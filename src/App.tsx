@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GameState, GameScreen, PlayerStats, MissionStats, SectorTrigger, MapItem, WeaponType } from './types';
 import { loadGameState, saveGameState } from './utils/persistence';
 import { aggregateStats } from './utils/gameLogic';
-import GameCanvas from './components/GameCanvas';
+import GameCanvas, { GameCanvasHandle } from './components/GameCanvas';
 import Camp from './components/camp/Camp';
 import GameHUD from './components/ui/hud/GameHUD';
 import ScreenPause from './components/game/ScreenPause';
@@ -40,6 +40,8 @@ const App: React.FC = () => {
 
     // Interaction Locks
     const [isSaving, setIsSaving] = useState(false);
+    const gameCanvasRef = React.useRef<GameCanvasHandle>(null);
+
 
     useEffect(() => {
         // Auto-save on meaningful state changes (screens)
@@ -50,7 +52,8 @@ const App: React.FC = () => {
     useGlobalInput(gameState.screen, {
         isPaused, isMapOpen, showTeleportMenu, activeClue, isDialogueOpen, hp: hudState.hp || 100, isSettingsOpen
     }, {
-        setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen
+        setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen,
+        requestPointerLock: () => gameCanvasRef.current?.requestPointerLock()
     });
 
     const handleUpdateHUD = useCallback((data: any) => {
@@ -227,6 +230,7 @@ const App: React.FC = () => {
             {gameState.screen === GameScreen.MISSION && (
                 <>
                     <GameCanvas
+                        ref={gameCanvasRef}
                         stats={gameState.stats}
                         loadout={gameState.loadout}
                         weaponLevels={gameState.weaponLevels}
@@ -270,7 +274,7 @@ const App: React.FC = () => {
 
                     {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && (
                         <ScreenPause
-                            onResume={() => setIsPaused(false)}
+                            onResume={() => { setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
                             onAbort={handleAbortMission}
                             onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
                             onOpenSettings={() => setIsSettingsOpen(true)}
@@ -288,7 +292,7 @@ const App: React.FC = () => {
                     )}
 
                     {activeClue && (
-                        <ScreenClue clue={activeClue} onClose={() => { setActiveClue(null); setIsPaused(false); }} />
+                        <ScreenClue clue={activeClue} onClose={() => { setActiveClue(null); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }} />
                     )}
                 </>
             )}
@@ -300,7 +304,7 @@ const App: React.FC = () => {
                     playerPos={hudState.playerPos}
                     familyPos={hudState.familyPos || undefined}
                     bossPos={hudState.bossPos || undefined}
-                    onClose={() => { setIsMapOpen(false); setIsPaused(false); }}
+                    onClose={() => { setIsMapOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
                     onSelectCoords={handleMapSelectCoords}
                 />
             )}

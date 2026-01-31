@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { WeaponType } from '../../../types';
-import { WEAPONS } from '../../../content/constants';
+import { WEAPONS, RANKS } from '../../../content/constants';
 import { t } from '../../../utils/i18n';
 
 interface GameHUDProps {
@@ -56,8 +56,18 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const prevHp = useRef(hp);
     const prevLevel = useRef(level);
+
+    const getRank = (lvl: number) => {
+        const rankKey = Math.min(Math.max(0, lvl - 1), 19);
+        const translated = t(`ranks.${rankKey}`);
+        if (translated.startsWith('ranks.')) return RANKS[rankKey] || 'SURVIVOR';
+        return translated;
+    };
     const prevSkillPoints = useRef(skillPoints);
     const prevScrap = useRef(scrap);
+
+    const [spGainAmount, setSpGainAmount] = useState(0);
+    const [scrapGainAmount, setScrapGainAmount] = useState(0);
 
     useEffect(() => {
         if (hp < prevHp.current) {
@@ -76,7 +86,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     }, [level]);
 
     useEffect(() => {
-        if ((skillPoints || 0) > (prevSkillPoints.current || 0)) {
+        const diff = (skillPoints || 0) - (prevSkillPoints.current || 0);
+        if (diff > 0) {
+            setSpGainAmount(diff);
             setSpGained(true);
             const t = setTimeout(() => setSpGained(false), 2000);
             return () => clearTimeout(t);
@@ -85,9 +97,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     }, [skillPoints]);
 
     useEffect(() => {
-        if (scrap > prevScrap.current) {
+        const diff = scrap - prevScrap.current;
+        if (diff > 0) {
+            setScrapGainAmount(diff);
             setScrapGained(true);
-            const t = setTimeout(() => setScrapGained(false), 500);
+            const t = setTimeout(() => setScrapGained(false), 1000);
             return () => clearTimeout(t);
         }
         prevScrap.current = scrap;
@@ -174,31 +188,43 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             <div className="absolute inset-0 pointer-events-none p-8 flex flex-col justify-between font-sans z-50">
                 {/* Top Header */}
                 <div className="flex justify-between items-start">
-                    {/* Resource Group (Horizontal) */}
-                    <div className="flex flex-row gap-2 items-start">
-
-                        {/* Skill Points (Left, Narrow) - Animated */}
-                        <div className={`relative transition-all duration-300 transform origin-left ${spGained ? 'scale-110 z-10' : 'scale-100'}`}>
-                            <div className={`bg-black/90 p-2 border-l-4 skew-x-[-10deg] shadow-lg w-[70px] transition-colors duration-300 ${spGained ? 'border-purple-400 bg-purple-900/50' : 'border-purple-800'}`}>
-                                <div className="skew-x-[10deg]">
-                                    <span className={`text-[9px] uppercase font-bold block tracking-widest transition-colors ${spGained ? 'text-purple-300' : 'text-zinc-500'}`}>{t('ui.sp')}</span>
-                                    <span className={`text-xl font-black transition-colors ${spGained ? 'text-white' : 'text-purple-500'}`}>{skillPoints}</span>
+                    {/* Ranking & Resource Group (Top Left) */}
+                    <div className="flex flex-col gap-4 items-start">
+                        {/* Rank Box (Matches CampHUD) */}
+                        <div className="bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl w-[320px] backdrop-blur-sm transition-all duration-300">
+                            <h1 className="text-4xl font-black text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem', fontWeight: 900 }}>{getRank(level)}</h1>
+                            <div className="flex items-center gap-4 mt-2">
+                                <span className="text-blue-400 font-bold text-sm tracking-widest">{t('ui.lvl')} {level}</span>
+                                <div className="flex-1 h-1.5 bg-blue-900/40">
+                                    <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${xpP}%` }} />
                                 </div>
                             </div>
-                            {/* Floating +1 when gaining SP */}
-                            {spGained && (
-                                <div className="absolute -right-4 -top-4 text-3xl font-black text-purple-300 animate-[bounce_1s_infinite] drop-shadow-[0_0_10px_rgba(168,85,247,0.8)] skew-x-[-10deg]">
-                                    +1
-                                </div>
-                            )}
                         </div>
 
-                        {/* Scrap (Right) - Animated on gain */}
-                        <div className={`transition-all duration-200 transform origin-left ${scrapGained ? 'scale-110' : 'scale-100'}`}>
-                            <div className={`bg-black/90 p-2 border-l-4 skew-x-[-10deg] shadow-lg w-[100px] transition-colors duration-200 ${scrapGained ? 'border-yellow-400 bg-yellow-900/40' : 'border-yellow-700'}`}>
-                                <div className="skew-x-[10deg]">
-                                    <span className={`text-[9px] uppercase font-bold block tracking-widest ${scrapGained ? 'text-yellow-200' : 'text-zinc-500'}`}>{t('ui.scrap')}</span>
-                                    <span className={`text-xl font-black ${scrapGained ? 'text-white' : 'text-yellow-500'}`}>{scrap}</span>
+                        <div className="flex flex-row gap-4 items-start">
+                            {/* Skill Points (Left, Narrow) - Animated */}
+                            <div className={`relative transition-all duration-300 transform origin-left ${spGained ? 'scale-110 z-10' : 'scale-100'}`}>
+                                <div className={`px-4 py-2 border backdrop-blur-sm transition-all duration-300 ${skillPoints > 0 || spGained ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/80 border-slate-700'} ${spGained ? 'animate-[bubble_0.3s_ease-out]' : ''}`}>
+                                    <div className="flex flex-col">
+                                        <div className="flex justify-between items-baseline gap-2 relative">
+                                            <span className={`text-[10px] uppercase font-black block tracking-widest transition-colors ${skillPoints > 0 || spGained ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
+                                            {spGained && <span className="absolute -top-3 right-0 text-[10px] font-black text-purple-300 animate-pulse drop-shadow-md">+{spGainAmount}</span>}
+                                        </div>
+                                        <span className={`text-2xl font-black transition-colors ${skillPoints > 0 || spGained ? 'text-purple-400' : 'text-white'}`}>{skillPoints}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Scrap (Right) - Animated on gain */}
+                            <div className={`transition-all duration-200 transform origin-left ${scrapGained ? 'scale-110 z-10' : 'scale-100'}`}>
+                                <div className={`px-4 py-2 border backdrop-blur-sm transition-all duration-300 ${scrap > 0 || scrapGained ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 border-slate-700'} ${scrapGained ? 'animate-[bubble_0.3s_ease-out]' : ''}`}>
+                                    <div className="flex flex-col">
+                                        <div className="flex justify-between items-baseline gap-2 relative">
+                                            <span className={`text-[10px] uppercase font-black block tracking-widest ${scrap > 0 || scrapGained ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
+                                            {scrapGained && <span className="absolute -top-3 right-0 text-[10px] font-black text-yellow-300 animate-pulse drop-shadow-md">+{scrapGainAmount}</span>}
+                                        </div>
+                                        <span className={`text-2xl font-black ${scrap > 0 || scrapGained ? 'text-yellow-400' : 'text-white'}`}>{scrap}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -256,20 +282,14 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             <div className="h-full bg-emerald-600 transition-all duration-200 ease-out" style={{ width: `${stP}%` }} />
                         </div>
 
-                        {/* XP Bar Container - Shifted Left More for Skew Alignment */}
-                        <div className="relative w-full h-1.5 bg-blue-950/40 skew-x-[-10deg] z-10 -ml-1.5">
-                            <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${xpP}%` }} />
-                        </div>
-
-                        {/* Level Text - Aligned with XP bar left edge (-ml-1.5 approx) */}
-                        <div className="flex items-center justify-between mt-0.5 skew-x-[-10deg] px-1 z-10 -ml-2">
-                            <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest">{t('ui.level')} {level}</span>
-                            {showLevelUp && (
-                                <span className="text-blue-400 text-[10px] font-black tracking-widest animate-pulse uppercase">
+                        {/* Level Up Notification */}
+                        {showLevelUp && (
+                            <div className="absolute -top-12 left-0 w-full flex items-center justify-center skew-x-[-10deg] z-10">
+                                <span className="text-blue-400 text-sm font-black tracking-[0.2em] animate-pulse uppercase bg-black/80 px-4 py-1 border border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
                                     {t('ui.level_up')}
                                 </span>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Centered Action Bar (Weapons) */}

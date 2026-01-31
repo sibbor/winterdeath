@@ -18,11 +18,6 @@ export const en = {
         kills: "KILLS",
         level: "LEVEL",
         level_up: "LEVEL UP!",
-        reloading: "RELOADING",
-        defeat_boss: "DEFEAT BOSS",
-        target_located: "TARGET LOCATED",
-        protect_family: "PROTECT FAMILY",
-        scanning: "SCANNING...",
         xp: "XP",
         xp_earned: "XP Earned",
         sp_earned: "SP Earned",
@@ -58,22 +53,15 @@ export const en = {
         found: "FOUND",
         locked: "LOCKED",
         sector: "SECTOR",
-        confirm_selection: "CONFIRM SELECTION",
         play_sector: "GO TO BRIEFING",
         close: "CLOSE",
         deploy_sector: "HEAD TO SECTOR",
         back_to_overview: "BACK TO OVERVIEW",
         mission_briefing: "SECTOR BRIEFING",
         settings: "SETTINGS",
-        save_settings: "SAVE SETTINGS",
         language: "LANGUAGE",
         debug_mode: "DEBUG MODE",
-        debug_desc: "Enable cheats and extra info.",
         show_fps: "SHOW FPS",
-        reset_campaign: "RESET CAMPAIGN",
-        reset_desc: "This will delete all progress.",
-        delete_save_data: "DELETE SAVE DATA",
-        delete_data: "DELETE DATA",
         cancel: "CANCEL",
         paused: "PAUSED",
         continue: "CONTINUE",
@@ -120,8 +108,6 @@ export const en = {
         open_chest: "OPEN CHEST [E]",
         travel: "TRAVEL [E]",
         clue_found_title: "CLUE FOUND",
-        reunited_with: "REUNITED WITH",
-        end_conversation: "END CONVERSATION",
         available_pts: "PTS",
         throwables_thrown: "Throwables thrown",
         throwables_used: "Throwables Used",
@@ -138,13 +124,29 @@ export const en = {
         pri: "PRI",
         sec: "SEC",
         thr: "THR",
-        complete_prev: "Complete previous sector to access data.",
-        unknown_family: "Family Member: ???",
         player: "Player",
         chest: "Chest",
+        large_chest: "Large Chest",
         poi: "POI",
         clue: "Clue",
-        boss: "Boss"
+        boss: "Boss",
+        adventure_log: "ADVENTURE LOG",
+        log_enemies: "ENEMIES",
+        log_bosses: "BOSSES",
+        log_collectibles: "COLLECTIBLES",
+        log_clues: "CLUES",
+        log_poi: "POI",
+        wip: "WORK IN PROGRESS",
+        archive_corrupted: "Archive corrupted. Data recovery pending...",
+        travel_logs_empty: "Travel logs empty or unreadable.",
+        decrypted_segment: "[ Decrypted Data Segment {idx}-{id}... ]",
+        fragment: "Intel Fragment",
+        intel_none: "No intel gathered.",
+        classified_threat: "Classified threat data.",
+        unknown_threat: "Unknown Threat",
+        unknown_sector: "Unknown Sector",
+        health: "Health",
+        speed: "Speed"
     },
     categories: {
         primary: "PRIMARY",
@@ -155,9 +157,29 @@ export const en = {
     },
     stations: {
         armory: "ARMORY",
-        missions: "SECTOR OVERVIEW",
+        sectors: "SECTORS",
         skills: "SKILLS",
+        adventure_log: "ADVENTURE LOG",
         stats: "STATISTICS"
+    },
+    enemies: {
+        WALKER: {
+            name: "Walker",
+            description: "Standard reanimated combatant. Low threat individually, dangerous in swarms. Aim for the head."
+        },
+        RUNNER: {
+            name: "Runner",
+            description: "Hyper-aggressive mutation. Closing speed is extreme. Prioritize targets immediately."
+        },
+        TANK: {
+            name: "Tank",
+            description: "Heavily armored juggernaut. Absorbs significant small-arms fire. Explosives recommended."
+        },
+        BOMBER: {
+            name: "Bomber",
+            description: "Unstable biological payload. Explodes on proximity. Keep safe distance."
+        },
+        unknown: "Unknown biological anomaly."
     },
     skills: {
         vitality: "VITALITET",
@@ -167,19 +189,8 @@ export const en = {
         reflex: "REFLEXES",
         reflex_desc: "Increases movement speed."
     },
-    weapons: {
-        smg: "SMG",
-        shotgun: "Shotgun",
-        rifle: "Assault Rifle",
-        pistol: "Pistol",
-        revolver: "Revolver",
-        grenade: "Grenade",
-        molotov: "Molotov",
-        flashbang: "Flashbang",
-        minigun: "Minigun",
-        radio: "Radio"
-    },
-   tips: [
+    minigun: "Minigun",
+    tips: [
         "Just shoot! Unlimited gun ammo.",
         "Conserve throwables, they're limited.",
         "Use throwables for crowds.",
@@ -220,13 +231,15 @@ export const en = {
         epilogue_title: "EPILOGUE: NO ONE LEFT BEHIND",
         epilogue_text: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the undead, but we made a promise. Return to The Village one last time. Save them.",
         generic_briefing: "Emergency Broadcast: Distress signal detected in {map}. Locate the survivor and neutralize the {boss}.",
-        extracted_briefing: "Sector Report: {map} is currently under the control of the {boss}. Although the survivor has been successfully extracted to camp, the area remains a critical threat. The horde is growing, and we cannot let the {boss} establish a stronghold. Go in, clear the sector, and eliminate the target."
+        extracted_briefing: "Sector Report: {map} is currently under the control of the {boss}. Although the survivor has been successfully extracted to camp, the area remains a critical threat. The horde is growing, and we cannot let the {boss} establish a stronghold. Go in, clear the sector, and eliminate the target.",
+        gym_event: "What the hell was that?!"
     },
     bosses: {
-        0: { name: "The Yard Master", death: "The creature that started it all in The Village lies dead. Its mutated form suggests it was once human, perhaps a neighbor. Loke is safe now." },
-        1: { name: "The Vault Stalker", death: "The armored giant guarding the bunker has fallen. The survivors inside have fled, but Jordan is secured. The caves are silent once more." },
-        2: { name: "The Frequency", death: "A screeching horror that used the radio mast to coordinate the horde. With its death, the interference clears. Esmeralda is safe." },
-        3: { name: "The Metal Crusher", death: "The massive monstrosity that separated Nathalie from Esmeralday is dead. It took everything to bring it down. The family is finally reunited." }
+        0: { name: "The Yard Master", death: "The creature that started it all in The Village lies dead. Its mutated form suggests it was once human, perhaps a neighbor. Loke is safe now.", lore: "Entity identified in Sector 1 (Forest). wields crude heavy weaponry. High physical resilience." },
+        1: { name: "The Vault Stalker", death: "The armored giant guarding the bunker has fallen. The survivors inside have fled, but Jordan is secured. The caves are silent once more.", lore: "Entity identified in Sector 2 (Graveyard). Capabilities include optical camouflage and rapid repositioning." },
+        2: { name: "The Frequency", death: "A screeching horror that used the radio mast to coordinate the horde. With its death, the interference clears. Esmeralda is safe.", lore: "Entity identified in Sector 3 (Sewers). Emits toxic biological agents. Environmental hazard." },
+        3: { name: "The Metal Crusher", death: "The massive monstrosity that separated Nathalie from Esmeralday is dead. It took everything to bring it down. The family is finally reunited.", lore: "Entity identified in Sector 4 (City). Massive bio-mechanical structure. Extreme threat level." },
+        intro_default: "A massive threat dominates this sector."
     },
     family: {
         dad: "Dad",
@@ -261,7 +274,7 @@ export const en = {
         s1_town_center: "The tracks disappear... they must be here somewhere.",
         s1_tunnel_blocked: "Oh crap, the tunnel has been blocked by a crashed bus",
         s1_tunnel_cleared: "Tunnel cleared. Smooth!",
-        
+
         s1_poi_building_on_fire: "Shit, there building is on a fire!",
         s1_poi_church: "The church is burning... The work of Satan?",
         s1_poi_cafe: "Oh, I miss sitting here with my family.",
@@ -269,14 +282,14 @@ export const en = {
         s1_poi_gym: "Used to lift weights here. Some heavy fucking weights.",
         s1_poi_grocery: "The grocery store seems looted...",
         s1_poi_train_yard: "Hmm... the smoke comes from the train. Let's have a look.",
-        
+
         // Sector 2 Triggers
-        s2_collectible_1: "",
-        s2_collectible_1_description: "",
-        s2_collectible_1_icon: "",
-        s2_collectible_2: "",
-        s2_collectible_2_description: "",
-        s2_collectible_2_icon: "",
+        s2_collectible_1: "Dirty Teddy Bear",
+        s2_collectible_1_description: "Jordan's teddy. It's missing an eye and smells like the damp caves. He must have dropped it when they were running from the hostiles.",
+        s2_collectible_1_icon: "🧸",
+        s2_collectible_2: "Old Military Map",
+        s2_collectible_2_description: "A partially torn map of the bunker system. Some areas are marked with 'INFECTED' and 'STAY AWAY'. It seems the shelters were compromised early on.",
+        s2_collectible_2_icon: "🗺️",
         s2_start: "Loke said the others followed these rails. Let's see where it leads us...",
         s2_combat: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this.",
         s2_mountain: "Oh, the cave entrance. Let's see if they're hinding inside!",
@@ -285,7 +298,20 @@ export const en = {
         s2_cave_loot: "Old military supplies. Let's see what we can find.",
         s2_cave_loot_more: "More supplies. Most of it looted already. By who?! Natahlie? Esmeralda? Jordan?",
         s2_cave_door: "These huge doors must lead to the shelter. Let's hope they're inside!",
-        s2_train_tunnel: "The tunnel is blocked. Let's head another direction."
+        s2_train_tunnel: "The tunnel is blocked. Let's head another direction.",
+        s2_tunnel: "This tunnel looks like it once led out to the other side of the mountain.",
+
+        // Sector 3 Triggers
+        s3_collectible: "Worn Radio Component",
+        s3_collectible_desc: "A small circuit board, likely from the mast's control panel. Esmeralda must have been trying to repair it before she was chased away.",
+        s3_forest_noise: "The forest is too loud. Every snap of a twig sounds like a runner...",
+        s3_mast_sight: "There it is. The Häglared Mast. If Esmeralda is anywhere, she's there.",
+
+        // Sector 4 Triggers
+        s4_collectible: "Rusted Car Key",
+        s4_collectible_desc: "A key to an old Volvo. It was found near a stack of wrecked cars. Maybe Nathalie tried to use one as a barricade.",
+        s4_noise: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?",
+        s4_shed: "The office building. It's the only place with a reinforced door. She has to be in there."
     },
     dialogue: {
         // Dialogue: Sector 1

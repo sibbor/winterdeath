@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { t } from '../../utils/i18n';
 
 export const Sector4: SectorDef = {
     id: 3,
@@ -126,9 +127,9 @@ export const Sector4: SectorDef = {
         shedGroup.add(shed);
         scene.add(shedGroup);
         obstacles.push({ mesh: shedGroup, radius: 12 });
-        SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, "OFFICE");
+        SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, t('maps.scrapyard_name')); // Using map name as key or appropriate label
 
-        SectorBuilder.spawnClueMarker(ctx, 40, -80, 'collectible', 'phone'); // Placeholder visual
+        SectorBuilder.spawnClueMarker(ctx, 40, -80, t('clues.s4_collectible'), 'phone'); // Placeholder visual
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);

@@ -4,6 +4,7 @@ import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY, createTextSprite } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
+import { t } from '../../utils/i18n';
 
 export const Sector2: SectorDef = {
     id: 1,
@@ -356,8 +357,8 @@ export const Sector2: SectorDef = {
         // Extracted to Sector2_Cave.ts
         generateCaveSystem(ctx, innerCave, caveEntrancePos);
 
-        SectorBuilder.spawnClueMarker(ctx, 50, 22, 'collectible 1', 'phone');
-        SectorBuilder.spawnClueMarker(ctx, 92, -208, 'collectible 2', 'pacifier');
+        SectorBuilder.spawnClueMarker(ctx, 50, 22, t('clues.s2_collectible_1'), 'phone');
+        SectorBuilder.spawnClueMarker(ctx, 92, -208, t('clues.s2_collectible_2'), 'pacifier');
 
         SectorBuilder.visualizeTriggers(ctx);
     },

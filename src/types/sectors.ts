@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { SectorTrigger, MapItem, WeatherType, SectorState } from '../../types';
+import { SectorTrigger, MapItem, WeatherType, SectorState } from './index';
 
 export interface SectorEnvironment {
     bgColor: number;
@@ -16,7 +16,7 @@ export interface SectorEnvironment {
         intensity: number;
         position?: { x: number, y: number, z: number };
     };
-    cameraOffsetZ: number; 
+    cameraOffsetZ: number;
     weather: WeatherType;
     weatherDensity?: number; // Particle count
 }
@@ -50,22 +50,22 @@ export interface SectorDef {
     id: number;
     name: string;
     environment: SectorEnvironment;
-    
+
     // Spawns
     playerSpawn: SpawnPoint;
     familySpawn: SpawnPoint;
     bossSpawn: SpawnPoint;
-    
+
     // Cinematic
     cinematic?: CinematicConfig;
 
     // Logic
     generate: (ctx: SectorContext) => void;
     onUpdate: (
-        delta: number, 
-        now: number, 
-        playerPos: THREE.Vector3, 
-        gameState: any, 
+        delta: number,
+        now: number,
+        playerPos: THREE.Vector3,
+        gameState: any,
         sectorState: SectorState,
         events: {
             spawnZombie: (type?: string, pos?: THREE.Vector3) => void;

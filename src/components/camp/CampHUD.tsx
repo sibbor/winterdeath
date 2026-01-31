@@ -30,8 +30,10 @@ interface CampHUDProps {
 
 const STATIONS = [
     { id: 'armory', labelKey: 'stations.armory' },
-    { id: 'missions', labelKey: 'stations.missions' },
-    { id: 'skills', labelKey: 'stations.skills' } // Maps to Player Skills now
+    { id: 'sectors', labelKey: 'stations.sectors' },
+    { id: 'skills', labelKey: 'stations.skills' },
+    { id: 'adventure_log', labelKey: 'stations.adventure_log' },
+    { id: 'stats', labelKey: 'stations.stats' }, // Statistics
 ];
 
 const CampHUD: React.FC<CampHUDProps> = ({
@@ -50,11 +52,25 @@ const CampHUD: React.FC<CampHUDProps> = ({
     };
 
     const getLabelPos = (id: string) => {
-        switch (id) { case 'armory': return { left: '25%', top: '35%' }; case 'missions': return { left: '50%', top: '30%' }; case 'skills': return { left: '75%', top: '35%' }; default: return { left: '50%', top: '50%' }; }
+        switch (id) {
+            case 'armory': return { left: '20%', top: '30%' };
+            case 'adventure_log': return { left: '40%', top: '35%' };
+            case 'sectors': return { left: '60%', top: '35%' };
+            case 'skills': return { left: '80%', top: '30%' };
+            case 'stats': return { left: '15%', top: '15%' }; // If hovered over stats box? Usually not handled by hoveredStation but checking just in case
+            default: return { left: '50%', top: '40%' };
+        }
     };
 
     const getStationColorClass = (id: string) => {
-        switch (id) { case 'armory': return 'bg-yellow-700 border-yellow-500'; case 'missions': return 'bg-green-700 border-green-500'; case 'skills': return 'bg-purple-700 border-purple-500'; default: return 'bg-red-700 border-white/20'; }
+        switch (id) {
+            case 'armory': return 'bg-yellow-700 border-yellow-500';
+            case 'sectors': return 'bg-red-700 border-red-500'; // Red
+            case 'skills': return 'bg-purple-700 border-purple-500';
+            case 'adventure_log': return 'bg-green-700 border-green-500'; // Green
+            case 'stats': return 'bg-blue-700 border-blue-500';
+            default: return 'bg-red-700 border-white/20';
+        }
     };
 
     return (
@@ -96,11 +112,11 @@ const CampHUD: React.FC<CampHUDProps> = ({
             {hoveredStation && !hoveredStation.startsWith('family_') && !hoveredStation.startsWith('player_') && !isIdle && (
                 <div className={`absolute transform -translate-x-1/2 pointer-events-none z-20 ${uiFadeClass}`} style={{ ...getLabelPos(hoveredStation) }}>
                     <div className={`${getStationColorClass(hoveredStation)} text-white px-8 py-2 text-2xl font-black uppercase tracking-widest border-2 shadow-2xl mb-2`}>{t(STATIONS.find(s => s.id === hoveredStation)?.labelKey || '')}</div>
-                    <div className="bg-black/80 text-slate-300 px-4 py-2 border border-slate-700 text-center text-xs font-bold uppercase">
-                        {hoveredStation === 'armory' && (<div className="flex gap-4"><span>{t('ui.pri')}: {currentLoadoutNames.pri}</span><span>{t('ui.sec')}: {currentLoadoutNames.sec}</span><span>{t('ui.thr')}: {currentLoadoutNames.thr}</span></div>)}
-                        {hoveredStation === 'missions' && (<div>{t('ui.sector')}: {currentMapName}</div>)}
-                        {hoveredStation === 'skills' && (<div>{t('ui.available_pts')}: {stats.skillPoints}</div>)}
-                    </div>
+                    {hoveredStation === 'armory' && (
+                        <div className="bg-black/80 text-slate-300 px-4 py-2 border border-slate-700 text-center text-xs font-bold uppercase">
+                            <div className="flex gap-4"><span>{t('ui.pri')}: {currentLoadoutNames.pri}</span><span>{t('ui.sec')}: {currentLoadoutNames.sec}</span><span>{t('ui.thr')}: {currentLoadoutNames.thr}</span></div>
+                        </div>
+                    )}
                 </div>
             )}
 

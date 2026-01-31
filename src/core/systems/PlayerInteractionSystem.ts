@@ -80,6 +80,10 @@ export class PlayerInteractionSystem implements System {
                 soundManager.playUiConfirm();
                 this.spawnScrapExplosion(session, chest.mesh.position.x, chest.mesh.position.z, chest.scrap);
 
+                // Remove Glow Light
+                const light = chest.mesh.getObjectByName('chestLight');
+                if (light) chest.mesh.remove(light);
+
                 // Animate Lid
                 if (chest.mesh.children[1]) {
                     chest.mesh.children[1].rotation.x = -Math.PI / 2;
