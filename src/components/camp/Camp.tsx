@@ -8,6 +8,7 @@ import { t } from '../../utils/i18n';
 import { ModelFactory } from '../../utils/assets';
 import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 import { createCampTextures } from '../../utils/assets/campTextures';
+import { Engine, GraphicsSettings } from '../../core/engine/Engine';
 import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
 
@@ -39,7 +40,9 @@ interface CampProps {
     bossesDefeated: number[];
     onResetGame: () => void;
     hasCheckpoint?: boolean;
-    onFPSUpdate?: (fps: number) => void; // New prop
+    onFPSUpdate?: (fps: number) => void;
+    onSaveGraphics: (graphics: GraphicsSettings) => void;
+    initialGraphics?: GraphicsSettings;
 }
 
 const STATIONS = [
@@ -48,7 +51,7 @@ const STATIONS = [
     { id: 'skills', pos: new THREE.Vector3(8, 0, -4) }
 ];
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartMission, currentMap, debugMode, onToggleDebug, showFps, onToggleFps, familyMembersFound, isMapLoaded, bossesDefeated, onResetGame, hasCheckpoint, onFPSUpdate }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartMission, currentMap, debugMode, onToggleDebug, showFps, onToggleFps, familyMembersFound, isMapLoaded, bossesDefeated, onResetGame, hasCheckpoint, onFPSUpdate, onSaveGraphics, initialGraphics }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     // fpsRef removed as it is now global
@@ -56,6 +59,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
     const [activeModal, setActiveModal] = useState<'armory' | 'missions' | 'skills' | 'stats' | 'settings' | 'briefing' | 'reset_confirm' | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string } | null>(null);
+
+    const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || Engine.getInstance().getSettings());
+
+    // Renderer Ref for live updates
+    const engineRef = useRef<Engine | null>(null);
 
     // Idle UI State
     const [isIdle, setIsIdle] = useState(false);
@@ -123,25 +131,27 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const width = container.clientWidth;
         const height = container.clientHeight;
 
-        const scene = new THREE.Scene();
+        // --- ENGINE & RENDERER ---
+        const engine = Engine.getInstance();
+        engine.updateSettings(graphics);
+        engine.mount(container);
+        engineRef.current = engine;
+
+        const scene = engine.scene;
+        const camera = engine.camera;
+        const renderer = engine.renderer;
+
+        // Reset Scene for Camp
+        scene.clear();
+        camera.position.set(0, 10, 22);
+
         scene.background = new THREE.Color(0x050510);
         scene.fog = new THREE.FogExp2(0x050510, 0.015);
-
-        const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 3000);
-        camera.position.set(0, 10, 22);
 
         const BASE_LOOK_AT = new THREE.Vector3(0, 2, -5);
         const CINEMATIC_LOOK_AT = new THREE.Vector3(0, 8, -5);
         const currentLookAt = BASE_LOOK_AT.clone();
         camera.lookAt(currentLookAt);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-        renderer.setSize(width, height);
-        // Optimize: Cap pixel ratio for high-DPI screens (Surface Pro)
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        container.appendChild(renderer.domElement);
 
         const hemiLight = new THREE.HemisphereLight(0x444455, 0x111115, 0.6);
         scene.add(hemiLight);
@@ -170,7 +180,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const animals = activeMembers.filter(m => m.race === 'animal');
 
         activeMembers.forEach((memberData) => {
-            const member = (memberData.id === 'player') ? ModelFactory.createPlayer() : ModelFactory.createFamilyMember(memberData);
+            // Use createFamilyMember for everyone (removes flashlight/gun for player in camp)
+            const member = ModelFactory.createFamilyMember(memberData);
+
+            // Ensure player has the correct ID format for interaction
+            if (memberData.id === 'player') {
+                member.userData.id = `player_${memberData.name}`;
+                member.userData.type = 'family';
+            }
             let angle = 0, radius = memberData.race === 'animal' ? 5.2 : 5.0;
 
             if (memberData.race === 'animal') {
@@ -219,9 +236,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         window.addEventListener('mousemove', onMM); window.addEventListener('click', onCL);
         const onResize = () => {
-            if (!containerRef.current) return;
-            const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight;
-            camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            engine.renderer.setSize(width, height);
         };
         window.addEventListener('resize', onResize);
 
@@ -232,16 +251,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         const animate = () => {
             frameId = requestAnimationFrame(animate);
-
-            // Performance Optimization: Throttle FPS when menu is open
-            if (activeModalRef.current) {
-                // Skip every other frame (30 FPS cap)
-                if (frame % 2 !== 0) {
-                    frame++;
-                    return;
-                }
-            }
-
             frame++;
             // activeRef is managed by the sync effect now, or we read from activeModalRef directly. 
             // But to be safe with existing logic:
@@ -345,14 +354,15 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
                 }
             });
-            renderer.render(scene, camera);
+            engine.renderer.render(scene, camera);
         };
 
         let frameId = requestAnimationFrame(animate);
         return () => {
             cancelAnimationFrame(frameId);
             window.removeEventListener('mousemove', onMM); window.removeEventListener('click', onCL); window.removeEventListener('resize', onResize);
-            renderer.dispose(); if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+            // We NO LONGER dispose the renderer here as it's shared
+            // We only unmount it if necessary, but mount() handles unparenting
             activeChats.current.forEach(c => { if (c.element.parentNode) c.element.parentNode.removeChild(c.element); });
         };
     }, [familyMembersFound, debugMode, textures]);
@@ -386,7 +396,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} />}
             {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} />}
             {activeModal === 'missions' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} onClose={closeModal} onSelectMap={(id) => { onSelectMap(id); openModal('briefing'); }} />}
-            {activeModal === 'settings' && <ScreenSettings onClose={closeModal} showFps={showFps} onToggleFps={onToggleFps} />}
+            {activeModal === 'settings' && (
+                <ScreenSettings
+                    onClose={closeModal}
+                    showFps={showFps}
+                    onToggleFps={onToggleFps}
+                    graphics={graphics}
+                    onUpdateGraphics={(newG) => {
+                        setGraphics(newG);
+                        onSaveGraphics(newG);
+                        Engine.getInstance().updateSettings(newG);
+                    }}
+                />
+            )}
             {activeModal === 'briefing' && <ScreenSectorBriefing mapIndex={currentMap} isExtracted={familyMembersFound.includes(currentMap)} isBossDefeated={bossesDefeated.includes(currentMap)} onStart={() => onStartMission()} onCancel={() => openModal('missions')} />}
             {activeModal === 'reset_confirm' && <ScreenResetConfirm onConfirm={onResetGame} onCancel={closeModal} />}
         </div>

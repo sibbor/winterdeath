@@ -124,9 +124,9 @@ export const initTreePrototypes = () => {
         foliageGeo.computeVertexNormals();
 
         const foliage = new THREE.Mesh(foliageGeo, needleMat);
-        foliage.castShadow = true;
+        foliage.castShadow = false;
         // receiveShadow false on foliage often saves self-shadowing artifacts/perf on transparent textures
-        foliage.receiveShadow = true;
+        foliage.receiveShadow = false;
 
         group.add(foliage);
 
@@ -158,5 +158,12 @@ export const ObjectGenerator = {
         tree.scale.setScalar(scaleMultiplier);
 
         return tree;
+    },
+
+    getPrototypes: () => {
+        if (treePrototypes.length === 0) {
+            initTreePrototypes();
+        }
+        return treePrototypes;
     }
 };

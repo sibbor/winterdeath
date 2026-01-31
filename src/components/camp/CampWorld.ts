@@ -20,35 +20,103 @@ export const CampWorld = {
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const spawnTree = (x: number, z: number, scale: number) => {
-            const tree = ObjectGenerator.createTree(scale);
-            tree.position.set(x, 0, z);
-            scene.add(tree);
+        // Seeded random for deterministic layout
+        let seed = 12345;
+        const srandom = () => {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
         };
 
-        // Procedural Forest
-        for (let i = 0; i < 20; i++) {
-            const a = Math.random() * Math.PI * 2; const r = 25 + Math.random() * 15;
-            const x = Math.cos(a) * r; const z = Math.sin(a) * r;
-            if (z < 10 && Math.abs(x) < 10) continue;
-            spawnTree(x, z, 0.8 + Math.random() * 0.4);
-        }
-        for (let i = 0; i < 150; i++) {
-            const a = Math.random() * Math.PI * 2; const r = 40 + Math.random() * 40;
-            spawnTree(Math.cos(a) * r, Math.sin(a) * r, 1.0 + Math.random() * 0.5);
-        }
-        for (let i = 0; i < 400; i++) {
-            const a = Math.random() * Math.PI * 2;
-            const r = 80 + Math.random() * 100;
-            const distFactor = Math.max(0.2, 1 - Math.pow((Math.max(0, r - 60) / 140), 1.5));
-            const baseScale = 1.5 + Math.random() * 1.0;
-            const finalScale = baseScale * distFactor;
-            spawnTree(Math.cos(a) * r, Math.sin(a) * r, finalScale);
+        const treeInstances: { x: number, z: number, scale: number, darken: number }[] = [];
+
+        // 1. HIGH DARK SILHOUETTES (Denser & Wider)
+        for (let i = 0; i < 10; i++) {
+            const x = (srandom() - 0.5) * 100;
+            const z = -45 - srandom() * 60;
+
+            // Moon Window for silhouettes too
+            let scale = 1.15 + srandom() * 2;
+
+            treeInstances.push({ x, z, scale, darken: 0.12 });
         }
 
-        // Closer clusters
-        for (let i = 0; i < 15; i++) { spawnTree(-15 - Math.random() * 20, -4 + (Math.random() - 0.5) * 20, 0.9 + Math.random() * 0.4); }
-        for (let i = 0; i < 15; i++) { spawnTree(15 + Math.random() * 20, -4 + (Math.random() - 0.5) * 20, 0.9 + Math.random() * 0.4); }
+        // 2. THE FOREST WALL (Deterministic V-Shape - Denser)
+        for (let i = 0; i < 30; i++) {
+            const z = -15 - srandom() * 20;
+            const zFactor = (z + 15) / -45;
+            const maxX = 35 - (zFactor * 20);
+            const x = (srandom() - 0.5) * 2 * maxX;
+            if (Math.abs(x) < 2) continue;
+
+            // Moon Window: Reduce scale for trees in the moon's quadrant (-30 < X < -5)
+            let scale = 1.1 + srandom() * 0.9;
+            if (x < -15 && x > -20) scale *= 0.6;
+
+            treeInstances.push({ x, z, scale, darken: 1.0 });
+        }
+
+        // 3. CAMPFIRE FRAMING & SIDE ANCHORS
+        // Flank the campfire area
+        treeInstances.push({ x: -15, z: 2, scale: 1.8, darken: 1.0 });
+        treeInstances.push({ x: 15, z: 2, scale: 1.8, darken: 1.0 });
+
+        treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
+
+        // --- MATHEMATICAL OPTIMIZATION ---
+        // Optimization: Use InstancedMesh instead of cloning separate trees.
+        // We reuse prototypes directly to avoid CPU overhead of object creation.
+        const prototypes = ObjectGenerator.getPrototypes();
+        const firstVariant = prototypes[0].children;
+        const trunkMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'CylinderGeometry') as THREE.Mesh;
+        const foliageMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'BufferGeometry') as THREE.Mesh;
+
+        if (trunkMesh && foliageMesh) {
+            const count = treeInstances.length;
+            const instTrunk = new THREE.InstancedMesh(trunkMesh.geometry, trunkMesh.material, count);
+            const instFoliage = new THREE.InstancedMesh(foliageMesh.geometry, foliageMesh.material, count);
+
+            // User requested no shadows for performance
+            instTrunk.castShadow = false;
+            instTrunk.receiveShadow = false;
+            instFoliage.castShadow = false;
+            instFoliage.receiveShadow = false;
+
+            // Reuse scratch objects outside the loop to minimize Garbage Collection (GC)
+            const matrix = new THREE.Matrix4();
+            const position = new THREE.Vector3();
+            const quaternion = new THREE.Quaternion();
+            const scaleVec = new THREE.Vector3();
+            const color = new THREE.Color();
+            const rotationY = new THREE.Euler(0, 0, 0);
+
+            for (let i = 0; i < count; i++) {
+                const inst = treeInstances[i];
+
+                // 1. Position
+                position.set(inst.x, 0, inst.z);
+
+                // 2. Rotation (Deterministic Hash)
+                rotationY.y = (inst.x * 123.45 + inst.z * 678.9) % (Math.PI * 2);
+                quaternion.setFromEuler(rotationY);
+
+                // 3. Scale
+                scaleVec.setScalar(inst.scale);
+
+                // 4. Compose Matrix in one step (Translation * Rotation * Scale)
+                matrix.compose(position, quaternion, scaleVec);
+
+                instTrunk.setMatrixAt(i, matrix);
+                instFoliage.setMatrixAt(i, matrix);
+
+                // 5. Apply Color (Darkening)
+                color.setScalar(inst.darken);
+                instTrunk.setColorAt(i, color);
+                instFoliage.setColorAt(i, color);
+            }
+
+            scene.add(instTrunk);
+            scene.add(instFoliage);
+        }
     },
 
     setupStations: (scene: THREE.Scene, textures: Textures, stationsPos: { id: string, pos: THREE.Vector3 }[]) => {

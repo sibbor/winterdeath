@@ -128,6 +128,12 @@ export interface GameState {
     timestamp: number;
   } | null;
   familySPAwarded: number[]; // Maps where family SP has been claimed
+  graphics?: {
+    pixelRatio: number;
+    antialias: boolean;
+    shadows: boolean;
+    shadowMapType: number;
+  };
 }
 
 export interface Vector2 {
@@ -242,6 +248,7 @@ export interface GameCanvasProps {
   onDialogueStateChange: (isOpen: boolean) => void;
   onMapInit: (items: MapItem[]) => void;
   onFPSUpdate?: (fps: number) => void;
+  initialGraphics?: any;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

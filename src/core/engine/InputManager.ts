@@ -136,12 +136,12 @@ export class InputManager {
         if (document.pointerLockElement) {
             if (!this.isEnabled) return;
 
-            const SENSITIVITY = 0.002;
+            const SENSITIVITY = 0.005;
             this.aimAngle -= e.movementX * SENSITIVITY;
 
-            const radius = window.innerHeight / 2;
-            this.state.aimVector.x = Math.cos(this.aimAngle) * radius;
-            this.state.aimVector.y = Math.sin(this.aimAngle) * radius;
+            // Update aimVector with a large enough radius to act as a direction
+            this.state.aimVector.x = Math.cos(this.aimAngle) * 100;
+            this.state.aimVector.y = Math.sin(this.aimAngle) * 100;
 
             this.state.mouse.x = Math.cos(this.aimAngle);
             this.state.mouse.y = Math.sin(this.aimAngle);

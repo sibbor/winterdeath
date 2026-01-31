@@ -368,11 +368,11 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         if (!containerRef.current) return;
 
         // --- ENGINE INIT ---
-
-
-
-        // Init Engine
-        const engine = new Engine();
+        // Use shared Engine instance
+        const engine = Engine.getInstance();
+        if (propsRef.current.initialGraphics) {
+            engine.updateSettings(propsRef.current.initialGraphics);
+        }
         engine.mount(containerRef.current);
         engineRef.current = engine;
         engine.input.enable();
@@ -387,7 +387,6 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         // Extract Engine Components for local usage
         const scene = engine.scene;
         const camera = engine.camera;
-        const renderer = engine.renderer;
 
         soundManager.resume();
 
@@ -427,7 +426,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
         const env = currentSector.environment;
         const textures = createProceduralTextures(); // Re-create or pass from props if needed
 
-        AssetPreloader.warmup(renderer, env);
+        AssetPreloader.warmup(engine.renderer, env);
 
         scene.background = new THREE.Color(env.bgColor);
         scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
@@ -754,7 +753,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
                 if (playerMeshRef.current) {
                     PlayerAnimation.update(playerMeshRef.current, { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 }, now, delta);
                 }
-                renderer.render(scene, camera);
+                engine.renderer.render(scene, camera);
                 lastTime = now;
                 return;
             }
@@ -762,7 +761,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
             if (state.isDead) {
                 DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMember.mesh || null, input: engine.input.state }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
                 FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroup.position, { spawnPart, spawnDecal });
-                renderer.render(scene, camera);
+                engine.renderer.render(scene, camera);
                 lastTime = now;
                 return;
             }
@@ -786,12 +785,12 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
 
             if (cinematicRef.current.active) {
                 CinematicSystem.update(cinematicRef.current, camera, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine });
-                renderer.render(scene, camera);
+                engine.renderer.render(scene, camera);
                 lastTime = now;
                 return;
             }
 
-            if (state.isInteractionOpen) { renderer.render(scene, camera); lastTime = now; return; }
+            if (state.isInteractionOpen) { engine.renderer.render(scene, camera); lastTime = now; return; }
 
             const currentInput = engine.input.state;
             let speed = 15 * propsRef.current.stats.speed;
@@ -937,7 +936,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
                     Cam: ${camera.position.x.toFixed(1)}, ${camera.position.z.toFixed(1)} <br/>
                     Enemies: ${state.enemies.length} <br/>
                     HP: ${state.hp.toFixed(0)} <br/>
-                    Render: ${renderer.info.render.calls} <br/>
+                    Render: ${engine.renderer.info.render.calls} <br/>
                     Objs: ${scene.children.length} <br/>
                     Modes: Cin:${cinematicRef.current.active} Boss:${bossIntroRef.current.active} Cut:${cameraOverrideRef.current?.active}
                 `;
@@ -971,14 +970,7 @@ const GameCanvas: React.FC<GameCanvasProps> = React.memo((props) => {
                 <div id="debug-stats">Initializing Debug...</div>
             </div>
 
-            {/* STATIC CROSSHAIR (Visible when Running) */}
-            {!props.isPaused && !props.isClueOpen && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 pointer-events-none z-[100] flex items-center justify-center opacity-80">
-                    <div className="w-1 h-1 bg-red-500 rounded-full shadow-[0_0_5px_red]"></div>
-                    <div className="absolute w-8 h-[1px] bg-white/30"></div>
-                    <div className="absolute h-8 w-[1px] bg-white/30"></div>
-                </div>
-            )}
+
 
             <div
                 ref={containerRef}

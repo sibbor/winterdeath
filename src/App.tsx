@@ -12,6 +12,7 @@ import ScreenTeleport from './components/game/ScreenTeleport';
 import ScreenSectorReport from './components/game/ScreenSectorReport';
 import ScreenBossKilled from './components/game/ScreenBossKilled';
 import ScreenClue from './components/game/ScreenClue';
+import ScreenSettings from './components/camp/ScreenSettings';
 import FPSDisplay from './components/ui/core/FPSDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
@@ -20,6 +21,7 @@ import { soundManager } from './utils/sound';
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
     const [isPaused, setIsPaused] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isMapOpen, setIsMapOpen] = useState(false);
     const [showTeleportMenu, setShowTeleportMenu] = useState(false);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
@@ -46,9 +48,9 @@ const App: React.FC = () => {
 
     // Global Input Hook (ESC, M)
     useGlobalInput(gameState.screen, {
-        isPaused, isMapOpen, showTeleportMenu, activeClue, isDialogueOpen, hp: hudState.hp || 100
+        isPaused, isMapOpen, showTeleportMenu, activeClue, isDialogueOpen, hp: hudState.hp || 100, isSettingsOpen
     }, {
-        setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false)
+        setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen
     });
 
     const handleUpdateHUD = useCallback((data: any) => {
@@ -163,6 +165,10 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, stats: newStats }));
     };
 
+    const handleSaveGraphics = (graphics: any) => {
+        setGameState(prev => ({ ...prev, graphics }));
+    };
+
     const handleSaveLoadout = (loadout: any, levels: any) => {
         setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
     };
@@ -192,7 +198,7 @@ const App: React.FC = () => {
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
             <CustomCursor hidden={cursorHidden} />
 
-            {(gameState.debugMode || gameState.showFps) && <FPSDisplay fps={fps} />}
+            {gameState.showFps && <FPSDisplay fps={fps} />}
 
             {gameState.screen === GameScreen.CAMP && (
                 <Camp
@@ -212,8 +218,9 @@ const App: React.FC = () => {
                     onToggleFps={(val) => setGameState(prev => ({ ...prev, showFps: val }))}
                     isMapLoaded={true}
                     onResetGame={handleResetGame}
-                    hasCheckpoint={!!gameState.midRunCheckpoint}
                     onFPSUpdate={handleFPSUpdate}
+                    onSaveGraphics={handleSaveGraphics}
+                    initialGraphics={gameState.graphics}
                 />
             )}
 
@@ -248,6 +255,7 @@ const App: React.FC = () => {
                         onDialogueStateChange={setIsDialogueOpen}
                         onMapInit={setCurrentMapItems}
                         onFPSUpdate={handleFPSUpdate}
+                        initialGraphics={gameState.graphics}
                     />
 
                     {/* Hide HUD if hudState.isHidden (triggered during Boss Intro) */}
@@ -260,11 +268,22 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {isPaused && !isMapOpen && !showTeleportMenu && (
+                    {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && (
                         <ScreenPause
                             onResume={() => setIsPaused(false)}
                             onAbort={handleAbortMission}
                             onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
+                            onOpenSettings={() => setIsSettingsOpen(true)}
+                        />
+                    )}
+
+                    {isSettingsOpen && (
+                        <ScreenSettings
+                            onClose={() => setIsSettingsOpen(false)}
+                            showFps={gameState.showFps}
+                            onToggleFps={(val) => setGameState(prev => ({ ...prev, showFps: val }))}
+                            graphics={gameState.graphics}
+                            onUpdateGraphics={handleSaveGraphics}
                         />
                     )}
 

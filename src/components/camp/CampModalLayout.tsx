@@ -13,6 +13,7 @@ interface CampModalLayoutProps {
     canConfirm?: boolean;
     children: React.ReactNode;
     isSettings?: boolean;
+    showCancel?: boolean;
 }
 
 const CampModalLayout: React.FC<CampModalLayoutProps> = ({
@@ -24,7 +25,8 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     closeLabel,
     canConfirm = true,
     children,
-    isSettings = false
+    isSettings = false,
+    showCancel = true
 }) => {
     // Reduced mb-8 to mb-4
     const headerStyle = "text-6xl font-black text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg]";
@@ -39,12 +41,14 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                         {title}
                     </h2>
                     <div className="flex gap-6">
-                        <button
-                            onClick={() => { soundManager.playUiClick(); onClose(); }}
-                            className={`${buttonStyle} border-gray-600 text-gray-400 hover:text-white hover:border-white bg-transparent`}
-                        >
-                            {isSettings ? t('ui.cancel') : (closeLabel || t('ui.close'))}
-                        </button>
+                        {showCancel && (
+                            <button
+                                onClick={() => { soundManager.playUiClick(); onClose(); }}
+                                className={`${buttonStyle} border-gray-600 text-gray-400 hover:text-white hover:border-white bg-transparent`}
+                            >
+                                {isSettings ? t('ui.cancel') : (closeLabel || t('ui.close'))}
+                            </button>
+                        )}
 
                         {onConfirm && (
                             <button
@@ -58,10 +62,10 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                                 }}
                                 disabled={!canConfirm}
                                 className={`${buttonStyle} ${isSettings
-                                        ? 'border-white bg-white text-black hover:bg-gray-200'
-                                        : (canConfirm
-                                            ? 'border-red-600 bg-red-700/80 text-white hover:bg-red-600 hover:border-red-400'
-                                            : 'border-gray-800 text-gray-700 bg-gray-900 cursor-not-allowed')
+                                    ? 'border-white bg-white text-black hover:bg-gray-200'
+                                    : (canConfirm
+                                        ? 'border-red-600 bg-red-700/80 text-white hover:bg-red-600 hover:border-red-400'
+                                        : 'border-gray-800 text-gray-700 bg-gray-900 cursor-not-allowed')
                                     }`}
                             >
                                 {confirmLabel || t('ui.confirm_selection')}

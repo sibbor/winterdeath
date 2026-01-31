@@ -1,4 +1,5 @@
 
+import * as THREE from 'three';
 import { GameState, GameScreen, WeaponType } from '../types';
 import { INITIAL_STATS } from '../content/constants';
 
@@ -17,7 +18,13 @@ export const DEFAULT_STATE: GameState = {
     familyMembersFound: [],
     bossesDefeated: [],
     midRunCheckpoint: null,
-    familySPAwarded: []
+    familySPAwarded: [],
+    graphics: {
+        pixelRatio: 1.25,
+        antialias: true,
+        shadows: true,
+        shadowMapType: THREE.PCFShadowMap
+    }
 };
 
 export const getPersistentState = (state: GameState) => {
@@ -31,7 +38,8 @@ export const getPersistentState = (state: GameState) => {
         familyMembersFound: state.familyMembersFound,
         bossesDefeated: state.bossesDefeated,
         midRunCheckpoint: state.midRunCheckpoint,
-        familySPAwarded: state.familySPAwarded
+        familySPAwarded: state.familySPAwarded,
+        graphics: state.graphics
     };
 };
 
@@ -48,7 +56,8 @@ export const loadGameState = (): GameState => {
                 weaponLevels: { ...DEFAULT_STATE.weaponLevels, ...(loaded.weaponLevels || {}) },
                 screen: GameScreen.CAMP,
                 debugMode: loaded.debugMode || false,
-                showFps: loaded.showFps || false
+                showFps: loaded.showFps || false,
+                graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) }
             };
             // Compatibility checks
             if (mergedState.stats.totalDistanceTraveled === undefined) mergedState.stats.totalDistanceTraveled = 0;

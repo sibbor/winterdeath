@@ -10,6 +10,7 @@ interface UIState {
     activeClue: any;
     isDialogueOpen: boolean;
     hp: number;
+    isSettingsOpen: boolean;
 }
 
 interface UIActions {
@@ -18,6 +19,7 @@ interface UIActions {
     setShowTeleportMenu: (val: boolean) => void;
     setTeleportInitialCoords: (val: any) => void;
     onResume: () => void;
+    setIsSettingsOpen: (val: boolean) => void;
 }
 
 export const useGlobalInput = (
@@ -33,7 +35,7 @@ export const useGlobalInput = (
 
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 if (ui.isMapOpen) {
                     actions.setIsMapOpen(false);
                     actions.setIsPaused(false);
@@ -44,6 +46,9 @@ export const useGlobalInput = (
                     actions.setTeleportInitialCoords(null);
                     actions.setIsMapOpen(true);
                     // actions.setIsPaused(false); // Removed: Keep game paused on map
+                    soundManager.playUiClick();
+                } else if (ui.isSettingsOpen) {
+                    actions.setIsSettingsOpen(false);
                     soundManager.playUiClick();
                 } else if (ui.isPaused) {
                     actions.onResume();
@@ -67,7 +72,7 @@ export const useGlobalInput = (
                 }
             }
         };
-        
+
         window.addEventListener('keydown', handleInput, { capture: true });
         return () => window.removeEventListener('keydown', handleInput, { capture: true });
     }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeClue, ui.isDialogueOpen, ui.hp, actions]);
