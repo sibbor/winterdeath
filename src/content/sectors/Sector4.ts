@@ -36,7 +36,12 @@ export const Sector4: SectorDef = {
         triggers.push(
             // Collectible
             {
-                id: 's4_collectible', position: { x: 40, z: -80 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible", description: "clues.s4_collectible_desc", triggered: false, icon: "🔧",
+                id: 's4_collectible', position: { x: 40, z: -80 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible", description: "clues.s4_collectible_desc", triggered: false, icon: "💍",
+                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
+            },
+            // Nathalie's Police Badge
+            {
+                id: 's4_collectible_2', position: { x: -20, z: -60 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible_2", description: "clues.s4_collectible_2_description", triggered: false, icon: "s4_collectible_2_icon",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
             // Flavor
@@ -129,7 +134,8 @@ export const Sector4: SectorDef = {
         obstacles.push({ mesh: shedGroup, radius: 12 });
         SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, t('maps.scrapyard_name')); // Using map name as key or appropriate label
 
-        SectorBuilder.spawnClueMarker(ctx, 40, -80, t('clues.s4_collectible'), 'phone'); // Placeholder visual
+        SectorBuilder.spawnClueMarker(ctx, 40, -80, 'collectible 1', 'ring');
+        SectorBuilder.spawnClueMarker(ctx, -20, -60, 'collectible 2', 'badge');
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);

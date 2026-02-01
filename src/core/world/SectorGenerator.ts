@@ -35,7 +35,7 @@ export const SectorBuilder = {
         });
     },
 
-    spawnClueMarker: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier') => {
+    spawnClueMarker: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy') => {
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
         group.userData = { id, type: 'clue_visual' };
@@ -60,6 +60,35 @@ export const SectorBuilder = {
             light.position.y = 1.0;
             group.add(light);
             ctx.flickeringLights.push({ light, baseInt: 3, flickerRate: 0.1 }); // Fast flicker for "tech" feel
+        } else if (type === 'axe') {
+            const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), new THREE.MeshStandardMaterial({ color: 0x8b4513 }));
+            handle.rotation.z = Math.PI / 2;
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.8, 0.2), new THREE.MeshStandardMaterial({ color: 0xaaaaaa }));
+            head.position.set(0.5, 0.2, 0);
+            group.add(handle); group.add(head);
+            const light = new THREE.PointLight(0xffaaaa, 3, 5); light.position.y = 0.5; group.add(light);
+        } else if (type === 'scarf' || type === 'jacket') {
+            const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.8), new THREE.MeshStandardMaterial({ color: type === 'scarf' ? 0xcc0000 : 0x0000cc }));
+            group.add(cloth);
+            const light = new THREE.PointLight(0xaaaaff, 3, 5); light.position.y = 0.5; group.add(light);
+        } else if (type === 'badge') {
+            const plate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.05), new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.8, roughness: 0.2 }));
+            plate.rotation.x = -Math.PI / 4;
+            const shield = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 8, 16, Math.PI), new THREE.MeshStandardMaterial({ color: 0xffdd44 }));
+            shield.position.set(0, 0, 0.03);
+            plate.add(shield);
+            group.add(plate);
+            const light = new THREE.PointLight(0xffffcc, 3, 5); light.position.y = 0.5; group.add(light);
+        } else if (type === 'diary') {
+            const book = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.1), new THREE.MeshStandardMaterial({ color: 0xaa44aa }));
+            book.rotation.y = Math.PI / 4;
+            group.add(book);
+            const light = new THREE.PointLight(0xffaaff, 3, 5); light.position.y = 0.5; group.add(light);
+        } else if (type === 'ring') {
+            const ringHandle = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.03, 8, 24), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 }));
+            ringHandle.rotation.x = Math.PI / 2;
+            group.add(ringHandle);
+            const light = new THREE.PointLight(0xffffcc, 3, 5); light.position.y = 0.5; group.add(light);
         } else {
             // Enhanced Pacifier/Item Visuals
             const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.08, 16, 32), new THREE.MeshStandardMaterial({ color: 0xffaaaa, emissive: 0xff0000, emissiveIntensity: 2.0 }));
@@ -293,57 +322,6 @@ export const SectorBuilder = {
         }
 
         ctx.scene.add(group);
-    },
-
-    createCurvedRailTrack: (ctx: SectorContext, points: THREE.Vector3[]) => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        curve.curveType = 'catmullrom';
-        const length = curve.getLength();
-
-        const spacing = 4.0;
-        const count = Math.ceil(length / spacing);
-        const pointsList = curve.getSpacedPoints(count);
-
-        pointsList.forEach((pt, i) => {
-            if (i >= pointsList.length - 1) return;
-            const next = pointsList[i + 1];
-            const tangent = new THREE.Vector3().subVectors(next, pt).normalize();
-            const axis = new THREE.Vector3(0, 1, 0);
-            const normal = new THREE.Vector3().crossVectors(tangent, axis).normalize();
-
-            const sleeper = new THREE.Mesh(new THREE.BoxGeometry(5, 0.2, 0.6), MATERIALS.brownBrick);
-            sleeper.position.copy(pt).add(new THREE.Vector3(0, 0.1, 0));
-            sleeper.lookAt(pt.clone().add(tangent));
-            ctx.scene.add(sleeper);
-
-            const railLen = pt.distanceTo(next);
-            const railGeo = new THREE.BoxGeometry(0.2, 0.2, railLen + 0.1);
-
-            const rL = new THREE.Mesh(railGeo, MATERIALS.blackMetal);
-            const posL = pt.clone().add(normal.clone().multiplyScalar(-1.5));
-            const nextPosL = next.clone().add(normal.clone().multiplyScalar(-1.5));
-            const midL = new THREE.Vector3().addVectors(posL, nextPosL).multiplyScalar(0.5);
-            midL.y = 0.3;
-            rL.position.copy(midL);
-            rL.lookAt(nextPosL.x, 0.3, nextPosL.z);
-            ctx.scene.add(rL);
-
-            const rR = new THREE.Mesh(railGeo, MATERIALS.blackMetal);
-            const posR = pt.clone().add(normal.clone().multiplyScalar(1.5));
-            const nextPosR = next.clone().add(normal.clone().multiplyScalar(1.5));
-            const midR = new THREE.Vector3().addVectors(posR, nextPosR).multiplyScalar(0.5);
-            midR.y = 0.3;
-            rR.position.copy(midR);
-            rR.lookAt(nextPosR.x, 0.3, nextPosR.z);
-            ctx.scene.add(rR);
-        });
-
-        const mapPoints = curve.getSpacedPoints(20);
-        mapPoints.forEach(p => {
-            if (p) ctx.mapItems.push({ id: `rail_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: 2, color: '#333' });
-        });
-
-        return curve;
     },
 
     fillArea: (

@@ -29,7 +29,7 @@ interface CampProps {
     onSaveStats: (newStats: PlayerStats) => void;
     onSaveLoadout: (loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType }, levels: Record<WeaponType, number>) => void;
     onSelectMap: (mapIndex: number) => void;
-    onStartMission: () => void;
+    onStartSector: () => void;
     currentMap: number;
     debugMode: boolean;
     onToggleDebug: (val: boolean) => void;
@@ -38,11 +38,11 @@ interface CampProps {
     familyMembersFound: number[];
     isMapLoaded: boolean;
     bossesDefeated: number[];
-    onResetGame: () => void;
-    hasCheckpoint?: boolean;
     onFPSUpdate?: (fps: number) => void;
+    onResetGame: () => void;
     onSaveGraphics: (graphics: GraphicsSettings) => void;
     initialGraphics?: GraphicsSettings;
+    onCampLoaded?: () => void;
 }
 
 const STATIONS = [
@@ -52,7 +52,7 @@ const STATIONS = [
     { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
 ];
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartMission, currentMap, debugMode, onToggleDebug, showFps, onToggleFps, familyMembersFound, isMapLoaded, bossesDefeated, onResetGame, hasCheckpoint, onFPSUpdate, onSaveGraphics, initialGraphics }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, showFps, onToggleFps, familyMembersFound, isMapLoaded, bossesDefeated, hasCheckpoint, onFPSUpdate, onSaveGraphics, initialGraphics, onResetGame, onCampLoaded }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
 
@@ -86,6 +86,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     useEffect(() => {
         soundManager.resume();
         soundManager.startCampfire();
+
+        // Signal loaded after a short delay for smooth transition
+        if (onCampLoaded) {
+            setTimeout(() => {
+                onCampLoaded();
+            }, 1000);
+        }
+
         return () => soundManager.stopCampfire();
     }, []);
 
@@ -388,7 +396,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     stats={stats} hoveredStation={hoveredStation} currentMapName={t(MAP_THEMES[currentMap]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(WEAPONS[currentLoadout.primary].displayName), sec: t(WEAPONS[currentLoadout.secondary].displayName), thr: t(WEAPONS[currentLoadout.throwable].displayName) }}
                     onOpenStats={() => openModal('stats')} onOpenArmory={() => openModal('armory')} onOpenSkills={() => openModal('skills')}
-                    onOpenSettings={() => openModal('settings')} onStartMission={() => { }}
+                    onOpenSettings={() => openModal('settings')} onStartSector={() => { }}
                     debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => openModal('reset_confirm')}
                     onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 10 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
                 />
@@ -397,7 +405,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             {activeModal === 'stats' && <ScreenStatistics stats={stats} onClose={closeModal} />}
             {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} />}
             {activeModal === 'adventure_log' && <ScreenAdventureLog stats={stats} onClose={closeModal} />}
-            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartMission={onStartMission} />}
+            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} />}
             {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} />}
             {activeModal === 'settings' && (
                 <ScreenSettings
@@ -413,7 +421,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 />
             )}
 
-            {activeModal === 'reset_confirm' && <ScreenResetConfirm onConfirm={onResetGame} onCancel={closeModal} />}
+            {activeModal === 'reset_confirm' && (
+                <ScreenResetConfirm
+                    onConfirm={onResetGame}
+                    onCancel={closeModal}
+                />
+            )}
+
         </div>
     );
 };

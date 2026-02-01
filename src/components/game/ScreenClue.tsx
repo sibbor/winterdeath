@@ -15,19 +15,7 @@ const ScreenClue: React.FC<ScreenClueProps> = ({ clue, onClose }) => {
         soundManager.playUiConfirm();
     }, []);
 
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                onClose();
-            }
-        };
-        // Use capture to handle event before GameCanvas/App listeners
-        window.addEventListener('keydown', handleEsc, { capture: true });
-        return () => window.removeEventListener('keydown', handleEsc, { capture: true });
-    }, [onClose]);
+    // Unified ESC handling is managed via useGlobalInput in App.tsx
 
     return (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-8" onClick={(e) => e.stopPropagation()}>

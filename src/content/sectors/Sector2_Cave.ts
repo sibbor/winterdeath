@@ -31,10 +31,10 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
             actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
         },
 
-        // Collectible (1 SP)
+        // Jordan's Teddy Bear
         {
             id: 's2_collectible_2',
-            position: { x: 92, z: -208 },
+            position: { x: 155, z: -155 },
             radius: 2,
             type: 'COLLECTIBLE',
             content: "clues.s2_collectible_2",
@@ -44,6 +44,9 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
             actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
         },
     );
+
+    // Visual Marker for Teddy
+    SectorBuilder.spawnClueMarker(ctx, 155, -155, 'collectible 2', 'teddy');
 
     // 5.1 Floors (Gravel)
     const caveFloor = new THREE.Mesh(new THREE.PlaneGeometry(350, 350), MATERIALS.gravel);
@@ -267,8 +270,11 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
             doorGroup.rotation.y = Math.PI / 2;
 
             const doorL = new THREE.Mesh(new THREE.BoxGeometry(10, 14, 1), MATERIALS.metalPanel); doorL.position.set(-5, 7, 0);
+            doorL.name = 's2_bunker_door_l';
             const doorR = new THREE.Mesh(new THREE.BoxGeometry(10, 14, 1), MATERIALS.metalPanel); doorR.position.set(5, 7, 0);
+            doorR.name = 's2_bunker_door_r';
             const frame = new THREE.Mesh(new THREE.BoxGeometry(22, 16, 2), MATERIALS.concrete); frame.position.set(0, 8, -1);
+            frame.name = 's2_bunker_door_frame';
 
             const ind = new THREE.PointLight(0x00ff00, 2, 15); ind.position.set(0, 12, 2);
             doorGroup.add(doorL); doorGroup.add(doorR); doorGroup.add(frame); doorGroup.add(ind);

@@ -141,6 +141,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, showFps, onTog
                         <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!showFps ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>OFF</button>
                     </div>
                 </div>
+
             </div>
         </CampModalLayout>
     );

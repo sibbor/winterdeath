@@ -1,0 +1,92 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { t } from '../../utils/i18n';
+import { MAP_THEMES } from '../../content/constants';
+
+interface ScreenLoadingProps {
+    mapIndex: number;
+    isCamp?: boolean;
+}
+
+const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp }) => {
+    const tips = useMemo(() => t('tips') as string[], []);
+    const [randomTip, setRandomTip] = useState('');
+
+    const mapKeys = ['village', 'bunker', 'mast', 'scrapyard', 'home'];
+    const mapKey = isCamp ? 'camp' : (mapKeys[mapIndex] || 'village');
+
+    useEffect(() => {
+        if (tips && Array.isArray(tips) && tips.length > 0) {
+            const index = Math.floor(Math.random() * tips.length);
+            setRandomTip(tips[index]);
+        }
+    }, [tips]);
+
+    return (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black text-white font-sans overflow-hidden select-none">
+            {/* Background Aesthetic */}
+            <div className="absolute inset-0 opacity-20">
+                <div className="w-full h-full bg-[radial-gradient(circle_at_center,_rgba(255,0,0,0.1)_0%,_transparent_70%)]" />
+                <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-red-900/20 to-transparent" />
+            </div>
+
+            <div className="relative z-10 max-w-2xl w-full px-8 flex flex-col items-center gap-12">
+                {/* Sector Info */}
+                <div className="flex flex-col items-center gap-4 text-center">
+                    <h4 className="text-red-600 font-black tracking-[0.4em] uppercase text-sm animate-pulse">
+                        {t('ui.loading')}
+                    </h4>
+                    <h2 className="text-5xl md:text-6xl font-black italic tracking-tighter uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] skew-x-[-10deg]">
+                        {t(`maps.${mapKey}_name`)}
+                    </h2>
+                    <div className="h-1 w-32 bg-red-600 rounded-full mt-2" />
+                    <p className="text-gray-400 text-sm italic max-w-md mt-2">
+                        {t(`maps.${mapKey}_desc`)}
+                    </p>
+                </div>
+
+                {/* Loading Bar */}
+                <div className="w-full h-2 bg-gray-900 border border-gray-800 rounded-full overflow-hidden relative skew-x-[-10deg]">
+                    <div className="absolute inset-0 bg-red-600/20 animate-[loading-shimmer_2s_infinite]" />
+                    <div className="h-full bg-red-600 animate-[loading-progress_3s_ease-in-out_infinite] shadow-[0_0_10px_rgba(220,38,38,0.5)]" />
+                </div>
+
+                {/* Tip Section */}
+                {randomTip && (
+                    <div className="w-full bg-gray-900/60 backdrop-blur-md border-l-4 border-red-600 p-6 shadow-2xl animate-[fade-in_0.5s_ease-out]">
+                        <span className="text-red-500 font-mono font-black text-xs uppercase tracking-[0.2em] block mb-2">
+                            Survivor Tip
+                        </span>
+                        <p className="text-xl md:text-2xl font-medium leading-tight italic text-gray-100">
+                            "{randomTip}"
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Bottom Branding / Version */}
+            <div className="absolute bottom-8 flex flex-col items-center opacity-30">
+                <span className="text-[10px] font-black tracking-[0.5em] uppercase text-gray-500">
+                    Winterdeath Protocol
+                </span>
+            </div>
+
+            <style>{`
+                @keyframes loading-progress {
+                    0% { width: 0%; left: 0; }
+                    50% { width: 70%; left: 15%; }
+                    100% { width: 100%; left: 0; }
+                }
+                @keyframes loading-shimmer {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
+                @keyframes fade-in {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
+        </div>
+    );
+};
+
+export default ScreenLoading;

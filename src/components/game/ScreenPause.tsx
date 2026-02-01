@@ -14,6 +14,8 @@ interface ScreenPauseProps {
 const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap, onOpenSettings }) => {
     const buttonStyle = "w-full py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 skew-x-[-10deg]";
 
+    // Unified ESC handling is managed via useGlobalInput in App.tsx
+
     return (
         <GameModalLayout title={t('ui.paused')}>
             <div className="space-y-6">

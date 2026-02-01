@@ -25,13 +25,6 @@ export const CharacterModels = {
         gun.scale.set(0.1, 0.4, 1);
         group.add(gun);
 
-        // Flashlight
-        const light = new THREE.SpotLight(0xffffff, 400, 60, Math.PI / 6, 0.5, 1);
-        light.position.set(0, 0.2, 0.6);
-        light.target.position.set(0, 0, 10);
-        group.add(light);
-        group.add(light.target);
-
         return group;
     },
 

@@ -1,20 +1,63 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Vinterdöd
 
-# Run and deploy your AI Studio app
+A survival horror web game.
 
-This contains everything you need to run your app locally.
+## 🛠️ Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/drive/13Rtgs2SCCqMTWXpQnVz-dY0GC6xwGjKC
+To run this project, you will need to clean install the following software:
 
-## Run Locally
+1.  **Install Git**
+    *   Essential for downloading the code.
+    *   [Download Git](https://git-scm.com/downloads)
 
-**Prerequisites:**  Node.js
+2.  **Install Google Antigravity**
+    *   Required for AI-assisted development (if applicable).
+    *   [Download Antigravity](https://antigravity.google/download)
 
+3.  **Install Node.js**
+    *   Required to run the game server. Download the **LTS** version.
+    *   [Download Node.js](https://nodejs.org/en/download/)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+
+## 🚀 Installation Guide
+
+Follow these steps to get the game running on your machine.
+
+### 1. Open Terminal
+Open **PowerShell** or **Command Prompt** (or your preferred terminal).
+
+### 2. Clone the Repository
+Download the game code to your computer.
+```bash
+git clone https://github.com/sibbor/winterdeath.git
+```
+
+### 3. Enter the Project Folder
+Move into the folder you just downloaded.
+```bash
+cd winterdeath
+```
+
+### 4. Install Dependencies
+Download all the libraries the game needs to work. This might take a minute.
+```bash
+npm install
+```
+
+---
+
+## 🎮 How to Play
+
+### Start Development Server
+This runs the game locally on your machine.
+```bash
+npm run dev
+```
+> After running the command, open your browser and go to: `http://localhost:5173` (or the URL shown in your terminal).
+
+### Build for Production
+To create a finalized version of the game files for publishing:
+```bash
+npm run build
+```

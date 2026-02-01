@@ -3,12 +3,12 @@ import React from 'react';
 import { t } from '../../utils/i18n';
 import GameModalLayout from './GameModalLayout';
 import { BOSSES } from '../../content/constants';
-import { MissionStats } from '../../types';
+import { SectorStats } from '../../types';
 
 interface ScreenBossKilledProps {
     mapIndex: number;
     onProceed: () => void;
-    stats?: MissionStats;
+    stats?: SectorStats;
 }
 
 const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ mapIndex, onProceed, stats }) => {

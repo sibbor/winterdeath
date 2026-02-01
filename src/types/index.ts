@@ -2,11 +2,12 @@
 export enum GameScreen {
   CAMP = 'CAMP',
   BRIEFING = 'BRIEFING',
-  MISSION = 'MISSION',
+  SECTOR = 'SECTOR',
   BOSS_STORY = 'BOSS_STORY',
   BOSS_KILLED = 'BOSS_KILLED',
   RECAP = 'RECAP',
-  DEATH = 'DEATH'
+  DEATH = 'DEATH',
+  PROLOGUE = 'PROLOGUE'
 }
 
 export enum WeaponCategory {
@@ -64,7 +65,7 @@ export interface PlayerStats {
   scrap: number; // Current balance
 
   // Detailed Stats
-  missionsCompleted: number;
+  sectorsCompleted: number;
   familyFoundCount: number;
   totalSkillPointsEarned: number;
 
@@ -84,9 +85,10 @@ export interface PlayerStats {
   mostUsedWeapon: string;
   chestsOpened: number;
   bigChestsOpened: number;
+  prologueSeen?: boolean;
 }
 
-export interface MissionStats {
+export interface SectorStats {
   timeElapsed: number;
   shotsFired: number;
   shotsHit: number; // New
@@ -123,10 +125,10 @@ export interface GameState {
     throwable: WeaponType;
   };
   weaponLevels: Record<WeaponType, number>;
-  missionBriefing: string;
+  sectorBriefing: string;
   debugMode: boolean;
   showFps: boolean; // New
-  missionStats?: MissionStats;
+  sectorStats?: SectorStats;
   familyMembersFound: number[]; // Array of Map IDs where family was found
   bossesDefeated: number[]; // Array of Map IDs where boss was defeated
   midRunCheckpoint?: {
@@ -230,20 +232,22 @@ export interface Obstacle {
 }
 
 export interface GameCanvasProps {
+  // ... (existing props)
+  onOpenMap: () => void;
   stats: PlayerStats;
   loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType };
   weaponLevels: Record<WeaponType, number>;
-  onDie: (stats: MissionStats, killer: string) => void;
+  onDie: (stats: SectorStats, killer: string) => void;
   onUpdateHUD: (data: any) => void;
   currentMap: number;
   debugMode: boolean;
-  onMissionEnded: (stats: MissionStats) => void;
+  onSectorEnded: (stats: SectorStats) => void;
   onPauseToggle: (paused: boolean) => void;
-  triggerEndMission: boolean;
+  triggerEndSector: boolean;
   isRunning: boolean;
-  isPaused: boolean;
-  disableInput: boolean;
-  familyAlreadyRescued: boolean;
+  onDialogueStateChange: (active: boolean) => void;
+  onBossIntroStateChange?: (active: boolean) => void;
+  onMapInit: (items: MapItem[]) => void;
   bossPermanentlyDefeated: boolean;
   onLevelLoaded: () => void;
   startAtCheckpoint: boolean;
@@ -251,8 +255,6 @@ export interface GameCanvasProps {
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onClueFound: (clue: SectorTrigger) => void;
   isClueOpen: boolean;
-  onDialogueStateChange: (isOpen: boolean) => void;
-  onMapInit: (items: MapItem[]) => void;
   onFPSUpdate?: (fps: number) => void;
   initialGraphics?: any;
 }

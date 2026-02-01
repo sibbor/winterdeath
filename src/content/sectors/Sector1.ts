@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY, createTextSprite } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { PathGenerator } from '../../core/world/PathGenerator';
 import { t } from '../../utils/i18n';
 
 const R_OFFSET = Math.PI / 2;
@@ -36,34 +37,23 @@ export const Sector1: SectorDef = {
         const { scene, obstacles, flickeringLights, burningBarrels, triggers } = ctx;
 
         // Roads
-        const roadMat = MATERIALS.asphalt;
-
-        // Road 1
-        for (let i = 0; i < 5; i++) {
-            const segment = new THREE.Mesh(new THREE.PlaneGeometry(100, 16), roadMat);
-            segment.rotation.x = -Math.PI / 2;
-            segment.position.set(100 + i * 100, 0.02, 220);
-            segment.receiveShadow = true;
-            scene.add(segment);
-        }
+        // Roads
+        PathGenerator.createRoad(ctx, [
+            new THREE.Vector3(100, 0, 220),
+            new THREE.Vector3(500, 0, 220)
+        ], 16);
 
         // Road 2
-        for (let i = 0; i < 3; i++) {
-            const segment = new THREE.Mesh(new THREE.PlaneGeometry(16, 100), roadMat);
-            segment.rotation.x = -Math.PI / 2;
-            segment.position.set(350, 0.03, 100 + i * 100);
-            segment.receiveShadow = true;
-            scene.add(segment);
-        }
+        PathGenerator.createRoad(ctx, [
+            new THREE.Vector3(350, 0, 100),
+            new THREE.Vector3(350, 0, 350)
+        ], 16);
 
         // Path
-        for (let i = 0; i < 2; i++) {
-            const segment = new THREE.Mesh(new THREE.PlaneGeometry(100, 8), roadMat);
-            segment.rotation.x = -Math.PI / 2;
-            segment.position.set(550 + i * 100, 0.02, 250);
-            segment.receiveShadow = true;
-            scene.add(segment);
-        }
+        PathGenerator.createDirtPath(ctx, [
+            new THREE.Vector3(550, 0, 250),
+            new THREE.Vector3(750, 0, 250)
+        ], 8);
 
         // Lamps
         for (let z = -100; z > -500; z -= 30) { const p = { x: 210, z: z }; SectorBuilder.spawnStreetLamp(ctx, p.x, p.z); }
@@ -84,7 +74,7 @@ export const Sector1: SectorDef = {
 
         // Burning Car
         const carPos = { x: 22, z: 5 };
-        SectorBuilder.spawnCar(ctx, carPos.x, carPos.z, 0.3 + R_OFFSET);
+        SectorBuilder.spawnVolvo(ctx, carPos.x, carPos.z, 0.3 + R_OFFSET);
         const carFire = new THREE.PointLight(0xff4400, 15, 30); carFire.position.set(carPos.x, 4, carPos.z); scene.add(carFire);
         flickeringLights.push({ light: carFire, baseInt: 10, flickerRate: 0.4 });
         burningBarrels.push({ position: new THREE.Vector3(carPos.x, 2, carPos.z) });
@@ -289,12 +279,12 @@ export const Sector1: SectorDef = {
             { id: 's1_tunnel_cleared', position: { x: 250, z: -560 }, radius: 10, type: 'THOUGHTS', content: "clues.s1_tunnel_cleared", triggered: false },
 
             // POIs (Action: 250 XP Reward)
-            { id: 's1_poi_building_on_fire', position: { x: 120, z: -80 }, radius: 50, type: 'POI', content: "clues.s1_poi_building_on_fire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 250 } }] },
-            { id: 's1_poi_church', position: { x: 250, z: -320 }, radius: 20, type: 'POI', content: "clues.s1_poi_church", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 250 } }] },
-            { id: 's1_poi_cafe', position: { x: 210, z: -350 }, radius: 20, type: 'POI', content: "clues.s1_poi_cafe", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 250 } }] },
-            { id: 's1_poi_pizzeria', position: { x: 280, z: -380 }, radius: 20, type: 'POI', content: "clues.s1_poi_pizzeria", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 250 } }] },
-            { id: 's1_poi_grocery', position: { x: 240, z: -450 }, radius: 20, type: 'POI', content: "clues.s1_poi_grocery", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 250 } }] },
-            { id: 's1_poi_train_yard', position: { x: 250, z: -700 }, radius: 30, type: 'POI', content: "clues.s1_poi_train_yard", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 250 } }] },
+            { id: 's1_poi_building_on_fire', position: { x: 120, z: -80 }, radius: 50, type: 'POI', content: "clues.s1_poi_building_on_fire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_church', position: { x: 250, z: -320 }, radius: 20, type: 'POI', content: "clues.s1_poi_church", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_cafe', position: { x: 210, z: -350 }, radius: 20, type: 'POI', content: "clues.s1_poi_cafe", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_pizzeria', position: { x: 280, z: -380 }, radius: 20, type: 'POI', content: "clues.s1_poi_pizzeria", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_grocery', position: { x: 240, z: -450 }, radius: 20, type: 'POI', content: "clues.s1_poi_grocery", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_train_yard', position: { x: 250, z: -700 }, radius: 30, type: 'POI', content: "clues.s1_poi_train_yard", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
 
             // --- THE GYM EVENT (Trigger #4) ---
             {
@@ -305,11 +295,12 @@ export const Sector1: SectorDef = {
                 content: "story.gym_event", // Updated to key
                 triggered: false,
                 actions: [
-                    { type: 'GIVE_REWARD', payload: { xp: 250 } }, // Reward for finding Gym
+                    { type: 'GIVE_REWARD', payload: { xp: 500 } }, // Reward for finding Gym
                     { type: 'CAMERA_SHAKE', payload: { amount: 2.0 } },
                     { type: 'PLAY_SOUND', payload: { id: 'explosion' } },
                     // Pan to Train Yard
                     { type: 'CAMERA_PAN', payload: { target: { x: 250, z: -700 }, duration: 2000 } },
+                    { type: 'PLAY_SOUND', payload: { id: 'explosion' } },
                     // After pan (using delay)
                     { type: 'SHOW_TEXT', payload: { text: t('story.gym_event') }, delay: 2500 },
                     // Start Wave
@@ -339,7 +330,7 @@ export const Sector1: SectorDef = {
 
         // Spawn Visual Markers for Collectibles
         SectorBuilder.spawnClueMarker(ctx, posCollectible1.x, posCollectible1.z, 'collectible 1', 'phone');
-        SectorBuilder.spawnClueMarker(ctx, posCollectible2.x, posCollectible2.z, 'collectible 2', 'pacifier');
+        SectorBuilder.spawnClueMarker(ctx, posCollectible2.x, posCollectible2.z, 'collectible 2', 'axe');
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);

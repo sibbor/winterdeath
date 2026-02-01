@@ -9,7 +9,7 @@ export class PlayerInteractionSystem implements System {
 
     constructor(
         private playerGroup: THREE.Group,
-        private onMissionEnded: (isExtraction: boolean) => void
+        private onSectorEnded: (isExtraction: boolean) => void
     ) { }
 
     update(session: GameSession, dt: number, now: number) {
@@ -94,7 +94,7 @@ export class PlayerInteractionSystem implements System {
                 if (chest.type === 'big') state.bigChestsOpened++;
             }
         } else if (type === 'bus') {
-            this.onMissionEnded(true);
+            this.onSectorEnded(true);
         }
     }
 

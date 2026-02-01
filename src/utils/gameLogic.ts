@@ -1,53 +1,53 @@
 
-import { PlayerStats, MissionStats, WeaponType, WeaponCategory } from '../types';
+import { PlayerStats, SectorStats, WeaponType, WeaponCategory } from '../types';
 import { LEVEL_CAP, WEAPONS } from '../content/constants';
 
-export const aggregateStats = (prevStats: PlayerStats, missionStats: MissionStats, died: boolean, aborted: boolean): PlayerStats => {
+export const aggregateStats = (prevStats: PlayerStats, sectorStats: SectorStats, died: boolean, aborted: boolean): PlayerStats => {
     const s = { ...prevStats };
-    if (!died && !aborted) s.missionsCompleted += 1;
-    s.scrap += missionStats.scrapLooted;
-    s.totalScrapCollected += missionStats.scrapLooted;
-    const missionKills = (Object.values(missionStats.killsByType) as number[]).reduce((a, b) => a + b, 0);
+    if (!died && !aborted) s.sectorsCompleted += 1;
+    s.scrap += sectorStats.scrapLooted;
+    s.totalScrapCollected += sectorStats.scrapLooted;
+    const missionKills = (Object.values(sectorStats.killsByType) as number[]).reduce((a, b) => a + b, 0);
     s.kills += missionKills;
-    for (const [type, count] of Object.entries(missionStats.killsByType)) {
+    for (const [type, count] of Object.entries(sectorStats.killsByType)) {
         s.killsByType[type] = (s.killsByType[type] || 0) + (count as number);
     }
-    s.totalBulletsFired += missionStats.shotsFired;
-    s.totalBulletsHit = (s.totalBulletsHit || 0) + (missionStats.shotsHit || 0);
-    s.totalThrowablesThrown = (s.totalThrowablesThrown || 0) + (missionStats.throwablesThrown || 0);
+    s.totalBulletsFired += sectorStats.shotsFired;
+    s.totalBulletsHit = (s.totalBulletsHit || 0) + (sectorStats.shotsHit || 0);
+    s.totalThrowablesThrown = (s.totalThrowablesThrown || 0) + (sectorStats.throwablesThrown || 0);
 
-    s.totalDamageDealt += missionStats.damageDealt;
-    s.totalDamageTaken += missionStats.damageTaken;
+    s.totalDamageDealt += sectorStats.damageDealt;
+    s.totalDamageTaken += sectorStats.damageTaken;
     if (died) s.deaths += 1;
-    s.chestsOpened = (s.chestsOpened || 0) + (missionStats.chestsOpened || 0);
-    s.bigChestsOpened = (s.bigChestsOpened || 0) + (missionStats.bigChestsOpened || 0);
-    s.totalDistanceTraveled = (s.totalDistanceTraveled || 0) + (missionStats.distanceTraveled || 0);
+    s.chestsOpened = (s.chestsOpened || 0) + (sectorStats.chestsOpened || 0);
+    s.bigChestsOpened = (s.bigChestsOpened || 0) + (sectorStats.bigChestsOpened || 0);
+    s.totalDistanceTraveled = (s.totalDistanceTraveled || 0) + (sectorStats.distanceTraveled || 0);
 
-    if (missionStats.cluesFound && missionStats.cluesFound.length > 0) {
+    if (sectorStats.cluesFound && sectorStats.cluesFound.length > 0) {
         const currentClues = s.cluesFound || [];
-        const newUniqueClues = missionStats.cluesFound.filter(c => !currentClues.includes(c));
+        const newUniqueClues = sectorStats.cluesFound.filter(c => !currentClues.includes(c));
         s.cluesFound = [...currentClues, ...newUniqueClues];
     }
 
-    if (missionStats.seenEnemies && missionStats.seenEnemies.length > 0) {
+    if (sectorStats.seenEnemies && sectorStats.seenEnemies.length > 0) {
         const current = s.seenEnemies || [];
-        const newUnique = missionStats.seenEnemies.filter(c => !current.includes(c));
+        const newUnique = sectorStats.seenEnemies.filter(c => !current.includes(c));
         s.seenEnemies = [...current, ...newUnique];
     }
 
-    if (missionStats.seenBosses && missionStats.seenBosses.length > 0) {
+    if (sectorStats.seenBosses && sectorStats.seenBosses.length > 0) {
         const current = s.seenBosses || [];
-        const newUnique = missionStats.seenBosses.filter(c => !current.includes(c));
+        const newUnique = sectorStats.seenBosses.filter(c => !current.includes(c));
         s.seenBosses = [...current, ...newUnique];
     }
 
-    if (missionStats.visitedPOIs && missionStats.visitedPOIs.length > 0) {
+    if (sectorStats.visitedPOIs && sectorStats.visitedPOIs.length > 0) {
         const current = s.visitedPOIs || [];
-        const newUnique = missionStats.visitedPOIs.filter(c => !current.includes(c));
+        const newUnique = sectorStats.visitedPOIs.filter(c => !current.includes(c));
         s.visitedPOIs = [...current, ...newUnique];
     }
 
-    let gainedXp = missionStats.xpGained + missionStats.bonusXp;
+    let gainedXp = sectorStats.xpGained + sectorStats.bonusXp;
     while (gainedXp > 0 && s.level < LEVEL_CAP) {
         const needed = s.nextLevelXp - s.currentXp;
         if (gainedXp >= needed) {

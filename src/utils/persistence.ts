@@ -4,7 +4,7 @@ import { GameState, GameScreen, WeaponType } from '../types';
 import { INITIAL_STATS } from '../content/constants';
 
 export const DEFAULT_STATE: GameState = {
-    screen: GameScreen.CAMP,
+    screen: GameScreen.PROLOGUE,
     stats: INITIAL_STATS,
     currentMap: 0,
     loadout: { primary: WeaponType.SMG, secondary: WeaponType.PISTOL, throwable: WeaponType.GRENADE },
@@ -12,7 +12,7 @@ export const DEFAULT_STATE: GameState = {
         [WeaponType.PISTOL]: 1, [WeaponType.SMG]: 1, [WeaponType.SHOTGUN]: 1, [WeaponType.RIFLE]: 1,
         [WeaponType.REVOLVER]: 1, [WeaponType.GRENADE]: 1, [WeaponType.MOLOTOV]: 1, [WeaponType.MINIGUN]: 1, [WeaponType.RADIO]: 1, [WeaponType.FLASHBANG]: 1
     },
-    missionBriefing: '',
+    sectorBriefing: '',
     debugMode: false,
     showFps: false,
     familyMembersFound: [],
@@ -54,7 +54,7 @@ export const loadGameState = (): GameState => {
                 stats: { ...DEFAULT_STATE.stats, ...(loaded.stats || {}) },
                 loadout: { ...DEFAULT_STATE.loadout, ...(loaded.loadout || {}) },
                 weaponLevels: { ...DEFAULT_STATE.weaponLevels, ...(loaded.weaponLevels || {}) },
-                screen: GameScreen.CAMP,
+                screen: loaded.stats?.prologueSeen ? GameScreen.CAMP : GameScreen.PROLOGUE,
                 debugMode: loaded.debugMode || false,
                 showFps: loaded.showFps || false,
                 graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) }

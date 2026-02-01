@@ -40,10 +40,28 @@ export const AssetPreloader = {
         // -- Particles & Projectiles --
         const matKeys = Object.keys(MATERIALS) as (keyof typeof MATERIALS)[];
         matKeys.forEach(k => {
-            // Create a mesh for every material to force compilation
-            const mesh = new THREE.Mesh(GEOMETRY.box, MATERIALS[k]);
+            const mat = MATERIALS[k];
+            // Skip large ground/road textures to save time, focus on common shaders
+            if (k === 'road' || k === 'asphalt' || k === 'snow' || k === 'concrete') return;
+
+            const mesh = new THREE.Mesh(GEOMETRY.box, mat);
             dummyRoot.add(mesh);
+
+            // If it's a transparent/emissive material, also test on a plane/sphere
+            if (mat instanceof THREE.MeshBasicMaterial && mat.transparent) {
+                const p = new THREE.Mesh(GEOMETRY.plane, mat);
+                dummyRoot.add(p);
+            }
         });
+
+        // -- Specific Weapon Geometries --
+        // These often have different shader requirements than boxes
+        const bullet = new THREE.Mesh(GEOMETRY.bullet, MATERIALS.bullet);
+        dummyRoot.add(bullet);
+        const grenade = new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade);
+        dummyRoot.add(grenade);
+        const molotov = new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov);
+        dummyRoot.add(molotov);
 
         // -- Characters (Skinned Meshes / Groups) --
         // Player
@@ -61,11 +79,35 @@ export const AssetPreloader = {
         dummyRoot.add(boss);
 
         // -- Environmental Props --
-        // Force specific geometries that might not share materials directly with particles
-        const tree = new THREE.Mesh(GEOMETRY.treeLeaves, MATERIALS.treeLeaves);
-        dummyRoot.add(tree);
-        const rock = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-        dummyRoot.add(rock);
+        // Trunk & Stylized Foliage
+        const trunk = new THREE.Mesh(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
+        dummyRoot.add(trunk);
+        const foliage = new THREE.Mesh(GEOMETRY.foliageCluster, MATERIALS.treeLeaves);
+        dummyRoot.add(foliage);
+
+        // Interactive Props
+        const barrel = new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrel);
+        dummyRoot.add(barrel);
+        const explosiveBarrel = new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrelExplosive);
+        dummyRoot.add(explosiveBarrel);
+        const chest = new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard);
+        dummyRoot.add(chest);
+
+        // -- Weather & Effects --
+        const fog = new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog);
+        dummyRoot.add(fog);
+        const ash = new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash);
+        dummyRoot.add(ash);
+
+        // Decals (Directly on plane)
+        const blood = new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal);
+        dummyRoot.add(blood);
+        const scorch = new THREE.Mesh(GEOMETRY.decal, MATERIALS.scorchDecal);
+        dummyRoot.add(scorch);
+
+        // -- Narrative / Quest Items --
+        const ring = new THREE.Mesh(GEOMETRY.familyRing, MATERIALS.familyRing);
+        dummyRoot.add(ring);
 
         // 3. Force Compilation
         // renderer.compile is the magic method added in newer Three.js versions to avoid jank

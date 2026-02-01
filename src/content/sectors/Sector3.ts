@@ -36,7 +36,12 @@ export const Sector3: SectorDef = {
         triggers.push(
             // Collectible
             {
-                id: 's3_collectible', position: { x: -20, z: -100 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible", description: "clues.s3_collectible_desc", triggered: false, icon: "🔍",
+                id: 's3_collectible', position: { x: -20, z: -100 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible", description: "clues.s3_collectible_desc", triggered: false, icon: "📖",
+                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
+            },
+            // Esmeralda's Jacket
+            {
+                id: 's3_collectible_2', position: { x: 30, z: -40 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible_2", description: "clues.s3_collectible_2_description", triggered: false, icon: "s3_collectible_2_icon",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
             // Flavor
@@ -122,7 +127,8 @@ export const Sector3: SectorDef = {
             scene.add(f);
         }
 
-        SectorBuilder.spawnClueMarker(ctx, -20, -100, t('clues.s3_collectible'), 'phone');
+        SectorBuilder.spawnClueMarker(ctx, -20, -100, 'collectible 1', 'diary');
+        SectorBuilder.spawnClueMarker(ctx, 30, -40, 'collectible 2', 'jacket');
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);

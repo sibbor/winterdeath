@@ -13,11 +13,11 @@ interface CampHUDProps {
     isIdle: boolean;
     currentLoadoutNames: { pri: string, sec: string, thr: string };
 
-    onOpenStats: () => void; // Now opens Statistics
+    onOpenStats: () => void;
     onOpenArmory: () => void;
-    onOpenSkills: () => void; // Now opens Player Skills
+    onOpenSkills: () => void;
     onOpenSettings: () => void;
-    onStartMission: () => void; // Although unused now in main button, keeping prop for interface compatibility if needed, or remove if unused in parent
+    onStartSector: () => void;
 
     // Debug actions
     debugMode: boolean;
@@ -38,7 +38,7 @@ const STATIONS = [
 
 const CampHUD: React.FC<CampHUDProps> = ({
     stats, hoveredStation, currentMapName, hasCheckpoint, isIdle, currentLoadoutNames,
-    onOpenStats, onOpenArmory, onOpenSkills, onOpenSettings, onStartMission,
+    onOpenStats, onOpenArmory, onOpenSkills, onOpenSettings, onStartSector,
     debugMode, onToggleDebug, onResetGame, onDebugScrap, onDebugSkill, fpsRef
 }) => {
 
@@ -135,6 +135,7 @@ const CampHUD: React.FC<CampHUDProps> = ({
                     <div onClick={() => { soundManager.playUiClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black/80 px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
                         <span className="text-xs uppercase text-red-500 font-bold tracking-widest">{t('ui.delete_save_data')}</span>
                     </div>
+
                 </div>
             </div>
 

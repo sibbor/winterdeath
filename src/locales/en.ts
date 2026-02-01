@@ -57,15 +57,16 @@ export const en = {
         close: "CLOSE",
         deploy_sector: "HEAD TO SECTOR",
         back_to_overview: "BACK TO OVERVIEW",
-        mission_briefing: "SECTOR BRIEFING",
+        sector_briefing: "SECTOR BRIEFING",
         settings: "SETTINGS",
         language: "LANGUAGE",
         debug_mode: "DEBUG MODE",
         show_fps: "SHOW FPS",
         cancel: "CANCEL",
+        skip: "SKIP",
         paused: "PAUSED",
         continue: "CONTINUE",
-        end_mission: "ABORT SECTOR",
+        end_sector: "ABORT SECTOR",
         sector_aborted: "SECTOR ABORTED",
         teleport: "TELEPORT",
         map_btn: "MAP",
@@ -88,16 +89,17 @@ export const en = {
         resuming: "RESUMING...",
         loading: "LOADING...",
         confirm_reset: "Are you sure you want to reset all progress?",
-        reset_confirm_title: "DELETE ALL DATA?",
-        reset_confirm_desc: "This will permanently delete your save file and reset all progress (Levels, XP, Family found, Bosses killed). This action cannot be undone.",
-        yes_delete: "YES, DELETE EVERYTHING",
-        no_cancel: "NO, KEEP DATA",
+        reset_confirm_title: "Delete Save File",
+        reset_confirm_desc: "This will permanently delete your save file and reset all progress. This action cannot be undone.",
+        yes_delete: "DELETE DATA",
+        no_cancel: "KEEP DATA",
         available_skill_points: "AVAILABLE SKILL POINTS",
         next_sp_hint: "NEXT SP IN {xp} XP",
         sp_hint_rankup: "Earn Skill Points by finding collectibles, rescuing family, killing bosses or ranking up ({xp} XP needed)",
         sp_hint_max: "Earn Skill Points by finding collectibles, rescuing family or killing bosses.",
         upgrade: "UPGRADE",
         confirm_upgrades: "CONFIRM UPGRADES",
+        end_dialogue: "End Dialogue",
         confirm_loadout: "CONFIRM LOADOUT",
         damage: "DAMAGE",
         magazine: "MAG",
@@ -113,7 +115,7 @@ export const en = {
         throwables_used: "Throwables Used",
         boss_killed: "BOSS KILLED",
         teleport_title: "TELEPORT",
-        tactical_map: "TAKTIKKARTA",
+        tactical_map: "TACTICAL MAP",
         coordinates: "COORDINATES",
         you: "YOU",
         current_rank: "CURRENT RANK",
@@ -146,7 +148,15 @@ export const en = {
         unknown_threat: "Unknown Threat",
         unknown_sector: "Unknown Sector",
         health: "Health",
-        speed: "Speed"
+        speed: "Speed",
+        end_mission: "END MISSION",
+        delete_save_data: "DELETE SAVE DATA",
+        end_conversation: "END CONVERSATION",
+        located: "LOCATED",
+        defeat_boss: "DEFEAT BOSS",
+        target_located: "TARGET LOCATED",
+        protect_family: "PROTECT FAMILY",
+        scanning: "SCANNING..."
     },
     categories: {
         primary: "PRIMARY",
@@ -157,7 +167,7 @@ export const en = {
     },
     stations: {
         armory: "ARMORY",
-        sectors: "SECTORS",
+        sectors: "SECTOR OVERVIEW",
         skills: "SKILLS",
         adventure_log: "ADVENTURE LOG",
         stats: "STATISTICS"
@@ -182,20 +192,32 @@ export const en = {
         unknown: "Unknown biological anomaly."
     },
     skills: {
-        vitality: "VITALITET",
+        vitality: "VITALITY",
         vitality_desc: "Increases maximum health.",
         adrenaline: "ADRENALINE",
         adrenaline_desc: "Increase maximum stamina.",
         reflex: "REFLEXES",
         reflex_desc: "Increases movement speed."
     },
-    minigun: "Minigun",
+    weapons: {
+        smg: "SMG",
+        shotgun: "Shotgun",
+        rifle: "Rifle",
+        pistol: "Pistol",
+        revolver: "Revolver",
+        grenade: "Grenade",
+        molotov: "Molotov",
+        flashbang: "Flashbang",
+        minigun: "Minigun",
+        radio: "Radio"
+    },
     tips: [
         "Just shoot! Unlimited gun ammo.",
         "Conserve throwables, they're limited.",
         "Use throwables for crowds.",
         "Explore for essential Scrap.",
         "Keep moving.",
+        "Press [F] to toggle your Flashlight.",
         "Hold Space to RUSH, pushing back enemies and moving faster.",
         "Skill Points levels up the character's abilites",
         "Earn Skill points by rescuing family members, find collectibles and killing bosses.",
@@ -217,7 +239,9 @@ export const en = {
         scrapyard_name: "The Scrapyard",
         scrapyard_desc: "An industrial scrapyard full of wrecked cars, metal parts and oil. The maze of wrecked cars makes it a death trap.",
         home_name: "Home",
-        home_desc: "Return to your home together with your reunited family members."
+        home_desc: "Return to your home together with your reunited family members.",
+        camp_name: "Base Camp",
+        camp_desc: "Your safe haven. Restock, upgrade skills, and prepare for the next sector."
     },
     story: {
         prologue_title: "PROLOGUE: THE HOMECOMING",
@@ -230,6 +254,61 @@ export const en = {
         intel_scrap_text: "Your daughter is safe. She revealed the heartbreaking truth: a massive Titan zombie attacked them in the woods. Your wife sacrificed herself, screaming to lure it away so your daughter could escape.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
         epilogue_title: "EPILOGUE: NO ONE LEFT BEHIND",
         epilogue_text: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the undead, but we made a promise. Return to The Village one last time. Save them.",
+        prologue: [
+            {
+                overlay: "GÅNGHESTER. 48 HOURS SINCE VMA.",
+                narrative: "The VMA signal has been broadcasting for 48 hours. Robert gets a phone call and is ordered to work and help evacuate the city.",
+                image: "Dark, snowy Gånghester at night and a phone ringing.",
+                audio: "The piercing sound of the Swedish VMA signal ('Hesa Fredrik')."
+            },
+            {
+                overlay: "THE CITY IS IN CHAOS.",
+                narrative: "Robert drives through the city and sees the chaos. People are rioting and looting. But it's not just people...",
+                image: "Robert sitting in his police car looking out the window at the chaos. Panicked people running in the streets.",
+                bubbles: ["Riots in the city...", "We're losing control...", "The infection is spreading..."],
+                audio: "Chaotic police radio chatter. Screams in the distance. Gunfire."
+            },
+            {
+                overlay: "SOCIETY COLLAPSES.",
+                narrative: "The police is overrun by the infected. Robert understands that society has collapsed.",
+                image: "Burning skyline of the wintry Borås in the distance, smashed and burning police cars and zombies groaning.",
+                bubbles: ["What is happening?", "I need to get home to my family.", "I must get home."],
+                audio: "Distant explosions, gunfire, zombies groaning."
+            },
+            {
+                overlay: "RADIO SILENCE.",
+                narrative: "Robert tries to communicate with his colleagues. Static radio chatter.",
+                image: "Robert in his police uniform, looking stressed. Radio in his hand.",
+                bubbles: ["Am I the only one left in town?", "We're not in control!"],
+                audio: "Static and radio chatter."
+            },
+            {
+                overlay: "SIGNAL LOST.",
+                narrative: "Robert tries to call Nathalie. Static sound.",
+                image: "Phone with no signal and in skyline of the Borås in the distance.",
+                bubbles: ["No signal...", "Damn it!", "I need to reach Nathalie."],
+                audio: "Distant explosions, gunfire."
+            },
+            {
+                overlay: "GET HOME.",
+                narrative: "Everything has turned to shit. Robert drives frantically to get home to his family. He sees the front door is smashed open. He draws his weapon and rushes inside.",
+                image: "Police car driving fast through the snowy streets of Borås, zombies in the streets.",
+                audio: "Fast car sound. Heavy breathing."
+            },
+            {
+                overlay: "HOME.",
+                narrative: "He arrives home. The house is destroyed. He steps inside.",
+                image: "Robert’s villa, front door smashed open, family's car on fire in the driveway.",
+                bubbles: ["NATHALIE! ESMERALDA! LOKE! JORDAN!"],
+                audio: "A low growl from the shadows."
+            },
+            {
+                overlay: "FAMILY'S GONE.",
+                narrative: "Robert sees the chaos in the house. His family is not there. He sees a bloody trail leading out to the cellar door. He is instantly attacked by zombies.",
+                image: "Interior hallway, overturned furniture, a dead zombie, blood streak leading to the cellar door.",
+                audio: "Zombies groaning and attacking."
+            }
+        ],
         generic_briefing: "Emergency Broadcast: Distress signal detected in {map}. Locate the survivor and neutralize the {boss}.",
         extracted_briefing: "Sector Report: {map} is currently under the control of the {boss}. Although the survivor has been successfully extracted to camp, the area remains a critical threat. The horde is growing, and we cannot let the {boss} establish a stronghold. Go in, clear the sector, and eliminate the target.",
         gym_event: "What the hell was that?!"
@@ -263,9 +342,9 @@ export const en = {
         s1_collectible_1: "Esmeralda's phone",
         s1_collectible_1_description: "The screen is cracked and flickering, but some details are visible. Esmeralda's last attempt was a message to me:\n'Dad!! Can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to the S[...]'\n'Message not sent. Retry?' is written in red at the bottom...",
         s1_collectible_1_icon: "📱",
-        s1_collectible_2: "Jordan's favorite pacifier",
-        s1_collectible_2_description: "It's small, blue and covered in frost. Jordan never goes anywhere without it. They must have been in a real hurry...",
-        s1_collectible_2_icon: "👶",
+        s1_collectible_2: "Loke's Hand Axe",
+        s1_collectible_2_description: "Loke's small hand axe. He always wants to help me chop wood at the summer cottage. He must have grabbed it in a hurry to defend himself.",
+        s1_collectible_2_icon: "🪓",
 
         s1_start_tracks: "Footprints! They went this way... what did Loke mean by 'D'?",
         s1_blood_stains: "Blood stains! Are they hurt?!",
@@ -284,12 +363,12 @@ export const en = {
         s1_poi_train_yard: "Hmm... the smoke comes from the train. Let's have a look.",
 
         // Sector 2 Triggers
-        s2_collectible_1: "Dirty Teddy Bear",
-        s2_collectible_1_description: "Jordan's teddy. It's missing an eye and smells like the damp caves. He must have dropped it when they were running from the hostiles.",
-        s2_collectible_1_icon: "🧸",
-        s2_collectible_2: "Old Military Map",
-        s2_collectible_2_description: "A partially torn map of the bunker system. Some areas are marked with 'INFECTED' and 'STAY AWAY'. It seems the shelters were compromised early on.",
-        s2_collectible_2_icon: "🗺️",
+        s2_collectible_1: "Jordan's favorite pacifier",
+        s2_collectible_1_description: "It's small, blue and covered in frost. Jordan never goes anywhere without it. He must have dropped it when they ran into the caves.",
+        s2_collectible_1_icon: "👶",
+        s2_collectible_2: "Jordan's Teddy Bear",
+        s2_collectible_2_description: "Jordan's favorite teddy bear. It's missing an eye and smells of the damp caves. He must have dropped it when they ran into the darkness.",
+        s2_collectible_2_icon: "🧸",
         s2_start: "Loke said the others followed these rails. Let's see where it leads us...",
         s2_combat: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this.",
         s2_mountain: "Oh, the cave entrance. Let's see if they're hinding inside!",
@@ -302,14 +381,20 @@ export const en = {
         s2_tunnel: "This tunnel looks like it once led out to the other side of the mountain.",
 
         // Sector 3 Triggers
-        s3_collectible: "Worn Radio Component",
-        s3_collectible_desc: "A small circuit board, likely from the mast's control panel. Esmeralda must have been trying to repair it before she was chased away.",
+        s3_collectible: "Esmeralda's Diary",
+        s3_collectible_desc: "A small notebook with flowers on the cover. The last page is about how much she misses her friends... and how scared she is of the darkness in the forest.",
+        s3_collectible_2: "Esmeralda's Jacket",
+        s3_collectible_2_description: "Esmeralda's favorite jacket. It's torn and has bloodstains on the sleeve. My stomach knots... I hope it's not her blood.",
+        s3_collectible_2_icon: "🧥",
         s3_forest_noise: "The forest is too loud. Every snap of a twig sounds like a runner...",
         s3_mast_sight: "There it is. The Häglared Mast. If Esmeralda is anywhere, she's there.",
 
         // Sector 4 Triggers
-        s4_collectible: "Rusted Car Key",
-        s4_collectible_desc: "A key to an old Volvo. It was found near a stack of wrecked cars. Maybe Nathalie tried to use one as a barricade.",
+        s4_collectible: "Nathalie's Wedding Ring",
+        s4_collectible_desc: "A simple gold ring with an inscription inside: 'Forever us'. It's cold, but the memories it carries burn in my hand.",
+        s4_collectible_2: "Nathalie's Police Badge",
+        s4_collectible_2_description: "Nathalie's Detective Inspector badge. It's scratched and slightly scorched at the edges. She must have lost it during the fight at the scrap yard. She never gives up her shield willingly.",
+        s4_collectible_2_icon: "�️",
         s4_noise: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?",
         s4_shed: "The office building. It's the only place with a reinforced door. She has to be in there."
     },
@@ -356,7 +441,6 @@ export const en = {
         "1_21": "Oh, yeah, for certain. Let's go, boys!",
         "1_22": "Bye... and good luck!",
         "1_23": "(The door slams shut with a deafening boom. Something stirs in the dark...)",
-
 
         // Dialogue: Sector 3
         "2_0": "HELLO? Is anyone here?",

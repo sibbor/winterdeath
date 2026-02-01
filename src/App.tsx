@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameState, GameScreen, PlayerStats, MissionStats, SectorTrigger, MapItem, WeaponType } from './types';
-import { loadGameState, saveGameState } from './utils/persistence';
+import { GameState, GameScreen, PlayerStats, SectorStats, SectorTrigger, MapItem, WeaponType } from './types';
+import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './utils/gameLogic';
 import GameCanvas, { GameCanvasHandle } from './components/GameCanvas';
 import Camp from './components/camp/Camp';
@@ -12,6 +12,8 @@ import ScreenTeleport from './components/game/ScreenTeleport';
 import ScreenSectorReport from './components/game/ScreenSectorReport';
 import ScreenBossKilled from './components/game/ScreenBossKilled';
 import ScreenClue from './components/game/ScreenClue';
+import Prologue from './components/game/Prologue';
+import ScreenLoading from './components/game/ScreenLoading';
 import ScreenSettings from './components/camp/ScreenSettings';
 import FPSDisplay from './components/ui/core/FPSDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
@@ -26,17 +28,20 @@ const App: React.FC = () => {
     const [showTeleportMenu, setShowTeleportMenu] = useState(false);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
+    const [isLoadingLevel, setIsLoadingLevel] = useState(false);
+    const [isLoadingCamp, setIsLoadingCamp] = useState(false);
 
     // HUD & Game State tracked in App for persistence/UI overlay
     const [hudState, setHudState] = useState<any>({});
     const [activeClue, setActiveClue] = useState<SectorTrigger | null>(null);
     const [isDialogueOpen, setIsDialogueOpen] = useState(false);
+    const [isBossIntroActive, setIsBossIntroActive] = useState(false);
     const [currentMapItems, setCurrentMapItems] = useState<MapItem[]>([]);
     const [fps, setFps] = useState(0);
 
-    // Mission Results
+    // Sector Results
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
-    const [missionStats, setMissionStats] = useState<MissionStats | null>(null);
+    const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
 
     // Interaction Locks
     const [isSaving, setIsSaving] = useState(false);
@@ -50,9 +55,10 @@ const App: React.FC = () => {
 
     // Global Input Hook (ESC, M)
     useGlobalInput(gameState.screen, {
-        isPaused, isMapOpen, showTeleportMenu, activeClue, isDialogueOpen, hp: hudState.hp || 100, isSettingsOpen
+        isPaused, isMapOpen, showTeleportMenu, activeClue, isDialogueOpen, isBossIntroActive, hp: hudState.hp || 100, isSettingsOpen
     }, {
         setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen,
+        setActiveClue,
         requestPointerLock: () => gameCanvasRef.current?.requestPointerLock()
     });
 
@@ -65,9 +71,9 @@ const App: React.FC = () => {
         setFps(val);
     }, []);
 
-    const handleDie = useCallback((stats: MissionStats, killer: string) => {
+    const handleDie = useCallback((stats: SectorStats, killer: string) => {
         setDeathDetails({ killer });
-        setMissionStats(stats);
+        setSectorStats(stats);
 
         const newStats = aggregateStats(gameState.stats, stats, true, false);
         setGameState(prev => ({
@@ -77,7 +83,7 @@ const App: React.FC = () => {
         }));
     }, [gameState.stats]);
 
-    const handleMissionEnded = useCallback((stats: MissionStats) => {
+    const handleSectorEnded = useCallback((stats: SectorStats) => {
         setDeathDetails(null);
 
         // 1. Basic Aggregation (Includes XP and Level Up SP)
@@ -108,42 +114,53 @@ const App: React.FC = () => {
         }
 
         const newFamily = [...gameState.familyMembersFound];
+        const newFamilySP = [...gameState.familySPAwarded];
+
         if (stats.familyFound && stats.familyExtracted) {
+            // Track "Found" status (for unlocks/story)
             if (!newFamily.includes(gameState.currentMap)) {
                 newFamily.push(gameState.currentMap);
+            }
+
+            // Track SP Reward separately (Explicit prevention of duplicates)
+            if (!newFamilySP.includes(gameState.currentMap)) {
+                newFamilySP.push(gameState.currentMap);
                 newStats.skillPoints++; // Award SP for first-time Family rescue
                 newStats.totalSkillPointsEarned++;
             }
         }
 
-        // 4. Update Mission Stats for Report Screen
+        // 4. Update Sector Stats for Report Screen
         // Calculate total SP gain (Level Up + Clues + Objectives)
         stats.spEarned = newStats.skillPoints - prevSp;
-        setMissionStats(stats);
+        setSectorStats(stats);
 
         setGameState(prev => ({
             ...prev,
             stats: newStats,
             bossesDefeated: newBosses,
             familyMembersFound: newFamily,
+            familySPAwarded: newFamilySP,
             screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP, // Go to Boss Killed screen first if boss died
             midRunCheckpoint: null // Clear checkpoint on success
         }));
     }, [gameState.stats, gameState.currentMap, gameState.bossesDefeated, gameState.familyMembersFound]);
 
-    const handleAbortMission = () => {
+    const handleAbortSector = () => {
         setIsPaused(false);
-        // Create partial stats for abort
-        const abortedStats: MissionStats = {
-            timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {},
-            scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
-            chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: []
-        };
-        setMissionStats(abortedStats);
         setDeathDetails(null);
 
-        const newStats = aggregateStats(gameState.stats, abortedStats, false, true);
+        // Create partial stats for abort
+        const abortedStats: SectorStats = {
+            timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {},
+            scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
+            chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: [],
+            seenEnemies: [], seenBosses: [], visitedPOIs: []
+        };
 
+        setSectorStats(abortedStats);
+
+        const newStats = aggregateStats(gameState.stats, abortedStats, false, true);
         setGameState(prev => ({
             ...prev,
             stats: newStats,
@@ -152,6 +169,7 @@ const App: React.FC = () => {
     };
 
     const handleTeleportJump = (x: number, z: number) => {
+        gameCanvasRef.current?.requestPointerLock();
         setTeleportTarget({ x, z, timestamp: Date.now() });
         setShowTeleportMenu(false);
         setIsPaused(false);
@@ -180,9 +198,10 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, currentMap: mapIndex }));
     };
 
-    const handleStartMission = () => {
-        setGameState(prev => ({ ...prev, screen: GameScreen.MISSION }));
-        // Reset mission state variables
+    const handleStartSector = () => {
+        setIsLoadingLevel(true);
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        // Reset sector state variables
         setHudState({});
         setCurrentMapItems([]);
         setActiveClue(null);
@@ -190,12 +209,24 @@ const App: React.FC = () => {
         setIsMapOpen(false);
     };
 
+    const handlePrologueComplete = () => {
+        setGameState(prev => ({
+            ...prev,
+            screen: GameScreen.CAMP,
+            stats: {
+                ...prev.stats,
+                prologueSeen: true
+            }
+        }));
+        soundManager.playUiConfirm();
+    };
+
     const handleResetGame = () => {
-        localStorage.removeItem('slaughterNationSave_v10');
+        clearSave();
         window.location.reload();
     };
 
-    const cursorHidden = gameState.screen === GameScreen.MISSION && !isPaused && !isMapOpen && !activeClue && !showTeleportMenu && !isDialogueOpen && !deathDetails;
+    const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeClue && !showTeleportMenu && !isDialogueOpen && !deathDetails;
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
@@ -216,7 +247,7 @@ const App: React.FC = () => {
                     onSaveStats={handleSaveStats}
                     onSaveLoadout={handleSaveLoadout}
                     onSelectMap={handleSelectMap}
-                    onStartMission={handleStartMission}
+                    onStartSector={handleStartSector}
                     onToggleDebug={(val) => setGameState(prev => ({ ...prev, debugMode: val }))}
                     onToggleFps={(val) => setGameState(prev => ({ ...prev, showFps: val }))}
                     isMapLoaded={true}
@@ -224,10 +255,11 @@ const App: React.FC = () => {
                     onFPSUpdate={handleFPSUpdate}
                     onSaveGraphics={handleSaveGraphics}
                     initialGraphics={gameState.graphics}
+                    onCampLoaded={() => setIsLoadingCamp(false)}
                 />
             )}
 
-            {gameState.screen === GameScreen.MISSION && (
+            {gameState.screen === GameScreen.SECTOR && (
                 <>
                     <GameCanvas
                         ref={gameCanvasRef}
@@ -236,20 +268,21 @@ const App: React.FC = () => {
                         weaponLevels={gameState.weaponLevels}
                         currentMap={gameState.currentMap}
                         debugMode={gameState.debugMode}
-                        isRunning={!isPaused && !isMapOpen && !showTeleportMenu && !activeClue}
-                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeClue}
-                        disableInput={!!activeClue}
+                        isRunning={!isPaused && !isMapOpen && !showTeleportMenu && !activeClue && !isLoadingLevel}
+                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeClue || isLoadingLevel}
+                        disableInput={!!activeClue || isLoadingLevel}
 
                         onUpdateHUD={handleUpdateHUD}
                         onDie={handleDie}
-                        onMissionEnded={handleMissionEnded}
+                        onSectorEnded={handleSectorEnded}
                         onPauseToggle={setIsPaused}
-                        triggerEndMission={false}
+                        onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
+                        triggerEndSector={false}
 
                         familyAlreadyRescued={gameState.familyMembersFound.includes(gameState.currentMap)}
                         bossPermanentlyDefeated={gameState.bossesDefeated.includes(gameState.currentMap)}
 
-                        onLevelLoaded={() => { }}
+                        onLevelLoaded={() => setIsLoadingLevel(false)}
                         startAtCheckpoint={false}
                         onCheckpointReached={() => { }}
 
@@ -257,25 +290,27 @@ const App: React.FC = () => {
                         onClueFound={setActiveClue}
                         isClueOpen={!!activeClue}
                         onDialogueStateChange={setIsDialogueOpen}
+                        onBossIntroStateChange={setIsBossIntroActive}
                         onMapInit={setCurrentMapItems}
                         onFPSUpdate={handleFPSUpdate}
                         initialGraphics={gameState.graphics}
                     />
 
-                    {/* Hide HUD if hudState.isHidden (triggered during Boss Intro) */}
+                    {/* Hide HUD if hudState.isHidden (triggered during other states if needed, but no longer Boss Intro) */}
                     {!isMapOpen && !showTeleportMenu && !activeClue && !hudState.isHidden && (
                         <GameHUD
                             {...hudState}
                             loadout={gameState.loadout}
                             weaponLevels={gameState.weaponLevels}
                             debugMode={gameState.debugMode}
+                            isBossIntro={isBossIntroActive}
                         />
                     )}
 
                     {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && (
                         <ScreenPause
                             onResume={() => { setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
-                            onAbort={handleAbortMission}
+                            onAbort={handleAbortSector}
                             onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
                             onOpenSettings={() => setIsSettingsOpen(true)}
                         />
@@ -292,19 +327,23 @@ const App: React.FC = () => {
                     )}
 
                     {activeClue && (
-                        <ScreenClue clue={activeClue} onClose={() => { setActiveClue(null); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }} />
+                        <ScreenClue clue={activeClue} onClose={() => { gameCanvasRef.current?.requestPointerLock(); setActiveClue(null); setIsPaused(false); }} />
                     )}
                 </>
             )}
 
-            {/* Map Screen (Overlay for Mission) */}
+            {(isLoadingLevel || isLoadingCamp) && (
+                <ScreenLoading mapIndex={gameState.currentMap} isCamp={isLoadingCamp} />
+            )}
+
+            {/* Map Screen (Overlay for Sector) */}
             {isMapOpen && (
                 <ScreenMap
                     items={currentMapItems}
                     playerPos={hudState.playerPos}
                     familyPos={hudState.familyPos || undefined}
                     bossPos={hudState.bossPos || undefined}
-                    onClose={() => { setIsMapOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
+                    onClose={() => { gameCanvasRef.current?.requestPointerLock(); setIsMapOpen(false); setIsPaused(false); }}
                     onSelectCoords={handleMapSelectCoords}
                 />
             )}
@@ -326,7 +365,7 @@ const App: React.FC = () => {
             {gameState.screen === GameScreen.BOSS_KILLED && (
                 <ScreenBossKilled
                     mapIndex={gameState.currentMap}
-                    stats={missionStats || undefined}
+                    stats={sectorStats || undefined}
                     onProceed={() => {
                         soundManager.playUiConfirm();
                         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
@@ -334,18 +373,20 @@ const App: React.FC = () => {
                 />
             )}
 
-            {gameState.screen === GameScreen.RECAP && missionStats && (
+            {gameState.screen === GameScreen.RECAP && sectorStats && (
                 <ScreenSectorReport
-                    stats={missionStats}
+                    stats={sectorStats}
                     deathDetails={deathDetails}
                     currentMap={gameState.currentMap}
                     onReturnCamp={() => {
+                        setIsLoadingCamp(true);
                         setGameState(prev => ({ ...prev, screen: GameScreen.CAMP }));
                         soundManager.playUiConfirm();
                     }}
                     onRetry={() => {
-                        setGameState(prev => ({ ...prev, screen: GameScreen.MISSION }));
-                        setMissionStats(null);
+                        setIsLoadingLevel(true);
+                        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+                        setSectorStats(null);
                         setDeathDetails(null);
                         setHudState({});
                         setCurrentMapItems([]);
@@ -354,6 +395,10 @@ const App: React.FC = () => {
                         soundManager.playUiConfirm();
                     }}
                 />
+            )}
+
+            {gameState.screen === GameScreen.PROLOGUE && (
+                <Prologue onComplete={handlePrologueComplete} />
             )}
         </div>
     );

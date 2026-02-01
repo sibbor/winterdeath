@@ -37,13 +37,14 @@ interface GameHUDProps {
     distanceTraveled?: number;
     isDead?: boolean; // New prop for death effect
     debugMode?: boolean;
+    isBossIntro?: boolean;
 }
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
     hp, maxHp, stamina, maxStamina, ammo, magSize, activeWeapon, isReloading, score, scrap, multiplier, loadout, boss,
     throwableReadyTime = 0, throwableAmmo = 3, kills = 0, bossSpawned = false, bossDefeated = false,
     familyDistance = null, familySignal = 0, familyFound = false, level = 1, currentXp = 0, nextLevelXp = 100,
-    reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false
+    reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false
 }) => {
     const hpP = Math.max(0, (hp / maxHp) * 100);
     const stP = Math.max(0, (stamina / maxStamina) * 100);
@@ -56,6 +57,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const prevHp = useRef(hp);
     const prevLevel = useRef(level);
+    const prevXp = useRef(currentXp);
+
+    // New state for XP Gain
+    const [xpGainAmount, setXpGainAmount] = useState(0);
+    const [xpGained, setXpGained] = useState(false);
 
     const getRank = (lvl: number) => {
         const rankKey = Math.min(Math.max(0, lvl - 1), 19);
@@ -80,10 +86,21 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     useEffect(() => {
         if (level > prevLevel.current) {
             setShowLevelUp(true);
-            setTimeout(() => setShowLevelUp(false), 3000);
+            setTimeout(() => setShowLevelUp(false), 5000); // Extended for animation
         }
         prevLevel.current = level;
     }, [level]);
+
+    useEffect(() => {
+        const diff = (currentXp || 0) - (prevXp.current || 0);
+        if (diff >= 250) {
+            setXpGainAmount(diff);
+            setXpGained(true);
+            const t = setTimeout(() => setXpGained(false), 3000);
+            return () => clearTimeout(t);
+        }
+        prevXp.current = currentXp;
+    }, [currentXp]);
 
     useEffect(() => {
         const diff = (skillPoints || 0) - (prevSkillPoints.current || 0);
@@ -191,14 +208,42 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     {/* Ranking & Resource Group (Top Left) */}
                     <div className="flex flex-col gap-4 items-start">
                         {/* Rank Box (Matches CampHUD) */}
-                        <div className="bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl w-[320px] backdrop-blur-sm transition-all duration-300">
-                            <h1 className="text-4xl font-black text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem', fontWeight: 900 }}>{getRank(level)}</h1>
+                        <div className="bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl w-[320px] backdrop-blur-sm transition-all duration-300 relative group">
+                            {/* Rank Title Animation */}
+                            <div className="relative overflow-hidden">
+                                {showLevelUp ? (
+                                    <h1 className="text-4xl font-black text-white tracking-tighter leading-none uppercase animate-[revealRight_1s_ease-out_forwards]" style={{ fontSize: '2.25rem', fontWeight: 900 }}>
+                                        {getRank(level)}
+                                    </h1>
+                                ) : (
+                                    <h1 className="text-4xl font-black text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem', fontWeight: 900 }}>
+                                        {getRank(level)}
+                                    </h1>
+                                )}
+                            </div>
+
                             <div className="flex items-center gap-4 mt-2">
                                 <span className="text-blue-400 font-bold text-sm tracking-widest">{t('ui.lvl')} {level}</span>
                                 <div className="flex-1 h-1.5 bg-blue-900/40">
                                     <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${xpP}%` }} />
+                                    {/* Large XP Gain Indicator */}
+                                    {xpGained && (
+                                        <div className="absolute top-0 right-0 h-full flex items-center justify-end pr-2 overflow-visible">
+                                            <span className="text-xs font-black text-blue-300 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)] absolute right-0">+{xpGainAmount} XP</span>
+                                            <span className="text-xs font-black text-white drop-shadow-[0_0_5px_rgba(59,130,246,1)] animate-pulse relative z-10">+{xpGainAmount} XP</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* Level Up Notification Overlay */}
+                            {showLevelUp && (
+                                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none bg-black/60 backdrop-blur-[1px]">
+                                    <span className="text-blue-400 text-2xl font-black tracking-[0.2em] animate-[pulse_0.5s_ease-in-out_infinite] uppercase drop-shadow-[0_0_10px_rgba(59,130,246,0.8)] border-y-2 border-blue-500 py-1 bg-black/80 w-full text-center transform -skew-x-6">
+                                        {t('ui.level_up')}
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex flex-row gap-4 items-start">
@@ -208,9 +253,16 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                     <div className="flex flex-col">
                                         <div className="flex justify-between items-baseline gap-2 relative">
                                             <span className={`text-[10px] uppercase font-black block tracking-widest transition-colors ${skillPoints > 0 || spGained ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                                            {spGained && <span className="absolute -top-3 right-0 text-[10px] font-black text-purple-300 animate-pulse drop-shadow-md">+{spGainAmount}</span>}
                                         </div>
-                                        <span className={`text-2xl font-black transition-colors ${skillPoints > 0 || spGained ? 'text-purple-400' : 'text-white'}`}>{skillPoints}</span>
+                                        <div className="relative">
+                                            <span className={`text-2xl font-black transition-colors ${skillPoints > 0 || spGained ? 'text-purple-400' : 'text-white'}`}>{skillPoints}</span>
+                                            {spGained && (
+                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                    <span className="text-lg font-black text-purple-200 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1] opacity-75">+{spGainAmount}</span>
+                                                    <span className="text-lg font-black text-white drop-shadow-[0_0_10px_rgba(168,85,247,1)] animate-bounce z-20 absolute">+{spGainAmount}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -221,9 +273,16 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                     <div className="flex flex-col">
                                         <div className="flex justify-between items-baseline gap-2 relative">
                                             <span className={`text-[10px] uppercase font-black block tracking-widest ${scrap > 0 || scrapGained ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                                            {scrapGained && <span className="absolute -top-3 right-0 text-[10px] font-black text-yellow-300 animate-pulse drop-shadow-md">+{scrapGainAmount}</span>}
                                         </div>
-                                        <span className={`text-2xl font-black ${scrap > 0 || scrapGained ? 'text-yellow-400' : 'text-white'}`}>{scrap}</span>
+                                        <div className="relative">
+                                            <span className={`text-2xl font-black ${scrap > 0 || scrapGained ? 'text-yellow-400' : 'text-white'}`}>{scrap}</span>
+                                            {scrapGained && (
+                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                    <span className="text-lg font-black text-yellow-200 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1] opacity-75">+{scrapGainAmount}</span>
+                                                    <span className="text-lg font-black text-white drop-shadow-[0_0_10px_rgba(234,179,8,1)] animate-bounce z-20 absolute">+{scrapGainAmount}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -239,7 +298,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             </div>
                         </div>
                     ) : (
-                        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/90 border border-red-900/50 px-8 py-2 skew-x-[-10deg]">
+                        <div className={`absolute top-6 left-1/2 -translate-x-1/2 bg-black/90 border border-red-900/50 px-8 py-2 skew-x-[-10deg] transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                             <span className="text-red-700 font-black text-2xl tracking-[0.2em] block skew-x-[10deg] uppercase">
                                 {kills} {t('ui.kills')}
                             </span>
@@ -247,25 +306,27 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     )}
 
                     {/* Coordinates (Top Right) */}
-                    {playerPos && (
-                        <div className="flex flex-col gap-2 items-end">
-                            <div className="flex flex-col items-end text-sm font-mono font-bold text-white/70 bg-black/50 p-3 border border-white/10 skew-x-[-10deg]">
-                                <div className="skew-x-[10deg]">
-                                    ({Math.round(playerPos.x)}, {Math.round(playerPos.z)})
+                    <div className={`flex flex-col gap-2 items-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                        {playerPos && (
+                            <>
+                                <div className="flex flex-col items-end text-sm font-mono font-bold text-white/70 bg-black/50 p-3 border border-white/10 skew-x-[-10deg]">
+                                    <div className="skew-x-[10deg]">
+                                        ({Math.round(playerPos.x)}, {Math.round(playerPos.z)})
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="flex flex-col items-end text-sm font-mono font-bold text-blue-200/80 bg-black/50 p-3 border border-blue-500/20 skew-x-[-10deg]">
-                                <div className="skew-x-[10deg]">
-                                    {distanceTraveled} m
+                                <div className="flex flex-col items-end text-sm font-mono font-bold text-blue-200/80 bg-black/50 p-3 border border-blue-500/20 skew-x-[-10deg]">
+                                    <div className="skew-x-[10deg]">
+                                        {distanceTraveled} m
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    )}
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 {/* Bottom Interface */}
-                <div className="flex justify-between items-end relative w-full">
+                <div className={`flex justify-between items-end relative w-full transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                     {/* Left Stats Panel (Split Bars with Gap) */}
                     <div className={`w-80 flex flex-col gap-1 relative ${isShaking ? 'translate-x-1 translate-y-1' : ''}`}>
 
@@ -282,14 +343,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             <div className="h-full bg-emerald-600 transition-all duration-200 ease-out" style={{ width: `${stP}%` }} />
                         </div>
 
-                        {/* Level Up Notification */}
-                        {showLevelUp && (
-                            <div className="absolute -top-12 left-0 w-full flex items-center justify-center skew-x-[-10deg] z-10">
-                                <span className="text-blue-400 text-sm font-black tracking-[0.2em] animate-pulse uppercase bg-black/80 px-4 py-1 border border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-                                    {t('ui.level_up')}
-                                </span>
-                            </div>
-                        )}
                     </div>
 
                     {/* Centered Action Bar (Weapons) */}

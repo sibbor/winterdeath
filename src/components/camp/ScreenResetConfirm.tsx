@@ -11,28 +11,29 @@ interface ScreenResetConfirmProps {
 
 const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCancel }) => {
     return (
-        <CampModalLayout 
-            title={t('ui.reset_confirm_title')} 
+        <CampModalLayout
+            title={t('ui.reset_confirm_title')}
             borderColorClass="border-red-600"
             onClose={onCancel}
-            canConfirm={false} // Hide default confirm button, we use custom ones
+            showCancel={false}
+            isSmall={true}
         >
-            <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center space-y-12">
-                <div className="bg-red-900/20 border-2 border-red-600 p-8 skew-x-[-5deg]">
-                    <p className="text-red-200 text-xl font-bold skew-x-[5deg] leading-relaxed">
+            <div className="flex flex-col items-center justify-center py-4 max-w-xl mx-auto text-center space-y-8">
+                <div className="bg-red-900/40 border-2 border-red-600 p-6 skew-x-[-5deg] shadow-[inset_0_0_20px_rgba(220,38,38,0.2)]">
+                    <p className="text-red-100 text-lg font-black uppercase tracking-tight skew-x-[5deg] leading-tight">
                         {t('ui.reset_confirm_desc')}
                     </p>
                 </div>
 
-                <div className="flex gap-8">
-                    <button 
+                <div className="flex gap-6">
+                    <button
                         onClick={() => { soundManager.playUiClick(); onCancel(); }}
                         className="px-8 py-4 bg-gray-900 border-2 border-gray-600 text-white font-black uppercase tracking-widest hover:bg-gray-800 hover:border-white transition-all skew-x-[-5deg]"
                     >
                         <span className="block skew-x-[5deg]">{t('ui.no_cancel')}</span>
                     </button>
 
-                    <button 
+                    <button
                         onClick={() => { soundManager.playUiConfirm(); onConfirm(); }}
                         className="px-8 py-4 bg-red-700 border-2 border-red-500 text-white font-black uppercase tracking-widest hover:bg-red-600 hover:scale-105 transition-all skew-x-[-5deg] shadow-[0_0_20px_rgba(220,38,38,0.5)]"
                     >

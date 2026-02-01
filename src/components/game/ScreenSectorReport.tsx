@@ -1,12 +1,12 @@
 
 import React from 'react';
 import { t } from '../../utils/i18n';
-import { MissionStats } from '../../types';
+import { SectorStats } from '../../types';
 import GameModalLayout from './GameModalLayout';
 import { BOSSES } from '../../content/constants';
 
 interface ScreenSectorReportProps {
-    stats: MissionStats;
+    stats: SectorStats;
     deathDetails: { killer: string } | null;
     onReturnCamp: () => void;
     onRetry: () => void;

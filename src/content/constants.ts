@@ -20,7 +20,7 @@ export const INITIAL_STATS: PlayerStats = {
     skillPoints: 0,
     kills: 0,
     scrap: 0,
-    missionsCompleted: 0,
+    sectorsCompleted: 0,
     familyFoundCount: 0,
     totalSkillPointsEarned: 0,
     killsByType: {},

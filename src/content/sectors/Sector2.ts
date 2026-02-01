@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY, createTextSprite } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { PathGenerator } from '../../core/world/PathGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
 import { t } from '../../utils/i18n';
 
@@ -21,7 +22,7 @@ export const Sector2: SectorDef = {
     },
     // --- SPAWN POINTS ---
     playerSpawn: { x: 0, z: 200 },
-    familySpawn: { x: 61, z: -193, y: 0 }, // In Boss Room (R7)
+    familySpawn: { x: 50, z: -193, y: 0 }, // Offset from final target (61) to be behind the door
     bossSpawn: { x: 61, z: -193 },
 
     cinematic: {
@@ -33,12 +34,18 @@ export const Sector2: SectorDef = {
     generate: (ctx: SectorContext) => {
         const { scene, obstacles, flickeringLights, burningBarrels, triggers } = ctx;
 
+        // Custom init to hide Jordan
+        setTimeout(() => {
+            const jordan = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Jordan');
+            if (jordan) jordan.visible = false;
+        }, 100);
+
         // --- TRIGGERS (Outside/General) ---
         triggers.push(
             // Collectible (1 SP)
             {
                 id: 's2_collectible_1',
-                position: { x: 50, z: 22 },
+                position: { x: 140, z: -50 },
                 radius: 2,
                 type: 'COLLECTIBLE',
                 content: "clues.s2_collectible_1",
@@ -47,24 +54,6 @@ export const Sector2: SectorDef = {
                 icon: "s2_collectible_1_icon",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
-            // Narrative Triggers (50 XP)
-            {
-                id: 's2_start', position: { x: 0, z: 180 }, radius: 20, type: 'THOUGHTS', content: "clues.s2_start", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_combat', position: { x: 2, z: 95 }, radius: 20, type: 'SPEECH', content: "clues.s2_combat", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_mountain', position: { x: 95, z: -55 }, radius: 20, type: 'SPEECH', content: "clues.s2_mountain", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_train_tunnel', position: { x: 130, z: -55 }, radius: 20, type: 'POI', content: "clues.s2_tunnel", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-
             // --- FIND JORDAN EVENT ---
             {
                 id: 'found_jordan',
@@ -88,7 +77,7 @@ export const Sector2: SectorDef = {
         ];
 
         // Generate Rail Mesh
-        const curve = SectorBuilder.createCurvedRailTrack(ctx, railPoints);
+        const curve = PathGenerator.createRailway(ctx, railPoints);
 
         // Ground (Snowy) - Covering the entire play area
         const forestGround = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), MATERIALS.snow);
@@ -357,8 +346,7 @@ export const Sector2: SectorDef = {
         // Extracted to Sector2_Cave.ts
         generateCaveSystem(ctx, innerCave, caveEntrancePos);
 
-        SectorBuilder.spawnClueMarker(ctx, 50, 22, t('clues.s2_collectible_1'), 'phone');
-        SectorBuilder.spawnClueMarker(ctx, 92, -208, t('clues.s2_collectible_2'), 'pacifier');
+        SectorBuilder.spawnClueMarker(ctx, 140, -50, 'collectible 1', 'pacifier');
 
         SectorBuilder.visualizeTriggers(ctx);
     },
@@ -377,6 +365,67 @@ export const Sector2: SectorDef = {
             if (outer) outer.visible = !insideCave;
             if (curtain) curtain.visible = insideCave;
             if (voidRoof) voidRoof.visible = true;
+
+            // --- JORDAN CINEMATIC LOGIC ---
+            if (!sectorState.jordanCinematic) {
+                sectorState.jordanCinematic = { phase: 'NONE', timer: 0 };
+            }
+
+            const jc = sectorState.jordanCinematic;
+            const doorL = scene.getObjectByName('s2_bunker_door_l');
+            const doorR = scene.getObjectByName('s2_bunker_door_r');
+
+            // Listen for custom trigger from Dialogue System (1_16 ends)
+            window.addEventListener('spawn_jordan', () => {
+                if (jc.phase === 'NONE') {
+                    jc.phase = 'OPENING_DOORS';
+                    jc.timer = now;
+                }
+            }, { once: true });
+
+            if (jc.phase === 'OPENING_DOORS') {
+                const elapsed = now - jc.timer;
+                const openDist = Math.min(8, elapsed * 0.005);
+                if (doorL) doorL.position.x = -5 - openDist;
+                if (doorR) doorR.position.x = 5 + openDist;
+
+                if (elapsed > 2000) {
+                    jc.phase = 'JORDAN_WALK';
+                    jc.timer = now;
+                    // Find and Reveal Jordan
+                    const jordan = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Jordan');
+                    if (jordan) {
+                        jordan.visible = true;
+                        jc.jordan = jordan;
+                    }
+                }
+            } else if (jc.phase === 'JORDAN_WALK') {
+                const elapsed = now - jc.timer;
+                if (jc.jordan) {
+                    const targetX = 61 + 10; // Slightly towards player
+                    const targetZ = -193;
+                    const jordanPos = jc.jordan.position;
+                    const moveSpeed = 0.05;
+
+                    // Simple walk out of the room towards the player (who is likely at ~61, -193)
+                    // The familySpawn is 61, -193. The door is at 61-2/2 (approx 60).
+                    // Jordan starts at 50, so he needs to walk to ~75.
+                    const walkTarget = new THREE.Vector3(75, 0, -193);
+                    jordanPos.lerp(walkTarget, moveSpeed);
+
+                    if (jordanPos.distanceTo(walkTarget) < 1.0) {
+                        jc.phase = 'START_DIALOGUE_2';
+                        jc.timer = now;
+                    }
+                }
+            } else if (jc.phase === 'START_DIALOGUE_2') {
+                jc.phase = 'FINISHED';
+                // Find Jordan mesh to trigger dialogue
+                const jordan = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Jordan');
+                if (jordan && (events as any).startCinematic) {
+                    (events as any).startCinematic(jordan);
+                }
+            }
         }
 
         // --- SPAWNING LOGIC (Shifted Z) ---

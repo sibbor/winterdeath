@@ -12,11 +12,11 @@ interface ScreenSectorOverviewProps {
     debugMode: boolean;
     stats: PlayerStats;
     onSelectMap: (mapIndex: number) => void;
-    onStartMission: () => void;
+    onStartSector: () => void;
     onClose: () => void;
 }
 
-const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, familyMembersFound, bossesDefeated, debugMode, stats, onSelectMap, onStartMission, onClose }) => {
+const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, familyMembersFound, bossesDefeated, debugMode, stats, onSelectMap, onStartSector, onClose }) => {
     const [selectedMapIndex, setSelectedMapIndex] = useState(currentMap);
     const [briefingText, setBriefingText] = useState("");
 
@@ -31,7 +31,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
         const mapName = t(mapTheme.name);
         const bossName = t(boss.name);
 
-        if (isRescued) { // Using isRescued similar to "isExtracted" in old briefing
+        if (isRescued) { // Using isRescued similar to "isExtracted" in old sector briefing
             return t('story.extracted_briefing', { map: mapName, boss: bossName });
         }
 
@@ -93,7 +93,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
 
     const handleDeploy = () => {
         onSelectMap(selectedMapIndex);
-        onStartMission();
+        onStartSector();
     };
 
 
@@ -113,7 +113,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
 
     return (
         <CampModalLayout
-            title={t('stations.missions')}
+            title={t('stations.sectors')}
             borderColorClass="border-red-600"
             onClose={onClose}
             onConfirm={handleDeploy}
@@ -122,7 +122,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
         >
             <div className="flex h-full gap-8">
                 {/* LEFT: Sector List */}
-                <div className="w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6 custom-scrollbar">
                     {MAP_THEMES.map((map, i) => {
                         const isSel = selectedMapIndex === i;
                         // re-eval locked for list
@@ -138,18 +138,16 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                                     ${isSel ? 'bg-red-900/20 border-red-500' : 'border-gray-800'}
                                 `}
                             >
-                                <h3 className={`text-xl font-black uppercase tracking-wider ${isSel ? 'text-red-400' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
+                                <h3 className={`text-xl font-black uppercase tracking-wider ${isSel ? 'text-white' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
                                     {locked ? `${t('ui.sector')} ${i + 1} - ${t('ui.locked')}` : t(map.name)}
                                 </h3>
-                                {/* No description as requested */}
-                                {isSel && <div className="absolute right-0 top-0 bottom-0 w-2 bg-red-500"></div>}
                             </button>
                         );
                     })}
                 </div>
 
                 {/* RIGHT: Detail View */}
-                <div className="flex-1 flex flex-col bg-black/40 border-2 border-red-900/50 p-8 relative">
+                <div className="flex-1 flex flex-col bg-black/40 border-2 border-gray-800 p-8 relative">
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
@@ -157,7 +155,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                                 {t(mapTheme.name)}
                             </h2>
                             {/* Stats Row */}
-                            <div className="flex gap-4 text-sm font-bold font-mono text-gray-400 mt-1">
+                            <div className="flex gap-4 text-lg font-bold font-mono text-gray-400 mt-1">
                                 <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total || '?'}</span></span>
                                 <span className="text-gray-600">|</span>
                                 <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total || '?'}</span></span>
@@ -167,7 +165,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                         </div>
 
                         <div className="flex gap-4 items-start">
-                            {/* Mission Status Check */}
+                            {/* Sector Status Check */}
                             <div className={`px-4 py-2 text-sm font-black uppercase border tracking-wider ${statusColorClass} text-center min-w-[180px] whitespace-nowrap`}>
                                 {statusText}
                             </div>
@@ -187,7 +185,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                     </div>
 
                     {/* Briefing Text */}
-                    <div className="flex-1 bg-gray-950/50 p-6 border border-gray-600 overflow-y-auto mb-6 shadow-inner font-mono text-base leading-relaxed text-gray-300">
+                    <div className="flex-1 bg-black overflow-y-auto mb-6 shadow-inner font-mono text-xl leading-relaxed text-gray-300 whitespace-pre-wrap">
                         {briefingText}
                         <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
                     </div>

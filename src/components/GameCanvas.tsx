@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo, useState, useImperativeHandle } from
 import * as THREE from 'three';
 import { Engine } from '../core/engine/Engine';
 import { GameSession } from '../core/GameSession';
-import { PlayerStats, WeaponType, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, MissionStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
+import { PlayerStats, WeaponType, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
 
 import { WEAPONS, BOSSES, MAP_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP } from '../content/constants';
 
@@ -69,7 +69,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     useEffect(() => { deathPhaseRef.current = deathPhase; }, [deathPhase]);
 
     const activeBubbles = useRef<any[]>([]);
-    const hasEndedMission = useRef(false);
+    const hasEndedSector = useRef(false);
     const collectedCluesRef = useRef<SectorTrigger[]>([]);
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
@@ -78,7 +78,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     // Actually, passing them to systems requires them to be stable or updated.
     // Let's define them inside the useEffect before onUpdate, BUT before system instantiation.
     // The issue is system instantiation happens ONCE.
-    // So `concludeMission` must capture `propsRef` and `gameSessionRef.current.state`.
+    // So `concludeSector` must capture `propsRef` and `gameSessionRef.current.state`.
 
     const prevPosRef = useRef<THREE.Vector3 | null>(null);
 
@@ -87,6 +87,10 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     const [currentLine, setCurrentLine] = useState(0);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [bossIntroActive, setBossIntroActive] = useState(false);
+    useEffect(() => {
+        if (props.onBossIntroStateChange) props.onBossIntroStateChange(bossIntroActive);
+    }, [bossIntroActive]);
+
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [foundMemberName, setFoundMemberName] = useState('');
     const [interactionType, setInteractionType] = useState<'NONE' | 'LADDER' | 'BUS' | 'SHOP' | 'CLUE'>('NONE');
@@ -107,6 +111,8 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     const playerMeshRef = useRef<THREE.Group>(new THREE.Group());
     const reloadBarRef = useRef<HTMLDivElement>(null);
     const aimCrossRef = useRef<HTMLDivElement>(null);
+    const flashlightRef = useRef<THREE.SpotLight>(null);
+    const lockRequestTime = useRef(0);
 
     // ... Keep hooks for Cinematic/Intro
 
@@ -116,10 +122,10 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         if (deathPhase !== 'CONTINUE') return;
         const handleContinue = (e: Event) => {
             if (e.type === 'keydown' && (e as KeyboardEvent).key === 'Escape') return;
-            if (!hasEndedMission.current) {
+            if (!hasEndedSector.current) {
                 const state = stateRef.current;
                 const now = performance.now();
-                hasEndedMission.current = true;
+                hasEndedSector.current = true;
                 propsRef.current.onDie({
                     timeElapsed: now - state.startTime, shotsFired: state.shotsFired, shotsHit: state.shotsHit, throwablesThrown: state.throwablesThrown,
                     killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: 0,
@@ -138,6 +144,24 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             window.removeEventListener('touchstart', handleContinue);
         };
     }, [deathPhase]);
+    // Auto-pause on pointer unlock (e.g. user hits ESC, or Alt-Tab)
+    useEffect(() => {
+        const handleLockChange = () => {
+            // Ignore unlock if we just requested a lock (grace period for async lock)
+            if (performance.now() - lockRequestTime.current < 1500) {
+                // console.log('Ignoring unlock due to recent request');
+                return;
+            }
+
+            if (!document.pointerLockElement && props.isRunning && !props.isPaused && !stateRef.current.isDead) {
+                // Only pause if we expected to be running
+                console.log('[GameCanvas] Pointer unlocked, pausing...');
+                propsRef.current.onPauseToggle(true);
+            }
+        };
+        document.addEventListener('pointerlockchange', handleLockChange);
+        return () => document.removeEventListener('pointerlockchange', handleLockChange);
+    }, [props.isRunning, props.isPaused]);
 
     useEffect(() => {
         if (props.onDialogueStateChange) props.onDialogueStateChange(cinematicActive);
@@ -155,9 +179,41 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     // --- INPUT EVENT LISTENERS (Replaces useGameInput callbacks) ---
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Priority Checks (ESC handling)
+            if (e.key === 'Escape') {
+                if (bossIntroActive) {
+                    setBossIntroActive(false);
+                    bossIntroRef.current.active = false;
+                    e.stopPropagation();
+                    return;
+                }
+                if (cinematicActive) {
+                    endCinematic(); // Use existing function
+                    e.stopPropagation();
+                    return;
+                }
+
+                if (isInputEnabled) {
+                    propsRef.current.onPauseToggle(true);
+                }
+                return;
+            }
+
             if (!isInputEnabled) return;
             const key = e.key;
-            if (key === 'Escape') propsRef.current.onPauseToggle(true);
+
+            if (key.toLowerCase() === 'm') propsRef.current.onOpenMap();
+
+            // Flashlight Toggle (F)
+            if (key.toLowerCase() === 'f') {
+                if (flashlightRef.current) {
+                    // Toggle intensity between 0 and 2.5
+                    const isOn = flashlightRef.current.intensity > 0;
+                    flashlightRef.current.intensity = isOn ? 0 : 400;
+                    soundManager.playUiClick(); // Or a specific click/switch sound if available
+                }
+            }
+
             if (stateRef.current.isDead) return;
             stateRef.current.lastActionTime = performance.now();
             // Weapon switching handled by PlayerCombatSystem
@@ -375,6 +431,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     useImperativeHandle(ref, () => ({
         requestPointerLock: () => {
             if (containerRef.current) {
+                lockRequestTime.current = performance.now();
                 engineRef.current?.input.requestPointerLock(containerRef.current);
             }
         }
@@ -409,7 +466,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
 
         isMounted.current = true;
-        hasEndedMission.current = false;
+        hasEndedSector.current = false;
 
         // Reset State
         setDeathPhase('NONE');
@@ -513,9 +570,14 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         };
         currentSector.generate(ctx);
 
-        // ... rest of setup
-        if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
-        if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
+        // Artificially delay loading screen removal to let the player read tips / see the aesthetic
+        // and to ensure no frame-drop on immediate start.
+        setTimeout(() => {
+            if (isMounted.current) {
+                if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
+                if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
+            }
+        }, 2000);
 
         const weatherParticles: any[] = [];
 
@@ -610,14 +672,14 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             }
         };
 
-        const concludeMission = (isExtraction: boolean) => {
+        const concludeSector = (isExtraction: boolean) => {
             const state = session.state;
             const now = performance.now();
-            if (!hasEndedMission.current) {
-                hasEndedMission.current = true;
+            if (!hasEndedSector.current) {
+                hasEndedSector.current = true;
                 if (isExtraction) { state.familyExtracted = true; soundManager.stopRadioStatic(); }
 
-                propsRef.current.onMissionEnded({
+                propsRef.current.onSectorEnded({
                     timeElapsed: now - state.startTime, shotsFired: state.shotsFired, shotsHit: state.shotsHit, throwablesThrown: state.throwablesThrown,
                     killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: isExtraction ? 500 : 0,
                     familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
@@ -639,7 +701,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         session.addSystem(new PlayerMovementSystem(playerGroup));
         session.addSystem(new PlayerCombatSystem(playerGroup));
         session.addSystem(new WorldLootSystem(playerGroup));
-        session.addSystem(new PlayerInteractionSystem(playerGroup, concludeMission));
+        session.addSystem(new PlayerInteractionSystem(playerGroup, concludeSector));
         session.addSystem(new EnemySystem(playerGroup, { spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound }));
         session.addSystem(new SectorSystem(playerGroup, props.currentMap, { setNotification, t }));
         playerGroupRef.current = playerGroup;
@@ -648,6 +710,18 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         const pSpawn = currentSector.playerSpawn;
         playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
         prevPosRef.current = playerGroup.position.clone();
+
+        // --- FLASHLIGHT SETUP ---
+        const fl = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1); // Wider angle (PI/3), softer edge
+        fl.position.set(0, 3.5, 0.5); // Lower and slightly further back
+        fl.target.position.set(0, 0, 10); // Aim forward
+        fl.castShadow = true;
+        fl.shadow.camera.near = 1;
+        fl.shadow.camera.far = 40;
+        fl.shadow.bias = -0.0001; // Reduce shadow acne
+        playerGroup.add(fl);
+        playerGroup.add(fl.target);
+        flashlightRef.current = fl;
         const laserGeo = new THREE.PlaneGeometry(0.1, 20); laserGeo.translate(0, 10, 0); laserGeo.rotateX(Math.PI / 2);
         const laserMat = new THREE.MeshBasicMaterial({ map: laserTex, color: 0x00ffff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
         const laserMesh = new THREE.Mesh(laserGeo, laserMat); laserMesh.position.y = 1.3; playerGroup.add(laserMesh);
@@ -762,7 +836,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                     );
                     propsRef.current.onUpdateHUD({ ...hudData, fps, debugMode: propsRef.current.debugMode });
                 } else {
-                    propsRef.current.onUpdateHUD({ ...HudSystem.getHudData(state, playerGroup.position, fmMesh || null, engine.input.state, now, propsRef.current, distanceTraveledRef.current), fps, isHidden: true });
+                    propsRef.current.onUpdateHUD({ ...HudSystem.getHudData(state, playerGroup.position, fmMesh || null, engine.input.state, now, propsRef.current, distanceTraveledRef.current), fps });
                 }
             }
 
@@ -796,13 +870,13 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             if (state.bossDefeatedTime > 0) {
                 state.invulnerableUntil = now + 10000;
                 if (now - state.bossDefeatedTime > 4000) {
-                    concludeMission(false);
+                    concludeSector(false);
                     return;
                 }
             }
 
-            if (propsRef.current.triggerEndMission) {
-                concludeMission(false);
+            if (propsRef.current.triggerEndSector) {
+                concludeSector(false);
                 return;
             }
 
@@ -950,6 +1024,18 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
             EnvironmentSystem.update(flickeringLights);
 
+            // --- BURNING OBJECTS FX ---
+            burningBarrels.forEach(b => {
+                if (frame % 3 === 0) {
+                    const rx = (Math.random() - 0.5) * 3;
+                    const rz = (Math.random() - 0.5) * 2;
+                    spawnPart(b.position.x + rx, b.position.y, b.position.z + rz, 'campfire_flame', 1, undefined, undefined, 0xff7700);
+                }
+                if (frame % 8 === 0) {
+                    spawnPart(b.position.x + (Math.random() - 0.5) * 2, b.position.y + 0.5, b.position.z + (Math.random() - 0.5) * 2, 'campfire_spark', 1);
+                }
+            });
+
             // EnemyManager.cleanupDeadEnemies moved to EnemySystem
 
             FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroup.position, { spawnPart, spawnDecal });
@@ -1025,7 +1111,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                             onClick={() => { soundManager.playUiClick(); endCinematic(); }}
                             className="bg-black/80 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg]"
                         >
-                            <span className="block skew-x-[10deg]">{t('ui.end_conversation')}</span>
+                            <span className="block skew-x-[10deg]">{t('ui.end_dialogue')}</span>
                         </button>
                     </div>
                 )

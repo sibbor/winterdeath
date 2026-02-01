@@ -51,15 +51,16 @@ export const sv = {
         close: "STÄNG",
         deploy_sector: "ÅK TILL SEKTOR",
         back_to_overview: "TILLBAKA TILL ÖVERSIKT",
-        mission_briefing: "SEKTORGENOMGÅNG",
+        sector_briefing: "SEKTORGENOMGÅNG",
         settings: "INSTÄLLNINGAR",
         language: "SPRÅK",
         debug_mode: "DEBUG-LÄGE",
         show_fps: "VISA FPS",
         cancel: "AVBRYT",
+        skip: "HOPPA ÖVER",
         paused: "PAUSAD",
         continue: "FORTSÄTT",
-        end_mission: "AVBRYT SEKTOR",
+        end_sector: "AVBRYT SEKTOR",
         sector_aborted: "SEKTOR AVBRUTEN",
         teleport: "TELEPORTERA",
         map_btn: "KARTA",
@@ -82,16 +83,17 @@ export const sv = {
         resuming: "ÅTERUPPTAR...",
         loading: "LADDAR...",
         confirm_reset: "Är du säker på att du vill återställa allt?",
-        reset_confirm_title: "RADERA ALL DATA?",
+        reset_confirm_title: "Radera sparfil",
         reset_confirm_desc: "Detta kommer permanent radera din sparfil och återställa alla framsteg (Nivåer, EP, Familj, Bossar). Detta går inte att ångra.",
-        yes_delete: "JA, RADERA ALLT",
-        no_cancel: "NEJ, BEHÅLL DATA",
+        yes_delete: "RADERA DATA",
+        no_cancel: "BEHÅLL DATA",
         available_skill_points: "TILLGÄNGLIGA FÄRDIGHETSPOÄNG",
         next_sp_hint: "NÄSTA FP OM {xp} EP",
         sp_hint_rankup: "Få Färdighetspoäng genom att hitta ledtrådar, rädda familjemedlemmar, döda bossar eller nå nästa nivå ({xp} EP krävs)",
         sp_hint_max: "Få Färdighetspoäng genom att hitta ledtrådar, rädda familjemedlemmar eller döda bossar.",
         upgrade: "UPPGRADERA",
         confirm_upgrades: "BEKRÄFTA",
+        end_dialogue: "Avsluta dialog",
         confirm_loadout: "BEKRÄFTA UTRUSTNING",
         damage: "SKADA",
         magazine: "MAG",
@@ -125,6 +127,11 @@ export const sv = {
         clue: "Ledtråd",
         boss: "Boss",
         log_poi: "INTRESSE",
+        adventure_log: "ÄVENTYRLOGG",
+        log_enemies: "FIENDER",
+        log_bosses: "BOSSAR",
+        log_collectibles: "SAMLAROBJEKT",
+        log_clues: "LEDTRÅDAR",
         wip: "UNDER ARBETE",
         archive_corrupted: "Arkiv korrupt. Dataåterställning pågår...",
         travel_logs_empty: "Resebloggar tomma eller oläsliga.",
@@ -135,7 +142,15 @@ export const sv = {
         unknown_threat: "Okänt hot",
         unknown_sector: "Okänd sektor",
         health: "Hälsa",
-        speed: "Hastighet"
+        speed: "Hastighet",
+        end_mission: "AVSLUTA UPPDRAG",
+        delete_save_data: "RADERA SPARDATA",
+        end_conversation: "AVSLUTA SAMTAL",
+        located: "LOKALISERAD",
+        defeat_boss: "BESEGRA BOSS",
+        target_located: "MÅL LOKALISERAT",
+        protect_family: "SKYDDA FAMILJEN",
+        scanning: "SKANNAR..."
     },
     categories: {
         primary: "PRIMÄR",
@@ -145,8 +160,8 @@ export const sv = {
         tool: "VERKTYG"
     },
     stations: {
-        armory: "ARMERET",
-        sectors: "SEKTORER",
+        armory: "VAPENFÖRRÅD",
+        sectors: "SEKTOR-ÖVERSIKT",
         skills: "FÄRDIGHETER",
         adventure_log: "ÄVENTYRLOGG",
         stats: "STATISTIK"
@@ -178,7 +193,18 @@ export const sv = {
         reflex: "REFLEXER",
         reflex_desc: "Ökar rörelsehastigheten."
     },
-    minigun: "Minigun",
+    weapons: {
+        smg: "SMG",
+        shotgun: "Hagelgevär",
+        rifle: "Automatkarbin",
+        pistol: "Pistol",
+        revolver: "Revolver",
+        grenade: "Granat",
+        molotov: "Molotov",
+        flashbang: "Blixtgranat",
+        minigun: "Minigun",
+        radio: "Radio"
+    },
     tips: [
         "Skjut bara! Obegränsad ammunition till pistoler.",
         "Spara på kastvapen, de är begränsade.",
@@ -194,7 +220,8 @@ export const sv = {
         "Automatisk omladdning är långsammare än manuell [R].",
         "Att uppgradera 'Vitalitet' hjälper dig att överleva längre.",
         "Att uppgradera 'Adrenalin' hjälper dig att springa under längre perioder.",
-        "Att uppgradera 'Reflexer' hjälper dig att springa ifrån zombierna."
+        "Att uppgradera 'Reflexer' hjälper dig att springa ifrån zombierna.",
+        "Tryck på [F] för att använda ficklampan."
     ],
     maps: {
         village_name: "Byn",
@@ -206,7 +233,9 @@ export const sv = {
         scrapyard_name: "Skroten",
         scrapyard_desc: "En industriell skrotgård full av bilvrak, metalldelar och olja. Labyrinten av bilvrak gör den till en dödsfälla.",
         home_name: "Hem",
-        home_desc: "Återvänd hem tillsammans med dina återförenade familjemedlemmar."
+        home_desc: "Återvänd hem tillsammans med dina återförenade familjemedlemmar.",
+        camp_name: "Lägret",
+        camp_desc: "Din fristad. Fyll på förråd, uppgradera färdigheter och förbered dig för nästa sektor."
     },
     story: {
         prologue_title: "PROLOG: HEMKOMSTEN",
@@ -216,9 +245,64 @@ export const sv = {
         intel_mast_title: "INTEL: RADIOSKUGGA",
         intel_mast_text: "Överlevarna i bunkern tvingade iväg din fru och dotter. Din son sa att de begav sig norrut genom den täta tallskogen, mot Häglaredsmasten.\n\nDet är en lång vandring genom tät vegetation och de infekterade finns överallt. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
         intel_scrap_title: "INTEL: OFFRET",
-        intel_scrap_text: "Din dotter är i säkerhet. Hon avslöjade den hjärtskärande sanningen: en massiv Titan-zombie attackerade dem i skogen. Din fru offrade sig själv och skrek för att locka bort den så att din dotter kunde fly.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
+        intel_scrap_text: "Din dotter är i säkerhet. Hon avslöjade den hjärtskärande sanningen: en massiv Titan-zombie attackerade dem i skogen. Din fru offrade sig själv och skrek för att locka bort den så att din dotter kunde fly.\n\nHon sprang mot industriområdet, närmare bestämt den gamla bilfirman. Hon kan fortfarande vara vid liv. Du måste tro på det. Hämta hem din fru, Robert.",
         epilogue_title: "EPILOG: INGEN LÄMNAS KVAR",
         epilogue_text: "Familjen är återförenad. Du har gjort det omöjliga. Men när ni satt runda elden kom din son ihåg en sista sak.\n\nFamiljens husdjur. De lämnades låsta i huset när kaoset började. Området kryllar av odöda, men vi gav ett löfte. Återvänd till Byn en sista gång. Rädda dem.",
+        prologue: [
+            {
+                overlay: "GÅNGHESTER. 48 TIMMAR SEDAN VMA.",
+                narrative: "VMA-signalen har ljudit i 48 timmar. Robert får ett samtal och beordras att inställa sig för att hjälpa till med evakueringen av staden.",
+                image: "Mörkt, snöigt Gånghester på natten och en telefon som ringer.",
+                audio: "Det genomträngande ljudet av det svenska VMA-signalen ('Hesa Fredrik')."
+            },
+            {
+                overlay: "STADEN ÄR I KAOS.",
+                narrative: "Robert kör genom staden och ser kaoset. Människor gör upplopp och plundrar. Men det är inte bara människor...",
+                image: "Robert sitter i sin polisbil och tittar ut på kaoset. Panikslagna människor på gatorna.",
+                bubbles: ["Upplopp i staden...", "Vi håller på att tappa kontrollen...", "Infektionen sprider sig..."],
+                audio: "Kaotiskt polisfraktion. Skrik i fjärran. Skottlossning."
+            },
+            {
+                overlay: "SAMHÄLLET KOLLAPSAR.",
+                narrative: "Polisen är överrörd av de infekterade. Robert förstår att samhället har kollapsat.",
+                image: "Brinnande skyline av det vintriga Borås i fjärran, krossade och brinnande polisbilar och zombier som stönar.",
+                bubbles: ["Vad är det som händer?", "Jag måste hem till min familj.", "Jag måste hem."],
+                audio: "Explosioner i fjärran, skottlossning, zombier stönar."
+            },
+            {
+                overlay: "RADIOSKUGGA.",
+                narrative: "Robert försöker kommunicera med sina kollegor. Statiskt brus på radion.",
+                image: "Robert i sin polisuniform, ser stressad ut. Radio i handen.",
+                bubbles: ["Är jag den enda kvar i stan?", "Vi har ingen kontroll!"],
+                audio: "Statiskt brus och radiochatter."
+            },
+            {
+                overlay: "SIGNAL FÖRLORAD.",
+                narrative: "Robert försöker ringa Nathalie. Statiskt ljud.",
+                image: "Telefon utan täckning och Borås skyline i fjärran.",
+                bubbles: ["Ingen täckning...", "För i helvete!", "Jag måste nå Nathalie."],
+                audio: "Explosioner i fjärran, skottlossning."
+            },
+            {
+                overlay: "TA DIG HEM.",
+                narrative: "Allt har gått åt helvete. Robert kör desperat hem till sin familj. Han ser att ytterdörren är uppbruten. Han drar sitt vapen och rusar in.",
+                image: "Polisbil som kör snabbt genom Borås snöiga gator, zombier på gatorna.",
+                audio: "Ljud av en snabb bil. Tung andning."
+            },
+            {
+                overlay: "HEM.",
+                narrative: "Han kommer hem. Huset är förstört. Han kliver in.",
+                image: "Roberts villa, ytterdörren uppbruten, familjens bil brinner på uppfarten.",
+                bubbles: ["NATHALIE! ESMERALDA! LOKE! JORDAN!"],
+                audio: "Ett lågt morrande från skuggorna."
+            },
+            {
+                overlay: "FAMILJEN ÄR BORTA.",
+                narrative: "Robert ser kaoset i huset. Hans familj är inte där. Han ser ett blodspår som leder ut mot källardörren. Han blir omedelbart attackerad av zombier.",
+                image: "Inredningshall, välta möbler, en död zombie, blodspår som leder till källardörren.",
+                audio: "Zombier stönar och attackerar."
+            }
+        ],
         generic_briefing: "Nödsändning: Nödsignal detekterad i {map}. Lokalisera överlevaren och neutralisera {boss}.",
         extracted_briefing: "Sektorrapport: {map} kontrolleras för närvarande av {boss}. Även om överlevaren har evakuerats till lägret, förblir området ett kritiskt hot. Horden växer, och vi kan inte låta {boss} etablera ett fäste. Gå in, rensa sektorn och eliminera målet.",
         gym_event: "Vad i helvete var det?!"
@@ -237,12 +321,12 @@ export const sv = {
         wife: "Fru",
         cat: "Katt"
     },
-    // DON'T CHANGE!
+    // DON'T AUTO-TRANSLATE 'chatter'
     chatter: {
         robert: ["Är alla okej?", "Ni är bäst", "Bra lagarbete!", "Jag älskar er av hela mitt hjärta", "Vi ska klara det här.", "Ni är bäst", "Håll elden vid liv.", "Var på din vakt.", "Jag låter inget hända er."],
         loke: ["Jag håller elden vid liv.", "Jag saknar mina tv-spel.", "Pappa, tror du att de är borta?", "Jag fick nästan tåget att fungera!", "Det är riktigt mörkt där ute."],
-        jordan: ["PAPPA", "MAMMA", "LOKE", "ESME", "ELD", "KATT", "ZOMB", "SNÖ", "STÄDA", "LAMPA", "PANG-PANG"],
-        esmeralda: ["Kan vi laga min telefon?", "Jag behöver smink.", "Pappa, du ser trött ut.", "Jag önskar att vi kunde åka hem.", "Jag hatar den här kylan.", "Jag fixade masten!", "Älskar dig!"],
+        jordan: ["PAPA", "MAMA", "LOKE", "ESME", "ELD", "KATT", "ZOMB", "SNÖ", "STÄDA", "LAMPA", "PANG-PANG"],
+        esmeralda: ["Kan vi laga min telefon?", "Jag behöver smink.", "Pappa, du ser trött ut.", "Jag önskar att vi kunde åka hem.", "Jag hatar den här kylan.", "Jag fixade masten!", "Älskar er!"],
         nathalie: ["Vi är tillsammans, det är det som räknas.", "Schss nu, försök sova.", "Jag tar nästa vakt.", "Robert, var försiktig där ute.", "Min modiga familj.", "Håll dig nära värmen.", "Jag älskar er alla."],
         sotis: ["Mjau."],
         panter: ["Mjau?"]
@@ -252,11 +336,11 @@ export const sv = {
         s1_collectible_1: "Esmeraldas telefon",
         s1_collectible_1_description: "Skärmen är sprucken och flimrar, men vissa detaljer syns. Esmeraldas sista försök var ett meddelande till mig:\n'Pappa!! Kan inte ringa dig! Hjälp oss! Någon satte eld på vår bil och försöker bryta sig in. RING NU!! Vi springer mot S[...]'\n'Meddelandet kunde inte skickas. Försök igen?' är skrivet i rött nertill...",
         s1_collectible_1_icon: "📱",
-        s1_collectible_2: "Jordans favoritnapp",
-        s1_collectible_2_description: "Den är liten, blå och täckt av frost. Jordan aldrig någonstans utan den. De måste ha haft riktigt bråttom...",
-        s1_collectible_2_icon: "👶",
+        s1_collectible_2: "Lokes handyxa",
+        s1_collectible_2_description: "Handyxan som jag har gett till Loke. Den han alltid använder när han hjälper mig med veden eller hugga ned träd hemma. Han måste ha tagit med sig den för att försvara sig.",
+        s1_collectible_2_icon: "🪓",
 
-        s1_start_tracks: "Fotspår! De gick åt det här hållet... vad menade Loke med 'D'?",
+        s1_start_tracks: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?",
         s1_blood_stains: "Blodfläckar! Är de skadade?!",
         s1_phone_thought: "Esmeralda... hon måste ha varit livrädd.",
         s1_still_tracking: "Spåren fortsätter i den här riktningen.",
@@ -273,12 +357,12 @@ export const sv = {
         s1_poi_train_yard: "Hmm... röken kommer från tåget. Låt oss ta en titt.",
 
         // Sector 2 Triggers
-        s2_collectible_1: "Smutsig nallebjörn",
-        s2_collectible_1_description: "Jordans nalle. Den saknar ett öga och luktar som de fuktiga grottorna. Han måste ha tappat den när de sprang från de fientliga.",
-        s2_collectible_1_icon: "🧸",
-        s2_collectible_2: "Gammal militärkarta",
-        s2_collectible_2_description: "En delvis sönderriven karta över bunkersystemet. Vissa områden är markerade med 'INFEKTERADE' och 'HÅLL DIG BORTA'. Det verkar som om skyddsrummen kompromitterades tidigt.",
-        s2_collectible_2_icon: "🗺️",
+        s2_collectible_1: "Jordans favoritnapp",
+        s2_collectible_1_description: "Den är liten, blå och täckt av frost. Jordan går aldrig någonstans utan den. Han måste ha tappat den när de sprang in i grottorna.",
+        s2_collectible_1_icon: "👶",
+        s2_collectible_2: "Jordans nallebjörn",
+        s2_collectible_2_description: "Jordans favoritnalle. Den saknar ett öga och luktar av grottans fukt. Han måste ha tappat den när de sprang in i mörkret.",
+        s2_collectible_2_icon: "🧸",
         s2_start: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss...",
         s2_combat: "FAN! Zombier överallt. Fortsätt kämpa, Loke! Vi fixar det här.",
         s2_mountain: "Åh, grottingången. Låt oss se om de gömmer sig där inne!",
@@ -291,41 +375,110 @@ export const sv = {
         s2_tunnel: "Den här tunneln ser ut att ha lett ut till andra sidan berget.",
 
         // Sector 3 Triggers
-        s3_collectible: "Sliten radiokomponent",
-        s3_collectible_desc: "Ett litet kretskort, troligen från mastens kontrollpanel. Esmeralda måste ha försökt reparera det innan hon jagades iväg.",
+        s3_collectible: "Esmeraldas dagbok",
+        s3_collectible_desc: "En liten anteckningsbok med blommor på omslaget. Sista sidan handlar om hur mycket hon saknar sina vänner... och hur rädd hon är för mörkret i skogen.",
+        s3_collectible_2: "Esmeraldas jacka",
+        s3_collectible_2_description: "Esmeraldas favoritjacka. Den är sönderriven och har blodfläckar på ärmen. Det knyter sig i magen... jag hoppas det inte är hennes blod.",
+        s3_collectible_2_icon: "🧥",
         s3_forest_noise: "Skogen är för högljudd. Varje kvist som bryts låter som en löpare...",
         s3_mast_sight: "Där är den. Häglaredsmasten. Om Esmeralda är någonstans, så är hon där.",
 
         // Sector 4 Triggers
-        s4_collectible: "Rostig bilnyckel",
-        s4_collectible_desc: "En nyckel till en gammal Volvo. Den hittades nära en stapel bilvrak. Kanske försökte Nathalie använda en som barrikad.",
+        s4_collectible: "Nathalies förlovningsring",
+        s4_collectible_desc: "En guldring med en stor vit diamant; på insidan en inskription: 'För alltid vi'. Den är kall, men minnena den bär på bränner i handen.",
+        s4_collectible_2: "Nathalies polisbricka",
+        s4_collectible_2_description: "Nathalies kriminalinspektörsbricka. Den är repad och lite svedd i kanten. Hon måste ha tappat den under striden på skroten. Hon ger aldrig upp sitt märke frivilligt.",
+        s4_collectible_2_icon: "🛡️",
         s4_noise: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?",
         s4_shed: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne."
     },
     dialogue: {
-        "0_0": "Loke? Är du här?",
-        "0_1": "Pappa! Här borta!",
-        "0_2": "Tack gode gud. Är du skadad?",
-        "0_3": "(Kramar Loke)",
-        "0_4": "Jag är okej. Bara rädd.",
-        "0_5": "Vi åker hem.",
-        "0_6": "But the others?",
-        "0_7": "Vi hittar dom också.",
-        "0_8": "Okej.",
-        "0_9": "(Nickar)",
-        "0_10": "Håll dig nära.",
-        "0_11": "Vi drar.",
-        "0_12": "Jag är precis bakom dig.",
+        // Dialogue: Sector 1
+        "0_0": "LOKE!!",
+        "0_1": "PAPPA?! Du är här! Vi försökte nå dig. Vi blev attackerade! Av ZOMBIER! Det var blod överallt...",
+        "0_2": "/Lugn, grabben./ Titta på mig. Är du skadad? Är du okej?",
+        "0_3": "(Kramar Loke hårt)",
+        "0_4": "De andra är inte här, pappa...",
+        "0_5": "Vi kommer hitta dem, jag lovar.",
+        "0_6": "Nathalie sa att vi skulle försöka ta tåget till Dalsjöfors. När vi hittade tåget hoppade jag ombord, men sen... sen kom en... enorm zombie. Nathalie sa att jag var säker här men att de var tvungna att gömma sig.",
+        "0_7": "Loke, du gjorde helt rätt som lyssnade på Nathalie.",
+        "0_8": "Men pappa, Esmeralda och Nathalie var så RÄDDA! Jag såg det i deras blick. Och Jordan grät hysteriskt... De sprang jättefort, åt det hållet.",
+        "0_9": "(Loke pekar mot spåren som leder mot berget)",
+        "0_10": "Du är modig som hanterade det här ensam, men från och med nu håller vi ihop oavsett vad!",
+        "0_11": "Kom igen, nu går vi till lägret jag byggde så att vi kan förbereda oss på att hitta de andra!",
+        "0_12": "WOW! Ett läger? Finns det mat? Värme? VAPEN?!",
 
-        "1_0": "Vem där?",
-        "1_1": "Robert. Jag letar efter min familj.",
-        "1_2": "Öppna dörren!",
-        "1_3": "Det är fullt. Försvinn.",
-        "1_4": "(Drar vapen)",
-        "1_5": "Öppna. Nu.",
-        "1_6": "Lugn! Pojken är här.",
-        "1_7": "Jordan?",
-        "1_8": "Pappa!",
-        "1_9": "Kom igen, vi måste härifrån."
+        // Dialogue: Sector 2 (part 1)
+        "1_0": "(Bultar hårt på ståldörren)",
+        "1_1": "Stanna där! Det är fullt! DRA ÅT HELVETE!",
+        "1_2": "(En gevärspipa sticker ut genom den lilla luckan i dörren och siktar på Robert)",
+        "1_3": "Jag är polis. Lägg ner vapnet och lyssna noga.",
+        "1_4": "SKITER FULLSTÄNDIGT I DET! FÖRSVINN ANNARS SKJUTER JAG SKALLEN AV DIG!",
+        "1_5": "Jag kom hit för att leta efter min familj - Nathalie, Esmeralda och Jordan. Inget annat.",
+        "1_6": "(Gevärspipan försvinner från luckan)",
+        "1_7": "Pojken... Han är här inne. I säkerhet. Men... de andra är borta.",
+        "1_8": "Borta?! Var är de?",
+        "1_9": "Vi hade fullt. Kvinnan sa åt oss att skydda pojken.... Jordan. Tills de kom tillbaka med hjälp.",
+        "1_10": "Vi gick med på att skydda honom. Men tiden har gått. Jag tror att flickan och kvinnan kan ha...",
+        "1_11": "Tyst nu. Sa de vart de var på väg?",
+        "1_12": "Nej, men jag hörde dem nämna 'radio' och 'mast'. De kysste pojken farväl och sprang ut genom tunnlarna.",
+        "1_13": "Okej. Öppna dörren nu.",
+        "1_14": "(Nervöst) Gör oss inte illa, okej? Vi ber om ursäkt!!",
+        "1_15": "ÖPPNA DÖRREN.",
+        "1_16": "(Den tunga hydrauliska dörren pyser och börjar öppnas...)",
+
+        // Dialogue: Sector 2 (part 2) 
+        "1_17": "PAPPA! LOKE!",
+        "1_18": "Åh, JORDAN!",
+        "1_19": "Vår modiga lilla kille.",
+        "1_20": "Pappa, jag tror att de har begett sig mot Masten!",
+        "1_21": "Ja, helt säkert. Nu går vi, grabbar!",
+        "1_22": "Hejdå... och lycka till!",
+        "1_23": "(Dörren slår igen med en öronbedövande smäll. Något rör sig i mörkret...)",
+
+        // Dialogue: Sector 3
+        "2_0": "HALLÅ? Är det någon här?",
+        "2_1": "PAPPA! Jag trodde aldrig... jag såg dig inte i mörkret...",
+        "2_2": "Åh, ESMERALDA! Öppna dörren, jag har Loke och Jordan med mig!",
+        "2_3": "Jag är så sjukt glad att se dig! Jag älskar er, ungar!",
+        "2_4": "(Gruppkram)",
+        "2_5": "Pappa, vi försökte starta masten för att nå DIG! Jag och Nathalie blev jagade av två monster... Nathalie sprang iväg för att locka bort dem.",
+        "2_6": "Vi löser det här – tillsammans!",
+        "2_7": "Jag ska bara göra några sista justeringar... sen så!",
+        "2_8": "(Trycker på knappar och drar i spakar... *slår* på kontrollpanelen *högfrekvent ljud*)",
+        "2_9": "*radiostörningar*",
+        "2_10": "(Pratar i radio) NATHALIE. KOM IN.",
+        "2_11": "ÄLSKLING! Jag... *radiostörningar*",
+        "2_12": "SKIT! Det var Nathalie. Vi måste hitta bättre mottagning!",
+        "2_13": "Följ med mig ungar.",
+
+        // Dialogue: Sector 4
+        "3_0": "(Viskar i radio) /Måste viska.../ *brus* /skroten.../ *brus* /monster.../",
+        "3_1": "(Pratar i radio) Uppfattat! KOM IN.",
+        "3_2": "(Paniken stiger) Skynda barn! Vi måste rädda Nathalie!",
+        "3_3": "Den som skadar henne ligger illa till!",
+        "3_4": "Ja, om någon försöker ska vi... KROSSA DEM!",
+        "3_5": "KROSSA!",
+        "3_6": "(Viskar i radio) /Har vi kontakt? KOM IN./",
+        "3_7": "(Pratar i radio) 100%! KOM IN.",
+        "3_8": "(Viskar i radio, gråter) /Jag älskar dig... KOM IN./",
+        "3_9": "(Pratar i radio lugnt) /Och jag älskar dig! Och barnen också. De är med mig! KOM IN./",
+        "3_10": "(Viskar i radio) /Tack... du är bäst. KOM IN./",
+        "3_11": "(Pratar i radio) Vi kommer efter dig så fort vi kan, älskling! KOM IN.",
+        "3_12": "(Viskar i radio) /Var försiktig... Ett monster jagade mig hit. Det är kvar här. Jag hör det, men jag gömmer mig. KOM IN./",
+        "3_13": "(Pratar i radio) Vi löser det här tillsammans! KOM IN.",
+        "3_14": "(Gör tecken till barnen) /Schh... Vi måste vara tysta nu./",
+        "3_15": "(Nickar)",
+        "3_16": "(Viskar i radio) /Vi är här nu! Var är du? KOM IN./",
+        "3_17": "(Viskar i radio) /Byggnaden. KOM IN./",
+        "3_18": "(Viskar i radio) /Vi ses snart! KOM IN./",
+        "3_19": "(Pekar mot byggnaden) /Hon är där inne. Här är planen: På mitt räknande till tre springer ni till byggnaden och ni tre tar er till Nathalie. Jag har lite ouppgjorda affärer med monstret.../",
+        "3_20": "(Nickar instämmande)",
+        "3_21": "(Viskar i radio) /Öppna dörren om 10 sekunder. Barnen kommer till dig. KOM IN./",
+        "3_22": "(Viskar i radio) /Okej... men du då?/",
+        "3_23": "(Viskar i radio) /Jag distraherar monstret. Redo? KOM IN./",
+        "3_24": "(Viskar i radio) /Redo. KOM IN./",
+        "3_25": "(Viskar) /1... 2... 3, spring!/",
+        "3_26": "KOM OCH TA MIG DÅ, DIN JÄVEL!"
     }
 };
