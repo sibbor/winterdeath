@@ -166,15 +166,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         };
     }, [deathPhase]);
 
-    // Ensure cursor is visible on death, pause, or when UI is open
+    // Notify parent of death screen state
     useEffect(() => {
-        const shouldRelease = deathPhase !== 'NONE' || props.isPaused || props.isClueOpen;
+        const isDeathScreenActive = deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE';
+        if (propsRef.current.onDeathStateChange) {
+            propsRef.current.onDeathStateChange(isDeathScreenActive);
+        }
+    }, [deathPhase]);
+
+    // Ensure cursor is visible on death, pause, dialogue or boss intro
+    useEffect(() => {
+        const shouldRelease = deathPhase !== 'NONE' || props.isPaused || props.isClueOpen || cinematicActive || bossIntroActive;
         if (shouldRelease) {
             if (document.pointerLockElement) {
                 document.exitPointerLock();
             }
         }
-    }, [deathPhase, props.isPaused, props.isClueOpen]);
+    }, [deathPhase, props.isPaused, props.isClueOpen, cinematicActive, bossIntroActive]);
     // Auto-pause on pointer unlock (e.g. user hits ESC, or Alt-Tab)
     useEffect(() => {
         const handleLockChange = () => {
@@ -184,8 +192,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 return;
             }
 
-            if (!document.pointerLockElement && props.isRunning && !props.isPaused && !stateRef.current.isDead) {
-                // Only pause if we expected to be running
+            // Use refs to check current state reliably inside the listener (avoids stale closures)
+            const isExpectedUnlock = stateRef.current.isDead || cinematicRef.current.active || bossIntroRef.current.active || propsRef.current.isPaused || propsRef.current.isClueOpen;
+
+            if (!document.pointerLockElement && props.isRunning && !props.isPaused && !isExpectedUnlock) {
+                // Only pause if we expected to be running AND it's not an expected UI unlock
                 console.log('[GameCanvas] Pointer unlocked, pausing...');
                 propsRef.current.onPauseToggle(true);
             }
@@ -322,6 +333,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     const startCinematic = (familyMesh: THREE.Group, scriptId?: number, customParams?: { targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3 }) => {
         if (cinematicRef.current.active) return;
+
+        // IMPORTANT: Set ref state BEFORE releasing lock so the lock change listener knows it's intentional
+        cinematicRef.current.active = true;
+
+        // Release pointer lock so user can use mouse for dialogue buttons
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+
         setFoundMemberName(familyMember.name);
         setCinematicActive(true);
         stateRef.current.isInteractionOpen = true;
@@ -396,6 +416,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stateRef.current.isInteractionOpen = false;
         stateRef.current.familyFound = true;
         cinematicRef.current.active = false;
+
+        // Re-request lock for gameplay (will only work if called from a user gesture)
+        if (containerRef.current) {
+            engineRef.current?.input.requestPointerLock(containerRef.current);
+        }
 
         // Triggers are handled mid-script in CinematicSystem.update, 
         // but we also check the last line here just in case or for cleanup.
@@ -871,8 +896,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             // BOSS INTRO SEQUENCE
-            setBossIntroActive(true);
             bossIntroRef.current = { active: true, startTime: performance.now(), bossMesh: newBoss.mesh };
+            setBossIntroActive(true);
 
             // Clear any previous timer
             if (bossIntroTimerRef.current) clearTimeout(bossIntroTimerRef.current);

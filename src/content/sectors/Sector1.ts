@@ -136,7 +136,7 @@ export const Sector1: SectorDef = {
         obstacles.push({ mesh: villaGroup, collider: { type: 'box', size: new THREE.Vector3(20, 20, 14) } });
 
         // Burning Car
-        SectorBuilder.spawnVolvo(ctx, LOCATIONS.POIS.CAR.x, LOCATIONS.POIS.CAR.z, 0.3, 0, 0x333333);
+        SectorBuilder.spawnCar(ctx, LOCATIONS.POIS.CAR.x, LOCATIONS.POIS.CAR.z, 0.3, 0, 0x333333);
         const carFire = new THREE.PointLight(0xff4400, 15, 30);
         carFire.position.set(LOCATIONS.POIS.CAR.x, 4, LOCATIONS.POIS.CAR.z);
         scene.add(carFire);
@@ -199,7 +199,7 @@ export const Sector1: SectorDef = {
         const carColors = [0x3355ff, 0xcccccc, 0xcc2222]; // Blue, Silver, Red
         for (let i = 0; i < 3; i++) {
             const carPos = { x: LOCATIONS.POIS.SMU.x + 35, z: LOCATIONS.POIS.SMU.z + (i * 12) - 10 };
-            SectorBuilder.spawnVolvo(ctx, carPos.x, carPos.z, 0.3, 0, carColors[i]);
+            SectorBuilder.spawnCar(ctx, carPos.x, carPos.z, 0.3, 0, carColors[i]);
             const carFire = new THREE.PointLight(0xff4400, 15, 30);
             carFire.position.set(carPos.x, 4, carPos.z);
             scene.add(carFire);

@@ -69,7 +69,7 @@ export const useGlobalInput = (
                     actions.onResume();
                 } else if (screen === GameScreen.SECTOR && !ui.activeClue && !ui.isDialogueOpen && !ui.isBossIntroActive && ui.hp > 0) {
                     actions.setIsPaused(true);
-                    // DO NOT request lock here. We want to unlock or stay unlocked.
+                    if (document.pointerLockElement) document.exitPointerLock();
                 }
             }
             // Map Logic (M)
@@ -84,6 +84,7 @@ export const useGlobalInput = (
                         // Only allow opening map if the game is not currently paused (e.g. Pause Menu)
                         actions.setIsMapOpen(true);
                         actions.setIsPaused(true);
+                        if (document.pointerLockElement) document.exitPointerLock();
                         soundManager.playUiConfirm();
                     }
                 }

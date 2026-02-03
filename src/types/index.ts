@@ -248,6 +248,7 @@ export interface GameCanvasProps {
   isRunning: boolean;
   isPaused: boolean;
   onDialogueStateChange: (active: boolean) => void;
+  onDeathStateChange?: (active: boolean) => void;
   onBossIntroStateChange?: (active: boolean) => void;
   onMapInit: (items: MapItem[]) => void;
   bossPermanentlyDefeated: boolean;

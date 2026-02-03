@@ -227,9 +227,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 {/* Top Header */}
                 <div className="flex justify-between items-start">
                     {/* Ranking & Resource Group (Top Left) */}
-                    <div className="flex flex-col gap-4 items-start">
+                    <div className={`flex flex-col gap-4 items-start transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                         {/* Rank Box (Matches CampHUD) */}
-                        <div className="bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl w-[320px] backdrop-blur-sm transition-all duration-300 relative group">
+                        <div className="bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl w-[320px] backdrop-blur-sm relative group">
                             {/* Rank Title Animation */}
                             <div className="relative overflow-hidden">
                                 {showLevelUp ? (

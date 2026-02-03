@@ -41,6 +41,7 @@ const App: React.FC = () => {
 
     // Sector Results
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
+    const [isDeathScreenActive, setIsDeathScreenActive] = useState(false);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
 
     // Interaction Locks
@@ -200,8 +201,8 @@ const App: React.FC = () => {
 
     const handleStartSector = () => {
         setIsLoadingLevel(true);
+        setTeleportTarget(null);
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-        // Reset sector state variables
         setHudState({});
         setCurrentMapItems([]);
         setActiveClue(null);
@@ -229,7 +230,7 @@ const App: React.FC = () => {
         window.location.reload();
     };
 
-    const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeClue && !showTeleportMenu && !isDialogueOpen && !deathDetails;
+    const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeClue && !showTeleportMenu && !isDialogueOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive;
 
     const handleClueClose = () => {
         gameCanvasRef.current?.requestPointerLock();
@@ -305,14 +306,15 @@ const App: React.FC = () => {
                         isClueOpen={!!activeClue}
                         onClueClose={handleClueClose}
                         onDialogueStateChange={setIsDialogueOpen}
+                        onDeathStateChange={setIsDeathScreenActive}
                         onBossIntroStateChange={setIsBossIntroActive}
                         onMapInit={setCurrentMapItems}
                         onFPSUpdate={handleFPSUpdate}
                         initialGraphics={gameState.graphics}
                     />
 
-                    {/* Hide HUD if hudState.isHidden or during dialogues/intro */}
-                    {!isMapOpen && !showTeleportMenu && !activeClue && !hudState.isHidden && !isDialogueOpen && !isBossIntroActive && (
+                    {/* Hide HUD if hudState.isHidden or during dialogues/intro (but allow GameHUD to handle its own visibility for Boss Intro) */}
+                    {!isMapOpen && !showTeleportMenu && !activeClue && !hudState.isHidden && !isDialogueOpen && (
                         <GameHUD
                             {...hudState}
                             loadout={gameState.loadout}
@@ -392,11 +394,13 @@ const App: React.FC = () => {
                     deathDetails={deathDetails}
                     currentMap={gameState.currentMap}
                     onReturnCamp={() => {
+                        setIsDeathScreenActive(false);
                         setIsLoadingCamp(true);
                         setGameState(prev => ({ ...prev, screen: GameScreen.CAMP }));
                         soundManager.playUiConfirm();
                     }}
                     onRetry={() => {
+                        setIsDeathScreenActive(false);
                         setIsLoadingLevel(true);
                         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
                         setSectorStats(null);
