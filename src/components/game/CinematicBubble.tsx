@@ -7,6 +7,7 @@ interface CinematicBubbleProps {
     speakerName: string;
     isVisible: boolean;
     domRef: React.RefObject<HTMLDivElement>;
+    tailPosition?: 'bottom' | 'top' | 'left' | 'right';
 }
 
 interface TextToken {
@@ -14,7 +15,7 @@ interface TextToken {
     content: string;
 }
 
-const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, isVisible, domRef }) => {
+const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, isVisible, domRef, tailPosition = 'bottom' }) => {
     const [visibleCount, setVisibleCount] = useState(0);
     const [opacity, setOpacity] = useState(0);
     const timerRef = useRef<number | null>(null);
@@ -25,7 +26,7 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
         const regex = /(\([^)]+\)|\/[^/]+\/)/g;
         // Split and keep delimiters
         const parts = text.split(regex);
-        
+
         return parts.map((part): TextToken => {
             if (part.startsWith('(') && part.endsWith(')')) {
                 return { type: 'action', content: part };
@@ -46,7 +47,7 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
         if (isVisible && text) {
             setOpacity(1);
             setVisibleCount(0);
-            
+
             if (timerRef.current) clearInterval(timerRef.current);
 
             timerRef.current = window.setInterval(() => {
@@ -71,17 +72,17 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
 
     const bgColor = getSpeakerColor(speakerName);
     const isDark = ['#111111', '#222222', '#000000'].includes(bgColor);
-    const textColor = isDark ? 'text-white' : 'text-black';
-    const borderColor = isDark ? 'border-white/30' : 'border-black/30';
+    const textColor = 'text-white';
+    const borderColor = 'rgba(255, 255, 255, 0.3)';
 
     // Render Logic
     const renderContent = () => {
         let currentIdx = 0;
-        
+
         return tokens.map((token, i) => {
             const start = currentIdx;
             const end = start + token.content.length;
-            
+
             // If completely hidden
             if (visibleCount <= start) {
                 currentIdx = end;
@@ -91,21 +92,19 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
             // Determine slice
             const visibleLength = Math.min(token.content.length, visibleCount - start);
             let displayStr = token.content.substring(0, visibleLength);
-            
+
             // Styling & Cleanup
             let className = "";
             let style = {};
 
             if (token.type === 'action') {
-                className = "text-yellow-500 italic text-sm"; // Action color override
-                // RemoveParens if fully typed or partial? 
-                // Let's just keep them for context or strip them. 
-                // DialogueOverlay stripped them. Let's strip them but we need to handle the slice index carefully.
-                // Simpler: Keep them in DOM but style them.
+                className = "italic";
+                // Strip parentheses for display
+                displayStr = displayStr.replace(/[()]/g, '');
             } else if (token.type === 'italic') {
-                className = isDark ? "text-gray-400 italic" : "text-gray-600 italic";
+                className = isDark ? "italic" : "italic";
                 // Strip slashes for display
-                displayStr = displayStr.replace(/\//g, ''); 
+                displayStr = displayStr.replace(/\//g, '');
             }
 
             currentIdx = end;
@@ -118,36 +117,83 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
         });
     };
 
+    // Calculate tail styles
+    const getTailStyles = () => {
+        const size = 12;
+        const borderWidth = 2;
+
+        const base = "absolute w-0 h-0 border-solid pointer-events-none";
+        const innerBase = "absolute w-0 h-0 border-solid pointer-events-none z-[1]";
+
+        switch (tailPosition) {
+            case 'top':
+                return {
+                    outer: `${base} left-1/2 -translate-x-1/2 top-[-${size + borderWidth}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-b-[${size + borderWidth}px]`,
+                    inner: `${innerBase} left-1/2 -translate-x-1/2 top-[-${size}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-b-[${size}px]`,
+                    outerStyle: { borderBottomColor: borderColor },
+                    innerStyle: { borderBottomColor: bgColor },
+                    containerTransform: 'translate(-50%, 20px)'
+                };
+            case 'left':
+                return {
+                    outer: `${base} top-1/2 -translate-y-1/2 left-[-${size + borderWidth}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-r-[${size + borderWidth}px]`,
+                    inner: `${innerBase} top-1/2 -translate-y-1/2 left-[-${size}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-r-[${size}px]`,
+                    outerStyle: { borderRightColor: borderColor },
+                    innerStyle: { borderRightColor: bgColor },
+                    containerTransform: 'translate(20px, -50%)'
+                };
+            case 'right':
+                return {
+                    outer: `${base} top-1/2 -translate-y-1/2 right-[-${size + borderWidth}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-l-[${size + borderWidth}px]`,
+                    inner: `${innerBase} top-1/2 -translate-y-1/2 right-[-${size}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-l-[${size}px]`,
+                    outerStyle: { borderLeftColor: borderColor },
+                    innerStyle: { borderLeftColor: bgColor },
+                    containerTransform: 'translate(calc(-100% - 20px), -50%)'
+                };
+            case 'bottom':
+            default:
+                return {
+                    outer: `${base} left-1/2 -translate-x-1/2 bottom-[-${size + borderWidth}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-t-[${size + borderWidth}px]`,
+                    inner: `${innerBase} left-1/2 -translate-x-1/2 bottom-[-${size}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-t-[${size}px]`,
+                    outerStyle: { borderTopColor: borderColor },
+                    innerStyle: { borderTopColor: bgColor },
+                    containerTransform: 'translate(-50%, calc(-100% - 20px))'
+                };
+        }
+    };
+
+    const tail = getTailStyles();
+
     return (
-        <div 
+        <div
             ref={domRef}
-            className="absolute pointer-events-none z-50 transition-opacity duration-300"
-            style={{ 
-                left: 0, 
-                top: 0, 
+            className="absolute pointer-events-none z-50"
+            style={{
+                left: 0,
+                top: 0,
                 opacity: opacity,
-                transform: 'translate(-50%, -100%)' // Centered and above anchor
+                transform: tail.containerTransform,
+                transition: 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease-out'
             }}
         >
-            <div className="relative mb-4">
-                <div 
-                    className={`px-6 py-4 rounded-2xl shadow-xl max-w-sm border-2 ${textColor} ${borderColor}`}
-                    style={{ backgroundColor: bgColor }}
+            <div className="relative">
+                <div
+                    className={`px-6 py-4 rounded-2xl shadow-xl max-w-sm border-2 ${textColor}`}
+                    style={{ backgroundColor: bgColor, borderColor: borderColor }}
                 >
-                    <h4 className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">{speakerName}</h4>
+                    <h4 className="text-lg font-black uppercase tracking-widest opacity-70 mb-1">{speakerName}</h4>
                     <p className="text-lg font-bold leading-tight font-mono whitespace-pre-wrap">
                         {renderContent()}
                         {isVisible && visibleCount < fullTextLength && (
-                            <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1 align-middle"/>
+                            <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1 align-middle" />
                         )}
                     </p>
                 </div>
-                
-                {/* Tail */}
-                <div 
-                    className={`absolute left-1/2 -translate-x-1/2 bottom-[-10px] w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[10px]`}
-                    style={{ borderTopColor: bgColor }} // Match bg
-                />
+
+                {/* Tail Outer (Border) */}
+                <div className={tail.outer} style={tail.outerStyle} />
+                {/* Tail Inner (Fill) */}
+                <div className={tail.inner} style={tail.innerStyle} />
             </div>
         </div>
     );

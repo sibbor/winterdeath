@@ -2,7 +2,7 @@ import React from 'react';
 import { t } from '../../utils/i18n';
 
 interface InteractionPromptProps {
-    type: 'chest' | 'bus' | null;
+    type: 'collectible' | 'chest' | 'bus' | 'null';
 }
 
 const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type }) => {
@@ -11,12 +11,15 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type }) => {
     let textKey = '';
     let colorClass = '';
 
-    if (type === 'chest') {
+    if (type === 'collectible') {
+        textKey = 'ui.pickup_collectible';
+        colorClass = 'border-gray-500 text-gray-500';
+    } else if (type === 'chest') {
         textKey = 'ui.open_chest';
         colorClass = 'border-yellow-500 text-yellow-500';
     } else if (type === 'bus') {
-        textKey = 'ui.travel';
-        colorClass = 'border-blue-500 text-blue-500';
+        textKey = 'ui.plant_explosive';
+        colorClass = 'border-red-500 text-red-500';
     }
 
     return (

@@ -8,7 +8,7 @@ import { WEAPONS } from '../content/constants';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 
-export class GameSession {
+export class GameSessionLogic {
     public inputDisabled: boolean = false;
     public debugMode: boolean = false;
     public state!: RuntimeState;

@@ -5,27 +5,52 @@ import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { t } from '../../utils/i18n';
 
+const LOCATIONS = {
+    SPAWN: {
+        PLAYER: { x: 0, z: 0 },
+        FAMILY: { x: 10, z: -200, y: 0 },
+        BOSS: { x: 10, z: -220 }
+    },
+    CINEMATIC: {
+        OFFSET: { x: 10, y: 15, z: 15 },
+        LOOK_AT: { x: 0, y: 2, z: 0 }
+    },
+    COLLECTIBLES: {
+        C1: { x: -20, z: -100 },
+        C2: { x: 30, z: -40 }
+    },
+    TRIGGERS: {
+        FOREST_NOISE: { x: 0, z: -50 },
+        MAST_SIGHT: { x: 0, z: -150 },
+        FOUND_ESMERALDA: { x: 10, z: -200 }
+    },
+    POIS: {
+        MAST: { x: 0, z: -210 },
+        MAST_DEBUG: { x: 0, z: -210 }
+    }
+} as const;
+
 export const Sector3: SectorDef = {
     id: 2,
     name: "maps.mast_name",
     environment: {
         bgColor: 0x051015, // Dark blue/green night
-        fogDensity: 0.03,
+        fogDensity: 0.02,
         ambientIntensity: 0.5, // Increased for visibility
         groundColor: 0x112211, // Forest floor
-        fov: 60,
+        fov: 50,
         moon: { visible: true, color: 0x88ffaa, intensity: 0.4 }, // Increased intensity
-        cameraOffsetZ: 45,
-        weather: 'none' // Dense forest, maybe rain instead?
+        cameraOffsetZ: 40,
+        weather: 'rain' // Dense forest, maybe rain instead?
     },
     // --- SPAWN POINTS ---
-    playerSpawn: { x: 0, z: 0 },
-    familySpawn: { x: 10, z: -200, y: 0 }, // Esmeralda at the base of the mast
-    bossSpawn: { x: 10, z: -200 }, // Boss at family location
+    playerSpawn: LOCATIONS.SPAWN.PLAYER,
+    familySpawn: LOCATIONS.SPAWN.FAMILY,
+    bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     cinematic: {
-        offset: { x: 10, y: 15, z: 15 },
-        lookAtOffset: { x: 0, y: 2, z: 0 },
+        offset: LOCATIONS.CINEMATIC.OFFSET,
+        lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
         rotationSpeed: 0.02
     },
 
@@ -36,33 +61,33 @@ export const Sector3: SectorDef = {
         triggers.push(
             // Collectible
             {
-                id: 's3_collectible', position: { x: -20, z: -100 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible", description: "clues.s3_collectible_desc", triggered: false, icon: "📖",
+                id: 's3_collectible', position: LOCATIONS.COLLECTIBLES.C1, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible", description: "clues.s3_collectible_desc", triggered: false, icon: "📖",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
             // Esmeralda's Jacket
             {
-                id: 's3_collectible_2', position: { x: 30, z: -40 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible_2", description: "clues.s3_collectible_2_description", triggered: false, icon: "s3_collectible_2_icon",
+                id: 's3_collectible_2', position: LOCATIONS.COLLECTIBLES.C2, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible_2", description: "clues.s3_collectible_2_description", triggered: false, icon: "s3_collectible_2_icon",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
             // Flavor
             {
-                id: 's3_forest_noise', position: { x: 0, z: -50 }, radius: 20, type: 'THOUGHTS', content: "clues.s3_forest_noise", triggered: false,
+                id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s3_forest_noise", triggered: false,
                 actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_rustle' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
             {
-                id: 's3_mast_sight', position: { x: 0, z: -150 }, radius: 30, type: 'THOUGHTS', content: "clues.s3_mast_sight", triggered: false,
+                id: 's3_mast_sight', position: LOCATIONS.TRIGGERS.MAST_SIGHT, radius: 30, type: 'THOUGHTS', content: "clues.s3_mast_sight", triggered: false,
                 actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
 
             // --- FIND ESMERALDA EVENT ---
             {
                 id: 'found_esmeralda',
-                position: { x: 10, z: -200 }, // Mast Base
+                position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, // Mast Base
                 radius: 8,
                 type: 'EVENT',
                 content: '',
                 triggered: false,
-                actions: [{ type: 'START_CINEMATIC' }]
+                actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
         );
 
@@ -118,7 +143,7 @@ export const Sector3: SectorDef = {
 
         scene.add(mastGroup);
         obstacles.push({ mesh: mastGroup, radius: 8 });
-        SectorBuilder.spawnDebugMarker(ctx, 0, -210, 10, t('maps.mast_name'));
+        //SectorBuilder.spawnDebugMarker(ctx, 0, -210, 10, t('maps.mast_name'));
 
         // Fences
         for (let x = -20; x <= 20; x += 4) {
@@ -127,11 +152,10 @@ export const Sector3: SectorDef = {
             scene.add(f);
         }
 
-        SectorBuilder.spawnClueMarker(ctx, -20, -100, 'collectible 1', 'diary');
-        SectorBuilder.spawnClueMarker(ctx, 30, -40, 'collectible 2', 'jacket');
-
-        // VISUALIZE TRIGGERS (Debug)
-        SectorBuilder.visualizeTriggers(ctx);
+        // --- ZOMBIE SPAWNING ---
+        for (let i = 0; i < 5; i++) {
+            ctx.spawnZombie('WALKER');
+        }
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {

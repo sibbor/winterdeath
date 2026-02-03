@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { System } from './System';
-import { GameSession } from '../GameSession';
+import { GameSessionLogic } from '../GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { resolveCollision } from '../../utils/physics';
 
@@ -9,7 +9,7 @@ export class PlayerMovementSystem implements System {
 
     constructor(private playerGroup: THREE.Group) { }
 
-    update(session: GameSession, delta: number, now: number) {
+    update(session: GameSessionLogic, delta: number, now: number) {
         const state = session.state;
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
@@ -85,6 +85,44 @@ export class PlayerMovementSystem implements System {
         let isMoving = false;
 
         // --- Rolling Logic ---
+        const MAX_STEP = 0.2; // Sub-step size to prevent tunneling
+
+        const performMove = (baseMoveVec: THREE.Vector3) => {
+            const dist = baseMoveVec.length();
+            if (dist < 0.001) return;
+
+            const steps = Math.ceil(dist / MAX_STEP);
+            const stepVec = baseMoveVec.clone().divideScalar(steps);
+
+            for (let s = 0; s < steps; s++) {
+                const testPos = playerGroup.position.clone().add(stepVec);
+
+                // Collision Resolution (Iterative)
+                for (let i = 0; i < 4; i++) {
+                    let adjusted = false;
+                    for (const obs of obstacles) {
+                        const push = resolveCollision(testPos, 0.5, obs);
+                        if (push) {
+                            // Apply push
+                            const colInfo = obs.collider ? `${obs.collider.type} ${JSON.stringify(obs.collider.size || obs.collider.radius)}` : 'MeshCollider';
+                            console.log(`[COLLISION] Hit: '${obs.mesh?.name || 'Unnamed'}' (${obs.mesh?.geometry?.type || 'NoGeo'}) [${colInfo}] at (${testPos.x.toFixed(2)}, ${testPos.z.toFixed(2)})`);
+                            testPos.add(push);
+                            adjusted = true;
+
+                            // Cancel velocity in the push direction (Slide)
+                            // Project stepVec onto the push normal (normalized push) and subtract?
+                            // Simple position correction handles static overlap.
+                            // But we should probably adjust the FUTURE steps?
+                            // For now, just position correction is standard "slide".
+                        }
+                    }
+                    if (!adjusted) break;
+                }
+                playerGroup.position.copy(testPos);
+            }
+        };
+
+        // --- Rolling Logic ---
         if (state.isRolling) {
             if (state.rollDir.lengthSq() === 0) {
                 if (playerGroup) state.rollDir.copy(new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize());
@@ -92,18 +130,7 @@ export class PlayerMovementSystem implements System {
             if (now < state.rollStartTime + 300) {
                 speed *= 2.5;
                 const moveVec = state.rollDir.clone().multiplyScalar(speed * delta);
-                const testPos = playerGroup.position.clone().add(moveVec);
-
-                // Collision
-                for (let i = 0; i < 3; i++) {
-                    let adjusted = false;
-                    for (const obs of obstacles) {
-                        const push = resolveCollision(testPos, 0.5, obs);
-                        if (push) { testPos.add(push); adjusted = true; }
-                    }
-                    if (!adjusted) break;
-                }
-                playerGroup.position.copy(testPos);
+                performMove(moveVec);
             } else {
                 state.isRolling = false;
             }
@@ -116,22 +143,8 @@ export class PlayerMovementSystem implements System {
 
                 if (v.lengthSq() > 0) {
                     isMoving = true;
-                    // Fix: Ensure we don't modify state.stats.speed directly if used above, but speed is a local var.
-                    // speed depends on stats.speed which is dynamic.
-
                     const moveVec = v.normalize().multiplyScalar(speed * delta);
-                    const testPos = playerGroup.position.clone().add(moveVec);
-
-                    // Collision
-                    for (let i = 0; i < 3; i++) {
-                        let adjusted = false;
-                        for (const obs of obstacles) {
-                            const push = resolveCollision(testPos, 0.5, obs);
-                            if (push) { testPos.add(push); adjusted = true; }
-                        }
-                        if (!adjusted) break;
-                    }
-                    playerGroup.position.copy(testPos);
+                    performMove(moveVec);
                 }
             }
         }

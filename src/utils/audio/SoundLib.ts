@@ -6,17 +6,17 @@ export const Synth = {
         const now = core.ctx.currentTime;
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
-        
+
         osc.type = type;
         osc.frequency.setValueAtTime(freq, now);
-        
+
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(vol, now + attack);
         gain.gain.exponentialRampToValueAtTime(0.001, now + (durationMS / 1000));
-        
+
         osc.connect(gain);
         gain.connect(core.masterGain);
-        
+
         osc.start(now);
         osc.stop(now + (durationMS / 1000) + 0.1);
         core.track(osc as unknown as AudioBufferSourceNode);
@@ -29,14 +29,14 @@ export const Synth = {
         for (let i = 0; i < bufferSize; i++) {
             data[i] = Math.random() * 2 - 1;
         }
-        
+
         const noise = core.ctx.createBufferSource();
         noise.buffer = buffer;
         const gain = core.ctx.createGain();
-        
+
         gain.gain.setValueAtTime(vol, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + (durationMS / 1000));
-        
+
         noise.connect(gain);
         gain.connect(core.masterGain);
         noise.start(now);
@@ -69,13 +69,59 @@ export const UiSounds = {
     },
     playTone: (core: SoundCore, freq: number, type: OscillatorType, duration: number, vol: number) => {
         Synth.tone(core, type, freq, duration * 1000, vol);
+    },
+    playMetalDoorShut: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // Low heavy thud
+        Synth.noise(core, 400, 0.4);
+        Synth.tone(core, 'sawtooth', 60, 300, 0.5, 0.01);
+        // Resonant metallic ring
+        Synth.tone(core, 'triangle', 200, 800, 0.1, 0.02);
+    },
+    playMetalDoorOpen: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        const duration = 2.0;
+        // Continuous grinding noise
+        const bufferSize = core.ctx.sampleRate * duration;
+        const buffer = core.ctx.createBuffer(1, bufferSize, core.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            // Modulated noise for "shuddering" feel
+            const mod = 1.0 + Math.sin(i * 0.01) * 0.5;
+            data[i] = (Math.random() * 2 - 1) * 0.05 * mod;
+        }
+        const noise = core.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = core.ctx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        noise.connect(gain);
+        gain.connect(core.masterGain);
+        noise.start(now);
+        core.track(noise);
+
+        // High pitch metallic creak
+        const osc = core.ctx.createOscillator();
+        const oscGain = core.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(350, now + duration); // Rising pitch as it strains
+        oscGain.gain.setValueAtTime(0, now);
+        oscGain.gain.linearRampToValueAtTime(0.05, now + 0.5);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        osc.connect(oscGain);
+        oscGain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + duration);
+        core.track(osc as unknown as AudioBufferSourceNode);
     }
 };
 
 export const WeaponSounds = {
     playShot: (core: SoundCore, weaponId: string) => {
         const now = core.ctx.currentTime;
-        
+
         // Default Sound Params (Generic)
         let noiseDur = 0.1;
         let noiseVol = 0.3;
@@ -128,10 +174,10 @@ export const WeaponSounds = {
         osc.type = oscType;
         osc.frequency.setValueAtTime(freqStart, now);
         osc.frequency.exponentialRampToValueAtTime(freqEnd, now + oscDur);
-        
+
         gain.gain.setValueAtTime(oscVol, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + oscDur);
-        
+
         osc.connect(gain);
         gain.connect(core.masterGain);
         osc.start(now);
@@ -140,11 +186,11 @@ export const WeaponSounds = {
     },
     playThrowable: (core: SoundCore, weaponId: string) => {
         const now = core.ctx.currentTime;
-        
+
         // 1. Activation Sound (Pin pull / Ignite)
         if (weaponId === 'Molotov') {
             // Liquid/Cloth ignite - softer noise
-            Synth.noise(core, 200, 0.2); 
+            Synth.noise(core, 200, 0.2);
         } else {
             // Metallic pin click - high pitch ping
             Synth.tone(core, 'square', 1200, 50, 0.1);
@@ -154,7 +200,7 @@ export const WeaponSounds = {
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
         osc.type = 'sine';
-        
+
         // Doppler-ish pitch shift
         osc.frequency.setValueAtTime(200, now + 0.1);
         osc.frequency.linearRampToValueAtTime(350, now + 0.2); // Up
@@ -163,7 +209,7 @@ export const WeaponSounds = {
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(0.15, now + 0.2); // Fade in
         gain.gain.linearRampToValueAtTime(0, now + 0.45); // Fade out
-        
+
         osc.connect(gain);
         gain.connect(core.masterGain);
         osc.start(now);
@@ -193,20 +239,20 @@ export const EnemySounds = {
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
         osc.type = 'sawtooth';
-        
+
         let freq = 80;
         let dur = 0.5;
-        
+
         if (type === 'RUNNER') { freq = 150; dur = 0.3; }
         else if (type === 'TANK') { freq = 50; dur = 1.0; }
-        
+
         osc.frequency.setValueAtTime(freq, now);
         osc.frequency.linearRampToValueAtTime(freq * 0.8, now + dur);
-        
+
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(0.1, now + 0.1);
         gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-        
+
         osc.connect(gain);
         gain.connect(core.masterGain);
         osc.start(now);
@@ -221,116 +267,118 @@ export const VoiceSounds = {
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
         osc.type = 'triangle';
-        
+
         const pitch = basePitch + Math.random() * 50;
         osc.frequency.setValueAtTime(pitch, now);
         osc.frequency.linearRampToValueAtTime(pitch * 1.2, now + (duration * 0.25));
         osc.frequency.linearRampToValueAtTime(pitch * 0.8, now + duration);
-        
+
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
         gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-        
+
         osc.connect(gain);
         gain.connect(core.masterGain);
         osc.start();
         osc.stop(now + duration);
         core.track(osc as unknown as AudioBufferSourceNode);
     },
+    playMetalDoorShut: (core: SoundCore) => { UiSounds.playMetalDoorShut(core); },
+    playMetalDoorOpen: (core: SoundCore) => { UiSounds.playMetalDoorOpen(core); },
     playVoice: (core: SoundCore, name: string) => {
-      if (!name) return;
-      
-      let baseFreq = 200;
-      let type: OscillatorType = 'triangle';
-      const lowerName = name.toLowerCase();
+        if (!name) return;
 
-      if (lowerName.includes('robert') || lowerName.includes('pappa')) { baseFreq = 110; type = 'sawtooth'; } 
-      else if (lowerName.includes('nathalie') || lowerName.includes('mamma') || lowerName.includes('hustru')) { baseFreq = 350; type = 'sine'; } 
-      else if (lowerName.includes('jordan')) { baseFreq = 650; type = 'sine'; } 
-      else if (lowerName.includes('loke')) { baseFreq = 280; type = 'triangle'; } 
-      else if (lowerName.includes('esmeralda')) { baseFreq = 400; type = 'sine'; } 
-      else if (lowerName.includes('sotis')) { VoiceSounds.playMeow(core, 350, 0.4); return; } 
-      else if (lowerName.includes('panter')) { VoiceSounds.playMeow(core, 500, 0.25); return; } 
+        let baseFreq = 200;
+        let type: OscillatorType = 'triangle';
+        const lowerName = name.toLowerCase();
 
-      const syllables = 3 + Math.floor(Math.random() * 3);
-      const now = core.ctx.currentTime;
-      
-      for(let i=0; i<syllables; i++) {
-          const osc = core.ctx.createOscillator();
-          const gain = core.ctx.createGain();
-          osc.type = type;
-          const startTime = now + i * 0.08;
-          const duration = 0.05 + Math.random() * 0.05;
-          const pitchVar = (Math.random() - 0.5) * 100;
-          osc.frequency.setValueAtTime(baseFreq + pitchVar, startTime);
-          osc.frequency.linearRampToValueAtTime(baseFreq + pitchVar + (Math.random()-0.5)*50, startTime + duration);
-          gain.gain.setValueAtTime(0, startTime);
-          gain.gain.linearRampToValueAtTime(0.15, startTime + 0.01);
-          gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-          osc.connect(gain);
-          gain.connect(core.masterGain);
-          osc.start(startTime);
-          osc.stop(startTime + duration + 0.05);
-          core.track(osc as unknown as AudioBufferSourceNode);
-      }
+        if (lowerName.includes('robert') || lowerName.includes('pappa')) { baseFreq = 110; type = 'sawtooth'; }
+        else if (lowerName.includes('nathalie') || lowerName.includes('mamma') || lowerName.includes('hustru')) { baseFreq = 350; type = 'sine'; }
+        else if (lowerName.includes('jordan')) { baseFreq = 650; type = 'sine'; }
+        else if (lowerName.includes('loke')) { baseFreq = 280; type = 'triangle'; }
+        else if (lowerName.includes('esmeralda')) { baseFreq = 400; type = 'sine'; }
+        else if (lowerName.includes('sotis')) { VoiceSounds.playMeow(core, 350, 0.4); return; }
+        else if (lowerName.includes('panter')) { VoiceSounds.playMeow(core, 500, 0.25); return; }
+
+        const syllables = 3 + Math.floor(Math.random() * 3);
+        const now = core.ctx.currentTime;
+
+        for (let i = 0; i < syllables; i++) {
+            const osc = core.ctx.createOscillator();
+            const gain = core.ctx.createGain();
+            osc.type = type;
+            const startTime = now + i * 0.08;
+            const duration = 0.05 + Math.random() * 0.05;
+            const pitchVar = (Math.random() - 0.5) * 100;
+            osc.frequency.setValueAtTime(baseFreq + pitchVar, startTime);
+            osc.frequency.linearRampToValueAtTime(baseFreq + pitchVar + (Math.random() - 0.5) * 50, startTime + duration);
+            gain.gain.setValueAtTime(0, startTime);
+            gain.gain.linearRampToValueAtTime(0.15, startTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+            osc.connect(gain);
+            gain.connect(core.masterGain);
+            osc.start(startTime);
+            osc.stop(startTime + duration + 0.05);
+            core.track(osc as unknown as AudioBufferSourceNode);
+        }
     },
     playDamageGrunt: (core: SoundCore) => {
-      const variants = ['ouch', 'hrrmf', 'ouf'];
-      const variant = variants[Math.floor(Math.random() * variants.length)];
-      
-      if (variant === 'ouch') {
-          Synth.tone(core, 'sawtooth', 250, 100, 0.2, 0.02);
-      } else if (variant === 'hrrmf') {
-          Synth.tone(core, 'sawtooth', 120, 80, 0.15, 0.03);
-      } else {
-          Synth.tone(core, 'sawtooth', 150, 120, 0.2, 0.025);
-      }
+        const variants = ['ouch', 'hrrmf', 'ouf'];
+        const variant = variants[Math.floor(Math.random() * variants.length)];
+
+        if (variant === 'ouch') {
+            Synth.tone(core, 'sawtooth', 250, 100, 0.2, 0.02);
+        } else if (variant === 'hrrmf') {
+            Synth.tone(core, 'sawtooth', 120, 80, 0.15, 0.03);
+        } else {
+            Synth.tone(core, 'sawtooth', 150, 120, 0.2, 0.025);
+        }
     },
     playDeathScream: (core: SoundCore, name: string) => {
         const lowerName = (name || '').toLowerCase();
         const isMale = lowerName.includes('robert') || lowerName.includes('pappa') || lowerName.includes('loke') || lowerName.includes('jordan');
-        
+
         const now = core.ctx.currentTime;
         const duration = 1.5;
-        
+
         const osc = core.ctx.createOscillator();
         osc.type = 'sawtooth';
-        
+
         const osc2 = core.ctx.createOscillator();
         osc2.type = 'square';
 
         const gain = core.ctx.createGain();
         const gain2 = core.ctx.createGain();
-        
+
         const startFreq = isMale ? 300 : 500;
         const endFreq = isMale ? 80 : 150;
 
         osc.frequency.setValueAtTime(startFreq, now);
         osc.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
-        
-        osc2.frequency.setValueAtTime(startFreq * 0.98, now); 
+
+        osc2.frequency.setValueAtTime(startFreq * 0.98, now);
         osc2.frequency.exponentialRampToValueAtTime(endFreq * 0.95, now + duration);
 
         gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.4, now + 0.1); 
+        gain.gain.linearRampToValueAtTime(0.4, now + 0.1);
         gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
 
         gain2.gain.setValueAtTime(0, now);
-        gain2.gain.linearRampToValueAtTime(0.1, now + 0.1); 
+        gain2.gain.linearRampToValueAtTime(0.1, now + 0.1);
         gain2.gain.exponentialRampToValueAtTime(0.01, now + duration);
 
         osc.connect(gain);
         osc2.connect(gain2);
-        
+
         gain.connect(core.masterGain);
         gain2.connect(core.masterGain);
 
         osc.start(now);
         osc2.start(now);
-        
+
         osc.stop(now + duration + 0.1);
         osc2.stop(now + duration + 0.1);
-        
+
         core.track(osc as unknown as AudioBufferSourceNode);
     }
 };

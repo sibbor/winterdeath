@@ -53,46 +53,42 @@ const setupTrees = (scene: THREE.Scene) => {
     treeInstances.push({ x: 15, z: 2, scale: 1.8, darken: 1.0 });
     treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
 
-    // --- MATHEMATICAL OPTIMIZATION ---
-    // Optimization: Use InstancedMesh instead of cloning separate trees.
-    const prototypes = ObjectGenerator.getPrototypes();
-    const firstVariant = prototypes[0].children;
-    const trunkMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'CylinderGeometry') as THREE.Mesh;
-    const foliageMesh = firstVariant.find(c => (c as THREE.Mesh).geometry.type === 'BufferGeometry') as THREE.Mesh;
+    // --- TREE INSTANTIATION ---
+    // Ensure prototypes are ready
+    ObjectGenerator.initNaturePrototypes();
+    const prototypes = ObjectGenerator.getPrototypes(); // Returns flat array: Spruce, Pine, Birch
 
-    if (trunkMesh && foliageMesh) {
-        const count = treeInstances.length;
-        const instTrunk = new THREE.InstancedMesh(trunkMesh.geometry, trunkMesh.material, count);
-        const instFoliage = new THREE.InstancedMesh(foliageMesh.geometry, foliageMesh.material, count);
+    if (!prototypes || prototypes.length === 0) return;
 
-        instTrunk.castShadow = true; instTrunk.receiveShadow = true;
-        instFoliage.castShadow = true; instFoliage.receiveShadow = true;
+    // First 5 are Spruce (NATURE_VARIANTS = 5)
+    // We'll use Spruces for the forest wall.
 
-        const matrix = new THREE.Matrix4();
-        const position = new THREE.Vector3();
-        const quaternion = new THREE.Quaternion();
-        const scaleVec = new THREE.Vector3();
-        const color = new THREE.Color();
-        const rotationY = new THREE.Euler(0, 0, 0);
+    for (const inst of treeInstances) {
+        // Pick a random Spruce variant (indices 0-4)
+        // Use srandom logic? Or just simple mod.
+        const variantIdx = Math.floor((inst.x + inst.z) % 5 + 5) % 5;
+        const tree = prototypes[variantIdx].clone();
 
-        for (let i = 0; i < count; i++) {
-            const inst = treeInstances[i];
-            position.set(inst.x, 0, inst.z);
-            rotationY.y = (inst.x * 123.45 + inst.z * 678.9) % (Math.PI * 2);
-            quaternion.setFromEuler(rotationY);
-            scaleVec.setScalar(inst.scale);
-            matrix.compose(position, quaternion, scaleVec);
+        tree.position.set(inst.x, 0, inst.z);
+        tree.scale.setScalar(inst.scale);
 
-            instTrunk.setMatrixAt(i, matrix);
-            instFoliage.setMatrixAt(i, matrix);
-
-            color.setScalar(inst.darken);
-            instTrunk.setColorAt(i, color);
-            instFoliage.setColorAt(i, color);
+        // Apply "Darken" (Silhouettes)
+        // We must clone materials to avoid affecting shared instances
+        if (inst.darken < 0.9) {
+            tree.traverse((child: any) => {
+                if (child.isMesh) {
+                    child.material = child.material.clone();
+                    child.material.color.multiplyScalar(inst.darken);
+                    // Disable shadows for distant silhouettes to save perf?
+                    if (inst.darken < 0.5) {
+                        child.castShadow = false;
+                        child.receiveShadow = false;
+                    }
+                }
+            });
         }
 
-        scene.add(instTrunk);
-        scene.add(instFoliage);
+        scene.add(tree);
     }
 };
 

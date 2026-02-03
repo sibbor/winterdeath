@@ -135,6 +135,7 @@ export const EnemyManager = {
             spawnBubble: (text: string, duration: number) => void;
             t: (key: string) => string;
             gainXp: (amount: number) => void;
+            onBossKilled?: (id: number) => void;
         }
     ) => {
         for (let i = enemies.length - 1; i >= 0; i--) {
@@ -149,6 +150,7 @@ export const EnemyManager = {
                         soundManager.playVictory();
                         callbacks.spawnBubble(callbacks.t('ui.threat_neutralized'), 4000);
                         callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 200);
+                        if (e.bossId !== undefined && callbacks.onBossKilled) callbacks.onBossKilled(e.bossId);
                     }
                 } else {
                     // Regular Enemy Scrap Drop Chance (10%)

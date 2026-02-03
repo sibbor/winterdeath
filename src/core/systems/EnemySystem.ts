@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { System } from './System';
-import { GameSession } from '../GameSession';
+import { GameSessionLogic } from '../GameSessionLogic';
 import { EnemyManager } from '../EnemyManager';
 import { FXSystem } from './FXSystem';
 import { WorldLootSystem } from './WorldLootSystem';
@@ -15,11 +15,12 @@ export class EnemySystem implements System {
             spawnBubble: (text: string, duration: number) => void;
             gainXp: (amount: number) => void;
             t: (key: string) => string;
-            onClueFound: (clue: any) => void; // Passed but maybe handled by Trigger, checking if needed
+            onClueFound: (clue: any) => void;
+            onBossKilled: (id: number) => void;
         }
     ) { }
 
-    update(session: GameSession, dt: number, now: number) {
+    update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const scene = session.engine.scene;
 
@@ -97,16 +98,17 @@ export class EnemySystem implements System {
                 spawnScrap: (x, z, amt) => WorldLootSystem.spawnScrapExplosion(scene, state.scrapItems, x, z, amt),
                 spawnBubble: this.callbacks.spawnBubble,
                 t: this.callbacks.t,
-                gainXp: this.callbacks.gainXp
+                gainXp: this.callbacks.gainXp,
+                onBossKilled: this.callbacks.onBossKilled
             }
         );
     }
 
-    private spawnPart(session: GameSession, x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) {
+    private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) {
         FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color);
     }
 
-    private spawnDecal(session: GameSession, x: number, z: number, scale: number, mat?: any) {
+    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: any) {
         FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat);
     }
 }

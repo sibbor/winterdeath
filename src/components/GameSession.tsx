@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useMemo, useState, useImperativeHandle } from 'react';
+import React, { useEffect, useRef, useMemo, useState, useImperativeHandle, useCallback } from 'react';
 import * as THREE from 'three';
 import { Engine } from '../core/engine/Engine';
-import { GameSession } from '../core/GameSession';
+import { GameSessionLogic } from '../core/GameSessionLogic';
 import { PlayerStats, WeaponType, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
 
 import { WEAPONS, BOSSES, MAP_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP } from '../content/constants';
@@ -30,6 +30,7 @@ import { WorldLootSystem } from '../core/systems/WorldLootSystem'; // New
 import { PlayerInteractionSystem } from '../core/systems/PlayerInteractionSystem';
 import { EnemySystem } from '../core/systems/EnemySystem';
 import { SectorSystem } from '../core/systems/SectorSystem'; // New
+import ScreenPlayerDied from './game/ScreenPlayerDied';
 import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
 // ... (Interfaces remain same)
@@ -42,24 +43,25 @@ const seededRandom = (seed: number) => {
         return (s = s * 16807 % 2147483647) / 2147483647;
     };
 };
+
 // Define handle for parent access
-export interface GameCanvasHandle {
+export interface GameSessionHandle {
     requestPointerLock: () => void;
 }
 
-const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, ref) => {
+const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
     const propsRef = useRef(props);
     // Engine Ref instead of individual Three refs
     const engineRef = useRef<Engine | null>(null);
-    const gameSessionRef = useRef<GameSession | null>(null);
+    const gameSessionRef = useRef<GameSessionLogic | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     // Remove chatOverlayRef unused here? Or keep if needed.
     const chatOverlayRef = useRef<HTMLDivElement>(null);
 
     // Keep GameState Refs (Rules, Stats)
-    const stateRef = useRef<ReturnType<typeof GameSession.createInitialState>>(null!);
+    const stateRef = useRef<ReturnType<typeof GameSessionLogic.createInitialState>>(null!);
     if (!stateRef.current) {
-        stateRef.current = GameSession.createInitialState(props);
+        stateRef.current = GameSessionLogic.createInitialState(props);
     }
 
     useEffect(() => { propsRef.current = props; }, [props]);
@@ -73,6 +75,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     const collectedCluesRef = useRef<SectorTrigger[]>([]);
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
+    const lastDrawCallsRef = useRef(0);
 
     // Refs for callbacks to avoid closure issues if defined outside
     // Actually, passing them to systems requires them to be stable or updated.
@@ -87,6 +90,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     const [currentLine, setCurrentLine] = useState(0);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [bossIntroActive, setBossIntroActive] = useState(false);
+    const [isSectorLoading, setIsSectorLoading] = useState(true);
     useEffect(() => {
         if (props.onBossIntroStateChange) props.onBossIntroStateChange(bossIntroActive);
     }, [bossIntroActive]);
@@ -94,6 +98,18 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [foundMemberName, setFoundMemberName] = useState('');
     const [interactionType, setInteractionType] = useState<'NONE' | 'LADDER' | 'BUS' | 'SHOP' | 'CLUE'>('NONE');
+    const [forceHideHUD, setForceHideHUD] = useState(false);
+
+    useEffect(() => {
+        const h = () => setForceHideHUD(true);
+        const s = () => setForceHideHUD(false);
+        window.addEventListener('hide_hud', h);
+        window.addEventListener('show_hud', s);
+        return () => {
+            window.removeEventListener('hide_hud', h);
+            window.removeEventListener('show_hud', s);
+        };
+    }, []);
     const interactionTypeRef = useRef<string>('NONE');
     // Sync interaction type
     useEffect(() => { interactionTypeRef.current = interactionType; }, [interactionType]);
@@ -109,6 +125,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
     const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
     const playerMeshRef = useRef<THREE.Group>(new THREE.Group());
+    const familyMemberRef = useRef<any>(null);
     const reloadBarRef = useRef<HTMLDivElement>(null);
     const aimCrossRef = useRef<HTMLDivElement>(null);
     const flashlightRef = useRef<THREE.SpotLight>(null);
@@ -117,23 +134,27 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     // ... Keep hooks for Cinematic/Intro
 
 
+    const triggerContinue = useCallback(() => {
+        if (!hasEndedSector.current) {
+            const state = stateRef.current;
+            const now = performance.now();
+            hasEndedSector.current = true;
+            propsRef.current.onDie({
+                timeElapsed: now - state.startTime, shotsFired: state.shotsFired, shotsHit: state.shotsHit, throwablesThrown: state.throwablesThrown,
+                killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: 0,
+                familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
+                bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
+                distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened
+            }, state.killerType || "Unknown");
+        }
+    }, []);
+
     // ... (EventListeners for death phase continue)
     useEffect(() => {
-        if (deathPhase !== 'CONTINUE') return;
+        if (deathPhase === 'NONE' || deathPhase === 'ANIMATION') return;
         const handleContinue = (e: Event) => {
             if (e.type === 'keydown' && (e as KeyboardEvent).key === 'Escape') return;
-            if (!hasEndedSector.current) {
-                const state = stateRef.current;
-                const now = performance.now();
-                hasEndedSector.current = true;
-                propsRef.current.onDie({
-                    timeElapsed: now - state.startTime, shotsFired: state.shotsFired, shotsHit: state.shotsHit, throwablesThrown: state.throwablesThrown,
-                    killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: 0,
-                    familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
-                    bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
-                    distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened
-                }, state.killerType || "Unknown");
-            }
+            triggerContinue();
         };
         window.addEventListener('keydown', handleContinue);
         window.addEventListener('mousedown', handleContinue);
@@ -144,6 +165,16 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             window.removeEventListener('touchstart', handleContinue);
         };
     }, [deathPhase]);
+
+    // Ensure cursor is visible on death, pause, or when UI is open
+    useEffect(() => {
+        const shouldRelease = deathPhase !== 'NONE' || props.isPaused || props.isClueOpen;
+        if (shouldRelease) {
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+        }
+    }, [deathPhase, props.isPaused, props.isClueOpen]);
     // Auto-pause on pointer unlock (e.g. user hits ESC, or Alt-Tab)
     useEffect(() => {
         const handleLockChange = () => {
@@ -167,6 +198,14 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         if (props.onDialogueStateChange) props.onDialogueStateChange(cinematicActive);
     }, [cinematicActive]);
 
+    // Update Graphics Settings dynamically
+    useEffect(() => {
+        if (engineRef.current && props.initialGraphics) {
+            // "initialGraphics" name is a bit misleading if updated dynamically, but it works as the conduit.
+            engineRef.current.updateSettings(props.initialGraphics);
+        }
+    }, [props.initialGraphics]);
+
     useEffect(() => {
         if (!props.isClueOpen && stateRef.current.clueActive) {
             stateRef.current.isInteractionOpen = false;
@@ -188,13 +227,22 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                     return;
                 }
                 if (cinematicActive) {
-                    endCinematic(); // Use existing function
+                    // endCinematic(); // DISABLED: ESC no longer skips dialogues
+                    e.stopPropagation();
+                    return;
+                }
+                // Fix: Close Clue on ESC
+                if (propsRef.current.isClueOpen && propsRef.current.onClueClose) {
+                    propsRef.current.onClueClose();
                     e.stopPropagation();
                     return;
                 }
 
                 if (isInputEnabled) {
                     propsRef.current.onPauseToggle(true);
+                } else if (propsRef.current.isPaused) {
+                    // Fix: Unpause if already paused (and input was disabled due to pause)
+                    propsRef.current.onPauseToggle(false);
                 }
                 return;
             }
@@ -202,7 +250,8 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             if (!isInputEnabled) return;
             const key = e.key;
 
-            if (key.toLowerCase() === 'm') propsRef.current.onOpenMap();
+            // 'M' Map toggle is handled by useGlobalInput hook to support Opening/Closing during pause.
+            // GameSession only handles gameplay inputs.
 
             // Flashlight Toggle (F)
             if (key.toLowerCase() === 'f') {
@@ -271,45 +320,57 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
     let fmMesh: THREE.Group | undefined;
     const familyMember = useRef({ mesh: null as any, ring: null as any, found: false, following: false, name: '', cooldown: 0, scale: 1.0, seed: Math.random() * 100 }).current;
 
-    const startCinematic = (familyMesh: THREE.Group) => {
+    const startCinematic = (familyMesh: THREE.Group, scriptId?: number, customParams?: { targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3 }) => {
         if (cinematicRef.current.active) return;
         setFoundMemberName(familyMember.name);
         setCinematicActive(true);
         stateRef.current.isInteractionOpen = true;
         stateRef.current.familyFound = true;
 
-        const pPos = playerGroupRef.current!.position.clone();
-        const fPos = familyMesh.position.clone();
-        const midPoint = new THREE.Vector3().addVectors(pPos, fPos).multiplyScalar(0.5);
+        const pPos = new THREE.Vector3();
+        playerGroupRef.current!.getWorldPosition(pPos);
+
+        const fPos = new THREE.Vector3();
+        familyMesh.getWorldPosition(fPos);
+
+        // Zoom on player/door: Focal point biased towards player (0.15 weight towards Jordan = approx Door Frame)
+        const midPoint = new THREE.Vector3().lerpVectors(pPos, fPos, 0.15);
 
         let camOffset = new THREE.Vector3(0, 20, 15);
         let camLookAtOffset = new THREE.Vector3(0, 0, 0);
         let rotationSpeed = 0;
+        let zoom = 0;
 
         if (currentSector.cinematic) {
             const c = currentSector.cinematic;
             if (c.offset) camOffset.set(c.offset.x, c.offset.y, c.offset.z);
             if (c.lookAtOffset) camLookAtOffset.set(c.lookAtOffset.x, c.lookAtOffset.y, c.lookAtOffset.z);
             if (c.rotationSpeed) rotationSpeed = c.rotationSpeed;
+            if (c.zoom) zoom = c.zoom;
         }
 
-        const targetLookAt = midPoint.clone().add(camLookAtOffset);
-        const targetPos = midPoint.clone().add(camOffset);
+        const targetLookAt = customParams?.lookAtPos || midPoint.clone().add(camLookAtOffset);
+        const targetPos = customParams?.targetPos || midPoint.clone().add(camOffset);
+
+        const selectedScript = scriptId !== undefined ? (STORY_SCRIPTS[scriptId] || []) : currentScript;
 
         cinematicRef.current = {
             active: true,
+            startTime: performance.now(),
             cameraBasePos: targetPos,
             cameraLookAt: targetLookAt,
             speakers: [playerGroupRef.current!, familyMesh],
-            script: currentScript,
+            script: selectedScript,
             lineIndex: 0,
             lineStartTime: performance.now(),
             lineDuration: 0,
             typingDuration: 0,
             fadingOut: false,
             rotationSpeed,
+            zoom,
             midPoint: midPoint,
-            relativeOffset: camOffset
+            relativeOffset: camOffset,
+            customCameraOverride: !!(customParams?.targetPos || customParams?.lookAtPos)
         };
         playCinematicLine(0);
     };
@@ -335,10 +396,36 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         stateRef.current.isInteractionOpen = false;
         stateRef.current.familyFound = true;
         cinematicRef.current.active = false;
-        window.dispatchEvent(new CustomEvent('family-follow'));
-        const lastLine = currentScript[currentScript.length - 1];
-        if (lastLine && lastLine.trigger === 'boss_start') {
-            setTimeout(() => window.dispatchEvent(new CustomEvent('boss-spawn-trigger')), 1000);
+
+        // Triggers are handled mid-script in CinematicSystem.update, 
+        // but we also check the last line here just in case or for cleanup.
+        const finishedScript = cinematicRef.current.script;
+        const lastLine = finishedScript[finishedScript.length - 1];
+
+        if (lastLine && lastLine.trigger) {
+            const triggers = lastLine.trigger.split(',');
+            triggers.forEach(t => {
+                const trimmed = t.trim();
+                if (trimmed === 'boss_start') {
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('boss-spawn-trigger')), 1000);
+                } else if (trimmed === 'family_follow' || trimmed === 'family-follow') {
+                    window.dispatchEvent(new CustomEvent('family-follow'));
+                } else {
+                    window.dispatchEvent(new CustomEvent(trimmed));
+                }
+            });
+        }
+    };
+
+    const gainXp = (amount: number) => {
+        const state = stateRef.current;
+        state.currentXp += amount; state.score += amount;
+        while (state.currentXp >= state.nextLevelXp && state.level < 20) { // LEVEL_CAP is 20
+            state.currentXp -= state.nextLevelXp;
+            state.level++;
+            state.spFromLevelUp++;
+            state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
+            soundManager.playUiConfirm();
         }
     };
 
@@ -384,7 +471,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 case 'GIVE_REWARD':
                     if (payload) {
                         if (payload.scrap) stateRef.current.collectedScrap += payload.scrap;
-                        if (payload.xp) stateRef.current.score += payload.xp;
+                        if (payload.xp) gainXp(payload.xp);
                         if (payload.sp) stateRef.current.spFromCollectibles += payload.sp;
                         soundManager.playUiConfirm();
                     }
@@ -416,6 +503,9 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                     if (familyMember.mesh) {
                         startCinematic(familyMember.mesh);
                     }
+                    break;
+                case 'TRIGGER_FAMILY_FOLLOW':
+                    window.dispatchEvent(new Event('family-follow'));
                     break;
             }
         };
@@ -452,7 +542,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         engine.input.enable();
 
         // Init GameSession
-        const session = new GameSession(engine);
+        const session = new GameSessionLogic(engine);
         if (stateRef.current) {
             session.init(stateRef.current);
         }
@@ -495,182 +585,35 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         activeBubbles.current.forEach(b => { if (b.element.parentNode) b.element.parentNode.removeChild(b.element); });
         activeBubbles.current = [];
 
-        // --- ENVIRONMENT SETUP ---
-        const rng = seededRandom(propsRef.current.currentMap + 4242);
-        const env = currentSector.environment;
-        const textures = createProceduralTextures(); // Re-create or pass from props if needed
-
-        AssetPreloader.warmup(engine.renderer, env);
-
-        scene.background = new THREE.Color(env.bgColor);
-        scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
-
-        // Update Camera
-        camera.fov = env.fov;
-        camera.updateProjectionMatrix();
-        camera.position.set(0, 50, env.cameraOffsetZ);
-
-        ProjectileSystem.clear(scene);
-
-        const ambientLight = new THREE.AmbientLight(0x404050, env.ambientIntensity);
-        scene.add(ambientLight);
-
-        if (env.moon && env.moon.visible) {
-            const lightPos = env.moon.position || { x: 50, y: 100, z: 50 };
-            const moonLight = new THREE.DirectionalLight(env.moon.color, env.moon.intensity);
-            moonLight.position.set(lightPos.x, lightPos.y, lightPos.z);
-            moonLight.castShadow = true;
-            moonLight.shadow.camera.left = -100;
-            moonLight.shadow.camera.right = 100;
-            moonLight.shadow.camera.top = 100;
-            moonLight.shadow.camera.bottom = -100;
-            moonLight.shadow.mapSize.width = 2048;
-            moonLight.shadow.mapSize.height = 2048;
-            scene.add(moonLight);
-        }
-
-        if (env.sunPosition) {
-            const sun = new THREE.DirectionalLight(0xffffee, 0.5);
-            sun.position.set(env.sunPosition.x, env.sunPosition.y, env.sunPosition.z);
-            sun.castShadow = true;
-            scene.add(sun);
-        }
-
-        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1.0, metalness: 0.0, color: env.groundColor });
-        const tileSize = 500;
-        const tileGeo = new THREE.PlaneGeometry(tileSize, tileSize);
-
-        for (let gx = -2; gx <= 2; gx++) {
-            for (let gz = -2; gz <= 2; gz++) {
-                const tile = new THREE.Mesh(tileGeo, groundMat);
-                tile.rotation.x = -Math.PI / 2;
-                tile.position.set(gx * tileSize, 0, gz * tileSize);
-                tile.receiveShadow = true;
-                scene.add(tile);
-            }
-        }
-
+        // --- PRE-INIT VARIABLES (Moved out of setTimeout for scope access) ---
+        const weatherParticles: any[] = [];
+        const flickeringLights: any[] = [];
+        const burningBarrels: any[] = [];
         stateRef.current.chests = [];
         const chests = stateRef.current.chests;
-        const flickeringLights: any[] = []; const burningBarrels: any[] = [];
         const mapItems: MapItem[] = [];
 
-        // PASS TEXTURES TO CONTEXT
-        const ctx = {
-            scene,
-            obstacles: stateRef.current.obstacles,
-            chests,
-            flickeringLights,
-            burningBarrels,
-            rng,
-            triggers: stateRef.current.triggers,
-            mapItems,
-            debugMode: propsRef.current.debugMode,
-            textures: textures // Passed from GameCanvas useMemo
-        };
-        currentSector.generate(ctx);
-
-        // Artificially delay loading screen removal to let the player read tips / see the aesthetic
-        // and to ensure no frame-drop on immediate start.
-        setTimeout(() => {
-            if (isMounted.current) {
-                if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
-                if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
-            }
-        }, 2000);
-
-        const weatherParticles: any[] = [];
-
-        if (env.weather !== 'none') {
-            const count = 100; // Force low count for performance (was env.weatherDensity || 4000)
-            const geo = GEOMETRY.snowParticle;
-
-            let color = 0xffffff;
-            let opacity = 0.8;
-            let velBase = new THREE.Vector3(0, -0.2, 0);
-
-            if (env.weather === 'rain') {
-                color = 0x8899ff; opacity = 0.6; velBase.set(0, -0.8, 0);
-            } else if (env.weather === 'ash') {
-                color = 0x555555; opacity = 0.8; velBase.set(0, -0.05, 0);
-            } else if (env.weather === 'embers') {
-                color = 0xff5500; opacity = 1.0; velBase.set(0, 0.05, 0);
-            }
-
-            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
-
-            for (let i = 0; i < count; i++) {
-                const s = new THREE.Mesh(geo, mat);
-                s.position.set((Math.random() - 0.5) * 300, Math.random() * 40, (Math.random() - 0.5) * 300);
-                if (env.weather === 'rain') s.scale.set(0.5, 5, 1);
-                scene.add(s);
-
-                const v = velBase.clone();
-                v.x += (Math.random() - 0.5) * 0.1;
-                if (env.weather === 'embers') v.y += Math.random() * 0.05;
-                else v.y -= Math.random() * 0.1;
-                v.z += (Math.random() - 0.5) * 0.1;
-
-                weatherParticles.push({ mesh: s, vel: v, resetY: 40 });
-            }
-        } else {
-            for (let i = 0; i < 30; i++) {
-                const m = new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog);
-                m.position.set((Math.random() - 0.5) * 200, 2, (Math.random() - 0.5) * 200);
-                m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * Math.PI;
-                scene.add(m); weatherParticles.push({ mesh: m, type: 'ground_fog', speed: (Math.random() - 0.5) * 0.5 });
-            }
-        }
-
+        // Constants/Setup (Moved out of setTimeout)
         const fSpawn = currentSector.familySpawn;
 
-        if (!propsRef.current.familyAlreadyRescued) {
-            const theme = MAP_THEMES[propsRef.current.currentMap];
-            const fmData = FAMILY_MEMBERS[theme ? theme.familyMemberId : 0];
-            fmMesh = ModelFactory.createFamilyMember(fmData);
-            fmMesh.position.set(fSpawn.x, 0, fSpawn.z);
-            if (fSpawn.y) fmMesh.position.y = fSpawn.y;
-            const nameParams = createTextSprite(fmData.name); nameParams.scale.set(12, 3, 1); nameParams.position.y = 3.5; fmMesh.add(nameParams);
+        // Helper functions needed for Systems / generate (Moved out of setTimeout)
+        const spawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
+            const origin = (playerGroupRef.current && playerGroupRef.current.children.length > 0)
+                ? playerGroupRef.current.position
+                : new THREE.Vector3(currentSector.playerSpawn.x, currentSector.playerSpawn.y || 0, currentSector.playerSpawn.z);
 
-            const markerGroup = new THREE.Group();
-            markerGroup.position.y = 0.2;
-
-            const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
-            const fillGeo = new THREE.CircleGeometry(5.0, 32);
-            const fillMat = new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
-            const fill = new THREE.Mesh(fillGeo, fillMat);
-            fill.rotation.x = -Math.PI / 2;
-            markerGroup.add(fill);
-
-            const borderGeo = new THREE.RingGeometry(4.8, 5.0, 32);
-            const borderMat = new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
-            const border = new THREE.Mesh(borderGeo, borderMat);
-            border.rotation.x = -Math.PI / 2;
-            markerGroup.add(border);
-
-            fmMesh.add(markerGroup);
-            familyMember.ring = markerGroup;
-
-            const fLight = new THREE.PointLight(fmData.color, 2, 8);
-            fLight.position.y = 2;
-            fmMesh.add(fLight);
-            flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
-
-            scene.add(fmMesh); familyMember.mesh = fmMesh; familyMember.name = fmData.name; familyMember.scale = fmData.scale;
-        } else familyMember.found = true;
-
-        // Helper functions for Systems
-        const gainXp = (amount: number) => {
-            const state = session.state;
-            state.currentXp += amount; state.score += amount;
-            while (state.currentXp >= state.nextLevelXp && state.level < LEVEL_CAP) {
-                state.currentXp -= state.nextLevelXp;
-                state.level++;
-                state.spFromLevelUp++;
-                state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
-                soundManager.playUiConfirm();
+            const newEnemy = EnemyManager.spawn(scene, origin, forcedType, forcedPos, stateRef.current.bossSpawned, stateRef.current.enemies.length);
+            if (newEnemy) {
+                stateRef.current.enemies.push(newEnemy);
+                const type = newEnemy.type; // e.g. 'WALKER'
+                if (!stateRef.current.seenEnemies.includes(type)) {
+                    stateRef.current.seenEnemies.push(type);
+                }
             }
         };
+
+        // Helper functions moved to component scope
+
 
         const concludeSector = (isExtraction: boolean) => {
             const state = session.state;
@@ -682,54 +625,224 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 propsRef.current.onSectorEnded({
                     timeElapsed: now - state.startTime, shotsFired: state.shotsFired, shotsHit: state.shotsHit, throwablesThrown: state.throwablesThrown,
                     killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: isExtraction ? 500 : 0,
-                    familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
+                    familyFound: state.familyFound || stateRef.current.familyFound, familyExtracted: isExtraction && (state.familyFound || stateRef.current.familyFound), damageDealt: state.damageDealt, damageTaken: state.damageTaken,
                     bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
                     chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened, distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, isExtraction,
-                    seenEnemies: state.seenEnemies, seenBosses: state.seenBosses, visitedPOIs: state.visitedPOIs
+                    seenEnemies: state.seenEnemies, seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []), visitedPOIs: state.visitedPOIs
                 });
             }
         };
 
+        // --- ENVIRONMENT SETUP (Delayed) ---
+        setTimeout(() => {
+            if (!isMounted.current) return;
 
-        // ...
+            const rng = seededRandom(propsRef.current.currentMap + 4242);
+            const env = currentSector.environment;
 
+            AssetPreloader.warmup(engine.renderer, env);
 
+            scene.background = new THREE.Color(env.bgColor);
+            scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
 
-        // ...
+            // Update Camera
+            camera.fov = env.fov;
+            camera.updateProjectionMatrix();
+            camera.position.set(0, 50, env.cameraOffsetZ);
 
-        const playerGroup = ModelFactory.createPlayer();
-        session.addSystem(new PlayerMovementSystem(playerGroup));
-        session.addSystem(new PlayerCombatSystem(playerGroup));
-        session.addSystem(new WorldLootSystem(playerGroup));
-        session.addSystem(new PlayerInteractionSystem(playerGroup, concludeSector));
-        session.addSystem(new EnemySystem(playerGroup, { spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound }));
-        session.addSystem(new SectorSystem(playerGroup, props.currentMap, { setNotification, t }));
-        playerGroupRef.current = playerGroup;
-        const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
-        playerMeshRef.current = bodyMesh as THREE.Mesh;
-        const pSpawn = currentSector.playerSpawn;
-        playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
-        prevPosRef.current = playerGroup.position.clone();
+            ProjectileSystem.clear(scene);
 
-        // --- FLASHLIGHT SETUP ---
-        const fl = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1); // Wider angle (PI/3), softer edge
-        fl.position.set(0, 3.5, 0.5); // Lower and slightly further back
-        fl.target.position.set(0, 0, 10); // Aim forward
-        fl.castShadow = true;
-        fl.shadow.camera.near = 1;
-        fl.shadow.camera.far = 40;
-        fl.shadow.bias = -0.0001; // Reduce shadow acne
-        playerGroup.add(fl);
-        playerGroup.add(fl.target);
-        flashlightRef.current = fl;
-        const laserGeo = new THREE.PlaneGeometry(0.1, 20); laserGeo.translate(0, 10, 0); laserGeo.rotateX(Math.PI / 2);
-        const laserMat = new THREE.MeshBasicMaterial({ map: laserTex, color: 0x00ffff, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-        const laserMesh = new THREE.Mesh(laserGeo, laserMat); laserMesh.position.y = 1.3; playerGroup.add(laserMesh);
+            const ambientLight = new THREE.AmbientLight(0x404050, env.ambientIntensity);
+            scene.add(ambientLight);
 
+            if (env.moon && env.moon.visible) {
+                const lightPos = env.moon.position || { x: 50, y: 100, z: 50 };
+                const moonLight = new THREE.DirectionalLight(env.moon.color, env.moon.intensity);
+                moonLight.position.set(lightPos.x, lightPos.y, lightPos.z);
+                moonLight.castShadow = true;
+                moonLight.shadow.camera.left = -100;
+                moonLight.shadow.camera.right = 100;
+                moonLight.shadow.camera.top = 100;
+                moonLight.shadow.camera.bottom = -100;
+                moonLight.shadow.mapSize.width = 2048;
+                moonLight.shadow.mapSize.height = 2048;
+                scene.add(moonLight);
+            }
 
-        scene.add(playerGroup);
+            if (env.sunPosition) {
+                const sun = new THREE.DirectionalLight(0xffffee, 0.5);
+                sun.position.set(env.sunPosition.x, env.sunPosition.y, env.sunPosition.z);
+                sun.castShadow = true;
+                scene.add(sun);
+            }
 
-        if (propsRef.current.startAtCheckpoint && fmMesh) { playerGroup.position.copy(fmMesh.position).add(new THREE.Vector3(0, 0, 5)); if (fSpawn && fSpawn.y) playerGroup.position.y = 0; prevPosRef.current = playerGroup.position.clone(); }
+            const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1.0, metalness: 0.0, color: env.groundColor });
+            const tileSize = 500;
+            const tileGeo = new THREE.PlaneGeometry(tileSize, tileSize);
+
+            for (let gx = -2; gx <= 2; gx++) {
+                for (let gz = -2; gz <= 2; gz++) {
+                    const tile = new THREE.Mesh(tileGeo, groundMat);
+                    tile.rotation.x = -Math.PI / 2;
+                    tile.position.set(gx * tileSize, 0, gz * tileSize);
+                    tile.receiveShadow = true;
+                    scene.add(tile);
+                }
+            }
+
+            // Generate Sector Content
+            const ctx = {
+                scene,
+                obstacles: stateRef.current.obstacles,
+                chests,
+                flickeringLights,
+                burningBarrels,
+                rng,
+                triggers: stateRef.current.triggers,
+                mapItems,
+                debugMode: propsRef.current.debugMode,
+                textures: textures,
+                spawnZombie
+            };
+            currentSector.generate(ctx);
+
+            // --- ASSET-DRIVEN EFFECT DISCOVERY ---
+            // Scan scene for objects with `userData.effects`
+            const activeEffects: any[] = [];
+            scene.traverse((child) => {
+                if (child.userData && child.userData.effects) {
+                    const effects = child.userData.effects as any[];
+
+                    // Initialize Lights immediately
+                    effects.forEach(eff => {
+                        if (eff.type === 'light') {
+                            const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
+                            if (eff.offset) light.position.copy(eff.offset);
+                            child.add(light);
+                            if (eff.flicker) {
+                                flickeringLights.push({ light, baseIntensity: eff.intensity });
+                            }
+                        }
+                    });
+
+                    // Store for periodic updates (Particles)
+                    activeEffects.push(child);
+                }
+            });
+            stateRef.current.activeEffects = activeEffects;
+
+            // Weather Particles
+            if (env.weather !== 'none') {
+                const count = 100;
+                const geo = GEOMETRY.snowParticle;
+                let color = 0xffffff;
+                let opacity = 0.8;
+                let velBase = new THREE.Vector3(0, -0.2, 0);
+
+                if (env.weather === 'rain') { color = 0x8899ff; opacity = 0.6; velBase.set(0, -0.8, 0); }
+                else if (env.weather === 'ash') { color = 0x555555; opacity = 0.8; velBase.set(0, -0.05, 0); }
+                else if (env.weather === 'embers') { color = 0xff5500; opacity = 1.0; velBase.set(0, 0.05, 0); }
+
+                const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+                for (let i = 0; i < count; i++) {
+                    const s = new THREE.Mesh(geo, mat);
+                    s.position.set((Math.random() - 0.5) * 300, Math.random() * 40, (Math.random() - 0.5) * 300);
+                    if (env.weather === 'rain') s.scale.set(0.5, 5, 1);
+                    scene.add(s);
+                    const v = velBase.clone();
+                    v.x += (Math.random() - 0.5) * 0.1;
+                    if (env.weather === 'embers') v.y += Math.random() * 0.05;
+                    else v.y -= Math.random() * 0.1;
+                    v.z += (Math.random() - 0.5) * 0.1;
+                    weatherParticles.push({ mesh: s, vel: v, resetY: 40 });
+                }
+            } else {
+                for (let i = 0; i < 30; i++) {
+                    const m = new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog);
+                    m.position.set((Math.random() - 0.5) * 200, 2, (Math.random() - 0.5) * 200);
+                    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * Math.PI;
+                    scene.add(m); weatherParticles.push({ mesh: m, type: 'ground_fog', speed: (Math.random() - 0.5) * 0.5 });
+                }
+            }
+
+            // Family Member
+            if (!propsRef.current.familyAlreadyRescued) {
+                const theme = MAP_THEMES[propsRef.current.currentMap];
+                const fmData = FAMILY_MEMBERS[theme ? theme.familyMemberId : 0];
+                fmMesh = ModelFactory.createFamilyMember(fmData);
+                fmMesh.position.set(fSpawn.x, 0, fSpawn.z);
+                if (fSpawn.y) fmMesh.position.y = fSpawn.y;
+                const nameParams = createTextSprite(fmData.name); nameParams.scale.set(12, 3, 1); nameParams.position.y = 3.5; fmMesh.add(nameParams);
+
+                const markerGroup = new THREE.Group();
+                markerGroup.position.y = 0.2;
+                const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
+                const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+                fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
+                const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+                border.rotation.x = -Math.PI / 2; markerGroup.add(border);
+                fmMesh.add(markerGroup); familyMember.ring = markerGroup;
+
+                const fLight = new THREE.PointLight(fmData.color, 2, 8); fLight.position.y = 2; fmMesh.add(fLight);
+                flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
+                scene.add(fmMesh); familyMember.mesh = fmMesh; familyMember.name = fmData.name; familyMember.scale = fmData.scale;
+                familyMemberRef.current = familyMember;
+            } else familyMember.found = true;
+
+            // Player Group
+            const playerGroup = ModelFactory.createPlayer();
+            session.addSystem(new PlayerMovementSystem(playerGroup));
+            session.addSystem(new PlayerCombatSystem(playerGroup));
+            session.addSystem(new WorldLootSystem(playerGroup));
+            session.addSystem(new PlayerInteractionSystem(playerGroup, concludeSector));
+            session.addSystem(new EnemySystem(playerGroup, {
+                spawnBubble,
+                gainXp,
+                t,
+                onClueFound: propsRef.current.onClueFound,
+                onBossKilled: (id: number) => {
+                    if (!stateRef.current.bossesDefeated.includes(id)) {
+                        stateRef.current.bossesDefeated.push(id);
+                    }
+                }
+            }));
+            session.addSystem(new SectorSystem(playerGroup, props.currentMap, { setNotification, t, spawnPart, startCinematic }));
+            playerGroupRef.current = playerGroup;
+
+            const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
+            playerMeshRef.current = bodyMesh as THREE.Mesh;
+            const pSpawn = currentSector.playerSpawn;
+            playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
+            if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot; // Set initial rotation
+
+            // Set initial aim direction if specified in sector
+            if (currentSector.initialAim) {
+                engine.input.state.aimVector = new THREE.Vector2(currentSector.initialAim.x, currentSector.initialAim.y);
+            }
+
+            prevPosRef.current = playerGroup.position.clone();
+
+            // Flashlight
+            const fl = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
+            fl.position.set(0, 3.5, 0.5); fl.target.position.set(0, 0, 10); fl.castShadow = true;
+            fl.shadow.camera.near = 1; fl.shadow.camera.far = 40; fl.shadow.bias = -0.0001;
+            playerGroup.add(fl); playerGroup.add(fl.target);
+            flashlightRef.current = fl;
+
+            scene.add(playerGroup);
+
+            if (propsRef.current.startAtCheckpoint && fmMesh) {
+                playerGroupRef.current.position.copy(fmMesh.position).add(new THREE.Vector3(0, 0, 5));
+                if (fSpawn && fSpawn.y) playerGroupRef.current.position.y = 0;
+                prevPosRef.current = playerGroupRef.current.position.clone();
+            }
+
+            // Call Loaded Callbacks
+            if (isMounted.current) setIsSectorLoading(false);
+            if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
+            if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
+
+        }, 50);
 
         const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
             FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
@@ -741,29 +854,16 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
 
 
-        const spawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
-            const newEnemy = EnemyManager.spawn(scene, playerGroup.position, forcedType, forcedPos, stateRef.current.bossSpawned, stateRef.current.enemies.length);
-            if (newEnemy) {
-                stateRef.current.enemies.push(newEnemy);
-                const type = newEnemy.type; // e.g. 'WALKER'
-                if (!stateRef.current.seenEnemies.includes(type)) {
-                    stateRef.current.seenEnemies.push(type);
-                }
-            }
-        };
 
-        if (propsRef.current.currentMap === 0) {
-            for (let i = 0; i < 5; i++) {
-                const jitterX = (Math.random() - 0.5) * 2; const jitterZ = (Math.random() - 0.5) * 2;
-                spawnZombie('RUNNER', new THREE.Vector3(-18 + jitterX, 0, -5 + jitterZ));
-            }
-        } else for (let i = 0; i < 5; i++) spawnZombie('WALKER');
+
+
 
         const spawnBoss = () => {
             if (stateRef.current.bossSpawned) return;
             const bossData = BOSSES[propsRef.current.currentMap] || BOSSES[0];
             const bSpawn = currentSector.bossSpawn;
             const newBoss = EnemyManager.spawnBoss(scene, { x: bSpawn.x, z: bSpawn.z }, bossData);
+            newBoss.bossId = bossData.id;
             stateRef.current.enemies.push(newBoss);
             stateRef.current.bossSpawned = true;
             if (!stateRef.current.seenBosses.includes(bossData.id)) {
@@ -787,8 +887,32 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         };
 
         window.addEventListener('boss-spawn-trigger', spawnBoss);
-        const onFamilyFollow = () => { familyMember.following = true; stateRef.current.isInteractionOpen = false; stateRef.current.familyFound = true; if (!stateRef.current.bossSpawned) spawnBoss(); };
+        const onFamilyFollow = () => {
+            familyMember.following = true;
+            stateRef.current.isInteractionOpen = false;
+            stateRef.current.familyFound = true;
+        };
         window.addEventListener('family-follow', onFamilyFollow);
+        window.addEventListener('family_follow', onFamilyFollow);
+
+        (window as any).setCameraOverride = (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => {
+            cameraOverrideRef.current = params;
+        };
+
+        window.addEventListener('keep_camera', () => {
+            if (cinematicRef.current.active || cinematicActive) {
+                cameraOverrideRef.current = {
+                    active: true,
+                    targetPos: (cinematicRef.current.cameraBasePos || new THREE.Vector3()).clone(),
+                    lookAtPos: (cinematicRef.current.cameraLookAt || new THREE.Vector3()).clone(),
+                    endTime: performance.now() + 30000 // Long timeout, cleared by next cinematic or interaction
+                };
+            }
+        });
+
+        (window as any).clearCameraOverride = () => {
+            cameraOverrideRef.current = null;
+        };
 
         let lastTime = performance.now();
         let frame = 0;
@@ -796,16 +920,14 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
         engine.onUpdate = (dt: number) => {
             if (!isMounted.current || propsRef.current.isPaused) return;
 
+            // Wait for Init
+            const playerGroup = playerGroupRef.current;
+            if (!playerGroup || playerGroup.children.length === 0) return;
+
             const state = stateRef.current;
             const now = performance.now();
+            lastDrawCallsRef.current = engine.renderer.info.render.calls;
             const input = engine.input.state;
-
-            if (frame % 60 === 0 && propsRef.current.debugMode) {
-                // Keep minimal debug info if debug mode is on, or just remove it.
-                // Removing for now to clean up console.
-            }
-
-
 
             const delta = dt;
 
@@ -824,19 +946,27 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                     state.lastFpsUpdate = now;
                 }
 
+                const hudMesh = familyMemberRef.current?.mesh || null;
+
                 if (!bossIntroActive) {
                     const hudData = HudSystem.getHudData(
                         state,
-                        playerGroup.position,
-                        fmMesh || null,
-                        engine.input.state,
+                        playerGroupRef.current.position,
+                        hudMesh,
+                        input,
                         now,
                         propsRef.current,
-                        distanceTraveledRef.current
+                        distanceTraveledRef.current,
+                        camera
                     );
+                    hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                     propsRef.current.onUpdateHUD({ ...hudData, fps, debugMode: propsRef.current.debugMode });
                 } else {
-                    propsRef.current.onUpdateHUD({ ...HudSystem.getHudData(state, playerGroup.position, fmMesh || null, engine.input.state, now, propsRef.current, distanceTraveledRef.current), fps });
+                    if (propsRef.current.onUpdateHUD && now % 5 === 0) { // Throttled HUD update
+                        const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, input, now, propsRef.current, distanceTraveledRef.current, camera);
+                        hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
+                        propsRef.current.onUpdateHUD({ ...hudData, fps: Math.round(1000 / delta) });
+                    }
                 }
             }
 
@@ -855,14 +985,16 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                     PlayerAnimation.update(playerMeshRef.current, { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 }, now, delta);
                 }
                 engine.renderer.render(scene, camera);
+                lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
 
             if (state.isDead) {
-                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMember.mesh || null, input: engine.input.state }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
-                FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroup.position, { spawnPart, spawnDecal });
+                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMember.mesh || null, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
+                FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
                 engine.renderer.render(scene, camera);
+                lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
@@ -887,6 +1019,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             if (cinematicRef.current.active) {
                 CinematicSystem.update(cinematicRef.current, camera, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine });
                 engine.renderer.render(scene, camera);
+                lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
@@ -898,10 +1031,10 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
             if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
                 const tgt = propsRef.current.teleportTarget;
-                playerGroup.position.set(tgt.x, 0, tgt.z);
+                playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
                 spawnPart(tgt.x, 1, tgt.z, 'smoke', 20); soundManager.playTone(800, 'sine', 0.2, 0.1);
-                lastTeleportRef.current = tgt.timestamp; camera.position.set(tgt.x, 50, tgt.z + env.cameraOffsetZ); camera.lookAt(playerGroup.position);
-                prevPosRef.current = playerGroup.position.clone();
+                lastTeleportRef.current = tgt.timestamp; camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ); camera.lookAt(playerGroupRef.current.position);
+                prevPosRef.current = playerGroupRef.current.position.clone();
             }
 
             // Sync input state
@@ -914,19 +1047,19 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
             const aim = currentInput.aimVector;
             if (aim.lengthSq() > 1 && !propsRef.current.disableInput && !cameraOverrideRef.current?.active) {
-                const targetX = playerGroup.position.x + aim.x; const targetZ = playerGroup.position.z + aim.y;
-                playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
+                const targetX = playerGroupRef.current.position.x + aim.x; const targetZ = playerGroupRef.current.position.z + aim.y;
+                playerGroupRef.current.lookAt(targetX, playerGroupRef.current.position.y, targetZ);
             }
 
-            if (prevPosRef.current) { const d = playerGroup.position.distanceTo(prevPosRef.current); distanceTraveledRef.current += d; }
-            prevPosRef.current = playerGroup.position.clone();
+            if (prevPosRef.current) { const d = playerGroupRef.current.position.distanceTo(prevPosRef.current); distanceTraveledRef.current += d; }
+            prevPosRef.current = playerGroupRef.current.position.clone();
 
             if (playerMeshRef.current) {
                 PlayerAnimation.update(playerMeshRef.current, { isMoving, isRushing: state.isRushing, isRolling: state.isRolling, rollStartTime: state.rollStartTime, staminaRatio: state.stamina / state.maxStamina, isSpeaking: state.speakBounce > 0 || now < state.speakingUntil, isThinking: now < state.thinkingUntil, isIdleLong: (now - state.lastActionTime > 20000), seed: 0 }, now, delta);
             }
 
             if (familyMember.mesh) {
-                FamilySystem.update(familyMember, playerGroup, state, cinematicRef.current.active, now, delta, { setFoundMemberName, startCinematic });
+                FamilySystem.update(familyMember, playerGroupRef.current, state, cinematicRef.current.active, now, delta, { setFoundMemberName, startCinematic });
             }
 
             if (!cinematicRef.current.active && !bossIntroRef.current.active) {
@@ -941,7 +1074,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                         camera.lookAt(override.lookAtPos);
                     }
                 } else {
-                    CameraSystem.update(camera, playerGroup.position, env.cameraOffsetZ, state, false, delta);
+                    CameraSystem.update(camera, playerGroupRef.current.position, currentSector.environment.cameraOffsetZ, state, false, delta);
                 }
             }
 
@@ -971,11 +1104,11 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
             // LootSystem update moved to WorldLootSystem within GameSession
 
             if (!bossIntroRef.current.active) {
-                EnemyManager.update(delta, now, playerGroup.position, state.enemies, state.obstacles,
+                EnemyManager.update(delta, now, playerGroupRef.current.position, state.enemies, state.obstacles,
                     (damage: number, type: string, enemyPos: THREE.Vector3) => {
                         if (now < state.invulnerableUntil) return;
                         state.damageTaken += damage; state.hp -= damage; soundManager.playDamageGrunt(); state.hurtShake = 1.0; state.lastDamageTime = now; if (type === 'Boss') state.bossDamageTaken += damage;
-                        spawnPart(playerGroup.position.x, 1.2, playerGroup.position.z, 'blood', 80);
+                        spawnPart(playerGroupRef.current.position.x, 1.2, playerGroupRef.current.position.z, 'blood', 80);
                         if (state.hp <= 0 && !state.isDead) {
                             state.isDead = true;
                             state.deathStartTime = now;
@@ -983,7 +1116,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                             const playerMoveDir = new THREE.Vector3(0, 0, 0);
                             if (input.w) playerMoveDir.z -= 1; if (input.s) playerMoveDir.z += 1; if (input.a) playerMoveDir.x -= 1; if (input.d) playerMoveDir.x += 1;
                             if (playerMoveDir.lengthSq() > 0) state.deathVel = playerMoveDir.normalize().multiplyScalar(15);
-                            else state.deathVel = new THREE.Vector3().subVectors(playerGroup.position, enemyPos).normalize().multiplyScalar(12);
+                            else state.deathVel = new THREE.Vector3().subVectors(playerGroupRef.current.position, enemyPos).normalize().multiplyScalar(12);
                             state.deathVel.y = 4;
                         }
                     },
@@ -992,7 +1125,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 );
             }
 
-            TriggerHandler.checkTriggers(playerGroup.position, state, now, {
+            TriggerHandler.checkTriggers(playerGroupRef.current.position, state, now, {
                 spawnBubble,
                 removeVisual: (id: string) => {
                     const visual = scene.getObjectByName(`clue_visual_${id}`) || scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual');
@@ -1017,14 +1150,48 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 const b = activeBubbles.current[i];
                 const age = now - b.startTime;
                 if (age > b.duration) { if (b.element.parentNode) b.element.parentNode.removeChild(b.element); activeBubbles.current.splice(i, 1); continue; }
-                const vec = playerGroup.position.clone(); vec.y += 2.5; vec.project(camera);
-                const x = (vec.x * 0.5 + 0.5) * window.innerWidth; const y = (-(vec.y * 0.5) + 0.5) * window.innerHeight;
-                b.element.style.left = `${x}px`; b.element.style.top = `${y}px`; b.element.style.transform = `translate(-50%, -100%) translateY(-${(age / b.duration) * 20}px)`; b.element.style.opacity = age < 200 ? `${age / 200}` : (age > b.duration - 500 ? `${(b.duration - age) / 500}` : '1');
+                // Fixed on Screen (HUD Style) - effectively "Static over head" since camera follows player
+                const x = window.innerWidth * 0.5;
+                const y = window.innerHeight * 0.45; // Positioned lower (42%) to be just above head height
+
+                b.element.style.left = `${x}px`;
+                b.element.style.top = `${y}px`;
+
+                // Slight float up effect for polish, but base position is fixed
+                b.element.style.transform = `translate(-50%, -100%) translateY(-${(age < 200 ? 0 : (age - 200) / (b.duration - 200)) * 10}px)`;
+                b.element.style.opacity = age < 200 ? `${age / 200}` : (age > b.duration - 500 ? `${(b.duration - age) / 500}` : '1');
+
             }
 
             EnvironmentSystem.update(flickeringLights);
 
-            // --- BURNING OBJECTS FX ---
+            // --- ACTIVE EFFECTS (ASSET DRIVEN) ---
+            if (state.activeEffects) {
+                state.activeEffects.forEach((obj: any) => {
+                    if (!obj.userData.effects) return;
+                    const effects = obj.userData.effects;
+
+                    effects.forEach((eff: any) => {
+                        if (eff.type === 'emitter') {
+                            if (!eff.lastEmit) eff.lastEmit = 0;
+                            if (now - eff.lastEmit > eff.interval) {
+                                eff.lastEmit = now;
+                                const offset = eff.offset ? eff.offset.clone().applyQuaternion(obj.quaternion) : new THREE.Vector3();
+                                const pos = obj.position.clone().add(offset);
+
+                                if (eff.spread) {
+                                    pos.x += (Math.random() - 0.5) * eff.spread;
+                                    pos.z += (Math.random() - 0.5) * eff.spread;
+                                }
+
+                                spawnPart(pos.x, pos.y, pos.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
+                            }
+                        }
+                    });
+                });
+            }
+
+            // --- BURNING OBJECTS FX (LEGACY) ---
             burningBarrels.forEach(b => {
                 if (frame % 3 === 0) {
                     const rx = (Math.random() - 0.5) * 3;
@@ -1036,28 +1203,10 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 }
             });
 
-            // EnemyManager.cleanupDeadEnemies moved to EnemySystem
-
             FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroup.position, { spawnPart, spawnDecal });
 
             // currentSector.onUpdate moved to SectorSystem
             // Verify Debug Update
-            const dbg = document.getElementById('debug-stats');
-            if (dbg) {
-                dbg.innerHTML = `
-                    FPS: ${Math.round(1 / delta)} <br/>
-                    Frame: ${frame} <br/>
-                    Pos: ${playerGroup.position.x.toFixed(1)}, ${playerGroup.position.z.toFixed(1)} <br/>
-                    Inp: W:${input.w} S:${input.s} Fire:${input.fire} <br/>
-                    Cam: ${camera.position.x.toFixed(1)}, ${camera.position.z.toFixed(1)} <br/>
-                    Enemies: ${state.enemies.length} <br/>
-                    HP: ${state.hp.toFixed(0)} <br/>
-                    Render: ${engine.renderer.info.render.calls} <br/>
-                    Objs: ${scene.children.length} <br/>
-                    Modes: Cin:${cinematicRef.current.active} Boss:${bossIntroRef.current.active} Cut:${cameraOverrideRef.current?.active}
-                `;
-            }
-
             // Render handled by Engine
         };
 
@@ -1081,18 +1230,17 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
     return (
         <div className="absolute inset-0 w-full h-full">
-            {/* DEBUG OVERLAY */}
-            <div className="absolute top-1/2 right-0 -translate-y-1/2 p-2 bg-black/50 text-green-400 font-mono text-xs z-[200] pointer-events-none text-right">
-                <div id="debug-stats">Initializing Debug...</div>
-            </div>
-
-
 
             <div
                 ref={containerRef}
-                className="absolute inset-0 cursor-none"
+                className={`absolute inset-0`}
                 onClick={() => {
-                    if (props.isRunning && containerRef.current) {
+                    if (cinematicActive && currentLine) {
+                        // Skip bubble
+                        playCinematicLine(cinematicRef.current.lineIndex + 1);
+                        return;
+                    }
+                    if (props.isRunning && containerRef.current && deathPhase === 'NONE') {
                         engineRef.current?.input.requestPointerLock(containerRef.current);
                     }
                 }}
@@ -1103,6 +1251,7 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 speakerName={currentLine ? currentLine.speaker : ""}
                 isVisible={cinematicActive && currentLine !== null}
                 domRef={bubbleRef}
+                tailPosition={cinematicRef.current.tailPosition}
             />
             {
                 cinematicActive && (
@@ -1119,35 +1268,12 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
             {
                 (deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE') && (
-                    <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none">
-
-                        <div className="absolute inset-0 bg-red-950/40 backdrop-blur-md opacity-0 animate-[fadeIn_1.5s_ease-out_0.3s_forwards]"></div>
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(50,0,0,0.9)_100%)] opacity-0 animate-[fadeIn_1.5s_ease-out_0.3s_forwards]"></div>
-
-                        <div className="mb-6 w-auto min-w-[500px] border-y-8 border-red-800 bg-gradient-to-b from-red-950/90 to-black/90 p-12 skew-x-[-5deg] text-center shadow-[0_0_50px_rgba(220,38,38,0.6)] animate-[slam_0.3s_cubic-bezier(0.25,0.46,0.45,0.94)_forwards] relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/blood-splatter.png')]"></div>
-
-                            <h3 className="text-2xl font-black text-red-500 uppercase tracking-[0.3em] mb-4 drop-shadow-md">
-                                {PLAYER_CHARACTER.name} {t('ui.killed_by')}
-                            </h3>
-                            <p className="text-6xl md:text-8xl font-black text-red-600 uppercase tracking-tighter drop-shadow-[0_5px_5px_rgba(0,0,0,1)] stroke-black leading-none" style={{ WebkitTextStroke: '2px black' }}>
-                                {getKillerName()}
-                            </p>
-                        </div>
-
-                        {deathPhase === 'CONTINUE' && (
-                            <div className="absolute bottom-[15%] animate-pulse">
-                                <span className="text-xl md:text-2xl font-bold text-gray-300 uppercase tracking-[0.2em] bg-black/80 px-8 py-2 border-y border-red-900/50">
-                                    {t('ui.continue')} <span className="animate-bounce inline-block">_</span>
-                                </span>
-                            </div>
-                        )}
-                    </div>
+                    <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} />
                 )
             }
 
             {
-                !bossIntroActive && (
+                !isSectorLoading && !bossIntroActive && !cinematicActive && !forceHideHUD && (
                     <GameUI
                         onCloseClue={() => { }} interactionType={interactionType} dialogueOpen={false} dialogueLine={null}
                         foundMemberName={foundMemberName} isLastLine={false} onNextDialogue={() => { }} onPrevDialogue={() => { }} onCloseDialogue={() => { }}
@@ -1165,6 +1291,18 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
                 0% { opacity: 0; }
                 100% { opacity: 1; }
             }
+            @keyframes narrative-fade {
+                0% { 
+                    opacity: 0; 
+                    transform: translateY(10px);
+                    filter: blur(8px);
+                }
+                100% { 
+                    opacity: 1; 
+                    transform: translateY(0);
+                    filter: blur(0);
+                }
+            }
         `}</style>
         </div >
     );
@@ -1172,4 +1310,4 @@ const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>((props, r
 
 
 
-export default GameCanvas;
+export default GameSession;

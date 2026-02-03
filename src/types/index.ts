@@ -161,7 +161,8 @@ export type TriggerActionType =
   | 'SHOW_TEXT'
   | 'CAMERA_PAN'
   | 'START_WAVE'
-  | 'START_CINEMATIC'; // New
+  | 'START_CINEMATIC'
+  | 'TRIGGER_FAMILY_FOLLOW'; // New
 
 export interface TriggerAction {
   type: TriggerActionType;
@@ -245,16 +246,19 @@ export interface GameCanvasProps {
   onPauseToggle: (paused: boolean) => void;
   triggerEndSector: boolean;
   isRunning: boolean;
+  isPaused: boolean;
   onDialogueStateChange: (active: boolean) => void;
   onBossIntroStateChange?: (active: boolean) => void;
   onMapInit: (items: MapItem[]) => void;
   bossPermanentlyDefeated: boolean;
+  familyAlreadyRescued?: boolean;
   onLevelLoaded: () => void;
   startAtCheckpoint: boolean;
   onCheckpointReached: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onClueFound: (clue: SectorTrigger) => void;
   isClueOpen: boolean;
+  onClueClose?: () => void;
   onFPSUpdate?: (fps: number) => void;
   initialGraphics?: any;
 }

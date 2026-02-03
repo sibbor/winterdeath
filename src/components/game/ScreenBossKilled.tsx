@@ -24,7 +24,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ mapIndex, onProceed
     );
 
     return (
-        <GameModalLayout title={titleNode} titleColorClass="text-red-600" maxWidthClass="max-w-4xl">
+        <GameModalLayout title={titleNode} titleColorClass="text-red-600" maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl">
             <div className="bg-black/50 p-8 border-2 border-red-900 mb-10 skew-x-[-5deg]">
                 <div className="skew-x-[5deg]">
                     <p className="text-slate-300 text-2xl leading-relaxed font-light italic mb-8">

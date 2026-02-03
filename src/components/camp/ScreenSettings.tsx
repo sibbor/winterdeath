@@ -13,13 +13,11 @@ interface GraphicsSettings {
 
 interface ScreenSettingsProps {
     onClose: () => void;
-    showFps: boolean;
-    onToggleFps: (val: boolean) => void;
     graphics: GraphicsSettings;
     onUpdateGraphics: (settings: GraphicsSettings) => void;
 }
 
-const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, showFps, onToggleFps, graphics, onUpdateGraphics }) => {
+const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics }) => {
     // Force update to re-render when language changes
     const [, setTick] = useState(0);
 
@@ -29,11 +27,6 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, showFps, onTog
         setLocale(next);
         soundManager.playUiClick();
         setTick(t => t + 1);
-    };
-
-    const toggleFps = () => {
-        onToggleFps(!showFps);
-        soundManager.playUiClick();
     };
 
     const setPixelRatio = (ratio: number) => {
@@ -130,17 +123,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, showFps, onTog
                     </div>
                 </div>
 
-                {/* FPS Toggle */}
-                <div onClick={toggleFps} className="w-full bg-gray-900/50 p-6 border border-gray-700 flex justify-between items-center transition-colors hover:border-white cursor-pointer group rounded-lg">
-                    <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.show_fps')}</h3>
-                        <p className="text-gray-400 text-sm font-mono tracking-tighter">Diagnostic Overlay</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${showFps ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>ON</button>
-                        <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!showFps ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>OFF</button>
-                    </div>
-                </div>
+                {/* FPS Toggle Removed */}
 
             </div>
         </CampModalLayout>

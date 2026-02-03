@@ -178,36 +178,7 @@ export const SectorBuilder = {
         }
     },
 
-    spawnCar: (ctx: SectorContext, x: number, z: number, yRot: number) => {
-        const car = new THREE.Mesh(GEOMETRY.prop_car, new THREE.MeshStandardMaterial({
-            color: Math.random() > 0.5 ? 0x222222 : 0x444455,
-            roughness: 0.6
-        }));
-        car.position.set(x, 0.9, z);
-        car.rotation.y = yRot;
-        car.castShadow = true;
-        ctx.scene.add(car);
-        ctx.obstacles.push({
-            mesh: car,
-            collider: { type: 'box', size: new THREE.Vector3(6, 5, 11) }
-        });
-
-        // Add Snow on top
-        const snow = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.2, 11.2), MATERIALS.snow);
-        snow.position.set(0, 1.0, 0);
-        car.add(snow);
-
-        ctx.mapItems.push({
-            id: `car_${Math.random()}`,
-            x, z,
-            type: 'OBSTACLE',
-            label: 'Wreck',
-            color: '#555555',
-            radius: 4
-        });
-    },
-
-    spawnVolvo: (ctx: SectorContext, x: number, z: number, rotY: number, stackIndex: number = 0) => {
+    spawnCar: (ctx: SectorContext, x: number, z: number, rotY: number, stackIndex: number = 0, colorOverride?: number) => {
         const group = new THREE.Group();
         const yOffset = stackIndex * 1.5;
         group.position.set(x, yOffset, z);
@@ -219,7 +190,7 @@ export const SectorBuilder = {
         }
 
         const colors = [0x7c2e2e, 0x3e4c5e, 0x8c8c7a, 0x4a5c4a, 0x8b5a2b, 0x5d4037];
-        const color = colors[Math.floor(Math.random() * colors.length)];
+        const color = colorOverride !== undefined ? colorOverride : colors[Math.floor(Math.random() * colors.length)];
 
         const matBody = new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0.1 });
         const matWindow = new THREE.MeshStandardMaterial({ color: 0x1a2b3c, roughness: 0.3, metalness: 0.5 });
@@ -280,8 +251,8 @@ export const SectorBuilder = {
         }
     },
 
-    spawnTree: (ctx: SectorContext, x: number, z: number, scaleMultiplier: number = 1.0) => {
-        const tree = ObjectGenerator.createTree(scaleMultiplier);
+    spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
+        const tree = ObjectGenerator.createTree(type, scaleMultiplier);
         tree.position.set(x, 0, z);
         ctx.scene.add(tree);
 
@@ -291,37 +262,6 @@ export const SectorBuilder = {
             mesh: tree,
             collider: { type: 'sphere', radius: colRadius }
         });
-    },
-
-    createRailTrack: (ctx: SectorContext, start: THREE.Vector3, end: THREE.Vector3) => {
-        const vec = new THREE.Vector3().subVectors(end, start);
-        const len = vec.length();
-        const center = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        const angle = Math.atan2(vec.x, vec.z);
-
-        const group = new THREE.Group();
-        group.position.copy(center);
-        group.rotation.y = angle;
-
-        const railGeo = new THREE.BoxGeometry(0.2, 0.2, len);
-        const railL = new THREE.Mesh(railGeo, MATERIALS.blackMetal);
-        railL.position.set(-1.5, 0.2, 0);
-        group.add(railL);
-
-        const railR = new THREE.Mesh(railGeo, MATERIALS.blackMetal);
-        railR.position.set(1.5, 0.2, 0);
-        group.add(railR);
-
-        const sleeperCount = Math.floor(len / 3);
-        const sleeperGeo = new THREE.BoxGeometry(5, 0.2, 0.6);
-        for (let i = 0; i <= sleeperCount; i++) {
-            const z = -len / 2 + i * (len / sleeperCount);
-            const sleeper = new THREE.Mesh(sleeperGeo, MATERIALS.brownBrick);
-            sleeper.position.set(0, 0.1, z);
-            group.add(sleeper);
-        }
-
-        ctx.scene.add(group);
     },
 
     fillArea: (
@@ -409,7 +349,6 @@ export const SectorBuilder = {
         for (let i = 0; i < 50; i++) {
             const x = (Math.random() - 0.5) * 200;
             const z = (Math.random() - 0.5) * 200;
-            SectorBuilder.spawnTree(ctx, x, z, 0.8 + Math.random());
         }
     }
 };

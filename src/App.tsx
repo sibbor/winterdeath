@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GameState, GameScreen, PlayerStats, SectorStats, SectorTrigger, MapItem, WeaponType } from './types';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './utils/gameLogic';
-import GameCanvas, { GameCanvasHandle } from './components/GameCanvas';
+import GameSession, { GameSessionHandle } from './components/GameSession';
 import Camp from './components/camp/Camp';
 import GameHUD from './components/ui/hud/GameHUD';
 import ScreenPause from './components/game/ScreenPause';
@@ -15,7 +15,7 @@ import ScreenClue from './components/game/ScreenClue';
 import Prologue from './components/game/Prologue';
 import ScreenLoading from './components/game/ScreenLoading';
 import ScreenSettings from './components/camp/ScreenSettings';
-import FPSDisplay from './components/ui/core/FPSDisplay';
+import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/sound';
@@ -45,7 +45,7 @@ const App: React.FC = () => {
 
     // Interaction Locks
     const [isSaving, setIsSaving] = useState(false);
-    const gameCanvasRef = React.useRef<GameCanvasHandle>(null);
+    const gameCanvasRef = React.useRef<GameSessionHandle>(null);
 
 
     useEffect(() => {
@@ -210,9 +210,12 @@ const App: React.FC = () => {
     };
 
     const handlePrologueComplete = () => {
+        // Transition straight to SECTOR (skipping CAMP as requested)
+        // GameSession is already mounted in background, so switching screen makes it visible instantly
         setGameState(prev => ({
             ...prev,
-            screen: GameScreen.CAMP,
+            screen: GameScreen.SECTOR, // Was CAMP
+            currentMap: 0, // Ensure we are on Sector 1
             stats: {
                 ...prev.stats,
                 prologueSeen: true
@@ -228,11 +231,17 @@ const App: React.FC = () => {
 
     const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeClue && !showTeleportMenu && !isDialogueOpen && !deathDetails;
 
+    const handleClueClose = () => {
+        gameCanvasRef.current?.requestPointerLock();
+        setActiveClue(null);
+        setIsPaused(false);
+    };
+
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
             <CustomCursor hidden={cursorHidden} />
 
-            {gameState.showFps && <FPSDisplay fps={fps} />}
+            {gameState.debugMode && <DebugDisplay fps={fps} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
 
             {gameState.screen === GameScreen.CAMP && (
                 <Camp
@@ -243,33 +252,38 @@ const App: React.FC = () => {
                     familyMembersFound={gameState.familyMembersFound}
                     bossesDefeated={gameState.bossesDefeated}
                     debugMode={gameState.debugMode}
-                    showFps={gameState.showFps}
                     onSaveStats={handleSaveStats}
                     onSaveLoadout={handleSaveLoadout}
                     onSelectMap={handleSelectMap}
                     onStartSector={handleStartSector}
                     onToggleDebug={(val) => setGameState(prev => ({ ...prev, debugMode: val }))}
-                    onToggleFps={(val) => setGameState(prev => ({ ...prev, showFps: val }))}
                     isMapLoaded={true}
+                    onUpdateHUD={handleUpdateHUD}
                     onResetGame={handleResetGame}
-                    onFPSUpdate={handleFPSUpdate}
                     onSaveGraphics={handleSaveGraphics}
                     initialGraphics={gameState.graphics}
                     onCampLoaded={() => setIsLoadingCamp(false)}
                 />
             )}
 
-            {gameState.screen === GameScreen.SECTOR && (
+            {/* 
+                Use Concurrent Rendering:
+                Render GameSession if screen IS SECTOR OR PROLOGUE.
+                If Prologue, isRunning is FALSE (paused loop), but Mount effect still runs (Generation).
+                This preloads the world behind the Prologue screen.
+            */}
+            {(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE) && (
                 <>
-                    <GameCanvas
+                    <GameSession
                         ref={gameCanvasRef}
                         stats={gameState.stats}
                         loadout={gameState.loadout}
                         weaponLevels={gameState.weaponLevels}
-                        currentMap={gameState.currentMap}
+                        currentMap={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentMap} // Force Map 0 during pre-load
                         debugMode={gameState.debugMode}
-                        isRunning={!isPaused && !isMapOpen && !showTeleportMenu && !activeClue && !isLoadingLevel}
-                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeClue || isLoadingLevel}
+                        // Only run loop if actually playing Sector
+                        isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeClue && !isLoadingLevel}
+                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeClue || isLoadingLevel || gameState.screen === GameScreen.PROLOGUE}
                         disableInput={!!activeClue || isLoadingLevel}
 
                         onUpdateHUD={handleUpdateHUD}
@@ -289,6 +303,7 @@ const App: React.FC = () => {
                         teleportTarget={teleportTarget}
                         onClueFound={setActiveClue}
                         isClueOpen={!!activeClue}
+                        onClueClose={handleClueClose}
                         onDialogueStateChange={setIsDialogueOpen}
                         onBossIntroStateChange={setIsBossIntroActive}
                         onMapInit={setCurrentMapItems}
@@ -296,8 +311,8 @@ const App: React.FC = () => {
                         initialGraphics={gameState.graphics}
                     />
 
-                    {/* Hide HUD if hudState.isHidden (triggered during other states if needed, but no longer Boss Intro) */}
-                    {!isMapOpen && !showTeleportMenu && !activeClue && !hudState.isHidden && (
+                    {/* Hide HUD if hudState.isHidden or during dialogues/intro */}
+                    {!isMapOpen && !showTeleportMenu && !activeClue && !hudState.isHidden && !isDialogueOpen && !isBossIntroActive && (
                         <GameHUD
                             {...hudState}
                             loadout={gameState.loadout}
@@ -319,15 +334,13 @@ const App: React.FC = () => {
                     {isSettingsOpen && (
                         <ScreenSettings
                             onClose={() => setIsSettingsOpen(false)}
-                            showFps={gameState.showFps}
-                            onToggleFps={(val) => setGameState(prev => ({ ...prev, showFps: val }))}
                             graphics={gameState.graphics}
                             onUpdateGraphics={handleSaveGraphics}
                         />
                     )}
 
                     {activeClue && (
-                        <ScreenClue clue={activeClue} onClose={() => { gameCanvasRef.current?.requestPointerLock(); setActiveClue(null); setIsPaused(false); }} />
+                        <ScreenClue clue={activeClue} onClose={handleClueClose} />
                     )}
                 </>
             )}

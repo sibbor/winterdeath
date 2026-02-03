@@ -15,6 +15,7 @@ export const DeathSystem = {
             playerMesh: THREE.Mesh | null;
             fmMesh: THREE.Object3D | null;
             input: any;
+            camera: THREE.Camera;
         },
         setDeathPhase: (phase: any) => void,
         props: any,
@@ -35,7 +36,7 @@ export const DeathSystem = {
 
             // Force HUD Update (0 HP)
             props.onUpdateHUD({
-                ...HudSystem.getHudData(state, refs.playerGroup?.position || new THREE.Vector3(), refs.fmMesh, refs.input, now, props, distanceTraveled),
+                ...HudSystem.getHudData(state, refs.playerGroup?.position || new THREE.Vector3(), refs.fmMesh, refs.input, now, props, distanceTraveled, refs.camera),
                 hp: 0,
                 isDead: true
             });

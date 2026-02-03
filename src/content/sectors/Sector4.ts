@@ -3,29 +3,54 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { t } from '../../utils/i18n';
+
+const LOCATIONS = {
+    SPAWN: {
+        PLAYER: { x: 0, z: 0 },
+        FAMILY: { x: -40, z: -150, y: 0 },
+        BOSS: { x: -40, z: -150 }
+    },
+    CINEMATIC: {
+        OFFSET: { x: 15, y: 12, z: 15 },
+        LOOK_AT: { x: 0, y: 1.5, z: 0 }
+    },
+    COLLECTIBLES: {
+        C1: { x: 40, z: -80 },
+        C2: { x: -20, z: -60 }
+    },
+    TRIGGERS: {
+        NOISE: { x: 0, z: -50 },
+        SHED_SIGHT: { x: -20, z: -120 },
+        FOUND_NATHALIE: { x: -40, z: -150 }
+    },
+    POIS: {
+        SHED: { x: -40, z: -150 }
+    }
+} as const;
 
 export const Sector4: SectorDef = {
     id: 3,
     name: "maps.scrapyard_name",
     environment: {
         bgColor: 0x110500, // Rusty orange/red sky
-        fogDensity: 0.025,
+        fogDensity: 0.02,
         ambientIntensity: 0.6, // Increased for visibility
         groundColor: 0x2a1a11, // Oily dirt
-        fov: 50,
-        moon: { visible: true, color: 0xffaa00, intensity: 0.3 }, // Increased
+        fov: 40,
+        moon: { visible: true, color: 0xffaa00, intensity: 0.3 },
         cameraOffsetZ: 40,
-        weather: 'none'
+        weather: 'rain'
     },
     // --- SPAWN POINTS ---
-    playerSpawn: { x: 0, z: 0 },
-    familySpawn: { x: -40, z: -150, y: 0 }, // Nathalie hidden in a shed
-    bossSpawn: { x: -40, z: -150 }, // Boss at family location
+    playerSpawn: LOCATIONS.SPAWN.PLAYER,
+    familySpawn: LOCATIONS.SPAWN.FAMILY,
+    bossSpawn: LOCATIONS.SPAWN.BOSS,
 
     cinematic: {
-        offset: { x: 15, y: 12, z: 15 },
-        lookAtOffset: { x: 0, y: 1.5, z: 0 },
+        offset: LOCATIONS.CINEMATIC.OFFSET,
+        lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
         rotationSpeed: 0.05
     },
 
@@ -36,33 +61,33 @@ export const Sector4: SectorDef = {
         triggers.push(
             // Collectible
             {
-                id: 's4_collectible', position: { x: 40, z: -80 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible", description: "clues.s4_collectible_desc", triggered: false, icon: "💍",
+                id: 's4_collectible', position: LOCATIONS.COLLECTIBLES.C1, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible", description: "clues.s4_collectible_desc", triggered: false, icon: "💍",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
             // Nathalie's Police Badge
             {
-                id: 's4_collectible_2', position: { x: -20, z: -60 }, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible_2", description: "clues.s4_collectible_2_description", triggered: false, icon: "s4_collectible_2_icon",
+                id: 's4_collectible_2', position: LOCATIONS.COLLECTIBLES.C2, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible_2", description: "clues.s4_collectible_2_description", triggered: false, icon: "s4_collectible_2_icon",
                 actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
             },
             // Flavor
             {
-                id: 's4_creepy_noise', position: { x: 0, z: -50 }, radius: 20, type: 'THOUGHTS', content: "clues.s4_noise", triggered: false,
+                id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s4_noise", triggered: false,
                 actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
             {
-                id: 's4_shed_sight', position: { x: -20, z: -120 }, radius: 25, type: 'THOUGHTS', content: "clues.s4_shed", triggered: false,
+                id: 's4_shed_sight', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'THOUGHTS', content: "clues.s4_shed", triggered: false,
                 actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
 
             // --- FIND NATHALIE EVENT ---
             {
                 id: 'found_nathalie',
-                position: { x: -40, z: -150 }, // Shed
+                position: LOCATIONS.TRIGGERS.FOUND_NATHALIE, // Shed
                 radius: 8,
                 type: 'EVENT',
                 content: '',
                 triggered: false,
-                actions: [{ type: 'START_CINEMATIC' }]
+                actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
         );
 
@@ -110,18 +135,11 @@ export const Sector4: SectorDef = {
             SectorBuilder.spawnTree(ctx, x, z, 1.0 + Math.random() * 0.5);
         }
 
-        // Burning Barrels
-        for (let i = 0; i < 10; i++) {
-            const x = (Math.random() - 0.5) * 100;
-            const z = -Math.random() * 150;
-            const barrel = new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrel);
-            barrel.position.set(x, 1.25, z);
-            scene.add(barrel);
-
-            const fire = new THREE.PointLight(0xff6600, 5, 20);
-            fire.position.set(x, 4, z);
-            scene.add(fire);
-            burningBarrels.push({ position: new THREE.Vector3(x, 2, z) });
+        // Burning Fire Pits (Asset-Driven)
+        for (let i = 0; i < 3; i++) {
+            const x = (Math.random() - 0.5) * 40;
+            const z = -60 - (Math.random() * 80);
+            ObjectGenerator.createFire(ctx, x, z);
         }
 
         // The Dealership Building (Nathalie's location)
@@ -132,13 +150,18 @@ export const Sector4: SectorDef = {
         shedGroup.add(shed);
         scene.add(shedGroup);
         obstacles.push({ mesh: shedGroup, radius: 12 });
-        SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, t('maps.scrapyard_name')); // Using map name as key or appropriate label
+        //SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, t('maps.scrapyard_name')); // Using map name as key or appropriate label
 
         SectorBuilder.spawnClueMarker(ctx, 40, -80, 'collectible 1', 'ring');
         SectorBuilder.spawnClueMarker(ctx, -20, -60, 'collectible 2', 'badge');
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);
+
+        // --- ZOMBIE SPAWNING ---
+        for (let i = 0; i < 5; i++) {
+            ctx.spawnZombie('WALKER');
+        }
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {

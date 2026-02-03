@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { System } from './System';
-import { GameSession } from '../GameSession';
+import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/sound';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
@@ -19,7 +19,7 @@ export class WorldLootSystem implements System {
 
     constructor(private playerGroup: THREE.Group) { }
 
-    update(session: GameSession, dt: number, now: number) {
+    update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const scene = session.engine.scene;
 
@@ -118,22 +118,37 @@ export class WorldLootSystem implements System {
         amount: number
     ) {
         const count = Math.min(Math.ceil(amount / 10), 20);
-        for (let i = 0; i < count; i++) {
-            const s = new THREE.Mesh(GEOMETRY.scrap, MATERIALS.scrap);
-            s.position.set(x, 1, z);
-            scene.add(s);
-            const angle = Math.random() * Math.PI * 2;
-            const force = 0.2 + Math.random() * 0.3;
 
-            scrapItems.push({
-                mesh: s,
-                value: 10 + Math.floor(Math.random() * 10),
-                velocity: new THREE.Vector3(Math.cos(angle) * force * 10, 5 + Math.random() * 5, Math.sin(angle) * force * 10),
-                grounded: false,
-                magnetized: false,
-                life: 60.0,
-                spawnTime: performance.now()
-            });
+        // Spawn the first few immediately for instant feedback
+        const immediateCount = Math.min(5, count);
+        for (let i = 0; i < immediateCount; i++) {
+            spawnSingleScrap(scene, scrapItems, x, z);
+        }
+
+        // Spread the rest across next few frames to avoid lag spike
+        const remaining = count - immediateCount;
+        for (let i = 0; i < remaining; i++) {
+            setTimeout(() => {
+                spawnSingleScrap(scene, scrapItems, x, z);
+            }, i * 8); // 8ms between each spawn (spread over ~120ms)
         }
     }
+}
+
+function spawnSingleScrap(scene: THREE.Scene, scrapItems: ScrapItem[], x: number, z: number) {
+    const s = new THREE.Mesh(GEOMETRY.scrap, MATERIALS.scrap);
+    s.position.set(x, 1, z);
+    scene.add(s);
+    const angle = Math.random() * Math.PI * 2;
+    const force = 0.2 + Math.random() * 0.3;
+
+    scrapItems.push({
+        mesh: s,
+        value: 10 + Math.floor(Math.random() * 10),
+        velocity: new THREE.Vector3(Math.cos(angle) * force * 10, 5 + Math.random() * 5, Math.sin(angle) * force * 10),
+        grounded: false,
+        magnetized: false,
+        life: 60.0,
+        spawnTime: performance.now()
+    });
 }

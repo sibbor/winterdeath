@@ -62,6 +62,8 @@ export const AssetPreloader = {
         dummyRoot.add(grenade);
         const molotov = new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov);
         dummyRoot.add(molotov);
+        const landingMarker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
+        dummyRoot.add(landingMarker);
 
         // -- Characters (Skinned Meshes / Groups) --
         // Player
@@ -92,6 +94,8 @@ export const AssetPreloader = {
         dummyRoot.add(explosiveBarrel);
         const chest = new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard);
         dummyRoot.add(chest);
+        const scrap = new THREE.Mesh(GEOMETRY.scrap, MATERIALS.scrap);
+        dummyRoot.add(scrap);
 
         // -- Weather & Effects --
         const fog = new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog);

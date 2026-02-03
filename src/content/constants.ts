@@ -13,7 +13,7 @@ export const LEVEL_CAP = 20;
 export const INITIAL_STATS: PlayerStats = {
     level: 1,
     currentXp: 0,
-    nextLevelXp: 100,
+    nextLevelXp: 1000,
     maxHp: 100,
     maxStamina: 100,
     speed: 1.0,

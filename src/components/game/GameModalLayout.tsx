@@ -7,6 +7,7 @@ interface GameModalLayoutProps {
     footer?: React.ReactNode;
     titleColorClass?: string; // e.g. text-red-600
     maxWidthClass?: string; // e.g. max-w-4xl
+    blurClass?: string; // e.g. backdrop-blur-xl
 }
 
 const GameModalLayout: React.FC<GameModalLayoutProps> = ({
@@ -14,10 +15,11 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     children,
     footer,
     titleColorClass = "text-white",
-    maxWidthClass = "max-w-xl"
+    maxWidthClass = "max-w-xl",
+    blurClass = "backdrop-blur-md"
 }) => {
     return (
-        <div className="absolute inset-0 bg-black/80 z-[60] flex items-center justify-center backdrop-blur-sm p-4">
+        <div className={`absolute inset-0 bg-black/20 z-[60] flex items-center justify-center ${blurClass} p-4`}>
             <div className={`w-full ${maxWidthClass} text-center bg-black border-4 border-gray-800 shadow-[0_0_50px_rgba(220,38,38,0.2)] relative overflow-hidden`}>
 
                 {/* Background Decoration */}

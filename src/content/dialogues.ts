@@ -6,7 +6,7 @@
 */
 export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; text: string; trigger?: string }[]> = {
     0: [
-        { speaker: 'Robert', text: "dialogue.0_0" }, 
+        { speaker: 'Robert', text: "dialogue.0_0" },
         { speaker: 'Loke', text: "dialogue.0_1" },
         { speaker: 'Robert', text: "dialogue.0_2" },
         { speaker: 'Robert', type: 'gesture', text: "dialogue.0_3" },
@@ -18,7 +18,7 @@ export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; tex
         { speaker: 'Loke', type: 'gesture', text: "dialogue.0_9" },
         { speaker: 'Robert', text: "dialogue.0_10" },
         { speaker: 'Robert', text: "dialogue.0_11" },
-        { speaker: 'Loke', text: "dialogue.0_12" }
+        { speaker: 'Loke', text: "dialogue.0_12", trigger: 'family_follow,boss_start' }
     ],
     // Sector 2:
     1: [
@@ -39,16 +39,17 @@ export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; tex
         { speaker: 'Robert', text: "dialogue.1_13" },
         { speaker: 'Unknown', text: "dialogue.1_14" },
         { speaker: 'Robert', text: "dialogue.1_15" },
-        { speaker: 'Unknown', type: 'action', text: "dialogue.1_16", trigger: 'spawn_jordan' },
-
-        // Part 2: The Reunion with Jordan
+        { speaker: 'Unknown', type: 'action', text: "dialogue.1_16", trigger: 'spawn_jordan,keep_camera' }
+    ],
+    // Sector 2 Part 2 (Triggered after door opens)
+    102: [
         { speaker: 'Jordan', text: "dialogue.1_17" },
         { speaker: 'Loke', text: "dialogue.1_18" },
         { speaker: 'Robert', text: "dialogue.1_19" },
         { speaker: 'Jordan', text: "dialogue.1_20" },
         { speaker: 'Robert', text: "dialogue.1_21" },
         { speaker: 'Unknown', text: "dialogue.1_22" },
-        { speaker: 'Unknown', type: 'action', text: "dialogue.1_23", trigger: 'boss_start' },
+        { speaker: 'Unknown', type: 'action', text: "dialogue.1_23", trigger: 's2_conclusion,keep_camera' }
     ],
     // Sector 3:
     2: [
@@ -65,7 +66,7 @@ export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; tex
         { speaker: 'Robert', text: "dialogue.2_10" },
         { speaker: 'Radio', text: "dialogue.2_11" },
         { speaker: 'Robert', text: "dialogue.2_12" },
-        { speaker: 'Robert', text: "dialogue.2_13" },
+        { speaker: 'Robert', text: "dialogue.2_13", trigger: 'family_follow,boss_start' },
     ],
     // Sector 4
     3: [
@@ -100,6 +101,6 @@ export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; tex
         { speaker: 'Robert', text: "dialogue.3_23" },
         { speaker: 'Nathalie', text: "dialogue.3_24" },
         { speaker: 'Robert', text: "dialogue.3_25" },
-        { speaker: 'Robert', text: "dialogue.3_26", trigger: 'boss_start' }
+        { speaker: 'Robert', text: "dialogue.3_26", trigger: 'family_follow,boss_start' }
     ]
 };

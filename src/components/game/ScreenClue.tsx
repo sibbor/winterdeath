@@ -15,8 +15,6 @@ const ScreenClue: React.FC<ScreenClueProps> = ({ clue, onClose }) => {
         soundManager.playUiConfirm();
     }, []);
 
-    // Unified ESC handling is managed via useGlobalInput in App.tsx
-
     return (
         <div className="absolute inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-8" onClick={(e) => e.stopPropagation()}>
             <div className="max-w-2xl w-full border-4 border-gray-800 bg-black p-12 shadow-[0_0_50px_rgba(255,255,0,0.2)] flex flex-col items-center text-center relative skew-x-[-2deg]">

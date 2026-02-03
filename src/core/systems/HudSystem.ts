@@ -11,7 +11,8 @@ export const HudSystem = {
         input: any,
         now: number,
         props: any,
-        distanceTraveled: number
+        distanceTraveled: number,
+        camera: THREE.Camera
     ) => {
         let bossInfo = null;
         let activeBoss = null;
@@ -88,7 +89,33 @@ export const HudSystem = {
             distanceTraveled: Math.floor(distanceTraveled),
             kills: state.killsInRun,
             spEarned: spEarned,
-            skillPoints: (props.stats.skillPoints || 0) + spEarned // Total available for HUD
+            skillPoints: (props.stats.skillPoints || 0) + spEarned, // Total available for HUD
+            debugInfo: {
+                aim: input.aimVector ? { x: parseFloat(input.aimVector.x.toFixed(2)), y: parseFloat(input.aimVector.y.toFixed(2)) } : { x: 0, y: 0 },
+                input: {
+                    w: input.w ? 1 : 0,
+                    a: input.a ? 1 : 0,
+                    s: input.s ? 1 : 0,
+                    d: input.d ? 1 : 0,
+                    fire: input.fire ? 1 : 0,
+                    reload: input.reload ? 1 : 0
+                },
+                cam: { x: parseFloat(camera.position.x.toFixed(1)), y: parseFloat(camera.position.y.toFixed(1)), z: parseFloat(camera.position.z.toFixed(1)) },
+                camera: {
+                    x: parseFloat(camera.position.x.toFixed(1)),
+                    y: parseFloat(camera.position.y.toFixed(1)),
+                    z: parseFloat(camera.position.z.toFixed(1)),
+                    rotX: camera.rotation.x,
+                    rotY: camera.rotation.y,
+                    rotZ: camera.rotation.z,
+                    fov: (camera as THREE.PerspectiveCamera).fov
+                },
+                modes: state.interactionType || 'Standard',
+                enemies: state.enemies.length,
+                objects: state.obstacles.length,
+                drawCalls: 0, // Injected by GameSession
+                coords: { x: playerPos.x, z: playerPos.z }
+            }
         };
     }
 };

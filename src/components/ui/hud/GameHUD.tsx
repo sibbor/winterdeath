@@ -38,17 +38,20 @@ interface GameHUDProps {
     isDead?: boolean; // New prop for death effect
     debugMode?: boolean;
     isBossIntro?: boolean;
+    fps?: number;
+    debugInfo?: any;
 }
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
     hp, maxHp, stamina, maxStamina, ammo, magSize, activeWeapon, isReloading, score, scrap, multiplier, loadout, boss,
     throwableReadyTime = 0, throwableAmmo = 3, kills = 0, bossSpawned = false, bossDefeated = false,
     familyDistance = null, familySignal = 0, familyFound = false, level = 1, currentXp = 0, nextLevelXp = 100,
-    reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false
+    reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false,
+    fps = 0, debugInfo
 }) => {
     const hpP = Math.max(0, (hp / maxHp) * 100);
     const stP = Math.max(0, (stamina / maxStamina) * 100);
-    const xpP = Math.max(0, (currentXp / nextLevelXp) * 100);
+    const xpP = Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100));
 
     const [isShaking, setIsShaking] = useState(false);
     const [showLevelUp, setShowLevelUp] = useState(false);
@@ -71,6 +74,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     };
     const prevSkillPoints = useRef(skillPoints);
     const prevScrap = useRef(scrap);
+    const prevDistanceTraveled = useRef(distanceTraveled);
 
     const [spGainAmount, setSpGainAmount] = useState(0);
     const [scrapGainAmount, setScrapGainAmount] = useState(0);
@@ -84,45 +88,60 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     }, [hp]);
 
     useEffect(() => {
-        if (level > prevLevel.current) {
+        // Suppress on load (Distance jumped from 0 to > 20)
+        const isLoad = prevDistanceTraveled.current < 5;
+
+        if (level > prevLevel.current && (level - prevLevel.current === 1) && !isLoad) {
             setShowLevelUp(true);
             setTimeout(() => setShowLevelUp(false), 5000); // Extended for animation
         }
         prevLevel.current = level;
-    }, [level]);
+    }, [level, distanceTraveled]);
 
     useEffect(() => {
         const diff = (currentXp || 0) - (prevXp.current || 0);
-        if (diff >= 250) {
+        // Suppress on load
+        const isLoad = prevDistanceTraveled.current < 5;
+
+        if (diff >= 250 && !isLoad) {
             setXpGainAmount(diff);
             setXpGained(true);
             const t = setTimeout(() => setXpGained(false), 3000);
             return () => clearTimeout(t);
         }
         prevXp.current = currentXp;
-    }, [currentXp]);
+    }, [currentXp, distanceTraveled]);
 
     useEffect(() => {
         const diff = (skillPoints || 0) - (prevSkillPoints.current || 0);
-        if (diff > 0) {
+        const isLoad = prevDistanceTraveled.current === 0 && distanceTraveled > 20;
+
+        if (diff > 0 && diff < 10 && !isLoad) {
             setSpGainAmount(diff);
             setSpGained(true);
             const t = setTimeout(() => setSpGained(false), 2000);
             return () => clearTimeout(t);
         }
         prevSkillPoints.current = skillPoints;
-    }, [skillPoints]);
+    }, [skillPoints, distanceTraveled]);
 
     useEffect(() => {
         const diff = scrap - prevScrap.current;
-        if (diff > 0) {
+        const isLoad = prevDistanceTraveled.current === 0 && distanceTraveled > 20;
+
+        if (diff > 0 && !isLoad) {
             setScrapGainAmount(diff);
             setScrapGained(true);
             const t = setTimeout(() => setScrapGained(false), 1000);
             return () => clearTimeout(t);
         }
         prevScrap.current = scrap;
-    }, [scrap]);
+    }, [scrap, distanceTraveled]);
+
+    // Track distance for load detection (Must be last effect)
+    useEffect(() => {
+        prevDistanceTraveled.current = distanceTraveled;
+    }, [distanceTraveled]);
 
     const renderSlot = (slot: string, weapon: WeaponType, isActive: boolean) => {
         const wData = WEAPONS[weapon];
@@ -203,6 +222,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             </div>
 
             <div className="absolute inset-0 pointer-events-none p-8 flex flex-col justify-between font-sans z-50">
+                {/* Debug Overlay Removed (Moved to FPSDisplay) */}
+
                 {/* Top Header */}
                 <div className="flex justify-between items-start">
                     {/* Ranking & Resource Group (Top Left) */}
@@ -305,24 +326,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         </div>
                     )}
 
-                    {/* Coordinates (Top Right) */}
-                    <div className={`flex flex-col gap-2 items-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                        {playerPos && (
-                            <>
-                                <div className="flex flex-col items-end text-sm font-mono font-bold text-white/70 bg-black/50 p-3 border border-white/10 skew-x-[-10deg]">
-                                    <div className="skew-x-[10deg]">
-                                        ({Math.round(playerPos.x)}, {Math.round(playerPos.z)})
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col items-end text-sm font-mono font-bold text-blue-200/80 bg-black/50 p-3 border border-blue-500/20 skew-x-[-10deg]">
-                                    <div className="skew-x-[10deg]">
-                                        {distanceTraveled} m
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                    {/* Coordinates (Top Right) - Removed */}
+                    <div className="hidden"></div>
                 </div>
 
                 {/* Bottom Interface */}

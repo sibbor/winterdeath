@@ -23,6 +23,12 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                     <span className="block skew-x-[10deg]">{t('ui.continue')}</span>
                 </button>
                 <button
+                    onClick={() => { soundManager.playUiClick(); onOpenMap(); }}
+                    className={`${buttonStyle} bg-slate-800 text-white border-slate-600 hover:bg-slate-700`}
+                >
+                    <span className="block skew-x-[10deg]">{t('ui.map_btn')}</span>
+                </button>
+                <button
                     onClick={() => { soundManager.playUiClick(); onOpenSettings(); }}
                     className={`${buttonStyle} bg-slate-800 text-white border-slate-600 hover:bg-slate-700`}
                 >

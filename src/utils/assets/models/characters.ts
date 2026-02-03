@@ -1,7 +1,7 @@
-
 import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
+import { TEXTURES } from '../../assets';
 import { PLAYER_CHARACTER } from '../../../content/constants';
 
 export const CharacterModels = {
@@ -24,6 +24,27 @@ export const CharacterModels = {
         gun.position.set(0, body.position.y, 1);
         gun.scale.set(0.1, 0.4, 1);
         group.add(gun);
+
+        // Laser sight (attached like flashlight - relative position, inherits rotation)
+        // 30m long with blue gradient fade at the tip
+        const laserGeo = new THREE.PlaneGeometry(0.15, 30);
+        const laserMat = new THREE.MeshBasicMaterial({
+            map: TEXTURES.laserTex,
+            color: 0x00aaff, // Blue tint
+            transparent: true,
+            opacity: 0.8,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide
+        });
+
+        const laserSight = new THREE.Mesh(laserGeo, laserMat);
+        // Position relative to player - 30m long, so center at 15m forward
+        laserSight.position.set(0, 1.0, 16); // Gun height, centered at 16m forward
+        laserSight.rotation.x = -Math.PI / 2; // Horizontal plane
+        laserSight.visible = true; // Always visible when player is active
+        laserSight.userData.isLaserSight = true;
+        group.add(laserSight);
 
         return group;
     },
@@ -54,7 +75,13 @@ export const CharacterModels = {
 
         const uniqueId = memberData.id !== 'player' ? `family_${memberData.id}` : `player_${memberData.name}`;
         group.userData = {
-            id: uniqueId, type: 'family', race: memberData.race, name: memberData.name, title: memberData.title, geometryHeight
+            id: uniqueId,
+            type: 'family',
+            race: memberData.race,
+            name: memberData.name,
+            title: memberData.title,
+            geometryHeight,
+            isFamilyMember: true
         };
 
         group.add(body);

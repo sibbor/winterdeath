@@ -7,7 +7,7 @@ import { soundManager } from '../../utils/sound';
 import { t } from '../../utils/i18n';
 import { ModelFactory } from '../../utils/assets';
 import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
-import { createCampTextures } from '../../utils/assets/campTextures';
+import { createProceduralTextures } from '../../utils/assets';
 import { Engine, GraphicsSettings } from '../../core/engine/Engine';
 import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
@@ -33,16 +33,14 @@ interface CampProps {
     currentMap: number;
     debugMode: boolean;
     onToggleDebug: (val: boolean) => void;
-    showFps: boolean;
-    onToggleFps: (val: boolean) => void;
     familyMembersFound: number[];
     isMapLoaded: boolean;
     bossesDefeated: number[];
-    onFPSUpdate?: (fps: number) => void;
     onResetGame: () => void;
     onSaveGraphics: (graphics: GraphicsSettings) => void;
     initialGraphics?: GraphicsSettings;
     onCampLoaded?: () => void;
+    onUpdateHUD: (data: any) => void;
 }
 
 const STATIONS = [
@@ -52,9 +50,10 @@ const STATIONS = [
     { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
 ];
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, showFps, onToggleFps, familyMembersFound, isMapLoaded, bossesDefeated, hasCheckpoint, onFPSUpdate, onSaveGraphics, initialGraphics, onResetGame, onCampLoaded }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, familyMembersFound, isMapLoaded, bossesDefeated, hasCheckpoint, onUpdateHUD, onSaveGraphics, initialGraphics, onResetGame, onCampLoaded }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
+    const lastDrawCallsRef = useRef(0);
 
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
     const [activeModal, setActiveModal] = useState<'armory' | 'sectors' | 'skills' | 'stats' | 'settings' | 'reset_confirm' | 'adventure_log' | null>(null);
@@ -81,7 +80,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     const envStateRef = useRef<CampEffectsState | null>(null);
 
-    const textures = useMemo(() => createCampTextures(), []);
+    const textures = useMemo(() => createProceduralTextures(), []);
 
     useEffect(() => {
         soundManager.resume();
@@ -154,6 +153,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         // Reset Scene for Camp
         scene.clear();
         camera.position.set(0, 10, 22);
+        camera.far = 2500; // Increase draw distance for stars (r=1800)
+        camera.updateProjectionMatrix();
 
         scene.background = new THREE.Color(0x050510);
         scene.fog = new THREE.FogExp2(0x050510, 0.015);
@@ -267,13 +268,34 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             activeRef.current = activeModalRef.current;
             const now = Date.now();
 
-            // Update FPS Ref text
+            // Update FPS / Debug Info
             framesSinceUpdate++;
-            if (now - lastFpsUpdate >= 500) {
+            if (now - lastFpsUpdate >= 200) { // Faster update for debug smoothness
                 const fps = Math.round((framesSinceUpdate * 1000) / (now - lastFpsUpdate));
-                if (onFPSUpdate) onFPSUpdate(fps);
                 framesSinceUpdate = 0;
                 lastFpsUpdate = now;
+
+                if (debugMode) {
+                    onUpdateHUD({
+                        fps,
+                        debugInfo: {
+                            input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },
+                            aim: { x: 0, y: 0 },
+                            cam: {
+                                x: parseFloat(camera.position.x.toFixed(1)),
+                                y: parseFloat(camera.position.y.toFixed(1)),
+                                z: parseFloat(camera.position.z.toFixed(1))
+                            },
+                            modes: 'Camp',
+                            enemies: 0,
+                            objects: scene.children.length, // Direct children count
+                            drawCalls: lastDrawCallsRef.current,
+                            coords: { x: 0, z: 0 }
+                        }
+                    });
+                } else {
+                    onUpdateHUD({ fps });
+                }
             }
 
             // Update Environment (Wind, Stars, Fire, Particles)
@@ -365,6 +387,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 }
             });
             engine.renderer.render(scene, camera);
+            lastDrawCallsRef.current = engine.renderer.info.render.calls;
         };
 
         let frameId = requestAnimationFrame(animate);
@@ -410,8 +433,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             {activeModal === 'settings' && (
                 <ScreenSettings
                     onClose={closeModal}
-                    showFps={showFps}
-                    onToggleFps={onToggleFps}
                     graphics={graphics}
                     onUpdateGraphics={(newG) => {
                         setGraphics(newG);

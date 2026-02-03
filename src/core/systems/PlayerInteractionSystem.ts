@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { System } from './System';
-import { GameSession } from '../GameSession';
+import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/sound';
 import { WorldLootSystem } from './WorldLootSystem';
 
@@ -12,7 +12,7 @@ export class PlayerInteractionSystem implements System {
         private onSectorEnded: (isExtraction: boolean) => void
     ) { }
 
-    update(session: GameSession, dt: number, now: number) {
+    update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const input = session.engine.input.state;
 
@@ -69,7 +69,7 @@ export class PlayerInteractionSystem implements System {
         playerPos: THREE.Vector3,
         chests: any[],
         state: any,
-        session: GameSession
+        session: GameSessionLogic
     ) {
         if (!type) return;
 
@@ -98,7 +98,7 @@ export class PlayerInteractionSystem implements System {
         }
     }
 
-    private spawnScrapExplosion(session: GameSession, x: number, z: number, amount: number) {
+    private spawnScrapExplosion(session: GameSessionLogic, x: number, z: number, amount: number) {
         WorldLootSystem.spawnScrapExplosion(session.engine.scene, session.state.scrapItems, x, z, amount);
     }
 }

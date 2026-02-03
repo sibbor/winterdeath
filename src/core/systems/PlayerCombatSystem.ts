@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { System } from './System';
-import { GameSession } from '../GameSession';
+import { GameSessionLogic } from '../GameSessionLogic';
 import { WeaponHandler } from './WeaponHandler';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
@@ -15,7 +15,7 @@ export class PlayerCombatSystem implements System {
 
     constructor(private playerGroup: THREE.Group) { }
 
-    init(session: GameSession) {
+    init(session: GameSessionLogic) {
         if (this.initialized) return;
         this.initialized = true;
 
@@ -44,7 +44,7 @@ export class PlayerCombatSystem implements System {
         this.aimCross = crossGroup;
     }
 
-    update(session: GameSession, dt: number, now: number) {
+    update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled; // Using the added flag
@@ -85,6 +85,13 @@ export class PlayerCombatSystem implements System {
             }
         }
 
+        // Laser sight automatically follows player rotation (attached to playerGroup)
+        // Just hide it when dead or input disabled
+        const laserSight = this.playerGroup.children.find(c => c.userData.isLaserSight) as THREE.Mesh;
+        if (laserSight) {
+            laserSight.visible = !disableInput && !state.isDead;
+        }
+
         // --- Firing ---
         if (!disableInput) {
             WeaponHandler.handleFiring(
@@ -100,7 +107,7 @@ export class PlayerCombatSystem implements System {
         }
     }
 
-    cleanup(session: GameSession) {
+    cleanup(session: GameSessionLogic) {
         const scene = session.engine.scene;
         if (this.reloadBar) {
             scene.remove(this.reloadBar.bg);

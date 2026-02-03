@@ -64,13 +64,9 @@ export const useGlobalInput = (
                     actions.setIsSettingsOpen(false);
                     soundManager.playUiClick();
                 } else if (ui.isPaused) {
-                    actions.onResume();
-                    // OnResume handles the lock in App.tsx usually, but we can double tap here if needed
-                    // But onResume passed to this hook likely just sets state.
-                    // Wait, App.tsx passes `() => setIsPaused(false)` as onResume to this hook.
-                    // So we must handle lock here OR update the passed onResume.
-                    // Let's rely on actions.requestPointerLock for consistency if it's not handled in onResume.
+                    // Try to lock FIRST before state changes (which might unmount UI)
                     actions.requestPointerLock?.();
+                    actions.onResume();
                 } else if (screen === GameScreen.SECTOR && !ui.activeClue && !ui.isDialogueOpen && !ui.isBossIntroActive && ui.hp > 0) {
                     actions.setIsPaused(true);
                     // DO NOT request lock here. We want to unlock or stay unlocked.

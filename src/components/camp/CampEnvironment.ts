@@ -20,6 +20,18 @@ export interface CampEffectsState {
 }
 
 export const CampEnvironment = {
+    initEffects: (scene: THREE.Scene, textures: Textures): CampEffectsState => {
+        const starSystem = CampEnvironment.setupSky(scene, textures);
+        const fireLight = CampEnvironment.setupCampfire(scene, textures);
+
+        return {
+            wind: new WindSystem(),
+            particles: { flames: [], sparkles: [], smokes: [] },
+            starSystem,
+            fireLight
+        };
+    },
+
     setupSky: (scene: THREE.Scene, textures: Textures) => {
         // Moon
         const moonGeo = new THREE.SphereGeometry(15, 32, 32);
@@ -79,7 +91,7 @@ export const CampEnvironment = {
                     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
                     float alpha = 0.8 + 0.2 * sin(phase);
                     if (twinkleSpeed > 0.0) alpha = 0.9 + 0.1 * sin(uTime * twinkleSpeed + phase);
-                    vAlpha = alpha; gl_PointSize = size * (300.0 / -mvPosition.z);
+                    vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
                 }
             `,
             fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
@@ -129,18 +141,6 @@ export const CampEnvironment = {
         scene.add(fireGroup);
 
         return fireLight;
-    },
-
-    initEffects: (scene: THREE.Scene, textures: Textures): CampEffectsState => {
-        const starSystem = CampEnvironment.setupSky(scene, textures);
-        const fireLight = CampEnvironment.setupCampfire(scene, textures);
-
-        return {
-            wind: new WindSystem(),
-            particles: { flames: [], sparkles: [], smokes: [] },
-            starSystem,
-            fireLight
-        };
     },
 
     updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {

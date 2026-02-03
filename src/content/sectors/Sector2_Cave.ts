@@ -8,53 +8,10 @@ import { t } from '../../utils/i18n';
 export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, caveEntrancePos: THREE.Vector3) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
 
-    // --- CAVE TRIGGERS ---
-    triggers.push(
-        {
-            id: 's2_cave_lights', position: { x: 100, z: -126 }, radius: 10, type: 'SPEECH', content: "clues.s2_cave_lights", triggered: false,
-            actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-        },
-        {
-            id: 's2_cave_watch_out', position: { x: caveEntrancePos.x, z: -80 }, radius: 10, type: 'SPEECH', content: "clues.s2_cave_watch_out", triggered: false,
-            actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-        },
-        {
-            id: 's2_cave_loot', position: { x: 150, z: -150 }, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot", triggered: false,
-            actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-        },
-        {
-            id: 's2_cave_loot_more', position: { x: 100, z: -200 }, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot_more", triggered: false,
-            actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-        },
-        {
-            id: 's2_cave_door', position: { x: 61, z: -193 }, radius: 25, type: 'SPEECH', content: "clues.s2_cave_door", triggered: false,
-            actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-        },
+    // 5.1 Floors (Specific Rooms & Corridors)
+    // Removed giant plane to prevent leakage
 
-        // Jordan's Teddy Bear
-        {
-            id: 's2_collectible_2',
-            position: { x: 155, z: -155 },
-            radius: 2,
-            type: 'COLLECTIBLE',
-            content: "clues.s2_collectible_2",
-            description: "clues.s2_collectible_2_description",
-            triggered: false,
-            icon: "s2_collectible_2_icon",
-            actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-        },
-    );
-
-    // Visual Marker for Teddy
-    SectorBuilder.spawnClueMarker(ctx, 155, -155, 'collectible 2', 'teddy');
-
-    // 5.1 Floors (Gravel)
-    const caveFloor = new THREE.Mesh(new THREE.PlaneGeometry(350, 350), MATERIALS.gravel);
-    caveFloor.rotation.x = -Math.PI / 2;
-    caveFloor.position.set(60, 0.06, -210); // Shifted Z
-    caveFloor.receiveShadow = true;
-    innerCave.add(caveFloor);
-
+    // Will generate floors after spaces are defined...
     interface Box { x: number; z: number; w: number; d: number; rotation?: number; }
     interface RoomData extends Box {
         id: number;
@@ -65,6 +22,7 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         family?: boolean;
     }
 
+
     // Define Rooms
     const rooms: RoomData[] = [
         { id: 1, x: 100, z: -100, w: 30, d: 30, type: 'Lobby', zombies: 5 },
@@ -73,7 +31,8 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         { id: 4, x: 100, z: -200, w: 30, d: 30, type: 'Food', chests: 3 },
         { id: 5, x: 100, z: -125, w: 20, d: 20, type: 'Social1', zombies: 5 },
         { id: 6, x: 60, z: -125, w: 30, d: 30, type: 'Social2', zombies: 5 },
-        { id: 7, x: 61, z: -193, w: 40, d: 50, type: 'Boss', boss: true, family: true }
+        { id: 7, x: 61, z: -193, w: 40, d: 50, type: 'Boss', boss: true, family: true },
+        { id: 8, x: 25, z: -193, w: 20, d: 20, type: 'BunkerInterior' } // Room behind the doors
     ];
 
     // Define Explicit Corridors to Connect Rooms
@@ -103,15 +62,39 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         // New R6 (North) <-> R4 (West)
         // R6 (60, -125) -> R4 (100, -200)
         { x: 60, z: -145, w: 10, d: 50 },  // North from R6
-        { x: 75, z: -160, w: 30, d: 10 }, // East step
-        { x: 85, z: -180, w: 10, d: 40 }, // South to R4 West side
+        { x: 75, z: -160, w: 30, d: 10 },  // East step
+        { x: 85, z: -180, w: 10, d: 40 },  // South to R4 West side
 
         // New R4 (North) <-> R7 (East)
         // R4 (100, -200) -> R7 (61, -193)
         { x: 100, z: -182.5, w: 10, d: 15 }, // North from R4
         { x: 90, z: -175, w: 30, d: 10 },    // West step
-        { x: 81, z: -184, w: 10, d: 20 }     // South to R7 East side
+        { x: 81, z: -184, w: 10, d: 20 },     // South to R7 East side
+        // Bunker interior connection - Widened to 24 to fit the 22m door frame
+        { x: 38, z: -193, w: 10, d: 24 }      // R8 <-> R7 (Connecting behind doors)
     ];
+
+    // --- FLOOR GENERATION ---
+    const allSpaces: Box[] = [...rooms, ...corridors];
+    allSpaces.forEach(s => {
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w + 6, s.d + 6), MATERIALS.gravel);
+        floor.rotation.x = -Math.PI / 2;
+        if (s.rotation) floor.rotation.z = -s.rotation; // Plane geometry is X-Z, rotation is Y (which becomes Z after rotX)
+
+        floor.position.set(s.x, 0.06, s.z); // Lifted to 0.05 for visibility
+        floor.receiveShadow = true;
+        innerCave.add(floor);
+    });
+
+    // Entrance Half-Circle Gravel
+    const entranceGeo = new THREE.CircleGeometry(12, 32, 0, Math.PI);
+    const entranceFloor = new THREE.Mesh(entranceGeo, MATERIALS.gravel);
+    entranceFloor.rotation.x = -Math.PI / 2;
+    // Entrance is at -70. Cave interior goes to -100.
+    // So we want the half-circle to point towards POSITIVE Z (towards track).
+    entranceFloor.rotation.z = 0;
+    entranceFloor.position.set(caveEntrancePos.x, 0.05, caveEntrancePos.z + 2); // Lifted to 0.05
+    innerCave.add(entranceFloor);
 
     const createStringLight = (p1: THREE.Vector3, p2: THREE.Vector3, intensity: number) => {
         const dist = p1.distanceTo(p2);
@@ -125,7 +108,7 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         const line = new THREE.Line(geometry, material);
         innerCave.add(line);
 
-        const numLights = Math.max(1, Math.floor(dist / 4));
+        const numLights = Math.max(1, Math.floor(dist / 15)); // Optimized: 15m spacing (was 4m)
         for (let i = 1; i <= numLights; i++) {
             const t = i / (numLights + 1);
             const pos = curve.getPoint(t);
@@ -191,61 +174,93 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         }
     };
 
-    // 5.4 Wall Builder (Organic Locking Stones) for Rooms AND Corridors
-    const allSpaces = [...rooms, ...corridors];
+    // 5.4 Wall Builder (Instanced Visuals + Simplified Physics)
+    // Using InstancedMesh for stones (Draw Call Check: Massive Reduction)
+    // Using Composed Box Colliders for walls (Physics Check: Massive Reduction)
+
+    const createWallSegment = (pA: THREE.Vector3, pB: THREE.Vector3) => {
+        const vec = new THREE.Vector3().subVectors(pB, pA);
+        const len = vec.length();
+        if (len < 0.5) return;
+
+        const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
+        const angle = Math.atan2(vec.z, vec.x);
+
+        const wallHeight = 5;
+        const wallThick = 4.0;
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(len, wallHeight, wallThick), MATERIALS.stone);
+
+        wall.position.set(mid.x, wallHeight / 2, mid.z);
+        wall.rotation.y = -angle;
+
+        wall.castShadow = false;
+        wall.receiveShadow = false;
+        wall.name = 'Cave_Wall';
+        scene.add(wall);
+        wall.updateMatrixWorld();
+
+        obstacles.push({ mesh: wall, collider: { type: 'box', size: new THREE.Vector3(len, wallHeight, wallThick) } });
+    };
 
     allSpaces.forEach(r => {
         const wallDist = 1.0;
         const corners = getCorners(r, wallDist);
 
-        // Generate perimeter points by walking along edges
-        const perimeter = [];
         for (let i = 0; i < 4; i++) {
             const p1 = corners[i];
             const p2 = corners[(i + 1) % 4];
+
+            const segmentStart = new THREE.Vector3();
+            let isSegmentActive = false;
+
             const dist = Math.sqrt((p2.x - p1.x) ** 2 + (p2.z - p1.z) ** 2);
-            // Step size approx 2.0
-            const steps = Math.ceil(dist / 2.0);
-            for (let j = 0; j < steps; j++) {
+            const steps = Math.ceil(dist / 0.5); // Higher resolution (0.5m steps instead of 2.0m)
+
+            for (let j = 0; j <= steps; j++) {
                 const t = j / steps;
-                perimeter.push({
-                    x: p1.x + (p2.x - p1.x) * t,
-                    z: p1.z + (p2.z - p1.z) * t
-                });
+                const px = p1.x + (p2.x - p1.x) * t;
+                const pz = p1.z + (p2.z - p1.z) * t;
+
+                // Validity Check
+                let isValid = true;
+
+                // Entrance Gap - Widened to remove protruding walls
+                if (pz > -71 && Math.abs(px - 100) < 18.0) isValid = false;
+
+                // Bunker Door Gap (Manual punch-through on West wall)
+                if (Math.abs(px - 41) < 2.0 && Math.abs(pz - (-193)) < 12.0) isValid = false;
+
+                // Intersection Gap (Doorways)
+                if (isValid) {
+                    for (const other of allSpaces) {
+                        if (other === r) continue;
+                        if (isPointInBox(px, pz, other, -1.0)) {
+                            isValid = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (isValid) {
+                    // Start segment if needed
+                    if (!isSegmentActive) {
+                        segmentStart.set(px, 0, pz);
+                        isSegmentActive = true;
+                    }
+                } else {
+                    // Found a hole (Doorway/Gap)
+                    if (isSegmentActive) {
+                        createWallSegment(segmentStart, new THREE.Vector3(px, 0, pz));
+                        isSegmentActive = false;
+                    }
+                }
+            }
+
+            // End of edge cleanup
+            if (isSegmentActive) {
+                createWallSegment(segmentStart, new THREE.Vector3(p2.x, 0, p2.z));
             }
         }
-
-        perimeter.forEach(pt => {
-            // EXCEPTION: Cave Entrance Opening
-            // Entrance width 14. Center 100.
-            // Opening buffer: 7 + 1 = 8.
-            if (pt.z > -71 && Math.abs(pt.x - 100) < 8.0) return;
-
-            // Check if this wall point is inside ANY other room/corridor (creates opening)
-            // Use a smaller negative padding to allow tight fits to open up
-            for (const other of allSpaces) {
-                if (other === r) continue;
-                if (isPointInBox(pt.x, pt.z, other, -1.0)) return;
-            }
-
-            // Stack stones
-            const stones = 1 + Math.floor(Math.random() * 2);
-            for (let k = 0; k < stones; k++) {
-                const rock = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-                const s = 3.0 + Math.random() * 1.5;
-
-                const jx = (Math.random() - 0.5) * 1.0;
-                const jz = (Math.random() - 0.5) * 1.0;
-
-                rock.position.set(pt.x + jx, k * 2.5 + s * 0.4, pt.z + jz);
-                rock.scale.set(s, s * 0.8, s);
-                rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-                rock.castShadow = true;
-                innerCave.add(rock);
-
-                if (k === 0) obstacles.push({ mesh: rock, collider: { type: 'sphere', radius: s * 0.7 } });
-            }
-        });
     });
 
     // Room Specifics (Lights, Spawns)
@@ -257,47 +272,22 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
             2.0
         );
 
+        if (r.type === 'BunkerInterior') {
+            // Bright light for bunker
+            const light = new THREE.PointLight(0xfff0dd, 5, 25);
+            light.position.set(r.x, 8, r.z);
+            innerCave.add(light);
+        }
+
         // Spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
                 SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
             }
         }
-        if (r.boss) {
-            const doorGroup = new THREE.Group();
-            // Decorative back door at West wall
-            doorGroup.position.set(r.x - r.w / 2 + 2, 0, r.z);
-            doorGroup.rotation.y = Math.PI / 2;
-
-            const doorL = new THREE.Mesh(new THREE.BoxGeometry(10, 14, 1), MATERIALS.metalPanel); doorL.position.set(-5, 7, 0);
-            doorL.name = 's2_bunker_door_l';
-            const doorR = new THREE.Mesh(new THREE.BoxGeometry(10, 14, 1), MATERIALS.metalPanel); doorR.position.set(5, 7, 0);
-            doorR.name = 's2_bunker_door_r';
-            const frame = new THREE.Mesh(new THREE.BoxGeometry(22, 16, 2), MATERIALS.concrete); frame.position.set(0, 8, -1);
-            frame.name = 's2_bunker_door_frame';
-
-            const ind = new THREE.PointLight(0x00ff00, 2, 15); ind.position.set(0, 12, 2);
-            doorGroup.add(doorL); doorGroup.add(doorR); doorGroup.add(frame); doorGroup.add(ind);
-            innerCave.add(doorGroup);
-            obstacles.push({ mesh: doorGroup, collider: { type: 'box', size: new THREE.Vector3(4, 14, 20) } });
-
-            SectorBuilder.spawnDebugMarker(ctx, r.x, r.z, 8, t('maps.bunker_name')); // Using bunker name as placeholder or appropriate key
-        }
     });
 
-    // Entrance Light
-    const entranceLight = new THREE.SpotLight(0xaaccff, 10, 200, 0.6, 0.5, 1);
-    entranceLight.position.set(caveEntrancePos.x, 30, caveEntrancePos.z + 20);
-    entranceLight.target.position.set(caveEntrancePos.x, 0, caveEntrancePos.z - 80);
-    entranceLight.castShadow = true;
-    scene.add(entranceLight);
-    scene.add(entranceLight.target);
-
-    // Invisible walls to prevent climbing around entrance outside
-    const blockL = new THREE.Mesh(new THREE.BoxGeometry(80, 50, 20), new THREE.MeshBasicMaterial({ visible: false }));
-    blockL.position.set(caveEntrancePos.x - 60, 25, caveEntrancePos.z - 10); obstacles.push({ mesh: blockL, collider: { type: 'box', size: new THREE.Vector3(80, 50, 20) } });
-    const blockR = new THREE.Mesh(new THREE.BoxGeometry(80, 50, 20), new THREE.MeshBasicMaterial({ visible: false }));
-    blockR.position.set(caveEntrancePos.x + 60, 25, caveEntrancePos.z - 10); obstacles.push({ mesh: blockR, collider: { type: 'box', size: new THREE.Vector3(80, 50, 20) } });
+    /*
 
     // --- VOID ROOF (MOUNTAIN TOP) ---
     // Creates a solid mesh over the entire cave area EXCEPT rooms/corridors
@@ -337,14 +327,12 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
     roofMesh.castShadow = true;
     roofMesh.receiveShadow = true;
     roofMesh.name = "Sector2_VoidRoof";
-
-    /*    
-    // innerCave.add(roofMesh); // COMMENTED OUT FOR DEBUGGING (Kept logic from original)
+    innerCave.add(roofMesh);
 
     // Curtain to hide entrance transition if needed
     const curtain = new THREE.Mesh(new THREE.PlaneGeometry(300, 150), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-    curtain.position.set(caveEntrancePos.x, 20, caveEntrancePos.z + 10); 
-    curtain.rotation.y = Math.PI; 
+    curtain.position.set(caveEntrancePos.x, 20, caveEntrancePos.z + 10);
+    curtain.rotation.y = Math.PI;
     curtain.name = "Sector2_Curtain";
     curtain.visible = false;
     scene.add(curtain);

@@ -5,7 +5,7 @@ export interface Enemy {
     mesh: THREE.Group;
     type: string;
     hp: number;
-    maxHp?: number; 
+    maxHp?: number;
     speed: number;
     damage: number;
     score: number;
@@ -13,17 +13,18 @@ export interface Enemy {
     fleeing: boolean;
     lastKnockback: number;
     isBoss?: boolean;
+    bossId?: number; // Maps to BOSSES[id]
     dead?: boolean;
-    hitTime: number; 
-    color: number; 
+    hitTime: number;
+    color: number;
     originalScale: number;
-    
+
     // Status Effects
     isBurning: boolean;
-    burnTimer: number; 
-    afterburnTimer: number; 
+    burnTimer: number;
+    afterburnTimer: number;
     isBlinded: boolean;
-    blindUntil: number; 
+    blindUntil: number;
     slowTimer: number;
 
     // Death Animation State
@@ -32,7 +33,7 @@ export interface Enemy {
     deathVel?: THREE.Vector3; // Velocity during death fall
     velocity: THREE.Vector3; // Current movement velocity
     lastTrailPos?: THREE.Vector3; // For spacing blood trail
-    
+
     // Physics
     fallForward?: boolean; // Direction of fall
     bloodSpawned?: boolean; // If death blood pool has been spawned
