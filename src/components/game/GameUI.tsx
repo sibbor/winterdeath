@@ -6,9 +6,10 @@ import InteractionPrompt from './InteractionPrompt';
 
 interface GameUIProps {
     onCloseClue: () => void;
-    
-    interactionType: 'chest' | 'bus' | null;
-    
+
+    interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null;
+    interactionScreenPos?: { x: number, y: number } | null;
+
     // Legacy Dialogue Props (Can be ignored or cleaned up later)
     dialogueOpen: boolean;
     dialogueLine: any;
@@ -21,14 +22,15 @@ interface GameUIProps {
 
 const GameUI: React.FC<GameUIProps> = ({
     interactionType,
+    interactionScreenPos
 }) => {
-    // Legacy Dialogue Overlay removed. Logic moved to GameCanvas + CinematicBubble.
+    // 1. Dialogue: CinematicBubble.
 
-    // 3. HUD Elements (Interactions)
+    // 2. Interactions
     // These render *on top* of the game but don't block input usually, 
     // unless mapped to keys. They are purely visual prompts here.
     return (
-        <InteractionPrompt type={interactionType} />
+        <InteractionPrompt type={interactionType} screenPos={interactionScreenPos} />
     );
 };
 

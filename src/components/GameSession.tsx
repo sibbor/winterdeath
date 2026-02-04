@@ -26,15 +26,15 @@ import { DeathSystem } from '../core/systems/DeathSystem';
 import { AssetPreloader } from '../core/systems/AssetPreloader';
 import { PlayerMovementSystem } from '../core/systems/PlayerMovementSystem';
 import { PlayerCombatSystem } from '../core/systems/PlayerCombatSystem';
-import { WorldLootSystem } from '../core/systems/WorldLootSystem'; // New
+import { WorldLootSystem } from '../core/systems/WorldLootSystem';
 import { PlayerInteractionSystem } from '../core/systems/PlayerInteractionSystem';
 import { EnemySystem } from '../core/systems/EnemySystem';
-import { SectorSystem } from '../core/systems/SectorSystem'; // New
+import { SectorSystem } from '../core/systems/SectorSystem';
 import ScreenPlayerDied from './game/ScreenPlayerDied';
+import ScreenCollectibleFound from './game/ScreenCollectibleFound';
+import { COLLECTIBLES } from '../content/collectibles';
 import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
-// ... (Interfaces remain same)
-
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -73,6 +73,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const activeBubbles = useRef<any[]>([]);
     const hasEndedSector = useRef(false);
     const collectedCluesRef = useRef<SectorTrigger[]>([]);
+    const sessionCollectiblesFound = useRef<string[]>([]);
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
@@ -97,7 +98,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [foundMemberName, setFoundMemberName] = useState('');
-    const [interactionType, setInteractionType] = useState<'NONE' | 'LADDER' | 'BUS' | 'SHOP' | 'CLUE'>('NONE');
+    const [interactionType, setInteractionType] = useState<'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null>(null);
+    const [interactionScreenPos, setInteractionScreenPos] = useState<{ x: number, y: number } | null>(null);
     const [forceHideHUD, setForceHideHUD] = useState(false);
 
     useEffect(() => {
@@ -144,7 +146,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: 0,
                 familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
                 bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
-                distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened
+                distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current,
+                collectiblesFound: sessionCollectiblesFound.current,
+                chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened,
+                isExtraction: false,
+                seenEnemies: state.seenEnemies, seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []), visitedPOIs: state.visitedPOIs
             }, state.killerType || "Unknown");
         }
     }, []);
@@ -276,7 +282,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (stateRef.current.isDead) return;
             stateRef.current.lastActionTime = performance.now();
-            // Weapon switching handled by PlayerCombatSystem
         };
         const handleKeyUp = (e: KeyboardEvent) => {
             if (!isInputEnabled) return;
@@ -330,6 +335,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     let fmMesh: THREE.Group | undefined;
     const familyMember = useRef({ mesh: null as any, ring: null as any, found: false, following: false, name: '', cooldown: 0, scale: 1.0, seed: Math.random() * 100 }).current;
+
+    const onCollectibleFoundInternal = useCallback((id: string) => {
+        if (!sessionCollectiblesFound.current.includes(id)) {
+            sessionCollectiblesFound.current.push(id);
+        }
+        propsRef.current.onCollectibleFound(id);
+    }, []);
 
     const startCinematic = (familyMesh: THREE.Group, scriptId?: number, customParams?: { targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3 }) => {
         if (cinematicRef.current.active) return;
@@ -597,6 +609,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         collectedCluesRef.current = [];
         distanceTraveledRef.current = 0;
         prevPosRef.current = null;
+        sessionCollectiblesFound.current = [];
         stateRef.current.bossDefeatedTime = 0;
         stateRef.current.thinkingUntil = 0;
         stateRef.current.speakingUntil = 0;
@@ -637,8 +650,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-        // Helper functions moved to component scope
-
+        const onCollectibleFoundInternal = (collectibleId: string) => {
+            if (!sessionCollectiblesFound.current.includes(collectibleId)) {
+                sessionCollectiblesFound.current.push(collectibleId);
+            }
+            // Also trigger the parent callback to show the modal
+            if (propsRef.current.onCollectibleFound) {
+                propsRef.current.onCollectibleFound(collectibleId);
+            }
+        };
 
         const concludeSector = (isExtraction: boolean) => {
             const state = session.state;
@@ -648,12 +668,29 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (isExtraction) { state.familyExtracted = true; soundManager.stopRadioStatic(); }
 
                 propsRef.current.onSectorEnded({
-                    timeElapsed: now - state.startTime, shotsFired: state.shotsFired, shotsHit: state.shotsHit, throwablesThrown: state.throwablesThrown,
-                    killsByType: state.killsByType, scrapLooted: state.collectedScrap, xpGained: state.score, bonusXp: isExtraction ? 500 : 0,
-                    familyFound: state.familyFound || stateRef.current.familyFound, familyExtracted: isExtraction && (state.familyFound || stateRef.current.familyFound), damageDealt: state.damageDealt, damageTaken: state.damageTaken,
-                    bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
-                    chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened, distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current, isExtraction,
-                    seenEnemies: state.seenEnemies, seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []), visitedPOIs: state.visitedPOIs
+                    timeElapsed: now - state.startTime,
+                    shotsFired: state.shotsFired,
+                    shotsHit: state.shotsHit,
+                    throwablesThrown: state.throwablesThrown,
+                    killsByType: state.killsByType,
+                    scrapLooted: state.collectedScrap,
+                    xpGained: state.score,
+                    bonusXp: isExtraction ? 500 : 0,
+                    familyFound: state.familyFound || stateRef.current.familyFound,
+                    familyExtracted: isExtraction && (state.familyFound || stateRef.current.familyFound),
+                    damageDealt: state.damageDealt,
+                    damageTaken: state.damageTaken,
+                    bossDamageDealt: state.bossDamageDealt,
+                    bossDamageTaken: state.bossDamageTaken,
+                    chestsOpened: state.chestsOpened,
+                    bigChestsOpened: state.bigChestsOpened,
+                    distanceTraveled: distanceTraveledRef.current,
+                    cluesFound: collectedCluesRef.current,
+                    collectiblesFound: sessionCollectiblesFound.current,
+                    isExtraction,
+                    seenEnemies: state.seenEnemies,
+                    seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []),
+                    visitedPOIs: state.visitedPOIs
                 });
             }
         };
@@ -727,7 +764,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 mapItems,
                 debugMode: propsRef.current.debugMode,
                 textures: textures,
-                spawnZombie
+                spawnZombie,
+                cluesFound: propsRef.current.stats.cluesFound || [],
+                collectiblesFound: propsRef.current.stats.collectiblesFound || [],
+                sectorId: propsRef.current.currentMap
             };
             currentSector.generate(ctx);
 
@@ -819,7 +859,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new WorldLootSystem(playerGroup));
-            session.addSystem(new PlayerInteractionSystem(playerGroup, concludeSector));
+
+            const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, onCollectibleFoundInternal);
+            session.addSystem(interactionSystem);
+
             session.addSystem(new EnemySystem(playerGroup, {
                 spawnBubble,
                 gainXp,
@@ -1106,12 +1149,24 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             // WeaponHandler Inputs removed (Moved to PlayerCombatSystem)
 
             // InteractionSystem moved to PlayerInteractionSystem
+            // Interaction logic: Sync Type & Project position to HUD
             const currentInter = state.interactionType;
-            if (currentInter !== interactionTypeRef.current) { interactionTypeRef.current = currentInter; setInteractionType(currentInter); }
+            if (currentInter !== interactionTypeRef.current) {
+                interactionTypeRef.current = currentInter;
+                setInteractionType(currentInter);
+            }
 
-            // Interaction Key Press moved to PlayerInteractionSystem
+            if (currentInter) {
+                const projectPos = playerGroupRef.current.position.clone();
+                projectPos.y += 2.5; // Same height as reload bar
 
-            // WeaponHandler Firing removed (Moved to PlayerCombatSystem)
+                const vector = projectPos.project(camera);
+                const screenX = (vector.x + 1) / 2 * 100;
+                const screenY = (1 - vector.y) / 2 * 100;
+                setInteractionScreenPos({ x: screenX, y: screenY });
+            } else {
+                setInteractionScreenPos(null);
+            }
 
             const gameContext = {
                 scene, enemies: state.enemies, obstacles: state.obstacles, spawnPart, spawnDecal,
@@ -1157,10 +1212,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (visual) scene.remove(visual);
                 },
                 onClueFound: (clue) => {
-                    propsRef.current.onClueFound(clue);
-                    if (clue.type === 'COLLECTIBLE') {
-                        const alreadyFound = propsRef.current.stats.cluesFound.includes(clue.content);
-                        if (!alreadyFound) state.spFromCollectibles++;
+                    // Only narrative clues here
+                    if (clue.id) {
+                        propsRef.current.onClueFound(clue);
                     }
                 },
                 onTrigger: (type: string, duration: number) => {
@@ -1300,8 +1354,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             {
                 !isSectorLoading && !bossIntroActive && !cinematicActive && !forceHideHUD && (
                     <GameUI
-                        onCloseClue={() => { }} interactionType={interactionType} dialogueOpen={false} dialogueLine={null}
-                        foundMemberName={foundMemberName} isLastLine={false} onNextDialogue={() => { }} onPrevDialogue={() => { }} onCloseDialogue={() => { }}
+                        onCloseClue={() => { }}
+                        interactionType={interactionType}
+                        interactionScreenPos={interactionScreenPos}
+                        dialogueOpen={false}
+                        dialogueLine={null}
+                        foundMemberName={foundMemberName}
+                        isLastLine={false}
+                        onNextDialogue={() => { }}
+                        onPrevDialogue={() => { }}
+                        onCloseDialogue={() => { }}
                     />
                 )
             }

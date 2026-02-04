@@ -15,14 +15,23 @@ const ICONS = {
 };
 
 export const WEAPONS: Record<WeaponType, WeaponStats> = {
-  [WeaponType.SMG]: { name: WeaponType.SMG, displayName: 'weapons.smg', category: WeaponCategory.PRIMARY, baseDamage: 12, damage: 12, fireRate: 100, magSize: 30, reloadTime: 2000, range: 12, spread: 0.15, color: '#ef4444', icon: ICONS.SMG },
+  // Primary
+  [WeaponType.SMG]: { name: WeaponType.SMG, displayName: 'weapons.smg', category: WeaponCategory.PRIMARY, baseDamage: 12, damage: 12, fireRate: 100, magSize: 30, reloadTime: 2000, range: 12, spread: 0.20, color: '#ef4444', icon: ICONS.SMG },
   [WeaponType.SHOTGUN]: { name: WeaponType.SHOTGUN, displayName: 'weapons.shotgun', category: WeaponCategory.PRIMARY, baseDamage: 15, damage: 15, fireRate: 1000, magSize: 6, reloadTime: 3000, range: 8, spread: 0.35, color: '#b91c1c', icon: ICONS.SHOTGUN },
-  [WeaponType.RIFLE]: { name: WeaponType.RIFLE, displayName: 'weapons.rifle', category: WeaponCategory.PRIMARY, baseDamage: 35, damage: 35, fireRate: 200, magSize: 25, reloadTime: 2500, range: 20, spread: 0.02, color: '#dc2626', icon: ICONS.RIFLE },
+  [WeaponType.RIFLE]: { name: WeaponType.RIFLE, displayName: 'weapons.rifle', category: WeaponCategory.PRIMARY, baseDamage: 35, damage: 35, fireRate: 200, magSize: 25, reloadTime: 2500, range: 20, spread: 0.05, color: '#dc2626', icon: ICONS.RIFLE },
+
+  // Secondary
   [WeaponType.PISTOL]: { name: WeaponType.PISTOL, displayName: 'weapons.pistol', category: WeaponCategory.SECONDARY, baseDamage: 25, damage: 25, fireRate: 400, magSize: 12, reloadTime: 1500, range: 15, spread: 0.05, color: '#fbbf24', icon: ICONS.PISTOL },
   [WeaponType.REVOLVER]: { name: WeaponType.REVOLVER, displayName: 'weapons.revolver', category: WeaponCategory.SECONDARY, baseDamage: 60, damage: 60, fireRate: 800, magSize: 6, reloadTime: 2500, range: 25, spread: 0.01, color: '#d97706', icon: ICONS.REVOLVER },
-  [WeaponType.GRENADE]: { name: WeaponType.GRENADE, displayName: 'weapons.grenade', category: WeaponCategory.THROWABLE, baseDamage: 150, damage: 150, fireRate: 5, magSize: 3, reloadTime: 0, range: 20, spread: 0, color: '#10b981', icon: ICONS.GRENADE },
-  [WeaponType.MOLOTOV]: { name: WeaponType.MOLOTOV, displayName: 'weapons.molotov', category: WeaponCategory.THROWABLE, baseDamage: 10, damage: 10, fireRate: 4, magSize: 3, reloadTime: 0, range: 18, spread: 0, color: '#f59e0b', icon: ICONS.MOLOTOV },
-  [WeaponType.FLASHBANG]: { name: WeaponType.FLASHBANG, displayName: 'weapons.flashbang', category: WeaponCategory.THROWABLE, baseDamage: 0, damage: 0, fireRate: 10, magSize: 4, reloadTime: 0, range: 20, spread: 0, color: '#e2e8f0', icon: ICONS.FLASHBANG },
+
+  // Throwable
+  [WeaponType.GRENADE]: { name: WeaponType.GRENADE, displayName: 'weapons.grenade', category: WeaponCategory.THROWABLE, baseDamage: 150, damage: 150, fireRate: 5, magSize: 5, reloadTime: 0, range: 15, spread: 0, color: '#10b981', icon: ICONS.GRENADE },
+  [WeaponType.MOLOTOV]: { name: WeaponType.MOLOTOV, displayName: 'weapons.molotov', category: WeaponCategory.THROWABLE, baseDamage: 10, damage: 10, fireRate: 4, magSize: 5, reloadTime: 0, range: 15, spread: 0, color: '#f59e0b', icon: ICONS.MOLOTOV },
+  [WeaponType.FLASHBANG]: { name: WeaponType.FLASHBANG, displayName: 'weapons.flashbang', category: WeaponCategory.THROWABLE, baseDamage: 0, damage: 0, fireRate: 10, magSize: 5, reloadTime: 0, range: 15, spread: 0, color: '#e2e8f0', icon: ICONS.FLASHBANG },
+
+  // Special
   [WeaponType.MINIGUN]: { name: WeaponType.MINIGUN, displayName: 'weapons.minigun', category: WeaponCategory.SPECIAL, baseDamage: 15, damage: 15, fireRate: 50, magSize: 200, reloadTime: 5000, range: 25, spread: 0.2, color: '#7c3aed', icon: ICONS.MINIGUN },
+
+  // Tool
   [WeaponType.RADIO]: { name: WeaponType.RADIO, displayName: 'weapons.radio', category: WeaponCategory.TOOL, baseDamage: 0, damage: 0, fireRate: 0, magSize: 0, reloadTime: 0, range: 0, spread: 0, color: '#3b82f6', icon: ICONS.RADIO }
 };

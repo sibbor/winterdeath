@@ -53,19 +53,7 @@ export const TriggerHandler = {
                 }
 
                 // --- LEGACY / STANDARD BEHAVIOR ---
-                if (trig.type === 'COLLECTIBLE') {
-                    // Remove the 3D marker
-                    callbacks.removeVisual(trig.id);
-
-                    // Track it
-                    if (!callbacks.collectedCluesRef.current.includes(trig.content)) {
-                        callbacks.collectedCluesRef.current.push(trig.content);
-                    }
-
-                    // Trigger UI Modal
-                    callbacks.onClueFound(trig);
-                    callbacks.onTrigger('THOUGHTS', 2000); // Collectibles trigger thinking
-                } else if (trig.content) {
+                if (trig.content) {
                     // Narrative / Flavor Triggers
                     const text = callbacks.t(trig.content);
                     callbacks.spawnBubble(text);

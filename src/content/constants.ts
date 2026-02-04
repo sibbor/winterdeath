@@ -13,7 +13,7 @@ export const LEVEL_CAP = 20;
 export const INITIAL_STATS: PlayerStats = {
     level: 1,
     currentXp: 0,
-    nextLevelXp: 1000,
+    nextLevelXp: 1500,
     maxHp: 100,
     maxStamina: 100,
     speed: 1.0,
@@ -38,7 +38,9 @@ export const INITIAL_STATS: PlayerStats = {
     deaths: 0,
     mostUsedWeapon: '',
     chestsOpened: 0,
-    bigChestsOpened: 0
+    bigChestsOpened: 0,
+    collectiblesFound: [],
+    viewedCollectibles: []
 };
 
 export const PLAYER_CHARACTER = {

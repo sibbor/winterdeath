@@ -47,6 +47,9 @@ export interface SectorContext {
     textures: any; // Dynamic textures passed from App/Canvas
     spawnZombie: (type: string, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
+    cluesFound: string[];
+    collectiblesFound: string[];
+    sectorId: number;
 }
 
 export interface SectorDef {

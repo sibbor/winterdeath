@@ -4,6 +4,7 @@ import { t } from '../../utils/i18n';
 import { SectorStats } from '../../types';
 import GameModalLayout from './GameModalLayout';
 import { BOSSES } from '../../content/constants';
+import { getCollectibleById, getCollectiblesBySector } from '../../content/collectibles';
 
 interface ScreenSectorReportProps {
     stats: SectorStats;
@@ -147,27 +148,58 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <span className="text-4xl font-black text-white">+{stats.scrapLooted}</span>
                         </div>
 
-                        {/* Grid Layout: Clues Found (L) / Chests Looted (R) */}
-                        <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
-                            <StatBlock label={t('ui.clues_found')} value={stats.cluesFound.length} color="text-yellow-400" />
+                        {/* Chests info */}
+                        <div className="mt-4 pt-2 border-t border-gray-800/30">
                             <StatBlock label={t('ui.chests')} value={stats.chestsOpened + stats.bigChestsOpened} color="text-yellow-400" />
                         </div>
 
-                        {/* Clues List */}
-                        <div className="overflow-y-auto custom-scrollbar text-left max-h-48 pt-2">
-                            {stats.cluesFound && stats.cluesFound.length > 0 ? (
-                                <ul className="space-y-2">
-                                    {stats.cluesFound.slice(0, 3).map((clue, i) => (
-                                        <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
-                                            {t(clue) === clue ? clue : t(clue)}
-                                        </li>
-                                    ))}
-                                    {stats.cluesFound.length > 3 && <li className="text-xs text-gray-500 font-bold uppercase tracking-widest">...</li>}
-                                </ul>
-                            ) : (
-                                <span className="text-gray-600 font-mono text-xs uppercase">{t('ui.none')}</span>
-                            )}
+                        {/* Grid Layout: Collectibles Found (L) / Clues Found (R) */}
+                        <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
+                            <StatBlock
+                                label={t('ui.log_collectibles')}
+                                value={`${stats.collectiblesFound?.length || 0} / ${getCollectiblesBySector(currentMap + 1).length}`}
+                                color="text-yellow-400"
+                            />
+                            <StatBlock label={t('ui.clues_found')} value={stats.cluesFound.length} color="text-yellow-400" />
                         </div>
+
+                        {/* Two column list for Clues and Collectibles */}
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            {/* Collectibles List */}
+                            <div className="overflow-y-auto custom-scrollbar text-left max-h-48">
+                                {stats.collectiblesFound && stats.collectiblesFound.length > 0 ? (
+                                    <ul className="space-y-2">
+                                        {stats.collectiblesFound.map((id, i) => {
+                                            const def = getCollectibleById(id);
+                                            return (
+                                                <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
+                                                    {def ? t(def.nameKey) : id}
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                ) : (
+                                    <span className="text-gray-600 font-mono text-xs uppercase">{t('ui.none')}</span>
+                                )}
+                            </div>
+
+                            {/* Clues List */}
+                            <div className="overflow-y-auto custom-scrollbar text-left max-h-48">
+                                {stats.cluesFound && stats.cluesFound.length > 0 ? (
+                                    <ul className="space-y-2">
+                                        {stats.cluesFound.slice(0, 3).map((clue, i) => (
+                                            <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
+                                                {t(clue) === clue ? clue : t(clue)}
+                                            </li>
+                                        ))}
+                                        {stats.cluesFound.length > 3 && <li className="text-xs text-gray-500 font-bold uppercase tracking-widest">...</li>}
+                                    </ul>
+                                ) : (
+                                    <span className="text-gray-600 font-mono text-xs uppercase">{t('ui.none')}</span>
+                                )}
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 

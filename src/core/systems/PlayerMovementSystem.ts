@@ -43,14 +43,20 @@ export class PlayerMovementSystem implements System {
         spawnPart: (x: number, y: number, z: number, type: string, count: number) => void
     ): boolean {
         // --- Stamina & Rush Logic ---
+        // Fix for infinite drain (space released = stop rushing)
+        if (!input.space) {
+            state.isRushing = false;
+            state.spaceDepressed = false;
+            state.rushCostPaid = false;
+        }
         if (input.space && !state.spaceDepressed) {
             state.spaceDepressed = true;
             state.spacePressTime = now;
             state.rushCostPaid = false;
         }
 
+        // Hold space to Rush
         if (state.spaceDepressed && !state.isRolling) {
-            // Hold space to Rush
             if (!state.isRushing && now - state.spacePressTime > 150) {
                 if (state.stamina >= 10) {
                     if (!state.rushCostPaid) { state.stamina -= 10; state.rushCostPaid = true; }

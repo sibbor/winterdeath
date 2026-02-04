@@ -1,7 +1,7 @@
 
 // ... existing imports ...
 import { SoundCore } from './audio/SoundCore';
-import { UiSounds, WeaponSounds, VoiceSounds, EnemySounds } from './audio/SoundLib';
+import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds } from './audio/SoundLib';
 
 export class SoundManager {
   // ... existing properties ...
@@ -28,9 +28,12 @@ export class SoundManager {
   playUiHover() { UiSounds.playHover(this.core); }
   playUiClick() { UiSounds.playClick(this.core); }
   playUiConfirm() { UiSounds.playConfirm(this.core); }
+  playUiPickup() { GamePlaySounds.playPickupCollectiblee(this.core); }
+  playOpenChest() { GamePlaySounds.playOpenChest(this.core); }
+  playLootingScrap() { GamePlaySounds.playLootingScrap(this.core); }
   playTone(freq: number, type: OscillatorType, duration: number, vol: number = 0.1) { UiSounds.playTone(this.core, freq, type, duration, vol); }
-  playMetalDoorShut() { UiSounds.playMetalDoorShut(this.core); }
-  playMetalDoorOpen() { UiSounds.playMetalDoorOpen(this.core); }
+  playMetalDoorShut() { GamePlaySounds.playMetalDoorShut(this.core); }
+  playMetalDoorOpen() { GamePlaySounds.playMetalDoorOpen(this.core); }
 
   // --- Voice Delegate ---
   playVoice(name: string) { VoiceSounds.playVoice(this.core, name); }

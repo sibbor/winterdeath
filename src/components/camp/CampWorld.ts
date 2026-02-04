@@ -141,7 +141,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const ammoGreenMat = new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 });
 
     // =========================================
-    // 1. ARMORY RACK (Vänster)
+    // 1. STATION: ARMORY
     // =========================================
     const rackGroup = new THREE.Group();
     const rackPostGeo = new THREE.BoxGeometry(0.2, 4.0, 0.2);
@@ -152,32 +152,33 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         slat.position.set(0, 0.8 + i * 0.7, -0.4); rackGroup.add(slat);
     }
 
-    // Vapen som lutar bakåt
+    // Weapons
     for (let i = 0; i < 4; i++) {
         const gun = new THREE.Group();
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.4, 0.15), metalMat); gun.add(body);
         const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2), metalMat);
-        barrel.position.y = 1.3; gun.add(barrel);
-        gun.position.set(-1.2 + i * 0.8, 0.7, -0.2);
-        gun.rotation.x = -0.25; // Lutar bakåt mot brädorna
+        barrel.position.y = 1.3;
+        gun.add(barrel);
+        gun.position.set(-1.2 + i * 0.8, 0.7, 0.2);
+        gun.rotation.x = -0.25;
         rackGroup.add(gun);
     }
 
-    // Ammolådor
+    // Ammo crates
     const crateGeo = new THREE.BoxGeometry(0.8, 0.5, 0.6);
     const c1 = new THREE.Mesh(crateGeo, ammoGreenMat); c1.position.set(-2.0, 0.25, 0.6); c1.rotation.y = 0.3; rackGroup.add(c1);
     const c2 = new THREE.Mesh(crateGeo, ammoGreenMat); c2.position.set(-0.9, 0.25, 0.4); c2.rotation.y = 1.4; rackGroup.add(c2);
     const c3 = new THREE.Mesh(crateGeo, ammoGreenMat); c3.position.set(-1.8, 0.75, 0.65); c3.rotation.y = 0.6; rackGroup.add(c3);
 
     // =========================================
-    // 2. DESK (Adventure Log)
+    // 2. STATION: ADVENTURE LOG
     // =========================================
     const deskGroup = new THREE.Group();
     const dW = 2.4, dD = 1.4, dH = 1.1;
     const dTop = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.1, dD), warmWoodMat);
     dTop.position.y = dH; deskGroup.add(dTop);
 
-    // Ben
+    // Legs
     const dLegGeo = new THREE.BoxGeometry(0.15, dH, 0.15);
     [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(p => {
         const l = new THREE.Mesh(dLegGeo, darkerWoodMat);
@@ -185,7 +186,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         deskGroup.add(l);
     });
 
-    // Staplade böcker
+    // Staples books
     for (let i = 0; i < 3; i++) {
         const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.9), new THREE.MeshStandardMaterial({ color: 0x442211 + i * 0x111111 }));
         b.position.set(-0.6, dH + 0.06 + (i * 0.13), -0.1);
@@ -193,7 +194,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         deskGroup.add(b);
     }
 
-    // --- ÖPPEN BOK (Adventure Log) ---
+    // Open book 
     const openBook = new THREE.Group();
     const paperMat = new THREE.MeshStandardMaterial({ color: 0xffffee, roughness: 0.9 });
     const coverMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8 });
@@ -203,7 +204,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
 
     const pageL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.65), paperMat);
     pageL.position.set(-0.2, 0.15, 0);
-    pageL.rotation.z = 0.15; // Ger den öppna effekten
+    pageL.rotation.z = 0.15;
     openBook.add(pageL);
 
     const pageR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.65), paperMat);
@@ -215,12 +216,12 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     deskGroup.add(openBook);
 
     // =========================================
-    // 3. MAP BOARD
+    // 3. STATION: SECTOR OVERVIEW
     // =========================================
     const mapGroup = new THREE.Group();
     const bW = 3.5, bH = 2.2;
 
-    // Stolpar som går ner i marken
+    // Poles
     const mLegGeo = new THREE.BoxGeometry(0.2, 4.0, 0.2);
     const mL = new THREE.Mesh(mLegGeo, darkerWoodMat); mL.position.set(-bW / 2, 2, 0); mapGroup.add(mL);
     const mR = new THREE.Mesh(mLegGeo, darkerWoodMat); mR.position.set(bW / 2, 2, 0); mapGroup.add(mR);
@@ -228,11 +229,11 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const board = new THREE.Mesh(new THREE.BoxGeometry(bW, bH, 0.1), warmWoodMat);
     board.position.y = 2.8; mapGroup.add(board);
 
-    // Karta med skissad terräng
+    // Map
     const map = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.4), new THREE.MeshStandardMaterial({ map: createCanvasTexture(256, 256, 'map') }));
     map.position.set(0, 2.8, 0.06); mapGroup.add(map);
 
-    // Notisar på snedden
+    // Notes
     const noteTex = createCanvasTexture(128, 128, 'note');
     for (let i = 0; i < 3; i++) {
         const note = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.5), new THREE.MeshStandardMaterial({ map: noteTex, transparent: true }));
@@ -243,28 +244,26 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     }
 
     // =========================================
-    // 4. MEDICINE CABINET (Hög, Ihålig, Fylld)
+    // 4. STATION SKILLS
     // =========================================
     const medGroup = new THREE.Group();
     const cH = 5.0, cW = 2.0, cD = 0.8, th = 0.1;
 
-    // Bakstycke
+    // Back
     const back = new THREE.Mesh(new THREE.BoxGeometry(cW, cH, th), warmWoodMat);
     back.position.set(0, cH / 2, -cD / 2 + th / 2); medGroup.add(back);
-    // Sidor
+    // Sides
     const sGeo = new THREE.BoxGeometry(th, cH, cD);
     const sL = new THREE.Mesh(sGeo, warmWoodMat); sL.position.set(-cW / 2 + th / 2, cH / 2, 0); medGroup.add(sL);
     const sR = new THREE.Mesh(sGeo, warmWoodMat); sR.position.set(cW / 2 - th / 2, cH / 2, 0); medGroup.add(sR);
-    // Topp/Botten
+    // Top/Bottom
     const tbGeo = new THREE.BoxGeometry(cW, th, cD);
     const top = new THREE.Mesh(tbGeo, warmWoodMat); top.position.set(0, cH - th / 2, 0); medGroup.add(top);
     const bot = new THREE.Mesh(tbGeo, warmWoodMat); bot.position.set(0, th / 2, 0); medGroup.add(bot);
-
-    // Dörrar nertill
+    // Doors
     const cDoor = new THREE.Mesh(new THREE.BoxGeometry(cW - 0.1, cH * 0.3, th), darkerWoodMat);
     cDoor.position.set(0, cH * 0.15, cD / 2); medGroup.add(cDoor);
-
-    // Hyllplan och Flaskor
+    // Shelves and bottles
     for (let h = 0; h < 3; h++) {
         const yBase = cH * 0.4 + (h * 1.0);
         const shelf = new THREE.Mesh(new THREE.BoxGeometry(cW - th * 2, th / 2, cD - th), darkerWoodMat);
@@ -283,7 +282,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         }
     }
 
-    // Medicinlåda
+    // Medicine box
     const medkit = new THREE.Group();
     const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: 0xcc0000 }));
     medkit.add(box);

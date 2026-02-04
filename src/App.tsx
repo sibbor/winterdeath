@@ -11,7 +11,8 @@ import ScreenMap from './components/game/ScreenMap';
 import ScreenTeleport from './components/game/ScreenTeleport';
 import ScreenSectorReport from './components/game/ScreenSectorReport';
 import ScreenBossKilled from './components/game/ScreenBossKilled';
-import ScreenClue from './components/game/ScreenClue';
+import ScreenCollectibleFound from './components/game/ScreenCollectibleFound';
+import ScreenAdventureLog from './components/camp/ScreenAdventureLog';
 import Prologue from './components/game/Prologue';
 import ScreenLoading from './components/game/ScreenLoading';
 import ScreenSettings from './components/camp/ScreenSettings';
@@ -19,6 +20,7 @@ import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/sound';
+import { getCollectibleById } from './content/collectibles';
 
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
@@ -33,8 +35,9 @@ const App: React.FC = () => {
 
     // HUD & Game State tracked in App for persistence/UI overlay
     const [hudState, setHudState] = useState<any>({});
-    const [activeClue, setActiveClue] = useState<SectorTrigger | null>(null);
+    const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
     const [isDialogueOpen, setIsDialogueOpen] = useState(false);
+    const [isAdventureLogOpen, setIsAdventureLogOpen] = useState(false);
     const [isBossIntroActive, setIsBossIntroActive] = useState(false);
     const [currentMapItems, setCurrentMapItems] = useState<MapItem[]>([]);
     const [fps, setFps] = useState(0);
@@ -56,10 +59,11 @@ const App: React.FC = () => {
 
     // Global Input Hook (ESC, M)
     useGlobalInput(gameState.screen, {
-        isPaused, isMapOpen, showTeleportMenu, activeClue, isDialogueOpen, isBossIntroActive, hp: hudState.hp || 100, isSettingsOpen
+        isPaused, isMapOpen, showTeleportMenu, activeCollectible, isDialogueOpen, isBossIntroActive, hp: hudState.hp || 100, isSettingsOpen, isAdventureLogOpen
     }, {
         setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen,
-        setActiveClue,
+        setIsAdventureLogOpen,
+        setActiveCollectible,
         requestPointerLock: () => gameCanvasRef.current?.requestPointerLock()
     });
 
@@ -91,17 +95,6 @@ const App: React.FC = () => {
         const prevSp = gameState.stats.skillPoints;
         const newStats = aggregateStats(gameState.stats, stats, false, false);
 
-        // 2. Award SP for New Collectibles
-        // aggregateStats has already merged the clues into newStats.cluesFound.
-        // Comparison with gameState.stats.cluesFound tells us how many were new.
-        const prevClueCount = gameState.stats.cluesFound ? gameState.stats.cluesFound.length : 0;
-        const newClueCount = newStats.cluesFound ? newStats.cluesFound.length : 0;
-        const cluesFoundCount = Math.max(0, newClueCount - prevClueCount);
-
-        if (cluesFoundCount > 0) {
-            newStats.skillPoints += cluesFoundCount;
-            newStats.totalSkillPointsEarned += cluesFoundCount;
-        }
 
         // 3. Award SP for Unique Map Objectives (Boss / Family)
         const newBosses = [...gameState.bossesDefeated];
@@ -155,7 +148,7 @@ const App: React.FC = () => {
         const abortedStats: SectorStats = {
             timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {},
             scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
-            chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: [],
+            chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: [], collectiblesFound: [],
             seenEnemies: [], seenBosses: [], visitedPOIs: []
         };
 
@@ -205,7 +198,7 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setHudState({});
         setCurrentMapItems([]);
-        setActiveClue(null);
+        setActiveCollectible(null);
         setIsPaused(false);
         setIsMapOpen(false);
     };
@@ -230,13 +223,43 @@ const App: React.FC = () => {
         window.location.reload();
     };
 
-    const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeClue && !showTeleportMenu && !isDialogueOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive;
+    const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen;
 
-    const handleClueClose = () => {
+    const handleCollectibleClose = useCallback(() => {
         gameCanvasRef.current?.requestPointerLock();
-        setActiveClue(null);
+        if (activeCollectible) {
+            setGameState(prev => {
+                const collId = activeCollectible as string;
+                if (!prev.stats.collectiblesFound) return prev; // Safety check
+                if (prev.stats.collectiblesFound.includes(collId)) return prev;
+                return {
+                    ...prev,
+                    stats: {
+                        ...prev.stats,
+                        collectiblesFound: [...prev.stats.collectiblesFound, collId],
+                        skillPoints: prev.stats.skillPoints + 1,
+                        totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
+                    }
+                };
+            });
+        }
+        setActiveCollectible(null);
         setIsPaused(false);
-    };
+    }, [activeCollectible]);
+
+    const handleClueFound = useCallback((clue: SectorTrigger) => {
+        if (!clue.id) return;
+        setGameState(prev => {
+            if (prev.stats.cluesFound.includes(clue.id)) return prev;
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    cluesFound: [...prev.stats.cluesFound, clue.id]
+                }
+            };
+        });
+    }, []);
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
@@ -283,9 +306,9 @@ const App: React.FC = () => {
                         currentMap={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentMap} // Force Map 0 during pre-load
                         debugMode={gameState.debugMode}
                         // Only run loop if actually playing Sector
-                        isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeClue && !isLoadingLevel}
-                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeClue || isLoadingLevel || gameState.screen === GameScreen.PROLOGUE}
-                        disableInput={!!activeClue || isLoadingLevel}
+                        isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeCollectible && !isLoadingLevel && !isAdventureLogOpen}
+                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeCollectible || isLoadingLevel || gameState.screen === GameScreen.PROLOGUE || isAdventureLogOpen}
+                        disableInput={!!activeCollectible || isLoadingLevel || isAdventureLogOpen}
 
                         onUpdateHUD={handleUpdateHUD}
                         onDie={handleDie}
@@ -302,9 +325,10 @@ const App: React.FC = () => {
                         onCheckpointReached={() => { }}
 
                         teleportTarget={teleportTarget}
-                        onClueFound={setActiveClue}
-                        isClueOpen={!!activeClue}
-                        onClueClose={handleClueClose}
+                        onCollectibleFound={setActiveCollectible}
+                        onClueFound={handleClueFound}
+                        isCollectibleOpen={!!activeCollectible}
+                        onCollectibleClose={handleCollectibleClose}
                         onDialogueStateChange={setIsDialogueOpen}
                         onDeathStateChange={setIsDeathScreenActive}
                         onBossIntroStateChange={setIsBossIntroActive}
@@ -314,7 +338,7 @@ const App: React.FC = () => {
                     />
 
                     {/* Hide HUD if hudState.isHidden or during dialogues/intro (but allow GameHUD to handle its own visibility for Boss Intro) */}
-                    {!isMapOpen && !showTeleportMenu && !activeClue && !hudState.isHidden && !isDialogueOpen && (
+                    {!isMapOpen && !showTeleportMenu && !activeCollectible && !hudState.isHidden && !isDialogueOpen && (
                         <GameHUD
                             {...hudState}
                             loadout={gameState.loadout}
@@ -324,25 +348,36 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && (
+                    {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && !isAdventureLogOpen && (
                         <ScreenPause
                             onResume={() => { setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
                             onAbort={handleAbortSector}
                             onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
                             onOpenSettings={() => setIsSettingsOpen(true)}
+                            onOpenAdventureLog={() => { setIsAdventureLogOpen(true); soundManager.playUiConfirm(); }}
                         />
                     )}
 
                     {isSettingsOpen && (
                         <ScreenSettings
-                            onClose={() => setIsSettingsOpen(false)}
+                            onClose={() => { setIsSettingsOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
                             graphics={gameState.graphics}
                             onUpdateGraphics={handleSaveGraphics}
                         />
                     )}
 
-                    {activeClue && (
-                        <ScreenClue clue={activeClue} onClose={handleClueClose} />
+                    {activeCollectible && (
+                        <ScreenCollectibleFound
+                            collectible={getCollectibleById(activeCollectible)!}
+                            onClose={handleCollectibleClose}
+                        />
+                    )}
+
+                    {isAdventureLogOpen && (
+                        <ScreenAdventureLog
+                            stats={gameState.stats}
+                            onClose={() => { setIsAdventureLogOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
+                        />
                     )}
                 </>
             )}
@@ -407,7 +442,7 @@ const App: React.FC = () => {
                         setDeathDetails(null);
                         setHudState({});
                         setCurrentMapItems([]);
-                        setActiveClue(null);
+                        setActiveCollectible(null);
                         setIsPaused(false);
                         soundManager.playUiConfirm();
                     }}

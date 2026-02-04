@@ -427,7 +427,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             {activeModal === 'stats' && <ScreenStatistics stats={stats} onClose={closeModal} />}
             {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} />}
-            {activeModal === 'adventure_log' && <ScreenAdventureLog stats={stats} onClose={closeModal} />}
+            {activeModal === 'adventure_log' && <ScreenAdventureLog
+                stats={stats}
+                onClose={closeModal}
+                onMarkCollectiblesViewed={(newIds) => {
+                    const updated = [...(stats.viewedCollectibles || [])];
+                    newIds.forEach(id => {
+                        if (!updated.includes(id)) {
+                            updated.push(id);
+                        }
+                    });
+                    onSaveStats({ ...stats, viewedCollectibles: updated });
+                }}
+            />}
             {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} />}
             {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} />}
             {activeModal === 'settings' && (

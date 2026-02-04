@@ -79,39 +79,6 @@ export const Sector2: SectorDef = {
         // --- TRIGGERS (Outside/General) ---
         triggers.push(
             {
-                id: 's2_bunker_approach',
-                position: { x: 39, z: -193 },
-                radius: 10,
-                type: 'EVENT',
-                content: '',
-                triggered: false,
-                actions: []
-            },
-            // Collectible 1
-            {
-                id: 's2_collectible_1',
-                position: LOCATIONS.COLLECTIBLES.C1,
-                radius: 5,
-                type: 'COLLECTIBLE',
-                content: "clues.s2_collectible_1",
-                description: "clues.s2_collectible_1_description",
-                triggered: false,
-                icon: "s2_collectible_1_icon",
-                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-            },
-            // Collectible 2
-            {
-                id: 's2_collectible_2',
-                position: LOCATIONS.COLLECTIBLES.C2,
-                radius: 2,
-                type: 'COLLECTIBLE',
-                content: "clues.s2_collectible_2",
-                description: "clues.s2_collectible_2_description",
-                triggered: false,
-                icon: "s2_collectible_2_icon",
-                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-            },
-            {
                 id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHTS', content: "clues.s2_start", triggered: false,
                 actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
@@ -146,14 +113,18 @@ export const Sector2: SectorDef = {
                 actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
             {
-                id: 's2_cave_door', position: LOCATIONS.POIS.BOSS_ROOM, radius: 15, type: 'SPEECH', content: "clues.s2_cave_door", triggered: false,
+                id: 's2_cave_knock_port', position: { x: 35, z: -193 }, radius: 10, type: 'EVENT', content: '', triggered: false,
+                actions: []
+            },
+            {
+                id: 's2_cave_door_room', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'SPEECH', content: "clues.s2_cave_door", triggered: false,
                 actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
             },
         );
 
-        // Visual Marker for collectibles
-        SectorBuilder.spawnClueMarker(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 'collectible 1', 'pacifier');
-        SectorBuilder.spawnClueMarker(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 'collectible 2', 'teddy');
+        // Visual Collectibles
+        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's2_collectible_1', 'pacifier');
+        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's2_collectible_2', 'teddy');
 
         // Visualize Triggers
         SectorBuilder.visualizeTriggers(ctx);
@@ -598,8 +569,8 @@ export const Sector2: SectorDef = {
 
             // --- CINEMATIC TRIGGER & SEQUENCE ---
             // Access triggers from gameState (4th argument)
-            const approachTrigger = gameState.triggers.find(t => t.id === 's2_bunker_approach');
-            if (approachTrigger && approachTrigger.triggered && !sectorState.introCinematicPlayed) {
+            const knockingTrigger = gameState.triggers.find(t => t.id === 's2_cave_knock_port');
+            if (knockingTrigger && knockingTrigger.triggered && !sectorState.introCinematicPlayed) {
                 const doorFrame = scene.getObjectByName('s2_bunker_door_frame');
                 if (doorFrame && (events as any).startCinematic) {
                     (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });

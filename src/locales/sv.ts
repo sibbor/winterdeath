@@ -101,8 +101,11 @@ export const sv = {
         reload: "LADDNING",
         equipped: "VALD",
         signal_strength: "SIGNAL",
+        interact_pickup_collectible: "[E] PLOCKA UPP FÖREMÅL",
+        interact_open_chest: "[E] ÖPPNA KISTA",
+        interact_plant_explosive: "[E] PLANTERA SPRÄNGMEDEL",
+        interact_knock_on_port: "[E] KNCKA PÅ PORTEN",
         open_chest: "ÖPPNA KISTA [E]",
-        travel: "RES [E]",
         clue_found_title: "LEDTRÅD HITTAD",
         available_pts: "POÄNG",
         throwables_thrown: "Kastvapen Kastade",
@@ -143,14 +146,16 @@ export const sv = {
         unknown_sector: "Okänd sektor",
         health: "Hälsa",
         speed: "Hastighet",
-        end_mission: "AVSLUTA UPPDRAG",
+        end_game: "AVBRYT SEKTOR",
         delete_save_data: "RADERA SPARDATA",
         end_conversation: "AVSLUTA SAMTAL",
         located: "LOKALISERAD",
         defeat_boss: "BESEGRA BOSS",
         target_located: "MÅL LOKALISERAT",
         protect_family: "SKYDDA FAMILJEN",
-        scanning: "SKANNAR..."
+        scanning: "SKANNAR...",
+        collected: "INSAMLADE",
+        new: "NY"
     },
     categories: {
         primary: "PRIMÄR",
@@ -335,10 +340,8 @@ export const sv = {
         // Sector 1 Triggers
         s1_collectible_1: "Esmeraldas telefon",
         s1_collectible_1_description: "Skärmen är sprucken och flimrar, men vissa detaljer syns. Esmeraldas sista försök var ett meddelande till mig:\n'Pappa!! Kan inte ringa dig! Hjälp oss! Någon satte eld på vår bil och försöker bryta sig in. RING NU!! Vi springer mot S[...]'\n'Meddelandet kunde inte skickas. Försök igen?' är skrivet i rött nertill...",
-        s1_collectible_1_icon: "📱",
         s1_collectible_2: "Lokes handyxa",
         s1_collectible_2_description: "Handyxan som jag har gett till Loke. Den han alltid använder när han hjälper mig med veden eller hugga ned träd hemma. Han måste ha tagit med sig den för att försvara sig.",
-        s1_collectible_2_icon: "🪓",
 
         s1_start_tracks: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?",
         s1_blood_stains: "Blodfläckar! Är de skadade?!",
@@ -348,21 +351,20 @@ export const sv = {
         s1_tunnel_blocked: "Åh nej, tunneln har blockerats av en krockad buss",
         s1_tunnel_cleared: "Tunneln rensad. Smidigt!",
 
-        s1_poi_building_on_fire: "Skit, byggnaden brinner!",
+        s1_poi_building_on_fire: "Helvete! SMU-gården brinner!",
         s1_poi_church: "Kyrkan brinner... Satans verk?",
-        s1_poi_cafe: "Åh, jag saknar att sitta här med min familj.",
-        s1_poi_pizzeria: "Tyckte alltid om att köra 'PIZZADAG!' med min familj här.",
+        s1_poi_cafe: "Åh, jag saknar att sitta på caféet med min familj.",
+        s1_poi_pizzeria: "Uppskattar alltid att köra 'PIZZA TIME!' med min familjen här.",
         s1_poi_gym: "Brukade lyfta skrot här. Riktigt jävla tungt skrot.",
         s1_poi_grocery: "Mataffären verkar plundrad...",
-        s1_poi_train_yard: "Hmm... röken kommer från tåget. Låt oss ta en titt.",
+        s1_poi_train_yard: "Hmm... röken kommer från tåget.",
 
         // Sector 2 Triggers
-        s2_collectible_1: "Jordans favoritnapp",
+        s2_collectible_1_title: "Jordans favoritnapp",
         s2_collectible_1_description: "Den är liten, blå och täckt av frost. Jordan går aldrig någonstans utan den. Han måste ha tappat den när de sprang in i grottorna.",
-        s2_collectible_1_icon: "👶",
-        s2_collectible_2: "Jordans nallebjörn",
+        s2_collectible_2_title: "Jordans nallebjörn",
         s2_collectible_2_description: "Jordans favoritnalle. Den saknar ett öga och luktar av grottans fukt. Han måste ha tappat den när de sprang in i mörkret.",
-        s2_collectible_2_icon: "🧸",
+
         s2_start: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss...",
         s2_combat: "FAN! Zombier överallt. Fortsätt kämpa, Loke! Vi fixar det här.",
         s2_mountain: "Åh, grottingången. Låt oss se om de gömmer sig där inne!",
@@ -375,20 +377,20 @@ export const sv = {
         s2_tunnel: "Den här tunneln ser ut att ha lett ut till andra sidan berget.",
 
         // Sector 3 Triggers
-        s3_collectible: "Esmeraldas dagbok",
-        s3_collectible_desc: "En liten anteckningsbok med blommor på omslaget. Sista sidan handlar om hur mycket hon saknar sina vänner... och hur rädd hon är för mörkret i skogen.",
-        s3_collectible_2: "Esmeraldas jacka",
+        s3_collectible_1_title: "Esmeraldas dagbok",
+        s3_collectible_1_description: "En liten anteckningsbok med blommor på omslaget. Sista sidan handlar om hur mycket hon saknar sina vänner... och hur rädd hon är för mörkret i skogen.",
+        s3_collectible_2_title: "Esmeraldas jacka",
         s3_collectible_2_description: "Esmeraldas favoritjacka. Den är sönderriven och har blodfläckar på ärmen. Det knyter sig i magen... jag hoppas det inte är hennes blod.",
-        s3_collectible_2_icon: "🧥",
+
         s3_forest_noise: "Skogen är för högljudd. Varje kvist som bryts låter som en löpare...",
         s3_mast_sight: "Där är den. Häglaredsmasten. Om Esmeralda är någonstans, så är hon där.",
 
         // Sector 4 Triggers
-        s4_collectible: "Nathalies förlovningsring",
-        s4_collectible_desc: "En guldring med en stor vit diamant; på insidan en inskription: 'För alltid vi'. Den är kall, men minnena den bär på bränner i handen.",
-        s4_collectible_2: "Nathalies polisbricka",
+        s4_collectible_1_title: "Nathalies förlovningsring",
+        s4_collectible_1_description: "En guldring med en stor vit diamant; på insidan en inskription: 'För alltid vi'. Den är kall, men minnena den bär på bränner i handen.",
+        s4_collectible_2_title: "Nathalies polisbricka",
         s4_collectible_2_description: "Nathalies kriminalinspektörsbricka. Den är repad och lite svedd i kanten. Hon måste ha tappat den under striden på skroten. Hon ger aldrig upp sitt märke frivilligt.",
-        s4_collectible_2_icon: "🛡️",
+
         s4_noise: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?",
         s4_shed: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne."
     },

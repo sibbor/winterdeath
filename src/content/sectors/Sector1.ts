@@ -480,7 +480,7 @@ export const Sector1: SectorDef = {
         const bloodPool = new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal);
         bloodPool.rotation.x = -Math.PI / 2;
         bloodPool.position.set(37, 0.05, 44);
-        bloodPool.scale.set(3, 3, 1);
+        bloodPool.scale.set(5, 5, 2);
         scene.add(bloodPool);
 
         // Corpse
@@ -489,13 +489,22 @@ export const Sector1: SectorDef = {
         corpse.position.set(37, 0.2, 44);
         scene.add(corpse);
 
+        // Blood Pool 2
+        const bloodPool2 = new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal);
+        bloodPool2.rotation.x = -Math.PI / 2;
+        bloodPool2.position.set(42, 0.05, 45);
+        bloodPool2.scale.set(5, 5, 2);
+        scene.add(bloodPool2);
+
+        // Corpse 2
+        const baseZomb2 = ModelFactory.createZombie('RUNNER', { color: 0xff00bb });
+        const corpse2 = ModelFactory.createCorpse(baseZomb2);
+        corpse2.position.set(42, 0.2, 45);
+        scene.add(corpse2);
+
 
         // --- TRIGGERS ---
         triggers.push(
-            // Collectibles (Action: 1 SP Reward)
-            { id: 's1_collectible_1', position: LOCATIONS.COLLECTIBLES.C1, radius: 4, type: 'COLLECTIBLE', content: "clues.s1_collectible_1", description: "clues.s1_collectible_1_description", triggered: false, icon: "s1_collectible_1_icon", actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }] },
-            { id: 's1_collectible_2', position: LOCATIONS.COLLECTIBLES.C2, radius: 4, type: 'COLLECTIBLE', content: "clues.s1_collectible_2", description: "clues.s1_collectible_2_description", triggered: false, icon: "s1_collectible_2_icon", actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }] },
-
             // Clues (Action: 50 XP Reward)
             { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: 'THOUGHTS', content: "clues.s1_start_tracks", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: 'THOUGHTS', content: "clues.s1_blood_stains", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -506,7 +515,7 @@ export const Sector1: SectorDef = {
             { id: 's1_tunnel_cleared', position: LOCATIONS.TRIGGERS.TUNNEL, radius: 10, type: 'THOUGHTS', content: "clues.s1_tunnel_cleared", triggered: false },
 
             // POIs (Action: 250 XP Reward)
-            { id: 's1_poi_building_on_fire', position: LOCATIONS.POIS.SMU, radius: 50, type: 'POI', content: "clues.s1_poi_building_on_fire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's1_poi_building_on_fire', position: LOCATIONS.POIS.SMU, radius: 30, type: 'POI', content: "clues.s1_poi_building_on_fire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's1_poi_church', position: LOCATIONS.POIS.CHURCH, radius: 20, type: 'POI', content: "clues.s1_poi_church", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's1_poi_cafe', position: LOCATIONS.POIS.CAFE, radius: 20, type: 'POI', content: "clues.s1_poi_cafe", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's1_poi_pizzeria', position: LOCATIONS.POIS.PIZZERIA, radius: 20, type: 'POI', content: "clues.s1_poi_pizzeria", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
@@ -524,20 +533,17 @@ export const Sector1: SectorDef = {
                 actions: [
                     { type: 'CAMERA_SHAKE', payload: { amount: 2.0 } },
                     { type: 'PLAY_SOUND', payload: { id: 'explosion' } },
-                    // Pan to Train Yard
                     { type: 'CAMERA_PAN', payload: { target: LOCATIONS.POIS.TRAIN_YARD, duration: 2000 } },
                     { type: 'PLAY_SOUND', payload: { id: 'explosion' } },
-                    // After pan (using delay)
                     { type: 'SHOW_TEXT', payload: { text: t('story.gym_event') }, delay: 2500 },
-                    // Start Wave
                     { type: 'START_WAVE', payload: { count: 50 }, delay: 3000 },
                     // Spawn Zombies from Directions
                     // Batch 1: Church (North)
-                    //{ type: 'SPAWN_ENEMY', payload: { type: 'RUNNER', count: 10, pos: LOCATIONS.POIS.CHURCH, spread: 10 }, delay: 3000 },
+                    { type: 'SPAWN_ENEMY', payload: { type: 'RUNNER', count: 10, pos: LOCATIONS.POIS.CHURCH, spread: 10 }, delay: 3000 },
                     // Batch 2: Cafe (West)
-                    //{ type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 10, pos: LOCATIONS.POIS.CAFE, spread: 10 }, delay: 3500 },
+                    { type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 10, pos: LOCATIONS.POIS.CAFE, spread: 10 }, delay: 3500 },
                     // Batch 3: Grocery (South)
-                    //{ type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 10, pos: LOCATIONS.POIS.GROCERY, spread: 10 }, delay: 4000 },
+                    { type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 10, pos: LOCATIONS.POIS.GROCERY, spread: 10 }, delay: 4000 },
                     // More waves follow logic in onUpdate if needed, or define here
                 ]
             },
@@ -553,6 +559,12 @@ export const Sector1: SectorDef = {
                 actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
         );
+
+        // Visual Collectibles - Only spawn in original Sector 1 (not reused by Sector 5)
+        if (ctx.sectorId === 0) {
+            SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's1_collectible_1', 'phone');
+            SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's1_collectible_2', 'axe');
+        }
 
         // --- ZOMBIE SPAWNING ---
         for (let i = 0; i < 3; i++) {

@@ -148,7 +148,6 @@ export const EnemyManager = {
                     if (!state.bossDefeatedTime) {
                         state.bossDefeatedTime = now;
                         soundManager.playVictory();
-                        callbacks.spawnBubble(callbacks.t('ui.threat_neutralized'), 4000);
                         callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 200);
                         if (e.bossId !== undefined && callbacks.onBossKilled) callbacks.onBossKilled(e.bossId);
                     }

@@ -109,9 +109,15 @@ export const AssetPreloader = {
         const scorch = new THREE.Mesh(GEOMETRY.decal, MATERIALS.scorchDecal);
         dummyRoot.add(scorch);
 
-        // -- Narrative / Quest Items --
+        // -- Narrative / Quest Items & Collectibles --
         const ring = new THREE.Mesh(GEOMETRY.familyRing, MATERIALS.familyRing);
         dummyRoot.add(ring);
+
+        const collectibleTypes = ['phone', 'pacifier', 'axe', 'scarf', 'jacket', 'badge', 'diary', 'ring', 'teddy'];
+        collectibleTypes.forEach(type => {
+            const model = ModelFactory.createCollectible(type);
+            dummyRoot.add(model);
+        });
 
         // 3. Force Compilation
         // renderer.compile is the magic method added in newer Three.js versions to avoid jank

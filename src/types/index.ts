@@ -78,6 +78,8 @@ export interface PlayerStats {
   totalDamageTaken: number;
   totalDistanceTraveled: number; // New: In meters
   cluesFound: string[]; // List of collected clue names (IDs)
+  collectiblesFound: string[]; // New: List of collected 3D items
+  viewedCollectibles: string[]; // New: List of collectibles seen in Adventure Log
   seenEnemies: string[]; // New: List of enemy types seen
   seenBosses: string[]; // New: List of bosses seen
   visitedPOIs: string[]; // New: List of POI IDs visited
@@ -105,6 +107,7 @@ export interface SectorStats {
   bossDamageTaken?: number; // New
   distanceTraveled: number; // New
   cluesFound: string[]; // New
+  collectiblesFound: string[]; // New
   seenEnemies?: string[]; // New
   seenBosses?: string[]; // New
   visitedPOIs?: string[]; // New
@@ -257,9 +260,10 @@ export interface GameCanvasProps {
   startAtCheckpoint: boolean;
   onCheckpointReached: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
+  onCollectibleFound: (id: string) => void;
   onClueFound: (clue: SectorTrigger) => void;
-  isClueOpen: boolean;
-  onClueClose?: () => void;
+  isCollectibleOpen: boolean;
+  onCollectibleClose: () => void;
   onFPSUpdate?: (fps: number) => void;
   initialGraphics?: any;
 }

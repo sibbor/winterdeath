@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
+import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
 import { ObjectGenerator } from './ObjectGenerator';
 
@@ -35,86 +35,32 @@ export const SectorBuilder = {
         });
     },
 
-    spawnClueMarker: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy') => {
+    spawnCollectible: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy') => {
+        // Persistence Check: Don't spawn if already found
+        const foundList = (ctx as any).collectiblesFound || []; // Fallback if type not updated yet
+        if (foundList.includes(id)) {
+            return;
+        }
+
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
-        group.userData = { id, type: 'clue_visual' };
-        group.name = `clue_visual_${id}`;
+        group.userData = { id, type: 'collectible', collectibleId: id };
+        group.name = `collectible_${id}`;
 
-        if (type === 'phone') {
-            // Enhanced Phone Visuals (Larger, Glowing)
-            const phone = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.8), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 }));
-            const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.65), new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
-            screen.rotation.x = -Math.PI / 2;
-            screen.position.y = 0.05;
-            phone.add(screen);
+        // Use centralized ModelFactory for visual consistency
+        const mesh = ModelFactory.createCollectible(type);
+        group.add(mesh);
 
-            // Pulsing Holographic Glow (simulated via point light for now, specific shader later if needed)
-            const glowPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
-            glowPlane.rotation.x = -Math.PI / 2;
-            glowPlane.position.y = 0.02;
-            phone.add(glowPlane);
-
-            group.add(phone);
-            const light = new THREE.PointLight(0x00ffff, 3, 8);
-            light.position.y = 1.0;
-            group.add(light);
-            ctx.flickeringLights.push({ light, baseInt: 3, flickerRate: 0.1 }); // Fast flicker for "tech" feel
-        } else if (type === 'axe') {
-            const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.2), new THREE.MeshStandardMaterial({ color: 0x8b4513 }));
-            handle.rotation.z = Math.PI / 2;
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.8, 0.2), new THREE.MeshStandardMaterial({ color: 0xaaaaaa }));
-            head.position.set(0.5, 0.2, 0);
-            group.add(handle); group.add(head);
-            const light = new THREE.PointLight(0xffaaaa, 3, 5); light.position.y = 0.5; group.add(light);
-        } else if (type === 'scarf' || type === 'jacket') {
-            const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.8), new THREE.MeshStandardMaterial({ color: type === 'scarf' ? 0xcc0000 : 0x0000cc }));
-            group.add(cloth);
-            const light = new THREE.PointLight(0xaaaaff, 3, 5); light.position.y = 0.5; group.add(light);
-        } else if (type === 'badge') {
-            const plate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.05), new THREE.MeshStandardMaterial({ color: 0xccaa00, metalness: 0.8, roughness: 0.2 }));
-            plate.rotation.x = -Math.PI / 4;
-            const shield = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 8, 16, Math.PI), new THREE.MeshStandardMaterial({ color: 0xffdd44 }));
-            shield.position.set(0, 0, 0.03);
-            plate.add(shield);
-            group.add(plate);
-            const light = new THREE.PointLight(0xffffcc, 3, 5); light.position.y = 0.5; group.add(light);
-        } else if (type === 'diary') {
-            const book = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.1), new THREE.MeshStandardMaterial({ color: 0xaa44aa }));
-            book.rotation.y = Math.PI / 4;
-            group.add(book);
-            const light = new THREE.PointLight(0xffaaff, 3, 5); light.position.y = 0.5; group.add(light);
-        } else if (type === 'ring') {
-            const ringHandle = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.03, 8, 24), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 }));
-            ringHandle.rotation.x = Math.PI / 2;
-            group.add(ringHandle);
-            const light = new THREE.PointLight(0xffffcc, 3, 5); light.position.y = 0.5; group.add(light);
-        } else {
-            // Enhanced Pacifier/Item Visuals
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.08, 16, 32), new THREE.MeshStandardMaterial({ color: 0xffaaaa, emissive: 0xff0000, emissiveIntensity: 2.0 }));
-            ring.rotation.x = Math.PI / 2;
-            group.add(ring);
-
-            // Ground Glow
-            const glowPlane = new THREE.Mesh(new THREE.CircleGeometry(0.8, 32), new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }));
-            glowPlane.rotation.x = -Math.PI / 2;
-            glowPlane.position.y = 0.02;
-            group.add(glowPlane);
-
-            const light = new THREE.PointLight(0xffaaaa, 4, 6);
-            light.position.y = 0.5;
-            group.add(light);
-        }
-        group.rotation.y = Math.random() * Math.PI;
+        group.rotation.y = Math.random() * Math.PI * 2;
         ctx.scene.add(group);
 
         ctx.mapItems.push({
-            id: `clue_${id}`,
+            id: `collectible_${id}`,
             x, z,
             type: 'TRIGGER',
-            label: 'ui.clue',
-            icon: '🔍',
-            color: '#00ffff'
+            label: 'ui.collectible',
+            icon: '🎁',
+            color: '#ffd700'
         });
     },
 

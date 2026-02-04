@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../utils/i18n';
 import { MAP_THEMES, BOSSES, FAMILY_MEMBERS } from '../../content/constants';
+import { getCollectiblesBySector } from '../../content/collectibles';
 import { en } from '../../locales/en';
 import CampModalLayout from './CampModalLayout';
 import { PlayerStats } from '../../types';
@@ -60,27 +61,29 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
 
     // -- Stats Calculation --
     const { collectibles, clues, pois } = useMemo(() => {
-        // This is a rough estimation based on naming conventions in en.ts
-        // In a real scenario, we'd have a structured list of all IDs per sector.
-        // We'll scan en.clues keys.
-        const sectorPrefix = `s${selectedMapIndex + 1}_`;
+        const sectorNum = selectedMapIndex + 1;
 
+        // Accurate Collectible Count
+        const sectorCollectibles = getCollectiblesBySector(sectorNum);
+        const foundCollectibles = (stats.collectiblesFound || []).filter(id =>
+            sectorCollectibles.some(c => c.id === id)
+        ).length;
+
+        // Clues & POIs (Still based on prefix but more robust)
+        const sectorPrefix = `s${sectorNum}_`;
         const allKeys = Object.keys(en.clues);
         const sectorKeys = allKeys.filter(k => k.startsWith(sectorPrefix));
 
-        const collectibleKeys = sectorKeys.filter(k => k.includes('collectible') && !k.endsWith('_description') && !k.endsWith('_icon'));
-        const clueKeys = sectorKeys.filter(k => !k.includes('collectible') && !k.includes('poi')); // "Tracks", "Blood", etc are narrative clues
+        const clueKeys = sectorKeys.filter(k => !k.includes('collectible') && !k.includes('poi') && !k.endsWith('_description'));
         const poiKeys = sectorKeys.filter(k => k.includes('poi'));
 
-        // Count found
-        const foundCollectibles = (stats.cluesFound || []).filter(id => collectibleKeys.includes(id)).length;
-        const foundClues = (stats.cluesFound || []).filter(id => clueKeys.includes(id)).length;
-        const foundPois = (stats.visitedPOIs || []).filter(id => poiKeys.includes(id)).length;
+        const foundCluesCount = (stats.cluesFound || []).filter(id => clueKeys.includes(id)).length;
+        const foundPoisCount = (stats.visitedPOIs || []).filter(id => poiKeys.includes(id)).length;
 
         return {
-            collectibles: { found: foundCollectibles, total: collectibleKeys.length || 0 }, // Fallback if 0 keys (e.g. S3/4 might be empty in en.ts)
-            clues: { found: foundClues, total: clueKeys.length || 0 },
-            pois: { found: foundPois, total: poiKeys.length || 0 }
+            collectibles: { found: foundCollectibles, total: sectorCollectibles.length },
+            clues: { found: foundCluesCount, total: clueKeys.length },
+            pois: { found: foundPoisCount, total: poiKeys.length }
         };
     }, [selectedMapIndex, stats]);
 

@@ -1,19 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlayerStats } from '../../types';
 import { t } from '../../utils/i18n';
 import { ZOMBIE_TYPES, BOSSES, MAP_THEMES } from '../../content/constants';
 import { soundManager } from '../../utils/sound';
+import { COLLECTIBLES } from '../../content/collectibles';
 import CampModalLayout from './CampModalLayout';
+import CollectiblePreview from '../ui/core/CollectiblePreview';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
     onClose: () => void;
+    onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
 }
 
 type Tab = 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
-const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose }) => {
-    const [activeTab, setActiveTab] = useState<Tab>('enemy');
+const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed }) => {
+    const [activeTab, setActiveTab] = useState<Tab>('collectibles');
+
+    // Mark all found collectibles as viewed when the log is opened
+    useEffect(() => {
+        const foundIds = stats.collectiblesFound || [];
+        const viewedIds = stats.viewedCollectibles || [];
+        const newIds = foundIds.filter(id => !viewedIds.includes(id));
+
+        if (newIds.length > 0 && onMarkCollectiblesViewed) {
+            onMarkCollectiblesViewed(newIds);
+        }
+    }, []); // Only run on mount
 
     const handleTabChange = (tab: Tab) => {
         soundManager.playUiClick();
@@ -21,11 +35,11 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose 
     };
 
     const tabs: { id: Tab, label: string }[] = [
-        { id: 'enemy', label: t('ui.log_enemies') },
-        { id: 'boss', label: t('ui.log_bosses') },
         { id: 'collectibles', label: t('ui.log_collectibles') },
         { id: 'clues', label: t('ui.log_clues') },
         { id: 'poi', label: t('ui.log_poi') },
+        { id: 'enemy', label: t('ui.log_enemies') },
+        { id: 'boss', label: t('ui.log_bosses') },
     ];
 
     const themeColor = '#16a34a'; // green-600
@@ -151,13 +165,75 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
     );
 };
 
-const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => (
-    <div className="flex flex-col items-center justify-center h-full opacity-50">
-        <div className="text-6xl mb-4 grayscale opacity-20">🏆</div>
-        <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-2">{t('ui.wip')}</h3>
-        <p className="text-gray-600 font-mono">Archive corrupted. Data recovery pending...</p>
-    </div>
-);
+const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
+    const foundIds = stats.collectiblesFound || [];
+    const viewedIds = stats.viewedCollectibles || [];
+
+    // Group collectibles by sector for better organization - ascending
+    const sectors = [1, 2, 3, 4, 5];
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
+            {sectors.map(sectorId => {
+                const sectorCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sectorId);
+                const theme = MAP_THEMES[sectorId - 1]; // Fix: MAP_THEMES is 0-indexed, sectorId is 1-indexed
+                const sectorName = theme ? t(theme.name) : `Sector ${sectorId}`;
+                const foundInSector = sectorCollectibles.filter(c => foundIds.includes(c.id)).length;
+
+                return (
+                    <div key={sectorId} className="space-y-6">
+                        <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
+                            <h3 className="text-3xl font-black uppercase tracking-tighter text-zinc-500">
+                                {sectorName}
+                            </h3>
+                            <span className="text-sm font-mono text-zinc-600 font-bold uppercase mt-1">
+                                {foundInSector} / {sectorCollectibles.length} {t('ui.collected')}
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {sectorCollectibles.map(item => {
+                                const isFound = foundIds.includes(item.id);
+                                const isNew = isFound && !viewedIds.includes(item.id);
+                                return (
+                                    <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'}`}>
+
+                                        {/* 3D Preview Area */}
+                                        <div className="aspect-square w-full bg-black/40 relative border-b border-zinc-800/50">
+                                            <CollectiblePreview type={item.modelType} isLocked={!isFound} />
+
+                                            {/* NEW Badge - Only shows for unviewed collectibles */}
+                                            {isNew && (
+                                                <div className="absolute top-2 right-2 bg-yellow-600 text-black text-[10px] font-black px-2 py-0.5 uppercase tracking-tighter skew-x-[-10deg] shadow-lg">
+                                                    {t('ui.new')}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Info Area */}
+                                        <div className="p-4 flex flex-col h-32">
+                                            <h4 className={`text-lg font-black uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
+                                                {isFound ? t(item.nameKey) : '???'}
+                                            </h4>
+                                            <p className={`text-xs font-mono leading-relaxed line-clamp-3 ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
+                                                {isFound ? t(item.descriptionKey) : 'Data encrypted. Item location unknown.'}
+                                            </p>
+                                        </div>
+
+                                        {/* Hover Overlay */}
+                                        {!isFound && (
+                                            <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors pointer-events-none"></div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
 
 const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
     const clues = stats.cluesFound || [];

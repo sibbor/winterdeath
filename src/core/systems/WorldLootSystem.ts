@@ -102,7 +102,7 @@ export class WorldLootSystem implements System {
                 scene.remove(item.mesh);
                 scrapItems.splice(i, 1);
                 // Play small click sound per item
-                if (Math.random() > 0.5) soundManager.playUiHover();
+                if (Math.random() > 0.3) soundManager.playLootingScrap();
                 continue;
             }
         }

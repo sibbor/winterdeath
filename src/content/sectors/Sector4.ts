@@ -59,16 +59,6 @@ export const Sector4: SectorDef = {
 
         // --- TRIGGERS ---
         triggers.push(
-            // Collectible
-            {
-                id: 's4_collectible', position: LOCATIONS.COLLECTIBLES.C1, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible", description: "clues.s4_collectible_desc", triggered: false, icon: "💍",
-                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-            },
-            // Nathalie's Police Badge
-            {
-                id: 's4_collectible_2', position: LOCATIONS.COLLECTIBLES.C2, radius: 2, type: 'COLLECTIBLE', content: "clues.s4_collectible_2", description: "clues.s4_collectible_2_description", triggered: false, icon: "s4_collectible_2_icon",
-                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-            },
             // Flavor
             {
                 id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s4_noise", triggered: false,
@@ -119,7 +109,7 @@ export const Sector4: SectorDef = {
             const rotY = Math.random() * Math.PI * 2;
 
             for (let h = 0; h < carStackHeight; h++) {
-                SectorBuilder.spawnVolvo(ctx, x, z, rotY, h);
+                SectorBuilder.spawnCar(ctx, x, z, rotY, h);
             }
         }
 
@@ -132,7 +122,7 @@ export const Sector4: SectorDef = {
             const x = Math.cos(angle) * r;
             const z = -80 + Math.sin(angle) * r; // Offset Z to center on play area roughly
 
-            SectorBuilder.spawnTree(ctx, x, z, 1.0 + Math.random() * 0.5);
+            SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
         }
 
         // Burning Fire Pits (Asset-Driven)
@@ -152,8 +142,9 @@ export const Sector4: SectorDef = {
         obstacles.push({ mesh: shedGroup, radius: 12 });
         //SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, t('maps.scrapyard_name')); // Using map name as key or appropriate label
 
-        SectorBuilder.spawnClueMarker(ctx, 40, -80, 'collectible 1', 'ring');
-        SectorBuilder.spawnClueMarker(ctx, -20, -60, 'collectible 2', 'badge');
+        // Visual Collectibles
+        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's4_collectible_1', 'ring');
+        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's4_collectible_2', 'jacket');
 
         // VISUALIZE TRIGGERS (Debug)
         SectorBuilder.visualizeTriggers(ctx);

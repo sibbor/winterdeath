@@ -107,9 +107,13 @@ export const en = {
         reload: "RELOAD",
         equipped: "EQUIPPED",
         signal_strength: "SIGNAL",
-        open_chest: "OPEN CHEST [E]",
-        travel: "TRAVEL [E]",
+        interact_pickup_collectible: "[E] PICKUP ITEM",
+        interact_open_chest: "[E] OPEN CHEST",
+        interact_plant_explosive: "[E] PLANT EXPLOSIVE",
+        interact_knock_on_port: "[E] KNOCK ON DOOR",
         clue_found_title: "CLUE FOUND",
+        skill_point: "SKILL POINT",
+        collectible_discovered: "COLLECTIBLE DISCOVERED",
         available_pts: "PTS",
         throwables_thrown: "Throwables thrown",
         throwables_used: "Throwables Used",
@@ -149,14 +153,16 @@ export const en = {
         unknown_sector: "Unknown Sector",
         health: "Health",
         speed: "Speed",
-        end_mission: "END MISSION",
+        end_game: "ABORT SECTOR",
         delete_save_data: "DELETE SAVE DATA",
         end_conversation: "END CONVERSATION",
         located: "LOCATED",
         defeat_boss: "DEFEAT BOSS",
         target_located: "TARGET LOCATED",
         protect_family: "PROTECT FAMILY",
-        scanning: "SCANNING..."
+        scanning: "SCANNING...",
+        collected: "COLLECTED",
+        new: "NEW"
     },
     categories: {
         primary: "PRIMARY",
@@ -338,13 +344,11 @@ export const en = {
         panter: ["Mrow?"]
     },
     clues: {
-        // Sector 1 Triggers
-        s1_collectible_1: "Esmeralda's phone",
-        s1_collectible_1_description: "The screen is cracked and flickering, but some details are visible. Esmeralda's last attempt was a message to me:\n'Dad!! Can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to the S[...]'\n'Message not sent. Retry?' is written in red at the bottom...",
-        s1_collectible_1_icon: "📱",
-        s1_collectible_2: "Loke's Hand Axe",
+        // Sector 1
+        s1_collectible_1_title: "Esmeralda's phone",
+        s1_collectible_1_description: "The screen is cracked and flickering, but some details are visible. Esmeralda's last attempt was a message to me:\n'Dad!! We can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to S[...]'\n'Message not sent. Retry?' is written in red at the bottom...",
+        s1_collectible_2_title: "Loke's Hand Axe",
         s1_collectible_2_description: "Loke's small hand axe. He always wants to help me chop wood at the summer cottage. He must have grabbed it in a hurry to defend himself.",
-        s1_collectible_2_icon: "🪓",
 
         s1_start_tracks: "Footprints! They went this way... what did Loke mean by 'D'?",
         s1_blood_stains: "Blood stains! Are they hurt?!",
@@ -354,21 +358,20 @@ export const en = {
         s1_tunnel_blocked: "Oh crap, the tunnel has been blocked by a crashed bus",
         s1_tunnel_cleared: "Tunnel cleared. Smooth!",
 
-        s1_poi_building_on_fire: "Shit, there building is on a fire!",
+        s1_poi_building_on_fire: "Shit! SMU campus is on a fire!",
         s1_poi_church: "The church is burning... The work of Satan?",
-        s1_poi_cafe: "Oh, I miss sitting here with my family.",
-        s1_poi_pizzeria: "Always enjoy doing 'PIZZA TIME!' with my family here.",
+        s1_poi_cafe: "Oh, I miss sitting at the café with my family.",
+        s1_poi_pizzeria: "Always enjoying doing 'PIZZA TIME!' with my family here.",
         s1_poi_gym: "Used to lift weights here. Some heavy fucking weights.",
         s1_poi_grocery: "The grocery store seems looted...",
-        s1_poi_train_yard: "Hmm... the smoke comes from the train. Let's have a look.",
+        s1_poi_train_yard: "Hmm... the smoke comes from the train.",
 
-        // Sector 2 Triggers
-        s2_collectible_1: "Jordan's favorite pacifier",
+        // Sector 2 
+        s2_collectible_1_title: "Jordan's favorite pacifier",
         s2_collectible_1_description: "It's small, blue and covered in frost. Jordan never goes anywhere without it. He must have dropped it when they ran into the caves.",
-        s2_collectible_1_icon: "👶",
-        s2_collectible_2: "Jordan's Teddy Bear",
+        s2_collectible_2_title: "Jordan's Teddy Bear",
         s2_collectible_2_description: "Jordan's favorite teddy bear. It's missing an eye and smells of the damp caves. He must have dropped it when they ran into the darkness.",
-        s2_collectible_2_icon: "🧸",
+
         s2_start: "Loke said the others followed these rails. Let's see where it leads us...",
         s2_campfire: "A campfire. Someone must have been here recently. Do you think it's them?",
         s2_combat: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this.",
@@ -380,21 +383,21 @@ export const en = {
         s2_cave_loot_more: "More supplies. Most of it looted already. By who?! Natahlie? Esmeralda? Jordan?",
         s2_cave_door: "These huge doors must lead to the shelter. Let's hope they're inside!",
 
-        // Sector 3 Triggers
-        s3_collectible: "Esmeralda's Diary",
-        s3_collectible_desc: "A small notebook with flowers on the cover. The last page is about how much she misses her friends... and how scared she is of the darkness in the forest.",
-        s3_collectible_2: "Esmeralda's Jacket",
+        // Sector 3:
+        s3_collectible_1_title: "Esmeralda's Diary",
+        s3_collectible_1_description: "A small notebook with flowers on the cover. The last page is about how much she misses her friends... and how scared she is of the darkness in the forest.",
+        s3_collectible_2_title: "Esmeralda's Jacket",
         s3_collectible_2_description: "Esmeralda's favorite jacket. It's torn and has bloodstains on the sleeve. My stomach knots... I hope it's not her blood.",
-        s3_collectible_2_icon: "🧥",
+
         s3_forest_noise: "The forest is too loud. Every snap of a twig sounds like a runner...",
         s3_mast_sight: "There it is. The Häglared Mast. If Esmeralda is anywhere, she's there.",
 
-        // Sector 4 Triggers
-        s4_collectible: "Nathalie's Wedding Ring",
-        s4_collectible_desc: "A simple gold ring with an inscription inside: 'Forever us'. It's cold, but the memories it carries burn in my hand.",
-        s4_collectible_2: "Nathalie's Police Badge",
+        // Sector 4
+        s4_collectible_1_title: "Nathalie's Wedding Ring",
+        s4_collectible_1_description: "A simple gold ring with an inscription inside: 'Forever us'. It's cold, but the memories it carries burn in my hand.",
+        s4_collectible_2_title: "Nathalie's Police Badge",
         s4_collectible_2_description: "Nathalie's Detective Inspector badge. It's scratched and slightly scorched at the edges. She must have lost it during the fight at the scrap yard. She never gives up her shield willingly.",
-        s4_collectible_2_icon: "�️",
+
         s4_noise: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?",
         s4_shed: "The office building. It's the only place with a reinforced door. She has to be in there."
     },

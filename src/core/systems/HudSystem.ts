@@ -89,7 +89,8 @@ export const HudSystem = {
             distanceTraveled: Math.floor(distanceTraveled),
             kills: state.killsInRun,
             spEarned: spEarned,
-            skillPoints: (props.stats.skillPoints || 0) + spEarned, // Total available for HUD
+            skillPoints: (props.stats.skillPoints || 0) + spEarned, // Total SP: base + session
+            totalScrap: (props.stats.scrap || 0) + state.collectedScrap, // Total scrap: base + session
             debugInfo: {
                 aim: input.aimVector ? { x: parseFloat(input.aimVector.x.toFixed(2)), y: parseFloat(input.aimVector.y.toFixed(2)) } : { x: 0, y: 0 },
                 input: {

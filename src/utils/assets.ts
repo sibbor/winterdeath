@@ -42,7 +42,6 @@ export const GEOMETRY = {
 };
 
 export * from './assets/models';
-// Consolidated from materials.ts
 
 
 // --- TEXTURE UTILS ---

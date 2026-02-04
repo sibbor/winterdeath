@@ -71,6 +71,7 @@ export class GameSessionLogic {
             spFromCollectibles: 0,
             isMoving: false,
             interactionType: null,
+            interactionTargetPos: null,
             bossIntroActive: false
         };
     }

@@ -59,16 +59,6 @@ export const Sector3: SectorDef = {
 
         // --- TRIGGERS ---
         triggers.push(
-            // Collectible
-            {
-                id: 's3_collectible', position: LOCATIONS.COLLECTIBLES.C1, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible", description: "clues.s3_collectible_desc", triggered: false, icon: "📖",
-                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-            },
-            // Esmeralda's Jacket
-            {
-                id: 's3_collectible_2', position: LOCATIONS.COLLECTIBLES.C2, radius: 2, type: 'COLLECTIBLE', content: "clues.s3_collectible_2", description: "clues.s3_collectible_2_description", triggered: false, icon: "s3_collectible_2_icon",
-                actions: [{ type: 'GIVE_REWARD', payload: { sp: 1 } }]
-            },
             // Flavor
             {
                 id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s3_forest_noise", triggered: false,
@@ -117,7 +107,7 @@ export const Sector3: SectorDef = {
                     const jitterZ = (Math.random() - 0.5) * 10;
                     const scale = 1 + Math.random();
 
-                    SectorBuilder.spawnTree(ctx, x + jitterX, z + jitterZ, scale);
+                    SectorBuilder.spawnTree(ctx, 'spruce', x + jitterX, z + jitterZ, scale);
                 }
             }
         }
@@ -151,6 +141,10 @@ export const Sector3: SectorDef = {
             f.position.set(x, 2, -190);
             scene.add(f);
         }
+
+        // Visual Collectibles
+        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's3_collectible_1', 'diary');
+        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's3_collectible_2', 'badge');
 
         // --- ZOMBIE SPAWNING ---
         for (let i = 0; i < 5; i++) {

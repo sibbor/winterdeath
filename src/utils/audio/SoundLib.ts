@@ -70,6 +70,59 @@ export const UiSounds = {
     playTone: (core: SoundCore, freq: number, type: OscillatorType, duration: number, vol: number) => {
         Synth.tone(core, type, freq, duration * 1000, vol);
     },
+};
+
+export const GamePlaySounds = {
+
+    playOpenChest: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // 1. Wood Creak (Lower freq sawtooth with decay)
+        Synth.tone(core, 'sawtooth', 120, 400, 0.1, 0.05);
+        // 2. Heavy Box Movement (Low pitch noise)
+        Synth.noise(core, 300, 0.2);
+        // 3. Resonant click
+        Synth.tone(core, 'triangle', 400, 100, 0.05);
+    },
+
+    playPickupCollectiblee: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // Zelda-style chime (C-E-G-C Arpeggio)
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, i) => {
+            const timeOffset = i * 0.1;
+            const osc = core.ctx.createOscillator();
+            const gain = core.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + timeOffset);
+            gain.gain.setValueAtTime(0, now + timeOffset);
+            gain.gain.linearRampToValueAtTime(0.1, now + timeOffset + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + timeOffset + 0.5);
+            osc.connect(gain);
+            gain.connect(core.masterGain);
+            osc.start(now + timeOffset);
+            osc.stop(now + timeOffset + 0.6);
+            core.track(osc as unknown as AudioBufferSourceNode);
+        });
+    },
+
+    playLootingScrap: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // High pitch metallic "klink" (Coin sound)
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(1800, now + 0.05); // Snap up
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+
     playMetalDoorShut: (core: SoundCore) => {
         const now = core.ctx.currentTime;
         // Low heavy thud
@@ -283,8 +336,8 @@ export const VoiceSounds = {
         osc.stop(now + duration);
         core.track(osc as unknown as AudioBufferSourceNode);
     },
-    playMetalDoorShut: (core: SoundCore) => { UiSounds.playMetalDoorShut(core); },
-    playMetalDoorOpen: (core: SoundCore) => { UiSounds.playMetalDoorOpen(core); },
+    playMetalDoorShut: (core: SoundCore) => { GamePlaySounds.playMetalDoorShut(core); },
+    playMetalDoorOpen: (core: SoundCore) => { GamePlaySounds.playMetalDoorOpen(core); },
     playVoice: (core: SoundCore, name: string) => {
         if (!name) return;
 

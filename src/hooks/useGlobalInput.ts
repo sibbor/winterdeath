@@ -7,11 +7,12 @@ interface UIState {
     isPaused: boolean;
     isMapOpen: boolean;
     showTeleportMenu: boolean;
-    activeClue: any;
+    activeCollectible: any;
     isDialogueOpen: boolean;
     isBossIntroActive?: boolean;
     hp: number;
     isSettingsOpen: boolean;
+    isAdventureLogOpen: boolean;
 }
 
 interface UIActions {
@@ -21,7 +22,8 @@ interface UIActions {
     setTeleportInitialCoords: (val: any) => void;
     onResume: () => void;
     setIsSettingsOpen: (val: boolean) => void;
-    setActiveClue?: (val: any) => void;
+    setIsAdventureLogOpen?: (val: boolean) => void;
+    setActiveCollectible?: (val: any) => void;
     requestPointerLock?: () => void;
 }
 
@@ -48,9 +50,9 @@ export const useGlobalInput = (
                     actions.setIsMapOpen(false);
                     actions.setIsPaused(false);
                     soundManager.playUiClick();
-                } else if (ui.activeClue) {
+                } else if (ui.activeCollectible) {
                     actions.requestPointerLock?.();
-                    actions.setActiveClue?.(null);
+                    actions.setActiveCollectible?.(null);
                     actions.setIsPaused(false);
                     soundManager.playUiClick();
                 } else if (ui.showTeleportMenu) {
@@ -63,18 +65,21 @@ export const useGlobalInput = (
                 } else if (ui.isSettingsOpen) {
                     actions.setIsSettingsOpen(false);
                     soundManager.playUiClick();
+                } else if (ui.isAdventureLogOpen) {
+                    actions.setIsAdventureLogOpen?.(false);
+                    soundManager.playUiClick();
                 } else if (ui.isPaused) {
                     // Try to lock FIRST before state changes (which might unmount UI)
                     actions.requestPointerLock?.();
                     actions.onResume();
-                } else if (screen === GameScreen.SECTOR && !ui.activeClue && !ui.isDialogueOpen && !ui.isBossIntroActive && ui.hp > 0) {
+                } else if (screen === GameScreen.SECTOR && !ui.activeCollectible && !ui.isDialogueOpen && !ui.isBossIntroActive && ui.hp > 0 && !ui.isAdventureLogOpen) {
                     actions.setIsPaused(true);
                     if (document.pointerLockElement) document.exitPointerLock();
                 }
             }
             // Map Logic (M)
             else if (e.key.toLowerCase() === 'm') {
-                if (screen === GameScreen.SECTOR && !ui.activeClue && !ui.isDialogueOpen && !ui.showTeleportMenu && ui.hp > 0) {
+                if (screen === GameScreen.SECTOR && !ui.activeCollectible && !ui.isDialogueOpen && !ui.showTeleportMenu && ui.hp > 0) {
                     if (ui.isMapOpen) {
                         actions.requestPointerLock?.();
                         actions.setIsMapOpen(false);
@@ -93,5 +98,5 @@ export const useGlobalInput = (
 
         window.addEventListener('keydown', handleInput, { capture: true });
         return () => window.removeEventListener('keydown', handleInput, { capture: true });
-    }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeClue, ui.isDialogueOpen, ui.hp, actions]);
+    }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeCollectible, ui.isDialogueOpen, ui.isAdventureLogOpen, ui.hp, actions]);
 };

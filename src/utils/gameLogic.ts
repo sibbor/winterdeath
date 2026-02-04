@@ -4,11 +4,13 @@ import { LEVEL_CAP, WEAPONS } from '../content/constants';
 
 export const aggregateStats = (prevStats: PlayerStats, sectorStats: SectorStats, died: boolean, aborted: boolean): PlayerStats => {
     const s = { ...prevStats };
-    if (!died && !aborted) s.sectorsCompleted += 1;
+    if (!died && !aborted) {
+        s.sectorsCompleted += 1;
+    }
     s.scrap += sectorStats.scrapLooted;
     s.totalScrapCollected += sectorStats.scrapLooted;
-    const missionKills = (Object.values(sectorStats.killsByType) as number[]).reduce((a, b) => a + b, 0);
-    s.kills += missionKills;
+    const sectorKills = (Object.values(sectorStats.killsByType) as number[]).reduce((a, b) => a + b, 0);
+    s.kills += sectorKills;
     for (const [type, count] of Object.entries(sectorStats.killsByType)) {
         s.killsByType[type] = (s.killsByType[type] || 0) + (count as number);
     }
@@ -18,7 +20,9 @@ export const aggregateStats = (prevStats: PlayerStats, sectorStats: SectorStats,
 
     s.totalDamageDealt += sectorStats.damageDealt;
     s.totalDamageTaken += sectorStats.damageTaken;
-    if (died) s.deaths += 1;
+    if (died) {
+        s.deaths += 1;
+    }
     s.chestsOpened = (s.chestsOpened || 0) + (sectorStats.chestsOpened || 0);
     s.bigChestsOpened = (s.bigChestsOpened || 0) + (sectorStats.bigChestsOpened || 0);
     s.totalDistanceTraveled = (s.totalDistanceTraveled || 0) + (sectorStats.distanceTraveled || 0);
@@ -27,6 +31,16 @@ export const aggregateStats = (prevStats: PlayerStats, sectorStats: SectorStats,
         const currentClues = s.cluesFound || [];
         const newUniqueClues = sectorStats.cluesFound.filter(c => !currentClues.includes(c));
         s.cluesFound = [...currentClues, ...newUniqueClues];
+    }
+
+    if (sectorStats.collectiblesFound && sectorStats.collectiblesFound.length > 0) {
+        const current = s.collectiblesFound || [];
+        const newUnique = sectorStats.collectiblesFound.filter(c => !current.includes(c));
+        s.collectiblesFound = [...current, ...newUnique];
+
+        // Award SP for each new unique collectible
+        s.skillPoints += newUnique.length;
+        s.totalSkillPointsEarned += newUnique.length;
     }
 
     if (sectorStats.seenEnemies && sectorStats.seenEnemies.length > 0) {
@@ -52,7 +66,7 @@ export const aggregateStats = (prevStats: PlayerStats, sectorStats: SectorStats,
         const needed = s.nextLevelXp - s.currentXp;
         if (gainedXp >= needed) {
             s.level++;
-            s.skillPoints++; // Award SP on Level Up
+            s.skillPoints++;
             s.totalSkillPointsEarned++;
             gainedXp -= needed; s.currentXp = 0;
             s.nextLevelXp = Math.floor(s.nextLevelXp * 1.2);

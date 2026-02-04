@@ -82,9 +82,11 @@ export interface RuntimeState {
     spFromLevelUp: number;
     spFromCollectibles: number;
     isMoving: boolean;
-    interactionType: 'chest' | 'bus' | 'collectible' | null;
+    interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null;
+    interactionTargetPos: THREE.Vector3 | null;
     nearestCollectible?: SectorTrigger | null;
     onClueFound?: ((clue: SectorTrigger) => void) | null;
+    onCollectibleFound?: ((id: string) => void) | null;
     gainXp?: ((amount: number) => void) | null;
     bossIntroActive: boolean;
 }
