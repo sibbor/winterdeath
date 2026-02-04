@@ -1,4 +1,5 @@
 
+import * as THREE from 'three';
 import { PlayerStats } from '../types';
 
 // Re-export Data
@@ -9,6 +10,30 @@ export { MAP_THEMES } from './sectors/themes';
 
 export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
+
+export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';
+
+export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMapType: THREE.ShadowMapType }> = {
+    OFF: { shadows: false, shadowMapType: 0 },
+    LOW: { shadows: true, shadowMapType: 0 },      // BasicShadowMap
+    MEDIUM: { shadows: true, shadowMapType: 1 },   // PCFShadowMap
+    HIGH: { shadows: true, shadowMapType: 2 },     // PCFSoftShadowMap
+    VERYHIGH: { shadows: true, shadowMapType: 3 }  // VSMShadowMap
+};
+
+export interface GraphicsSettings {
+    pixelRatio: number;
+    antialias: boolean;
+    shadows: boolean;
+    shadowMapType: THREE.ShadowMapType;
+}
+
+export const DEFAULT_GRAPHICS: GraphicsSettings = {
+    pixelRatio: 0.75,
+    antialias: false,
+    shadows: false,
+    shadowMapType: 0 // SHADOW_PRESETS.OFF
+};
 
 export const INITIAL_STATS: PlayerStats = {
     level: 1,

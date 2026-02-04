@@ -47,6 +47,7 @@ const seededRandom = (seed: number) => {
 // Define handle for parent access
 export interface GameSessionHandle {
     requestPointerLock: () => void;
+    getSectorStats: (isExtraction?: boolean, aborted?: boolean) => SectorStats;
 }
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
@@ -73,7 +74,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const activeBubbles = useRef<any[]>([]);
     const hasEndedSector = useRef(false);
     const collectedCluesRef = useRef<SectorTrigger[]>([]);
-    const sessionCollectiblesFound = useRef<string[]>([]);
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
@@ -147,9 +147,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 familyFound: state.familyFound, familyExtracted: state.familyExtracted, damageDealt: state.damageDealt, damageTaken: state.damageTaken,
                 bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
                 distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current,
-                collectiblesFound: sessionCollectiblesFound.current,
+                collectiblesFound: state.sessionCollectiblesFound,
                 chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened,
                 isExtraction: false,
+                spEarned: (state.level - propsRef.current.stats.level) + state.sessionCollectiblesFound.length + (state.bossesDefeated.length > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
                 seenEnemies: state.seenEnemies, seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []), visitedPOIs: state.visitedPOIs
             }, state.killerType || "Unknown");
         }
@@ -336,13 +337,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     let fmMesh: THREE.Group | undefined;
     const familyMember = useRef({ mesh: null as any, ring: null as any, found: false, following: false, name: '', cooldown: 0, scale: 1.0, seed: Math.random() * 100 }).current;
 
-    const onCollectibleFoundInternal = useCallback((id: string) => {
-        if (!sessionCollectiblesFound.current.includes(id)) {
-            sessionCollectiblesFound.current.push(id);
-        }
-        propsRef.current.onCollectibleFound(id);
-    }, []);
-
     const startCinematic = (familyMesh: THREE.Group, scriptId?: number, customParams?: { targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3 }) => {
         if (cinematicRef.current.active) return;
 
@@ -460,7 +454,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         while (state.currentXp >= state.nextLevelXp && state.level < 20) { // LEVEL_CAP is 20
             state.currentXp -= state.nextLevelXp;
             state.level++;
-            state.spFromLevelUp++;
             state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
             soundManager.playUiConfirm();
         }
@@ -509,7 +502,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (payload) {
                         if (payload.scrap) stateRef.current.collectedScrap += payload.scrap;
                         if (payload.xp) gainXp(payload.xp);
-                        if (payload.sp) stateRef.current.spFromCollectibles += payload.sp;
                         soundManager.playUiConfirm();
                     }
                     break;
@@ -561,6 +553,37 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 lockRequestTime.current = performance.now();
                 engineRef.current?.input.requestPointerLock(containerRef.current);
             }
+        },
+        getSectorStats: (isExtraction: boolean = false, aborted: boolean = false): SectorStats => {
+            const state = gameSessionRef.current?.state || {} as any;
+            const now = performance.now();
+            return {
+                timeElapsed: now - (state.startTime || now),
+                shotsFired: state.shotsFired || 0,
+                shotsHit: state.shotsHit || 0,
+                throwablesThrown: state.throwablesThrown || 0,
+                killsByType: state.killsByType || {},
+                scrapLooted: state.collectedScrap || 0,
+                xpGained: state.score || 0,
+                bonusXp: isExtraction ? 500 : 0,
+                familyFound: state.familyFound || stateRef.current.familyFound,
+                familyExtracted: isExtraction && (state.familyFound || stateRef.current.familyFound),
+                damageDealt: state.damageDealt || 0,
+                damageTaken: state.damageTaken || 0,
+                bossDamageDealt: state.bossDamageDealt || 0,
+                bossDamageTaken: state.bossDamageTaken || 0,
+                chestsOpened: state.chestsOpened || 0,
+                bigChestsOpened: state.bigChestsOpened || 0,
+                distanceTraveled: distanceTraveledRef.current,
+                cluesFound: collectedCluesRef.current,
+                collectiblesFound: state.sessionCollectiblesFound,
+                isExtraction,
+                aborted,
+                spEarned: (state.level - propsRef.current.stats.level) + (state.sessionCollectiblesFound?.length || 0) + ((state.bossesDefeated?.length || 0) > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
+                seenEnemies: state.seenEnemies || [],
+                seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []),
+                visitedPOIs: state.visitedPOIs || []
+            };
         }
     }));
 
@@ -589,11 +612,66 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const scene = engine.scene;
         const camera = engine.camera;
 
+        // --- HELPER WRAPPERS (Defined early for TDZ safety) ---
+        const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
+            FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
+        };
+
+        const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number) => {
+            FXSystem.spawnPart(scene, stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color);
+        };
+
+        const spawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
+            const origin = (playerGroupRef.current && playerGroupRef.current.children.length > 0)
+                ? playerGroupRef.current.position
+                : new THREE.Vector3(currentSector.playerSpawn.x, currentSector.playerSpawn.y || 0, currentSector.playerSpawn.z);
+
+            const newEnemy = EnemyManager.spawn(scene, origin, forcedType, forcedPos, stateRef.current.bossSpawned, stateRef.current.enemies.length);
+            if (newEnemy) {
+                stateRef.current.enemies.push(newEnemy);
+                const type = newEnemy.type;
+                if (!stateRef.current.seenEnemies.includes(type)) {
+                    stateRef.current.seenEnemies.push(type);
+                }
+            }
+        };
+
+        const onCollectibleFoundInternal = (collectibleId: string) => {
+            if (!stateRef.current.sessionCollectiblesFound.includes(collectibleId)) {
+                stateRef.current.sessionCollectiblesFound.push(collectibleId);
+            }
+            if (propsRef.current.onCollectibleFound) {
+                propsRef.current.onCollectibleFound(collectibleId);
+            }
+        };
+
+        const gainXp = (amount: number) => {
+            const state = stateRef.current;
+            state.score += amount;
+            state.currentXp += amount;
+            while (state.currentXp >= state.nextLevelXp && state.level < LEVEL_CAP) {
+                state.currentXp -= state.nextLevelXp;
+                state.level++;
+                state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
+                soundManager.playUiConfirm();
+            }
+        };
+
         soundManager.resume();
 
 
         isMounted.current = true;
         hasEndedSector.current = false;
+
+        // Fully Clear Scene of Game Objects
+        scene.children.slice().forEach(child => {
+            // Keep critical engine objects if any, but usually we clear all game-spawned ones
+            if (child.type === 'Group' || child.type === 'Mesh' || child.type === 'Sprite' || child.type === 'PointLight' || child.type === 'SpotLight' || child.type === 'DirectionalLight') {
+                if (child.name !== 'MainCamera' && !child.userData.isEngineStatic) {
+                    scene.remove(child);
+                }
+            }
+        });
 
         // Reset State
         setDeathPhase('NONE');
@@ -603,23 +681,44 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         cameraOverrideRef.current = null;
         if (bossIntroTimerRef.current) { clearTimeout(bossIntroTimerRef.current); bossIntroTimerRef.current = null; }
 
+        // Reset Runtime State to Fresh Defaults
         stateRef.current.startTime = performance.now();
         stateRef.current.isDead = false;
+        stateRef.current.hp = propsRef.current.stats.maxHp;
+        stateRef.current.maxHp = propsRef.current.stats.maxHp;
+        stateRef.current.stamina = propsRef.current.stats.maxStamina;
+        stateRef.current.maxStamina = propsRef.current.stats.maxStamina;
+        stateRef.current.score = 0;
+        stateRef.current.collectedScrap = 0;
+        stateRef.current.killsInRun = 0;
+        stateRef.current.killsByType = {};
+        stateRef.current.damageDealt = 0;
+        stateRef.current.damageTaken = 0;
+        stateRef.current.shotsFired = 0;
+        stateRef.current.shotsHit = 0;
+        stateRef.current.throwablesThrown = 0;
+        stateRef.current.familyFound = !!propsRef.current.familyAlreadyRescued;
+        stateRef.current.familyExtracted = false;
         stateRef.current.sectorState = {};
-        collectedCluesRef.current = [];
-        distanceTraveledRef.current = 0;
-        prevPosRef.current = null;
-        sessionCollectiblesFound.current = [];
+        stateRef.current.enemies = [];
+        stateRef.current.particles = [];
+        stateRef.current.bloodDecals = [];
+        stateRef.current.scrapItems = [];
+        stateRef.current.chests = [];
+        stateRef.current.obstacles = [];
+        stateRef.current.triggers = [];
+        stateRef.current.bossesDefeated = [];
+        stateRef.current.bossSpawned = false;
         stateRef.current.bossDefeatedTime = 0;
         stateRef.current.thinkingUntil = 0;
         stateRef.current.speakingUntil = 0;
         stateRef.current.lastActionTime = performance.now();
         stateRef.current.framesSinceHudUpdate = 0;
-        stateRef.current.spFromLevelUp = 0;
-        stateRef.current.spFromCollectibles = 0;
+        stateRef.current.sessionCollectiblesFound = [];
 
-        stateRef.current.obstacles = [];
-        stateRef.current.triggers = [];
+        collectedCluesRef.current = [];
+        distanceTraveledRef.current = 0;
+        prevPosRef.current = null;
         activeBubbles.current.forEach(b => { if (b.element.parentNode) b.element.parentNode.removeChild(b.element); });
         activeBubbles.current = [];
 
@@ -634,31 +733,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // Constants/Setup (Moved out of setTimeout)
         const fSpawn = currentSector.familySpawn;
 
-        // Helper functions needed for Systems / generate (Moved out of setTimeout)
-        const spawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
-            const origin = (playerGroupRef.current && playerGroupRef.current.children.length > 0)
-                ? playerGroupRef.current.position
-                : new THREE.Vector3(currentSector.playerSpawn.x, currentSector.playerSpawn.y || 0, currentSector.playerSpawn.z);
-
-            const newEnemy = EnemyManager.spawn(scene, origin, forcedType, forcedPos, stateRef.current.bossSpawned, stateRef.current.enemies.length);
-            if (newEnemy) {
-                stateRef.current.enemies.push(newEnemy);
-                const type = newEnemy.type; // e.g. 'WALKER'
-                if (!stateRef.current.seenEnemies.includes(type)) {
-                    stateRef.current.seenEnemies.push(type);
-                }
-            }
-        };
-
-        const onCollectibleFoundInternal = (collectibleId: string) => {
-            if (!sessionCollectiblesFound.current.includes(collectibleId)) {
-                sessionCollectiblesFound.current.push(collectibleId);
-            }
-            // Also trigger the parent callback to show the modal
-            if (propsRef.current.onCollectibleFound) {
-                propsRef.current.onCollectibleFound(collectibleId);
-            }
-        };
 
         const concludeSector = (isExtraction: boolean) => {
             const state = session.state;
@@ -686,8 +760,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     bigChestsOpened: state.bigChestsOpened,
                     distanceTraveled: distanceTraveledRef.current,
                     cluesFound: collectedCluesRef.current,
-                    collectiblesFound: sessionCollectiblesFound.current,
+                    collectiblesFound: state.sessionCollectiblesFound,
                     isExtraction,
+                    spEarned: (state.level - propsRef.current.stats.level) + (state.sessionCollectiblesFound?.length || 0) + ((state.bossesDefeated?.length || 0) > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
                     seenEnemies: state.seenEnemies,
                     seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []),
                     visitedPOIs: state.visitedPOIs
@@ -912,13 +987,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         }, 50);
 
-        const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
-            FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
-        };
-
-        const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number) => {
-            FXSystem.spawnPart(scene, stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color);
-        };
 
 
 
@@ -1173,38 +1241,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, scene, state.particles),
                 addScore: (amt: number) => gainXp(amt),
                 trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
-                    if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; }
+                    if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; gainXp(Math.ceil(amt)); }
                     if (type === 'hit') state.shotsHit += amt;
                 },
-                addFireZone: (z: any) => ProjectileSystem.fireZones.push(z)
+                now
             };
 
             ProjectileSystem.update(delta, now, gameContext);
 
-            // LootSystem update moved to WorldLootSystem within GameSession
-
-            if (!bossIntroRef.current.active) {
-                EnemyManager.update(delta, now, playerGroupRef.current.position, state.enemies, state.obstacles,
-                    (damage: number, type: string, enemyPos: THREE.Vector3) => {
-                        if (now < state.invulnerableUntil) return;
-                        state.damageTaken += damage; state.hp -= damage; soundManager.playDamageGrunt(); state.hurtShake = 1.0; state.lastDamageTime = now; if (type === 'Boss') state.bossDamageTaken += damage;
-                        spawnPart(playerGroupRef.current.position.x, 1.2, playerGroupRef.current.position.z, 'blood', 80);
-                        if (state.hp <= 0 && !state.isDead) {
-                            state.isDead = true;
-                            state.deathStartTime = now;
-                            state.killerType = type;
-                            const playerMoveDir = new THREE.Vector3(0, 0, 0);
-                            if (input.w) playerMoveDir.z -= 1; if (input.s) playerMoveDir.z += 1; if (input.a) playerMoveDir.x -= 1; if (input.d) playerMoveDir.x += 1;
-                            if (playerMoveDir.lengthSq() > 0) state.deathVel = playerMoveDir.normalize().multiplyScalar(15);
-                            else state.deathVel = new THREE.Vector3().subVectors(playerGroupRef.current.position, enemyPos).normalize().multiplyScalar(12);
-                            state.deathVel.y = 4;
-                        }
-                    },
-                    spawnPart, spawnDecal,
-                    (dotDamage: number, isBoss?: boolean) => { state.damageDealt += dotDamage; if (isBoss) state.bossDamageDealt += dotDamage; gainXp(Math.ceil(dotDamage)); }
-                );
-            }
-
+            // EnemyManager.update moved to EnemySystem
+            // TriggerHandler moved to TriggerSystem (Future) or kept here if needed
             TriggerHandler.checkTriggers(playerGroupRef.current.position, state, now, {
                 spawnBubble,
                 removeVisual: (id: string) => {

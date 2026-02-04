@@ -44,16 +44,14 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     let statusBoxClass = 'border-red-600 bg-red-900/20';
     let statusTitleColor = 'text-red-500';
 
-    if (stats.familyFound) {
-        if (bossKilled && !deathDetails && !stats.aborted) {
-            statusKey = 'ui.rescued';
-            statusBoxClass = 'border-green-500 bg-green-900/20';
-            statusTitleColor = 'text-green-500';
-        } else {
-            statusKey = 'ui.found';
-            statusBoxClass = 'border-yellow-500 bg-yellow-900/20';
-            statusTitleColor = 'text-yellow-500';
-        }
+    if (stats.familyExtracted) {
+        statusKey = 'ui.rescued';
+        statusBoxClass = 'border-green-500 bg-green-900/20';
+        statusTitleColor = 'text-green-500';
+    } else if (stats.familyFound) {
+        statusKey = 'ui.found';
+        statusBoxClass = 'border-yellow-500 bg-yellow-900/20';
+        statusTitleColor = 'text-yellow-500';
     } else {
         statusKey = 'ui.missing';
         statusBoxClass = 'border-red-600 bg-red-900/20';

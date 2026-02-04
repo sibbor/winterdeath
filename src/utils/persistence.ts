@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { GameState, GameScreen, WeaponType } from '../types';
-import { INITIAL_STATS } from '../content/constants';
+import { INITIAL_STATS, DEFAULT_GRAPHICS } from '../content/constants';
 
 export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
@@ -18,13 +18,7 @@ export const DEFAULT_STATE: GameState = {
     familyMembersFound: [],
     bossesDefeated: [],
     midRunCheckpoint: null,
-    familySPAwarded: [],
-    graphics: {
-        pixelRatio: 1.25,
-        antialias: true,
-        shadows: true,
-        shadowMapType: THREE.PCFShadowMap
-    }
+    graphics: DEFAULT_GRAPHICS
 };
 
 export const getPersistentState = (state: GameState) => {
@@ -38,7 +32,6 @@ export const getPersistentState = (state: GameState) => {
         familyMembersFound: state.familyMembersFound,
         bossesDefeated: state.bossesDefeated,
         midRunCheckpoint: state.midRunCheckpoint,
-        familySPAwarded: state.familySPAwarded,
         graphics: state.graphics
     };
 };
@@ -68,7 +61,6 @@ export const loadGameState = (): GameState => {
             if (mergedState.stats.seenBosses === undefined) mergedState.stats.seenBosses = [];
             if (mergedState.stats.visitedPOIs === undefined) mergedState.stats.visitedPOIs = [];
             if (mergedState.stats.collectiblesFound === undefined) mergedState.stats.collectiblesFound = [];
-            if (mergedState.familySPAwarded === undefined) mergedState.familySPAwarded = [];
 
             if (mergedState.midRunCheckpoint) {
                 mergedState.currentMap = mergedState.midRunCheckpoint.mapIndex;
@@ -82,9 +74,9 @@ export const loadGameState = (): GameState => {
 };
 
 export const saveGameState = (state: GameState) => {
-    localStorage.setItem('slaughterNationSave_v10', JSON.stringify(getPersistentState(state)));
+    localStorage.setItem('winterDeathSave_v1', JSON.stringify(getPersistentState(state)));
 };
 
 export const clearSave = () => {
-    localStorage.removeItem('slaughterNationSave_v10');
+    localStorage.removeItem('winterDeathSave_v1');
 };

@@ -43,7 +43,7 @@ interface GameHUDProps {
 }
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
-    hp, maxHp, stamina, maxStamina, ammo, magSize, activeWeapon, isReloading, score, scrap, multiplier, loadout, boss,
+    hp, maxHp, stamina, maxStamina, ammo, magSize, activeWeapon, isReloading, score, scrap = 0, multiplier, loadout, boss,
     throwableReadyTime = 0, throwableAmmo = 3, kills = 0, bossSpawned = false, bossDefeated = false,
     familyDistance = null, familySignal = 0, familyFound = false, level = 1, currentXp = 0, nextLevelXp = 100,
     reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false,
@@ -75,6 +75,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const prevSkillPoints = useRef(skillPoints);
     const prevScrap = useRef(scrap);
     const prevDistanceTraveled = useRef(distanceTraveled);
+    const hasMounted = useRef(false);
+
+    useEffect(() => {
+        hasMounted.current = true;
+    }, []);
 
     const [spGainAmount, setSpGainAmount] = useState(0);
     const [scrapGainAmount, setScrapGainAmount] = useState(0);
@@ -100,8 +105,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     useEffect(() => {
         const diff = (currentXp || 0) - (prevXp.current || 0);
-        // Suppress on load
-        const isLoad = prevDistanceTraveled.current < 5;
+        // Suppress on load or at spawn
+        const isLoad = !hasMounted.current || distanceTraveled < 1.0;
 
         if (diff >= 250 && !isLoad) {
             setXpGainAmount(diff);
@@ -114,26 +119,26 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     useEffect(() => {
         const diff = (skillPoints || 0) - (prevSkillPoints.current || 0);
-        const isLoad = prevDistanceTraveled.current === 0 && distanceTraveled > 20;
+        // Suppress on load or at spawn
+        const isLoad = !hasMounted.current || distanceTraveled < 1.0;
 
         if (diff > 0 && diff < 10 && !isLoad) {
             setSpGainAmount(diff);
             setSpGained(true);
-            const t = setTimeout(() => setSpGained(false), 2000);
-            return () => clearTimeout(t);
+            setTimeout(() => setSpGained(false), 2000);
         }
         prevSkillPoints.current = skillPoints;
     }, [skillPoints, distanceTraveled]);
 
     useEffect(() => {
         const diff = scrap - prevScrap.current;
-        const isLoad = prevDistanceTraveled.current === 0 && distanceTraveled > 20;
+        // Suppress on load or at spawn
+        const isLoad = !hasMounted.current || distanceTraveled < 1.0;
 
         if (diff > 0 && !isLoad) {
             setScrapGainAmount(diff);
             setScrapGained(true);
-            const t = setTimeout(() => setScrapGained(false), 1000);
-            return () => clearTimeout(t);
+            setTimeout(() => setScrapGained(false), 1000);
         }
         prevScrap.current = scrap;
     }, [scrap, distanceTraveled]);
@@ -269,8 +274,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                         <div className="flex flex-row gap-4 items-start">
                             {/* Skill Points (Left, Narrow) - Animated */}
-                            <div className={`relative transition-all duration-300 transform origin-left ${spGained ? 'scale-110 z-10' : 'scale-100'}`}>
-                                <div className={`px-4 py-2 border backdrop-blur-sm transition-all duration-300 ${skillPoints > 0 || spGained ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/80 border-slate-700'} ${spGained ? 'animate-[bubble_0.3s_ease-out]' : ''}`}>
+                            <div className={`relative transition-all duration-300 transform origin-left ${spGained ? 'animate-[resource-boom_0.5s_ease-out] z-10' : ''}`}>
+                                <div className={`px-4 py-2 border backdrop-blur-sm transition-all duration-300 ${skillPoints > 0 || spGained ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/80 border-slate-700'}`}>
                                     <div className="flex flex-col">
                                         <div className="flex justify-between items-baseline gap-2 relative">
                                             <span className={`text-[10px] uppercase font-black block tracking-widest transition-colors ${skillPoints > 0 || spGained ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
@@ -279,8 +284,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                             <span className={`text-2xl font-black transition-colors ${skillPoints > 0 || spGained ? 'text-purple-400' : 'text-white'}`}>{skillPoints}</span>
                                             {spGained && (
                                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                    <span className="text-lg font-black text-purple-200 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1] opacity-75">+{spGainAmount}</span>
-                                                    <span className="text-lg font-black text-white drop-shadow-[0_0_10px_rgba(168,85,247,1)] animate-bounce z-20 absolute">+{spGainAmount}</span>
+                                                    <span className="text-xl font-black text-white drop-shadow-[0_0_10px_rgba(168,85,247,1)] animate-[pop_0.4s_ease-out] z-20 absolute">+{spGainAmount}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -289,8 +293,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             </div>
 
                             {/* Scrap (Right) - Animated on gain */}
-                            <div className={`transition-all duration-200 transform origin-left ${scrapGained ? 'scale-110 z-10' : 'scale-100'}`}>
-                                <div className={`px-4 py-2 border backdrop-blur-sm transition-all duration-300 ${scrap > 0 || scrapGained ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 border-slate-700'} ${scrapGained ? 'animate-[bubble_0.3s_ease-out]' : ''}`}>
+                            <div className={`transition-all duration-200 transform origin-left ${scrapGained ? 'animate-[resource-boom_0.5s_ease-out] z-10' : ''}`}>
+                                <div className={`px-4 py-2 border backdrop-blur-sm transition-all duration-300 ${scrap > 0 || scrapGained ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 border-slate-700'}`}>
                                     <div className="flex flex-col">
                                         <div className="flex justify-between items-baseline gap-2 relative">
                                             <span className={`text-[10px] uppercase font-black block tracking-widest ${scrap > 0 || scrapGained ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
@@ -299,8 +303,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                             <span className={`text-2xl font-black ${scrap > 0 || scrapGained ? 'text-yellow-400' : 'text-white'}`}>{scrap}</span>
                                             {scrapGained && (
                                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                    <span className="text-lg font-black text-yellow-200 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_1] opacity-75">+{scrapGainAmount}</span>
-                                                    <span className="text-lg font-black text-white drop-shadow-[0_0_10px_rgba(234,179,8,1)] animate-bounce z-20 absolute">+{scrapGainAmount}</span>
+                                                    <span className="text-xl font-black text-white drop-shadow-[0_0_10px_rgba(234,179,8,1)] animate-[pop_0.4s_ease-out] z-20 absolute">+{scrapGainAmount}</span>
                                                 </div>
                                             )}
                                         </div>

@@ -89,14 +89,16 @@ export class PlayerInteractionSystem implements System {
     }
 
     private findNearbyCollectible(playerPos: THREE.Vector3, scene: THREE.Scene): THREE.Group | null {
+        // Search specifically for groups tagged as collectibles to avoid traversing everything
         const collectibles: THREE.Group[] = [];
         scene.traverse((obj) => {
-            if (obj.userData.collectibleId && obj instanceof THREE.Group) {
+            if (obj instanceof THREE.Group && obj.userData.isCollectible && !obj.userData.pickedUp) {
                 collectibles.push(obj);
             }
         });
 
         for (const collectible of collectibles) {
+            // Check distance (3.5m radius)
             if (playerPos.distanceTo(collectible.position) < 3.5) {
                 return collectible;
             }
@@ -160,21 +162,33 @@ export class PlayerInteractionSystem implements System {
         // Mark as picked up IMMEDIATELY to prevent re-pickup
         collectible.userData.pickedUp = true;
 
-        // Award SP immediately
-        session.state.spFromCollectibles = (session.state.spFromCollectibles || 0) + collectibleDef.reward.sp;
+        // Reward SP is now tracked via sessionCollectiblesFound list
 
         // Play pickup sound
         soundManager.playUiPickup();
 
-        // Trigger callback to show modal
+        // Trigger callback to show modal with a short delay
+        // This allows the animation to start and the HUD to show the SP flash before it's hidden by the modal
         if (this.onCollectibleFound) {
-            this.onCollectibleFound(collectibleId);
+            console.log(`[InteractionSystem] Picking up collectible: ${collectibleId}`);
+            setTimeout(() => {
+                if (this.onCollectibleFound) {
+                    this.onCollectibleFound(collectibleId);
+                }
+            }, 500);
         }
 
         // Animate pickup (float up and fade out)
         const startY = collectible.position.y;
         const startTime = Date.now();
         const duration = 800;
+
+        // Clone materials to avoid affecting shared materials (e.g. enemies)
+        collectible.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
+                child.material = child.material.clone();
+            }
+        });
 
         const animate = () => {
             const elapsed = Date.now() - startTime;

@@ -48,17 +48,32 @@ export const HudSystem = {
             ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
             : 0;
 
-        // Calculate potential SP earned in this run
-        let spEarned = (state.spFromLevelUp || 0) + (state.spFromCollectibles || 0);
+        // Calculate potential SP earned in this run, excluding what's already been saved to global stats
+        const sessionCollectibles = state.sessionCollectiblesFound || [];
+        const globalCollectibles = (props.stats && props.stats.collectiblesFound) || [];
+        const newCollectiblesCount = sessionCollectibles.filter(id => !globalCollectibles.includes(id)).length;
+
+        // SP from levels gained in this specific run
+        const levelGained = Math.max(0, state.level - (props.stats?.level || 1));
+
+        let spEarned = levelGained + newCollectiblesCount;
 
         // 1. Family Found (if not previously rescued)
-        if (state.familyFound && !props.familyAlreadyRescued) {
+        if (state.familyExtracted && !props.familyAlreadyRescued) {
             spEarned++;
         }
         // 2. Boss Defeated (if not previously defeated)
-        const bossKilled = (state.killsByType['Boss'] || 0) > 0;
+        const bossKilled = state.bossesDefeated?.length > 0;
         if (bossKilled && !props.bossPermanentlyDefeated) {
             spEarned++;
+        }
+
+        // Trace SP changes for debugging (throttled to once per change)
+        const totalSP = (props.stats?.skillPoints || 0) + spEarned;
+        const lastTotal = (state as any)._lastLoggedSP || 0;
+        if (totalSP !== lastTotal && spEarned > 0) {
+            console.log(`[HudSystem] SP Change: Global(${props.stats?.skillPoints || 0}) + SessionNew(${spEarned}) = Total(${totalSP})`);
+            (state as any)._lastLoggedSP = totalSP;
         }
 
         return {
@@ -69,7 +84,7 @@ export const HudSystem = {
             ammo: state.weaponAmmo[state.activeWeapon],
             magSize: (wep || {}).magSize || 0,
             score: state.score,
-            scrap: state.collectedScrap,
+            scrap: (props.stats.scrap || 0) + state.collectedScrap,
             multiplier: 1,
             activeWeapon: state.activeWeapon,
             isReloading: state.isReloading,
@@ -89,8 +104,7 @@ export const HudSystem = {
             distanceTraveled: Math.floor(distanceTraveled),
             kills: state.killsInRun,
             spEarned: spEarned,
-            skillPoints: (props.stats.skillPoints || 0) + spEarned, // Total SP: base + session
-            totalScrap: (props.stats.scrap || 0) + state.collectedScrap, // Total scrap: base + session
+            skillPoints: (props.stats?.skillPoints || 0) + spEarned, // Total SP: base + session (safely)
             debugInfo: {
                 aim: input.aimVector ? { x: parseFloat(input.aimVector.x.toFixed(2)), y: parseFloat(input.aimVector.y.toFixed(2)) } : { x: 0, y: 0 },
                 input: {

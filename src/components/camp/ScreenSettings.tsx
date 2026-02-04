@@ -2,14 +2,8 @@
 import React, { useState } from 'react';
 import { t, setLocale, getLocale } from '../../utils/i18n';
 import { soundManager } from '../../utils/sound';
+import { GraphicsSettings, SHADOW_PRESETS } from '../../content/constants';
 import CampModalLayout from './CampModalLayout';
-
-interface GraphicsSettings {
-    pixelRatio: number;
-    antialias: boolean;
-    shadows: boolean;
-    shadowMapType: number;
-}
 
 interface ScreenSettingsProps {
     onClose: () => void;
@@ -34,10 +28,6 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
         soundManager.playUiClick();
     };
 
-    const toggleShadows = () => {
-        onUpdateGraphics({ ...graphics, shadows: !graphics.shadows });
-        soundManager.playUiClick();
-    };
 
     const toggleAntialias = () => {
         onUpdateGraphics({ ...graphics, antialias: !graphics.antialias });
@@ -90,20 +80,21 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                     </div>
                     <div className="flex gap-2">
                         <button
-                            onClick={() => { onUpdateGraphics({ ...graphics, shadows: false }); soundManager.playUiClick(); }}
+                            onClick={() => { onUpdateGraphics({ ...graphics, ...SHADOW_PRESETS.OFF }); soundManager.playUiClick(); }}
                             className={`px-3 py-1 font-bold uppercase border-2 transition-all ${!graphics.shadows ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
                         >
                             Off
                         </button>
                         {[
-                            { label: 'Low', type: 0 },
-                            { label: 'Med', type: 1 },
-                            { label: 'High', type: 2 }
+                            { label: 'Low', preset: SHADOW_PRESETS.LOW },
+                            { label: 'Med', preset: SHADOW_PRESETS.MEDIUM },
+                            { label: 'High', preset: SHADOW_PRESETS.HIGH },
+                            { label: 'V.High', preset: SHADOW_PRESETS.VERYHIGH }
                         ].map(q => (
                             <button
                                 key={q.label}
-                                onClick={() => { onUpdateGraphics({ ...graphics, shadows: true, shadowMapType: q.type }); soundManager.playUiClick(); }}
-                                className={`px-3 py-1 font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.type ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
+                                onClick={() => { onUpdateGraphics({ ...graphics, ...q.preset }); soundManager.playUiClick(); }}
+                                className={`px-2 py-1 font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
                             >
                                 {q.label}
                             </button>

@@ -5,6 +5,7 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { EnemyManager } from '../EnemyManager';
 import { FXSystem } from './FXSystem';
 import { WorldLootSystem } from './WorldLootSystem';
+import { soundManager } from '../../utils/sound';
 
 export class EnemySystem implements System {
     id = 'enemy_system';
@@ -48,7 +49,7 @@ export class EnemySystem implements System {
                     if (now < state.invulnerableUntil) return;
                     state.damageTaken += damage;
                     state.hp -= damage;
-                    // soundManager.playDamageGrunt(); // Import soundManager
+                    soundManager.playDamageGrunt();
                     state.hurtShake = 1.0;
                     state.lastDamageTime = now;
                     if (type === 'Boss') state.bossDamageTaken += damage;

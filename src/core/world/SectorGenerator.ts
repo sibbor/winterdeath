@@ -44,7 +44,7 @@ export const SectorBuilder = {
 
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
-        group.userData = { id, type: 'collectible', collectibleId: id };
+        group.userData = { id, type: 'collectible', collectibleId: id, isCollectible: true };
         group.name = `collectible_${id}`;
 
         // Use centralized ModelFactory for visual consistency

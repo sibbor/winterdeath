@@ -80,52 +80,58 @@ const App: React.FC = () => {
         setDeathDetails({ killer });
         setSectorStats(stats);
 
-        const newStats = aggregateStats(gameState.stats, stats, true, false);
+        // 1. Determine new unique achievements from this run (even on death)
+        let newUniqueAchievements = 0;
+        const bossKilled = stats.killsByType['Boss'] > 0;
+        const newBosses = [...gameState.bossesDefeated];
+        if (bossKilled && !gameState.bossesDefeated.includes(gameState.currentMap)) {
+            newBosses.push(gameState.currentMap);
+            newUniqueAchievements++;
+        }
+
+        const newFamily = [...gameState.familyMembersFound];
+        // Note: On death, if they were extracted earlier in the same run, we still award it
+        if (stats.familyExtracted && !gameState.familyMembersFound.includes(gameState.currentMap)) {
+            newFamily.push(gameState.currentMap);
+            newUniqueAchievements++;
+        }
+
+        const newStats = aggregateStats(gameState.stats, stats, true, false, newUniqueAchievements);
         setGameState(prev => ({
             ...prev,
             stats: newStats,
+            bossesDefeated: newBosses,
+            familyMembersFound: newFamily,
             screen: GameScreen.RECAP
         }));
-    }, [gameState.stats]);
+    }, [gameState.stats, gameState.currentMap, gameState.bossesDefeated, gameState.familyMembersFound]);
 
     const handleSectorEnded = useCallback((stats: SectorStats) => {
         setDeathDetails(null);
 
-        // 1. Basic Aggregation (Includes XP and Level Up SP)
+        // 1. Basic Aggregation (Includes XP, Levels, and Collectibles SP)
         const prevSp = gameState.stats.skillPoints;
-        const newStats = aggregateStats(gameState.stats, stats, false, false);
 
-
-        // 3. Award SP for Unique Map Objectives (Boss / Family)
-        const newBosses = [...gameState.bossesDefeated];
+        // 2. Determine new unique achievements from this run
+        let newUniqueAchievements = 0;
         const bossKilled = stats.killsByType['Boss'] > 0;
-        if (bossKilled) {
-            if (!newBosses.includes(gameState.currentMap)) {
-                newBosses.push(gameState.currentMap);
-                newStats.skillPoints++; // Award SP for first-time Boss kill
-                newStats.totalSkillPointsEarned++;
-            }
+        const newBosses = [...gameState.bossesDefeated];
+        if (bossKilled && !gameState.bossesDefeated.includes(gameState.currentMap)) {
+            newBosses.push(gameState.currentMap);
+            newUniqueAchievements++;
         }
 
         const newFamily = [...gameState.familyMembersFound];
-        const newFamilySP = [...gameState.familySPAwarded];
-
-        if (stats.familyFound && stats.familyExtracted) {
-            // Track "Found" status (for unlocks/story)
-            if (!newFamily.includes(gameState.currentMap)) {
-                newFamily.push(gameState.currentMap);
-            }
-
-            // Track SP Reward separately (Explicit prevention of duplicates)
-            if (!newFamilySP.includes(gameState.currentMap)) {
-                newFamilySP.push(gameState.currentMap);
-                newStats.skillPoints++; // Award SP for first-time Family rescue
-                newStats.totalSkillPointsEarned++;
-            }
+        // For sector end, we check if family extracted in this run (and not already found globally)
+        if (stats.familyExtracted && !gameState.familyMembersFound.includes(gameState.currentMap)) {
+            newFamily.push(gameState.currentMap);
+            newUniqueAchievements++;
         }
 
+        // 3. Aggregate stats and calculate SP
+        const newStats = aggregateStats(gameState.stats, stats, false, false, newUniqueAchievements);
+
         // 4. Update Sector Stats for Report Screen
-        // Calculate total SP gain (Level Up + Clues + Objectives)
         stats.spEarned = newStats.skillPoints - prevSp;
         setSectorStats(stats);
 
@@ -134,7 +140,6 @@ const App: React.FC = () => {
             stats: newStats,
             bossesDefeated: newBosses,
             familyMembersFound: newFamily,
-            familySPAwarded: newFamilySP,
             screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP, // Go to Boss Killed screen first if boss died
             midRunCheckpoint: null // Clear checkpoint on success
         }));
@@ -144,8 +149,8 @@ const App: React.FC = () => {
         setIsPaused(false);
         setDeathDetails(null);
 
-        // Create partial stats for abort
-        const abortedStats: SectorStats = {
+        // Get actual stats from the game session
+        const abortedStats = gameCanvasRef.current?.getSectorStats(false, true) || {
             timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {},
             scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
             chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: [], collectiblesFound: [],

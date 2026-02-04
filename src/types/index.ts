@@ -138,7 +138,6 @@ export interface GameState {
     mapIndex: number;
     timestamp: number;
   } | null;
-  familySPAwarded: number[]; // Maps where family SP has been claimed
   graphics?: {
     pixelRatio: number;
     antialias: boolean;

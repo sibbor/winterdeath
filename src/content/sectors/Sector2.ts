@@ -122,7 +122,7 @@ export const Sector2: SectorDef = {
             },
         );
 
-        // Visual Collectibles
+        // Visual Collectibles                
         SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's2_collectible_1', 'pacifier');
         SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's2_collectible_2', 'teddy');
 

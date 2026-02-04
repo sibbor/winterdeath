@@ -24,6 +24,7 @@ export interface GameContext {
     trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => void;
     addScore: (amt: number) => void;
     addFireZone: (z: FireZone) => void;
+    now: number;
 }
 
 export interface Projectile {
@@ -67,7 +68,7 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
             ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1, undefined, undefined, 0xffaa00);
             ctx.spawnPart(pos.x, 0, pos.z, 'debris', 15, undefined, undefined, 0xffaa00);
             ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
-            
+
             soundManager.playExplosion();
 
             // Logic
@@ -82,7 +83,7 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
                     const actualDamage = Math.max(0, Math.min(e.hp, damage));
                     e.hp -= damage;
                     ctx.trackStats('damage', actualDamage, !!e.isBoss);
-                    
+
                     // Massive blood splatter for grenade hits
                     ctx.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 120);
 
@@ -97,28 +98,28 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
                         ctx.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'gore', 25);
                         ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0, MATERIALS.bloodDecal);
                     } else {
-                        e.hitTime = Date.now();
+                        e.hitTime = ctx.now;
                     }
                 }
             }
         }
     },
     [WeaponType.MOLOTOV]: {
-        radius: 15, 
+        radius: 15,
         fuseTime: 1.0,
         createMesh: () => new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov),
         createMarker: DEFAULT_MARKER,
         onImpact: (pos, radius, ctx) => {
             // Visuals
             ctx.spawnPart(pos.x, 0, pos.z, 'glass', 15);
-            for(let i=0; i<30; i++) {
-                const x = pos.x + (Math.random()-0.5)*3;
-                const z = pos.z + (Math.random()-0.5)*3;
+            for (let i = 0; i < 30; i++) {
+                const x = pos.x + (Math.random() - 0.5) * 3;
+                const z = pos.z + (Math.random() - 0.5) * 3;
                 ctx.spawnPart(x, 0.5, z, 'campfire_flame', 1, undefined, undefined, 0xff7700);
             }
-            
+
             // Explosion/Glass sound via general explosion util for now, or maybe add glass later
-            soundManager.playExplosion(); 
+            soundManager.playExplosion();
 
             // Create Fire Zone
             const fz: FireZone = {
@@ -128,7 +129,7 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
             };
             fz.mesh.rotation.x = -Math.PI / 2;
             fz.mesh.position.set(pos.x, 0.1, pos.z);
-            fz.mesh.scale.setScalar(fz.radius / 3.5); 
+            fz.mesh.scale.setScalar(fz.radius / 3.5);
             ctx.scene.add(fz.mesh);
             ctx.addFireZone(fz);
         }
@@ -141,16 +142,16 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1, undefined, undefined, 0xffffff);
             ctx.spawnPart(pos.x, 1, pos.z, 'spark', 10);
-            
+
             soundManager.playExplosion();
 
             const blindDuration = 2500;
             const now = Date.now();
-            
+
             for (const e of ctx.enemies) {
                 if (e.mesh.position.distanceTo(pos) < radius) {
                     e.isBlinded = true;
-                    e.blindUntil = now + blindDuration;
+                    e.blindUntil = ctx.now + blindDuration;
                 }
             }
         }
@@ -170,9 +171,9 @@ export const ProjectileSystem = {
         const b = new THREE.Mesh(visuals.geometry, visuals.material);
         b.position.copy(origin);
         scene.add(b);
-        
+
         // REMOVED redundant sound call. WeaponHandler handles the trigger sound.
-        
+
         ProjectileSystem.projectiles.push({
             mesh: b,
             type: 'bullet',
@@ -191,14 +192,14 @@ export const ProjectileSystem = {
 
         const maxDist = 25;
         const throwDist = Math.max(2, chargeRatio * maxDist);
-        
+
         const proj = def.createMesh();
         proj.position.copy(origin);
         scene.add(proj);
 
         // Arc Physics
         const gravity = 30;
-        const timeToTarget = def.fuseTime; 
+        const timeToTarget = def.fuseTime;
         const vx = (dir.x * throwDist) / timeToTarget;
         const vz = (dir.z * throwDist) / timeToTarget;
         const vy = (0 - origin.y + 0.5 * gravity * timeToTarget * timeToTarget) / timeToTarget;
@@ -226,13 +227,14 @@ export const ProjectileSystem = {
         // Wrap addFireZone to the context
         const fullCtx: GameContext = {
             ...ctx,
-            addFireZone: (z) => ProjectileSystem.fireZones.push(z)
+            addFireZone: (z) => ProjectileSystem.fireZones.push(z),
+            now: now
         };
 
         // --- UPDATE PROJECTILES ---
         for (let i = ProjectileSystem.projectiles.length - 1; i >= 0; i--) {
             const p = ProjectileSystem.projectiles[i];
-            
+
             if (p.type === 'bullet') {
                 updateBullet(p, i, delta, fullCtx);
             } else {
@@ -245,7 +247,7 @@ export const ProjectileSystem = {
             const fz = ProjectileSystem.fireZones[i];
             fz.life -= delta;
 
-            const flameDensity = 3; 
+            const flameDensity = 3;
             for (let k = 0; k < flameDensity; k++) {
                 const r = Math.sqrt(Math.random()) * (fz.radius * 0.8);
                 const theta = Math.random() * 2 * Math.PI;
@@ -269,7 +271,7 @@ export const ProjectileSystem = {
                 if (e.mesh.position.distanceTo(fz.mesh.position) < fz.radius) {
                     e.isBurning = true;
                     if (e.burnTimer <= 0) e.burnTimer = 0.5;
-                    e.afterburnTimer = 2.0; 
+                    e.afterburnTimer = 2.0;
                 }
             });
 
@@ -311,26 +313,26 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
     if (!destroy) {
         for (const e of ctx.enemies) {
             if (e.dead || e.deathState !== 'alive') continue;
-            
+
             // Skip enemies already hit by this piercing bullet
             if (p.hitEntities && p.hitEntities.has(e.mesh.uuid)) continue;
 
             const dx = p.mesh.position.x - e.mesh.position.x;
             const dz = p.mesh.position.z - e.mesh.position.z;
-            if (dx * dx + dz * dz < 1.0) { 
+            if (dx * dx + dz * dz < 1.0) {
                 if (Math.abs(p.mesh.position.y - e.mesh.position.y) < 2.0) {
-                    
+
                     // HIT
                     ctx.trackStats('hit', 1);
                     const actualDamage = Math.max(0, Math.min(e.hp, p.damage));
                     e.hp -= p.damage;
                     ctx.trackStats('damage', actualDamage, !!e.isBoss);
-                    e.hitTime = Date.now();
-                    
+                    e.hitTime = ctx.now;
+
                     // Increased blood count (~3x normal)
-                    ctx.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 80); 
+                    ctx.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 80);
                     ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 0.7 + Math.random() * 0.5, MATERIALS.bloodDecal);
-                    
+
                     // Apply slow effect
                     e.slowTimer = 0.5;
 
@@ -343,7 +345,7 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                         const distFromOrigin = p.origin.distanceTo(e.mesh.position);
                         const isShotgun = p.weapon === WeaponType.SHOTGUN;
                         const isRevolver = p.weapon === WeaponType.REVOLVER;
-                        
+
                         let shouldGib = false;
                         if (!e.isBoss) {
                             if (isShotgun) {
@@ -351,23 +353,23 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                             } else if (isRevolver) {
                                 // Gib if it's the 1st (0 prev hits) or 2nd (1 prev hit) target. 
                                 const hitCount = p.hitEntities ? p.hitEntities.size : 0;
-                                shouldGib = hitCount <= 1; 
+                                shouldGib = hitCount <= 1;
                             }
                         }
 
                         // GIBBING LOGIC
                         if (shouldGib) {
-                            const explodeForce = p.vel.clone().normalize().multiplyScalar(4.0); 
+                            const explodeForce = p.vel.clone().normalize().multiplyScalar(4.0);
                             ctx.explodeEnemy(e, explodeForce);
-                            
+
                             ctx.addScore(Math.ceil(actualDamage));
                             ctx.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'gore', 25);
                             ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.5, MATERIALS.bloodDecal);
-                            
+
                             // Revolver pierces even through gibs, Shotgun stops
                             if (!isRevolver) {
                                 destroy = true;
-                                break; 
+                                break;
                             }
                         } else {
                             // STANDARD DEATH
@@ -375,15 +377,15 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                                 e.dead = true;
                             } else {
                                 e.deathState = 'falling';
-                                e.deathTimer = 2.0; 
-                                
+                                e.deathTimer = 2.0;
+
                                 const baseSpeed = e.speed * 10;
                                 const isMoving = e.velocity.lengthSq() > 0.1;
                                 let finalVelocity = new THREE.Vector3();
 
                                 if (isMoving) {
                                     finalVelocity.copy(e.velocity).normalize();
-                                    finalVelocity.multiplyScalar(baseSpeed * 1.5); 
+                                    finalVelocity.multiplyScalar(baseSpeed * 1.5);
                                     const impactNudge = p.vel.clone().normalize().multiplyScalar(2.0);
                                     finalVelocity.add(impactNudge);
                                 } else {
@@ -392,12 +394,12 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                                         const forceFactor = Math.max(0.2, 1.0 - (distFromOrigin / 12.0));
                                         impactForce = 30 * forceFactor;
                                     } else if (isRevolver) {
-                                        impactForce = 25; 
+                                        impactForce = 25;
                                     }
                                     finalVelocity.copy(p.vel).normalize().multiplyScalar(impactForce);
                                 }
 
-                                finalVelocity.y = 2.0; 
+                                finalVelocity.y = 2.0;
                                 e.deathVel = finalVelocity;
                             }
                         }
@@ -429,13 +431,13 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
 }
 
 function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number) {
-    p.vel.y -= 30 * delta; 
+    p.vel.y -= 30 * delta;
     p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
     p.mesh.rotation.x += 10 * delta;
 
     // Marker Pulse
     if (p.marker) {
-        const pulse = Math.abs(Math.sin(now * 0.015)); 
+        const pulse = Math.abs(Math.sin(now * 0.015));
         (p.marker.material as THREE.Material).opacity = 0.3 + 0.7 * pulse;
         const scaleBase = p.maxRadius || 1.0;
         const scalePulse = 1.0 + 0.05 * pulse;

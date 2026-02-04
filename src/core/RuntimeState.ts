@@ -50,6 +50,7 @@ export interface RuntimeState {
     seenEnemies: string[]; // New
     seenBosses: string[]; // New
     visitedPOIs: string[]; // New
+    bossesDefeated: number[]; // New: Map IDs of bosses killed this run
     familyFound: boolean;
     familyExtracted: boolean;
     chestsOpened: number;
@@ -79,8 +80,6 @@ export interface RuntimeState {
     lastTrailPos: THREE.Vector3 | null;
     framesSinceHudUpdate: number;
     lastFpsUpdate: number;
-    spFromLevelUp: number;
-    spFromCollectibles: number;
     isMoving: boolean;
     interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null;
     interactionTargetPos: THREE.Vector3 | null;
@@ -89,5 +88,6 @@ export interface RuntimeState {
     onCollectibleFound?: ((id: string) => void) | null;
     gainXp?: ((amount: number) => void) | null;
     bossIntroActive: boolean;
+    sessionCollectiblesFound: string[];
 }
 

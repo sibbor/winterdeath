@@ -1,12 +1,8 @@
 import * as THREE from 'three';
+import { DEFAULT_GRAPHICS, GraphicsSettings } from '../../content/constants';
 import { InputManager } from './InputManager';
 
-export interface GraphicsSettings {
-    pixelRatio: number;
-    antialias: boolean;
-    shadows: boolean;
-    shadowMapType: THREE.ShadowMapType;
-}
+// Remove local interface
 
 export class Engine {
     // Singleton-like access for shared resources
@@ -23,12 +19,7 @@ export class Engine {
     public input: InputManager;
 
     // Settings
-    private settings: GraphicsSettings = {
-        pixelRatio: 1.25,
-        antialias: true,
-        shadows: true,
-        shadowMapType: THREE.PCFShadowMap
-    };
+    private settings: GraphicsSettings = { ...DEFAULT_GRAPHICS };
 
     // Time tracking
     private clock: THREE.Clock;

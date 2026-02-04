@@ -56,6 +56,7 @@ export class GameSessionLogic {
             obstacles: [] as Obstacle[],
             busUnlocked: false,
             clueActive: false,
+            bossesDefeated: [],
             bossDefeatedTime: 0,
             lastActionTime: performance.now(),
             thinkingUntil: 0,
@@ -67,12 +68,11 @@ export class GameSessionLogic {
             lastTrailPos: null as THREE.Vector3 | null,
             framesSinceHudUpdate: 0,
             lastFpsUpdate: 0,
-            spFromLevelUp: 0,
-            spFromCollectibles: 0,
             isMoving: false,
             interactionType: null,
             interactionTargetPos: null,
-            bossIntroActive: false
+            bossIntroActive: false,
+            sessionCollectiblesFound: []
         };
     }
 
