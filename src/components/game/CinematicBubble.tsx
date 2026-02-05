@@ -178,7 +178,7 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
         >
             <div className="relative">
                 <div
-                    className={`px-6 py-4 rounded-2xl shadow-xl max-w-sm border-2 ${textColor}`}
+                    className={`px-4 md:px-6 py-3 md:py-4 rounded-2xl shadow-xl max-w-[280px] md:max-w-sm border-2 ${textColor}`}
                     style={{ backgroundColor: bgColor, borderColor: borderColor }}
                 >
                     <h4 className="text-lg font-black uppercase tracking-widest opacity-70 mb-1">{speakerName}</h4>

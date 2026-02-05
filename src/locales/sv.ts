@@ -98,14 +98,14 @@ export const sv = {
         damage: "SKADA",
         magazine: "MAG",
         range: "RÄCKVIDD",
-        reload: "LADDNING",
+        reload: "LADDA OM",
+        interact: "INTERAGERA",
         equipped: "VALD",
         signal_strength: "SIGNAL",
-        interact_pickup_collectible: "[E] PLOCKA UPP FÖREMÅL",
-        interact_open_chest: "[E] ÖPPNA KISTA",
-        interact_plant_explosive: "[E] PLANTERA SPRÄNGMEDEL",
-        interact_knock_on_port: "[E] KNCKA PÅ PORTEN",
-        open_chest: "ÖPPNA KISTA [E]",
+        interact_pickup_collectible: "PLOCKA UPP FÖREMÅL",
+        interact_open_chest: "ÖPPNA KISTA",
+        interact_plant_explosive: "PLANTERA SPRÄNGMEDEL",
+        interact_knock_on_port: "KNACKA PÅ PORTEN",
         clue_found_title: "LEDTRÅD HITTAD",
         available_pts: "POÄNG",
         throwables_thrown: "Kastvapen Kastade",
@@ -155,7 +155,35 @@ export const sv = {
         protect_family: "SKYDDA FAMILJEN",
         scanning: "SKANNAR...",
         collected: "INSAMLADE",
-        new: "NY"
+        new: "NY",
+        editor: {
+            title: "Sektor-redigerare",
+            save: "SPARA SEKTOR",
+            export: "EXPORTERA KOD",
+            play_mode: "PROVSPELA",
+            edit_mode: "REDIGERA",
+            assets: "TILLGÅNGAR",
+            properties: "EGENSKAPER",
+            selected: "Markerad",
+            position: "Position",
+            rotation: "Rotation",
+            scale: "Skala",
+            categories: {
+                props: "Rekvisita",
+                buildings: "Byggnader",
+                enemies: "Fiender",
+                triggers: "Triggers",
+                paths: "Vägar"
+            },
+            tools: {
+                select: "Markera",
+                place: "Placera",
+                path: "Vägverktyg",
+                delete: "Radera"
+            },
+            snapping: "Rutnätssnapping",
+            placed_objects: "Placerade objekt"
+        }
     },
     categories: {
         primary: "PRIMÄR",
@@ -208,7 +236,11 @@ export const sv = {
         molotov: "Molotov",
         flashbang: "Blixtgranat",
         minigun: "Minigun",
-        radio: "Radio"
+        radio: "Radio",
+        wall_section: "Väggsektion",
+        wall_corner: "Hörnsektion",
+        door_frame: "Dörrkarm",
+        window_frame: "Fönsterkarm"
     },
     tips: [
         "Skjut bara! Obegränsad ammunition till pistoler.",

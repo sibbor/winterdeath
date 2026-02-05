@@ -30,6 +30,15 @@ export class PlayerMovementSystem implements System {
         );
 
         state.isMoving = isMoving;
+
+        this.handleRotation(
+            this.playerGroup,
+            input,
+            state,
+            session.isMobile,
+            disableInput,
+            isMoving
+        );
     }
 
     private handleMovement(
@@ -145,7 +154,16 @@ export class PlayerMovementSystem implements System {
         else {
             if (!disableInput) {
                 const v = new THREE.Vector3();
-                if (input.w) v.z -= 1; if (input.s) v.z += 1; if (input.a) v.x -= 1; if (input.d) v.x += 1;
+                if (input.w) v.z -= 1;
+                if (input.s) v.z += 1;
+                if (input.a) v.x -= 1;
+                if (input.d) v.x += 1;
+
+                // Support mobile joystick movement
+                if (input.joystickMove && (input.joystickMove.x !== 0 || input.joystickMove.y !== 0)) {
+                    v.x += input.joystickMove.x;
+                    v.z += input.joystickMove.y;
+                }
 
                 if (v.lengthSq() > 0) {
                     isMoving = true;
@@ -158,5 +176,51 @@ export class PlayerMovementSystem implements System {
         if (isMoving || input.fire || input.space) state.lastActionTime = now;
 
         return isMoving;
+    }
+
+    private handleRotation(
+        playerGroup: THREE.Group,
+        input: any,
+        state: any,
+        isMobile: boolean,
+        disableInput: boolean,
+        isMoving: boolean
+    ) {
+        if (disableInput) return;
+
+        const hasRightStick = input.joystickAim && input.joystickAim.lengthSq() > 0.1;
+        const hasLeftStick = input.joystickMove && input.joystickMove.lengthSq() > 0.1;
+        const hasMouse = !isMobile && input.aimVector && input.aimVector.lengthSq() > 1;
+
+        if (hasRightStick) {
+            // Priority 1 (Mobile): Aim Stick
+            const targetX = playerGroup.position.x + input.joystickAim.x * 10;
+            const targetZ = playerGroup.position.z + input.joystickAim.y * 10;
+            playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
+        }
+        else if (isMobile && hasLeftStick) {
+            // Priority 2 (Mobile): Move Stick (when not aiming)
+            // This fixes the flashlight direction while running on mobile
+            const targetX = playerGroup.position.x + input.joystickMove.x * 10;
+            const targetZ = playerGroup.position.z + input.joystickMove.y * 10;
+            playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
+        }
+        else if (hasMouse) {
+            // Priority 1 (Desktop): Mouse
+            const targetX = playerGroup.position.x + input.aimVector.x;
+            const targetZ = playerGroup.position.z + input.aimVector.y;
+            playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
+        }
+        else if (isMoving && !isMobile) {
+            // Priority 2 (Desktop): Keyboard Direction (fallback)
+            const moveDir = new THREE.Vector3(0, 0, 0);
+            if (input.w) moveDir.z -= 1; if (input.s) moveDir.z += 1; if (input.a) moveDir.x -= 1; if (input.d) moveDir.x += 1;
+
+            if (moveDir.lengthSq() > 0.1) {
+                const targetX = playerGroup.position.x + moveDir.x * 10;
+                const targetZ = playerGroup.position.z + moveDir.z * 10;
+                playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
+            }
+        }
     }
 }

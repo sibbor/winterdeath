@@ -21,6 +21,8 @@ import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/sound';
 import { getCollectibleById } from './content/collectibles';
+import { isMobile } from './utils/device';
+import SectorEditor from './components/editor/SectorEditor';
 
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
@@ -32,6 +34,17 @@ const App: React.FC = () => {
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
     const [isLoadingLevel, setIsLoadingLevel] = useState(false);
     const [isLoadingCamp, setIsLoadingCamp] = useState(false);
+    const [isEditorOpen, setIsEditorOpen] = useState(false);
+    const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
+
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobileDevice(isMobile());
+        };
+        // Initial check is already done by useState(isMobile())
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     // HUD & Game State tracked in App for persistence/UI overlay
     const [hudState, setHudState] = useState<any>({});
@@ -55,6 +68,7 @@ const App: React.FC = () => {
     useEffect(() => {
         // Auto-save on meaningful state changes (screens)
         saveGameState(gameState);
+        (window as any).setGameScreen = (screen: GameScreen) => setGameState(prev => ({ ...prev, screen }));
     }, [gameState]);
 
     // Global Input Hook (ESC, M)
@@ -152,7 +166,7 @@ const App: React.FC = () => {
         // Get actual stats from the game session
         const abortedStats = gameCanvasRef.current?.getSectorStats(false, true) || {
             timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {},
-            scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
+            scrapLooted: 0, xpGained: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
             chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: [], collectiblesFound: [],
             seenEnemies: [], seenBosses: [], visitedPOIs: []
         };
@@ -228,7 +242,7 @@ const App: React.FC = () => {
         window.location.reload();
     };
 
-    const cursorHidden = gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen;
+    const cursorHidden = isMobileDevice || (gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen);
 
     const handleCollectibleClose = useCallback(() => {
         gameCanvasRef.current?.requestPointerLock();
@@ -292,7 +306,12 @@ const App: React.FC = () => {
                     onSaveGraphics={handleSaveGraphics}
                     initialGraphics={gameState.graphics}
                     onCampLoaded={() => setIsLoadingCamp(false)}
+                    isMobileDevice={isMobileDevice}
                 />
+            )}
+
+            {gameState.screen === GameScreen.EDITOR && (
+                <SectorEditor onClose={() => setGameState(prev => ({ ...prev, screen: GameScreen.CAMP }))} />
             )}
 
             {/* 
@@ -340,6 +359,7 @@ const App: React.FC = () => {
                         onMapInit={setCurrentMapItems}
                         onFPSUpdate={handleFPSUpdate}
                         initialGraphics={gameState.graphics}
+                        isMobileDevice={isMobileDevice}
                     />
 
                     {/* Hide HUD if hudState.isHidden or during dialogues/intro (but allow GameHUD to handle its own visibility for Boss Intro) */}
@@ -350,6 +370,12 @@ const App: React.FC = () => {
                             weaponLevels={gameState.weaponLevels}
                             debugMode={gameState.debugMode}
                             isBossIntro={isBossIntroActive}
+                            isMobileDevice={isMobileDevice}
+                            onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
+                            onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
+                            onSelectWeapon={(slot) => {
+                                gameCanvasRef.current?.triggerInput(slot as any);
+                            }}
                         />
                     )}
 
@@ -360,6 +386,7 @@ const App: React.FC = () => {
                             onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
                             onOpenSettings={() => setIsSettingsOpen(true)}
                             onOpenAdventureLog={() => { setIsAdventureLogOpen(true); soundManager.playUiConfirm(); }}
+                            isMobileDevice={isMobileDevice}
                         />
                     )}
 
@@ -368,6 +395,7 @@ const App: React.FC = () => {
                             onClose={() => { setIsSettingsOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
                             graphics={gameState.graphics}
                             onUpdateGraphics={handleSaveGraphics}
+                            isMobileDevice={isMobileDevice}
                         />
                     )}
 
@@ -375,6 +403,7 @@ const App: React.FC = () => {
                         <ScreenCollectibleFound
                             collectible={getCollectibleById(activeCollectible)!}
                             onClose={handleCollectibleClose}
+                            isMobileDevice={isMobileDevice}
                         />
                     )}
 
@@ -382,13 +411,14 @@ const App: React.FC = () => {
                         <ScreenAdventureLog
                             stats={gameState.stats}
                             onClose={() => { setIsAdventureLogOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
+                            isMobileDevice={isMobileDevice}
                         />
                     )}
                 </>
             )}
 
             {(isLoadingLevel || isLoadingCamp) && (
-                <ScreenLoading mapIndex={gameState.currentMap} isCamp={isLoadingCamp} />
+                <ScreenLoading mapIndex={gameState.currentMap} isCamp={isLoadingCamp} isMobileDevice={isMobileDevice} />
             )}
 
             {/* Map Screen (Overlay for Sector) */}
@@ -400,6 +430,7 @@ const App: React.FC = () => {
                     bossPos={hudState.bossPos || undefined}
                     onClose={() => { gameCanvasRef.current?.requestPointerLock(); setIsMapOpen(false); setIsPaused(false); }}
                     onSelectCoords={handleMapSelectCoords}
+                    isMobileDevice={isMobileDevice}
                 />
             )}
 
@@ -414,6 +445,7 @@ const App: React.FC = () => {
                         setTeleportInitialCoords(null);
                         setIsMapOpen(true);
                     }}
+                    isMobileDevice={isMobileDevice}
                 />
             )}
 
@@ -425,6 +457,7 @@ const App: React.FC = () => {
                         soundManager.playUiConfirm();
                         setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
                     }}
+                    isMobileDevice={isMobileDevice}
                 />
             )}
 
@@ -451,11 +484,12 @@ const App: React.FC = () => {
                         setIsPaused(false);
                         soundManager.playUiConfirm();
                     }}
+                    isMobileDevice={isMobileDevice}
                 />
             )}
 
             {gameState.screen === GameScreen.PROLOGUE && (
-                <Prologue onComplete={handlePrologueComplete} />
+                <Prologue onComplete={handlePrologueComplete} isMobileDevice={isMobileDevice} />
             )}
         </div>
     );

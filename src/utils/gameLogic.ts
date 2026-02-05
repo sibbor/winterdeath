@@ -74,7 +74,7 @@ export const aggregateStats = (
     }
 
     // 7. Experience & Leveling
-    let gainedXp = (sectorStats.xpGained || 0) + (sectorStats.bonusXp || 0);
+    let gainedXp = (sectorStats.xpGained || 0);
     while (gainedXp > 0 && s.level < LEVEL_CAP) {
         const needed = s.nextLevelXp - s.currentXp;
         if (gainedXp >= needed) {

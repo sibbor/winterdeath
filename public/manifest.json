@@ -2,7 +2,24 @@
     "short_name": "Vinterdöd",
     "name": "Vinterdöd - Survival Project",
     "description": "A top-down 3D Twin-Stick Shooter with RPG elements. Survive zombie hordes, defeat bosses, and find your family.",
-    "icons": [],
+    "icons": [
+        {
+            "src": "icon-192.png",
+            "type": "image/png",
+            "sizes": "192x192"
+        },
+        {
+            "src": "icon-512.png",
+            "type": "image/png",
+            "sizes": "512x512"
+        },
+        {
+            "src": "icon-512.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "purpose": "maskable"
+        }
+    ],
     "start_url": ".",
     "display": "standalone",
     "theme_color": "#050505",

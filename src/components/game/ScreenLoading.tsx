@@ -5,9 +5,10 @@ import { MAP_THEMES } from '../../content/constants';
 interface ScreenLoadingProps {
     mapIndex: number;
     isCamp?: boolean;
+    isMobileDevice?: boolean;
 }
 
-const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp }) => {
+const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobileDevice }) => {
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
 
@@ -29,13 +30,13 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp }) => {
                 <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-red-900/20 to-transparent" />
             </div>
 
-            <div className="relative z-10 max-w-2xl w-full px-8 flex flex-col items-center gap-12">
+            <div className={`relative z-10 max-w-2xl w-full px-8 flex flex-col items-center ${isMobileDevice ? 'gap-8' : 'gap-12'}`}>
                 {/* Sector Info */}
                 <div className="flex flex-col items-center gap-4 text-center">
                     <h4 className="text-red-600 font-black tracking-[0.4em] uppercase text-sm animate-pulse">
                         {t('ui.loading')}
                     </h4>
-                    <h2 className="text-5xl md:text-6xl font-black italic tracking-tighter uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] skew-x-[-10deg]">
+                    <h2 className={`${isMobileDevice ? 'text-3xl' : 'text-5xl md:text-6xl'} font-black italic tracking-tighter uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] skew-x-[-10deg]`}>
                         {t(`maps.${mapKey}_name`)}
                     </h2>
                     <div className="h-1 w-32 bg-red-600 rounded-full mt-2" />

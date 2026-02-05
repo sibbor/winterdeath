@@ -15,9 +15,10 @@ interface ScreenPlayerSkillsProps {
     stats: PlayerStats;
     onSave: (newStats: PlayerStats) => void;
     onClose: () => void;
+    isMobileDevice?: boolean;
 }
 
-const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, onClose }) => {
+const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, onClose, isMobileDevice }) => {
     const [tempStats, setTempStats] = useState({ ...stats });
 
     const handleUpgradeSkill = (skillId: string, cost: number, value: number) => {
@@ -48,12 +49,13 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_upgrades')}
             canConfirm={tempStats.skillPoints !== stats.skillPoints}
+            isMobile={isMobileDevice}
         >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 h-full content-center">
+            <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 h-full content-center ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
                 {/* Header Section */}
-                <div className="col-span-full text-center mb-4 mt-4">
-                    <span className="text-purple-500 font-bold uppercase tracking-widest text-sm block mb-1">{t('ui.available_skill_points')}</span>
-                    <span className="text-6xl font-black text-white leading-none">{tempStats.skillPoints}</span>
+                <div className="col-span-full text-center mb-2 md:mb-4 mt-2 md:mt-4">
+                    <span className="text-purple-500 font-bold uppercase tracking-widest text-xs md:text-sm block mb-1">{t('ui.available_skill_points')}</span>
+                    <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-black text-white leading-none`}>{tempStats.skillPoints}</span>
                     <div className="mt-4">
                         <span className="text-purple-300 font-bold text-sm uppercase tracking-wider block max-w-2xl mx-auto">
                             {isMaxRank

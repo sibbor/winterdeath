@@ -12,6 +12,7 @@ interface ScreenSectorReportProps {
     onReturnCamp: () => void;
     onRetry: () => void;
     currentMap: number;
+    isMobileDevice?: boolean;
 }
 
 const formatTime = (ms: number) => {
@@ -26,7 +27,7 @@ const formatDistance = (meters: number) => {
     return `${Math.floor(meters)} m`;
 };
 
-const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentMap }) => {
+const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentMap, isMobileDevice }) => {
 
     const buttonStyle = "flex-1 max-w-xs py-4 font-black uppercase tracking-widest transition-colors skew-x-[-10deg] border-2 shadow-[0_0_20px_rgba(220,38,38,0.4)]";
 
@@ -100,17 +101,17 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     }
 
     return (
-        <GameModalLayout title="SECTOR REPORT" maxWidthClass="max-w-7xl" footer={Footer}>
+        <GameModalLayout title="SECTOR REPORT" maxWidthClass="max-w-7xl" footer={Footer} isMobile={isMobileDevice}>
 
             {/* Aborted Banner */}
             {stats.aborted && !deathDetails && (
-                <div className="mb-6 w-full border-4 border-yellow-900 bg-yellow-900/20 p-6 skew-x-[-5deg] text-center">
-                    <h3 className="text-2xl font-bold text-yellow-500 uppercase tracking-widest">{t('ui.sector_aborted')}</h3>
+                <div className={`mb-4 md:mb-6 w-full border-4 border-yellow-900 bg-yellow-900/20 ${isMobileDevice ? 'p-3' : 'p-6'} skew-x-[-5deg] text-center`}>
+                    <h3 className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold text-yellow-500 uppercase tracking-widest`}>{t('ui.sector_aborted')}</h3>
                 </div>
             )}
 
-            {/* 4-Group Layout */}
-            <div className="grid grid-cols-4 gap-8 mb-6">
+            {/* Responsive Grid Layout */}
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8 mb-6 ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
 
                 {/* 1. Performance (Blue) */}
                 <div className="flex flex-col space-y-6">
@@ -119,7 +120,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         {/* XP Box */}
                         <div className="bg-blue-900/20 p-4 border-l-4 border-blue-500 shadow-lg">
                             <span className="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">{t('ui.xp_earned')}</span>
-                            <span className="text-4xl font-black text-white">+{stats.xpGained + stats.bonusXp}</span>
+                            <span className="text-4xl font-black text-white">+{stats.xpGained}</span>
                         </div>
 
                         {/* SP Box */}

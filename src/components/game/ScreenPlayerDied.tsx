@@ -7,9 +7,10 @@ import { PLAYER_CHARACTER } from '../../content/constants';
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
     killerName: string;
+    isMobileDevice?: boolean;
 }
 
-const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerName }) => {
+const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerName, isMobileDevice }) => {
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
@@ -22,7 +23,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md p-8 text-white font-sans select-none overflow-hidden transition-opacity duration-1000"
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md p-4 sm:p-8 text-white font-sans select-none overflow-hidden transition-opacity duration-1000"
             style={{ opacity: isVisible ? 1 : 0 }}
         >
             {/* Background Aesthetic */}
@@ -30,10 +31,10 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
                 <div className="w-full h-full bg-[radial-gradient(circle_at_center,_transparent_0%,_black_95%)]" />
             </div>
 
-            <div className="relative z-10 max-w-4xl w-full flex flex-col items-center gap-12 text-center animate-[narrative-fade_1.5s_ease-out_forwards]">
+            <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center animate-[narrative-fade_1.5s_ease-out_forwards]`}>
                 {/* Header */}
                 <div className="flex flex-col gap-2">
-                    <h2 className="text-red-600 font-bold tracking-[0.3em] text-xl uppercase animate-pulse">
+                    <h2 className={`text-red-600 font-bold tracking-[0.3em] ${isMobileDevice ? 'text-lg' : 'text-xl'} uppercase animate-pulse`}>
                         {PLAYER_CHARACTER.name} {t('ui.killed_by')}
                     </h2>
                     <div className="h-1 w-24 bg-red-600 mx-auto rounded-full" />
@@ -41,17 +42,17 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
 
                 {/* Killer Name */}
                 <div className="min-h-[100px] flex items-center justify-center px-4 relative w-full">
-                    <p className="text-4xl md:text-6xl font-light italic leading-relaxed text-gray-200 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20">
+                    <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-6xl'} font-light italic leading-relaxed text-gray-200 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
                         "{killerName}"
                     </p>
                 </div>
 
                 {/* Action Button */}
-                <div className="relative flex flex-col items-center gap-8 mt-12 w-full z-10 animate-[fadeIn_1s_ease-out_forwards]">
+                <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-[fadeIn_1s_ease-out_forwards]`}>
                     <button
                         onClick={onContinue}
-                        className="group relative px-16 py-5 bg-white text-black border-4 border-black hover:bg-black hover:text-white transition-all duration-300 rounded-full overflow-hidden min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto">
-                        <span className="relative z-10 text-xl font-black tracking-[0.2em] uppercase transition-colors">
+                        className={`group relative ${isMobileDevice ? 'px-12 py-4' : 'px-16 py-5'} bg-white text-black border-4 border-black hover:bg-black hover:text-white transition-all duration-300 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
+                        <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase transition-colors`}>
                             {t('ui.continue')}
                         </span>
                     </button>

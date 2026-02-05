@@ -9,25 +9,26 @@ interface ScreenBossKilledProps {
     mapIndex: number;
     onProceed: () => void;
     stats?: SectorStats;
+    isMobileDevice?: boolean;
 }
 
-const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ mapIndex, onProceed, stats }) => {
+const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ mapIndex, onProceed, stats, isMobileDevice }) => {
     const bossData = BOSSES[mapIndex];
     const buttonStyle = "px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 skew-x-[-10deg]";
     const bossName = t(bossData?.name || "ui.boss").toUpperCase();
 
     const titleNode = (
         <div className="flex flex-col items-center">
-            <span className="text-xl md:text-2xl text-white font-bold tracking-[0.2em] mb-2 uppercase opacity-90">{t('ui.boss_killed')}</span>
-            <span className="text-5xl md:text-7xl font-black text-red-600 uppercase tracking-tighter skew-x-[-10deg] drop-shadow-lg">{bossName}</span>
+            <span className={`text-base md:text-2xl text-white font-bold tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90`}>{t('ui.boss_killed')}</span>
+            <span className={`${isMobileDevice ? 'text-4xl' : 'text-5xl md:text-7xl'} font-black text-red-600 uppercase tracking-tighter skew-x-[-10deg] drop-shadow-lg`}>{bossName}</span>
         </div>
     );
 
     return (
-        <GameModalLayout title={titleNode} titleColorClass="text-red-600" maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl">
-            <div className="bg-black/50 p-8 border-2 border-red-900 mb-10 skew-x-[-5deg]">
+        <GameModalLayout title={titleNode} titleColorClass="text-red-600" maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl" isMobile={isMobileDevice}>
+            <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 skew-x-[-5deg]`}>
                 <div className="skew-x-[5deg]">
-                    <p className="text-slate-300 text-2xl leading-relaxed font-light italic mb-8">
+                    <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8`}>
                         "{t(bossData?.deathStory || "The target has been eliminated.")}"
                     </p>
 

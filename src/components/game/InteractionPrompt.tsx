@@ -4,11 +4,14 @@ import { t } from '../../utils/i18n';
 interface InteractionPromptProps {
     type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | null;
     screenPos?: { x: number, y: number } | null;
+    isMobileDevice?: boolean;
+    onInteract?: () => void;
 }
 
-const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, screenPos }) => {
+const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, screenPos, isMobileDevice, onInteract }) => {
     if (!type) return null;
 
+    let key = (isMobileDevice ? "TAP" : "E");
     let textKey = '';
     let colorClass = '';
 
@@ -44,10 +47,14 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, screenPos }
     return (
         <div
             style={style}
-            className="flex flex-col items-center gap-2 pointer-events-none z-40 transition-opacity duration-200"
+            className="flex flex-col items-center gap-2 pointer-events-auto z-40 transition-opacity duration-200 cursor-pointer group"
+            onClick={(e) => {
+                e.stopPropagation();
+                if (onInteract) onInteract();
+            }}
         >
-            <div className={`bg-black/90 border-2 ${colorClass} px-4 py-1 font-bold uppercase tracking-wide text-sm`}>
-                {t(textKey)}
+            <div className={`bg-black/90 border-2 ${colorClass} px-4 py-1 font-bold uppercase tracking-wide text-sm group-hover:scale-105 group-active:scale-95 transition-transform`}>
+                [{key}] {t(textKey)}
             </div>
 
         </div>

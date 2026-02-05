@@ -9,9 +9,10 @@ interface ScreenSettingsProps {
     onClose: () => void;
     graphics: GraphicsSettings;
     onUpdateGraphics: (settings: GraphicsSettings) => void;
+    isMobileDevice?: boolean;
 }
 
-const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics }) => {
+const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics, isMobileDevice }) => {
     // Force update to re-render when language changes
     const [, setTick] = useState(0);
 
@@ -43,10 +44,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             confirmLabel={t('ui.close')}
             isSettings={true}
             showCancel={false}
+            isMobile={isMobileDevice}
         >
             <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
                 {/* Language Selector */}
-                <div onClick={toggleLocale} className="w-full bg-gray-900/50 p-6 border border-gray-700 flex justify-between items-center transition-colors hover:border-white cursor-pointer group rounded-lg">
+                <div onClick={toggleLocale} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
                     <div>
                         <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.language')}</h3>
                         <p className="text-gray-400 text-xs font-mono">English / Svenska</p>
@@ -58,12 +60,12 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 </div>
 
                 {/* Resolution / Pixel Ratio */}
-                <div className="w-full bg-gray-900/50 p-6 border border-gray-700 flex justify-between items-center transition-colors hover:border-white rounded-lg group">
+                <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                     <div>
                         <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Resolution</h3>
                         <p className="text-gray-400 text-xs font-mono">Performance vs Sharpness</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                         {[0.75, 1.0, 1.25].map(ratio => (
                             <button key={ratio} onClick={() => setPixelRatio(ratio)} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${graphics.pixelRatio === ratio ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>
                                 {ratio === 0.75 ? 'Low' : ratio === 1.0 ? 'Med' : 'High'}
@@ -73,15 +75,15 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 </div>
 
                 {/* Shadow Quality */}
-                <div className="w-full bg-gray-900/50 p-6 border border-gray-700 flex justify-between items-center transition-colors hover:border-white rounded-lg group">
+                <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                     <div>
                         <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Shadow Quality</h3>
                         <p className="text-gray-400 text-xs font-mono">Dynamic Campfire Shadows</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1 md:gap-2 flex-wrap">
                         <button
                             onClick={() => { onUpdateGraphics({ ...graphics, ...SHADOW_PRESETS.OFF }); soundManager.playUiClick(); }}
-                            className={`px-3 py-1 font-bold uppercase border-2 transition-all ${!graphics.shadows ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
+                            className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!graphics.shadows ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
                         >
                             Off
                         </button>
@@ -94,7 +96,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                             <button
                                 key={q.label}
                                 onClick={() => { onUpdateGraphics({ ...graphics, ...q.preset }); soundManager.playUiClick(); }}
-                                className={`px-2 py-1 font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
+                                className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
                             >
                                 {q.label}
                             </button>
@@ -103,7 +105,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 </div>
 
                 {/* Antialiasing (Needs Refresh) */}
-                <div onClick={toggleAntialias} className="w-full bg-gray-900/50 p-6 border border-gray-700 flex justify-between items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg">
+                <div onClick={toggleAntialias} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg gap-4">
                     <div>
                         <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Antialiasing</h3>
                         <p className="text-gray-400 text-xs font-mono">Smooth out jagged edges</p>
@@ -112,6 +114,15 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                         <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${graphics.antialias ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>ON</button>
                         <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!graphics.antialias ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>OFF</button>
                     </div>
+                </div>
+
+                {/* Editor Access */}
+                <div onClick={() => (window as any).setGameScreen?.('EDITOR')} className="w-full bg-blue-900/40 p-6 border border-blue-700 flex justify-between items-center transition-colors hover:border-white cursor-pointer group rounded-lg">
+                    <div>
+                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Sector Editor</h3>
+                        <p className="text-gray-400 text-xs font-mono">Create and edit maps in real-time</p>
+                    </div>
+                    <div className="bg-blue-600 px-4 py-2 font-bold uppercase rounded shadow-lg group-hover:bg-blue-500 transition-colors">Open</div>
                 </div>
 
                 {/* FPS Toggle Removed */}

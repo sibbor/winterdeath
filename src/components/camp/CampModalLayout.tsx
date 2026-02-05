@@ -15,6 +15,7 @@ interface CampModalLayoutProps {
     isSettings?: boolean;
     showCancel?: boolean;
     isSmall?: boolean;
+    isMobile?: boolean;
 }
 
 const CampModalLayout: React.FC<CampModalLayoutProps> = ({
@@ -28,24 +29,25 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     children,
     isSettings = false,
     showCancel = true,
-    isSmall = false
+    isSmall = false,
+    isMobile = false
 }) => {
     // Reduced mb-8 to mb-4
-    const headerStyle = "text-6xl font-black text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg]";
-    const buttonStyle = "px-8 py-3 font-black uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 border-2 shadow-lg";
+    const headerStyle = "text-3xl md:text-6xl font-black text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg]";
+    const buttonStyle = "px-4 md:px-8 py-2 md:py-3 font-black uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 border-2 shadow-lg text-xs md:text-base";
 
     const maxWidth = isSmall ? 'max-w-2xl' : 'max-w-7xl';
-    const height = isSmall ? 'h-auto max-h-[80vh]' : 'h-[90vh]';
+    const height = isSmall ? 'h-auto max-h-[85vh]' : 'h-[85vh] md:h-[90vh]';
 
     return (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50 p-4 md:p-8 backdrop-blur-lg pointer-events-auto">
             <div className={`bg-black/95 border-4 border-gray-800 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)] relative`}>
                 {/* Reduced padding p-8 to p-6 */}
-                <div className="p-6 border-b-2 border-gray-800 flex justify-between items-center bg-transparent shrink-0">
+                <div className="p-4 md:p-6 border-b-2 border-gray-800 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4">
                     <h2 className={`${headerStyle} ${borderColorClass}`}>
                         {title}
                     </h2>
-                    <div className="flex gap-6">
+                    <div className="flex gap-2 md:gap-6">
                         {showCancel && (
                             <button
                                 onClick={() => { soundManager.playUiClick(); onClose(); }}

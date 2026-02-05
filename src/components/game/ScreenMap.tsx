@@ -11,6 +11,7 @@ interface ScreenMapProps {
     bossPos?: { x: number, z: number };
     onClose: () => void;
     onSelectCoords: (x: number, z: number) => void;
+    isMobileDevice?: boolean;
 }
 
 const getItemPriority = (type: MapItemType | string): number => {
@@ -113,9 +114,10 @@ interface MapCanvasProps {
     setTooltipData: (data: { rect: DOMRect, items: MapItem[] } | null) => void;
     onMouseMove: (e: React.MouseEvent, bounds: any) => void;
     onClick: () => void;
+    onTouchStart?: (e: React.TouchEvent) => void;
 }
 
-const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouseMove, onClick }: MapCanvasProps) => {
+const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouseMove, onClick, onTouchStart }: MapCanvasProps) => {
 
     const toMapPercent = useCallback((x: number, z: number) => {
         if (!bounds || bounds.width === 0 || bounds.height === 0) return { x: 50, y: 50 };
@@ -158,6 +160,7 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
             }}
             onMouseMove={(e) => onMouseMove(e, bounds)}
             onClick={onClick}
+            onTouchStart={onTouchStart}
         >
             {/* Grid */}
             <div className="absolute inset-0 pointer-events-none">{gridLines}</div>
@@ -235,7 +238,7 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
 });
 
 
-const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos, bossPos, onClose, onSelectCoords }) => {
+const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos, bossPos, onClose, onSelectCoords, isMobileDevice }) => {
     const [tooltipData, setTooltipData] = useState<{ rect: DOMRect, items: MapItem[] } | null>(null);
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
 
@@ -315,10 +318,26 @@ const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos,
         onSelectCoords(mouseCoordsRef.current.x, mouseCoordsRef.current.z);
     }, [onSelectCoords]); // Stable dependency
 
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        if (!isMobileDevice) return;
+        const touch = e.touches[0];
+        const rect = e.currentTarget.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const px = ((touch.clientX - rect.left) / rect.width) * 100;
+        const py = ((touch.clientY - rect.top) / rect.height) * 100;
+
+        const x = bounds.minX + (px / 100) * bounds.width;
+        const z = bounds.minZ + (py / 100) * bounds.height;
+
+        onSelectCoords(x, z);
+        soundManager.playUiClick();
+    }, [bounds, onSelectCoords, isMobileDevice]);
+
     return (
-        <div className="absolute inset-0 z-[80] bg-black/40 flex items-center justify-center backdrop-blur-md p-8" onClick={onClose}>
+        <div className={`absolute inset-0 z-[80] bg-black/40 flex items-center justify-center backdrop-blur-md ${isMobileDevice ? 'p-2' : 'p-8'}`} onClick={onClose}>
             <div
-                className="w-full max-w-6xl h-[90vh] bg-black/95 border-4 border-blue-900/50 flex flex-col relative shadow-[0_0_50px_rgba(0,0,0,0.5)] skew-x-[-2deg]"
+                className={`w-full max-w-6xl ${isMobileDevice ? 'h-full border-2' : 'h-[90vh] border-4'} bg-black/95 border-blue-900/50 flex flex-col relative shadow-[0_0_50px_rgba(0,0,0,0.5)] skew-x-[-2deg]`}
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Background Decoration */}
@@ -327,48 +346,53 @@ const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos,
                 </div>
 
                 {/* Header */}
-                <div className="w-full p-6 border-b border-white/10 flex justify-between items-center bg-black/50 z-10">
-                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter border-l-4 border-blue-500 pl-4 skew-x-[-5deg]">
+                <div className={`w-full ${isMobileDevice ? 'p-3' : 'p-6'} border-b border-white/10 flex justify-between items-center bg-black/50 z-10`}>
+                    <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-black text-white uppercase tracking-tighter border-l-4 border-blue-500 ${isMobileDevice ? 'pl-2' : 'pl-4'} skew-x-[-5deg]`}>
                         {t('ui.tactical_map')}
                     </h2>
-                    <div className="flex gap-6 items-center mr-4">
-                        <div className="text-right">
-                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.coordinates')}</p>
-                            <p className="text-xl font-mono text-white font-bold">
-                                {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
-                            </p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.player')}</p>
-                            <p className="text-xl font-mono text-white font-bold">
-                                {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
-                            </p>
-                        </div>
-                        <button onClick={onClose} className="px-8 py-2 border-2 border-white text-white hover:bg-white hover:text-black font-black uppercase tracking-widest transition-colors skew-x-[-5deg] ml-4">
-                            <span className="block skew-x-[5deg]">{t('ui.close')}</span>
+                    <div className={`flex ${isMobileDevice ? 'gap-2' : 'gap-6'} items-center ${isMobileDevice ? 'mr-0' : 'mr-4'}`}>
+                        {!isMobileDevice && (
+                            <>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.coordinates')}</p>
+                                    <p className="text-xl font-mono text-white font-bold">
+                                        {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.player')}</p>
+                                    <p className="text-xl font-mono text-white font-bold">
+                                        {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                    </p>
+                                </div>
+                            </>
+                        )}
+                        <button onClick={onClose} className={`${isMobileDevice ? 'px-4 py-1 border' : 'px-8 py-2 border-2'} border-white text-white hover:bg-white hover:text-black font-black uppercase tracking-widest transition-colors skew-x-[-5deg] ${isMobileDevice ? 'ml-2' : 'ml-4'}`}>
+                            <span className="block skew-x-[5deg] text-xs md:text-base">{t('ui.close')}</span>
                         </button>
                     </div>
                 </div>
 
                 {/* Map Container */}
-                <div className="flex-1 w-full relative overflow-hidden p-8 flex items-center justify-center bg-black/40">
+                <div className={`flex-1 w-full relative overflow-hidden ${isMobileDevice ? 'p-2' : 'p-8'} flex items-center justify-center bg-black/40`}>
                     <MapCanvas
                         bounds={bounds}
                         groupedEntities={groupedEntities}
                         setTooltipData={setTooltipData}
                         onMouseMove={handleMouseMove}
                         onClick={onMapClick}
+                        onTouchStart={handleTouchStart}
                     />
                 </div>
 
                 {/* Footer Legend */}
-                <div className="w-full bg-black/80 border-t border-white/10 p-4 flex justify-center gap-8 text-[10px] uppercase font-bold text-gray-400 tracking-widest z-10">
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 bg-blue-500 block"></span> {t('ui.player')}</div>
-                    <div className="flex items-center gap-2"><span className="w-3 h-3 bg-green-500 rounded-full block"></span> {t('ui.family_member')}</div>
-                    <div className="flex items-center gap-2"><span className="text-lg">💀</span> {t('ui.boss')}</div>
-                    <div className="flex items-center gap-2"><span className="text-lg">📦</span> {t('ui.chest')}</div>
-                    <div className="flex items-center gap-2"><span className="text-lg">📍</span> {t('ui.poi')}</div>
-                    <div className="flex items-center gap-2"><span className="text-lg">🔍</span> {t('ui.clue')}</div>
+                <div className={`w-full bg-black/80 border-t border-white/10 ${isMobileDevice ? 'p-2' : 'p-4'} flex flex-wrap justify-center ${isMobileDevice ? 'gap-3' : 'gap-8'} ${isMobileDevice ? 'text-[8px]' : 'text-[10px]'} uppercase font-bold text-gray-400 tracking-widest z-10`}>
+                    <div className="flex items-center gap-1 md:gap-2"><span className="w-2 h-2 md:w-3 md:h-3 bg-blue-500 block"></span> {t('ui.player')}</div>
+                    <div className="flex items-center gap-1 md:gap-2"><span className="w-2 h-2 md:w-3 md:h-3 bg-green-500 rounded-full block"></span> {t('ui.family_member')}</div>
+                    <div className="flex items-center gap-1 md:gap-2"><span className="text-xs md:text-lg">💀</span> {t('ui.boss')}</div>
+                    <div className="flex items-center gap-1 md:gap-2"><span className="text-xs md:text-lg">📦</span> {t('ui.chest')}</div>
+                    <div className="flex items-center gap-1 md:gap-2"><span className="text-xs md:text-lg">📍</span> {t('ui.poi')}</div>
+                    <div className="flex items-center gap-1 md:gap-2"><span className="text-xs md:text-lg">🔍</span> {t('ui.clue')}</div>
                 </div>
             </div>
 

@@ -10,6 +10,7 @@ import { ScrapItem } from './systems/WorldLootSystem';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
+    public isMobile: boolean = false;
     public debugMode: boolean = false;
     public state!: RuntimeState;
     private systems: System[] = [];

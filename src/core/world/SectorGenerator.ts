@@ -210,6 +210,34 @@ export const SectorBuilder = {
         });
     },
 
+    spawnBuildingPiece: (ctx: SectorContext, type: string, x: number, z: number, rotY: number = 0) => {
+        const piece = ObjectGenerator.createBuildingPiece(type);
+        piece.position.set(x, 0, z);
+        piece.rotation.y = rotY;
+        ctx.scene.add(piece);
+
+        if (type.includes('Wall') || type.includes('Frame')) {
+            ctx.obstacles.push({
+                mesh: piece,
+                collider: { type: 'box', size: new THREE.Vector3(4, 4, 1) }
+            });
+        }
+    },
+
+    spawnEnemy: (ctx: SectorContext, type: string, x: number, z: number) => {
+        ctx.mapItems.push({
+            id: `enemy_spawn_${Math.random()}`,
+            x, z, type: 'ENEMY', label: type, color: '#f00', radius: 1
+        });
+    },
+
+    spawnBarrel: (ctx: SectorContext, x: number, z: number, explosive: boolean = false) => {
+        const barrel = ObjectGenerator.createBarrel(explosive);
+        barrel.position.set(x, 0, z);
+        ctx.scene.add(barrel);
+        ctx.obstacles.push({ mesh: barrel, collider: { type: 'sphere', radius: 0.6 } });
+    },
+
     fillArea: (
         ctx: SectorContext,
         center: { x: number, z: number },
@@ -261,7 +289,7 @@ export const SectorBuilder = {
 
             if (type === 'tree') {
                 const scale = 0.8 + Math.random() * 0.8;
-                SectorBuilder.spawnTree(ctx, x, z, scale);
+                SectorBuilder.spawnTree(ctx, 'spruce', x, z, scale);
             } else if (type === 'rock') {
                 const rock = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
                 const s = 0.5 + Math.random();
@@ -295,6 +323,26 @@ export const SectorBuilder = {
         for (let i = 0; i < 50; i++) {
             const x = (Math.random() - 0.5) * 200;
             const z = (Math.random() - 0.5) * 200;
+        }
+    },
+
+    attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: string, color?: number, intensity?: number, offset?: { x: number, y: number, z: number } }) => {
+        const offset = eff.offset || { x: 0, y: 0, z: 0 };
+        if (eff.type === 'light') {
+            const light = new THREE.PointLight(eff.color || 0xffaa00, eff.intensity || 1, 15);
+            light.position.set(offset.x, offset.y, offset.z);
+            parent.add(light);
+            // Auto-enable flickering for atmosphere if it's a "warm" light
+            if ((eff.color || 0) > 0xffaa00 || !eff.color) {
+                ctx.flickeringLights.push({ light, baseInt: eff.intensity || 1, flickerRate: 0.05 + Math.random() * 0.1 });
+            }
+        } else if (eff.type === 'fire') {
+            // We'll use a direct point light for the glow and assume the fire asset handles its own particle effects
+            // if we actually spawned a full fire object.
+            const light = new THREE.PointLight(0xff6600, 2, 10);
+            light.position.set(offset.x, offset.y + 1, offset.z);
+            parent.add(light);
+            ctx.flickeringLights.push({ light, baseInt: 2, flickerRate: 0.15 });
         }
     }
 };

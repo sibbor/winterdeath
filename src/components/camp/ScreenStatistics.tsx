@@ -8,9 +8,10 @@ import { RANKS } from '../../content/constants';
 interface ScreenStatisticsProps {
     stats: PlayerStats;
     onClose: () => void;
+    isMobileDevice?: boolean;
 }
 
-const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose }) => {
+const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, isMobileDevice }) => {
 
     const getRank = (level: number) => {
         const rankKey = Math.min(Math.max(0, level - 1), 19);
@@ -37,10 +38,11 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose }) =
             title={t('stations.stats')} // STATISTICS
             borderColorClass="border-blue-600"
             onClose={onClose}
+            isMobile={isMobileDevice}
         >
-            <div className="flex gap-12 h-full">
+            <div className={`flex h-full gap-6 md:gap-12 ${isMobileDevice ? 'flex-col overflow-y-auto' : ''}`}>
                 {/* LEFT COLUMN */}
-                <div className="w-1/3 flex flex-col gap-6">
+                <div className={`${isMobileDevice ? 'w-full shrink-0' : 'w-1/3'} flex flex-col gap-6`}>
                     {/* RANK BOX */}
                     <div className="bg-blue-900/20 border-2 border-blue-500/50 p-6 flex flex-col items-center text-center">
                         <span className="text-blue-400 text-sm font-bold uppercase tracking-widest mb-2">{t('ui.current_rank')}</span>
@@ -65,7 +67,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose }) =
                 </div>
 
                 {/* RIGHT COLUMN */}
-                <div className="flex-1 grid grid-cols-2 gap-6 content-start">
+                <div className={`flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 content-start ${isMobileDevice ? 'shrink-0' : ''}`}>
                     {/* PERFORMANCE BOX */}
                     <div className="bg-black border border-gray-800 p-6">
                         <h3 className="text-xl font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.performance')}</h3>

@@ -11,7 +11,7 @@ export const GEOMETRY = {
     quad: new THREE.PlaneGeometry(1, 1),
 
     // Projectiles / Effects
-    bullet: new THREE.SphereGeometry(0.05, 8, 8),
+    bullet: new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8),
     grenade: new THREE.DodecahedronGeometry(0.15),
     molotov: new THREE.CylinderGeometry(0.1, 0.1, 0.4, 8),
     particle: new THREE.PlaneGeometry(1, 1),

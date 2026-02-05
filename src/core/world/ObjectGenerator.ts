@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { createProceduralTextures, MATERIALS } from '../../utils/assets';
+import { createProceduralTextures, MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
 
 // Lazy load textures
@@ -288,6 +288,75 @@ export const initNaturePrototypes = () => {
     }
 };
 
+
+
+const buildingMeshes: Record<string, THREE.Group> = {};
+
+export const initBuildingPrototypes = () => {
+    if (buildingMeshes['WallSection']) return;
+
+    // Wall Section (4m wide, 4m high)
+    const wallGroup = new THREE.Group();
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 0.4), MATERIALS.building || MATERIALS.concrete);
+    wall.position.y = 2;
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    wallGroup.add(wall);
+    buildingMeshes['WallSection'] = wallGroup;
+
+    // Corner
+    const cornerGroup = new THREE.Group();
+    const c1 = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 0.4), MATERIALS.building || MATERIALS.concrete);
+    c1.position.set(0, 2, 1.8);
+    c1.castShadow = true;
+    cornerGroup.add(c1);
+    const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4, 4), MATERIALS.building || MATERIALS.concrete);
+    c2.position.set(1.8, 2, 0);
+    c2.castShadow = true;
+    cornerGroup.add(c2);
+    buildingMeshes['Corner'] = cornerGroup;
+
+    // Door Frame
+    const doorGroup = new THREE.Group();
+    const sideR = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 0.4), MATERIALS.building || MATERIALS.concrete);
+    sideR.position.set(1.25, 2, 0);
+    doorGroup.add(sideR);
+    const sideL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 0.4), MATERIALS.building || MATERIALS.concrete);
+    sideL.position.set(-1.25, 2, 0);
+    doorGroup.add(sideL);
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.4), MATERIALS.building || MATERIALS.concrete);
+    top.position.set(0, 3.25, 0);
+    doorGroup.add(top);
+    buildingMeshes['DoorFrame'] = doorGroup;
+
+    // Window Frame
+    const windowGroup = new THREE.Group();
+    const wSideR = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 0.4), MATERIALS.building || MATERIALS.concrete);
+    wSideR.position.set(1.5, 2, 0);
+    windowGroup.add(wSideR);
+    const wSideL = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 0.4), MATERIALS.building || MATERIALS.concrete);
+    wSideL.position.set(-1.5, 2, 0);
+    windowGroup.add(wSideL);
+    const wTop = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.4), MATERIALS.building || MATERIALS.concrete);
+    wTop.position.set(0, 3.5, 0);
+    windowGroup.add(wTop);
+    const wBot = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.4), MATERIALS.building || MATERIALS.concrete);
+    wBot.position.set(0, 0.5, 0);
+    windowGroup.add(wBot);
+    // Glass
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), MATERIALS.glass);
+    glass.position.set(0, 2, 0);
+    windowGroup.add(glass);
+    buildingMeshes['WindowFrame'] = windowGroup;
+
+    // Floor
+    const floorGroup = new THREE.Group();
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4), MATERIALS.concrete);
+    floor.position.y = -0.1;
+    floorGroup.add(floor);
+    buildingMeshes['Floor'] = floorGroup;
+};
+
 export const ObjectGenerator = {
     initNaturePrototypes,
     getPrototypes: () => {
@@ -309,7 +378,17 @@ export const ObjectGenerator = {
         return t;
     },
 
-    createRock: (scale: number = 1.0) => {
+    createRock: (scale: number = 1.0, radius: number = 1.0, segments: number = 6) => {
+        if (radius !== 1.0 || segments !== 6) {
+            const geo = new THREE.IcosahedronGeometry(radius, Math.min(segments, 4)); // Using detail instead of sides for icosahedron
+            const mat = (MATERIALS as any).rock || new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.scale.setScalar(scale);
+            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        }
         initNaturePrototypes();
         const list = uniqueMeshes['rock'];
         const p = list[Math.floor(Math.random() * list.length)];
@@ -317,6 +396,88 @@ export const ObjectGenerator = {
         r.scale.multiplyScalar(scale);
         r.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
         return r;
+    },
+
+    createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0x2d4c1e, roughness: 0.9 });
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, length), mat);
+        mesh.position.y = height / 2;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        // Add some noise "foliage" boxes
+        for (let i = 0; i < 5; i++) {
+            const leaf = new THREE.Mesh(new THREE.BoxGeometry(thickness * 1.1, height * 0.2, length * 0.2), mat);
+            leaf.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
+            group.add(leaf);
+        }
+        return group;
+    },
+
+    createFence: (length: number = 3.0) => {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 1.0 });
+        // Posts
+        const postGeo = new THREE.BoxGeometry(0.2, 1.2, 0.2);
+        const p1 = new THREE.Mesh(postGeo, mat); p1.position.set(0, 0.6, -length / 2); group.add(p1);
+        const p2 = new THREE.Mesh(postGeo, mat); p2.position.set(0, 0.6, length / 2); group.add(p2);
+        // Rails
+        const railGeo = new THREE.BoxGeometry(0.1, 0.15, length);
+        const r1 = new THREE.Mesh(railGeo, mat); r1.position.set(0, 0.4, 0); group.add(r1);
+        const r2 = new THREE.Mesh(railGeo, mat); r2.position.set(0, 0.9, 0); group.add(r2);
+        return group;
+    },
+
+    createStoneWall: (length: number = 2.0, height: number = 1.0) => {
+        const group = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 1.0 });
+        const base = new THREE.Mesh(new THREE.BoxGeometry(0.6, height, length), mat);
+        base.position.y = height / 2;
+        group.add(base);
+        // Stones
+        for (let i = 0; i < 10; i++) {
+            const stone = new THREE.Mesh(new THREE.BoxGeometry(0.7, height * 0.3, length * 0.25), mat);
+            stone.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
+            stone.rotation.set(Math.random(), Math.random(), Math.random());
+            group.add(stone);
+        }
+        return group;
+    },
+
+    createBuildingPiece: (type: string) => {
+        initBuildingPrototypes();
+        const proto = buildingMeshes[type];
+        return proto ? proto.clone() : new THREE.Group();
+    },
+
+    createBarrel: (explosive: boolean = false) => {
+        const group = new THREE.Group();
+        const mat = explosive ? MATERIALS.barrelExplosive : MATERIALS.barrel;
+        const mesh = new THREE.Mesh(GEOMETRY.barrel, mat);
+        mesh.position.y = 0.75;
+        mesh.castShadow = true;
+        group.add(mesh);
+        return group;
+    },
+
+    createStreetLamp: () => {
+        const group = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 8), MATERIALS.blackMetal);
+        pole.position.y = 4;
+        group.add(pole);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 2), MATERIALS.blackMetal);
+        arm.position.set(0, 7.5, 0.5);
+        group.add(arm);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.8), MATERIALS.blackMetal);
+        head.position.set(0, 7.5, 1.5);
+        group.add(head);
+
+        const light = new THREE.PointLight(0xaaddff, 4, 30);
+        light.position.set(0, 7.4, 1.5);
+        group.add(light);
+
+        return group;
     },
 
     /**
@@ -452,7 +613,7 @@ export const ObjectGenerator = {
     /**
      * Creates a hedge along a path.
      */
-    createHedge: (ctx: SectorContext, points: THREE.Vector3[], height: number = 2, thickness: number = 1.5) => {
+    createHedgePath: (ctx: SectorContext, points: THREE.Vector3[], height: number = 2, thickness: number = 1.5) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
         const steps = Math.ceil(length / 2);
@@ -563,7 +724,7 @@ export const ObjectGenerator = {
     /**
      * Creates a stone wall along a path.
      */
-    createStoneWall: (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
+    createStoneWallPath: (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
         // Dense packing for dry stone wall look
@@ -637,7 +798,7 @@ export const ObjectGenerator = {
     /**
      * Creates a plank fence along a path.
      */
-    createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' = 'wood', height: number = 1.2) => {
+    createFencePath: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' = 'wood', height: number = 1.2) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
         const steps = Math.ceil(length / 2.0); // 2m panels

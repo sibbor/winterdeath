@@ -168,13 +168,13 @@ export const Sector1: SectorDef = {
         });
 
         // Fences & Walls
-        ObjectGenerator.createFence(ctx, [
+        ObjectGenerator.createFencePath(ctx, [
             new THREE.Vector3(104, 0, 19),
             new THREE.Vector3(104, 0, 67),
             new THREE.Vector3(184, 0, 67)
         ]);
 
-        ObjectGenerator.createStoneWall(ctx, [
+        ObjectGenerator.createStoneWallPath(ctx, [
             new THREE.Vector3(203, 0, 76),
             new THREE.Vector3(206, 0, 112),
             new THREE.Vector3(205, 0, 134),
@@ -182,10 +182,10 @@ export const Sector1: SectorDef = {
         ]);
 
         // Hedges
-        ObjectGenerator.createHedge(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
-        ObjectGenerator.createHedge(ctx, [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(31, 0, 0), new THREE.Vector3(31, 0, 31)]);
-        ObjectGenerator.createHedge(ctx, [new THREE.Vector3(141, 0, 192), new THREE.Vector3(146, 0, 230)]);
-        ObjectGenerator.createHedge(ctx, [new THREE.Vector3(130, 0, 198), new THREE.Vector3(136, 0, 231)]);
+        ObjectGenerator.createHedgePath(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
+        ObjectGenerator.createHedgePath(ctx, [new THREE.Vector3(-6, 0, 0), new THREE.Vector3(31, 0, 0), new THREE.Vector3(31, 0, 31)]);
+        ObjectGenerator.createHedgePath(ctx, [new THREE.Vector3(141, 0, 192), new THREE.Vector3(146, 0, 230)]);
+        ObjectGenerator.createHedgePath(ctx, [new THREE.Vector3(130, 0, 198), new THREE.Vector3(136, 0, 231)]);
 
         // POI: SMU
         //SectorBuilder.spawnDebugMarker(ctx, LOCATIONS.POIS.SMU.x, LOCATIONS.POIS.SMU.z, 10, t('clues.s1_poi_building_on_fire'));

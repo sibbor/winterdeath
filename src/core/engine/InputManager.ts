@@ -18,6 +18,8 @@ export interface InputState {
     mouse: THREE.Vector2; // Normalized device coordinates (-1 to 1)
     aimVector: THREE.Vector2; // Direction from center of screen (or relative movement)
     cursorPos: { x: number, y: number }; // Screen pixels
+    joystickMove: THREE.Vector2; // Left stick input (-1 to 1)
+    joystickAim: THREE.Vector2;  // Right stick input (-1 to 1)
     locked: boolean;
 }
 
@@ -41,6 +43,8 @@ export class InputManager {
             mouse: new THREE.Vector2(),
             aimVector: new THREE.Vector2(1, 0),
             cursorPos: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+            joystickMove: new THREE.Vector2(0, 0),
+            joystickAim: new THREE.Vector2(0, 0),
             locked: false
         };
 
@@ -69,6 +73,8 @@ export class InputManager {
         this.state['2'] = false;
         this.state['3'] = false;
         this.state['4'] = false;
+        this.state.joystickMove.set(0, 0);
+        this.state.joystickAim.set(0, 0);
         // Keep mouse/aim to avoid snapping
     }
 
@@ -218,5 +224,13 @@ export class InputManager {
         } catch (e) {
             console.warn("Pointer lock failed:", e);
         }
+    }
+
+    public setJoystickMove(x: number, y: number) {
+        this.state.joystickMove.set(x, y);
+    }
+
+    public setJoystickAim(x: number, y: number) {
+        this.state.joystickAim.set(x, y);
     }
 }

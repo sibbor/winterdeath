@@ -16,6 +16,7 @@ interface ScreenArmoryProps {
         newLevels: Record<WeaponType, number>
     ) => void;
     onClose: () => void;
+    isMobileDevice?: boolean;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -26,7 +27,7 @@ const CATEGORY_COLORS: Record<string, string> = {
     [WeaponCategory.TOOL]: '#3b82f6',      // Blue-500
 };
 
-const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weaponLevels, onSave, onClose }) => {
+const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<WeaponCategory>(WeaponCategory.PRIMARY);
     const [tempStats, setTempStats] = useState({ ...stats });
     const [tempLoadout, setTempLoadout] = useState({ ...currentLoadout });
@@ -87,10 +88,11 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_loadout')}
             canConfirm={hasChanges}
+            isMobile={isMobileDevice}
         >
-            <div className="flex flex-col h-full gap-8">
+            <div className={`flex flex-col h-full ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
                 {/* Tabs bar with left padding to prevent cutoff */}
-                <div className="flex gap-4 border-b-2 border-gray-800 pb-4 overflow-x-auto pl-2 pt-2 min-h-[80px] items-end">
+                <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[60px] md:min-h-[80px] items-end shrink-0">
                     {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
                         const isActive = activeTab === cat;
                         const catColor = CATEGORY_COLORS[cat] || '#ffffff';
@@ -98,7 +100,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
                         return (
                             <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
-                                className={`px-6 py-4 text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
+                                className={`px-4 md:px-6 py-2 md:py-4 text-xs md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
                                 style={{
                                     borderColor: isActive ? catColor : 'transparent',
                                     backgroundColor: isActive ? catColor : 'transparent',
@@ -109,13 +111,22 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                             </button>
                         );
                     })}
-                    <div className="flex-1 flex justify-end items-center">
-                        <div className="bg-yellow-900/20 px-4 py-2 border border-yellow-500">
-                            <span className="text-[10px] font-bold text-yellow-500 uppercase block">{t('ui.scrap')}</span>
-                            <span className="text-2xl font-black text-white">{tempStats.scrap}</span>
+                    {!isMobileDevice && (
+                        <div className="flex-1 flex justify-end items-center">
+                            <div className="bg-yellow-900/20 px-4 py-2 border border-yellow-500">
+                                <span className="text-[10px] font-bold text-yellow-500 uppercase block">{t('ui.scrap')}</span>
+                                <span className="text-2xl font-black text-white">{tempStats.scrap}</span>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
+
+                {isMobileDevice && (
+                    <div className="flex justify-between items-center bg-yellow-900/10 p-2 border-b-2 border-yellow-900/20">
+                        <span className="text-xs font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
+                        <span className="text-xl font-black text-yellow-500">{tempStats.scrap}</span>
+                    </div>
+                )}
 
                 {/* 3 Columns Layout */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-4">

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DEFAULT_GRAPHICS, GraphicsSettings } from '../../content/constants';
+export type { GraphicsSettings };
 import { InputManager } from './InputManager';
 
 // Remove local interface
@@ -17,6 +18,8 @@ export class Engine {
     public camera: THREE.PerspectiveCamera;
     public renderer: THREE.WebGLRenderer;
     public input: InputManager;
+    private sceneStack: THREE.Scene[] = [];
+    private originalScene: THREE.Scene | null = null;
 
     // Settings
     private settings: GraphicsSettings = { ...DEFAULT_GRAPHICS };
@@ -166,6 +169,25 @@ export class Engine {
 
         this.renderer.dispose();
         Engine.instance = null;
+    }
+
+    /**
+     * Replaces the current scene with a new one, saving the old one on a stack.
+     */
+    public pushScene(newScene: THREE.Scene) {
+        this.sceneStack.push(this.scene);
+        this.scene = newScene;
+        this.applySettings(); // Re-apply shadow settings to new scene
+    }
+
+    /**
+     * Restores the previous scene from the stack.
+     */
+    public popScene() {
+        if (this.sceneStack.length > 0) {
+            this.scene = this.sceneStack.pop()!;
+            this.applySettings();
+        }
     }
 
     private handleResize = () => {

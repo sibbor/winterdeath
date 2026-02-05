@@ -11,11 +11,12 @@ interface ScreenAdventureLogProps {
     stats: PlayerStats;
     onClose: () => void;
     onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
+    isMobileDevice?: boolean;
 }
 
 type Tab = 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
-const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed }) => {
+const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<Tab>('collectibles');
 
     // Mark all found collectibles as viewed when the log is opened
@@ -49,15 +50,16 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             title={t('ui.adventure_log')}
             borderColorClass="border-green-600"
             onClose={onClose}
+            isMobile={isMobileDevice}
         >
-            <div className="flex flex-col h-full gap-8">
+            <div className={`flex flex-col h-full ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
                 {/* Tabs Bar */}
-                <div className="flex gap-4 border-b-2 border-gray-800 pb-4 overflow-x-auto pl-2 pt-2 min-h-[80px] items-end">
+                <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[60px] md:min-h-[80px] items-end shrink-0">
                     {tabs.map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
                             <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                                className={`px-6 py-4 text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
+                                className={`px-4 md:px-6 py-2 md:py-4 text-xs md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
                                 style={{
                                     borderColor: isActive ? themeColor : 'transparent',
                                     backgroundColor: isActive ? themeColor : 'transparent',

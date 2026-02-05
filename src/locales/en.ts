@@ -105,12 +105,13 @@ export const en = {
         magazine: "MAG",
         range: "RANGE",
         reload: "RELOAD",
+        interact: "INTERACT",
         equipped: "EQUIPPED",
         signal_strength: "SIGNAL",
-        interact_pickup_collectible: "[E] PICKUP ITEM",
-        interact_open_chest: "[E] OPEN CHEST",
-        interact_plant_explosive: "[E] PLANT EXPLOSIVE",
-        interact_knock_on_port: "[E] KNOCK ON DOOR",
+        interact_pickup_collectible: "PICKUP ITEM",
+        interact_open_chest: "OPEN CHEST",
+        interact_plant_explosive: "PLANT EXPLOSIVE",
+        interact_knock_on_port: "KNOCK ON DOOR",
         clue_found_title: "CLUE FOUND",
         skill_point: "SKILL POINT",
         collectible_discovered: "COLLECTIBLE DISCOVERED",
@@ -162,7 +163,35 @@ export const en = {
         protect_family: "PROTECT FAMILY",
         scanning: "SCANNING...",
         collected: "COLLECTED",
-        new: "NEW"
+        new: "NEW",
+        editor: {
+            title: "Sector Editor",
+            save: "SAVE SECTOR",
+            export: "EXPORT CODE",
+            play_mode: "PLAY TEST",
+            edit_mode: "EDIT MODE",
+            assets: "ASSETS",
+            properties: "PROPERTIES",
+            selected: "Selected",
+            position: "Position",
+            rotation: "Rotation",
+            scale: "Scale",
+            categories: {
+                props: "Props",
+                buildings: "Buildings",
+                enemies: "Enemies",
+                triggers: "Triggers",
+                paths: "Paths"
+            },
+            tools: {
+                select: "Select",
+                place: "Place",
+                path: "Path Tool",
+                delete: "Delete"
+            },
+            snapping: "Grid Snapping",
+            placed_objects: "Placed Objects"
+        }
     },
     categories: {
         primary: "PRIMARY",
@@ -215,7 +244,11 @@ export const en = {
         molotov: "Molotov",
         flashbang: "Flashbang",
         minigun: "Minigun",
-        radio: "Radio"
+        radio: "Radio",
+        wall_section: "Wall Section",
+        wall_corner: "Wall Corner",
+        door_frame: "Door Frame",
+        window_frame: "Window Frame"
     },
     tips: [
         "Just shoot! Unlimited gun ammo.",

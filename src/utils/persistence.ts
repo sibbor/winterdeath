@@ -36,8 +36,10 @@ export const getPersistentState = (state: GameState) => {
     };
 };
 
+const SAVE_KEY = 'winterDeathSave_v1';
+
 export const loadGameState = (): GameState => {
-    const saved = localStorage.getItem('slaughterNationSave_v10');
+    const saved = localStorage.getItem(SAVE_KEY);
     if (saved) {
         try {
             const loaded = JSON.parse(saved);
@@ -74,9 +76,9 @@ export const loadGameState = (): GameState => {
 };
 
 export const saveGameState = (state: GameState) => {
-    localStorage.setItem('winterDeathSave_v1', JSON.stringify(getPersistentState(state)));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(getPersistentState(state)));
 };
 
 export const clearSave = () => {
-    localStorage.removeItem('winterDeathSave_v1');
+    localStorage.removeItem(SAVE_KEY);
 };

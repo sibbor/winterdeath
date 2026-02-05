@@ -7,7 +7,8 @@ export enum GameScreen {
   BOSS_KILLED = 'BOSS_KILLED',
   RECAP = 'RECAP',
   DEATH = 'DEATH',
-  PROLOGUE = 'PROLOGUE'
+  PROLOGUE = 'PROLOGUE',
+  EDITOR = 'EDITOR'
 }
 
 export enum WeaponCategory {
@@ -93,24 +94,23 @@ export interface PlayerStats {
 export interface SectorStats {
   timeElapsed: number;
   shotsFired: number;
-  shotsHit: number; // New
-  throwablesThrown: number; // New
+  shotsHit: number;
+  throwablesThrown: number;
   killsByType: Record<string, number>;
   scrapLooted: number;
   xpGained: number;
-  bonusXp: number;
   familyFound: boolean;
-  familyExtracted?: boolean; // New: If true, family is saved even on death
+  familyExtracted?: boolean;
   damageDealt: number;
   damageTaken: number;
-  bossDamageDealt?: number; // New
-  bossDamageTaken?: number; // New
-  distanceTraveled: number; // New
-  cluesFound: string[]; // New
-  collectiblesFound: string[]; // New
-  seenEnemies?: string[]; // New
-  seenBosses?: string[]; // New
-  visitedPOIs?: string[]; // New
+  bossDamageDealt?: number;
+  bossDamageTaken?: number;
+  distanceTraveled: number;
+  cluesFound: string[];
+  collectiblesFound: string[];
+  seenEnemies?: string[];
+  seenBosses?: string[];
+  visitedPOIs?: string[];
   isExtraction?: boolean;
   chestsOpened: number;
   bigChestsOpened: number;
@@ -202,7 +202,7 @@ export interface ThoughtState {
   timestamp: number;
 }
 
-export type MapItemType = 'POI' | 'BUILDING' | 'ROAD' | 'OBSTACLE' | 'CHEST' | 'TRIGGER' | 'FAMILY' | 'PLAYER' | 'BOSS' | 'OTHER';
+export type MapItemType = 'POI' | 'BUILDING' | 'ROAD' | 'OBSTACLE' | 'CHEST' | 'TRIGGER' | 'FAMILY' | 'PLAYER' | 'BOSS' | 'ENEMY' | 'OTHER';
 
 export interface MapItem {
   id: string;

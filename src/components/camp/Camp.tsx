@@ -41,6 +41,7 @@ interface CampProps {
     initialGraphics?: GraphicsSettings;
     onCampLoaded?: () => void;
     onUpdateHUD: (data: any) => void;
+    isMobileDevice?: boolean;
 }
 
 const STATIONS = [
@@ -50,7 +51,7 @@ const STATIONS = [
     { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
 ];
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, familyMembersFound, isMapLoaded, bossesDefeated, hasCheckpoint, onUpdateHUD, onSaveGraphics, initialGraphics, onResetGame, onCampLoaded }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, familyMembersFound, isMapLoaded, bossesDefeated, hasCheckpoint, onUpdateHUD, onSaveGraphics, initialGraphics, onResetGame, onCampLoaded, isMobileDevice }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const lastDrawCallsRef = useRef(0);
@@ -99,7 +100,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     // Idle Timer
     useEffect(() => {
         const handleInput = () => { lastInputRef.current = Date.now(); if (isIdle) setIsIdle(false); };
-        window.addEventListener('mousemove', handleInput); window.addEventListener('mousedown', handleInput); window.addEventListener('keydown', handleInput); window.addEventListener('touchstart', handleInput);
+        window.addEventListener('mousemove', handleInput); window.addEventListener('mousedown', handleInput); window.addEventListener('keydown', handleInput); window.addEventListener('touchstart', handleInput, { passive: true });
         const idleTimer = setInterval(() => { if (!isIdle && Date.now() - lastInputRef.current > 10000) setIsIdle(true); }, 1000);
         return () => { window.removeEventListener('mousemove', handleInput); window.removeEventListener('mousedown', handleInput); window.removeEventListener('keydown', handleInput); window.removeEventListener('touchstart', handleInput); clearInterval(idleTimer); };
     }, [isIdle]);
@@ -425,11 +426,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 />
             )}
 
-            {activeModal === 'stats' && <ScreenStatistics stats={stats} onClose={closeModal} />}
-            {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} />}
+            {activeModal === 'stats' && <ScreenStatistics stats={stats} onClose={closeModal} isMobileDevice={isMobileDevice} />}
+            {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} isMobileDevice={isMobileDevice} />}
             {activeModal === 'adventure_log' && <ScreenAdventureLog
                 stats={stats}
                 onClose={closeModal}
+                isMobileDevice={isMobileDevice}
                 onMarkCollectiblesViewed={(newIds) => {
                     const updated = [...(stats.viewedCollectibles || [])];
                     newIds.forEach(id => {
@@ -440,8 +442,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     onSaveStats({ ...stats, viewedCollectibles: updated });
                 }}
             />}
-            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} />}
-            {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} />}
+            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} isMobileDevice={isMobileDevice} />}
+            {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} isMobileDevice={isMobileDevice} />}
             {activeModal === 'settings' && (
                 <ScreenSettings
                     onClose={closeModal}

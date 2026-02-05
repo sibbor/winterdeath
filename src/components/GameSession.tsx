@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useMemo, useState, useImperativeHandle, useCallback } from 'react';
 import * as THREE from 'three';
+import { normalize } from 'path'; // Note: Probably unused legacy
+import TouchController from './ui/TouchController';
 import { Engine } from '../core/engine/Engine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { PlayerStats, WeaponType, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
-
 import { WEAPONS, BOSSES, MAP_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP } from '../content/constants';
-
-
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { t } from '../utils/i18n';
@@ -565,7 +564,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 killsByType: state.killsByType || {},
                 scrapLooted: state.collectedScrap || 0,
                 xpGained: state.score || 0,
-                bonusXp: isExtraction ? 500 : 0,
                 familyFound: state.familyFound || stateRef.current.familyFound,
                 familyExtracted: isExtraction && (state.familyFound || stateRef.current.familyFound),
                 damageDealt: state.damageDealt || 0,
@@ -1175,17 +1173,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // Sync input state
             gameSessionRef.current!.inputDisabled = !!propsRef.current.disableInput || (!!cameraOverrideRef.current?.active);
+            gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
             gameSessionRef.current!.debugMode = propsRef.current.debugMode;
 
             // Update Game Session (Systems)
             gameSessionRef.current!.update(delta);
             const isMoving = state.isMoving;
 
-            const aim = currentInput.aimVector;
-            if (aim.lengthSq() > 1 && !propsRef.current.disableInput && !cameraOverrideRef.current?.active) {
-                const targetX = playerGroupRef.current.position.x + aim.x; const targetZ = playerGroupRef.current.position.z + aim.y;
-                playerGroupRef.current.lookAt(targetX, playerGroupRef.current.position.y, targetZ);
-            }
+            // Movement & Rotation System (was Rotation Logic here)
 
             if (prevPosRef.current) { const d = playerGroupRef.current.position.distanceTo(prevPosRef.current); distanceTraveledRef.current += d; }
             prevPosRef.current = playerGroupRef.current.position.clone();
@@ -1370,6 +1365,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }}
             />
+
+
+            {props.isMobileDevice && props.isRunning && !props.isPaused && (
+                <TouchController
+                    onMove={(x, y) => engineRef.current?.input.setJoystickMove(x, y)}
+                    onAim={(x, y) => engineRef.current?.input.setJoystickAim(x, y)}
+                    onFire={(fire) => { if (engineRef.current) engineRef.current.input.state.fire = fire; }}
+                    onReload={() => { if (engineRef.current) engineRef.current.input.state.r = true; setTimeout(() => { if (engineRef.current) engineRef.current.input.state.r = false; }, 100); }}
+                    onAction={() => { if (engineRef.current) engineRef.current.input.state.e = true; setTimeout(() => { if (engineRef.current) engineRef.current.input.state.e = false; }, 100); }}
+                />
+            )}
+
             <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none" />
             <CinematicBubble
                 text={currentLine ? t(currentLine.text) : ""}
@@ -1393,7 +1400,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             {
                 (deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE') && (
-                    <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} />
+                    <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} isMobileDevice={props.isMobileDevice} />
                 )
             }
 
@@ -1403,6 +1410,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         onCloseClue={() => { }}
                         interactionType={interactionType}
                         interactionScreenPos={interactionScreenPos}
+                        isMobileDevice={props.isMobileDevice}
+                        onInteract={() => {
+                            if (engineRef.current) {
+                                engineRef.current.input.state.e = true;
+                                setTimeout(() => {
+                                    if (engineRef.current) engineRef.current.input.state.e = false;
+                                }, 100);
+                            }
+                        }}
                         dialogueOpen={false}
                         dialogueLine={null}
                         foundMemberName={foundMemberName}
