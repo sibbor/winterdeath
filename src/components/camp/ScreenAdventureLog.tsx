@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PlayerStats } from '../../types';
 import { t } from '../../utils/i18n';
-import { ZOMBIE_TYPES, BOSSES, MAP_THEMES } from '../../content/constants';
+import { ZOMBIE_TYPES, BOSSES, SECTOR_THEMES } from '../../content/constants';
 import { soundManager } from '../../utils/sound';
 import { COLLECTIBLES } from '../../content/collectibles';
 import CampModalLayout from './CampModalLayout';
@@ -139,7 +139,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                                 <h3 className="text-2xl font-black uppercase tracking-tighter" style={{ color: isUnlocked ? (isDefeated ? '#10b981' : '#ef4444') : '#4b5563' }}>
                                     {isUnlocked ? t(boss.name) : 'Unknown Threat'}
                                 </h3>
-                                <span className="text-xs text-gray-500 uppercase tracking-widest">{t(MAP_THEMES[mapId]?.name || 'Unknown Sector')}</span>
+                                <span className="text-xs text-gray-500 uppercase tracking-widest">{t(SECTOR_THEMES[mapId]?.name || 'Unknown Sector')}</span>
                             </div>
                             {isDefeated && <span className="text-xs bg-emerald-900/40 text-emerald-400 px-3 py-1 rounded border border-emerald-900 font-bold uppercase tracking-wider">Eliminated</span>}
                         </div>
@@ -178,7 +178,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {sectors.map(sectorId => {
                 const sectorCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sectorId);
-                const theme = MAP_THEMES[sectorId - 1]; // Fix: MAP_THEMES is 0-indexed, sectorId is 1-indexed
+                const theme = SECTOR_THEMES[sectorId - 1]; // Fix: SECTOR_THEMES is 0-indexed, sectorId is 1-indexed
                 const sectorName = theme ? t(theme.name) : `Sector ${sectorId}`;
                 const foundInSector = sectorCollectibles.filter(c => foundIds.includes(c.id)).length;
 
@@ -193,7 +193,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className={`grid ${stats.isMobileDevice ? 'grid-cols-2 gap-2' : 'grid-cols-1 md:grid-cols-2 gap-6'}`}>
                             {sectorCollectibles.map(item => {
                                 const isFound = foundIds.includes(item.id);
                                 const isNew = isFound && !viewedIds.includes(item.id);
@@ -201,7 +201,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
                                     <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'}`}>
 
                                         {/* 3D Preview Area */}
-                                        <div className="aspect-square w-full bg-black/40 relative border-b border-zinc-800/50">
+                                        <div className={`aspect-square w-full bg-black/40 relative border-b border-zinc-800/50 ${stats.isMobileDevice ? 'max-h-[140px]' : ''}`}>
                                             <CollectiblePreview type={item.modelType} isLocked={!isFound} />
 
                                             {/* NEW Badge - Only shows for unviewed collectibles */}
@@ -213,13 +213,15 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
                                         </div>
 
                                         {/* Info Area */}
-                                        <div className="p-4 flex flex-col h-32">
-                                            <h4 className={`text-lg font-black uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
+                                        <div className={`${stats.isMobileDevice ? 'p-2 h-20' : 'p-4 h-32'} flex flex-col`}>
+                                            <h4 className={`${stats.isMobileDevice ? 'text-xs' : 'text-lg'} font-black uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
                                                 {isFound ? t(item.nameKey) : '???'}
                                             </h4>
-                                            <p className={`text-xs font-mono leading-relaxed line-clamp-3 ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                                                {isFound ? t(item.descriptionKey) : 'Data encrypted. Item location unknown.'}
-                                            </p>
+                                            {!stats.isMobileDevice && (
+                                                <p className={`text-xs font-mono leading-relaxed line-clamp-3 ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
+                                                    {isFound ? t(item.descriptionKey) : 'Data encrypted. Item location unknown.'}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Hover Overlay */}

@@ -8,52 +8,72 @@ interface CollectiblePreviewProps {
     isLocked?: boolean;
 }
 
+// Shared Renderer Singleton
+let sharedRenderer: THREE.WebGLRenderer | null = null;
+
+const getSharedRenderer = (width: number, height: number) => {
+    if (!sharedRenderer) {
+        sharedRenderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: true,
+            powerPreference: 'low-power',
+            precision: 'mediump' // Optimization for UI
+        });
+        sharedRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    }
+    // Always resize to ensure it fits the current container
+    sharedRenderer.setSize(width, height);
+    return sharedRenderer;
+};
+
 const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [isReady, setIsReady] = useState(false); // Deferred loading state
 
-    // Visibility tracking to lazy-load WebGL contexts
+    // Visibility tracking
     useEffect(() => {
         if (!containerRef.current) return;
-
         const observer = new IntersectionObserver(
-            ([entry]) => {
-                setIsVisible(entry.isIntersecting);
-            },
+            ([entry]) => setIsVisible(entry.isIntersecting),
             { threshold: 0.1 }
         );
-
         observer.observe(containerRef.current);
-
-        return () => {
-            if (containerRef.current) {
-                observer.unobserve(containerRef.current);
-            }
-            observer.disconnect();
-        };
+        return () => observer.disconnect();
     }, []);
 
-    // Scene initialization - Only for Unlocked & Visible items
+    // Deferred Loading Trigger
     useEffect(() => {
-        if (!isVisible || isLocked || !containerRef.current) return;
+        if (isVisible && !isLocked) {
+            // Small delay to let the UI slide-in animation finish (or at least start smoothly)
+            // preventing the main thread freeze from blocking the CSS transition.
+            const timer = setTimeout(() => setIsReady(true), 150);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, isLocked]);
+
+    // Scene initialization
+    useEffect(() => {
+        if (!isReady || isLocked || !containerRef.current) return;
 
         const container = containerRef.current;
         const width = container.clientWidth;
         const height = container.clientHeight;
 
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-        camera.position.set(0, 1, 3);
+        // Fix clipping: Set near plane to 0.01 and move camera slightly back if needed
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 100);
+        camera.position.set(0, 0.8, 1.8);
         camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            alpha: true,
-            powerPreference: 'low-power' // Optimization
-        });
-        renderer.setSize(width, height);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio
-        container.appendChild(renderer.domElement);
+        // Get Shared Renderer
+        const renderer = getSharedRenderer(width, height);
+
+        // Append CAN be tricky if we move the DOM node. 
+        // Since we are re-using the renderer, we ensure it's appended here.
+        if (renderer.domElement.parentElement !== container) {
+            container.appendChild(renderer.domElement);
+        }
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -67,7 +87,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         const group = new THREE.Group();
         const mesh = ModelFactory.createCollectible(type);
 
-        // Remove the world-space light if present to avoid over-exposure in UI
+        // Remove glow for UI
         const worldLight = mesh.getObjectByName('collectibleGlow');
         if (worldLight) mesh.remove(worldLight);
 
@@ -75,7 +95,10 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         scene.add(group);
 
         let animeId: number;
+        let isRunning = true;
+
         const animate = () => {
+            if (!isRunning) return;
             animeId = requestAnimationFrame(animate);
             group.rotation.y += 0.01;
             renderer.render(scene, camera);
@@ -83,12 +106,16 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         animate();
 
         return () => {
+            isRunning = false;
             cancelAnimationFrame(animeId);
 
-            // Thorough Cleanup
+            // Cleanup SCENE but NOT Renderer
             scene.traverse((object) => {
                 if (object instanceof THREE.Mesh) {
                     object.geometry.dispose();
+                    // Don't dispose cached materials from assets (ModelFactory returns cached assets?)
+                    // ModelFactory.createCollectible creates clones? Let's check.
+                    // Assuming cloned materials for safety in UI
                     if (Array.isArray(object.material)) {
                         object.material.forEach(m => m.dispose());
                     } else {
@@ -96,13 +123,14 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
                     }
                 }
             });
+            scene.clear();
 
-            renderer.dispose();
+            // Remove canvas from DOM but keep the instance alive
             if (container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }
         };
-    }, [type, isLocked, isVisible]);
+    }, [type, isLocked, isReady]);
 
     return (
         <div ref={containerRef} className="w-full h-full relative bg-black/20 flex items-center justify-center overflow-hidden">
@@ -111,9 +139,10 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
                     <span className="text-zinc-600 text-6xl font-black">?</span>
                     <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{type}</span>
                 </div>
-            ) : !isVisible ? (
+            ) : !isReady ? (
+                // Placeholder during deferred load prevents "pop"
                 <div className="text-[10px] font-mono text-zinc-700 uppercase animate-pulse">
-                    Loading Lens...
+                    Scanning...
                 </div>
             ) : null}
         </div>

@@ -42,12 +42,14 @@ export const DeathSystem = {
             });
 
         } else if (refs.deathPhase.current === 'ANIMATION') {
-            if (now - state.deathStartTime > 1500) {
+            // Speed up: Wait 800ms before showing message (was 1500)
+            if (now - state.deathStartTime > 800) {
                 refs.deathPhase.current = 'MESSAGE';
                 setDeathPhase('MESSAGE');
             }
         } else if (refs.deathPhase.current === 'MESSAGE') {
-            if (now - state.deathStartTime > 2500) {
+            // Speed up: Allow continue after 1.5s (was 2.5s)
+            if (now - state.deathStartTime > 1500) {
                 refs.deathPhase.current = 'CONTINUE';
                 setDeathPhase('CONTINUE');
             }

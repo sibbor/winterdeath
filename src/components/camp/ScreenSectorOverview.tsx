@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../utils/i18n';
-import { MAP_THEMES, BOSSES, FAMILY_MEMBERS } from '../../content/constants';
+import { SECTOR_THEMES, BOSSES, FAMILY_MEMBERS } from '../../content/constants';
 import { getCollectiblesBySector } from '../../content/collectibles';
 import { en } from '../../locales/en';
 import CampModalLayout from './CampModalLayout';
@@ -8,8 +8,8 @@ import { PlayerStats } from '../../types';
 
 interface ScreenSectorOverviewProps {
     currentMap: number;
-    familyMembersFound: number[];
-    bossesDefeated: number[];
+    rescuedFamilyIndices: number[];
+    deadBossIndices: number[];
     debugMode: boolean;
     stats: PlayerStats;
     onSelectMap: (mapIndex: number) => void;
@@ -18,24 +18,20 @@ interface ScreenSectorOverviewProps {
     isMobileDevice?: boolean;
 }
 
-const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, familyMembersFound, bossesDefeated, debugMode, stats, onSelectMap, onStartSector, onClose, isMobileDevice }) => {
+const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, rescuedFamilyIndices, deadBossIndices, debugMode, stats, onSelectMap, onStartSector, onClose, isMobileDevice }) => {
     const [selectedMapIndex, setSelectedMapIndex] = useState(currentMap);
     const [briefingText, setBriefingText] = useState("");
 
-    const mapTheme = MAP_THEMES[selectedMapIndex];
+    const mapTheme = SECTOR_THEMES[selectedMapIndex];
     const boss = BOSSES[selectedMapIndex] || BOSSES[0];
-    const isRescued = familyMembersFound.includes(selectedMapIndex);
-    const isCleared = bossesDefeated.includes(selectedMapIndex);
-    const isLocked = !debugMode && (selectedMapIndex > 0 && !bossesDefeated.includes(selectedMapIndex - 1));
+    const isRescued = rescuedFamilyIndices.includes(selectedMapIndex);
+    const isCleared = deadBossIndices.includes(selectedMapIndex);
+    const isLocked = !debugMode && (selectedMapIndex > 0 && !deadBossIndices.includes(selectedMapIndex - 1));
 
     // -- Briefing Text Logic --
     const fullBriefingText = useMemo(() => {
         const mapName = t(mapTheme.name);
         const bossName = t(boss.name);
-
-        if (isRescued) { // Using isRescued similar to "isExtracted" in old sector briefing
-            return t('story.extracted_briefing', { map: mapName, boss: bossName });
-        }
 
         switch (selectedMapIndex) {
             case 0: return t('story.prologue_text');
@@ -90,7 +86,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
 
 
     const handleSelect = (index: number) => {
-        if ((!debugMode && (index > 0 && !bossesDefeated.includes(index - 1)))) return; // Locked
+        if ((!debugMode && (index > 0 && !deadBossIndices.includes(index - 1)))) return; // Locked
         setSelectedMapIndex(index);
         onSelectMap(index);
     };
@@ -101,19 +97,13 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
     };
 
 
-    // -- Status Status --
-    let statusText = t('ui.status') + ": " + t('ui.not_completed');
-    let statusColorClass = "text-red-500 border-red-600 bg-red-900/20";
-    if (isCleared && isRescued) {
-        statusText = t('ui.status') + ": " + t('ui.sector_cleared');
-        statusColorClass = "text-green-500 border-green-600 bg-green-900/20";
-    } else if (isCleared) {
-        statusText = t('ui.status') + ": " + t('ui.threat_neutralized');
-        statusColorClass = "text-yellow-500 border-yellow-600 bg-yellow-900/20";
-    } else if (isRescued) {
-        statusText = t('ui.status') + ": " + t('ui.target_extracted');
-        statusColorClass = "text-blue-500 border-blue-600 bg-blue-900/20";
-    }
+
+
+    const bossStatusKey = isCleared ? 'ui.boss_dead' : 'ui.boss_alive';
+    const bossStatusColor = isCleared ? 'text-green-500 border-green-600 bg-green-900/20' : 'text-red-500 border-red-600 bg-red-900/20';
+
+    const familyStatusKey = isRescued ? 'ui.family_member_rescued' : 'ui.family_member_missing';
+    const familyStatusColor = isRescued ? 'text-green-500 border-green-600 bg-green-900/20' : 'text-red-500 border-red-600 bg-red-900/20';
 
     return (
         <CampModalLayout
@@ -122,16 +112,16 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
-            canConfirm={!(!debugMode && (selectedMapIndex > 0 && !bossesDefeated.includes(selectedMapIndex - 1)))} // Lock logic
+            canConfirm={!(!debugMode && (selectedMapIndex > 0 && !deadBossIndices.includes(selectedMapIndex - 1)))} // Lock logic
             isMobile={isMobileDevice}
         >
-            <div className={`flex h-full gap-4 md:gap-8 ${isMobileDevice ? 'flex-col overflow-y-auto' : ''}`}>
+            <div className={`flex h-full gap-4 md:gap-8 ${isMobileDevice ? 'flex-col overflow-y-auto touch-auto' : ''}`}>
                 {/* LEFT: Sector List */}
-                <div className={`${isMobileDevice ? 'w-full shrink-0 flex gap-2 overflow-x-auto pb-4 px-2' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar`}>
-                    {MAP_THEMES.map((map, i) => {
+                <div className={`${isMobileDevice ? 'w-full shrink-0 flex gap-2 overflow-x-auto pb-4 px-2 touch-pan-x' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar`} style={isMobileDevice ? { WebkitOverflowScrolling: 'touch' } : {}}>
+                    {SECTOR_THEMES.map((map, i) => {
                         const isSel = selectedMapIndex === i;
                         // re-eval locked for list
-                        const locked = !debugMode && (i > 0 && !bossesDefeated.includes(i - 1));
+                        const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
 
                         return (
                             <button
@@ -171,19 +161,17 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                         </div>
 
                         <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start">
-                            {/* Sector Status Check */}
-                            <div className={`px-4 py-1 md:py-2 text-xs md:text-sm font-black uppercase border tracking-wider ${statusColorClass} text-center md:min-w-[180px] whitespace-nowrap`}>
-                                {statusText}
+                            {/* Boss Status Check */}
+                            <div className={`px-4 py-1 md:py-2 text-xs md:text-sm font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
+                                {t('ui.boss_status')}: {t(bossStatusKey)}
                             </div>
 
                             {/* Family Status Check */}
                             {selectedMapIndex < 4 && (
-                                <div className={`px-4 py-1 md:py-2 text-xs md:text-sm font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap
-                                    ${isRescued ? 'text-green-500 border-green-600 bg-green-900/20' : 'text-red-500 border-red-600 bg-red-900/20'}
-                                `}>
+                                <div className={`px-4 py-1 md:py-2 text-xs md:text-sm font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                     {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedMapIndex]?.name || 'Unknown') : '???'}
-                                    <span className="text-[10px] md:text-xs ml-1 md:ml-2 opacity-70">
-                                        ({isRescued ? t('ui.rescued') : t('ui.missing')})
+                                    <span className="text-[10px] md:text-xs ml-1 md:ml-2 opacity-100">
+                                        ({t(familyStatusKey)})
                                     </span>
                                 </div>
                             )}
@@ -195,8 +183,6 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                         {briefingText}
                         <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
                     </div>
-
-                    {/* Footer Actions Removed (Moved to Header) */}
                 </div>
             </div>
         </CampModalLayout>

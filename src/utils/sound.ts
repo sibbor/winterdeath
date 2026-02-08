@@ -1,7 +1,7 @@
 
 // ... existing imports ...
 import { SoundCore } from './audio/SoundCore';
-import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds } from './audio/SoundLib';
+import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds } from './audio/SoundLib';
 
 export class SoundManager {
   // ... existing properties ...
@@ -25,7 +25,7 @@ export class SoundManager {
   }
 
   // --- UI Delegate ---
-  playUiHover() { UiSounds.playHover(this.core); }
+  playUiHover() { UiSounds.playUiHover(this.core); }
   playUiClick() { UiSounds.playClick(this.core); }
   playUiConfirm() { UiSounds.playConfirm(this.core); }
   playUiPickup() { GamePlaySounds.playPickupCollectiblee(this.core); }
@@ -34,6 +34,7 @@ export class SoundManager {
   playTone(freq: number, type: OscillatorType, duration: number, vol: number = 0.1) { UiSounds.playTone(this.core, freq, type, duration, vol); }
   playMetalDoorShut() { GamePlaySounds.playMetalDoorShut(this.core); }
   playMetalDoorOpen() { GamePlaySounds.playMetalDoorOpen(this.core); }
+  playCollectibleChime() { UiSounds.playCollectibleChime(this.core); }
 
   // --- Voice Delegate ---
   playVoice(name: string) { VoiceSounds.playVoice(this.core, name); }
@@ -47,9 +48,33 @@ export class SoundManager {
   playExplosion() { WeaponSounds.playExplosion(this.core); }
 
   // --- Enemy Delegate ---
-  playZombieGrowl(type: string = 'WALKER') { EnemySounds.playEnemySound(this.core, type); }
+  playWalkerGroan() { EnemySounds.playWalkerGroan(this.core); }
+  playWalkerAttack() { EnemySounds.playWalkerAttack(this.core); }
+  playWalkerDeath() { EnemySounds.playWalkerDeath(this.core); }
 
-  // --- Environment (Campfire/Radio - Kept here or moved later) ---
+  playRunnerScream() { EnemySounds.playRunnerScream(this.core); }
+  playRunnerAttack() { EnemySounds.playRunnerAttack(this.core); }
+  playRunnerDeath() { EnemySounds.playRunnerDeath(this.core); }
+
+  playTankRoar() { EnemySounds.playTankRoar(this.core); }
+  playTankSmash() { EnemySounds.playTankSmash(this.core); }
+  playTankDeath() { EnemySounds.playTankDeath(this.core); }
+
+  playBomberBeep() { EnemySounds.playBomberBeep(this.core); }
+  playBomberExplode() { EnemySounds.playBomberExplode(this.core); }
+
+  playZombieGrowl(type: string = 'WALKER') {
+    if (type === 'RUNNER') this.playRunnerScream();
+    else if (type === 'TANK') this.playTankRoar();
+    else this.playWalkerGroan();
+  }
+
+  // --- Boss Delegate ---
+  playBossSpawn(id: number) { BossSounds.playBossSpawn(this.core, id); }
+  playBossAttack(id: number) { BossSounds.playBossAttack(this.core, id); }
+  playBossDeath(id: number) { BossSounds.playBossDeath(this.core, id); }
+
+  // --- Environment ---
   playVictory() {
     const now = this.core.ctx.currentTime;
     [440, 554, 659, 880].forEach((freq, i) => {
@@ -158,6 +183,48 @@ export class SoundManager {
         }, 250);
       }
     }
+  }
+
+  playEffect(id: string) {
+    switch (id) {
+      case 'ambient_rustle': GamePlaySounds.playAmbientRustle(this.core); break;
+      case 'ambient_metal': GamePlaySounds.playAmbientMetal(this.core); break;
+
+      case 'zombie_bite': this.playWalkerAttack(); break; // Defaults to Walker
+
+      // Specific Triggers
+      case 'walker_groan': this.playWalkerGroan(); break;
+      case 'walker_attack': this.playWalkerAttack(); break;
+      case 'walker_death': this.playWalkerDeath(); break;
+
+      case 'runner_scream': this.playRunnerScream(); break;
+      case 'runner_attack': this.playRunnerAttack(); break;
+      case 'runner_death': this.playRunnerDeath(); break;
+
+      case 'tank_smash': this.playTankSmash(); break;
+      case 'tank_roar': this.playTankRoar(); break;
+      case 'tank_death': this.playTankDeath(); break;
+
+      case 'bomber_beep': this.playBomberBeep(); break;
+      case 'bomber_beep': this.playBomberBeep(); break;
+      case 'bomber_explode': this.playBomberExplode(); break;
+
+      default:
+        if (id.startsWith('boss_attack_')) {
+          const bossId = parseInt(id.split('_')[2]);
+          if (!isNaN(bossId)) this.playBossAttack(bossId);
+        } else if (id.startsWith('boss_death_')) {
+          const bossId = parseInt(id.split('_')[2]);
+          if (!isNaN(bossId)) this.playBossDeath(bossId);
+        } else {
+          console.warn(`Unknown effect: ${id}`);
+        }
+    }
+  }
+
+  playMusic(id: string) {
+    // Simple placeholder for ambient loops
+    console.log(`Now playing music/ambient: ${id}`);
   }
 }
 

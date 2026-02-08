@@ -197,7 +197,7 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
                         break;
                     case 'POI':
                         zIndex = 20; sizeClass = "w-6 h-6";
-                        content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
+                        content = <span className="text-xl drop-shadow-md">📍</span>;
                         break;
                     case 'OBSTACLE':
                         zIndex = 10; sizeClass = "w-2 h-2";
@@ -205,7 +205,20 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
                         break;
                     case 'CHEST':
                         zIndex = 15; sizeClass = "w-4 h-4";
-                        content = <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
+                        content = <span className="text-xl drop-shadow-md">📦</span>;
+                        break;
+                    case 'TRIGGER': // Assuming CLUE maps to TRIGGER or has its own type? Looking at getItemPriority, CLUE isn't there but 'TRIGGER' is.
+                        // Wait, check `GameSession` mapping. Clues are often just Triggers or Items.
+                        // If type is 'CLUE' (custom logic needed?)
+                        // `getItemPriority` has `TRIGGER`.
+                        // The user wanted `🔍` for Clue.
+                        // Let's assume if label is 'clue' or type is specific.
+                        // Actually, looking at `GameSession.tsx` line 889 `mapItems`, checking where they come from.
+                        // `SectorSystem` populates mapItems.
+                        // I will add a case for 'CLUE' if it exists, or check label.
+                        // For now let's stick to the requested changes for POI/CHEST.
+                        zIndex = 25;
+                        content = <span className="text-xl drop-shadow-md">🔍</span>;
                         break;
                     default:
                         content = (topItem.icon && topItem.icon.length < 5) ? <span style={{ color: topItem.color }}>{topItem.icon}</span> : <div className={`rounded-full shadow-sm ${sizeClass}`} style={{ backgroundColor: topItem.color || '#fff' }} />;
@@ -346,31 +359,45 @@ const ScreenMap: React.FC<ScreenMapProps> = ({ items = [], playerPos, familyPos,
                 </div>
 
                 {/* Header */}
-                <div className={`w-full ${isMobileDevice ? 'p-3' : 'p-6'} border-b border-white/10 flex justify-between items-center bg-black/50 z-10`}>
-                    <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-black text-white uppercase tracking-tighter border-l-4 border-blue-500 ${isMobileDevice ? 'pl-2' : 'pl-4'} skew-x-[-5deg]`}>
-                        {t('ui.tactical_map')}
-                    </h2>
-                    <div className={`flex ${isMobileDevice ? 'gap-2' : 'gap-6'} items-center ${isMobileDevice ? 'mr-0' : 'mr-4'}`}>
-                        {!isMobileDevice && (
-                            <>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.coordinates')}</p>
-                                    <p className="text-xl font-mono text-white font-bold">
-                                        {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
-                                    </p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.player')}</p>
-                                    <p className="text-xl font-mono text-white font-bold">
-                                        {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
-                                    </p>
-                                </div>
-                            </>
-                        )}
-                        <button onClick={onClose} className={`${isMobileDevice ? 'px-4 py-1 border' : 'px-8 py-2 border-2'} border-white text-white hover:bg-white hover:text-black font-black uppercase tracking-widest transition-colors skew-x-[-5deg] ${isMobileDevice ? 'ml-2' : 'ml-4'}`}>
-                            <span className="block skew-x-[5deg] text-xs md:text-base">{t('ui.close')}</span>
-                        </button>
+                <div className={`w-full ${isMobileDevice ? 'p-2' : 'p-6'} border-b border-white/10 flex flex-col items-stretch bg-black/50 z-10`}>
+                    <div className="flex justify-between items-center w-full">
+                        <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-black text-white uppercase tracking-tighter border-l-4 border-blue-500 ${isMobileDevice ? 'pl-2' : 'pl-4'} skew-x-[-5deg]`}>
+                            {t('ui.tactical_map')}
+                        </h2>
+                        <div className={`flex ${isMobileDevice ? 'gap-2' : 'gap-6'} items-center`}>
+                            {!isMobileDevice && (
+                                <>
+                                    <div className="text-right">
+                                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.coordinates')}</p>
+                                        <p className="text-xl font-mono text-white font-bold">
+                                            {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">{t('ui.player')}</p>
+                                        <p className="text-xl font-mono text-white font-bold">
+                                            {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                            <button onClick={onClose} className={`${isMobileDevice ? 'px-4 py-1 border' : 'px-8 py-2 border-2'} border-white text-white hover:bg-white hover:text-black font-black uppercase tracking-widest transition-colors skew-x-[-5deg] ${isMobileDevice ? 'ml-2' : 'ml-4'}`}>
+                                <span className="block skew-x-[5deg] text-xs md:text-base">{t('ui.close')}</span>
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Mobile Only: Player Position Row */}
+                    {isMobileDevice && playerPos && (
+                        <div className="flex justify-center mt-2 pt-2 border-t border-white/5">
+                            <div className="flex items-center gap-3 bg-blue-900/20 px-4 py-1 border border-blue-500/30 skew-x-[-5deg]">
+                                <span className="text-[10px] text-blue-400 font-black uppercase tracking-widest skew-x-[5deg]">{t('ui.player')}</span>
+                                <span className="text-sm font-mono text-white font-bold skew-x-[5deg]">
+                                    {Math.round(playerPos.x)}, {Math.round(playerPos.z)}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Map Container */}

@@ -1,6 +1,16 @@
 
 import * as THREE from 'three';
 
+export enum AIState {
+    IDLE = 'IDLE',
+    WANDER = 'WANDER',
+    CHASE = 'CHASE',
+    SEARCH = 'SEARCH',
+    BITING = 'BITING',
+    EXPLODING = 'EXPLODING',
+    STUNNED = 'STUNNED'
+}
+
 export interface Enemy {
     mesh: THREE.Group;
     type: string;
@@ -18,6 +28,22 @@ export interface Enemy {
     hitTime: number;
     color: number;
     originalScale: number;
+
+    // AI State Machine
+    state: AIState;
+    spawnPos: THREE.Vector3;
+    lastSeenPos: THREE.Vector3 | null;
+    lastSeenTime: number;
+    searchTimer: number;
+    hearingThreshold: number; // 0-1 (Sensitivity)
+    idleTimer: number; // Time before next wander
+
+    // Advanced Abilities
+    isGrappling?: boolean;
+    grappleTimer?: number;
+    explosionTimer?: number;
+    abilityCooldown?: number;
+    stunTimer?: number;
 
     // Status Effects
     isBurning: boolean;

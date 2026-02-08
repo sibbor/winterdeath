@@ -82,7 +82,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                 </div>
 
                 {/* Reduced padding p-12 to p-6 */}
-                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-transparent">
+                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-transparent touch-auto">
                     {children}
                 </div>
             </div>

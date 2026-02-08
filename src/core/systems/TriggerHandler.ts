@@ -33,11 +33,42 @@ export const TriggerHandler = {
                 }
             }
 
-            const dx = playerPos.x - trig.position.x;
-            const dz = playerPos.z - trig.position.z;
-            const distSq = dx * dx + dz * dz;
+            let isInside = false;
 
-            if (distSq < trig.radius * trig.radius) {
+            if (trig.size) {
+                // BOX TRIGGER CHECK
+                const localX = playerPos.x - trig.position.x;
+                const localZ = playerPos.z - trig.position.z;
+
+                let tx = localX;
+                let tz = localZ;
+
+                if (trig.rotation) {
+                    const sin = Math.sin(-trig.rotation);
+                    const cos = Math.cos(-trig.rotation);
+                    tx = localX * cos - localZ * sin;
+                    tz = localX * sin + localZ * cos;
+                }
+
+                const halfW = trig.size.width / 2;
+                const halfD = trig.size.depth / 2;
+
+                if (Math.abs(tx) <= halfW && Math.abs(tz) <= halfD) {
+                    isInside = true;
+                }
+            } else {
+                // CIRCLE TRIGGER CHECK
+                if (trig.radius) {
+                    const dx = playerPos.x - trig.position.x;
+                    const dz = playerPos.z - trig.position.z;
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq < trig.radius * trig.radius) {
+                        isInside = true;
+                    }
+                }
+            }
+
+            if (isInside) {
                 trig.triggered = true;
                 trig.lastTriggerTime = now;
 

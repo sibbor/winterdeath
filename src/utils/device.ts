@@ -15,5 +15,6 @@ export const isMobile = (): boolean => {
     // Check for touch capability
     const touchCheck = window.matchMedia('(pointer: coarse)').matches;
 
-    return uaCheck || widthCheck || touchCheck;
+    // We only consider it mobile if it's a mobile UA, OR if it's a small screen WITH touch capability
+    return uaCheck || (widthCheck && touchCheck);
 };

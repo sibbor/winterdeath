@@ -45,19 +45,27 @@ export const FXSystem = {
                 let geo: THREE.BufferGeometry = GEOMETRY.particle;
                 let mat: THREE.Material = MATERIALS.smoke;
 
-                if (type === 'gore' || type === 'limb') { geo = GEOMETRY.gore; mat = new THREE.MeshStandardMaterial({ color: color || 0x660000, roughness: 0.2 }); }
-                else if (type === 'blood') { geo = GEOMETRY.particle; mat = new THREE.MeshBasicMaterial({ color: 0xcc0000 }); }
-                else if (type === 'black_smoke') { geo = GEOMETRY.particle; mat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }); }
-                else if (type === 'fire') { geo = new THREE.DodecahedronGeometry(0.4); mat = new THREE.MeshBasicMaterial({ color: color || 0xff5500, transparent: true, opacity: 0.8 }); }
-                else if (type === 'campfire_flame') { geo = GEOMETRY.flame; mat = new THREE.MeshBasicMaterial({ color: color || 0xff5500, transparent: true, opacity: 0.8 }); }
-                else if (type === 'campfire_spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = new THREE.MeshBasicMaterial({ color: color || 0xffff00 }); }
+                if (type === 'gore' || type === 'limb') { geo = GEOMETRY.gore; mat = MATERIALS.gore; }
+                else if (type === 'blood') { geo = GEOMETRY.particle; mat = MATERIALS.blood; }
+                else if (type === 'black_smoke') { geo = GEOMETRY.particle; mat = MATERIALS.blackMetal; } // Fallback or add specific smoke material? let's use a specific one if possible, but MATERIALS.smoke is grey.
+                // improved black_smoke:
+                else if (type === 'black_smoke') {
+                    geo = GEOMETRY.particle;
+                    if (!MATERIALS['_blackSmoke']) {
+                        MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
+                    }
+                    mat = MATERIALS['_blackSmoke'];
+                }
+                else if (type === 'fire') { geo = new THREE.DodecahedronGeometry(0.4); mat = MATERIALS.fire; }
+                else if (type === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+                else if (type === 'campfire_spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; } // Reuse yellow basic
                 else if (type === 'debris') { geo = GEOMETRY.particle; mat = MATERIALS.stone; }
-                else if (type === 'debris_trail') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = new THREE.MeshBasicMaterial({ color: 0x888888 }); }
+                else if (type === 'debris_trail') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.stone; }
                 else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
-                else if (type === 'shockwave') { geo = GEOMETRY.shockwave; mat = new THREE.MeshBasicMaterial({ color: color || 0xffaa00, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }); }
-                else if (type === 'flash') { geo = GEOMETRY.sphere; mat = new THREE.MeshBasicMaterial({ color: color || 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }); }
-                else if (type === 'spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = new THREE.MeshBasicMaterial({ color: color || 0xffff00 }); }
-                else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true }); }
+                else if (type === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
+                else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
+                else if (type === 'spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; }
+                else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
 
                 m = new THREE.Mesh(geo, mat);
                 if (type === 'stun_star') m.scale.setScalar(0.2 + Math.random() * 0.1);
@@ -94,7 +102,10 @@ export const FXSystem = {
             else if (type === 'debris') { vel.x = (Math.random() - 0.5) * 8; vel.z = (Math.random() - 0.5) * 8; vel.y = 2 + Math.random() * 4; life = 200; }
             else if (type === 'fire') { vel = new THREE.Vector3(0, 0.03 + Math.random() * 0.04, 0); life = 1.0; }
             else if (type === 'campfire_flame') { vel = new THREE.Vector3(0, 0.05 + Math.random() * 0.05, 0); life = 1.0; }
-            else if (type === 'spark') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.05 + Math.random() * 0.05, (Math.random() - 0.5) * 0.02); life = 1.0; }
+            else if (type === 'spark') {
+                if (!customVel) vel = new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.05 + Math.random() * 0.05, (Math.random() - 0.5) * 0.02);
+                life = 1.0;
+            }
             else if (type === 'campfire_spark') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.1 + Math.random() * 0.1, (Math.random() - 0.5) * 0.05); life = 1.0; }
             else if (type === 'limb') { life = 300; }
             else if (type === 'debris_trail') { vel = new THREE.Vector3(0, 0, 0); life = 10; }
@@ -149,7 +160,8 @@ export const FXSystem = {
         // --- PARTICLES ---
         for (let i = particlesList.length - 1; i >= 0; i--) {
             const p = particlesList[i];
-            p.life -= 0.02;
+            const decay = delta * 44;
+            p.life -= decay;
 
             if (p.type === 'chunk' || p.type === 'debris' || p.type === 'glass' || p.type === 'limb' || p.type === 'blood') {
                 if (p.vel && p.vel.y !== undefined) {
@@ -197,9 +209,18 @@ export const FXSystem = {
                 }
             } else if (p.type === 'campfire_flame') {
                 p.mesh.position.y += p.vel.y;
-                p.mesh.scale.setScalar(Math.max(0, p.life));
-                p.mesh.rotation.y += 0.05;
+                p.mesh.scale.setScalar(Math.max(0, p.life * (1.0 + Math.random() * 0.5))); // Flicker size
+                p.mesh.rotation.y += 0.1; // Faster rotation
                 p.mesh.material.opacity = p.life;
+            } else if (p.type === 'black_smoke') {
+                p.mesh.position.y += delta * 2.0; // Rise consistently
+                p.mesh.position.x += (Math.random() - 0.5) * delta * 1.0; // Drift
+                p.mesh.position.z += (Math.random() - 0.5) * delta * 1.0;
+                const progress = 1 - (p.life / p.maxLife);
+                const scale = 1.0 + progress * 3.0; // Expand significantly
+                p.mesh.scale.set(scale, scale, scale);
+                p.mesh.rotation.z += delta * 0.2;
+                (p.mesh.material as THREE.MeshBasicMaterial).opacity = (p.life / p.maxLife) * 0.6;
             } else if (p.type === 'campfire_spark') {
                 p.mesh.position.add(p.vel);
                 p.mesh.position.x += Math.sin(now * 0.01) * 0.01;
@@ -216,8 +237,6 @@ export const FXSystem = {
             if (p.type === 'campfire_flame' || p.type === 'campfire_spark' || p.type === 'fire') {
                 if (p.life <= 0) isDead = true;
             } else {
-                p.life -= (1 - 0.02); // Decay helper
-
                 // Fade / Grow effects
                 if (p.type === 'shockwave') {
                     const progress = 1 - (p.life / p.maxLife);

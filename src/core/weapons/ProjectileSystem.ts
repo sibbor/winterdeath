@@ -23,6 +23,7 @@ export interface GameContext {
     addScore: (amt: number) => void;
     addFireZone: (z: FireZone) => void;
     now: number;
+    noiseEvents?: { pos: THREE.Vector3, radius: number, time: number }[];
 }
 
 export interface Projectile {
@@ -65,6 +66,11 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
             ctx.spawnPart(pos.x, 0, pos.z, 'debris', 15, undefined, undefined, 0xffaa00);
             ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
             soundManager.playExplosion();
+
+            // Noise Emission (75m radius for grenades)
+            if (ctx.noiseEvents) {
+                ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
+            }
 
             const damage = 150;
             const knockbackBase = 1.0;
@@ -110,6 +116,11 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
             }
             soundManager.playExplosion();
 
+            // Noise Emission (75m radius for molotovs)
+            if (ctx.noiseEvents) {
+                ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
+            }
+
             const fz: FireZone = {
                 mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone),
                 radius: radius,
@@ -132,6 +143,11 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
             ctx.spawnPart(pos.x, 1, pos.z, 'spark', 10);
             soundManager.playExplosion();
 
+            // Noise Emission (75m radius for flashbangs)
+            if (ctx.noiseEvents) {
+                ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
+            }
+
             const blindDuration = 2500;
             for (const e of ctx.enemies) {
                 if (e.mesh.position.distanceTo(pos) < radius) {
@@ -147,16 +163,8 @@ const BULLET_REGISTRY: Record<string, { geometry: THREE.BufferGeometry, material
     'DEFAULT': { geometry: GEOMETRY.bullet, material: MATERIALS.bullet, speed: 60 }
 };
 
-// Module-level state
-let activeProjectiles: Projectile[] = [];
-let activeFireZones: FireZone[] = [];
-
 export const ProjectileSystem = {
-    // Keep getters for compatibility if needed, though direct access is common in this codebase
-    get projectiles() { return activeProjectiles; },
-    get fireZones() { return activeFireZones; },
-
-    spawnBullet: (scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, damage: number) => {
+    spawnBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, damage: number) => {
         const visuals = BULLET_REGISTRY[weapon] || BULLET_REGISTRY['DEFAULT'];
         const b = new THREE.Mesh(visuals.geometry, visuals.material);
         b.position.copy(origin);
@@ -168,7 +176,7 @@ export const ProjectileSystem = {
 
         scene.add(b);
 
-        activeProjectiles.push({
+        projectiles.push({
             mesh: b,
             type: 'bullet',
             weapon: weapon,
@@ -180,7 +188,7 @@ export const ProjectileSystem = {
         });
     },
 
-    spawnThrowable: (scene: THREE.Scene, origin: THREE.Vector3, dir: THREE.Vector3, throwableId: string, chargeRatio: number) => {
+    spawnThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, throwableId: string, chargeRatio: number) => {
         const def = THROWABLE_REGISTRY[throwableId];
         if (!def) return;
 
@@ -204,7 +212,7 @@ export const ProjectileSystem = {
         marker.position.set(targetPos.x, 0.1, targetPos.z);
         scene.add(marker);
 
-        activeProjectiles.push({
+        projectiles.push({
             mesh: proj,
             type: 'throwable',
             weapon: throwableId,
@@ -217,27 +225,27 @@ export const ProjectileSystem = {
         });
     },
 
-    update: (delta: number, now: number, ctx: Omit<GameContext, 'addFireZone'>) => {
+    update: (delta: number, now: number, ctx: Omit<GameContext, 'addFireZone'>, projectiles: Projectile[], fireZones: FireZone[]) => {
         const fullCtx: GameContext = {
             ...ctx,
-            addFireZone: (z) => activeFireZones.push(z),
+            addFireZone: (z) => fireZones.push(z),
             now: now
         };
 
         // --- UPDATE PROJECTILES ---
-        for (let i = activeProjectiles.length - 1; i >= 0; i--) {
-            const p = activeProjectiles[i];
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+            const p = projectiles[i];
 
             if (p.type === 'bullet') {
-                updateBullet(p, i, delta, fullCtx);
+                updateBullet(p, i, delta, fullCtx, projectiles);
             } else {
-                updateThrowable(p, i, delta, fullCtx, now);
+                updateThrowable(p, i, delta, fullCtx, now, projectiles);
             }
         }
 
         // --- UPDATE FIRE ZONES ---
-        for (let i = activeFireZones.length - 1; i >= 0; i--) {
-            const fz = activeFireZones[i];
+        for (let i = fireZones.length - 1; i >= 0; i--) {
+            const fz = fireZones[i];
             fz.life -= delta;
 
             const flameDensity = 3;
@@ -269,29 +277,31 @@ export const ProjectileSystem = {
 
             if (fz.life <= 0) {
                 fullCtx.scene.remove(fz.mesh);
-                activeFireZones.splice(i, 1);
+                fireZones.splice(i, 1);
             }
         }
     },
 
-    clear: (scene: THREE.Scene) => {
-        activeProjectiles.forEach(p => {
+    clear: (scene: THREE.Scene, projectiles: Projectile[], fireZones: FireZone[]) => {
+        projectiles.forEach(p => {
             scene.remove(p.mesh);
             if (p.marker) scene.remove(p.marker);
         });
-        activeFireZones.forEach(f => scene.remove(f.mesh));
-        activeProjectiles = [];
-        activeFireZones = [];
+        fireZones.forEach(f => scene.remove(f.mesh));
+        // Note: The arrays themselves are managed by the caller's state, but we help clear them for safety
+        projectiles.length = 0;
+        fireZones.length = 0;
     }
 };
 
 // --- INTERNAL HELPERS ---
 
-function updateBullet(p: Projectile, index: number, delta: number, ctx: GameContext) {
+function updateBullet(p: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
     p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
     p.life -= delta;
 
     let destroy = false;
+    // ... rest same ...
 
     // Obstacle Collision
     for (const obs of ctx.obstacles) {
@@ -313,7 +323,7 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
             const dx = p.mesh.position.x - e.mesh.position.x;
             const dz = p.mesh.position.z - e.mesh.position.z;
             if (dx * dx + dz * dz < 1.0) {
-                if (Math.abs(p.mesh.position.y - e.mesh.position.y) < 2.0) {
+                if (Math.abs(p.mesh.position.y - e.mesh.position.y) < 6.0) {
                     ctx.trackStats('hit', 1);
                     const actualDamage = Math.max(0, Math.min(e.hp, p.damage));
                     e.hp -= p.damage;
@@ -391,11 +401,11 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
 
     if (destroy || p.life <= 0) {
         ctx.scene.remove(p.mesh);
-        activeProjectiles.splice(index, 1);
+        projectiles.splice(index, 1);
     }
 }
 
-function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number) {
+function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number, projectiles: Projectile[]) {
     p.vel.y -= 30 * delta;
     p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
     p.mesh.rotation.x += 10 * delta;
@@ -415,7 +425,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     if (isGroundHit || isFuseExpired) {
         ctx.scene.remove(p.mesh);
         if (p.marker) ctx.scene.remove(p.marker);
-        activeProjectiles.splice(index, 1);
+        projectiles.splice(index, 1);
 
         const pos = p.mesh.position.clone();
         if (isGroundHit) pos.y = 0; // Snap to ground for impact

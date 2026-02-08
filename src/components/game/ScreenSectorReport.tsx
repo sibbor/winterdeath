@@ -41,26 +41,18 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     const bossName = t(BOSSES[currentMap]?.name || "Boss");
 
     // Family Status Logic
-    let statusKey = 'ui.missing';
-    let statusBoxClass = 'border-red-600 bg-red-900/20';
-    let statusTitleColor = 'text-red-500';
+    let familyStatusKey = 'ui.family_member_missing';
+    let familyBoxClass = 'border-red-600 bg-red-900/20';
+    let familyTitleColor = 'text-red-500';
 
-    if (stats.familyExtracted) {
-        statusKey = 'ui.rescued';
-        statusBoxClass = 'border-green-500 bg-green-900/20';
-        statusTitleColor = 'text-green-500';
-    } else if (stats.familyFound) {
-        statusKey = 'ui.found';
-        statusBoxClass = 'border-yellow-500 bg-yellow-900/20';
-        statusTitleColor = 'text-yellow-500';
-    } else {
-        statusKey = 'ui.missing';
-        statusBoxClass = 'border-red-600 bg-red-900/20';
-        statusTitleColor = 'text-red-500';
+    if (stats.familyFound || bossKilled) {
+        familyStatusKey = 'ui.family_member_rescued';
+        familyBoxClass = 'border-green-500 bg-green-900/20';
+        familyTitleColor = 'text-green-500';
     }
 
     // Boss Status Logic
-    const bossStatusKey = bossKilled ? 'ui.eliminated' : 'ui.alive';
+    const bossStatusKey = bossKilled ? 'ui.boss_dead' : 'ui.boss_alive';
     const bossBoxClass = bossKilled
         ? 'border-green-500 bg-green-900/20'
         : 'border-red-600 bg-red-900/20';
@@ -249,9 +241,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <div className="space-y-6 px-2">
 
                         {/* Family Member Box */}
-                        <div className={`p-4 border-l-4 shadow-lg ${statusBoxClass}`}>
-                            <span className={`block text-xs font-bold uppercase tracking-widest mb-1 opacity-90 ${statusTitleColor}`}>{t('ui.family_member')}</span>
-                            <span className="text-3xl font-black uppercase text-white">{t(statusKey)}</span>
+                        <div className={`p-4 border-l-4 shadow-lg ${familyBoxClass}`}>
+                            <span className={`block text-xs font-bold uppercase tracking-widest mb-1 opacity-90 ${familyTitleColor}`}>{t('ui.family_member')}</span>
+                            <span className="text-3xl font-black uppercase text-white">{t(familyStatusKey)}</span>
                         </div>
 
                         {/* Boss Status Box */}

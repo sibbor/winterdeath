@@ -2,13 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Force hide cursor everywhere for custom game cursor */
-html,
-body,
-* {
-    cursor: none !important;
-}
-
+/* Initial setup */
 html,
 body,
 #game {
@@ -17,15 +11,17 @@ body,
     margin: 0;
     padding: 0;
     overflow: hidden;
-    touch-action: none;
 }
 
-
 body {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    overscroll-behavior: none;
+    user-select: none;
     margin: 0;
     overflow: hidden;
     background-color: #050505;
-    user-select: none;
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 

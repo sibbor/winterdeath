@@ -2,8 +2,12 @@
 import * as THREE from 'three';
 import { SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
+import { ObjectGenerator } from './ObjectGenerator';
+
+let pathLayer = 0; // Deterministic Y-stacking to prevent Z-fighting
 
 export const PathGenerator = {
+    resetPathLayer: () => { pathLayer = 0; },
 
     /**
      * Creates a curved railway track along a set of points.
@@ -25,7 +29,7 @@ export const PathGenerator = {
         const pointsList = curve.getSpacedPoints(segments);
 
         // -- Helpers --
-        const generateRibbon = (width: number, yOffset: number, uTile: number, color: number | THREE.Texture, matName?: string) => {
+        const generateRibbon = (width: number, yOffset: number, uTile: number, material: THREE.Material | number | THREE.Texture, matName?: string) => {
             const vertices: number[] = [];
             const uvs: number[] = [];
             const indices: number[] = [];
@@ -67,21 +71,39 @@ export const PathGenerator = {
             geo.setIndex(indices);
             geo.computeVertexNormals();
 
-            const mat = (color && typeof color === 'object' && 'isTexture' in color)
-                ? new THREE.MeshStandardMaterial({ map: color as THREE.Texture, roughness: 1.0 })
-                : new THREE.MeshStandardMaterial({ color: (color as number) || 0x666666, roughness: 0.9 });
+            let mat: THREE.Material;
+            if (material instanceof THREE.Material) {
+                mat = material.clone();
+                if (mat instanceof THREE.MeshStandardMaterial) {
+                    if (mat.map) {
+                        mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+                    }
+                    if (mat.bumpMap) {
+                        mat.bumpMap.wrapS = mat.bumpMap.wrapT = THREE.RepeatWrapping;
+                    }
+                }
+            } else if (material && typeof material === 'object' && 'isTexture' in material) {
+                const tex = (material as THREE.Texture);
+                tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+                mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 1.0 });
+            } else {
+                mat = new THREE.MeshStandardMaterial({ color: (material as number) || 0x666666, roughness: 0.9 });
+            }
 
             const mesh = new THREE.Mesh(geo, mat);
             mesh.name = matName || 'Ribbon';
-            mesh.receiveShadow = false;
+            mesh.receiveShadow = true;
             mesh.castShadow = false;
             ctx.scene.add(mesh);
             return mesh;
         };
 
         // 1. Gravel Bed
-        // Width 4.5, Y=0.04
-        generateRibbon(4.5, 0.04, length / 4, MATERIALS.gravel.map || 0x666666, 'Gravel');
+        // Width 4.5, Y=0.05 (Standardized)
+        generateRibbon(4.5, 0.05, length / 4, MATERIALS.gravel, 'Gravel');
+
+        // 1.1 Frost Shoulders (Railway)
+        generateRibbon(5.5, 0.01, length / 4, MATERIALS.frost, 'Railway_Frost');
 
         // 2. Sleepers
         // Place continuously along curve
@@ -107,7 +129,7 @@ export const PathGenerator = {
             if (i < sleeperPoints.length - 1) tangent = new THREE.Vector3().subVectors(sleeperPoints[i + 1], pt).normalize();
             else tangent = new THREE.Vector3().subVectors(pt, sleeperPoints[i - 1]).normalize();
 
-            dummy.position.copy(pt).setY(0.07); // Slightly above gravel (was 0.12)
+            dummy.position.copy(pt).setY(0.08); // On top of gravel (Standardized)
             dummy.lookAt(pt.clone().add(tangent));
             dummy.updateMatrix();
             sleeperMesh.setMatrixAt(i, dummy.matrix);
@@ -192,9 +214,9 @@ export const PathGenerator = {
     /**
      * Creates a road or dirt path along a set of points.
      */
-    createPath: (ctx: SectorContext, points: THREE.Vector3[], width: number, material: THREE.Material, type: 'ROAD' | 'PATH' = 'ROAD', showBlood: boolean = false, showFootprints: boolean = false) => {
+    createPointPath: (ctx: SectorContext, points: THREE.Vector3[], width: number, material: THREE.Material, type: 'ROAD' | 'PATH' = 'ROAD', showBlood: boolean = false, showFootprints: boolean = false, strict: boolean = false) => {
         const curve = new THREE.CatmullRomCurve3(points);
-        curve.curveType = 'centripetal';
+        curve.curveType = (strict ? 'centripetal' : 'catmullrom');
         const length = curve.getLength();
 
         // High resolution for smooth curves
@@ -204,6 +226,10 @@ export const PathGenerator = {
         const vertices: number[] = [];
         const uvs: number[] = [];
         const indices: number[] = [];
+
+        // Deterministic Y-stacking
+        pathLayer++;
+        const yOffset = 0.03 + (pathLayer * 0.001);
 
         // Generate Ribbons
         for (let i = 0; i < pointsList.length; i++) {
@@ -229,9 +255,8 @@ export const PathGenerator = {
             const pLeft = pt.clone().add(normal.clone().multiplyScalar(-width / 2));
             const pRight = pt.clone().add(normal.clone().multiplyScalar(width / 2));
 
-            // Push Vertices
-            vertices.push(pLeft.x, pLeft.y + 0.02, pLeft.z);
-            vertices.push(pRight.x, pRight.y + 0.02, pRight.z);
+            vertices.push(pLeft.x, pLeft.y + yOffset, pLeft.z);
+            vertices.push(pRight.x, pRight.y + yOffset, pRight.z);
 
             // UVs
             const v = i / segments * (length / width); // Tile based on aspect ratio
@@ -247,38 +272,21 @@ export const PathGenerator = {
                 indices.push(base + 1, base + 3, base + 2);
             }
 
-            // Blood Decals (Optional Decals)
-            if (showBlood && i % 4 === 0 && i < pointsList.length - 1) { // Reduced frequency
-                const footprint = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.6), MATERIALS.bloodDecal);
+            // Footprints or blood trails
+            if ((showBlood || showFootprints) && i % 4 === 0 && i < pointsList.length - 1) { // Reduced frequency
+                const prints = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.6), showBlood ? MATERIALS.bloodStainDecal : MATERIALS.footprintDecal);
                 const next = pointsList[i + 1] || pt.clone().add(tangent);
 
-                footprint.rotation.x = -Math.PI / 2;
-                footprint.position.set(pt.x + (Math.random() - 0.5), 0.03, pt.z + (Math.random() - 0.5));
+                prints.rotation.x = -Math.PI / 2;
+                prints.position.set(pt.x + (Math.random() - 0.5), 0.04, pt.z + (Math.random() - 0.5));
 
                 // Orient along path
-                footprint.lookAt(next.x, 0.03, next.z);
-                footprint.rotateX(-Math.PI / 2);
+                prints.lookAt(next.x, 0.04, next.z);
+                prints.rotateX(-Math.PI / 2);
 
-                footprint.material.transparent = true;
-                footprint.material.opacity = 0.2;
-                ctx.scene.add(footprint);
-            }
-
-            // Footprints (Optional Decals)
-            if (showFootprints && i % 4 === 0 && i < pointsList.length - 1) { // Reduced frequency
-                const footprint = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.6), MATERIALS.footprintDecal);
-                const next = pointsList[i + 1] || pt.clone().add(tangent);
-
-                footprint.rotation.x = -Math.PI / 2;
-                footprint.position.set(pt.x + (Math.random() - 0.5), 0.03, pt.z + (Math.random() - 0.5));
-
-                // Orient along path
-                footprint.lookAt(next.x, 0.03, next.z);
-                footprint.rotateX(-Math.PI / 2);
-
-                footprint.material.transparent = true;
-                footprint.material.opacity = 0.2;
-                ctx.scene.add(footprint);
+                prints.material.transparent = true;
+                prints.material.opacity = 0.2;
+                ctx.scene.add(prints);
             }
         }
 
@@ -291,6 +299,45 @@ export const PathGenerator = {
         const mesh = new THREE.Mesh(geometry, material);
         mesh.receiveShadow = true;
         ctx.scene.add(mesh);
+
+        // Significantly wider (2.5x), Y=0.01 (Standardized)
+        const frostWidth = width * 1.3;
+        const frostVertices: number[] = [];
+        const frostUVs: number[] = [];
+        const frostIndices: number[] = [];
+
+        for (let i = 0; i < pointsList.length; i++) {
+            const pt = pointsList[i];
+            let tangent = new THREE.Vector3();
+            if (i === 0) {
+                if (pointsList.length > 1) tangent.subVectors(pointsList[i + 1], pt).normalize();
+                else tangent.set(0, 0, 1);
+            } else if (i === pointsList.length - 1) {
+                tangent.subVectors(pt, pointsList[i - 1]).normalize();
+            } else {
+                tangent.subVectors(pointsList[i + 1], pointsList[i - 1]).normalize();
+            }
+            const normal = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+            const p1 = pt.clone().add(normal.clone().multiplyScalar(-frostWidth / 2));
+            const p2 = pt.clone().add(normal.clone().multiplyScalar(frostWidth / 2));
+
+            const yFrost = p1.y + yOffset + 0.01;
+            frostVertices.push(p1.x, yFrost, p1.z, p2.x, yFrost, p2.z);
+            const v = i / segments * (length / frostWidth);
+            frostUVs.push(0, v, 1, v);
+            if (i < pointsList.length - 1) {
+                const b = i * 2;
+                frostIndices.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+            }
+        }
+        const frostGeo = new THREE.BufferGeometry();
+        frostGeo.setAttribute('position', new THREE.Float32BufferAttribute(frostVertices, 3));
+        frostGeo.setAttribute('uv', new THREE.Float32BufferAttribute(frostUVs, 2));
+        frostGeo.setIndex(frostIndices);
+        frostGeo.computeVertexNormals();
+        const frostMesh = new THREE.Mesh(frostGeo, MATERIALS.frost);
+        frostMesh.receiveShadow = true;
+        ctx.scene.add(frostMesh);
 
         // Add to minimap
         const mapSamples = Math.ceil(length / 20);
@@ -305,8 +352,8 @@ export const PathGenerator = {
     /**
      * Creates a stream or water path.
      */
-    createStream: (ctx: SectorContext, points: THREE.Vector3[], width: number) => {
-        const curve = PathGenerator.createPath(ctx, points, width, new THREE.MeshStandardMaterial({
+    createWaterStream: (ctx: SectorContext, points: THREE.Vector3[], width: number) => {
+        const curve = PathGenerator.createPointPath(ctx, points, width, new THREE.MeshStandardMaterial({
             color: 0x004488,
             transparent: true,
             opacity: 0.6,
@@ -332,41 +379,49 @@ export const PathGenerator = {
     /**
      * Creates a formal road (asphalt) with optional lane markings.
      */
-    createRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 16, hasMarkings: boolean = false, material?: THREE.Material) => {
-        const curve = PathGenerator.createPath(ctx, points, width, material || MATERIALS.asphalt, 'ROAD');
+    createRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10,
+        material?: THREE.Material, hasMarkings?: boolean, strict: boolean = false) => {
 
-        if (hasMarkings) {
-            const length = curve.getLength();
-            const segments = Math.ceil(length / 2); // Sample points for markings
-            const pointsList = curve.getSpacedPoints(segments);
-
-            for (let i = 0; i < pointsList.length - 1; i++) {
-                if (i % 6 !== 0) continue; // Every Nth segment is a dash
-
-                const pt = pointsList[i];
-                const next = pointsList[i + 1];
-                const dist = pt.distanceTo(next);
-
-                const marking = new THREE.Mesh(new THREE.PlaneGeometry(0.2, dist + 0.5), new THREE.MeshBasicMaterial({ color: 0x999999, transparent: true, opacity: 0.5 }));
-
-                const mid = new THREE.Vector3().addVectors(pt, next).multiplyScalar(0.5);
-                marking.position.set(mid.x, 0.04, mid.z);
-
-                marking.lookAt(next.x, 0.04, next.z);
-                marking.rotateX(-Math.PI / 2);
-
-                ctx.scene.add(marking);
+        let curve: THREE.Curve<THREE.Vector3>;
+        if (strict) {
+            const c = new THREE.CatmullRomCurve3(points);
+            c.curveType = 'centripetal';
+            curve = c;
+        } else {
+            const path = new THREE.CurvePath<THREE.Vector3>();
+            for (let i = 0; i < points.length - 1; i++) {
+                path.add(new THREE.LineCurve3(points[i], points[i + 1]));
             }
+            curve = path;
         }
-        return curve;
+
+        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, 'ROAD', false, false, strict);
+    },
+
+    createGravelRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, strict: boolean = false) => {
+        return PathGenerator.createRoad(ctx, points, width, MATERIALS.gravel, false, strict);
+    },
+
+    createDirtRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, strict: boolean = false) => {
+        return PathGenerator.createRoad(ctx, points, width, MATERIALS.dirt, false, strict);
+    },
+
+    /**
+     * Creates a walking path (default asphalt).
+     */
+    createPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, material?: THREE.Material, showBlood?: boolean, showFootprints?: boolean, strict: boolean = false) => {
+        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, 'PATH', showBlood, showFootprints, strict);
+    },
+
+    createGravelPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, showBlood?: boolean, showFootprints?: boolean, strict?: boolean) => {
+        return PathGenerator.createPointPath(ctx, points, width, MATERIALS.gravel, 'PATH', showBlood, showFootprints, strict);
     },
 
     /**
      * Creates a dirt or snow path with optional footprint details.
      */
-    createDirtPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, showBlood: boolean = false, showFootprints: boolean = false, material?: THREE.Material) => {
-        // Use gravel or road with lower contrast, or just path decals on the snow ground
-        return PathGenerator.createPath(ctx, points, width, material || MATERIALS.gravel, 'PATH', showBlood, showFootprints);
+    createDirtPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, showBlood?: boolean, showFootprints?: boolean, strict?: boolean) => {
+        return PathGenerator.createPointPath(ctx, points, width, MATERIALS.dirt, 'PATH', showBlood, showFootprints, strict);
     },
 
     /**
@@ -383,7 +438,7 @@ export const PathGenerator = {
 
         const geo = new THREE.PlaneGeometry(options.size, options.size * 1.5); // Aspect ratio for footprints
         const mat = options.material.clone();
-        if (options.color !== undefined) mat.color.setHex(options.color);
+        if ('color' in mat && options.color !== undefined) (mat as any).color.setHex(options.color);
 
         // Using InstancedMesh for performance
         const mesh = new THREE.InstancedMesh(geo, mat, count);
@@ -407,14 +462,14 @@ export const PathGenerator = {
             const jx = (Math.random() - 0.5) * variance;
             const jz = (Math.random() - 0.5) * variance;
 
-            dummy.position.set(pt.x + jx, 0.05, pt.z + jz); // Slightly above ground
+            dummy.position.set(pt.x + jx, pt.y + 0.04, pt.z + jz); // Above path (0.04)
 
             // Orient
             if (options.randomRotation) {
                 dummy.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
             } else {
                 // Orient along path + 90 deg rotation because texture is usually upright
-                dummy.lookAt(pt.x + tangent.x, 0.05, pt.z + tangent.z);
+                dummy.lookAt(pt.x + tangent.x, pt.y + tangent.y + 0.04, pt.z + tangent.z);
                 dummy.rotateX(-Math.PI / 2); // Lay flat
                 dummy.rotateZ(Math.PI); // Adjust texture orientation if needed (heel to toe)
 
@@ -443,8 +498,289 @@ export const PathGenerator = {
             size,
             material: MATERIALS.bloodDecal,
             variance: 0.4,
-            randomRotation: true
         });
-    }
+    },
 
+    createFootprintPath: (ctx: SectorContext, points: THREE.Vector3[], spacing: number = 0.5, size: number = 0.5) => {
+        PathGenerator.createDecalPath(ctx, points, {
+            spacing,
+            size,
+            material: MATERIALS.footprintDecal,
+            variance: 0.2,
+            randomRotation: false
+        });
+    },
+
+    createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
+        let pointsList: THREE.Vector3[];
+
+        if (strict) {
+            const curve = new THREE.CurvePath<THREE.Vector3>();
+            for (let i = 0; i < points.length - 1; i++) {
+                curve.add(new THREE.LineCurve3(points[i], points[i + 1]));
+            }
+            const length = curve.getLength();
+            const steps = Math.ceil(length / 2.0);
+            pointsList = curve.getSpacedPoints(steps);
+        } else {
+            const curve = new THREE.CatmullRomCurve3(points);
+            const length = curve.getLength();
+            const steps = Math.ceil(length / 2.0);
+            pointsList = curve.getSpacedPoints(steps);
+        }
+
+        const colorHex = color === 'white' ? 0xffffff : (color === 'black' ? 0x333333 : 0x4a3728);
+
+        for (let i = 0; i < pointsList.length - 1; i++) {
+            const curr = pointsList[i];
+            const next = pointsList[i + 1];
+            const vec = new THREE.Vector3().subVectors(next, curr);
+            const dist = vec.length();
+            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+
+            // Create fence segment
+            const fence = color === 'mesh' ? ObjectGenerator.createMeshFence(dist, height) : ObjectGenerator.createFence(dist);
+            fence.position.copy(mid);
+            fence.lookAt(next.x, mid.y, next.z);
+
+            // Apply Height Scaling (if not mesh, as mesh uses height param)
+            if (color !== 'mesh' && height !== 1.2) {
+                const scaleY = height / 1.2;
+                fence.scale.y = scaleY;
+            }
+
+            // Apply Color
+            if (color !== 'wood' && color !== 'mesh') {
+                fence.traverse((child: any) => {
+                    if (child.isMesh) {
+                        child.material = child.material.clone();
+                        child.material.color.setHex(colorHex);
+                    }
+                });
+            }
+
+            ctx.scene.add(fence);
+
+            // Collision
+            ctx.obstacles.push({
+                mesh: fence,
+                collider: { type: 'box', size: new THREE.Vector3(0.2, height, dist) }
+            });
+        }
+    },
+
+    /**
+     * Creates a hedge along a path.
+     */
+    createHedge: (ctx: SectorContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
+        const curve = new THREE.CatmullRomCurve3(points);
+        const length = curve.getLength();
+        const steps = Math.ceil(length / 2.0);
+        const pointsList = curve.getSpacedPoints(steps);
+
+        for (let i = 0; i < pointsList.length - 1; i++) {
+            const curr = pointsList[i];
+            const next = pointsList[i + 1];
+            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+
+            const hedge = ObjectGenerator.createHedge(2.2, height, thickness);
+            hedge.position.copy(mid);
+            hedge.lookAt(next.x, mid.y, next.z);
+            ctx.scene.add(hedge);
+
+            ctx.obstacles.push({
+                mesh: hedge,
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) }
+            });
+        }
+    },
+
+    /**
+     * Creates a stone wall along a path.
+     */
+    createStoneWall: (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
+        const curve = new THREE.CatmullRomCurve3(points);
+        const length = curve.getLength();
+        const steps = Math.ceil(length / 1.5); // Adjusted steps for potentially denser stone wall segments
+        const pointsList = curve.getSpacedPoints(steps);
+
+        for (let i = 0; i < pointsList.length - 1; i++) {
+            const curr = pointsList[i];
+            const next = pointsList[i + 1];
+            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+            const dist = curr.distanceTo(next);
+
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, dist), MATERIALS.stone);
+            wall.position.copy(mid);
+            wall.lookAt(next.x, mid.y, next.z);
+            ctx.scene.add(wall);
+            ctx.obstacles.push({ mesh: wall, collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) } });
+        }
+    },
+
+    /**
+     * Creates a metal guardrail along a path.
+     */
+    /**
+     * Creates a metal guardrail along a path.
+     * @param floating If true, guardrail is elevated and collision only covers the rail itself, not the ground below.
+     */
+    createGuardrail: (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
+        const curve = new THREE.CatmullRomCurve3(points);
+        const length = curve.getLength();
+        // Posts every 2 meters
+        const steps = Math.ceil(length / 2.0);
+        const pointsList = curve.getSpacedPoints(steps);
+
+        const postGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.0, 6);
+        const railGeo = new THREE.BoxGeometry(0.15, 0.3, 1); // scalable Z
+
+        for (let i = 0; i < pointsList.length; i++) {
+            // Post
+            const pt = pointsList[i];
+            const post = new THREE.Mesh(postGeo, MATERIALS.guardrail);
+            post.position.copy(pt).add(new THREE.Vector3(0, 0.5, 0));
+            post.castShadow = true;
+            ctx.scene.add(post);
+
+            // Rail segment to next point
+            if (i < pointsList.length - 1) {
+                const next = pointsList[i + 1];
+                const mid = new THREE.Vector3().addVectors(pt, next).multiplyScalar(0.5);
+                const dist = pt.distanceTo(next);
+
+                const rail = new THREE.Mesh(railGeo, MATERIALS.guardrail);
+                rail.position.copy(mid).add(new THREE.Vector3(0, 0.8, 0)); // 0.8m height
+                rail.scale.z = dist; // Stretch to fit
+                rail.lookAt(next.x, mid.y + 0.8, next.z);
+                rail.castShadow = true;
+                ctx.scene.add(rail);
+
+                // Collision
+                // If floating, we only collide with the rail itself (high up).
+                // If NOT floating, we extend the collider to the ground.
+                const collHeight = floating ? 0.3 : (mid.y + 1.0);
+                const collY = floating ? (mid.y + 0.8) : (collHeight / 2);
+
+                const colGeo = new THREE.BoxGeometry(0.2, collHeight, dist);
+                const colMesh = new THREE.Mesh(colGeo);
+                colMesh.position.set(mid.x, collY, mid.z);
+                colMesh.lookAt(next.x, collY, next.z);
+                colMesh.visible = false;
+                ctx.scene.add(colMesh);
+
+                ctx.obstacles.push({
+                    mesh: colMesh,
+                    collider: { type: 'box', size: new THREE.Vector3(0.2, collHeight, dist) }
+                });
+            }
+        }
+    },
+
+    /**
+     * Creates a steep-sided mound (embankment) along a path.
+     */
+    createEmbankment: (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
+        // Create a straight-line path for strict embankment control (overpass usually straight)
+        const curve = new THREE.CatmullRomCurve3(points);
+        curve.curveType = 'centripetal';
+        const length = curve.getLength();
+        const segments = Math.ceil(length / 2);
+        const pointsList = curve.getSpacedPoints(segments);
+
+        const vertices: number[] = [];
+        const indices: number[] = [];
+        const uvs: number[] = [];
+
+        for (let i = 0; i < pointsList.length; i++) {
+            const pt = pointsList[i];
+            let tangent = new THREE.Vector3();
+            if (i === 0) {
+                if (pointsList.length > 1) tangent.subVectors(pointsList[1], pt).normalize();
+            } else if (i === pointsList.length - 1) {
+                tangent.subVectors(pt, pointsList[i - 1]).normalize();
+            } else {
+                tangent.subVectors(pointsList[i + 1], pointsList[i - 1]).normalize();
+            }
+
+            const up = new THREE.Vector3(0, 1, 0);
+            const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+
+            // Trapezoidal Layout
+            // Top Width (Road Bed)
+            const topW = width * 1.0;
+            // Bottom Width (Base of slope) -> Significantly wider to create the slope
+            const botW = width * 1.2; // Slope ratio ~1:1 or 1:1.5 depending on height
+
+            const bl = pt.clone().add(normal.clone().multiplyScalar(-botW / 2)).setY(0.1);
+            const tl = pt.clone().add(normal.clone().multiplyScalar(-topW / 2)).setY(height);
+            const tr = pt.clone().add(normal.clone().multiplyScalar(topW / 2)).setY(height);
+            const br = pt.clone().add(normal.clone().multiplyScalar(botW / 2)).setY(0.1);
+
+            vertices.push(bl.x, bl.y, bl.z, tl.x, tl.y, tl.z, tr.x, tr.y, tr.z, br.x, br.y, br.z);
+
+            // Correct UV Mapping with proper tiling along length
+            const tilingFactor = 2.0; // Increased tiling for gravel density
+            const v = (i / segments) * (length / width) * tilingFactor;
+
+            // Map UVs to follow the profile: 0->0.3(slope)->0.7(top)->1.0(slope)
+            uvs.push(0, v, 0.3, v, 0.7, v, 1, v);
+
+            if (i > 0) {
+                const off = (i - 1) * 4;
+                const curr = i * 4;
+                // Left Slope
+                indices.push(off + 0, curr + 0, off + 1, off + 1, curr + 0, curr + 1);
+                // Top Roadbed
+                indices.push(off + 1, curr + 1, off + 2, off + 2, curr + 1, curr + 2);
+                // Right Slope
+                indices.push(off + 2, curr + 2, off + 3, off + 3, curr + 2, curr + 3);
+                // Bottom
+                indices.push(off + 3, curr + 3, off + 0, off + 0, curr + 3, curr + 0);
+            }
+        }
+
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
+        // Add End Caps (Start and End of the segment)
+        const lastIdx = (pointsList.length - 1) * 4;
+        // Start Cap (face backwards)
+        indices.push(0, 1, 2, 0, 2, 3);
+        // End Cap (face forward)
+        indices.push(lastIdx + 0, lastIdx + 2, lastIdx + 1, lastIdx + 0, lastIdx + 3, lastIdx + 2);
+
+        geo.setIndex(indices);
+        geo.computeVertexNormals();
+
+        // Use the passed material or fallback to dirt, then clone and apply DoubleSide
+        const finalMat = (material || MATERIALS.dirt).clone();
+        finalMat.side = THREE.DoubleSide;
+
+        const mesh = new THREE.Mesh(geo, finalMat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        ctx.scene.add(mesh);
+
+        const colSteps = Math.ceil(length / 5);
+        for (let i = 0; i < colSteps; i++) {
+            const t = (i + 0.5) / colSteps;
+            const pt = curve.getPoint(t);
+            const tan = curve.getTangent(t);
+            const colLen = (length / colSteps) * 1.05; // Slight overlap
+
+            // Reduced collider width to prevent blocking underlying paths (e.g. tunnels)
+            const colWidth = width * 0.8;
+
+            const col = new THREE.Mesh(new THREE.BoxGeometry(colWidth, height, colLen));
+            col.position.copy(pt).setY(height / 2);
+            col.lookAt(pt.clone().add(tan).setY(height / 2));
+
+            col.visible = false; // Always invisible, only for physics and internal debug
+            col.updateMatrixWorld();
+            ctx.scene.add(col);
+            ctx.obstacles.push({ mesh: col, collider: { type: 'box', size: new THREE.Vector3(colWidth, height, colLen) } });
+        }
+    }
 };

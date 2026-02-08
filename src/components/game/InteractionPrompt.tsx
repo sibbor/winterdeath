@@ -38,7 +38,7 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, screenPos, 
         transform: 'translate(-50%, -50%)',
         position: 'absolute'
     } : {
-        bottom: '8rem',
+        bottom: '12rem',
         left: '50%',
         transform: 'translateX(-50%)',
         position: 'absolute'

@@ -8,6 +8,7 @@ interface CinematicBubbleProps {
     isVisible: boolean;
     domRef: React.RefObject<HTMLDivElement>;
     tailPosition?: 'bottom' | 'top' | 'left' | 'right';
+    isMobileDevice?: boolean;
 }
 
 interface TextToken {
@@ -15,7 +16,7 @@ interface TextToken {
     content: string;
 }
 
-const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, isVisible, domRef, tailPosition = 'bottom' }) => {
+const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, isVisible, domRef, tailPosition = 'bottom', isMobileDevice }) => {
     const [visibleCount, setVisibleCount] = useState(0);
     const [opacity, setOpacity] = useState(0);
     const timerRef = useRef<number | null>(null);
@@ -172,13 +173,14 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
                 left: 0,
                 top: 0,
                 opacity: opacity,
-                transform: tail.containerTransform,
+                transform: `${tail.containerTransform} ${isMobileDevice ? 'scale(0.75)' : 'scale(1)'}`,
+                transformOrigin: 'center center',
                 transition: 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease-out'
             }}
         >
             <div className="relative">
                 <div
-                    className={`px-4 md:px-6 py-3 md:py-4 rounded-2xl shadow-xl max-w-[280px] md:max-w-sm border-2 ${textColor}`}
+                    className={`px-4 md:px-6 py-3 md:py-4 rounded-2xl shadow-xl max-w-[340px] md:max-w-sm border-2 ${textColor}`}
                     style={{ backgroundColor: bgColor, borderColor: borderColor }}
                 >
                     <h4 className="text-lg font-black uppercase tracking-widest opacity-70 mb-1">{speakerName}</h4>

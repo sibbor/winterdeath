@@ -65,19 +65,19 @@ Plötsligt hörs en hög explosion och marken skälver. Den kommer ifrån tågst
 Ett gammalt diesellok står på tomgång och spyr ut tung, svart rök. Robert tar sig fram mellan containrar och tågvagnarna. När Robert slutligen når tågloket anträffar han Loke.
 
 Dialog:
-Robert: Loke! Håll dig nära mig. Håll ficklampan släckt om du inte absolut behöver den.
-Loke: Pappa... jag är rädd. Var är mamma och Esme?
-Robert: Jag vet inte än, men vi kommer att hitta dem. De är tuffa.
-Robert: (Nickar bestämt, fast hans hand skakar)
-Loke: De där sakerna vi såg... det var inte människor, eller hur?
-Robert: Nej. De var... sjuka. Mycket sjuka.
-Loke: De såg ut som zomb-... vänta, jag hör någonting.
-Robert: Huka dig! Bakom de där lådorna!
-Loke: (Viskande) Där! Är det... en människa?
-Loke: (Robert drar sitt vapen och kisar ut i snön)
-Robert: Stanna här. Rör dig inte förrän jag säger till.
-Loke: Vänta! Pappa, kolla... det är bara en soptunna. Vinden... den spelar oss ett spratt.
-Robert: (Andas ut långsamt) Mina nerver är helt slut. Låt oss fortsätta. Snabbt.
+Robert: LOKE!!
+Loke: PAPPA?! Du är här! Vi försökte nå dig. Vi blev attackerade! Av ZOMBIER! Det var blod överallt...
+Robert: /Lugn, grabben./ Titta på mig. Är du skadad? Är du okej?
+(Kramar Loke hårt)
+Loke: De andra är inte här, pappa...
+Robert: Vi kommer hitta dem, jag lovar.
+Loke: Nathalie sa att vi skulle försöka ta tåget till Dalsjöfors. När vi hittade tåget hoppade jag ombord, men sen... sen kom en... enorm zombie. Nathalie sa att jag var säker här men att de var tvungna att gömma sig.
+Robert: Loke, du gjorde helt rätt som lyssnade på Nathalie.
+Loke: Men pappa, Esmeralda och Nathalie var så RÄDDA! Jag såg det i deras blick. Och Jordan grät hysteriskt... De sprang jättefort, åt det hållet.
+(Loke pekar mot spåren som leder mot berget)
+Robert: Du är modig som hanterade det här ensam, men från och med nu håller vi ihop oavsett vad!
+Robert: Kom igen, nu går vi till lägret jag byggde så att vi kan förbereda oss på att hitta de andra!
+Loke: WOW! Ett läger? Finns det mat? Värme? VAPEN?!
 
 [BOSS FIGHT #1]
 
@@ -94,30 +94,31 @@ Inuti väntar en labyrint av betonggångar, rostiga rörsystem och mörka förr�
 Snart skymtar de den massiva stålporten i bergväggen – ingången till det gamla skyddsrummet från kalla krigets dagar. Robert bankar på stålporten.
 
 Dialog:
-Robert: (Robert sparkar på bunkerns tunga ståldörr. Den rör sig inte en millimeter.)
-Unknown: (Dämpad röst inifrån) GÅ HÄRIFRÅN! VI HAR SAGT ATT DET INTE FINNS PLATS!
-Unknown: (Robert ropar genom den förstärkta luckan)
-Robert: MIN SON ÄR DÄR INNE! ÖPPNA DÖRREN ELLER SÅ SPRÄNGER JÄG DEN I BITAR!
-Unknown: (Tystnad... sedan glider luckan upp. Ett par skräckslagna ögon kikar ut.)
-Robert: Konstapeln...? Är det du?
-Unknown: Öppna dörren. NU.
-Unknown: (Låsen gnisslar och stönar. Dörren svänger långsamt upp.)
-Robert: Var är han? Var är Jordan?
-Unknown: (Den överlevande pekar mot ett litet, mörkt rum längst in.)
-Unknown: Han är... han är där inne. Men du borde inte ha kommit tillbaka. De kommer...
-Robert: Vilka kommer?
-Unknown: (Ett lågt, gutturalt vrål ekas från tunnlarna bakom dem.)
-Robert: Gå in! Stäng dörren!
-Unknown: Det är för sent. Stalkern har fått vittring.
-Robert: JORDAN! PAPPA ÄR HÄR!
-Unknown: (En liten pojke springer ut, snyftande, och kastar sig mot Robert.)
-Jordan: PAPPA! PAPPA! DU HITTADE MIG!
-Loke: Jordan! Du är okej!
-Jordan: Jag visste att du skulle komma... men det stora monstret... det följde efter oss.
-Robert: Schh, det är okej. Jag har dig nu. Loke, vaka vid dörren.
-Loke: PAPPA! NÅGOT KLÄTTRAR PÅ VÄGGARNA!
-Unknown: (En massiv, blek varelse släpper sig ner från taket och väser.)
-Robert: BACKA! STÄLL ER BAKOM MIG!
+(Bultar hårt på ståldörren)
+Röst: Stanna där! Det är fullt! DRA ÅT HELVETE!
+(Sticker ut en gevärspipa genom den lilla luckan i porten och siktar på Robert)
+Robert: Jag är polis. Lägg ner vapnet och lyssna noga.
+Röst: SKITER FULLSTÄNDIGT I DET! FÖRSVINN ANNARS SKJUTER JAG SKALLEN AV DIG!
+Robert: Jag kom hit för att leta efter min familj - Nathalie, Esmeralda och Jordan. Inget annat.
+(Tar bort gevärspipan från luckan)
+Röst: Pojken... Han är här inne. I säkerhet. Men... de andra är borta.
+Robert: Borta?! Var är de?
+Röst: Vi hade fullt. Kvinnan sa åt oss att skydda pojken.... Jordan. Tills de kom tillbaka med hjälp.
+Röst: Vi gick med på att skydda honom. Men tiden har gått. Jag tror att flickan och kvinnan kan ha...
+Robert: Tyst nu. Sa de vart de var på väg?
+Röst: Nej, men jag hörde dem nämna 'radio' och 'mast'. De kysste pojken farväl och sprang ut genom tunnlarna.
+Robert: Okej. Öppna porten nu.
+Röst: /Gör oss inte illa, okej? Vi är så ledsna!!/
+Robert: ÖPPNA PORTEN.
+(Öppnar stålporten som leder in till skyddsrummet)
+
+Jordan: PAPPA! LOKE!
+Robert: Åh, JORDAN!
+Loke: Vår modiga lilla kille.
+Jordan: Pappa, jag tror att de har begett sig till masten!
+Robert: Yes, absolut. Vi drar dit, grabbar!
+Överlevande: Ehhh... Lycka till!
+(Slår igen metallporten med en öronbedövande smäll)
 
 [BOSS FIGHT #2]
 
@@ -137,20 +138,20 @@ Den enorma masten uppenbar sig likt ett metallskelett i mörkret. En lampa snura
 En välbekant - och älskad - röst svarar inifrån... Esmeralda!
 
 Dialog:
-Robert: Vänta... signalen blir starkare. Esmeralda, kolla din telefon!
-Esmeralda: Den fungerar! Jag har en stapel! Pappa, det är en röst... det låter som mamma!
-Robert: Va?! Ge mig den!
-Robert: (Robert lyssnar på radion, statiskt brus knastrar i vinden.)
-Alla: (Familjen samlas runt, håller andan.)
-Esmeralda: Pappa? Kan du höra henne?
-Robert: Nathalie! Kan du höra mig? Vi är vid masten!
-Radio: (Statiskt brus... sedan en svag, förvrängd röst) ...Robert...? Är det... du?
-Esmeralda: MAMMA!
-Radio: *brus* ...kan inte... stanna här... *brus* ...industriområdet... bilfirman... *brus*
-Robert: Nathalie! Vi kommer! Stanna där du är!
-Radio: *brus* ...inte... säkert... *brus* ...den följer efter... *brus*
-Robert: Signalen dog. Men hon är vid bilfirman i industriområdet.
-Robert: Vi måste röra oss. Nu. Innan snöstormen blir värre.
+Robert: HALLÅ? Är det någon här?
+Esmeralda: PAPPA! Jag trodde aldrig... jag såg dig inte i mörkret...
+Robert: Åh, ESMERALDA! Öppna dörren, jag har Loke och Jordan med mig!
+Robert: Jag är så sjukt glad att se dig! Jag älskar er, ungar!
+(Gruppkram)
+Esmeralda: Pappa, vi försökte starta masten för att nå DIG! Jag och Nathalie blev jagade av två monster... Nathalie sprang iväg för att locka bort dem.
+Robert: Vi löser det här – tillsammans!
+Esmeralda: Jag ska bara göra några sista justeringar... sen så!
+(Trycker på knappar och drar i spakar... *slår* på kontrollpanelen *högfrekvent ljud*)
+*radiostörningar*
+Robert: (Pratar i radio) NATHALIE. KOM IN.
+Nathalie: ÄLSKLING! Jag... *radiostörningar*
+Robert: SKIT! Det var Nathalie. Vi måste hitta bättre mottagning!
+Robert: Följ med mig ungar.
 
 [BOSS FIGHT #3]
 
@@ -165,7 +166,7 @@ Plötsligt sprakar det i radion och de får kontakt med Nathalie igen. Orden fal
 
 Nathalie: (Viskar i radio) /Måste viska.../ *brus* /skroten.../ *brus* /monster.../
 Robert: (Pratar i radio) Uppfattat! KOM IN.
-Robert: (Panik stiger) Skynda barn! Vi måste rädda Nathalie!
+Robert: (Paniken stiger) Skynda barn! Vi måste rädda Nathalie!
 Loke: Den som skadar henne ligger illa till!
 Esmeralda: Ja, om någon försöker ska vi... KROSSA DEM!
 Jordan: KROSSA!
@@ -178,17 +179,17 @@ Robert: (Pratar i radio) Vi kommer efter dig så fort vi kan, älskling! KOM IN.
 Nathalie: (Viskar i radio) /Var försiktig... Ett monster jagade mig hit. Det är kvar här. Jag hör det, men jag gömmer mig. KOM IN./
 Robert: (Pratar i radio) Vi löser det här tillsammans! KOM IN.
 Robert: (Gör tecken till barnen) /Schh... Vi måste vara tysta nu./
-Loke, Esmeralda, Jordan: (Nickar)
+(Nickar)
 Robert: (Viskar i radio) /Vi är här nu! Var är du? KOM IN./
 Nathalie: (Viskar i radio) /Byggnaden. KOM IN./
 Robert: (Viskar i radio) /Vi ses snart! KOM IN./
 Robert: (Pekar mot byggnaden) /Hon är där inne. Här är planen: På mitt räknande till tre springer ni till byggnaden och ni tre tar er till Nathalie. Jag har lite ouppgjorda affärer med monstret.../
-Barnen: (Nickar instämmande)
-Robert: (Viskar i radio) /Öppna dörren om 10 sek. Barnen kommer till dig. KOM IN./
+(Nickar instämmande)
+Robert: (Viskar i radio) /Öppna dörren om 10 sekunder. Barnen kommer till dig. KOM IN./
 Nathalie: (Viskar i radio) /Okej... men du då?/
 Robert: (Viskar i radio) /Jag distraherar monstret. Redo? KOM IN./
 Nathalie: (Viskar i radio) /Redo. KOM IN./
-Robert: (Viskar) /1... 2... 3, spring!/
+(Viskar) /1... 2... 3, spring!/
 Robert: KOM OCH TA MIG DÅ, DIN JÄVEL!
 
 Allt eftersom radiosignalen förbättras får de mer kontakt. De får reda på att Nathalie är i fara och får skynda sig för att komma till undsättning. Vid entrén till skroten blänker något i snön; [COLLECTIBLE: Nathalies vigselring]. Den måste ha glidit av hennes finger i kylan. Inne i kontorsbyggnaden, bland krossat glas, hittar de även [COLLECTIBLE: Nathalies polisbricka].

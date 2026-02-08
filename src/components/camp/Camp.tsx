@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { PlayerStats, WeaponType } from '../../types';
-import { WEAPONS, MAP_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
+import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
 import { soundManager } from '../../utils/sound';
 import { t } from '../../utils/i18n';
 import { ModelFactory } from '../../utils/assets';
@@ -11,6 +11,7 @@ import { createProceduralTextures } from '../../utils/assets';
 import { Engine, GraphicsSettings } from '../../core/engine/Engine';
 import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
+import { WeatherType } from '../../types';
 
 // Import UI Components
 import CampHUD from './CampHUD';
@@ -33,15 +34,17 @@ interface CampProps {
     currentMap: number;
     debugMode: boolean;
     onToggleDebug: (val: boolean) => void;
-    familyMembersFound: number[];
+    rescuedFamilyIndices: number[];
     isMapLoaded: boolean;
-    bossesDefeated: number[];
+    deadBossIndices: number[];
     onResetGame: () => void;
     onSaveGraphics: (graphics: GraphicsSettings) => void;
     initialGraphics?: GraphicsSettings;
     onCampLoaded?: () => void;
     onUpdateHUD: (data: any) => void;
     isMobileDevice?: boolean;
+    weather: WeatherType;
+    hasCheckpoint?: boolean;
 }
 
 const STATIONS = [
@@ -51,7 +54,7 @@ const STATIONS = [
     { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
 ];
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, familyMembersFound, isMapLoaded, bossesDefeated, hasCheckpoint, onUpdateHUD, onSaveGraphics, initialGraphics, onResetGame, onCampLoaded, isMobileDevice }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, rescuedFamilyIndices, isMapLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const lastDrawCallsRef = useRef(0);
@@ -153,6 +156,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         // Reset Scene for Camp
         scene.clear();
+
         camera.position.set(0, 10, 22);
         camera.far = 2500; // Increase draw distance for stars (r=1800)
         camera.updateProjectionMatrix();
@@ -173,7 +177,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, STATIONS);
 
         // Initialize Environment (Sky, Campfire, Particles, Wind)
-        envStateRef.current = CampEnvironment.initEffects(scene, textures);
+        envStateRef.current = CampEnvironment.initEffects(scene, textures, weather);
 
         // --- FAMILY MEMBERS ---
         const familyGroup = new THREE.Group();
@@ -182,7 +186,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         if (debugMode) FAMILY_MEMBERS.forEach(m => activeMembers.push(m));
         else {
-            familyMembersFound.forEach(mapId => {
+            (rescuedFamilyIndices || []).forEach(mapId => {
                 if (mapId < 4) activeMembers.push(FAMILY_MEMBERS[mapId]);
                 else if (mapId === 4) { activeMembers.push(FAMILY_MEMBERS[4]); activeMembers.push(FAMILY_MEMBERS[5]); }
             });
@@ -399,7 +403,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             // We only unmount it if necessary, but mount() handles unparenting
             activeChats.current.forEach(c => { if (c.element.parentNode) c.element.parentNode.removeChild(c.element); });
         };
-    }, [familyMembersFound, debugMode, textures]);
+    }, [rescuedFamilyIndices, debugMode, textures]);
 
     const openModal = (id: typeof activeModal) => setActiveModal(id);
     const closeModal = () => { soundManager.playUiClick(); setActiveModal(null); };
@@ -417,12 +421,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             {!activeModal && (
                 <CampHUD
-                    stats={stats} hoveredStation={hoveredStation} currentMapName={t(MAP_THEMES[currentMap]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
+                    stats={stats} hoveredStation={hoveredStation} currentMapName={t(SECTOR_THEMES[currentMap]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(WEAPONS[currentLoadout.primary].displayName), sec: t(WEAPONS[currentLoadout.secondary].displayName), thr: t(WEAPONS[currentLoadout.throwable].displayName) }}
                     onOpenStats={() => openModal('stats')} onOpenArmory={() => openModal('armory')} onOpenSkills={() => openModal('skills')}
                     onOpenSettings={() => openModal('settings')} onStartSector={() => { }}
                     debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => openModal('reset_confirm')}
                     onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 10 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
+                    isMobileDevice={isMobileDevice}
                 />
             )}
 
@@ -442,7 +447,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     onSaveStats({ ...stats, viewedCollectibles: updated });
                 }}
             />}
-            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} familyMembersFound={familyMembersFound} bossesDefeated={bossesDefeated} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} isMobileDevice={isMobileDevice} />}
+            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} rescuedFamilyIndices={rescuedFamilyIndices} deadBossIndices={deadBossIndices} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} isMobileDevice={isMobileDevice} />}
             {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} isMobileDevice={isMobileDevice} />}
             {activeModal === 'settings' && (
                 <ScreenSettings

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ModelFactory } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
-import { Enemy } from '../../types/enemy';
+import { Enemy, AIState } from '../../types/enemy';
 
 export const EnemySpawner = {
     spawn: (
@@ -39,9 +39,15 @@ export const EnemySpawner = {
             typeKey = forcedType;
             typeData = ZOMBIE_TYPES[forcedType as keyof typeof ZOMBIE_TYPES];
         } else {
-            if (roll > 0.95) { typeData = ZOMBIE_TYPES.TANK; typeKey = 'TANK'; }
-            else if (roll > 0.85) { typeData = ZOMBIE_TYPES.BOMBER; typeKey = 'BOMBER'; }
-            else if (roll > 0.7) { typeData = ZOMBIE_TYPES.RUNNER; typeKey = 'RUNNER'; }
+            // Updated Rates: Walker 70%, Runner 15%, Tank 10%, Bomber 5%
+            // Random is 0-1.
+            // Bomber: 0.95 - 1.0 (5%)
+            // Tank: 0.85 - 0.95 (10%)
+            // Runner: 0.70 - 0.85 (15%)
+            // Walker: 0 - 0.70 (70%)
+            if (roll > 0.95) { typeData = ZOMBIE_TYPES.BOMBER; typeKey = 'BOMBER'; }
+            else if (roll > 0.85) { typeData = ZOMBIE_TYPES.TANK; typeKey = 'TANK'; }
+            else if (roll > 0.70) { typeData = ZOMBIE_TYPES.RUNNER; typeKey = 'RUNNER'; }
         }
 
         const isTank = typeKey === 'TANK';
@@ -52,7 +58,9 @@ export const EnemySpawner = {
 
         scene.add(g);
 
-        return {
+        scene.add(g);
+
+        const enemy: Enemy = {
             mesh: g,
             type: typeKey,
             hp: typeData.hp,
@@ -75,8 +83,28 @@ export const EnemySpawner = {
             deathTimer: 0,
             velocity: new THREE.Vector3(0, 0, 0),
             fallForward: false,
-            bloodSpawned: false
+            bloodSpawned: false,
+
+            // AI Fields
+            state: AIState.IDLE,
+            spawnPos: new THREE.Vector3(x, 0, z),
+            lastSeenPos: null,
+            lastSeenTime: 0,
+            searchTimer: 0,
+            hearingThreshold: 1.0,
+            idleTimer: 0,
+
+            // Mechanics
+            isGrappling: false,
+            grappleTimer: 0,
+            explosionTimer: 0,
+            abilityCooldown: 0,
+            stunTimer: 0
         };
+
+        g.userData.entity = enemy;
+
+        return enemy;
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any): Enemy => {
@@ -111,7 +139,45 @@ export const EnemySpawner = {
             deathTimer: 0,
             velocity: new THREE.Vector3(0, 0, 0),
             fallForward: false,
-            bloodSpawned: false
+            bloodSpawned: false,
+
+            // AI Fields
+            state: AIState.IDLE,
+            spawnPos: new THREE.Vector3(pos.x, 0, pos.z),
+            lastSeenPos: null,
+            lastSeenTime: 0,
+            searchTimer: 0,
+            hearingThreshold: 1.0,
+            idleTimer: 0,
+
+            isGrappling: false,
+            grappleTimer: 0,
+            explosionTimer: 0,
+            abilityCooldown: 0
         };
+    },
+
+    spawnHorde: (
+        scene: THREE.Scene,
+        startPos: THREE.Vector3,
+        count: number,
+        bossSpawned: boolean,
+        currentCount: number
+    ): Enemy[] => {
+        const horde: Enemy[] = [];
+        for (let i = 0; i < count; i++) {
+            // Tight grouping: 3m radius
+            const offsetX = (Math.random() - 0.5) * 6;
+            const offsetZ = (Math.random() - 0.5) * 6;
+            const spawnPos = new THREE.Vector3(startPos.x + offsetX, 0, startPos.z + offsetZ);
+
+            // Allow random types within horde? Or forced?
+            // "Pre-defined hordes" usually implies mixed content or specific type.
+            // Let's use standard random logic but respecting caps.
+
+            const enemy = EnemySpawner.spawn(scene, startPos, undefined, spawnPos, bossSpawned, currentCount + i);
+            if (enemy) horde.push(enemy);
+        }
+        return horde;
     }
 };

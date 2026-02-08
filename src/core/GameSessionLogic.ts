@@ -8,12 +8,23 @@ import { WEAPONS } from '../content/constants';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 
+export interface NoiseEvent {
+    pos: THREE.Vector3;
+    radius: number;
+    type: 'footstep' | 'gunshot' | 'explosion' | 'other';
+    time: number;
+}
+
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
     public isMobile: boolean = false;
     public debugMode: boolean = false;
+    public cameraAngle: number = 0;
     public state!: RuntimeState;
     private systems: System[] = [];
+
+    // Sound System
+    public noiseEvents: NoiseEvent[] = [];
 
     constructor(public engine: Engine) { }
 
@@ -39,6 +50,9 @@ export class GameSessionLogic {
             throwChargeStart: 0,
             enemies: [] as Enemy[],
             particles: [] as any[],
+            activeEffects: [] as any[],
+            projectiles: [] as any[],
+            fireZones: [] as any[],
             scrapItems: [] as ScrapItem[],
             chests: [] as any[],
             cameraShake: 0, lastHudUpdate: 0, startTime: performance.now(), lastShotTime: 0,
@@ -51,7 +65,7 @@ export class GameSessionLogic {
             visitedPOIs: props.stats.visitedPOIs || [],
             familyFound: !!props.familyAlreadyRescued, familyExtracted: false,
             chestsOpened: 0, bigChestsOpened: 0, killsInRun: 0, isInteractionOpen: false, bossSpawned: false, bloodDecals: [] as any[], lastDamageTime: 0, lastStaminaUseTime: 0,
-            noiseLevel: 0, speakBounce: 0, hurtShake: 0,
+            noiseLevel: 0, speakBounce: 0, hurtShake: 0, shakeIntensity: 0,
             sectorState: {} as SectorState,
             triggers: [] as SectorTrigger[],
             obstacles: [] as Obstacle[],
@@ -73,7 +87,9 @@ export class GameSessionLogic {
             interactionType: null,
             interactionTargetPos: null,
             bossIntroActive: false,
-            sessionCollectiblesFound: []
+            sessionCollectiblesFound: [],
+            collectiblesFound: props.stats.collectiblesFound || [],
+            mapItems: []
         };
     }
 
@@ -82,11 +98,26 @@ export class GameSessionLogic {
     }
 
     update(dt: number) {
+        // Clear noise events from previous frame
+        this.noiseEvents = [];
+
         if (!this.state) return;
         const now = performance.now();
         for (const system of this.systems) {
             system.update(this, dt, now);
         }
+    }
+
+    makeNoise(pos: THREE.Vector3, radius: number, type: 'footstep' | 'gunshot' | 'explosion' | 'other' = 'other') {
+        this.noiseEvents.push({
+            pos: pos.clone(),
+            radius,
+            type,
+            time: performance.now()
+        });
+
+        // Visual debug?
+        // if (this.debugMode) { ... }
     }
 
     addSystem(system: System) {
@@ -108,6 +139,5 @@ export class GameSessionLogic {
             if (sys.cleanup) sys.cleanup(this);
         });
         this.systems = [];
-        this.engine.dispose();
     }
 }

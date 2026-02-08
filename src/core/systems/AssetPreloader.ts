@@ -3,8 +3,12 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
 
+let warmedUp = false;
+let lastMapIndex = -1;
+
 export const AssetPreloader = {
-    warmup: (renderer: THREE.WebGLRenderer, envConfig: any) => {
+    warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, yieldToMain?: () => Promise<void>) => {
+        if (warmedUp) return;
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
@@ -32,30 +36,30 @@ export const AssetPreloader = {
         }
 
         // 2. Add One of Every Material/Geometry Combo
-        // We place them behind the camera just in case, though this scene isn't rendered to screen
         const dummyRoot = new THREE.Group();
         dummyRoot.position.set(0, 0, -10);
         scene.add(dummyRoot);
 
         // -- Particles & Projectiles --
         const matKeys = Object.keys(MATERIALS) as (keyof typeof MATERIALS)[];
-        matKeys.forEach(k => {
+        for (const k of matKeys) {
             const mat = MATERIALS[k];
             // Skip large ground/road textures to save time, focus on common shaders
-            if (k === 'road' || k === 'asphalt' || k === 'snow' || k === 'concrete') return;
+            if (k === 'road' || k === 'asphalt' || k === 'snow' || k === 'concrete') continue;
 
             const mesh = new THREE.Mesh(GEOMETRY.box, mat);
             dummyRoot.add(mesh);
 
-            // If it's a transparent/emissive material, also test on a plane/sphere
             if (mat instanceof THREE.MeshBasicMaterial && mat.transparent) {
                 const p = new THREE.Mesh(GEOMETRY.plane, mat);
                 dummyRoot.add(p);
             }
-        });
+
+            // Yield every few materials to keep UI alive
+            if (yieldToMain && matKeys.indexOf(k) % 5 === 0) await yieldToMain();
+        }
 
         // -- Specific Weapon Geometries --
-        // These often have different shader requirements than boxes
         const bullet = new THREE.Mesh(GEOMETRY.bullet, MATERIALS.bullet);
         dummyRoot.add(bullet);
         const grenade = new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade);
@@ -65,76 +69,149 @@ export const AssetPreloader = {
         const landingMarker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
         dummyRoot.add(landingMarker);
 
-        // -- Characters (Skinned Meshes / Groups) --
-        // Player
+        if (yieldToMain) await yieldToMain();
+
+        // -- Characters --
         const player = ModelFactory.createPlayer();
         dummyRoot.add(player);
 
-        // Enemies
-        Object.keys(ZOMBIE_TYPES).forEach(type => {
+        const zombieKeys = Object.keys(ZOMBIE_TYPES);
+        for (const type of zombieKeys) {
             const z = ModelFactory.createZombie(type, ZOMBIE_TYPES[type as keyof typeof ZOMBIE_TYPES], false);
             dummyRoot.add(z);
-        });
+            if (yieldToMain) await yieldToMain();
+        }
 
-        // Boss (Generic placeholder using Boss 0 data to warm up boss shaders)
         const boss = ModelFactory.createZombie('Boss', { color: 0xff0000, scale: 3 } as any, true);
         dummyRoot.add(boss);
 
         // -- Environmental Props --
-        // Trunk & Stylized Foliage
         const trunk = new THREE.Mesh(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
         dummyRoot.add(trunk);
         const foliage = new THREE.Mesh(GEOMETRY.foliageCluster, MATERIALS.treeLeaves);
         dummyRoot.add(foliage);
 
-        // Interactive Props
         const barrel = new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrel);
         dummyRoot.add(barrel);
         const explosiveBarrel = new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrelExplosive);
         dummyRoot.add(explosiveBarrel);
+
         const chest = new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard);
         dummyRoot.add(chest);
+        const chestLid = new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestStandard);
+        dummyRoot.add(chestLid);
+        const chestBig = new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestBig);
+        dummyRoot.add(chestBig);
+
         const scrap = new THREE.Mesh(GEOMETRY.scrap, MATERIALS.scrap);
         dummyRoot.add(scrap);
+
+        // -- Instanced Mesh Warmup --
+        const instancedScrap = new THREE.InstancedMesh(GEOMETRY.scrap, MATERIALS.scrap, 10);
+        instancedScrap.count = 5;
+        for (let i = 0; i < 5; i++) {
+            instancedScrap.setMatrixAt(i, new THREE.Matrix4().setPosition(i, 0, 0));
+        }
+        dummyRoot.add(instancedScrap);
 
         // -- Weather & Effects --
         const fog = new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog);
         dummyRoot.add(fog);
+
+        const snow = new THREE.Mesh(GEOMETRY.weatherParticle, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
+        dummyRoot.add(snow);
+        const rain = new THREE.Mesh(GEOMETRY.weatherParticle, new THREE.MeshBasicMaterial({ color: 0xaaaaff, transparent: true, opacity: 0.4 }));
+        rain.scale.set(0.5, 4.0, 1.0);
+        dummyRoot.add(rain);
+
+        const gore = new THREE.Mesh(GEOMETRY.gore, new THREE.MeshStandardMaterial({ color: 0x660000, roughness: 0.2 }));
+        dummyRoot.add(gore);
+        const flame = new THREE.Mesh(GEOMETRY.flame, new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 }));
+        dummyRoot.add(flame);
+        const shockwave = new THREE.Mesh(GEOMETRY.shockwave, new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending }));
+        dummyRoot.add(shockwave);
+        const shard = new THREE.Mesh(GEOMETRY.shard, MATERIALS.glassShard);
+        dummyRoot.add(shard);
+
+        const crosshair = new THREE.Mesh(GEOMETRY.aimRing, MATERIALS.aimReticle);
+        dummyRoot.add(crosshair);
+
         const ash = new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash);
         dummyRoot.add(ash);
 
-        // Decals (Directly on plane)
         const blood = new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal);
         dummyRoot.add(blood);
         const scorch = new THREE.Mesh(GEOMETRY.decal, MATERIALS.scorchDecal);
         dummyRoot.add(scorch);
 
-        // -- Narrative / Quest Items & Collectibles --
         const ring = new THREE.Mesh(GEOMETRY.familyRing, MATERIALS.familyRing);
         dummyRoot.add(ring);
 
         const collectibleTypes = ['phone', 'pacifier', 'axe', 'scarf', 'jacket', 'badge', 'diary', 'ring', 'teddy'];
-        collectibleTypes.forEach(type => {
+        for (const type of collectibleTypes) {
             const model = ModelFactory.createCollectible(type);
             dummyRoot.add(model);
+
+            model.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.material) {
+                    const transMat = (child.material as THREE.Material).clone();
+                    transMat.transparent = true;
+                    transMat.opacity = 0.5;
+                    const transMesh = new THREE.Mesh(child.geometry, transMat);
+                    dummyRoot.add(transMesh);
+                }
+            });
+            if (yieldToMain) await yieldToMain();
+        }
+
+        // 3. Force Skinning Warmup
+        scene.traverse((obj) => {
+            if ((obj as any).isSkinnedMesh) {
+                const mesh = obj as THREE.SkinnedMesh;
+                mesh.skeleton.update();
+            }
         });
 
-        // 3. Force Compilation
-        // renderer.compile is the magic method added in newer Three.js versions to avoid jank
+        // 4. Force Compilation (Incremental with Yielding)
+        // Instead of one big compileAsync which might still block or be uncontrolled,
+        // we manually compile the scene subsets to ensure responsiveness.
         try {
+            // Compile global environment first
             renderer.compile(scene, camera);
+            if (yieldToMain) await yieldToMain();
+
+            // Iterate through root children (groups of assets) and compile them individually
+            const children = dummyRoot.children.slice();
+
+            // Simpler approach: 
+            // 1. Hide all main root children.
+            dummyRoot.children.forEach(c => c.visible = false);
+
+            // 2. Reveal and compile one by one
+            let batchCount = 0;
+            for (const child of children) {
+                child.visible = true;
+                batchCount++;
+
+                // Compile effective scene
+                renderer.compile(scene, camera);
+
+                if (batchCount % 2 === 0 && yieldToMain) await yieldToMain();
+            }
+
         } catch (e) {
             console.warn("Shader warmup failed", e);
         }
 
-        // 4. Clean up
-        // We remove objects from the scene to drop CPU references, 
-        // but the compiled programs remain on the GPU context.
-        scene.traverse((obj) => {
-            // Do NOT dispose geometry/materials here, as they are shared global assets
-            // We only want to dismantle the scene graph
-        });
-
+        // 5. Clean up
         scene.clear();
-    }
+        warmedUp = true;
+    },
+
+    isWarmedUp: () => warmedUp,
+    reset: () => { warmedUp = false; lastMapIndex = -1; },
+
+    // Track map persistence to allow instant-reloads
+    getLastMapIndex: () => lastMapIndex,
+    setLastMapIndex: (idx: number) => { lastMapIndex = idx; }
 };

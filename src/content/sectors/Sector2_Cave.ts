@@ -5,7 +5,7 @@ import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { t } from '../../utils/i18n';
 
-export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, caveEntrancePos: THREE.Vector3) => {
+export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group, caveEntrancePos: THREE.Vector3) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
 
     // 5.1 Floors (Specific Rooms & Corridors)
@@ -85,6 +85,8 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         floor.receiveShadow = true;
         innerCave.add(floor);
     });
+
+    if (ctx.yield) await ctx.yield();
 
     // Entrance Half-Circle Gravel
     const entranceGeo = new THREE.CircleGeometry(12, 32, 0, Math.PI);
@@ -202,7 +204,7 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         obstacles.push({ mesh: wall, collider: { type: 'box', size: new THREE.Vector3(len, wallHeight, wallThick) } });
     };
 
-    allSpaces.forEach(r => {
+    for (const r of allSpaces) {
         const wallDist = 1.0;
         const corners = getCorners(r, wallDist);
 
@@ -261,10 +263,11 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
                 createWallSegment(segmentStart, new THREE.Vector3(p2.x, 0, p2.z));
             }
         }
-    });
+        if (ctx.yield) await ctx.yield();
+    }
 
     // Room Specifics (Lights, Spawns)
-    rooms.forEach(r => {
+    for (const r of rooms) {
         // Lights
         createStringLight(
             new THREE.Vector3(r.x - r.w / 3, 8, r.z),
@@ -282,10 +285,11 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
         // Spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
-                SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
+                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
             }
         }
-    });
+        if (ctx.yield) await ctx.yield();
+    }
 
     /*
 
@@ -337,6 +341,16 @@ export const generateCaveSystem = (ctx: SectorContext, innerCave: THREE.Group, c
     curtain.visible = false;
     scene.add(curtain);
     */
+
+    // --- RANDOM HORDE SPAWNS (Testing) ---
+    if (ctx.spawnHorde) {
+        // Lobby
+        ctx.spawnHorde(5, 'WALKER', new THREE.Vector3(100, 0, -100));
+        // Mess Hall
+        ctx.spawnHorde(4, 'RUNNER', new THREE.Vector3(150, 0, -200));
+        // Deep Tunnel
+        ctx.spawnHorde(3, 'TANK', new THREE.Vector3(60, 0, -125));
+    }
 
     (ctx as any).roomData = rooms;
 };

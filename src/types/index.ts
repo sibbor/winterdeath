@@ -97,6 +97,7 @@ export interface SectorStats {
   shotsHit: number;
   throwablesThrown: number;
   killsByType: Record<string, number>;
+  totalScrapCollected?: number; // Added to match persistence if needed
   scrapLooted: number;
   xpGained: number;
   familyFound: boolean;
@@ -132,18 +133,15 @@ export interface GameState {
   debugMode: boolean;
   showFps: boolean; // New
   sectorStats?: SectorStats;
-  familyMembersFound: number[]; // Array of Map IDs where family was found
-  bossesDefeated: number[]; // Array of Map IDs where boss was defeated
-  midRunCheckpoint?: {
-    mapIndex: number;
-    timestamp: number;
-  } | null;
+  rescuedFamilyIndices: number[]; // Array of Map IDs where family was found
+  deadBossIndices: number[]; // Array of Map IDs where boss was defeated
   graphics?: {
     pixelRatio: number;
     antialias: boolean;
     shadows: boolean;
     shadowMapType: number;
   };
+  weather: WeatherType;
 }
 
 export interface Vector2 {
@@ -175,7 +173,7 @@ export interface TriggerAction {
 export interface SectorTrigger {
   id: string;
   position: { x: number, z: number };
-  radius: number;
+  radius?: number;
   type: TriggerType;
   content: string; // Legacy: The text to display
   description?: string; // Narrative description for clues
@@ -187,6 +185,10 @@ export interface SectorTrigger {
   actions?: TriggerAction[]; // List of actions to execute
   repeatInterval?: number; // If > 0, trigger resets after X ms (for recurring events/spawners)
   lastTriggerTime?: number; // Timestamp for repeat logic
+
+  // Box Shape Support
+  size?: { width: number, depth: number }; // For rectangular triggers
+  rotation?: number; // Y-rotation of the box
 }
 
 export interface NotificationState {
@@ -235,7 +237,6 @@ export interface Obstacle {
 }
 
 export interface GameCanvasProps {
-  // ... (existing props)
   onOpenMap: () => void;
   stats: PlayerStats;
   loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType };
@@ -256,8 +257,6 @@ export interface GameCanvasProps {
   bossPermanentlyDefeated: boolean;
   familyAlreadyRescued?: boolean;
   onLevelLoaded: () => void;
-  startAtCheckpoint: boolean;
-  onCheckpointReached: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onCollectibleFound: (id: string) => void;
   onClueFound: (clue: SectorTrigger) => void;
@@ -265,6 +264,7 @@ export interface GameCanvasProps {
   onCollectibleClose: () => void;
   onFPSUpdate?: (fps: number) => void;
   initialGraphics?: any;
+  weather?: WeatherType;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

@@ -27,7 +27,8 @@ export class PlayerInteractionSystem implements System {
             state.obstacles,
             state.busUnlocked,
             session.engine.scene,
-            state.triggers
+            state.triggers,
+            state.sectorState
         );
         state.interactionType = detection.type;
         state.interactionTargetPos = detection.position;
@@ -54,7 +55,8 @@ export class PlayerInteractionSystem implements System {
         obstacles: any[],
         busUnlocked: boolean,
         scene: THREE.Scene,
-        triggers: any[]
+        triggers: any[],
+        sectorState: any
     ): { type: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null, position: THREE.Vector3 | null } {
         // Check Collectibles first (highest priority)
         const collectible = this.findNearbyCollectible(playerPos, scene);
@@ -79,10 +81,16 @@ export class PlayerInteractionSystem implements System {
         }
 
         // Check Bus / Explosive
-        if (busUnlocked) {
-            const gate = obstacles.find((o: any) => o.id === 'gate');
-            if (gate && playerPos.distanceTo(gate.mesh.position) < 10) {
-                return { type: 'plant_explosive', position: gate.mesh.position.clone() };
+        if (sectorState && !sectorState.busExploded && sectorState.ctx && sectorState.ctx.busObject) {
+            // Respect the Sector's specific logic for when interaction is allowed (e.g. kill count)
+            if (sectorState.busCanBeInteractedWith) {
+                const bus = sectorState.ctx.busObject;
+                if (playerPos.distanceTo(bus.position) < 8) {
+                    return {
+                        type: 'plant_explosive',
+                        position: bus.position.clone().setY(2.5) // Position prompt slightly above ground 
+                    };
+                }
             }
         }
         return { type: null, position: null };
@@ -138,7 +146,13 @@ export class PlayerInteractionSystem implements System {
                 if (chest.type === 'big') state.bigChestsOpened++;
             }
         } else if (type === 'plant_explosive') {
-            this.onSectorEnded(true);
+            if (state.sectorState) {
+                state.sectorState.busInteractionTriggered = true;
+            } else {
+                // Fallback for safety, though sectorState should exist
+                console.warn("Sector state not found provided, forcing extraction");
+                this.onSectorEnded(true);
+            }
         } else if (type === 'knock_on_port') {
             const knockTrigger = state.triggers.find((t: any) => t.id === 's2_cave_knock_port');
             if (knockTrigger) {

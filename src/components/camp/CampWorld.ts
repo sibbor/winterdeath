@@ -28,7 +28,7 @@ const setupTrees = (scene: THREE.Scene) => {
         const z = -45 - srandom() * 60;
 
         // Moon Window for silhouettes too
-        let scale = 1.15 + srandom() * 2;
+        let scale = + srandom() * 2;
 
         treeInstances.push({ x, z, scale, darken: 0.12 });
     }
@@ -368,7 +368,14 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
 export const CampWorld = {
     setupTerrain: (scene: THREE.Scene, textures: Textures) => {
         // Ground
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.MeshStandardMaterial({ map: textures.gravel, roughness: 1, color: 0x888888 }));
+        const groundMat = MATERIALS.dirt.clone();
+        if (groundMat.map) {
+            groundMat.map.repeat.set(100, 100);
+        }
+        if (groundMat.bumpMap) {
+            groundMat.bumpMap.repeat.set(100, 100);
+        }
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);

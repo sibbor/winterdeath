@@ -6,7 +6,7 @@ export type Locale = 'en' | 'sv';
 
 const LOCALES = { en, sv };
 
-let currentLocale: Locale = 'en';
+let currentLocale: Locale = 'sv';
 
 // Try to load saved locale
 try {
@@ -14,7 +14,7 @@ try {
     if (saved && (saved === 'en' || saved === 'sv')) {
         currentLocale = saved;
     }
-} catch (e) {}
+} catch (e) { }
 
 export const setLocale = (locale: Locale) => {
     currentLocale = locale;

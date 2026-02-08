@@ -8,6 +8,8 @@ export const sv = {
     ui: {
         scrap: "SKROT",
         scrap_earned: "Skrot Intjänat",
+        game_title_1: "VINTER",
+        game_title_2: "DÖD",
         sp: "FP",
         kills: "DÖDADE",
         level: "NIVÅ",
@@ -37,6 +39,10 @@ export const sv = {
         mia: "SAKNAS",
         alive: "LEVANDE",
         eliminated: "ELIMINERAD",
+        family_member_missing: "SAKNAS",
+        family_member_rescued: "RÄDDAD",
+        boss_alive: "LEVANDE",
+        boss_dead: "DÖD",
         total_xp: "TOTAL EP",
         status: "STATUS",
         not_completed: "EJ KLARAD",
@@ -106,7 +112,9 @@ export const sv = {
         interact_open_chest: "ÖPPNA KISTA",
         interact_plant_explosive: "PLANTERA SPRÄNGMEDEL",
         interact_knock_on_port: "KNACKA PÅ PORTEN",
+        interact_blow_up_bus: "[E] SPRÄNG BUSSEN",
         clue_found_title: "LEDTRÅD HITTAD",
+        skill_point: "FÄRDIGHETSPOÄNG",
         available_pts: "POÄNG",
         throwables_thrown: "Kastvapen Kastade",
         throwables_used: "Kastvapen Använda",
@@ -154,8 +162,10 @@ export const sv = {
         target_located: "MÅL LOKALISERAT",
         protect_family: "SKYDDA FAMILJEN",
         scanning: "SKANNAR...",
+        zombie_wave: "Zombievåg",
         collected: "INSAMLADE",
         new: "NY",
+        survivor_tip: "Överlevnadstips",
         editor: {
             title: "Sektor-redigerare",
             save: "SPARA SEKTOR",
@@ -340,9 +350,6 @@ export const sv = {
                 audio: "Zombier stönar och attackerar."
             }
         ],
-        generic_briefing: "Nödsändning: Nödsignal detekterad i {map}. Lokalisera överlevaren och neutralisera {boss}.",
-        extracted_briefing: "Sektorrapport: {map} kontrolleras för närvarande av {boss}. Även om överlevaren har evakuerats till lägret, förblir området ett kritiskt hot. Horden växer, och vi kan inte låta {boss} etablera ett fäste. Gå in, rensa sektorn och eliminera målet.",
-        gym_event: "Vad i helvete var det?!"
     },
     bosses: {
         0: { name: "Gårdsherren", death: "Varelsen som startade allt i Byn ligger död. Dess muterade form tyder på att den en gång var människa, kanske en granne. Loke är säker nu.", lore: "Entitet identifierad i Sektor 1 (Skogen). Använder primitiva tunga vapen. Hög fysisk tålighet." },
@@ -368,11 +375,12 @@ export const sv = {
         sotis: ["Mjau."],
         panter: ["Mjau?"]
     },
+    // DON'T AUTO-TRANSLATE EXISTING ENTIRES IN 'clues', BUT CREATE NON-EXISTING ONES
     clues: {
         // Sector 1 Triggers
-        s1_collectible_1: "Esmeraldas telefon",
-        s1_collectible_1_description: "Skärmen är sprucken och flimrar, men vissa detaljer syns. Esmeraldas sista försök var ett meddelande till mig:\n'Pappa!! Kan inte ringa dig! Hjälp oss! Någon satte eld på vår bil och försöker bryta sig in. RING NU!! Vi springer mot S[...]'\n'Meddelandet kunde inte skickas. Försök igen?' är skrivet i rött nertill...",
-        s1_collectible_2: "Lokes handyxa",
+        s1_collectible_1_title: "Lokes telefon",
+        s1_collectible_1_description: "Skärmen är sprucken och flimrar, men vissa detaljer syns. Lokes sista försök var ett meddelande till mig:\n'Pappa!! Kan inte ringa dig! Hjälp oss! Någon satte eld på vår bil och försöker bryta sig in. RING NU!! Vi springer mot D[...]'\n'Meddelandet kunde inte skickas. Försök igen?' är skrivet i rött nertill...",
+        s1_collectible_2_title: "Lokes handyxa",
         s1_collectible_2_description: "Handyxan som jag har gett till Loke. Den han alltid använder när han hjälper mig med veden eller hugga ned träd hemma. Han måste ha tagit med sig den för att försvara sig.",
 
         s1_start_tracks: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?",
@@ -380,8 +388,12 @@ export const sv = {
         s1_they_must_be_scared: "Det är kaos! De måste vara livrädda.",
         s1_still_tracking: "Spåren fortsätter i den här riktningen.",
         s1_town_center: "Spåren försvinner... de måste vara här någonstans.",
-        s1_tunnel_blocked: "Åh nej, tunneln har blockerats av en krockad buss",
-        s1_tunnel_cleared: "Tunneln rensad. Smidigt!",
+
+        s1_event_tunnel_blocked: "Hmm... Tunneln till tågstationen blockeras av en krocked buss.",
+        s1_event_tunnel_whats_happening: "Vilken explosion! Vad i HELVETE var det?! Det kom från tågvagnshallen!",
+        s1_event_tunnel_plant_explosives: "Låt oss rensa tunneln genom att spränga den där jävla bussen!",
+        s1_event_tunnel_cleared: "Tunneln rensad. Smidigt!",
+        s1_event_tunnel_explosion_attracted_zombies: "Helvete! Explosionen lockade till sig zombies!",
 
         s1_poi_building_on_fire: "Helvete! SMU-gården brinner!",
         s1_poi_church: "Kyrkan brinner... Satans verk?",
@@ -426,6 +438,7 @@ export const sv = {
         s4_noise: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?",
         s4_shed: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne."
     },
+    // DON'T AUTO-TRANSLATE EXISTING ENTIRES IN 'dialogue', BUT CREATE NON-EXISTING ONES
     dialogue: {
         // Dialogue: Sector 1
         "0_0": "LOKE!!",

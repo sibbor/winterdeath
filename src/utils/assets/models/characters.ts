@@ -26,11 +26,23 @@ export const CharacterModels = {
         group.add(gun);
 
         // Laser sight (attached like flashlight - relative position, inherits rotation)
-        // 30m long with blue gradient fade at the tip
+        // Blue laser with fade at the tip (last ~10% = 3m of 30m)
+        const laserCanvas = document.createElement('canvas');
+        laserCanvas.width = 32; laserCanvas.height = 256;
+        const lCtx = laserCanvas.getContext('2d')!;
+        const lg = lCtx.createLinearGradient(0, 0, 0, 256);
+        lg.addColorStop(0, 'rgba(0, 170, 255, 0)'); // Tip (transparent)
+        lg.addColorStop(0.1, 'rgba(0, 170, 255, 0.3)'); // 3m fade zone
+        lg.addColorStop(0.15, 'rgba(0, 170, 255, 1)'); // Full brightness
+        lg.addColorStop(1, 'rgba(0, 170, 255, 1)'); // Base (full blue)
+        lCtx.fillStyle = lg;
+        lCtx.fillRect(0, 0, 32, 256);
+        const laserTex = new THREE.CanvasTexture(laserCanvas);
+
         const laserGeo = new THREE.PlaneGeometry(0.15, 30);
         const laserMat = new THREE.MeshBasicMaterial({
-            map: TEXTURES.laserTex,
-            color: 0x00aaff, // Blue tint
+            map: laserTex,
+            color: 0xffffff, // Use map colors
             transparent: true,
             opacity: 0.8,
             depthWrite: false,
@@ -61,12 +73,13 @@ export const CharacterModels = {
         const geometryHeight = isAnimal ? 0.5 : 2.0;
         const baseY = geometryHeight / 2;
 
-        body.position.y = baseY * scale;
-        body.scale.setScalar(scale);
+        body.position.y = baseY;
         body.castShadow = true;
 
         // Store baseScale for animation system restoration
         body.userData = { isBody: true, baseY: body.position.y, geometryHeight, baseScale: scale };
+
+        group.scale.setScalar(scale);
 
         if (isAnimal) {
             const tail = new THREE.Mesh(GEOMETRY.petTail, mat);

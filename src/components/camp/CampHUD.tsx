@@ -25,7 +25,7 @@ interface CampHUDProps {
     onResetGame: () => void;
     onDebugScrap: () => void;
     onDebugSkill: () => void;
-    fpsRef?: React.RefObject<HTMLDivElement>;
+    isMobileDevice?: boolean;
 }
 
 const STATIONS = [
@@ -39,7 +39,7 @@ const STATIONS = [
 const CampHUD: React.FC<CampHUDProps> = ({
     stats, hoveredStation, currentMapName, hasCheckpoint, isIdle, currentLoadoutNames,
     onOpenStats, onOpenArmory, onOpenSkills, onOpenSettings, onStartSector,
-    debugMode, onToggleDebug, onResetGame, onDebugScrap, onDebugSkill, fpsRef
+    debugMode, onToggleDebug, onResetGame, onDebugScrap, onDebugSkill, fpsRef, isMobileDevice
 }) => {
 
     const uiFadeClass = `transition-opacity ${isIdle ? 'duration-[2000ms] opacity-0' : 'duration-300 opacity-100'}`;
@@ -77,7 +77,7 @@ const CampHUD: React.FC<CampHUDProps> = ({
         <>
             {/* Top Left Stats / Buttons */}
             <div
-                className={`absolute top-0 left-0 p-8 z-30 flex flex-col gap-4 items-start pointer-events-none ${uiFadeClass}`}
+                className={`absolute top-0 left-0 p-8 z-30 flex flex-col gap-4 items-start pointer-events-none ${uiFadeClass} ${isMobileDevice ? 'camp-hud-mobile-scale' : ''}`}
             >
 
                 {/* Clicking level/dossier now opens Statistics (onOpenStats) */}
@@ -121,7 +121,7 @@ const CampHUD: React.FC<CampHUDProps> = ({
             )}
 
             {/* Bottom Actions */}
-            <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex flex-col items-center gap-4 ${uiFadeClass}`}>
+            <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex flex-col items-center gap-4 ${uiFadeClass} ${isMobileDevice ? 'camp-hud-bottom-scale' : ''}`}>
 
                 <div className="flex gap-4">
                     <div onClick={onOpenSettings} className="flex items-center gap-2 cursor-pointer bg-black/80 px-4 py-2 border border-gray-500 hover:border-white transition-colors">
@@ -140,12 +140,23 @@ const CampHUD: React.FC<CampHUDProps> = ({
             </div>
 
             {/* Top Right Logo */}
-            <div className={`absolute top-0 right-0 p-8 flex flex-col items-end pointer-events-none z-30 transition-opacity duration-300 opacity-100`}>
+            <div className={`absolute top-0 right-0 p-8 flex flex-col items-end pointer-events-none z-30 transition-opacity duration-300 opacity-100 ${isMobileDevice ? 'scale-75 origin-top-right' : ''}`}>
                 <div className="mb-4 text-right">
                     <h1 className="text-6xl font-black text-white italic tracking-tighter drop-shadow-lg leading-none">VINTER</h1>
                     <h1 className="text-6xl font-black text-red-600 italic tracking-tighter drop-shadow-lg leading-none">DÖD</h1>
                 </div>
             </div>
+
+            <style>{`
+                .camp-hud-mobile-scale {
+                    transform: scale(0.65);
+                    transform-origin: top left;
+                }
+                .camp-hud-bottom-scale {
+                    transform: translateX(-50%) scale(0.8);
+                    transform-origin: bottom center;
+                }
+            `}</style>
         </>
     );
 };

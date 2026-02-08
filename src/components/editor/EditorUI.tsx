@@ -3,26 +3,37 @@ import React from 'react';
 import * as THREE from 'three';
 import { EditorSystem } from '../../core/editor/EditorSystem';
 import { t } from '../../utils/i18n';
+import { EditorPersistence } from '../../utils/editorPersistence';
 
 interface EditorUIProps {
     editor: EditorSystem;
     onExport: () => void;
     currentSectorName: string;
     setSectorName: (name: string) => void;
+    isPlaying: boolean;
+    onPlayToggle: () => void;
+    onClose: () => void;
 }
 
-const EditorUI: React.FC<EditorUIProps> = ({ editor, onExport, currentSectorName, setSectorName }) => {
-    // We would normally use useTranslation() but I'll use a direct reference for simplicity or if i18n is setup differently
-    // Based on previous files, let's assume T is available or we just use hardcoded strings/ids as per rules.
-
-    const [activeCategory, setActiveCategory] = React.useState('props');
+const EditorUI: React.FC<EditorUIProps> = ({
+    editor, onExport, currentSectorName, setSectorName, isPlaying, onPlayToggle, onClose
+}) => {
+    const [activeCategory, setActiveCategory] = React.useState('nature');
+    const [activeSidebar, setActiveSidebar] = React.useState<'inspector' | 'environment' | 'assets' | null>(null);
+    const [showLoadDialog, setShowLoadDialog] = React.useState(false);
     const [, forceUpdate] = React.useReducer(x => x + 1, 0);
 
+    React.useEffect(() => {
+        editor.onChange = () => forceUpdate();
+        return () => { editor.onChange = null; };
+    }, [editor]);
+
     const categories = {
-        props: ['spruce', 'pine', 'birch', 'rock', 'car', 'lamp', 'barrel', 'explosive_barrel', 'hedge', 'fence', 'stonewall'],
+        nature: ['spruce', 'pine', 'birch', 'rock', 'hedge'],
         buildings: ['WallSection', 'Corner', 'DoorFrame', 'WindowFrame', 'Floor'],
-        enemies: ['WALKER', 'RUNNER', 'TANK', 'BOMBER'],
-        triggers: ['standard_chest', 'big_chest', 'story_trigger']
+        props: ['car', 'lamp', 'barrel', 'explosive_barrel', 'fence', 'stonewall'],
+        entities: ['WALKER', 'RUNNER', 'TANK', 'BOMBER', 'standard_chest', 'big_chest'],
+        logic: ['player_spawn', 'family_spawn', 'boss_spawn', 'story_trigger']
     };
 
     const selectedObject = editor.selectedObjectId ?
@@ -38,445 +49,445 @@ const EditorUI: React.FC<EditorUIProps> = ({ editor, onExport, currentSectorName
             const newPos = { ...obj.position, [axis]: value };
             editor.moveObject(obj.id, new THREE.Vector3(newPos.x, newPos.y, newPos.z));
         } else if (prop === 'rotation') {
-            // Simplify: editor only exposes rotateObject with angle, let's make it more direct for UI
-            const mesh = (editor as any).editorObjects.get(obj.id);
-            if (mesh) {
-                mesh.rotation[axis] = value;
-                obj.rotation[axis] = value;
+            let finalValue = value;
+            if (editor.snapToGrid && axis === 'y') {
+                const degrees = (value * 180) / Math.PI;
+                const snappedDegrees = Math.round(degrees / 45) * 45;
+                finalValue = (snappedDegrees * Math.PI) / 180;
             }
+            obj.rotation[axis] = finalValue;
+            const mesh = editor.scene.children.find(c => c.userData.id === obj.id);
+            if (mesh) mesh.rotation[axis] = finalValue;
         } else if (prop === 'scale') {
             editor.scaleObject(obj.id, value);
         }
         forceUpdate();
     };
 
+    const handlePrePlacementChange = (prop: string, axis: 'x' | 'y' | 'z', value: number) => {
+        const current = editor.prePlacementObject;
+        if (prop === 'rotation') {
+            let finalValue = value;
+            if (editor.snapToGrid && axis === 'y') {
+                const degrees = (value * 180) / Math.PI;
+                const snappedDegrees = Math.round(degrees / 45) * 45;
+                finalValue = (snappedDegrees * Math.PI) / 180;
+            }
+            editor.updatePrePlacement({ rotation: { ...current.rotation, [axis]: finalValue } });
+        } else if (prop === 'scale') {
+            editor.updatePrePlacement({ scale: { ...current.scale, [axis]: value } });
+        }
+        forceUpdate();
+    };
+
+    const savedSectors = EditorPersistence?.listSectors() || [];
+
     return (
-        <div className="editor-ui" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="editor-top-bar">
-                <input
-                    value={currentSectorName}
-                    onChange={(e) => setSectorName(e.target.value)}
-                    placeholder="Sector Name"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-                />
-                <button onClick={() => {
-                    editor.currentTool = 'SELECT';
-                    forceUpdate();
-                }} style={{ background: editor.currentTool === 'SELECT' ? '#2563eb' : '#444' }}>Select</button>
-                <button onClick={() => {
-                    editor.currentTool = 'PLACE';
-                    forceUpdate();
-                }} style={{ background: editor.currentTool === 'PLACE' ? '#2563eb' : '#444' }}>Place</button>
-                <button onClick={() => {
-                    editor.currentTool = 'PATH';
-                    forceUpdate();
-                }} style={{ background: editor.currentTool === 'PATH' ? '#2563eb' : '#444' }}>Path</button>
-                <button onClick={() => {
-                    editor.currentTool = 'SHAPE';
-                    forceUpdate();
-                }} style={{ background: editor.currentTool === 'SHAPE' ? '#2563eb' : '#444' }}>Shape</button>
+        <div className="editor-ui">
+            <div className="editor-header" onMouseDown={(e) => e.stopPropagation()}>
+                {/* ROW 1: System Controls */}
+                <div className="header-row top">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginRight: '20px' }}>
+                        <div style={{ width: '4px', height: '24px', background: '#dc2626' }} />
+                        <h4 style={{ margin: 0, color: '#dc2626', fontWeight: 900, fontStyle: 'italic', fontSize: '12px' }}>VINTERDÖD // EDITOR</h4>
+                    </div>
 
-                {editor.currentTool === 'SHAPE' && (
-                    <button onClick={() => {
-                        editor.finishShape();
-                        forceUpdate();
-                    }} style={{ background: '#10b981', marginLeft: '10px' }}>Finish Shape</button>
-                )}
+                    <input
+                        value={currentSectorName}
+                        onChange={(e) => setSectorName(e.target.value)}
+                        placeholder="Sector Name"
+                        style={{ width: '200px' }}
+                    />
 
-                <div style={{ marginLeft: '20px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <input type="checkbox" checked={editor.snapToGrid} onChange={(e) => {
-                        editor.snapToGrid = e.target.checked;
-                        forceUpdate();
-                    }} />
-                    <span>Grid Snap</span>
+                    <div style={{ display: 'flex', gap: '10px', marginLeft: '20px' }}>
+                        <button onClick={onPlayToggle} style={{ background: isPlaying ? '#dc2626' : '#111', border: isPlaying ? '1px solid #ff0000' : '1px solid #444', minWidth: '120px' }}>
+                            {isPlaying ? '■ STOP TEST' : '▶ START TEST'}
+                        </button>
+                    </div>
+
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '10px' }}>
+                        <button className="btn-prologue" onClick={() => setShowLoadDialog(!showLoadDialog)}>LOAD</button>
+                        <button className="btn-prologue" onClick={() => editor.save()}>SAVE</button>
+                        <button className="btn-prologue" onClick={onExport} style={{ background: '#dc2626', color: '#fff' }}>EXPORT</button>
+                        <button onClick={onClose} className="btn-close" style={{ background: '#ef4444', borderColor: '#ef4444' }}>CLOSE</button>
+                    </div>
                 </div>
 
-                <button onClick={() => editor.save()} style={{ marginLeft: 'auto' }}>Save</button>
-                <button onClick={onExport} style={{ background: '#10b981' }}>Export Code</button>
+                {/* ROW 2: Context & Tools */}
+                {!isPlaying && (
+                    <div className="header-row bottom">
+                        <button
+                            className={`btn-prologue ${activeSidebar === 'environment' ? 'active' : ''}`}
+                            onClick={() => setActiveSidebar(activeSidebar === 'environment' ? null : 'environment')}
+                        >
+                            ENVIRONMENT
+                        </button>
+                        <button
+                            className={`btn-prologue ${activeSidebar === 'inspector' ? 'active' : ''}`}
+                            onClick={() => setActiveSidebar(activeSidebar === 'inspector' ? null : 'inspector')}
+                        >
+                            SCENE INSPECTOR
+                        </button>
+
+                        <div style={{ display: 'flex', gap: '8px', padding: '0 10px', marginLeft: '20px', borderLeft: '1px solid rgba(220, 38, 38, 0.2)' }}>
+                            <button
+                                className={`btn-prologue ${editor.currentTool === 'SELECT' ? 'active' : ''}`}
+                                onClick={() => editor.setTool('SELECT')}
+                            >
+                                SELECT
+                            </button>
+                            <button
+                                className={`btn-prologue ${editor.currentTool === 'PLACE' ? 'active' : ''}`}
+                                onClick={() => { editor.setTool('PLACE'); setActiveSidebar('assets'); }}
+                            >
+                                PLACE
+                            </button>
+                            <button
+                                className={`btn-prologue ${editor.currentTool === 'PATH' ? 'active' : ''}`}
+                                onClick={() => editor.setTool('PATH')}
+                            >
+                                PATH
+                            </button>
+                            <button
+                                className={`btn-prologue ${editor.currentTool === 'SHAPE' ? 'active' : ''}`}
+                                onClick={() => editor.setTool('SHAPE')}
+                            >
+                                SHAPE
+                            </button>
+                        </div>
+
+                        <div style={{ marginLeft: '15px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 'bold', color: '#888' }}>
+                            <input id="snapToGrid" type="checkbox" checked={editor.snapToGrid} onChange={(e) => {
+                                editor.snapToGrid = e.target.checked;
+                                forceUpdate();
+                            }} />
+                            <label htmlFor="snapToGrid" style={{ transform: 'skewX(-5deg)', textTransform: 'uppercase', cursor: 'pointer' }}>SNAP</label>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            <div style={{ display: 'flex', height: 'calc(100% - 60px)' }}>
-                <div className="editor-side-panel">
-                    <h3>Assets</h3>
-                    <div className="category-tabs">
-                        {['props', 'buildings', 'enemies', 'triggers', 'environment', 'spawns'].map(cat => (
-                            <button
-                                key={cat}
-                                onClick={() => {
-                                    setActiveCategory(cat);
-                                    if (cat !== 'environment') {
-                                        // Reset current path progress when switching asset categories
-                                        (editor as any).currentPathPoints = [];
-                                        (editor as any).updatePathLine();
-                                    }
-                                }}
-                                style={{
-                                    background: activeCategory === cat ? 'rgba(59, 130, 246, 0.4)' : 'transparent',
-                                    color: activeCategory === cat ? '#fff' : '#888'
-                                }}
-                            >
-                                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+            {/* Load Dialog Overlay */}
+            {showLoadDialog && (
+                <div style={{ position: 'absolute', top: '70px', right: '120px', background: '#0a0a0a', border: '1px solid #dc2626', padding: '15px', zIndex: 1000, minWidth: '200px', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#dc2626', fontSize: '10px' }}>LOAD SECTOR</h5>
+                    <div className="sector-list">
+                        {EditorPersistence.listSectors().map((s: any) => (
+                            <button key={s.name} onClick={() => {
+                                editor.load(s.name);
+                                setSectorName(s.name);
+                                setShowLoadDialog(false);
+                            }}>
+                                {s.name}
                             </button>
                         ))}
-                    </div>
-
-                    {activeCategory === 'environment' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                            <div>
-                                <label>Background Color</label>
-                                <input
-                                    type="color"
-                                    value={'#' + editor.currentSector.environment.bgColor.toString(16).padStart(6, '0')}
-                                    onChange={(e) => {
-                                        editor.currentSector.environment.bgColor = parseInt(e.target.value.replace('#', ''), 16);
-                                        editor.updateEnvironmentVisuals();
-                                        forceUpdate();
-                                    }}
-                                    style={{ width: '100%', height: '40px', background: 'transparent', border: 'none' }}
-                                />
-                            </div>
-                            <div>
-                                <label>Fog Density ({editor.currentSector.environment.fogDensity.toFixed(3)})</label>
-                                <input
-                                    type="range" min="0" max="0.1" step="0.001"
-                                    value={editor.currentSector.environment.fogDensity}
-                                    onChange={(e) => {
-                                        editor.currentSector.environment.fogDensity = parseFloat(e.target.value);
-                                        editor.updateEnvironmentVisuals();
-                                        forceUpdate();
-                                    }}
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-                            <div>
-                                <label>Ambient Light</label>
-                                <input
-                                    type="range" min="0" max="2" step="0.1"
-                                    value={editor.currentSector.environment.ambientIntensity}
-                                    onChange={(e) => {
-                                        editor.currentSector.environment.ambientIntensity = parseFloat(e.target.value);
-                                        editor.updateEnvironmentVisuals();
-                                        forceUpdate();
-                                    }}
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-                            <div>
-                                <label>Time of Day</label>
-                                <select
-                                    value={editor.currentSector.environment.timeOfDay}
-                                    onChange={(e) => {
-                                        editor.currentSector.environment.timeOfDay = e.target.value as any;
-                                        editor.updateEnvironmentVisuals();
-                                        forceUpdate();
-                                    }}
-                                    style={{ width: '100%', padding: '8px', background: '#111', color: '#fff', border: '1px solid #444' }}
-                                >
-                                    <option value="day">Day</option>
-                                    <option value="night">Night</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label>Weather</label>
-                                <select
-                                    value={editor.currentSector.environment.weather}
-                                    onChange={(e) => {
-                                        editor.currentSector.environment.weather = e.target.value as any;
-                                        forceUpdate();
-                                    }}
-                                    style={{ width: '100%', padding: '8px', background: '#111', color: '#fff', border: '1px solid #444' }}
-                                >
-                                    <option value="none">None</option>
-                                    <option value="snow">Snow</option>
-                                    <option value="rain">Rain</option>
-                                    <option value="ash">Ash</option>
-                                </select>
-                            </div>
-                            <div className="property-group">
-                                <label>Weather Intensity ({editor.currentSector.environment.weatherIntensity?.toFixed(1)})</label>
-                                <input
-                                    type="range" min="0" max="5" step="0.1"
-                                    value={editor.currentSector.environment.weatherIntensity || 1.0}
-                                    onChange={(e) => {
-                                        editor.currentSector.environment.weatherIntensity = parseFloat(e.target.value);
-                                        forceUpdate();
-                                    }}
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-                        </div>
-                    ) : activeCategory === 'spawns' ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                            <div className="property-group">
-                                <label>Spawn Tools</label>
-                                <div className="asset-grid">
-                                    <button onClick={() => { editor.currentTool = 'SPAWN_PLAYER'; forceUpdate(); }} style={{ background: editor.currentTool === 'SPAWN_PLAYER' ? 'rgba(59, 130, 246, 0.4)' : '' }}>Player</button>
-                                    <button onClick={() => { editor.currentTool = 'SPAWN_FAMILY'; forceUpdate(); }} style={{ background: editor.currentTool === 'SPAWN_FAMILY' ? 'rgba(16, 185, 129, 0.4)' : '' }}>Family</button>
-                                    <button onClick={() => { editor.currentTool = 'SPAWN_BOSS'; forceUpdate(); }} style={{ background: editor.currentTool === 'SPAWN_BOSS' ? 'rgba(244, 63, 94, 0.4)' : '' }}>Boss</button>
-                                </div>
-                            </div>
-
-                            <div style={{ marginTop: '10px', fontSize: '11px', color: '#888', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
-                                <div>Player: {editor.currentSector.spawns.player.x.toFixed(1)}, {editor.currentSector.spawns.player.z.toFixed(1)}</div>
-                                <div>Family: {editor.currentSector.spawns.family.x.toFixed(1)}, {editor.currentSector.spawns.family.z.toFixed(1)}</div>
-                                <div>Boss: {editor.currentSector.spawns.boss.x.toFixed(1)}, {editor.currentSector.spawns.boss.z.toFixed(1)}</div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="asset-grid">
-                            {(categories as any)[activeCategory]?.map((type: string) => (
-                                <button
-                                    key={type}
-                                    onClick={() => {
-                                        editor.currentTool = 'PLACE';
-                                        editor.placementType = type;
-                                        forceUpdate();
-                                    }}
-                                    style={{
-                                        border: editor.placementType === type && editor.currentTool === 'PLACE' ? '2px solid #3b82f6' : '1px solid #444'
-                                    }}
-                                >
-                                    {type.replace('_', ' ')}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {editor.currentTool === 'PATH' && (
-                        <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                            <div className="property-group">
-                                <label>Path Settings</label>
-                                <select
-                                    value={editor.currentPathType}
-                                    onChange={(e) => { editor.currentPathType = e.target.value as any; forceUpdate(); }}
-                                    style={{ background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '8px', borderRadius: '4px' }}
-                                >
-                                    <option value="ROAD">Road</option>
-                                    <option value="PATH">Walking/Gravel</option>
-                                    <option value="STREAM">Water/Stream</option>
-                                    <option value="RAIL">Railroad</option>
-                                    <option value="BLOOD">Blood Trail</option>
-                                    <option value="FOOTPRINTS">Footprints</option>
-                                </select>
-                            </div>
-                            <div className="property-group" style={{ marginTop: '10px' }}>
-                                <label>Width: {editor.currentPathWidth}m</label>
-                                <input type="range" min="0.5" max="10" step="0.5" value={editor.currentPathWidth} onChange={(e) => { editor.currentPathWidth = parseFloat(e.target.value); forceUpdate(); }} />
-                            </div>
-                            <button onClick={() => { editor.finishPath(); forceUpdate(); }} style={{ marginTop: '10px', width: '100%', background: '#3b82f6' }}>Finish Path</button>
-                        </div>
-                    )}
-
-                    <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px' }}>
-                        <label style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', marginBottom: '10px', display: 'block' }}>Scene Objects</label>
-                        <div className="sector-list" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                            {editor.currentSector.objects.map(obj => (
-                                <button
-                                    key={obj.id}
-                                    onClick={() => editor.selectObject(obj.id)}
-                                    style={{
-                                        background: editor.selectedObjectId === obj.id ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255,255,255,0.02)',
-                                        color: editor.selectedObjectId === obj.id ? '#fff' : '#999',
-                                        borderColor: editor.selectedObjectId === obj.id ? 'rgba(59, 130, 246, 0.5)' : 'rgba(255,255,255,0.05)'
-                                    }}
-                                >
-                                    {obj.type} <span style={{ opacity: 0.4, fontSize: '10px' }}>({obj.id.slice(0, 4)})</span>
-                                </button>
-                            ))}
-                        </div>
+                        {EditorPersistence.listSectors().length === 0 && (
+                            <div style={{ color: '#444', fontSize: '10px' }}>No saved sectors</div>
+                        )}
                     </div>
                 </div>
+            )}
 
-                {selectedObject && (
-                    <div className="editor-side-panel" style={{ marginLeft: 'auto', borderRight: 'none', borderLeft: '1px solid #333' }}>
-                        <h3>Properties</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                            <div>
-                                <label>Type: <strong>{selectedObject.type}</strong></label>
-                            </div>
+            {editor.hoveredObjectId && !isPlaying && (
+                <div style={{
+                    position: 'absolute',
+                    bottom: '100px',
+                    left: '50%',
+                    transform: 'translateX(-50%) skewX(-5deg)',
+                    background: 'rgba(0,0,0,0.85)',
+                    border: '1px solid #dc2626',
+                    padding: '10px 25px',
+                    pointerEvents: 'none',
+                    zIndex: 100,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '15px',
+                    boxShadow: '0 0 30px rgba(220,38,38,0.4)'
+                }}>
+                    <div style={{ width: '4px', height: '25px', background: '#dc2626' }} />
+                    <span style={{ color: '#fff', fontWeight: 900, fontSize: '16px', fontStyle: 'italic', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                        {(() => {
+                            const obj = editor.currentSector.objects.find(o => o.id === editor.hoveredObjectId);
+                            if (obj) return obj.type;
+                            if (editor.hoveredObjectId.includes('Spawn')) return editor.hoveredObjectId.replace('Spawn_', 'SPAWN: ');
+                            return 'OBJECT';
+                        })()}
+                    </span>
+                    <span style={{ color: '#666', fontSize: '12px', fontWeight: 'bold' }}>#{editor.hoveredObjectId.slice(0, 8)}</span>
+                </div>
+            )}
 
-                            <div>
-                                <label>Position</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px' }}>
-                                    <input type="number" value={selectedObject.position.x} onChange={(e) => handlePropertyChange('position', 'x', parseFloat(e.target.value))} />
-                                    <input type="number" value={selectedObject.position.y} onChange={(e) => handlePropertyChange('position', 'y', parseFloat(e.target.value))} />
-                                    <input type="number" value={selectedObject.position.z} onChange={(e) => handlePropertyChange('position', 'z', parseFloat(e.target.value))} />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label>Rotation (Y)</label>
-                                <input
-                                    type="range" min="0" max={Math.PI * 2} step="0.1"
-                                    value={selectedObject.rotation.y}
-                                    onChange={(e) => handlePropertyChange('rotation', 'y', parseFloat(e.target.value))}
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-
-                            <div>
-                                <label>Scale</label>
-                                <input
-                                    type="range" min="0.1" max="10" step="0.1"
-                                    value={selectedObject.scale.x}
-                                    onChange={(e) => handlePropertyChange('scale', 'x', parseFloat(e.target.value))}
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
-
-                            {selectedObject.type === 'SHAPE' && selectedObject.properties && (
+            {!isPlaying && (
+                <div style={{ display: 'flex', height: '100%', pointerEvents: 'none' }}>
+                    {/* LEFT SIDEBAR: Assets / Inspector / Environment */}
+                    {activeSidebar && (
+                        <div className="editor-side-panel" onMouseDown={(e) => e.stopPropagation()}>
+                            {activeSidebar === 'assets' && (
                                 <>
-                                    <div>
-                                        <label>Height</label>
-                                        <input
-                                            type="number"
-                                            value={selectedObject.properties.height}
-                                            onChange={(e) => {
-                                                selectedObject.properties!.height = parseFloat(e.target.value);
-                                                editor.deleteObject(selectedObject.id); // Redraw
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }}
-                                        />
+                                    <h3>ASSETS</h3>
+                                    <div className="category-tabs">
+                                        {Object.keys(categories).map(cat => (
+                                            <button
+                                                key={cat}
+                                                className={`btn-prologue ${activeCategory === cat ? 'active' : ''}`}
+                                                onClick={() => setActiveCategory(cat)}
+                                                style={{ fontSize: '10px', padding: '6px 12px' }}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
                                     </div>
-                                    <div>
-                                        <label>Thickness</label>
-                                        <input
-                                            type="number"
-                                            value={selectedObject.properties.thickness}
-                                            onChange={(e) => {
-                                                selectedObject.properties!.thickness = parseFloat(e.target.value);
-                                                editor.deleteObject(selectedObject.id); // Redraw
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }}
-                                        />
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedObject.properties.filled}
-                                            onChange={(e) => {
-                                                selectedObject.properties!.filled = e.target.checked;
-                                                editor.deleteObject(selectedObject.id); // Redraw
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }}
-                                        />
-                                        <label>Filled</label>
-                                    </div>
-                                    <div>
-                                        <label>Color</label>
-                                        <input
-                                            type="color"
-                                            value={'#' + (selectedObject.properties.color || 0x888888).toString(16).padStart(6, '0')}
-                                            onChange={(e) => {
-                                                selectedObject.properties!.color = parseInt(e.target.value.replace('#', ''), 16);
-                                                editor.deleteObject(selectedObject.id); // Redraw
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }}
-                                            style={{ width: '100%', height: '30px' }}
-                                        />
+                                    <div className="asset-grid">
+                                        {(categories as any)[activeCategory].map((type: string) => (
+                                            <button
+                                                key={type}
+                                                className={`btn-prologue ${editor.placementType === type ? 'active' : ''}`}
+                                                onClick={() => { editor.setPlacementType(type); forceUpdate(); }}
+                                                style={{ fontSize: '9px', padding: '8px', minWidth: '80px' }}
+                                            >
+                                                {type}
+                                            </button>
+                                        ))}
                                     </div>
                                 </>
                             )}
 
-                            {selectedObject.type === 'rock' && (
+                            {activeSidebar === 'inspector' && (
                                 <>
-                                    <div className="property-group">
-                                        <label>Radius: {selectedObject.properties?.radius || 1.0}</label>
-                                        <input
-                                            type="range" min="0.5" max="5.0" step="0.1"
-                                            value={selectedObject.properties?.radius || 1.0}
-                                            onChange={(e) => {
-                                                if (!selectedObject.properties) selectedObject.properties = {};
-                                                selectedObject.properties.radius = parseFloat(e.target.value);
-                                                editor.deleteObject(selectedObject.id);
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="property-group">
-                                        <label>Sides (Detail): {selectedObject.properties?.segments || 6}</label>
-                                        <input
-                                            type="range" min="0" max="4" step="1"
-                                            value={selectedObject.properties?.segments || 0}
-                                            onChange={(e) => {
-                                                if (!selectedObject.properties) selectedObject.properties = {};
-                                                selectedObject.properties.segments = parseInt(e.target.value);
-                                                editor.deleteObject(selectedObject.id);
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }}
-                                        />
-                                    </div>
-                                </>
-                            )}
-
-                            <div style={{ borderTop: '1px solid #333', paddingTop: '10px' }}>
-                                <label>Attached Effects</label>
-                                <div style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
-                                    <button onClick={() => {
-                                        if (!selectedObject.effects) selectedObject.effects = [];
-                                        selectedObject.effects.push({ type: 'light', color: 0xffaa00, intensity: 1, offset: { x: 0, y: 1, z: 0 } });
-                                        editor.deleteObject(selectedObject.id);
-                                        (editor as any).spawnObjectInScene(selectedObject);
-                                        forceUpdate();
-                                    }} style={{ fontSize: '10px', padding: '5px' }}>+ Light</button>
-                                    <button onClick={() => {
-                                        if (!selectedObject.effects) selectedObject.effects = [];
-                                        selectedObject.effects.push({ type: 'fire', offset: { x: 0, y: 0.5, z: 0 } });
-                                        editor.deleteObject(selectedObject.id);
-                                        (editor as any).spawnObjectInScene(selectedObject);
-                                        forceUpdate();
-                                    }} style={{ fontSize: '10px', padding: '5px' }}>+ Fire</button>
-                                </div>
-                                {selectedObject.effects?.map((eff, i) => (
-                                    <div key={i} style={{ padding: '8px', background: '#222', borderRadius: '4px', marginBottom: '5px', fontSize: '11px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                            <strong>{eff.type.toUpperCase()}</strong>
-                                            <button onClick={() => {
-                                                selectedObject.effects!.splice(i, 1);
-                                                editor.deleteObject(selectedObject.id);
-                                                (editor as any).spawnObjectInScene(selectedObject);
-                                                forceUpdate();
-                                            }} style={{ padding: '0 5px', background: '#551111', border: 'none', color: '#fff' }}>x</button>
-                                        </div>
-                                        {eff.type === 'light' && (
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
-                                                <input type="color" value={'#' + (eff.color || 0xffffff).toString(16).padStart(6, '0')} onChange={(e) => {
-                                                    eff.color = parseInt(e.target.value.replace('#', ''), 16);
-                                                    editor.deleteObject(selectedObject.id);
-                                                    (editor as any).spawnObjectInScene(selectedObject);
+                                    <h3>SCENE INSPECTOR</h3>
+                                    <div style={{ flex: 1, overflowY: 'auto', pointerEvents: 'auto' }}>
+                                        {editor.currentSector.objects.map((obj) => (
+                                            <div
+                                                key={obj.id}
+                                                style={{
+                                                    padding: '8px 12px',
+                                                    background: editor.selectedObjectId === obj.id ? 'rgba(220,38,38,0.2)' : 'rgba(255,255,255,0.05)',
+                                                    borderLeft: editor.selectedObjectId === obj.id ? '3px solid #dc2626' : '3px solid transparent',
+                                                    marginBottom: '4px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    fontSize: '13px'
+                                                }}
+                                                onClick={() => {
+                                                    editor.selectObject(obj.id);
+                                                    const mesh = editor.scene.children.find(c => c.userData.id === obj.id);
+                                                    if (mesh) {
+                                                        const worldPos = new THREE.Vector3();
+                                                        mesh.getWorldPosition(worldPos);
+                                                        editor.focusCamera(worldPos);
+                                                    }
                                                     forceUpdate();
-                                                }} style={{ width: '100%' }} />
-                                                <input type="number" step="0.1" value={eff.intensity} onChange={(e) => {
-                                                    eff.intensity = parseFloat(e.target.value);
-                                                    editor.deleteObject(selectedObject.id);
-                                                    (editor as any).spawnObjectInScene(selectedObject);
-                                                    forceUpdate();
-                                                }} style={{ width: '100%' }} />
+                                                }}
+                                            >
+                                                <span style={{ color: '#fff', fontWeight: 'bold' }}>{obj.type}</span>
+                                                <span style={{ color: '#666', fontSize: '10px' }}>#{obj.id.slice(0, 6)}</span>
                                             </div>
+                                        ))}
+                                        {editor.currentSector.objects.length === 0 && (
+                                            <div style={{ color: '#444', fontStyle: 'italic', textAlign: 'center', marginTop: '20px', pointerEvents: 'none' }}>No objects in scene</div>
                                         )}
                                     </div>
-                                ))}
+                                </>
+                            )}
+
+                            {activeSidebar === 'environment' && (
+                                <>
+                                    <h3>ENVIRONMENT</h3>
+                                    <div className="property-group">
+                                        <label>WEATHER</label>
+                                        <select
+                                            value={editor.currentSector.environment.weather}
+                                            onChange={(e) => {
+                                                editor.currentSector.environment.weather = e.target.value as any;
+                                                editor.updateEnvironmentVisuals();
+                                                forceUpdate();
+                                            }}
+                                        >
+                                            <option value="none">Clear</option>
+                                            <option value="snow">Snow</option>
+                                            <option value="rain">Rain</option>
+                                            <option value="ash">Ash</option>
+                                        </select>
+                                    </div>
+                                    <div className="property-group">
+                                        <label>GROUND MATERIAL</label>
+                                        <select
+                                            value={editor.currentSector.environment.groundColor === 0xddddff ? 'snow' : editor.currentSector.environment.groundColor === 0x445544 ? 'grass' : 'gravel'}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (val === 'snow') editor.currentSector.environment.groundColor = 0xddddff;
+                                                else if (val === 'grass') editor.currentSector.environment.groundColor = 0x445544;
+                                                else editor.currentSector.environment.groundColor = 0x888888;
+                                                editor.updateEnvironmentVisuals();
+                                                forceUpdate();
+                                            }}
+                                        >
+                                            <option value="snow">Snow (White)</option>
+                                            <option value="grass">Grass (Green)</option>
+                                            <option value="gravel">Gravel (Grey)</option>
+                                        </select>
+                                    </div>
+                                    <div className="property-group">
+                                        <label>TIME OF DAY</label>
+                                        <select
+                                            value={editor.currentSector.environment.timeOfDay}
+                                            onChange={(e) => {
+                                                editor.currentSector.environment.timeOfDay = e.target.value as any;
+                                                editor.updateEnvironmentVisuals();
+                                                forceUpdate();
+                                            }}
+                                        >
+                                            <option value="day">Day</option>
+                                            <option value="night">Night</option>
+                                        </select>
+                                    </div>
+                                    <div className="property-group">
+                                        <label>AMBIENT LIGHT</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.1"
+                                            value={editor.currentSector.environment.ambientIntensity}
+                                            onChange={(e) => {
+                                                editor.currentSector.environment.ambientIntensity = parseFloat(e.target.value);
+                                                editor.updateEnvironmentVisuals();
+                                                forceUpdate();
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="property-group">
+                                        <label>FOG DENSITY</label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="0.1"
+                                            step="0.005"
+                                            value={editor.currentSector.environment.fogDensity}
+                                            onChange={(e) => {
+                                                editor.currentSector.environment.fogDensity = parseFloat(e.target.value);
+                                                editor.updateEnvironmentVisuals();
+                                                forceUpdate();
+                                            }}
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    <div style={{ flex: 1 }} />
+
+                    {/* Properties Sidebar (Right) - Visible when object selected OR when placing */}
+                    {(selectedObject || ['PLACE', 'PATH', 'SHAPE'].includes(editor.currentTool)) && (
+                        <div className="editor-side-panel right" onMouseDown={(e) => e.stopPropagation()}>
+                            <h3>{selectedObject ? 'PROPERTIES' : 'PLACEMENT SETTINGS'}</h3>
+
+                            {/* Tool specific "End" buttons */}
+                            {editor.currentTool === 'PATH' && (
+                                <button className="btn-prologue" style={{ width: '100%', marginBottom: '15px' }} onClick={() => editor.finishPath()}>END PATH</button>
+                            )}
+                            {editor.currentTool === 'SHAPE' && (
+                                <button className="btn-prologue" style={{ width: '100%', marginBottom: '15px' }} onClick={() => editor.finishShape()}>END SHAPE</button>
+                            )}
+
+                            {selectedObject && (
+                                <div className="property-group">
+                                    <label>POSITION</label>
+                                    <div className="coord-grid">
+                                        <div className="coord-input">
+                                            <span>X</span>
+                                            <input
+                                                type="number"
+                                                value={selectedObject.position.x}
+                                                onChange={(e) => handlePropertyChange('position', 'x', parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                        <div className="coord-input">
+                                            <span>Y</span>
+                                            <input
+                                                type="number"
+                                                value={selectedObject.position.y}
+                                                onChange={(e) => handlePropertyChange('position', 'y', parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                        <div className="coord-input">
+                                            <span>Z</span>
+                                            <input
+                                                type="number"
+                                                value={selectedObject.position.z}
+                                                onChange={(e) => handlePropertyChange('position', 'z', parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="property-group">
+                                <label>ROTATION Y</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={Math.PI * 2}
+                                    step="0.01"
+                                    value={selectedObject ? selectedObject.rotation.y : editor.prePlacementObject.rotation.y}
+                                    onChange={(e) => selectedObject ?
+                                        handlePropertyChange('rotation', 'y', parseFloat(e.target.value)) :
+                                        handlePrePlacementChange('rotation', 'y', parseFloat(e.target.value))
+                                    }
+                                />
+                                <div style={{ fontSize: '10px', color: '#555' }}>
+                                    {Math.round(((selectedObject ? selectedObject.rotation.y : editor.prePlacementObject.rotation.y) * 180) / Math.PI)}°
+                                </div>
                             </div>
 
-                            <button
-                                onClick={() => {
-                                    editor.deleteObject(selectedObject.id);
-                                    forceUpdate();
-                                }}
-                                style={{ background: '#ef4444', marginTop: '20px' }}
-                            >
-                                Delete Object
-                            </button>
+                            <div className="property-group">
+                                <label>SCALE</label>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="10"
+                                    step="0.1"
+                                    value={selectedObject ? selectedObject.scale.x : editor.prePlacementObject.scale.x}
+                                    onChange={(e) => selectedObject ?
+                                        handlePropertyChange('scale', 'x', parseFloat(e.target.value)) :
+                                        handlePrePlacementChange('scale', 'x', parseFloat(e.target.value))
+                                    }
+                                />
+                                <div className="property-value">{selectedObject ? selectedObject.scale.x.toFixed(2) : editor.prePlacementObject.scale.x.toFixed(2)}x</div>
+                            </div>
+
+                            {selectedObject && (
+                                <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+                                    <button
+                                        className="btn-prologue"
+                                        style={{ flex: 1, background: '#dc2626', color: '#fff' }}
+                                        onClick={() => editor.deleteObject(selectedObject.id)}
+                                    >
+                                        DELETE
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+
+                    {/* Hover Tooltip */}
+                    {editor.hoveredObjectId && (
+                        <div
+                            className="editor-tooltip"
+                            style={{
+                                left: `${editor.lastMousePos.x}px`,
+                                top: `${editor.lastMousePos.y}px`
+                            }}
+                        >
+                            {editor.currentSector.objects.find(o => o.id === editor.hoveredObjectId)?.type ||
+                                editor.currentSector.paths.find(p => p.id === editor.hoveredObjectId)?.type || 'Object'}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

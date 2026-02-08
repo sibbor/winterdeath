@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
 
-export const UndeadModels = {
+export const ZombieModels = {
     createZombie: (typeKey: string, typeData: any, isBoss: boolean = false): THREE.Group => {
         const group = new THREE.Group();
 
@@ -17,18 +17,27 @@ export const UndeadModels = {
         let scale = isTank ? 1.5 : 1.0;
         if (isBoss && typeData.scale) scale = typeData.scale;
 
-        body.position.y = 1.0 * scale;
-        body.scale.setScalar(scale);
+        body.position.y = 1.0; // Pivot is centered in LatheGeometry (-1 to 1), so +1 moves feet to ground
         body.castShadow = true;
 
         body.userData = { isBody: true, baseY: body.position.y };
 
+        group.scale.setScalar(scale);
         group.add(body);
         return group;
     },
 
     createCorpse: (sourceMesh: THREE.Group): THREE.Group => {
+        // Safeguard: Temporarily store and clear userData to avoid circular reference crashes during clone()
+        // (DevTools or certain environments might try to stringify userData during some operations)
+        const oldUserData = sourceMesh.userData;
+        (sourceMesh as any).userData = {};
+
         const corpse = sourceMesh.clone();
+
+        // Restore source userData
+        sourceMesh.userData = oldUserData;
+
         corpse.userData = { isCorpse: true };
 
         // Check if the source mesh has already "fallen" (rotation.x is roughly -90 deg / -1.57 rad)

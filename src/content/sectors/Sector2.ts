@@ -8,9 +8,8 @@ import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/sound';
-import { normalize } from 'path';
 import { EnemyManager } from '../../core/EnemyManager';
-import { BOSSES, FAMILY_MEMBERS } from '../../content/constants';
+import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
 import { SectorManager } from '../../core/SectorManager';
 
 const LOCATIONS = {
@@ -50,17 +49,28 @@ export const Sector2: SectorDef = {
     environment: {
         bgColor: 0x050510,
         fogDensity: 0.02,
-        ambientIntensity: 0.2,
+        ambientIntensity: 0.15,
         groundColor: 0x111111,
         fov: 50,
-        moon: { visible: true, color: 0x8899aa, intensity: 0.5 },
+        moon: { visible: true, color: 0x8899aa, intensity: 0.7, position: { x: -40, y: 30, z: -20 } },
         cameraOffsetZ: 40,
+        cameraHeight: CAMERA_HEIGHT,
         weather: 'snow'
     },
+    // Automatic Content
+    groundType: 'SNOW',
+    groundSize: { width: 600, depth: 600 },
+    ambientLoop: 'ambient_wind_loop',
     // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
+
+    // Auto-Spawn Collectibles
+    collectibles: [
+        { id: 's2_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's2_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+    ],
 
     cinematic: {
         offset: { x: 20, y: 8, z: 0 }, // Behind the player (East of midpoint)
@@ -69,10 +79,10 @@ export const Sector2: SectorDef = {
         zoom: 0.1
     },
 
-    generate: (ctx: SectorContext) => {
-        const { scene, obstacles, flickeringLights, burningBarrels, triggers } = ctx;
+    generate: async (ctx: SectorContext) => {
+        const { scene, obstacles, triggers } = ctx;
+        (ctx as any).sectorState.ctx = ctx;
 
-        // Exact Cave Entrance Position
         const caveEntrancePos = new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z);
         const tunnelPos = new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z);
 
@@ -122,12 +132,7 @@ export const Sector2: SectorDef = {
             },
         );
 
-        // Visual Collectibles                
-        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's2_collectible_1', 'pacifier');
-        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's2_collectible_2', 'teddy');
-
-        // Visualize Triggers
-        SectorBuilder.visualizeTriggers(ctx);
+        if (ctx.yield) await ctx.yield();
 
         // --- PART 1: THE SMOOTH S-CURVE RAILWAY ---
         // Generate Rail Mesh
@@ -139,13 +144,6 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, -50),
             new THREE.Vector3(200, 0, -50)];
         const curve = PathGenerator.createRailTrack(ctx, railRoadPath);
-
-        // Ground (Snowy) - Covering the entire play area
-        const forestGround = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), MATERIALS.snow);
-        forestGround.rotation.x = -Math.PI / 2;
-        forestGround.position.set(50, 0.05, -50);
-        forestGround.receiveShadow = true;
-        scene.add(forestGround);
 
         // Campfire
         const campfire = ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0);
@@ -245,8 +243,10 @@ export const Sector2: SectorDef = {
         forestRight.forEach(p => p.y = 0);
 
         // Tree Types: Pine and Spruce (No Birch)
-        ObjectGenerator.createForestInPolygon(ctx, forestLeft, 12, ['pine', 'spruce']);
-        ObjectGenerator.createForestInPolygon(ctx, forestRight, 12, ['pine', 'spruce']);
+        await SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
+        await SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
+
+        if (ctx.yield) await ctx.yield();
 
 
         // --- INVISIBLE WALLS (Blocking 35m from track) ---
@@ -267,26 +267,12 @@ export const Sector2: SectorDef = {
             rightWallPoints.push(pt.clone().add(normal.clone().multiplyScalar(wallOffset)));
         });
 
-        // --- DEBUG VISUALIZATION ---
-        // 1. Forest Polygons (Green Lines)
-        const debugMatGreen = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-        [forestLeft, forestRight].forEach(poly => {
-            const points = [...poly, poly[0]]; // Close loop
-            const geo = new THREE.BufferGeometry().setFromPoints(points);
-            const line = new THREE.Line(geo, debugMatGreen);
-            line.position.y = 1; // Slight lift
-            scene.add(line);
-        });
+        if (ctx.yield) await ctx.yield();
 
-        // 2. Invisible Walls (Blue Lines)
-        const debugMatBlue = new THREE.LineBasicMaterial({ color: 0x0000ff });
-        [leftWallPoints, rightWallPoints].forEach(pts => {
-            if (pts.length < 2) return;
-            const geo = new THREE.BufferGeometry().setFromPoints(pts);
-            const line = new THREE.Line(geo, debugMatBlue); // Open path
-            line.position.y = 2; // Higher lift
-            scene.add(line);
-        });
+        // --- DEBUG VISUALIZATION (Via SectorBuilder) ---
+        if (ctx.debugMode) {
+            SectorBuilder.visualizeTriggers(ctx);
+        }
 
         // --- PART 3: THE BUNKER ENTRANCE (Interactive Doors & Frame) ---
         // 1. Frame - Hollow construction to allow seeing through
@@ -324,11 +310,11 @@ export const Sector2: SectorDef = {
 
         // 3. Spawners for Loke & Jordan
         // Re-check for family models and spawn if missing
-        const ModelFactory = (window as any).ModelFactory;
-        if (ModelFactory) {
+        const ModelFactoryObj = (window as any).ModelFactory || ModelFactory;
+        if (ModelFactoryObj) {
             let lokeMesh = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Loke');
             if (!lokeMesh) {
-                lokeMesh = ModelFactory.createFamilyMember(FAMILY_MEMBERS[0]);
+                lokeMesh = ModelFactoryObj.createFamilyMember(FAMILY_MEMBERS[0]);
                 lokeMesh.name = 'Loke';
                 lokeMesh.userData.name = 'Loke';
                 lokeMesh.userData.type = 'family';
@@ -339,7 +325,7 @@ export const Sector2: SectorDef = {
 
             let jordanMesh = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Jordan');
             if (!jordanMesh) {
-                jordanMesh = ModelFactory.createFamilyMember(FAMILY_MEMBERS[1]);
+                jordanMesh = ModelFactoryObj.createFamilyMember(FAMILY_MEMBERS[1]);
                 jordanMesh.name = 'Jordan';
                 jordanMesh.userData.name = 'Jordan';
                 jordanMesh.userData.type = 'family';
@@ -349,6 +335,8 @@ export const Sector2: SectorDef = {
                 scene.add(jordanMesh);
             }
         }
+
+        if (ctx.yield) await ctx.yield();
 
         // --- PART 4: MOUNTAIN EXTERIOR & DECORATION ---
         // 1. Left Wall (Needs gap for Cave Entrance at 100, -70)
@@ -388,12 +376,10 @@ export const Sector2: SectorDef = {
         ObjectGenerator.createInvisibleWall(ctx, rightBlockPoints, 10, 1.0, 'InvisibleWall_RightBlock');
 
         // Debug Visual for Back Block
-        const debugBackBlock = new THREE.Line(new THREE.BufferGeometry().setFromPoints(backBlockPoints), debugMatBlue);
-        debugBackBlock.position.y = 2;
-        scene.add(debugBackBlock);
-        const debugRightBlock = new THREE.Line(new THREE.BufferGeometry().setFromPoints(rightBlockPoints), debugMatBlue);
-        debugRightBlock.position.y = 2;
-        scene.add(debugRightBlock);
+        if (ctx.debugMode) {
+            SectorBuilder.visualizePath(ctx, backBlockPoints, 0x0000ff);
+            SectorBuilder.visualizePath(ctx, rightBlockPoints, 0x0000ff);
+        }
 
         // Mountain Groups
         const outerMountain = new THREE.Group();
@@ -407,6 +393,8 @@ export const Sector2: SectorDef = {
         const innerCave = new THREE.Group();
         innerCave.name = "Sector2_InnerCave";
         scene.add(innerCave);
+
+        if (ctx.yield) await ctx.yield();
 
         // 2. Tunnel Arch (Concrete) - Decorative only, blocked
         const tunnelGroup = new THREE.Group();
@@ -540,7 +528,9 @@ export const Sector2: SectorDef = {
 
         // --- PART 5: THE CAVE SYSTEM (7 Rooms) ---
         // Extracted to Sector2_Cave.ts
-        generateCaveSystem(ctx, innerCave, caveEntrancePos);
+        await generateCaveSystem(ctx, innerCave, caveEntrancePos);
+
+        spawnSectorHordes(ctx);
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
@@ -817,3 +807,21 @@ export const Sector2: SectorDef = {
         }
     }
 };
+
+function spawnSectorHordes(ctx: SectorContext) {
+    if (!ctx.spawnHorde) return;
+
+    // Defined Horde Locations (Forest)
+    const hordeSpots = [
+        new THREE.Vector3(0, 0, 150),   // Near Start
+        new THREE.Vector3(30, 0, 100),  // Mid Forest
+        new THREE.Vector3(-30, 0, 80),  // Left Forest
+        new THREE.Vector3(50, 0, 0),    // Near Cave Path
+        new THREE.Vector3(120, 0, -60)  // Outside Cave
+    ];
+
+    hordeSpots.forEach((pos, i) => {
+        const count = 4 + Math.floor(ctx.rng() * 4);
+        ctx.spawnHorde(count, undefined, pos);
+    });
+}

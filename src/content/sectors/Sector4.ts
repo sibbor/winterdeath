@@ -5,6 +5,7 @@ import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { t } from '../../utils/i18n';
+import { CAMERA_HEIGHT } from '../constants';
 
 const LOCATIONS = {
     SPAWN: {
@@ -41,12 +42,23 @@ export const Sector4: SectorDef = {
         fov: 40,
         moon: { visible: true, color: 0xffaa00, intensity: 0.3 },
         cameraOffsetZ: 40,
+        cameraHeight: CAMERA_HEIGHT,
         weather: 'rain'
     },
+    // Automatic Content
+    groundType: 'DIRT',
+    bounds: { width: 350, depth: 350 },
+    ambientLoop: 'ambient_scrapyard_loop',
     // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
+
+    // Auto-Spawn Collectibles
+    collectibles: [
+        { id: 's4_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's4_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+    ],
 
     cinematic: {
         offset: LOCATIONS.CINEMATIC.OFFSET,
@@ -54,8 +66,8 @@ export const Sector4: SectorDef = {
         rotationSpeed: 0.05
     },
 
-    generate: (ctx: SectorContext) => {
-        const { scene, obstacles, burningBarrels, triggers } = ctx;
+    generate: async (ctx: SectorContext) => {
+        const { scene, obstacles, triggers } = ctx;
 
         // --- TRIGGERS ---
         triggers.push(
@@ -81,58 +93,43 @@ export const Sector4: SectorDef = {
             }
         );
 
-        // Tiled Ground (Dirty)
-        // Cover -200 to 200 X, -200 to 100 Z
-        const tileSize = 100;
-        const tileGeo = new THREE.PlaneGeometry(tileSize, tileSize);
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.8 });
+        if (ctx.yield) await ctx.yield();
 
-        for (let x = -2; x <= 2; x++) {
-            for (let z = -2; z <= 1; z++) {
-                const ground = new THREE.Mesh(tileGeo, groundMat);
-                ground.rotation.x = -Math.PI / 2;
-                ground.position.set(x * tileSize, 0.02, z * tileSize);
-                ground.receiveShadow = true;
-                scene.add(ground);
-            }
-        }
-
-        // Stacks of Cars (Maze)
+        // Stacks of Cars (Maze) - Sektor 4 Bilskroten
         for (let i = 0; i < 60; i++) {
             const x = (Math.random() - 0.5) * 160;
             const z = -20 - Math.random() * 140;
 
-            // Avoid spawn path center
             if (Math.abs(x) < 10 && z > -100) continue;
 
             const carStackHeight = 1 + Math.floor(Math.random() * 3);
             const rotY = Math.random() * Math.PI * 2;
 
-            for (let h = 0; h < carStackHeight; h++) {
-                SectorBuilder.spawnCar(ctx, x, z, rotY, h);
-            }
+            await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
+
+            if (i % 10 === 0 && ctx.yield) await ctx.yield();
         }
 
-        // Perimeter Trees (New Forest House Style)
-        // Add dense trees around the edges to frame the scrapyard
+        // Perimeter Trees
         for (let i = 0; i < 80; i++) {
             const angle = Math.random() * Math.PI * 2;
-            // Radius ~100-150 creates a ring outside the car area
             const r = 100 + Math.random() * 60;
             const x = Math.cos(angle) * r;
-            const z = -80 + Math.sin(angle) * r; // Offset Z to center on play area roughly
+            const z = -80 + Math.sin(angle) * r;
 
-            SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
+            await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
+
+            if (i % 20 === 0 && ctx.yield) await ctx.yield();
         }
 
-        // Burning Fire Pits (Asset-Driven)
+        // Burning Fire Pits
         for (let i = 0; i < 3; i++) {
             const x = (Math.random() - 0.5) * 40;
             const z = -60 - (Math.random() * 80);
-            ObjectGenerator.createFire(ctx, x, z);
+            //ObjectGenerator.createFire(ctx, x, z);
         }
 
-        // The Dealership Building (Nathalie's location)
+        // The Dealership Building
         const shedGroup = new THREE.Group();
         shedGroup.position.set(-40, 0, -150);
         const shed = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 20), MATERIALS.metalPanel);
@@ -140,19 +137,21 @@ export const Sector4: SectorDef = {
         shedGroup.add(shed);
         scene.add(shedGroup);
         obstacles.push({ mesh: shedGroup, radius: 12 });
-        //SectorBuilder.spawnDebugMarker(ctx, -40, -150, 10, t('maps.scrapyard_name')); // Using map name as key or appropriate label
 
-        // Visual Collectibles
-        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's4_collectible_1', 'ring');
-        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's4_collectible_2', 'jacket');
+        obstacles.push({ mesh: shedGroup, radius: 12 });
 
-        // VISUALIZE TRIGGERS (Debug)
-        SectorBuilder.visualizeTriggers(ctx);
+        if (ctx.yield) await ctx.yield();
 
         // --- ZOMBIE SPAWNING ---
         for (let i = 0; i < 5; i++) {
             ctx.spawnZombie('WALKER');
         }
+
+        if (ctx.debugMode) {
+            SectorBuilder.visualizeTriggers(ctx);
+        }
+
+        spawnSectorHordes(ctx);
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
@@ -168,3 +167,21 @@ export const Sector4: SectorDef = {
         }
     }
 };
+
+function spawnSectorHordes(ctx: SectorContext) {
+    if (!ctx.spawnHorde) return;
+
+    // Defined Horde Locations (Scrapyard)
+    const hordeSpots = [
+        new THREE.Vector3(0, 0, -50),   // Near Start
+        new THREE.Vector3(-20, 0, -130), // Shed Front
+        new THREE.Vector3(30, 0, -200),  // Deep Scrapyard
+        new THREE.Vector3(80, 0, -80),   // Right Flank
+        new THREE.Vector3(-80, 0, -80)   // Left Flank
+    ];
+
+    hordeSpots.forEach((pos, i) => {
+        const count = 6 + Math.floor(ctx.rng() * 4);
+        ctx.spawnHorde(count, undefined, pos);
+    });
+}

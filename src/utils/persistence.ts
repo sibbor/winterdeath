@@ -15,10 +15,10 @@ export const DEFAULT_STATE: GameState = {
     sectorBriefing: '',
     debugMode: false,
     showFps: false,
-    familyMembersFound: [],
-    bossesDefeated: [],
-    midRunCheckpoint: null,
-    graphics: DEFAULT_GRAPHICS
+    rescuedFamilyIndices: [],
+    deadBossIndices: [],
+    graphics: DEFAULT_GRAPHICS,
+    weather: 'snow'
 };
 
 export const getPersistentState = (state: GameState) => {
@@ -29,10 +29,10 @@ export const getPersistentState = (state: GameState) => {
         weaponLevels: state.weaponLevels,
         debugMode: state.debugMode,
         showFps: state.showFps,
-        familyMembersFound: state.familyMembersFound,
-        bossesDefeated: state.bossesDefeated,
-        midRunCheckpoint: state.midRunCheckpoint,
-        graphics: state.graphics
+        rescuedFamilyIndices: state.rescuedFamilyIndices,
+        deadBossIndices: state.deadBossIndices,
+        graphics: state.graphics,
+        weather: state.weather
     };
 };
 
@@ -52,7 +52,8 @@ export const loadGameState = (): GameState => {
                 screen: loaded.stats?.prologueSeen ? GameScreen.CAMP : GameScreen.PROLOGUE,
                 debugMode: loaded.debugMode || false,
                 showFps: loaded.showFps || false,
-                graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) }
+                graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) },
+                weather: loaded.weather || DEFAULT_STATE.weather
             };
             // Compatibility checks
             if (mergedState.stats.totalDistanceTraveled === undefined) mergedState.stats.totalDistanceTraveled = 0;
@@ -64,9 +65,14 @@ export const loadGameState = (): GameState => {
             if (mergedState.stats.visitedPOIs === undefined) mergedState.stats.visitedPOIs = [];
             if (mergedState.stats.collectiblesFound === undefined) mergedState.stats.collectiblesFound = [];
 
-            if (mergedState.midRunCheckpoint) {
-                mergedState.currentMap = mergedState.midRunCheckpoint.mapIndex;
+            // Migration for renamed fields
+            if (loaded.familyMembersFound && mergedState.rescuedFamilyIndices.length === 0) {
+                mergedState.rescuedFamilyIndices = loaded.familyMembersFound;
             }
+            if (loaded.bossesDefeated && mergedState.deadBossIndices.length === 0) {
+                mergedState.deadBossIndices = loaded.bossesDefeated;
+            }
+
             return mergedState;
         } catch (e) {
             console.error("Save file corrupted, resetting.");

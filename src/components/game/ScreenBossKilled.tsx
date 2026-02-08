@@ -28,7 +28,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ mapIndex, onProceed
         <GameModalLayout title={titleNode} titleColorClass="text-red-600" maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl" isMobile={isMobileDevice}>
             <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 skew-x-[-5deg]`}>
                 <div className="skew-x-[5deg]">
-                    <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8`}>
+                    <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
                         "{t(bossData?.deathStory || "The target has been eliminated.")}"
                     </p>
 

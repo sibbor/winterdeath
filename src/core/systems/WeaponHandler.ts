@@ -204,6 +204,11 @@ export const WeaponHandler = {
                         new THREE.Vector3(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion)
                     );
 
+                    // Noise Emission (60m radius for guns)
+                    if (state.noiseEvents) {
+                        state.noiseEvents.push({ pos: origin.clone(), radius: 60, time: now });
+                    }
+
                     // Play sound once
                     soundManager.playShot(wep.name);
 
@@ -218,7 +223,7 @@ export const WeaponHandler = {
                         dir.z += (Math.random() - 0.5) * wep.spread;
                         dir.normalize();
 
-                        ProjectileSystem.spawnBullet(scene, origin, dir, wep.name, wep.baseDamage);
+                        ProjectileSystem.spawnBullet(scene, state.projectiles, origin, dir, wep.name, wep.baseDamage);
                     }
 
                 } else if (state.weaponAmmo[state.activeWeapon] <= 0 && !state.isReloading) {
@@ -257,7 +262,7 @@ export const WeaponHandler = {
                     const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
                     const origin = playerGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
 
-                    ProjectileSystem.spawnThrowable(scene, origin, dir, state.activeWeapon, ratio);
+                    ProjectileSystem.spawnThrowable(scene, state.projectiles, origin, dir, state.activeWeapon, ratio);
 
                     // Auto switch back to primary if empty (Skip in debug mode)
                     if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {

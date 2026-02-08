@@ -31,12 +31,46 @@ const SectorEditor: React.FC<SectorEditorProps> = ({ onClose }) => {
         };
     }, []);
 
+    const [isPlaying, setIsPlaying] = useState(false);
+
     const handleExport = () => {
         if (!editor) return;
         editor.currentSector.name = currentSectorName;
         const code = exportToCode(editor.currentSector);
-        navigator.clipboard.writeText(code);
-        alert("Sector code copied to clipboard!");
+
+        // Clipboard Fallback
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(() => {
+                alert("Sector code copied to clipboard!");
+            }).catch(err => {
+                console.error("Clipboard failed", err);
+                fallbackCopy(code);
+            });
+        } else {
+            fallbackCopy(code);
+        }
+    };
+
+    const fallbackCopy = (text: string) => {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert("Sector code copied to clipboard (fallback)!");
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+            alert("Failed to copy code. Check console.");
+        }
+        document.body.removeChild(textArea);
+    };
+
+    const togglePlay = () => {
+        if (!editor) return;
+        const newPlaying = !isPlaying;
+        setIsPlaying(newPlaying);
+        editor.setPlayMode(newPlaying);
     };
 
     return (
@@ -49,16 +83,12 @@ const SectorEditor: React.FC<SectorEditorProps> = ({ onClose }) => {
                     onExport={handleExport}
                     currentSectorName={currentSectorName}
                     setSectorName={setCurrentSectorName}
+                    isPlaying={isPlaying}
+                    onPlayToggle={togglePlay}
+                    onClose={onClose}
                 />
             )}
 
-            <button
-                onClick={onClose}
-                className="btn-close"
-                style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000, background: '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
-            >
-                Close Editor
-            </button>
         </div>
     );
 };

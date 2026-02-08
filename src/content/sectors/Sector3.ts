@@ -1,32 +1,61 @@
-
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
-import { MATERIALS, GEOMETRY } from '../../utils/assets';
+import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { PathGenerator } from '../../core/world/PathGenerator';
+import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { t } from '../../utils/i18n';
+import { soundManager } from '../../utils/sound';
+import { EnemyManager } from '../../core/EnemyManager';
+import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
+import { SectorManager } from '../../core/SectorManager';
 
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: 0, z: 0 },
-        FAMILY: { x: 10, z: -200, y: 0 },
-        BOSS: { x: 10, z: -220 }
+        FAMILY: { x: -200, z: -10, y: 0 },
+        BOSS: { x: -220, z: -10 }
     },
     CINEMATIC: {
-        OFFSET: { x: 10, y: 15, z: 15 },
+        OFFSET: { x: 15, y: 15, z: -10 },
         LOOK_AT: { x: 0, y: 2, z: 0 }
     },
     COLLECTIBLES: {
-        C1: { x: -20, z: -100 },
-        C2: { x: 30, z: -40 }
+        C1: { x: 230, z: -130 },
+        C2: { x: 200, z: -100 }
     },
     TRIGGERS: {
-        FOREST_NOISE: { x: 0, z: -50 },
-        MAST_SIGHT: { x: 0, z: -150 },
-        FOUND_ESMERALDA: { x: 10, z: -200 }
+        FOREST_NOISE: { x: 16, z: -4 },
+        MAST_SIGHT: { x: -450, z: -80 },
+        FOUND_ESMERALDA: { x: -200, z: -10 }
     },
     POIS: {
-        MAST: { x: 0, z: -210 },
-        MAST_DEBUG: { x: 0, z: -210 }
+        SPAWN: { x: 0, z: 0, rot: Math.PI / 2 },
+        FARM: { x: 150, z: -120 },
+        FARMHOUSE: { x: 275, z: -175 },
+        MAST: { x: -250, z: -50 },
+    },
+    PATHS: {
+        FOREST_TRAIL: [
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(40, 0, -30),
+            new THREE.Vector3(80, 0, -10),
+            new THREE.Vector3(120, 0, -50)
+        ],
+        HAGLAREDSVAGEN: [
+            new THREE.Vector3(120, 0, -50),
+            new THREE.Vector3(180, 0, -120),
+            new THREE.Vector3(250, 0, -150),
+            new THREE.Vector3(320, 0, -120),
+            new THREE.Vector3(400, 0, -80)
+        ],
+        ROAD_TO_MAST: [
+            new THREE.Vector3(120, 0, -50),
+            new THREE.Vector3(180, 0, -120),
+            new THREE.Vector3(250, 0, -150),
+            new THREE.Vector3(320, 0, -120),
+            new THREE.Vector3(400, 0, -80)
+        ]
     }
 } as const;
 
@@ -34,19 +63,32 @@ export const Sector3: SectorDef = {
     id: 2,
     name: "maps.mast_name",
     environment: {
-        bgColor: 0x051015, // Dark blue/green night
+        bgColor: 0x051015,
         fogDensity: 0.02,
-        ambientIntensity: 0.5, // Increased for visibility
-        groundColor: 0x112211, // Forest floor
+        ambientIntensity: 0.5,
+        groundColor: 0x112211,
         fov: 50,
-        moon: { visible: true, color: 0x88ffaa, intensity: 0.4 }, // Increased intensity
+        moon: { visible: true, color: 0x88ffaa, intensity: 0.4 },
         cameraOffsetZ: 40,
-        weather: 'rain' // Dense forest, maybe rain instead?
+        cameraHeight: CAMERA_HEIGHT,
+        weather: 'rain'
     },
+
+    // Automatic Content
+    groundType: 'GRAVEL',
+    bounds: { width: 500, depth: 800 },
+    ambientLoop: 'ambient_forest_loop',
+
     // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
+
+    // Auto-Spawn Collectibles
+    collectibles: [
+        { id: 's3_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's3_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+    ],
 
     cinematic: {
         offset: LOCATIONS.CINEMATIC.OFFSET,
@@ -54,115 +96,157 @@ export const Sector3: SectorDef = {
         rotationSpeed: 0.02
     },
 
-    generate: (ctx: SectorContext) => {
+    generate: async (ctx: SectorContext) => {
         const { scene, obstacles, triggers } = ctx;
+        (ctx as any).sectorState.ctx = ctx;
 
-        // --- TRIGGERS ---
+        PathGenerator.createDirtPath(ctx, [...LOCATIONS.PATHS.FOREST_TRAIL], 3);
+        PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.HAGLAREDSVAGEN], 6);
+        PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.ROAD_TO_MAST], 6);
+
+        if (ctx.yield) await ctx.yield();
+
+        // 2. Burning Farm
+        const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
+        SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
+
+        // 3. Farm House area props and bodies
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x + 5, LOCATIONS.POIS.FARMHOUSE.z + 5, 'WALKER', Math.random() * Math.PI);
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x - 5, LOCATIONS.POIS.FARMHOUSE.z + 10, 'RUNNER', Math.random() * Math.PI);
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'WALKER', Math.random() * Math.PI);
+
+        if (ctx.yield) await ctx.yield();
+
+        // 3. Farm House area props
+        SectorBuilder.spawnVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
+
+        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 15, LOCATIONS.POIS.FARMHOUSE.z + 10, Math.PI / 4, 1.2);
+        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 12, LOCATIONS.POIS.FARMHOUSE.z + 14, Math.PI / 3, 1.0);
+
+        // Timber truck on the road near the farm
+        SectorBuilder.spawnVehicle(ctx, 160, -90, -Math.PI / 6, 'timber_truck', 0x334433);
+
+        if (ctx.yield) await ctx.yield();
+
+        // --- 4. Wheat Field ---
+        const fieldPoly = [
+            new THREE.Vector3(100, 0, -80),
+            new THREE.Vector3(250, 0, -80),
+            new THREE.Vector3(250, 0, -180),
+            new THREE.Vector3(100, 0, -180)
+        ];
+        await SectorBuilder.fillWheatField(ctx, fieldPoly, 0.4);
+
+        if (ctx.yield) await ctx.yield();
+
+        // --- 5. Forest Clearing ---
+        const clearingPoly = [
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(80, 0, 0),
+            new THREE.Vector3(80, 0, -80),
+            new THREE.Vector3(0, 0, -80)
+        ];
+        await SectorBuilder.createForest(ctx, clearingPoly, 12, ['spruce', 'pine', 'birch']);
+
+        // --- 6. The Mast ---
+        const mastPos = LOCATIONS.POIS.MAST;
+
+        // Asfalt-platta under masten
+        const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+        asphalt.rotation.x = -Math.PI / 2;
+        asphalt.position.set(mastPos.x, 0.05, mastPos.z);
+        asphalt.receiveShadow = true;
+        scene.add(asphalt);
+
+        // Stängsel runt området
+        // Stängsel runt området
+        SectorBuilder.createFence(ctx, [
+            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30),
+            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z - 30),
+            new THREE.Vector3(mastPos.x + 30, 0, mastPos.z - 30),
+            new THREE.Vector3(mastPos.x + 30, 0, mastPos.z + 30),
+            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30)
+        ], 'black', 2.5);
+
+        // Kontrollrummet (Byggnaden under masten)
+        const controlRoom = SectorBuilder.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
+        controlRoom.userData.isObstacle = true;
+
+        // Masten (Sammanslagen geometri)
+        const mastGroup = new THREE.Group();
+        mastGroup.position.set(mastPos.x, 5, mastPos.z);
+
+        const mastBase = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 10), MATERIALS.concrete);
+        mastBase.position.y = 1;
+        mastGroup.add(mastBase);
+
+        const mastMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 6, 60, 4), MATERIALS.mast);
+        mastMesh.position.y = 30;
+        mastGroup.add(mastMesh);
+
+        // Roterande Hub för varningsljus
+        const lightHub = new THREE.Group();
+        lightHub.name = "mastWarningLights";
+        lightHub.position.y = 60;
+
+        [2, -2].forEach(posX => {
+            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000 }));
+            lamp.position.x = posX;
+            const pLight = new THREE.PointLight(0xff0000, 10, 50);
+            lamp.add(pLight);
+            lightHub.add(lamp);
+        });
+
+        mastGroup.add(lightHub);
+        mastGroup.userData.isObstacle = true;
+        scene.add(mastGroup);
+
+        // --- 5. TRIGGERS ---
         triggers.push(
-            // Flavor
-            {
-                id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s3_forest_noise", triggered: false,
-                actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_rustle' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's3_mast_sight', position: LOCATIONS.TRIGGERS.MAST_SIGHT, radius: 30, type: 'THOUGHTS', content: "clues.s3_mast_sight", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
+            { id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }] },
 
-            // --- FIND ESMERALDA EVENT ---
-            {
-                id: 'found_esmeralda',
-                position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, // Mast Base
-                radius: 8,
-                type: 'EVENT',
-                content: '',
-                triggered: false,
-                actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
-            }
+            // Clues
+            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'THOUGHTS', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's3_mast_sight', position: LOCATIONS.TRIGGERS.MAST_SIGHT, radius: 8, type: 'THOUGHTS', content: "clues.s3_mast_sight", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] }
         );
 
-        // Tiled Ground (Gravel/Forest Floor)
-        const tileSize = 100;
-        const tileGeo = new THREE.PlaneGeometry(tileSize, tileSize);
-
-        // Cover -200 to 200 X, -300 to 100 Z
-        for (let x = -2; x <= 2; x++) {
-            for (let z = -3; z <= 1; z++) {
-                const ground = new THREE.Mesh(tileGeo, MATERIALS.gravel);
-                ground.rotation.x = -Math.PI / 2;
-                ground.position.set(x * tileSize, 0.02, z * tileSize);
-                ground.receiveShadow = true;
-                scene.add(ground);
-            }
+        // --- 6. COLLECTIBLES (Auto-Spawned) ---
+        if (ctx.debugMode) {
+            SectorBuilder.visualizeTriggers(ctx);
         }
 
-        // Dense Forest Path
-        for (let z = 20; z > -250; z -= 15) {
-            // Create a path width of ~20 units
-            for (let x = -100; x < 100; x += 10) {
-                if (Math.abs(x) < 15) continue; // Clear path
-
-                if (Math.random() > 0.2) {
-                    const jitterX = (Math.random() - 0.5) * 10;
-                    const jitterZ = (Math.random() - 0.5) * 10;
-                    const scale = 1 + Math.random();
-
-                    SectorBuilder.spawnTree(ctx, 'spruce', x + jitterX, z + jitterZ, scale);
-                }
-            }
-        }
-
-        // The Mast
-        const mastGroup = new THREE.Group();
-        mastGroup.position.set(0, 0, -210);
-
-        // Base
-        const base = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 10), MATERIALS.concrete);
-        mastGroup.add(base);
-
-        // Structure (Simplified Lattice)
-        const mastGeo = new THREE.CylinderGeometry(1, 6, 60, 4);
-        const mast = new THREE.Mesh(mastGeo, MATERIALS.mast);
-        mast.position.y = 30;
-        mastGroup.add(mast);
-
-        // Red Beacon
-        const beacon = new THREE.PointLight(0xff0000, 5, 200);
-        beacon.position.y = 60;
-        mastGroup.add(beacon);
-
-        scene.add(mastGroup);
-        obstacles.push({ mesh: mastGroup, radius: 8 });
-        //SectorBuilder.spawnDebugMarker(ctx, 0, -210, 10, t('maps.mast_name'));
-
-        // Fences
-        for (let x = -20; x <= 20; x += 4) {
-            const f = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 0.2), MATERIALS.blackMetal);
-            f.position.set(x, 2, -190);
-            scene.add(f);
-        }
-
-        // Visual Collectibles
-        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C1.x, LOCATIONS.COLLECTIBLES.C1.z, 's3_collectible_1', 'diary');
-        SectorBuilder.spawnCollectible(ctx, LOCATIONS.COLLECTIBLES.C2.x, LOCATIONS.COLLECTIBLES.C2.z, 's3_collectible_2', 'badge');
-
-        // --- ZOMBIE SPAWNING ---
-        for (let i = 0; i < 5; i++) {
-            ctx.spawnZombie('WALKER');
-        }
+        spawnSectorHordes(ctx);
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
-        // Simple ambient spawning in forest
-        if (Math.random() < 0.01 && gameState.enemies.length < 10) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 30 + Math.random() * 20;
-            const px = playerPos.x + Math.cos(angle) * dist;
-            const pz = playerPos.z + Math.sin(angle) * dist;
-            // Only spawn if off-path
-            if (Math.abs(px) > 15) {
-                events.spawnZombie('WALKER', new THREE.Vector3(px, 0, pz));
+        // Roterande varningsljus i masten (Söker efter unikt namn i scenen)
+        /*
+        ctx.scene.traverse((obj) => {
+            if (obj.name === "mastWarningLights") {
+                obj.rotation.y += delta * 2.0;
             }
-        }
+        });
+        */
     }
 };
+
+function spawnSectorHordes(ctx: SectorContext) {
+    if (!ctx.spawnHorde) return;
+
+    // Defined Horde Locations (Farm / Mast)
+    const hordeSpots = [
+        new THREE.Vector3(40, 0, -30),   // Forest Trail
+        new THREE.Vector3(150, 0, -120), // Farm
+        new THREE.Vector3(180, 0, -130), // Wheat Field
+        new THREE.Vector3(-250, 0, -50), // Mast Area
+        new THREE.Vector3(300, 0, -100)  // Road
+    ];
+
+    hordeSpots.forEach((pos, i) => {
+        const count = 5 + Math.floor(ctx.rng() * 5);
+        ctx.spawnHorde(count, undefined, pos);
+    });
+}

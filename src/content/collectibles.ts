@@ -61,7 +61,7 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         nameKey: 'clues.s3_collectible_2_title',
         descriptionKey: 'clues.s3_collectible_2_description',
         sector: 3,
-        modelType: 'badge',
+        modelType: 'jacket',
         reward: { sp: 1 }
     },
 
@@ -79,7 +79,7 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         nameKey: 'clues.s4_collectible_2_title',
         descriptionKey: 'clues.s4_collectible_2_description',
         sector: 4,
-        modelType: 'jacket',
+        modelType: 'badge',
         reward: { sp: 1 }
     }
 };

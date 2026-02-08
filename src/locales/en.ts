@@ -14,6 +14,8 @@ export const en = {
     ui: {
         scrap: "SCRAP",
         scrap_earned: "Scrap Earned",
+        game_title_1: "WINTER",
+        game_title_2: "DEATH",
         sp: "SP",
         kills: "KILLS",
         level: "LEVEL",
@@ -43,6 +45,10 @@ export const en = {
         mia: "MISSING",
         alive: "ALIVE",
         eliminated: "ELIMINATED",
+        family_member_missing: "MISSING",
+        family_member_rescued: "RESCUED",
+        boss_alive: "ALIVE",
+        boss_dead: "DEAD",
         total_xp: "TOTAL XP",
         status: "STATUS",
         not_completed: "NOT COMPLETED",
@@ -112,6 +118,7 @@ export const en = {
         interact_open_chest: "OPEN CHEST",
         interact_plant_explosive: "PLANT EXPLOSIVE",
         interact_knock_on_port: "KNOCK ON DOOR",
+        interact_blow_up_bus: "[E] BLOW UP BUS",
         clue_found_title: "CLUE FOUND",
         skill_point: "SKILL POINT",
         collectible_discovered: "COLLECTIBLE DISCOVERED",
@@ -162,8 +169,10 @@ export const en = {
         target_located: "TARGET LOCATED",
         protect_family: "PROTECT FAMILY",
         scanning: "SCANNING...",
+        zombie_wave: "Zombie Wave",
         collected: "COLLECTED",
         new: "NEW",
+        survivor_tip: "Survivor Tip",
         editor: {
             title: "Sector Editor",
             save: "SAVE SECTOR",
@@ -266,7 +275,7 @@ export const en = {
         "Auto-Reload is slower than manual Reload [R].",
         "Upgrading 'Vitaltiy' helps you survive longer.",
         "Upgrading 'Adrenaline' helps you run for longer periods of time.",
-        "Upgrading 'Reflexesd' helps you outrun the zombies."
+        "Upgrading 'Reflexes' helps you outrun the zombies."
     ],
     maps: {
         village_name: "The Village",
@@ -292,7 +301,7 @@ export const en = {
         intel_scrap_title: "INTEL: THE SACRIFICE",
         intel_scrap_text: "Your daughter is safe. She revealed the heartbreaking truth: a massive Titan zombie attacked them in the woods. Your wife sacrificed herself, screaming to lure it away so your daughter could escape.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
         epilogue_title: "EPILOGUE: NO ONE LEFT BEHIND",
-        epilogue_text: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the undead, but we made a promise. Return to The Village one last time. Save them.",
+        epilogue_text: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the zombies, but we made a promise. Return to The Village one last time. Save them.",
         prologue: [
             {
                 overlay: "GÅNGHESTER. 48 HOURS SINCE VMA.",
@@ -348,9 +357,6 @@ export const en = {
                 audio: "Zombies groaning and attacking."
             }
         ],
-        generic_briefing: "Emergency Broadcast: Distress signal detected in {map}. Locate the survivor and neutralize the {boss}.",
-        extracted_briefing: "Sector Report: {map} is currently under the control of the {boss}. Although the survivor has been successfully extracted to camp, the area remains a critical threat. The horde is growing, and we cannot let the {boss} establish a stronghold. Go in, clear the sector, and eliminate the target.",
-        gym_event: "What the hell was that?!"
     },
     bosses: {
         0: { name: "The Yard Master", death: "The creature that started it all in The Village lies dead. Its mutated form suggests it was once human, perhaps a neighbor. Loke is safe now.", lore: "Entity identified in Sector 1 (Forest). wields crude heavy weaponry. High physical resilience." },
@@ -378,8 +384,8 @@ export const en = {
     },
     clues: {
         // Sector 1
-        s1_collectible_1_title: "Esmeralda's phone",
-        s1_collectible_1_description: "The screen is cracked and flickering, but some details are visible. Esmeralda's last attempt was a message to me:\n'Dad!! We can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to S[...]'\n'Message not sent. Retry?' is written in red at the bottom...",
+        s1_collectible_1_title: "Loke's phone",
+        s1_collectible_1_description: "The screen is cracked and flickering, but some details are visible. Loke's last attempt was a message to me:\n'Dad!! We can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to D[...]'\n'Message not sent. Retry?' is written in red at the bottom...",
         s1_collectible_2_title: "Loke's Hand Axe",
         s1_collectible_2_description: "Loke's small hand axe. He always wants to help me chop wood at the summer cottage. He must have grabbed it in a hurry to defend himself.",
 
@@ -388,8 +394,6 @@ export const en = {
         s1_they_must_be_scared: "It's chaos! They must be terrified.",
         s1_still_tracking: "The tracks continues in this direction.",
         s1_town_center: "The tracks disappear... they must be here somewhere.",
-        s1_tunnel_blocked: "Oh crap, the tunnel has been blocked by a crashed bus",
-        s1_tunnel_cleared: "Tunnel cleared. Smooth!",
 
         s1_poi_building_on_fire: "Shit! SMU campus is on a fire!",
         s1_poi_church: "The church is burning... The work of Satan?",
@@ -399,7 +403,13 @@ export const en = {
         s1_poi_grocery: "The grocery store seems looted...",
         s1_poi_train_yard: "Hmm... the smoke comes from the train.",
 
-        // Sector 2 
+        s1_event_tunnel_blocked: "Hmm... The tunnel leading to the train station is blocked by a crashed bus.",
+        s1_event_tunnel_whats_happening: "What an explosion! What the HELL was that?! It came from the trainyard!",
+        s1_event_tunnel_plant_explosives: "Let's clear the tunnel by blowing up that fucking bus up!?",
+        s1_event_tunnel_cleared: "There we go - the tunnel has been cleared!",
+        s1_event_tunnel_explosion_attracted_zombies: "Fuck! The explosion attracted zombies!",
+
+        // Sector 2
         s2_collectible_1_title: "Jordan's favorite pacifier",
         s2_collectible_1_description: "It's small, blue and covered in frost. Jordan never goes anywhere without it. He must have dropped it when they ran into the caves.",
         s2_collectible_2_title: "Jordan's Teddy Bear",
@@ -423,7 +433,14 @@ export const en = {
         s3_collectible_2_description: "Esmeralda's favorite jacket. It's torn and has bloodstains on the sleeve. My stomach knots... I hope it's not her blood.",
 
         s3_forest_noise: "The forest is too loud. Every snap of a twig sounds like a runner...",
+        s3_dead_bodies: "Poor bastards... Children, look away!",
+        s3_tractor: "Nice tractor. Wonder if it's working?",
+        s3_burning_farm: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night.",
         s3_mast_sight: "There it is. The Häglared Mast. If Esmeralda is anywhere, she's there.",
+
+        s3_poi_the_farm: "The egg farm. This is the place where we used to get our eggs from.",
+        s3_poi_the_mast: "The mast is huge! Hard to imagine it was even higher before it was sabotaged in 2016.",
+
 
         // Sector 4
         s4_collectible_1_title: "Nathalie's Wedding Ring",

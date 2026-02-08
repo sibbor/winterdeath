@@ -1,10 +1,10 @@
 
 import { CharacterModels } from './models/characters';
-import { UndeadModels } from './models/undead';
+import { ZombieModels } from './models/zombie';
 import { CollectibleModels } from './models/collectibles';
 
 export const ModelFactory = {
     ...CharacterModels,
-    ...UndeadModels,
+    ...ZombieModels,
     ...CollectibleModels
 };

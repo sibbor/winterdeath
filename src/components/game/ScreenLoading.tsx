@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../utils/i18n';
-import { MAP_THEMES } from '../../content/constants';
+import { SECTOR_THEMES } from '../../content/constants';
 
 interface ScreenLoadingProps {
     mapIndex: number;
@@ -43,7 +43,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobil
 
                     <p className="text-gray-400 text-sm italic max-w-md mt-2">
                         <span className="text-red-500 uppercase tracking-[0.2em] block mb-2">
-                            Survivor Tip
+                            {t('ui.survivor_tip')}
                         </span>
                         "{randomTip}"
                     </p>

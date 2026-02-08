@@ -43,20 +43,24 @@ export class EnemySystem implements System {
                 this.playerGroup.position,
                 state.enemies,
                 state.obstacles,
+                session.noiseEvents,
+                state.shakeIntensity,
                 // onPlayerHit
-                (damage, type, enemyPos) => {
-                    // Logic from GameCanvas onPlayerHit
+                (damage: number, type: string, enemyPos: THREE.Vector3) => {
+
                     if (now < state.invulnerableUntil) return;
                     state.damageTaken += damage;
                     state.hp -= damage;
+
                     soundManager.playDamageGrunt();
                     state.hurtShake = 1.0;
                     state.lastDamageTime = now;
+                    // Fix: Check if type is 'Boss' string (safest since 'type' is string)
                     if (type === 'Boss') state.bossDamageTaken += damage;
 
                     this.spawnPart(session, this.playerGroup.position.x, 1.2, this.playerGroup.position.z, 'blood', 80);
 
-                    if (state.hp <= 0 && !state.isDead) { // state.isDead is in RuntimeState
+                    if (state.hp <= 0 && !state.isDead) {
                         state.isDead = true;
                         state.deathStartTime = now;
                         state.killerType = type;
@@ -78,6 +82,8 @@ export class EnemySystem implements System {
                 (x, y, z, type, count, mesh, vel, color) => this.spawnPart(session, x, y, z, type, count, mesh, vel, color),
                 // spawnDecal wrapper
                 (x, z, scale, mat) => this.spawnDecal(session, x, z, scale, mat),
+                // spawnBubble (Debug)
+                (text, dur) => this.callbacks.spawnBubble(text, dur),
                 // onDamageDealt
                 (dotDamage, isBoss) => {
                     state.damageDealt += dotDamage;

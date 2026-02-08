@@ -45,8 +45,26 @@ export const Synth = {
 };
 
 export const UiSounds = {
-    playHover: (core: SoundCore) => {
+    playUiHover: (core: SoundCore) => {
         Synth.tone(core, 'sine', 800, 50, 0.05);
+    },
+    playCollectibleChime: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, now);
+        osc.frequency.exponentialRampToValueAtTime(2000, now + 0.1);
+        osc.frequency.exponentialRampToValueAtTime(500, now + 0.5); // Ping-sparkle
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.6);
     },
     playClick: (core: SoundCore) => {
         Synth.tone(core, 'triangle', 600, 80, 0.1);
@@ -168,6 +186,12 @@ export const GamePlaySounds = {
         osc.start(now);
         osc.stop(now + duration);
         core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playAmbientRustle: (core: SoundCore) => {
+        Synth.noise(core, 500 + Math.random() * 500, 0.02);
+    },
+    playAmbientMetal: (core: SoundCore) => {
+        Synth.tone(core, 'triangle', 150 + Math.random() * 100, 400, 0.02, 0.1);
     }
 };
 
@@ -287,30 +311,317 @@ export const WeaponSounds = {
 };
 
 export const EnemySounds = {
-    playEnemySound: (core: SoundCore, type: string) => {
+    // --- WALKER ---
+    playWalkerGroan: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+
+        // Low, raspy moan
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(60 + Math.random() * 20, now);
+        osc.frequency.linearRampToValueAtTime(40, now + 1.5);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 1.6);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playWalkerAttack: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // Snap/Bite
+        Synth.noise(core, 100, 0.2);
+        // Growl
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.4);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playWalkerDeath: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(10, now + 0.8);
+
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.9);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+
+    // --- RUNNER ---
+    playRunnerScream: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+
+        // High pitched screech
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+        osc.frequency.linearRampToValueAtTime(300, now + 0.6);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.15, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.7);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playRunnerAttack: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        Synth.noise(core, 150, 0.2); // Fast swipe
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playRunnerDeath: (core: SoundCore) => {
         const now = core.ctx.currentTime;
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
         osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(500, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
 
-        let freq = 80;
-        let dur = 0.5;
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
 
-        if (type === 'RUNNER') { freq = 150; dur = 0.3; }
-        else if (type === 'TANK') { freq = 50; dur = 1.0; }
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
 
-        osc.frequency.setValueAtTime(freq, now);
-        osc.frequency.linearRampToValueAtTime(freq * 0.8, now + dur);
+    // --- TANK ---
+    playTankRoar: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // 1. Deep Rumble
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(80, now);
+        osc.frequency.linearRampToValueAtTime(60, now + 1.5);
 
         gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.1, now + 0.1);
+        gain.gain.linearRampToValueAtTime(0.4, now + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 2.1);
+        core.track(osc as unknown as AudioBufferSourceNode);
+
+        // 2. Screech Overlay
+        const osc2 = core.ctx.createOscillator();
+        const gain2 = core.ctx.createGain();
+        osc2.type = 'sawtooth';
+        osc2.frequency.setValueAtTime(200, now);
+        osc2.frequency.linearRampToValueAtTime(400, now + 0.5);
+        osc2.frequency.exponentialRampToValueAtTime(100, now + 2.0);
+
+        gain2.gain.setValueAtTime(0, now);
+        gain2.gain.linearRampToValueAtTime(0.1, now + 0.5);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+
+        osc2.connect(gain2);
+        gain2.connect(core.masterGain);
+        osc2.start(now);
+        osc2.stop(now + 2.1);
+        core.track(osc2 as unknown as AudioBufferSourceNode);
+    },
+    playTankSmash: (core: SoundCore) => {
+        // Heavy impact
+        WeaponSounds.playExplosion(core);
+        // Add metal crunch
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(50, now);
+        osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.6);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playTankDeath: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 3.0); // Long decay
+
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 3.0);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 3.1);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+
+    // --- BOMBER ---
+    playBomberBeep: (core: SoundCore, speed: number = 1.0) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.1);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.1, now + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playBomberExplode: (core: SoundCore) => {
+        WeaponSounds.playExplosion(core);
+        // Add wet squelch
+        Synth.noise(core, 400, 0.3);
+    }
+};
+
+export const BossSounds = {
+    playBossSpawn: (core: SoundCore, id: number) => {
+        const now = core.ctx.currentTime;
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+
+        // Base Roar
+        osc.type = 'sawtooth';
+        let freqStart = 100;
+        let freqEnd = 20;
+        let duration = 3.0;
+
+        // Custom profiles per boss
+        if (id === 0) { // Abomination (Standard)
+            freqStart = 120; freqEnd = 30; duration = 3.5;
+            osc.type = 'sawtooth';
+        } else if (id === 1) { // Tanky
+            freqStart = 80; freqEnd = 10; duration = 4.0;
+            osc.type = 'square';
+        } else if (id === 2) { // Fast/Alien
+            freqStart = 600; freqEnd = 200; duration = 2.5;
+            osc.type = 'sawtooth';
+        } else if (id === 3) { // Super Tank
+            freqStart = 50; freqEnd = 5; duration = 5.0;
+            osc.type = 'triangle';
+        }
+
+        osc.frequency.setValueAtTime(freqStart, now);
+        osc.frequency.exponentialRampToValueAtTime(freqEnd, now + duration);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.5, now + 0.5); // Fade in
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + duration + 0.1);
+        core.track(osc as unknown as AudioBufferSourceNode);
+
+        // Thunderous Impact
+        WeaponSounds.playExplosion(core);
+    },
+    playBossAttack: (core: SoundCore, id: number) => {
+        const now = core.ctx.currentTime;
+        // Aggressive Impact
+        Synth.noise(core, 300, 0.4);
+
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'sawtooth';
+        let f = 150;
+
+        if (id === 0) f = 180; // Abomination
+        else if (id === 2) f = 400; // Higher pitch for fast boss
+        else if (id === 3) { f = 80; osc.type = 'square'; } // Super Tank deep
+
+        osc.frequency.setValueAtTime(f, now);
+        osc.frequency.exponentialRampToValueAtTime(f * 0.5, now + 0.5);
+
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+        osc.connect(gain);
+        gain.connect(core.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.6);
+        core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playBossDeath: (core: SoundCore, id: number) => {
+        const now = core.ctx.currentTime;
+        // Long, dramatic fade
+        const osc = core.ctx.createOscillator();
+        const gain = core.ctx.createGain();
+        osc.type = 'square';
+
+        let dur = 4.0;
+        let startF = 100;
+        if (id === 3) { dur = 6.0; startF = 60; }
+
+        osc.frequency.setValueAtTime(startF, now);
+        osc.frequency.exponentialRampToValueAtTime(10, now + dur);
+
+        gain.gain.setValueAtTime(0.6, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
         osc.connect(gain);
         gain.connect(core.masterGain);
         osc.start(now);
-        osc.stop(now + dur + 0.1);
+        osc.stop(now + dur + 0.5);
         core.track(osc as unknown as AudioBufferSourceNode);
+
+        // Final thud
+        setTimeout(() => WeaponSounds.playExplosion(core), dur * 500);
     }
 };
 
@@ -389,7 +700,7 @@ export const VoiceSounds = {
     },
     playDeathScream: (core: SoundCore, name: string) => {
         const lowerName = (name || '').toLowerCase();
-        const isMale = lowerName.includes('robert') || lowerName.includes('pappa') || lowerName.includes('loke') || lowerName.includes('jordan');
+        const isMale = lowerName.includes('robert') || lowerName.includes('pappa');
 
         const now = core.ctx.currentTime;
         const duration = 1.5;

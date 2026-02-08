@@ -15,15 +15,13 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
 
     useEffect(() => {
         soundManager.playUiConfirm();
-        // Trigger fade-in after a brief delay
-        setTimeout(() => setIsVisible(true), 50);
+        // Trigger fade-in immediately (was 50ms)
+        setTimeout(() => setIsVisible(true), 10);
     }, []);
-
-    // Unified ESC handling is managed via useGlobalInput in App.tsx
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md p-4 sm:p-8 text-white font-sans select-none overflow-hidden transition-opacity duration-1000"
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md p-4 sm:p-8 text-white font-sans select-none overflow-hidden transition-opacity duration-500"
             style={{ opacity: isVisible ? 1 : 0 }}
         >
             {/* Background Aesthetic */}
@@ -48,7 +46,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
                 </div>
 
                 {/* Action Button */}
-                <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-[fadeIn_1s_ease-out_forwards]`}>
+                <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-[fadeIn_0.6s_ease-out_forwards]`}>
                     <button
                         onClick={onContinue}
                         className={`group relative ${isMobileDevice ? 'px-12 py-4' : 'px-16 py-5'} bg-white text-black border-4 border-black hover:bg-black hover:text-white transition-all duration-300 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>

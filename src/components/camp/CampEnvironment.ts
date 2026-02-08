@@ -1,6 +1,10 @@
 
 import * as THREE from 'three';
 import { WindSystem } from '../../utils/physics';
+import { WEATHER } from '../../content/constants';
+import { GEOMETRY } from '../../utils/assets';
+import { WeatherSystem } from '../../core/systems/WeatherSystem';
+import { WeatherType } from '../../types';
 
 interface Textures {
     stone: THREE.Texture;
@@ -17,20 +21,27 @@ export interface CampEffectsState {
     };
     starSystem: THREE.Points;
     fireLight: THREE.PointLight;
+    weatherSystem: WeatherSystem;
 }
 
 export const CampEnvironment = {
-    initEffects: (scene: THREE.Scene, textures: Textures): CampEffectsState => {
+    initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType): CampEffectsState => {
+        const wind = new WindSystem();
+        const weatherSystem = new WeatherSystem(scene, wind);
+        weatherSystem.sync(weatherType, WEATHER.PARTICLE_COUNT, 100);
+
         const starSystem = CampEnvironment.setupSky(scene, textures);
         const fireLight = CampEnvironment.setupCampfire(scene, textures);
 
         return {
-            wind: new WindSystem(),
+            wind,
             particles: { flames: [], sparkles: [], smokes: [] },
             starSystem,
-            fireLight
+            fireLight,
+            weatherSystem
         };
     },
+
 
     setupSky: (scene: THREE.Scene, textures: Textures) => {
         // Moon
@@ -50,7 +61,7 @@ export const CampEnvironment = {
             map: textures.halo,
             color: 0xffffee,
             transparent: true,
-            opacity: 0.4,
+            opacity: 0.1,
             blending: THREE.AdditiveBlending,
             fog: false,
             depthWrite: false
@@ -104,7 +115,6 @@ export const CampEnvironment = {
     },
 
     setupCampfire: (scene: THREE.Scene, textures: Textures) => {
-        // Light
         // Fire Light - Radial Shadows (The "Feel")
         const fireLight = new THREE.PointLight(0xff7722, 40, 90);
         fireLight.position.set(0, 3, 0);
@@ -193,5 +203,8 @@ export const CampEnvironment = {
             const sm = smokes[i]; sm.life -= 0.005; sm.mesh.position.y += sm.speed; sm.mesh.scale.multiplyScalar(1.01); sm.mesh.position.x += wind.x * 1.5; sm.mesh.position.z += wind.y * 1.5; sm.mesh.material.opacity = sm.life * 0.3;
             if (sm.life <= 0) { scene.remove(sm.mesh); smokes.splice(i, 1); }
         }
+
+        // Weather
+        state.weatherSystem.update(delta, now);
     }
 };

@@ -27,6 +27,10 @@ export const EnemyManager = {
         return EnemySpawner.spawnBoss(scene, pos, bossData);
     },
 
+    spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number) => {
+        return EnemySpawner.spawnHorde(scene, startPos, count, bossSpawned, currentCount);
+    },
+
     createCorpse: (enemy: Enemy): THREE.Object3D => {
         return ModelFactory.createCorpse(enemy.mesh);
     },
@@ -107,17 +111,22 @@ export const EnemyManager = {
         playerPos: THREE.Vector3,
         enemies: Enemy[],
         obstacles: Obstacle[],
+        noiseEvents: { pos: THREE.Vector3, radius: number, time: number }[],
+        shakeIntensity: number,
         onPlayerHit: (damage: number, type: string, enemyPos: THREE.Vector3) => void,
         spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) => void,
         spawnDecal: (x: number, z: number, scale: number, mat?: any) => void,
+        spawnBubble: (text: string, duration: number) => void,
         onDamageDealt?: (amount: number, isBoss?: boolean) => void
     ) => {
         for (const e of enemies) {
-            EnemyAI.updateEnemy(e, now, delta, playerPos, obstacles, {
+            EnemyAI.updateEnemy(e, now, delta, playerPos, obstacles, noiseEvents, enemies, shakeIntensity, {
                 onPlayerHit,
                 spawnPart,
                 spawnDecal,
-                onDamageDealt: (amt) => onDamageDealt ? onDamageDealt(amt, !!e.isBoss) : undefined
+                onDamageDealt: (amt) => onDamageDealt ? onDamageDealt(amt, !!e.isBoss) : undefined,
+                playSound: (id) => soundManager.playEffect(id),
+                spawnBubble
             });
         }
     },
@@ -147,7 +156,13 @@ export const EnemyManager = {
                 if (wasBoss) {
                     if (!state.bossDefeatedTime) {
                         state.bossDefeatedTime = now;
-                        soundManager.playVictory();
+                        // Use unique boss death sound
+                        if (e.bossId !== undefined) {
+                            soundManager.playBossDeath(e.bossId);
+                        }
+                        // Play victory fanfare after short delay
+                        setTimeout(() => soundManager.playVictory(), 4000);
+
                         callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 200);
                         if (e.bossId !== undefined && callbacks.onBossKilled) callbacks.onBossKilled(e.bossId);
                     }

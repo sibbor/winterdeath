@@ -14,6 +14,8 @@ export class PlayerMovementSystem implements System {
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
+        this.handleShake(input, state, delta);
+
         const spawnPart = (x: number, y: number, z: number, type: string, count: number) => {
             FXSystem.spawnPart(session.engine.scene, state.particles, x, y, z, type, count);
         };
@@ -26,7 +28,8 @@ export class PlayerMovementSystem implements System {
             delta,
             now,
             disableInput,
-            spawnPart
+            spawnPart,
+            session
         );
 
         state.isMoving = isMoving;
@@ -37,7 +40,8 @@ export class PlayerMovementSystem implements System {
             state,
             session.isMobile,
             disableInput,
-            isMoving
+            isMoving,
+            session
         );
     }
 
@@ -49,7 +53,8 @@ export class PlayerMovementSystem implements System {
         delta: number,
         now: number,
         disableInput: boolean,
-        spawnPart: (x: number, y: number, z: number, type: string, count: number) => void
+        spawnPart: (x: number, y: number, z: number, type: string, count: number) => void,
+        session: GameSessionLogic
     ): boolean {
         // --- Stamina & Rush Logic ---
         // Fix for infinite drain (space released = stop rushing)
@@ -118,9 +123,25 @@ export class PlayerMovementSystem implements System {
                     for (const obs of obstacles) {
                         const push = resolveCollision(testPos, 0.5, obs);
                         if (push) {
+                            // CHECK FOR ENEMY KNOCKBACK
+                            if ((state.isRushing || state.isRolling) && obs.mesh && obs.mesh.userData.entity) {
+                                const enemy = obs.mesh.userData.entity;
+                                // Can only knockback if not boss?
+                                if (!enemy.isBoss && enemy.state !== 'STUNNED' && enemy.state !== 'dead') {
+                                    enemy.state = 'STUNNED';
+                                    enemy.stunTimer = 1.0; // 1 second stun
+
+                                    // Apply Knockback Force
+                                    const force = state.isRolling ? 2.5 : 1.5;
+                                    const pushDir = baseMoveVec.clone().normalize();
+                                    enemy.mesh.position.add(pushDir.multiplyScalar(force));
+
+                                    // Visual/Sound?
+                                    // e.g. spawnPart(enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 5);
+                                }
+                            }
+
                             // Apply push
-                            const colInfo = obs.collider ? `${obs.collider.type} ${JSON.stringify(obs.collider.size || obs.collider.radius)}` : 'MeshCollider';
-                            console.log(`[COLLISION] Hit: '${obs.mesh?.name || 'Unnamed'}' (${obs.mesh?.geometry?.type || 'NoGeo'}) [${colInfo}] at (${testPos.x.toFixed(2)}, ${testPos.z.toFixed(2)})`);
                             testPos.add(push);
                             adjusted = true;
 
@@ -167,7 +188,9 @@ export class PlayerMovementSystem implements System {
 
                 if (v.lengthSq() > 0) {
                     isMoving = true;
-                    const moveVec = v.normalize().multiplyScalar(speed * delta);
+                    // --- CAMERA RELATIVE ROTATION ---
+                    const angle = session.cameraAngle || 0;
+                    const moveVec = v.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).multiplyScalar(speed * delta);
                     performMove(moveVec);
                 }
             }
@@ -178,45 +201,77 @@ export class PlayerMovementSystem implements System {
         return isMoving;
     }
 
+    private handleShake(input: any, state: any, delta: number) {
+        // Simple shake detection: Alternating inputs or rapid fire
+        // We'll track specific input combos in state
+        if (!state.shakeIntensity) state.shakeIntensity = 0;
+
+        let shakeInput = 0;
+        // Check for "Action" button mashing (Space/Fire)
+        if (input.space && !state.lastSpace) shakeInput += 1;
+        if (input.fire && !state.lastFire) shakeInput += 1;
+
+        // Track A/D Direction change?
+        if (input.a && !state.lastA) shakeInput += 0.5;
+        if (input.d && !state.lastD) shakeInput += 0.5;
+
+        state.lastSpace = input.space;
+        state.lastFire = input.fire;
+        state.lastA = input.a;
+        state.lastD = input.d;
+
+        if (shakeInput > 0) {
+            state.shakeIntensity += shakeInput;
+        }
+
+        // Decay
+        state.shakeIntensity = Math.max(0, state.shakeIntensity - delta * 2.0);
+    }
+
     private handleRotation(
         playerGroup: THREE.Group,
         input: any,
         state: any,
         isMobile: boolean,
         disableInput: boolean,
-        isMoving: boolean
+        isMoving: boolean,
+        session: GameSessionLogic
     ) {
         if (disableInput) return;
 
-        const hasRightStick = input.joystickAim && input.joystickAim.lengthSq() > 0.1;
+        const angle = session.cameraAngle || 0;
+        const hasRightStick = input.joystickAim && input.joystickAim.lengthSq() > 0.25;
         const hasLeftStick = input.joystickMove && input.joystickMove.lengthSq() > 0.1;
         const hasMouse = !isMobile && input.aimVector && input.aimVector.lengthSq() > 1;
 
         if (hasRightStick) {
-            // Priority 1 (Mobile): Aim Stick
-            const targetX = playerGroup.position.x + input.joystickAim.x * 10;
-            const targetZ = playerGroup.position.z + input.joystickAim.y * 10;
+            // Priority 1 (Mobile): Aim Stick (Explicit Override)
+            const aimVec = new THREE.Vector3(input.joystickAim.x, 0, input.joystickAim.y).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            const targetX = playerGroup.position.x + aimVec.x * 10;
+            const targetZ = playerGroup.position.z + aimVec.z * 10;
             playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
         }
         else if (isMobile && hasLeftStick) {
-            // Priority 2 (Mobile): Move Stick (when not aiming)
-            // This fixes the flashlight direction while running on mobile
-            const targetX = playerGroup.position.x + input.joystickMove.x * 10;
-            const targetZ = playerGroup.position.z + input.joystickMove.y * 10;
+            // Priority 2 (Mobile): Move Stick (ONLY if Right Stick is Idle)
+            const moveVec = new THREE.Vector3(input.joystickMove.x, 0, input.joystickMove.y).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            const targetX = playerGroup.position.x + moveVec.x * 10;
+            const targetZ = playerGroup.position.z + moveVec.z * 10;
             playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
         }
         else if (hasMouse) {
             // Priority 1 (Desktop): Mouse
-            const targetX = playerGroup.position.x + input.aimVector.x;
-            const targetZ = playerGroup.position.z + input.aimVector.y;
+            const aimVec = new THREE.Vector3(input.aimVector.x, 0, input.aimVector.y).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+            const targetX = playerGroup.position.x + aimVec.x;
+            const targetZ = playerGroup.position.z + aimVec.z;
             playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);
         }
         else if (isMoving && !isMobile) {
             // Priority 2 (Desktop): Keyboard Direction (fallback)
-            const moveDir = new THREE.Vector3(0, 0, 0);
-            if (input.w) moveDir.z -= 1; if (input.s) moveDir.z += 1; if (input.a) moveDir.x -= 1; if (input.d) moveDir.x += 1;
+            const moveDirRaw = new THREE.Vector3(0, 0, 0);
+            if (input.w) moveDirRaw.z -= 1; if (input.s) moveDirRaw.z += 1; if (input.a) moveDirRaw.x -= 1; if (input.d) moveDirRaw.x += 1;
 
-            if (moveDir.lengthSq() > 0.1) {
+            if (moveDirRaw.lengthSq() > 0.1) {
+                const moveDir = moveDirRaw.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
                 const targetX = playerGroup.position.x + moveDir.x * 10;
                 const targetZ = playerGroup.position.z + moveDir.z * 10;
                 playerGroup.lookAt(targetX, playerGroup.position.y, targetZ);

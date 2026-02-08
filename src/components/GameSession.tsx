@@ -1,16 +1,18 @@
 import React, { useEffect, useRef, useMemo, useState, useImperativeHandle, useCallback } from 'react';
 import * as THREE from 'three';
-import { normalize } from 'path'; // Note: Probably unused legacy
 import TouchController from './ui/TouchController';
 import { Engine } from '../core/engine/Engine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { PlayerStats, WeaponType, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
-import { WEAPONS, BOSSES, MAP_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP } from '../content/constants';
+import { SectorContext } from '../types/sectors';
+import { WEAPONS, BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP, CAMERA_HEIGHT } from '../content/constants';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { t } from '../utils/i18n';
 import { createProceduralTextures, createTextSprite, GEOMETRY, MATERIALS, ModelFactory } from '../utils/assets';
 import { SectorManager } from '../core/SectorManager';
+import { SectorBuilder } from '../core/world/SectorGenerator';
+import { PathGenerator } from '../core/world/PathGenerator';
 import { ProjectileSystem } from '../core/weapons/ProjectileSystem';
 import { FXSystem } from '../core/systems/FXSystem';
 import { EnemyManager, Enemy } from '../core/EnemyManager';
@@ -34,6 +36,10 @@ import ScreenCollectibleFound from './game/ScreenCollectibleFound';
 import { COLLECTIBLES } from '../content/collectibles';
 import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
+import { WEATHER } from '../content/constants';
+import { WeatherSystem } from '../core/systems/WeatherSystem';
+import { WindSystem } from '../utils/physics';
+import { WeatherType } from '../types';
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -47,6 +53,8 @@ const seededRandom = (seed: number) => {
 export interface GameSessionHandle {
     requestPointerLock: () => void;
     getSectorStats: (isExtraction?: boolean, aborted?: boolean) => SectorStats;
+    triggerInput: (key: string) => void;
+    rotateCamera: (dir: number) => void;
 }
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
@@ -64,7 +72,29 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stateRef.current = GameSessionLogic.createInitialState(props);
     }
 
+    // Clear HUD on mount to prevent ghost icons from previous session
+    useEffect(() => {
+        if (props.onUpdateHUD) props.onUpdateHUD({});
+    }, []);
+
     useEffect(() => { propsRef.current = props; }, [props]);
+
+    // Determine if we can do an "Instant Load" (Respawn on same map + Assets warm)
+    // Use persistent store from AssetPreloader to survive heavy reloads/unmounts
+    const lastMapIndex = AssetPreloader.getLastMapIndex();
+    const isSameMap = lastMapIndex === props.currentMap;
+    const isWarmedUp = AssetPreloader.isWarmedUp();
+
+    // Debug logic for mobile performance tuning
+    // If we expect instant load but don't get it, we need to know why.
+    if (!isSameMap && isWarmedUp && props.currentMap === 0 && lastMapIndex === -1) {
+        // First load logic - expected
+    }
+
+    const useInstantLoad = isSameMap && isWarmedUp;
+
+    // Start with loading screen ONLY if not instant loading
+    const [isSectorLoading, setIsSectorLoading] = useState(!useInstantLoad);
 
     const [deathPhase, setDeathPhase] = useState<DeathPhase>('NONE');
     const deathPhaseRef = useRef<DeathPhase>('NONE');
@@ -76,6 +106,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
+    const windSystemRef = useRef(new WindSystem());
+    const weatherSystemRef = useRef<WeatherSystem | null>(null);
+    const lastWeatherTypeRef = useRef<WeatherType>('none');
+    const cameraAngleRef = useRef(0);
+    const cameraAngleTargetRef = useRef(0);
+    const cameraHeightModifierRef = useRef(0); // For Arrow Up/Down pitch/height adjustment
 
     // Refs for callbacks to avoid closure issues if defined outside
     // Actually, passing them to systems requires them to be stable or updated.
@@ -90,12 +126,47 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const [currentLine, setCurrentLine] = useState(0);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [bossIntroActive, setBossIntroActive] = useState(false);
-    const [isSectorLoading, setIsSectorLoading] = useState(true);
     useEffect(() => {
         if (props.onBossIntroStateChange) props.onBossIntroStateChange(bossIntroActive);
     }, [bossIntroActive]);
 
+    // PC Camera Controls (Arrow Keys)
+    useEffect(() => {
+        if (props.isMobileDevice) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (stateRef.current.isPaused) return;
+            // Prevent default scrolling
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                // ONLY ALLOW IN DEBUG MODE
+                if (!stateRef.current.debugMode) return;
+                e.preventDefault();
+            }
+
+            switch (e.key) {
+                case 'ArrowLeft':
+                    cameraAngleTargetRef.current += Math.PI / 4;
+                    break;
+                case 'ArrowRight':
+                    cameraAngleTargetRef.current -= Math.PI / 4;
+                    break;
+                case 'ArrowUp':
+                    // Increase height (Steeper angle)
+                    cameraHeightModifierRef.current = Math.min(20, cameraHeightModifierRef.current + 2.5);
+                    break;
+                case 'ArrowDown':
+                    // Decrease height (Lower angle)
+                    cameraHeightModifierRef.current = Math.max(-5, cameraHeightModifierRef.current - 2.5);
+                    break;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [props.isMobileDevice]);
+
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const setupTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [foundMemberName, setFoundMemberName] = useState('');
     const [interactionType, setInteractionType] = useState<'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null>(null);
     const [interactionScreenPos, setInteractionScreenPos] = useState<{ x: number, y: number } | null>(null);
@@ -116,12 +187,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     useEffect(() => { interactionTypeRef.current = interactionType; }, [interactionType]);
 
     const cinematicRef = useRef({ active: false, startCamPos: new THREE.Vector3(), endCamPos: new THREE.Vector3(), startTime: 0, duration: 0, script: [] as any[], lineIndex: 0, speakers: [] as any[], cameraBasePos: new THREE.Vector3(), cameraLookAt: new THREE.Vector3(), lineStartTime: 0, lineDuration: 0, typingDuration: 0 });
+    const prevInputRef = useRef(false);
     const bossIntroRef = useRef({ active: false, startTime: 0, bossMesh: null as THREE.Group | null });
     const cameraOverrideRef = useRef<{ active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null>(null);
-    const [notification, setNotification] = useState<{ visible: boolean, text: string, icon: string, timestamp: number }>({ visible: false, text: '', icon: '', timestamp: 0 });
-
     const requestRef = useRef<number>();
     const isMounted = useRef(true);
+    const setupIdRef = useRef(0);
+    // prevMapRef removed as AssetPreloader handles warmup logic globally
     useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
 
     const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
@@ -194,7 +266,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const handleLockChange = () => {
             // Ignore unlock if we just requested a lock (grace period for async lock)
             if (performance.now() - lockRequestTime.current < 1500) {
-                // console.log('Ignoring unlock due to recent request');
                 return;
             }
 
@@ -203,7 +274,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (!document.pointerLockElement && props.isRunning && !props.isPaused && !isExpectedUnlock) {
                 // Only pause if we expected to be running AND it's not an expected UI unlock
-                console.log('[GameCanvas] Pointer unlocked, pausing...');
                 propsRef.current.onPauseToggle(true);
             }
         };
@@ -493,7 +563,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (payload && payload.id === 'bus') {
                         stateRef.current.busUnlocked = true;
                         stateRef.current.sectorState.busUnlocked = true;
-                        setNotification({ visible: true, text: t('clues.bus_clear'), icon: '🚌', timestamp: performance.now() });
+                        spawnBubble(`🚌 ${t('clues.bus_clear')}`);
                         soundManager.playUiConfirm();
                     }
                     break;
@@ -524,7 +594,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         stateRef.current.sectorState.hordeKilled = 0;
                         stateRef.current.sectorState.hordeTarget = payload.count;
                         stateRef.current.sectorState.waveActive = true;
-                        setNotification({ visible: true, text: t('ui.threat_neutralized'), icon: '⚠️', timestamp: performance.now() });
+                        spawnBubble(`⚠️ ${t('ui.threat_neutralized')}`);
                     }
                     break;
                 case 'START_CINEMATIC':
@@ -582,6 +652,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 seenBosses: (state.seenBosses || []).concat(stateRef.current.bossesDefeated || []),
                 visitedPOIs: state.visitedPOIs || []
             };
+        },
+        triggerInput: (key: string) => {
+            // Dispatch key events to be picked up by InputManager
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
+            setTimeout(() => {
+                window.dispatchEvent(new KeyboardEvent('keyup', { key: key, bubbles: true }));
+            }, 50);
+        },
+        rotateCamera: (dir: number) => {
+            cameraAngleTargetRef.current += dir * (Math.PI / 4); // 45 degrees
+        },
+        adjustPitch: (dir: number) => {
+            // 5 unit increments, clamped between -10 (low) and 20 (high)
+            cameraHeightModifierRef.current = Math.max(-10, Math.min(20, cameraHeightModifierRef.current + (dir * 5)));
         }
     }));
 
@@ -589,9 +673,29 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (!containerRef.current) return;
 
 
+
         // --- ENGINE INIT ---
         // Use shared Engine instance
+
         const engine = Engine.getInstance();
+
+        // Increment setup ID for this run to invalidate previous async operations
+        const currentSetupId = ++setupIdRef.current;
+
+        // Cleanup pre-existing state immediately on effect run
+        if (playerGroupRef.current) {
+            engine.scene.remove(playerGroupRef.current);
+            playerGroupRef.current = null;
+        }
+
+        // Comprehensive scene scrub (Remove everything except camera/static)
+        // This ensures no duplicate trees/enemies on respawn.
+        engine.scene.children.slice().forEach(child => {
+            if (child.name !== 'MainCamera' && !child.userData.isEngineStatic) {
+                engine.scene.remove(child);
+            }
+        });
+
         if (propsRef.current.initialGraphics) {
             engine.updateSettings(propsRef.current.initialGraphics);
         }
@@ -605,6 +709,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             session.init(stateRef.current);
         }
         gameSessionRef.current = session;
+        weatherSystemRef.current = new WeatherSystem(engine.scene, windSystemRef.current);
 
         // Extract Engine Components for local usage
         const scene = engine.scene;
@@ -723,7 +828,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // --- PRE-INIT VARIABLES (Moved out of setTimeout for scope access) ---
         const weatherParticles: any[] = [];
         const flickeringLights: any[] = [];
-        const burningBarrels: any[] = [];
+        const burningObjects: any[] = [];
         stateRef.current.chests = [];
         const chests = stateRef.current.chests;
         const mapItems: MapItem[] = [];
@@ -768,14 +873,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-        // --- ENVIRONMENT SETUP (Delayed) ---
-        setTimeout(() => {
-            if (!isMounted.current) return;
+        const yieldToMain = () => new Promise<void>(resolve => {
+            requestAnimationFrame(() => {
+                setTimeout(resolve, 0);
+            });
+        });
+
+        // --- ENVIRONMENT SETUP (Async) ---
+        const runSetup = async () => {
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
+
+            setIsSectorLoading(true);
 
             const rng = seededRandom(propsRef.current.currentMap + 4242);
             const env = currentSector.environment;
 
-            AssetPreloader.warmup(engine.renderer, env);
+            // 1. Asynchronous Warmup (Internal flag ensures it only runs once per session)
+            // If instant load, we pass undefined to yieldToMain to force synchronous execution
+            const yielder = useInstantLoad ? undefined : yieldToMain;
+
+            await AssetPreloader.warmupAsync(engine.renderer, env, yielder);
+
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             scene.background = new THREE.Color(env.bgColor);
             scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
@@ -783,15 +902,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             // Update Camera
             camera.fov = env.fov;
             camera.updateProjectionMatrix();
-            camera.position.set(0, 50, env.cameraOffsetZ);
+            camera.position.set(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ);
+            camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z);
 
-            ProjectileSystem.clear(scene);
+            ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
 
             const ambientLight = new THREE.AmbientLight(0x404050, env.ambientIntensity);
             scene.add(ambientLight);
 
             if (env.moon && env.moon.visible) {
-                const lightPos = env.moon.position || { x: 50, y: 100, z: 50 };
+                const lightPos = env.moon.position || { x: 80, y: 50, z: 50 };
                 const moonLight = new THREE.DirectionalLight(env.moon.color, env.moon.intensity);
                 moonLight.position.set(lightPos.x, lightPos.y, lightPos.z);
                 moonLight.castShadow = true;
@@ -811,38 +931,80 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 scene.add(sun);
             }
 
-            const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 1.0, metalness: 0.0, color: env.groundColor });
-            const tileSize = 500;
-            const tileGeo = new THREE.PlaneGeometry(tileSize, tileSize);
-
-            for (let gx = -2; gx <= 2; gx++) {
-                for (let gz = -2; gz <= 2; gz++) {
-                    const tile = new THREE.Mesh(tileGeo, groundMat);
-                    tile.rotation.x = -Math.PI / 2;
-                    tile.position.set(gx * tileSize, 0, gz * tileSize);
-                    tile.receiveShadow = true;
-                    scene.add(tile);
-                }
-            }
-
             // Generate Sector Content
-            const ctx = {
+            const ctx: SectorContext = {
                 scene,
                 obstacles: stateRef.current.obstacles,
                 chests,
                 flickeringLights,
-                burningBarrels,
+                burningObjects,
                 rng,
                 triggers: stateRef.current.triggers,
                 mapItems,
                 debugMode: propsRef.current.debugMode,
                 textures: textures,
                 spawnZombie,
+                spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => {
+                    const startPos = pos || (playerGroupRef.current ? playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
+                    // If no pos provided, spawn near player (dangerous?) or rely on EnemySpawner default logic?
+                    // EnemySpawner.spawnHorde takes startPos.
+                    // We should probably ensure pos is provided or default to something safe.
+                    // But for now, just pass it.
+                    const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, stateRef.current.bossSpawned, stateRef.current.enemies.length);
+                    if (newEnemies) {
+                        newEnemies.forEach(e => {
+                            stateRef.current.enemies.push(e);
+                            if (!stateRef.current.seenEnemies.includes(e.type)) {
+                                stateRef.current.seenEnemies.push(e.type);
+                            }
+                        });
+                    }
+                },
                 cluesFound: propsRef.current.stats.cluesFound || [],
                 collectiblesFound: propsRef.current.stats.collectiblesFound || [],
-                sectorId: propsRef.current.currentMap
+                sectorId: propsRef.current.currentMap,
+                smokeEmitters: [],
+                sectorState: stateRef.current.sectorState,
+                yield: yielder
             };
-            currentSector.generate(ctx);
+
+            // 2. Asynchronous Sector Generation (Preceded by automatic content)
+            await SectorBuilder.generateAutomaticContent(ctx, currentSector);
+
+            PathGenerator.resetPathLayer();
+            await currentSector.generate(ctx);
+
+            // Update global tracker for next time
+            AssetPreloader.setLastMapIndex(propsRef.current.currentMap);
+
+            // If we weren't instant loading (and thus showed loading screen), hide it now.
+            if (!useInstantLoad) {
+                setIsSectorLoading(false);
+            }
+
+            // Notify parent that level is loaded (Clean up global loading screen if any)
+            if (propsRef.current.onLevelLoaded) {
+                propsRef.current.onLevelLoaded();
+            }
+
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
+
+            // NEW: Automated Intro Message
+            if (currentSector.intro) {
+                setTimeout(() => {
+                    if (isMounted.current && setupIdRef.current === currentSetupId) {
+                        spawnBubble(`🧠 ${t(currentSector.intro!.text)}`);
+                        if (currentSector.intro!.sound) {
+                            soundManager.playEffect(currentSector.intro!.sound);
+                        }
+                    }
+                }, currentSector.intro.delay || 1500);
+            }
+
+            // NEW: Automated Ambient Loop
+            if (currentSector.ambientLoop) {
+                soundManager.playMusic(currentSector.ambientLoop);
+            }
 
             // --- ASSET-DRIVEN EFFECT DISCOVERY ---
             // Scan scene for objects with `userData.effects`
@@ -871,8 +1033,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // Weather Particles
             if (env.weather !== 'none') {
-                const count = 100;
-                const geo = GEOMETRY.snowParticle;
+                const count = WEATHER.PARTICLE_COUNT;
+                const geo = GEOMETRY.weatherParticle;
                 let color = 0xffffff;
                 let opacity = 0.8;
                 let velBase = new THREE.Vector3(0, -0.2, 0);
@@ -905,7 +1067,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // Family Member
             if (!propsRef.current.familyAlreadyRescued) {
-                const theme = MAP_THEMES[propsRef.current.currentMap];
+                const theme = SECTOR_THEMES[propsRef.current.currentMap];
                 const fmData = FAMILY_MEMBERS[theme ? theme.familyMemberId : 0];
                 fmMesh = ModelFactory.createFamilyMember(fmData);
                 fmMesh.position.set(fSpawn.x, 0, fSpawn.z);
@@ -931,10 +1093,47 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const playerGroup = ModelFactory.createPlayer();
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));
-            session.addSystem(new WorldLootSystem(playerGroup));
+            session.addSystem(new WorldLootSystem(playerGroup, scene));
 
             const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, onCollectibleFoundInternal);
             session.addSystem(interactionSystem);
+
+            session.addSystem(new SectorSystem(playerGroup, props.currentMap, {
+                setNotification: (n: any) => {
+                    if (n && n.visible && n.text) {
+                        spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000);
+                    }
+                },
+                t: (key: string) => t(key),
+                spawnPart,
+                startCinematic,
+                setInteraction: (interaction: any) => {
+                    if (interaction) {
+                        setInteractionType('plant_explosive');
+                        stateRef.current.currentInteraction = interaction;
+                    } else {
+                        setInteractionType(null);
+                        stateRef.current.currentInteraction = null;
+                    }
+                },
+                playSound: (id: string) => {
+                    if (id === 'explosion') soundManager.playExplosion();
+                    else soundManager.playUiConfirm();
+                },
+                playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => {
+                    soundManager.playTone(freq, type, duration, vol || 0.1);
+                },
+                cameraShake: (amount: number) => {
+                    stateRef.current.cameraShake = amount;
+                },
+                scene: engine.scene,
+                setCameraOverride: (params: any) => {
+                    cameraOverrideRef.current = params;
+                },
+                emitNoise: (pos: THREE.Vector3, radius: number, type: string) => {
+                    session.noiseEvents.push({ pos: pos.clone(), radius, type: type as any, time: performance.now() });
+                }
+            }));
 
             session.addSystem(new EnemySystem(playerGroup, {
                 spawnBubble,
@@ -947,12 +1146,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
             }));
-            session.addSystem(new SectorSystem(playerGroup, props.currentMap, { setNotification, t, spawnPart, startCinematic }));
             playerGroupRef.current = playerGroup;
 
             const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
             playerMeshRef.current = bodyMesh as THREE.Mesh;
-            const pSpawn = currentSector.playerSpawn;
+            // Defensive copy of spawn point
+            const pSpawn = { ...currentSector.playerSpawn };
             playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
             if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot; // Set initial rotation
 
@@ -970,6 +1169,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             playerGroup.add(fl); playerGroup.add(fl.target);
             flashlightRef.current = fl;
 
+            prevInputRef.current = false;
+
             scene.add(playerGroup);
 
             if (propsRef.current.startAtCheckpoint && fmMesh) {
@@ -978,12 +1179,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 prevPosRef.current = playerGroupRef.current.position.clone();
             }
 
+            // SNAP CAMERA (Prevent lerp jump on load)
+            camera.position.set(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ);
+            camera.lookAt(playerGroup.position);
+
             // Call Loaded Callbacks
             if (isMounted.current) setIsSectorLoading(false);
+
+            // Store Map Items in State for Runtime Access (e.g. SectorSystem)
+            stateRef.current.mapItems = mapItems;
+
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
             if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
+        };
 
-        }, 50);
+        runSetup();
 
 
 
@@ -1011,7 +1221,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             // Clear any previous timer
             if (bossIntroTimerRef.current) clearTimeout(bossIntroTimerRef.current);
 
-            // 4 Seconds Intro
+            // Trigger Boss Spawn Sound
+            soundManager.playBossSpawn(bossData.id);
+
+            // Hide HUD during intro
             bossIntroTimerRef.current = window.setTimeout(() => {
                 if (isMounted.current) {
                     setBossIntroActive(false);
@@ -1054,12 +1267,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         engine.onUpdate = (dt: number) => {
             if (!isMounted.current || propsRef.current.isPaused) return;
 
+            const now = performance.now();
+            windSystemRef.current.update(now);
+
+            if (weatherSystemRef.current) {
+                const currentWeather = propsRef.current.weather || 'none';
+                weatherSystemRef.current.sync(currentWeather, WEATHER.PARTICLE_COUNT, 200);
+                weatherSystemRef.current.update(dt, now);
+            }
+
             // Wait for Init
             const playerGroup = playerGroupRef.current;
             if (!playerGroup || playerGroup.children.length === 0) return;
 
             const state = stateRef.current;
-            const now = performance.now();
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
             const input = engine.input.state;
 
@@ -1074,6 +1295,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 state.framesSinceHudUpdate = 0;
                 state.lastHudUpdate = now;
+
+
+
+
+
 
                 if (now - state.lastFpsUpdate > 500) {
                     if (propsRef.current.onFPSUpdate) propsRef.current.onFPSUpdate(fps);
@@ -1134,10 +1360,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (state.bossDefeatedTime > 0) {
-                state.invulnerableUntil = now + 10000;
-                if (now - state.bossDefeatedTime > 4000) {
-                    concludeSector(false);
-                    return;
+                // Fix: Only apply invulnerability if the boss was defeated RECENTLY (within last 10s)
+                // This prevents permanent invulnerability if bossDefeatedTime persists from previous runs.
+                if (now - state.bossDefeatedTime < 10000) {
+                    state.invulnerableUntil = now + 10000;
+                    if (now - state.bossDefeatedTime > 4000) {
+                        concludeSector(state.familyFound);
+                        return;
+                    }
+                } else {
+                    // Timer is old/stale, clear it to prevent issues
+                    state.bossDefeatedTime = 0;
                 }
             }
 
@@ -1177,6 +1410,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             gameSessionRef.current!.debugMode = propsRef.current.debugMode;
 
             // Update Game Session (Systems)
+            gameSessionRef.current!.cameraAngle = cameraAngleRef.current;
             gameSessionRef.current!.update(delta);
             const isMoving = state.isMoving;
 
@@ -1205,7 +1439,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         camera.lookAt(override.lookAtPos);
                     }
                 } else {
-                    CameraSystem.update(camera, playerGroupRef.current.position, currentSector.environment.cameraOffsetZ, state, false, delta);
+                    // Camera Rotation Lerp
+                    cameraAngleRef.current += (cameraAngleTargetRef.current - cameraAngleRef.current) * 0.1;
+                    CameraSystem.update(camera, playerGroupRef.current.position, currentSector.environment.cameraOffsetZ, state, false, delta, cameraAngleRef.current, cameraHeightModifierRef.current);
                 }
             }
 
@@ -1219,9 +1455,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 setInteractionType(currentInter);
             }
 
-            if (currentInter) {
-                const projectPos = playerGroupRef.current.position.clone();
-                projectPos.y += 2.5; // Same height as reload bar
+            // Fixed Input Handling for Interactions
+            if (currentInput.e && !prevInputRef.current) {
+                if (state.currentInteraction && state.currentInteraction.action) {
+                    state.currentInteraction.action();
+                    // Clear after action? Depends on the action. 
+                    // Usually the action will update state that disables the interaction condition next frame.
+                }
+            }
+            prevInputRef.current = currentInput.e;
+
+            if (currentInter && state.currentInteraction) {
+                // Use specific interaction position if available, otherwise default to Player
+                let projectPos: THREE.Vector3;
+
+                if (state.currentInteraction.position) {
+                    projectPos = state.currentInteraction.position.clone();
+                    // Add fixed offset for visual clearance above the object
+                    projectPos.y += 1.5;
+                } else {
+                    projectPos = playerGroupRef.current.position.clone();
+                    projectPos.y += 2.5; // Same height as reload bar
+                }
 
                 const vector = projectPos.project(camera);
                 const screenX = (vector.x + 1) / 2 * 100;
@@ -1242,7 +1497,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 now
             };
 
-            ProjectileSystem.update(delta, now, gameContext);
+            // Noise System (Player)
+            if (state.isMoving) {
+                const noiseType = state.isRushing || state.isRolling ? 'run' : 'walk';
+                const noiseRadius = state.isRushing || state.isRolling ? 20 : 15;
+                // Throttle: Only every 500ms? Or every frame?
+                // AI checks every frame, so persistent noise is fine, but maybe spammy?
+                // Actually, let's just emit it. The AI Loop clears events.
+                session.noiseEvents.push({ pos: playerGroupRef.current.position.clone(), radius: noiseRadius, type: 'footstep', time: now });
+            }
+
+            ProjectileSystem.update(delta, now, gameContext, state.projectiles, state.fireZones);
 
             // EnemyManager.update moved to EnemySystem
             // TriggerHandler moved to TriggerSystem (Future) or kept here if needed
@@ -1270,17 +1535,46 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const b = activeBubbles.current[i];
                 const age = now - b.startTime;
                 if (age > b.duration) { if (b.element.parentNode) b.element.parentNode.removeChild(b.element); activeBubbles.current.splice(i, 1); continue; }
-                // Fixed on Screen (HUD Style) - effectively "Static over head" since camera follows player
-                const x = window.innerWidth * 0.5;
-                const y = window.innerHeight * 0.45; // Positioned lower (42%) to be just above head height
+
+                // Stack Logic: Oldest on Top
+                // i=0 is oldest. i=length-1 is newest.
+                // We want oldest at the top of the stack.
+                // Base Y is the bottom-most position for the NEWEST bubble.
+                // If we iterate 0..N, 0 should be highest.
+
+                const stackIndex = (activeBubbles.current.length - 1) - i; // 0 for newest, increasing for older
+                // Wait, user said "Oldest (first message) on top". 
+                // So the queue grows DOWNWARDS? Or it grows UPWARDS?
+                // Standard chat: Newest at bottom. Oldest scrolls up.
+                // Let's position Newest at Base Y. Oldest at Base Y - (Index * Height).
+
+                const baseX = window.innerWidth * 0.5;
+                const baseY = window.innerHeight * 0.45;
+                const bubbleHeight = 45; // Approx height + gap
+
+                const x = baseX;
+                const y = baseY - (stackIndex * bubbleHeight);
 
                 b.element.style.left = `${x}px`;
                 b.element.style.top = `${y}px`;
 
-                // Slight float up effect for polish, but base position is fixed
-                b.element.style.transform = `translate(-50%, -100%) translateY(-${(age < 200 ? 0 : (age - 200) / (b.duration - 200)) * 10}px)`;
-                b.element.style.opacity = age < 200 ? `${age / 200}` : (age > b.duration - 500 ? `${(b.duration - age) / 500}` : '1');
+                // Animation
+                // Fade In (0-200ms) | Sustain | Fade Out (End)
+                let opacity = '1';
+                if (age < 200) opacity = `${age / 200}`;
+                else if (age > b.duration - 500) opacity = `${(b.duration - age) / 500}`;
 
+                // Slide In Effect for Newest
+                let transform = `translate(-50%, -100%)`; // Centered and above the point
+                if (age < 200) {
+                    const slide = (1 - (age / 200)) * 20;
+                    transform += ` translateY(${slide}px)`;
+                }
+
+                b.element.style.transform = transform;
+                b.element.style.opacity = opacity;
+                b.element.style.zIndex = `${1000 - stackIndex}`; // Newest on top if overlapping? No, preventing overlap.
+                b.element.style.transition = 'top 0.3s ease-out'; // Smooth sorting
             }
 
             EnvironmentSystem.update(flickeringLights);
@@ -1296,8 +1590,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             if (!eff.lastEmit) eff.lastEmit = 0;
                             if (now - eff.lastEmit > eff.interval) {
                                 eff.lastEmit = now;
-                                const offset = eff.offset ? eff.offset.clone().applyQuaternion(obj.quaternion) : new THREE.Vector3();
-                                const pos = obj.position.clone().add(offset);
+
+                                const pos = new THREE.Vector3();
+                                if (eff.offset) {
+                                    pos.copy(eff.offset);
+                                    obj.localToWorld(pos);
+                                } else {
+                                    obj.getWorldPosition(pos);
+                                }
 
                                 if (eff.spread) {
                                     pos.x += (Math.random() - 0.5) * eff.spread;
@@ -1312,7 +1612,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             // --- BURNING OBJECTS FX (LEGACY) ---
-            burningBarrels.forEach(b => {
+            burningObjects.forEach(b => {
                 if (frame % 3 === 0) {
                     const rx = (Math.random() - 0.5) * 3;
                     const rz = (Math.random() - 0.5) * 2;
@@ -1332,20 +1632,58 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         return () => {
             isMounted.current = false;
-            window.removeEventListener('boss-spawn-trigger', spawnBoss); window.removeEventListener('family-follow', onFamilyFollow);
+            window.removeEventListener('boss-spawn-trigger', spawnBoss);
+            window.removeEventListener('family-follow', onFamilyFollow);
+            window.removeEventListener('family_follow', onFamilyFollow);
+
+            if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
             if (bossIntroTimerRef.current) clearTimeout(bossIntroTimerRef.current);
-            engine.dispose();
+
+            // Stop loop and disable input, but DO NOT dispose the singleton engine
+            engine.stop();
+            engine.input.disable();
             engineRef.current = null;
+
+            // Aggressive scene scrub for players
+            scene.children.slice().forEach(child => {
+                if (child.userData?.isPlayer || child.userData?.isLaserSight) {
+                    scene.remove(child);
+                }
+            });
+
+            if (playerGroupRef.current) {
+                scene.remove(playerGroupRef.current);
+            }
+
+            ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
+            session.dispose();
         };
     }, [props.currentMap, props.startAtCheckpoint, textures]);
 
     // Helper to get Boss Name or Killer Name
+    // Helper to get Boss Name or Killer Name
     const getKillerName = () => {
         if (!stateRef.current.killerType) return "UNKNOWN";
-        if (stateRef.current.killerType === 'Boss') {
+
+        const type = stateRef.current.killerType;
+
+        // 1. Boss Special Case
+        if (type === 'Boss') {
             return t(BOSSES[props.currentMap]?.name || "ui.boss").toUpperCase();
         }
-        return stateRef.current.killerType.toUpperCase();
+
+        // 2. Standard Enemy Mapping (e.g. TANK_SMASH -> TANK -> "Tank")
+        const baseType = type.split('_')[0];
+        const key = `enemies.${baseType}.name`;
+        const localized = t(key);
+
+        // If translation exists (doesn't return key), use it
+        if (localized && localized !== key) {
+            return localized.toUpperCase();
+        }
+
+        // 3. Fallback: Prettify the raw string (e.g. "EXPLOSION_DAMAGE" -> "EXPLOSION DAMAGE")
+        return type.replace(/_/g, ' ').toUpperCase();
     };
 
     return (
@@ -1367,13 +1705,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             />
 
 
-            {props.isMobileDevice && props.isRunning && !props.isPaused && (
+            {props.isMobileDevice && props.isRunning && !props.isPaused && !cinematicActive && !bossIntroActive && engineRef.current && (
                 <TouchController
-                    onMove={(x, y) => engineRef.current?.input.setJoystickMove(x, y)}
-                    onAim={(x, y) => engineRef.current?.input.setJoystickAim(x, y)}
-                    onFire={(fire) => { if (engineRef.current) engineRef.current.input.state.fire = fire; }}
-                    onReload={() => { if (engineRef.current) engineRef.current.input.state.r = true; setTimeout(() => { if (engineRef.current) engineRef.current.input.state.r = false; }, 100); }}
-                    onAction={() => { if (engineRef.current) engineRef.current.input.state.e = true; setTimeout(() => { if (engineRef.current) engineRef.current.input.state.e = false; }, 100); }}
+                    inputState={engineRef.current.input.state}
+                    onPause={() => propsRef.current.onPauseToggle(true)}
+                    onOpenMap={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', code: 'KeyM', bubbles: true }))}
                 />
             )}
 
@@ -1384,10 +1720,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 isVisible={cinematicActive && currentLine !== null}
                 domRef={bubbleRef}
                 tailPosition={cinematicRef.current.tailPosition}
+                isMobileDevice={props.isMobileDevice}
             />
             {
                 cinematicActive && (
-                    <div className="absolute bottom-40 left-1/2 -translate-x-1/2 pointer-events-auto z-50">
+                    <div className={`absolute ${props.isMobileDevice ? 'bottom-8' : 'bottom-40'} left-1/2 -translate-x-1/2 pointer-events-auto z-50`}>
                         <button
                             onClick={() => { soundManager.playUiClick(); endCinematic(); }}
                             className="bg-black/80 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg]"
@@ -1453,6 +1790,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
         `}</style>
+            <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
         </div >
     );
 });

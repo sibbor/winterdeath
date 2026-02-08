@@ -26,6 +26,15 @@ export const HudSystem = {
                 hp: activeBossObj.hp,
                 maxHp: activeBossObj.maxHp
             };
+        } else if (state.sectorState && state.sectorState.waveActive && state.sectorState.hordeTarget > 0) {
+            // Visualize Zombie Wave as a Boss Bar
+            const remaining = Math.max(0, state.sectorState.hordeTarget - state.sectorState.hordeKilled);
+            bossInfo = {
+                active: true,
+                name: 'ui.zombie_wave',
+                hp: remaining,
+                maxHp: state.sectorState.hordeTarget
+            };
         }
 
         let famSignal = 0;
@@ -59,7 +68,7 @@ export const HudSystem = {
         let spEarned = levelGained + newCollectiblesCount;
 
         // 1. Family Found (if not previously rescued)
-        if (state.familyExtracted && !props.familyAlreadyRescued) {
+        if (state.familyFound && !props.familyAlreadyRescued) {
             spEarned++;
         }
         // 2. Boss Defeated (if not previously defeated)

@@ -6,10 +6,15 @@ import { PlayerStats } from '../types';
 export { ZOMBIE_TYPES } from './enemies/zombies';
 export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
-export { MAP_THEMES } from './sectors/themes';
+export { SECTOR_THEMES } from './sectors/sector_themes';
 
 export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
+export const CAMERA_HEIGHT = 50;
+
+export const WEATHER = {
+    PARTICLE_COUNT: 400
+};
 
 export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';
 

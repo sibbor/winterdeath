@@ -57,6 +57,18 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
             </div>
 
             <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center`}>
+                {/* Game Title Design (Only on first step) */}
+                {currentIndex === 0 && (
+                    <div className="flex flex-col items-center mb-4 sm:mb-8 animate-title-drop select-none pointer-events-none">
+                        <h1 className="text-6xl sm:text-9xl font-black tracking-tighter text-white leading-[0.85] drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
+                            {t('ui.game_title_1')}
+                        </h1>
+                        <h1 className="text-6xl sm:text-9xl font-black tracking-tighter text-red-600 leading-[0.85] -mt-1 sm:-mt-2 drop-shadow-[0_10px_30px_rgba(185,28,28,0.4)]">
+                            {t('ui.game_title_2')}
+                        </h1>
+                    </div>
+                )}
+
                 {/* Header / Overlay */}
                 <div className="flex flex-col gap-2">
                     <h2 className="text-red-600 font-bold tracking-[0.3em] text-lg sm:text-xl uppercase animate-pulse">
@@ -137,6 +149,21 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
             </div>
 
             <style>{`
+                @keyframes title-drop {
+                    0% { 
+                        opacity: 0; 
+                        transform: translateY(-50px) scale(1.1); 
+                        filter: blur(20px);
+                    }
+                    100% { 
+                        opacity: 1; 
+                        transform: translateY(0) scale(1); 
+                        filter: blur(0);
+                    }
+                }
+                .animate-title-drop {
+                    animation: title-drop 1.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+                }
                 @keyframes thought-pop {
                     0% { 
                         opacity: 0; 

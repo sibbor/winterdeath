@@ -33,6 +33,9 @@ export interface RuntimeState {
     throwChargeStart: number;
     enemies: Enemy[];
     particles: any[];
+    activeEffects: any[]; // Objects with persistent effects (fire, smoke)
+    projectiles: any[];
+    fireZones: any[];
     scrapItems: ScrapItem[];
     chests: any[];
     cameraShake: number;
@@ -64,6 +67,7 @@ export interface RuntimeState {
     noiseLevel: number;
     speakBounce: number;
     hurtShake: number;
+    shakeIntensity: number;
     sectorState: SectorState;
     triggers: SectorTrigger[];
     obstacles: Obstacle[];
@@ -89,5 +93,7 @@ export interface RuntimeState {
     gainXp?: ((amount: number) => void) | null;
     bossIntroActive: boolean;
     sessionCollectiblesFound: string[];
+    collectiblesFound: string[];
+    mapItems: any[];
 }
 
