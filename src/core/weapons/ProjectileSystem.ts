@@ -248,9 +248,9 @@ export const ProjectileSystem = {
             const fz = fireZones[i];
             fz.life -= delta;
 
-            const flameDensity = 3;
+            const flameDensity = 15; // Increased from 3 to 15 for solid fire circle
             for (let k = 0; k < flameDensity; k++) {
-                const r = Math.sqrt(Math.random()) * (fz.radius * 0.8);
+                const r = Math.sqrt(Math.random()) * (fz.radius * 0.9);
                 const theta = Math.random() * 2 * Math.PI;
                 const fx = fz.mesh.position.x + r * Math.cos(theta);
                 const fzPos = fz.mesh.position.z + r * Math.sin(theta);

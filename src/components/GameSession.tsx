@@ -1040,8 +1040,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             });
             stateRef.current.activeEffects = activeEffects;
 
-            // Weather particles and ground fog are now handled by WeatherSystem.ts using InstancedMesh
-
             // --- PLAYER GROUP SETUP ---
             const playerGroup = ModelFactory.createPlayer();
             playerGroupRef.current = playerGroup;
@@ -1395,6 +1393,35 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 return;
             }
 
+            // --- RESTORED: Effect Updates (Fire, Smoke on objects) ---
+            // Run every 5 frames to save CPU, but ensure fire spawns
+            if (frame % 5 === 0) {
+                // Use the dedicated tracking list instead of iterating all obstacles
+                for (let i = 0; i < burningObjects.length; i++) {
+                    const mesh = burningObjects[i];
+                    if (mesh.userData.effects) {
+                        const effs = mesh.userData.effects;
+                        for (let j = 0; j < effs.length; j++) {
+                            const eff = effs[j];
+                            if (eff.type === 'emitter') {
+                                // Simple probability based on interval
+                                if (Math.random() < 0.5) {
+                                    const p = mesh.position.clone();
+                                    if (eff.offset) {
+                                        p.add(eff.offset);
+                                    }
+                                    // Add some randomness to position
+                                    p.x += (Math.random() - 0.5) * (eff.spread || 0.3);
+                                    p.z += (Math.random() - 0.5) * (eff.spread || 0.3);
+
+                                    spawnPart(p.x, p.y, p.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (state.isDead) {
                 DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
                 if (playerGroupRef.current) {
@@ -1428,6 +1455,35 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (!propsRef.current.isRunning || propsRef.current.isPaused) { soundManager.stopRadioStatic(); lastTime = now; return; }
 
             frame++;
+
+            // --- OPTIMIZATION: Light Culling ---
+            // Only keep the closest 12 lights active to save GPU performance
+            if (frame % 15 === 0 && playerGroupRef.current) {
+                const pPos = playerGroupRef.current.position;
+                const lights: { light: THREE.Light, distSq: number }[] = [];
+
+                scene.traverse((obj) => {
+                    if (obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight) {
+                        // Skip lights that should always be on (like flashlight if we had one as a child of camera/player separately detected)
+                        // But flashlight is usually attached to player, so distance is 0.
+                        const distSq = obj.position.distanceToSquared(pPos);
+                        lights.push({ light: obj, distSq });
+                    }
+                });
+
+                lights.sort((a, b) => a.distSq - b.distSq);
+
+                for (let i = 0; i < lights.length; i++) {
+                    const l = lights[i];
+                    // Keep Flashlight always on (it's very close usually)
+                    // Limit to 12 closest
+                    if (i < 12) {
+                        l.light.visible = true;
+                    } else {
+                        l.light.visible = false;
+                    }
+                }
+            }
 
             if (state.isInteractionOpen && !cinematicRef.current.active) {
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -1496,6 +1552,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // Update Footprints
             FootprintSystem.update(delta);
+
+            // Update FX (Particles, Debris, Blood)
+            if (playerGroupRef.current) {
+                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
+            }
 
             // Cinematic Update (Overrides)
             if (isCinematic) {

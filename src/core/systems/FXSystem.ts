@@ -5,6 +5,7 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 export const FXSystem = {
     particleQueue: [] as any[],
     decalQueue: [] as any[],
+    MESH_POOL: [] as THREE.Mesh[],
 
     // Internal immediate methods
     _spawnDecalImmediate: (
@@ -15,20 +16,50 @@ export const FXSystem = {
         scale: number,
         material?: THREE.Material
     ) => {
-        const d = new THREE.Mesh(GEOMETRY.decal, material || MATERIALS.bloodDecal);
-        d.position.set(x, 0.05 + Math.random() * 0.01, z);
+        // Decals are permanent until limit reached, so we don't pool them in the same way 
+        // OR we could pool them but they stay in scene longer.
+        // For now, let's keep decal logic as-is but use pool for the mesh creation if possible, 
+        // or just keep existing logic since decals are low frequency.
+        // Actually, optimization report says ALL particles/decals. 
+        // Let's use the pool for decals too.
+
+        let d = FXSystem.getPooledMesh(scene, GEOMETRY.decal, material || MATERIALS.bloodDecal);
+        d.position.set(x, 0.12 + Math.random() * 0.05, z);
         d.rotation.x = -Math.PI / 2;
         d.rotation.z = Math.random() * Math.PI * 2;
         d.scale.setScalar(scale);
 
-        scene.add(d);
         decalList.push(d);
 
-        // Limit decals to 250 to keep blood pools around longer
+        // Limit decals to 250
         if (decalList.length > 250) {
             const old = decalList.shift();
-            scene.remove(old);
+            FXSystem.recycleMesh(old);
         }
+    },
+
+    getPooledMesh: (scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material) => {
+        let m = FXSystem.MESH_POOL.find(mesh => !mesh.visible);
+        if (!m) {
+            // Expand pool
+            m = new THREE.Mesh(geo, mat);
+            scene.add(m);
+            FXSystem.MESH_POOL.push(m);
+        } else {
+            m.geometry = geo;
+            m.material = mat;
+            m.visible = true;
+            m.scale.set(1, 1, 1);
+            m.rotation.set(0, 0, 0);
+            // Ensure it's in the scene (might have been removed in old logic, but here we just hide)
+            if (m.parent !== scene) scene.add(m);
+        }
+        return m;
+    },
+
+    recycleMesh: (m: THREE.Mesh) => {
+        m.visible = false;
+        m.position.set(0, -1000, 0); // Move out of view just in case
     },
 
     _spawnPartImmediate: (
@@ -42,9 +73,13 @@ export const FXSystem = {
         customVel?: THREE.Vector3,
         color?: number
     ) => {
-        let m;
+        let m: THREE.Mesh;
+
         if (customMesh) {
+            // If custom mesh is provided, we clone it (legacy behavior for special meshes)
+            // Ideally we'd pool this too but custom meshes are rare (chunks mainly)
             m = customMesh.clone();
+            scene.add(m);
         } else {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.smoke;
@@ -69,7 +104,8 @@ export const FXSystem = {
             else if (type === 'spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; }
             else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
 
-            m = new THREE.Mesh(geo, mat);
+            m = FXSystem.getPooledMesh(scene, geo, mat);
+
             if (type === 'stun_star') m.scale.setScalar(0.2 + Math.random() * 0.1);
             else if (type !== 'flash' && type !== 'shockwave' && type !== 'fire' && type !== 'limb' && type !== 'campfire_flame') m.scale.setScalar(0.3 + Math.random() * 0.3);
         }
@@ -80,8 +116,7 @@ export const FXSystem = {
         if (type === 'limb') m.scale.set(0.3, 0.6, 0.3);
         if (type === 'stun_star') m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-        scene.add(m);
-
+        // Velocity & Life Logic (Same as before)
         let vel = customVel ? customVel.clone() : new THREE.Vector3((Math.random() - 0.5) * 0.2, Math.random() * 0.5, (Math.random() - 0.5) * 0.5);
         let life = 30 + Math.random() * 20;
 
@@ -121,7 +156,8 @@ export const FXSystem = {
             life,
             maxLife: life,
             type,
-            rotVel: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
+            rotVel: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
+            isPooled: !customMesh // Track if we should recycle or remove
         });
     },
 
@@ -209,23 +245,29 @@ export const FXSystem = {
                         if (Math.random() < 0.2) {
                             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.4 + Math.random() * 0.4, MATERIALS.bloodDecal);
                         }
-                        scene.remove(p.mesh);
+                        if (p.isPooled) FXSystem.recycleMesh(p.mesh);
+                        else scene.remove(p.mesh);
                         p.life = 0;
                     } else {
                         p.life = 0;
                         if (p.type === 'chunk' || p.type === 'limb') {
                             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.5, MATERIALS.bloodDecal);
-                            if (p.type === 'chunk') scene.remove(p.mesh);
+                            if (p.type === 'chunk') {
+                                if (p.isPooled) FXSystem.recycleMesh(p.mesh);
+                                else scene.remove(p.mesh);
+                            }
                             else {
                                 p.mesh.position.y = 0.15;
                                 p.mesh.rotation.set(Math.random(), 0, Math.random());
                             }
                         } else if (p.type === 'debris') {
                             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.0, MATERIALS.scorchDecal);
-                            scene.remove(p.mesh);
+                            if (p.isPooled) FXSystem.recycleMesh(p.mesh);
+                            else scene.remove(p.mesh);
                         }
                         else if (p.type === 'glass') {
-                            scene.remove(p.mesh);
+                            if (p.isPooled) FXSystem.recycleMesh(p.mesh);
+                            else scene.remove(p.mesh);
                         }
                     }
                     particlesList.splice(i, 1);
@@ -278,8 +320,11 @@ export const FXSystem = {
             }
 
             if (isDead && p.type !== 'limb') {
-                if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
-                else scene.remove(p.mesh);
+                if (p.isPooled) FXSystem.recycleMesh(p.mesh);
+                else {
+                    if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
+                    else scene.remove(p.mesh);
+                }
                 particlesList.splice(i, 1);
             }
         }

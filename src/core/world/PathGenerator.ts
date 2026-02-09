@@ -278,10 +278,10 @@ export const PathGenerator = {
                 const next = pointsList[i + 1] || pt.clone().add(tangent);
 
                 prints.rotation.x = -Math.PI / 2;
-                prints.position.set(pt.x + (Math.random() - 0.5), 0.04, pt.z + (Math.random() - 0.5));
+                prints.position.set(pt.x + (Math.random() - 0.5), yOffset + 0.02, pt.z + (Math.random() - 0.5));
 
                 // Orient along path
-                prints.lookAt(next.x, 0.04, next.z);
+                prints.lookAt(next.x, yOffset + 0.02, next.z);
                 prints.rotateX(-Math.PI / 2);
 
                 if (showBlood) {
@@ -431,7 +431,7 @@ export const PathGenerator = {
     /**
      * Creates a path made entirely of decals (e.g., footprints).
      */
-    createDecalPath: (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean }) => {
+    createDecalPath: (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
         const curve = new THREE.CatmullRomCurve3(points);
         // Curve type centripetal to avoid loops
         curve.curveType = 'centripetal';
@@ -466,14 +466,15 @@ export const PathGenerator = {
             const jx = (Math.random() - 0.5) * variance;
             const jz = (Math.random() - 0.5) * variance;
 
-            dummy.position.set(pt.x + jx, pt.y + 0.04, pt.z + jz); // Above path (0.04)
+            const yOff = options.yOffset !== undefined ? options.yOffset : 0.04;
+            dummy.position.set(pt.x + jx, pt.y + yOff, pt.z + jz); // Above path (Default 0.04)
 
             // Orient
             if (options.randomRotation) {
                 dummy.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
             } else {
                 // Orient along path + 90 deg rotation because texture is usually upright
-                dummy.lookAt(pt.x + tangent.x, pt.y + tangent.y + 0.04, pt.z + tangent.z);
+                dummy.lookAt(pt.x + tangent.x, pt.y + tangent.y + yOff, pt.z + tangent.z);
                 dummy.rotateX(-Math.PI / 2); // Lay flat
                 dummy.rotateZ(Math.PI); // Adjust texture orientation if needed (heel to toe)
 
@@ -502,6 +503,7 @@ export const PathGenerator = {
             size,
             material: MATERIALS.bloodDecal,
             variance: 0.4,
+            yOffset: 0.12 // Higher to clear roads
         });
     },
 

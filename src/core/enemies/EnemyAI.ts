@@ -33,7 +33,12 @@ export const EnemyAI = {
 
         // Standard HP Check
         if (e.hp <= 0) {
-            e.dead = true;
+            if (e.isBurning) {
+                e.deathState = 'dying_ash';
+                e.deathTimer = 3.0; // Time to crumble
+            } else {
+                e.dead = true; // Standard death
+            }
             return;
         }
 
@@ -347,11 +352,15 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
     // Burning
     if (e.isBurning) {
-        if (Math.random() < 0.3) {
-            const px = e.mesh.position.x + (Math.random() - 0.5) * 0.5;
-            const pz = e.mesh.position.z + (Math.random() - 0.5) * 0.5;
-            callbacks.spawnPart(px, e.mesh.position.y + 1.0, pz, 'campfire_flame', 1);
+        // High frequency burn particles (at least 1 per frame, often 2)
+        const particleCount = 1 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < particleCount; i++) {
+            const px = e.mesh.position.x + (Math.random() - 0.5) * 0.6;
+            const pz = e.mesh.position.z + (Math.random() - 0.5) * 0.6;
+            // Rise up from body center
+            callbacks.spawnPart(px, e.mesh.position.y + 0.5 + Math.random() * 1.0, pz, 'campfire_flame', 1);
         }
+
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
             if (e.burnTimer <= 0) {

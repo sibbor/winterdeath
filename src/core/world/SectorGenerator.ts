@@ -341,6 +341,7 @@ export const SectorBuilder = {
             opts.offset = new THREE.Vector3(0, height * 1.3, 0); // 110% height to be clearly above roof
         }
         EffectManager.attachEffect(object, 'fire', opts);
+        if (ctx.burningObjects) ctx.burningObjects.push(object);
     },
 
     spawnDeadBody: (ctx: SectorContext, x: number, z: number, type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {

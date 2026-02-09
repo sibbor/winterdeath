@@ -11,6 +11,7 @@ body,
     margin: 0;
     padding: 0;
     overflow: hidden;
+    touch-action: none; /* Reduce input latency by disabling browser gestures */
 }
 
 body {

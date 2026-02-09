@@ -145,6 +145,41 @@ export const AssetPreloader = {
         const scorch = new THREE.Mesh(GEOMETRY.decal, MATERIALS.scorchDecal);
         dummyRoot.add(scorch);
 
+
+        // Pre-warm FX Pool
+        // Create 200 particles of various types to fill the pool
+        const { FXSystem } = await import('./FXSystem');
+        // Dynamic import to avoid circular dependency if any, though likely safe to import at top.
+        // But let's be safe.
+
+        for (let i = 0; i < 100; i++) {
+            // Mix of particles to ensure pool has some variety if we were strictly typed,
+            // but our pool is generic meshes.
+            const p = new THREE.Mesh(GEOMETRY.particle, MATERIALS.smoke);
+            p.visible = false;
+            p.position.set(0, -1000, 0);
+            scene.add(p);
+            FXSystem.MESH_POOL.push(p);
+
+            // Add some fire particles too
+            if (i < 20) {
+                const f = new THREE.Mesh(GEOMETRY.flame, MATERIALS.fire);
+                f.visible = false;
+                f.position.set(0, -1000, 0);
+                scene.add(f);
+                FXSystem.MESH_POOL.push(f);
+            }
+        }
+
+        // Also add some gore chunks
+        for (let i = 0; i < 20; i++) {
+            const g = new THREE.Mesh(GEOMETRY.gore, MATERIALS.gore);
+            g.visible = false;
+            g.position.set(0, -1000, 0);
+            scene.add(g);
+            FXSystem.MESH_POOL.push(g);
+        }
+
         const ring = new THREE.Mesh(GEOMETRY.familyRing, MATERIALS.familyRing);
         dummyRoot.add(ring);
 
