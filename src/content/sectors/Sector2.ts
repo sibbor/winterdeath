@@ -11,10 +11,13 @@ import { soundManager } from '../../utils/sound';
 import { EnemyManager } from '../../core/EnemyManager';
 import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
 import { SectorManager } from '../../core/SectorManager';
+import { FamilySystem } from '../../core/systems/FamilySystem';
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: 0, z: 200, rot: Math.PI },
+        //TODO: enable after we're done with creating the mountain, cave opening and cave...
+        //PLAYER: { x: 0, z: 200, rot: Math.PI },
+        PLAYER: { x: 100, z: -65, rot: Math.PI },
         FAMILY: { x: 25, z: -193, y: 0 },
         BOSS: { x: 74, z: -210 }
     },
@@ -85,6 +88,9 @@ export const Sector2: SectorDef = {
 
         const caveEntrancePos = new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z);
         const tunnelPos = new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z);
+
+        // Reward Chest at boss spawn
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // --- TRIGGERS (Outside/General) ---
         triggers.push(
@@ -243,11 +249,10 @@ export const Sector2: SectorDef = {
         forestRight.forEach(p => p.y = 0);
 
         // Tree Types: Pine and Spruce (No Birch)
-        await SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
-        await SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
+        SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
+        SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
 
         if (ctx.yield) await ctx.yield();
-
 
         // --- INVISIBLE WALLS (Blocking 35m from track) ---
         // Generate Left and Right wall paths from the main curve
@@ -308,95 +313,80 @@ export const Sector2: SectorDef = {
         doorR.position.set(5, -1, 0); // Relative to frame, positioned to close gap
         frameGroup.add(doorR);
 
-        // 3. Spawners for Loke & Jordan
-        // Re-check for family models and spawn if missing
-        const ModelFactoryObj = (window as any).ModelFactory || ModelFactory;
-        if (ModelFactoryObj) {
-            let lokeMesh = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Loke');
-            if (!lokeMesh) {
-                lokeMesh = ModelFactoryObj.createFamilyMember(FAMILY_MEMBERS[0]);
-                lokeMesh.name = 'Loke';
-                lokeMesh.userData.name = 'Loke';
-                lokeMesh.userData.type = 'family';
-                lokeMesh.userData.isFamilyMember = true;
-                lokeMesh.visible = false;
-                scene.add(lokeMesh);
-            }
-
-            let jordanMesh = scene.children.find(c => c.userData.isFamilyMember && c.userData.name === 'Jordan');
-            if (!jordanMesh) {
-                jordanMesh = ModelFactoryObj.createFamilyMember(FAMILY_MEMBERS[1]);
-                jordanMesh.name = 'Jordan';
-                jordanMesh.userData.name = 'Jordan';
-                jordanMesh.userData.type = 'family';
-                jordanMesh.userData.isFamilyMember = true;
-                jordanMesh.visible = false;
-                jordanMesh.position.set(LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.y, LOCATIONS.SPAWN.FAMILY.z); // Initial position inside room R8
-                scene.add(jordanMesh);
-            }
-        }
-
+        // 3. Jordan & Loke (Now handled by centralized GameSession system)
         if (ctx.yield) await ctx.yield();
 
         // --- PART 4: MOUNTAIN EXTERIOR & DECORATION ---
-        // 1. Left Wall (Needs gap for Cave Entrance at 100, -70)
 
-        // Find split point
-        let caveIndex = -1;
-        let minCaveDist = Infinity;
-        leftWallPoints.forEach((p, i) => {
-            const d = p.distanceTo(caveEntrancePos);
-            if (d < minCaveDist) { minCaveDist = d; caveIndex = i; }
+        // 1. Create Cave Entrance (Visual Arch)
+        const caveEntranceGroup = ObjectGenerator.createCaveEntrance();
+        caveEntranceGroup.position.copy(caveEntrancePos);
+        caveEntranceGroup.position.z -= 2; // Slight offset
+        caveEntranceGroup.rotation.y = -Math.PI / 2;
+        scene.add(caveEntranceGroup);
+
+        // 2. Left Wall (Needs gap for Cave Entrance at 100, -70)
+        // We use createMountainSlice for visual mountains with collision
+        const leftPoints = curve.getSpacedPoints(40).map(p => {
+            // Offset to left
+            const tangent = curve.getTangentAt(curve.getUtoTmapping(0, p.distanceTo(curve.getPoint(0)))); // Approx
+            // Simple offset logic similar to before but cleaner
+            // Re-using the manual offset logic from original code for consistency
+            return p;
         });
 
-        if (minCaveDist < 50) {
-            // Create gap
-            const gapSize = 15; // Number of points to skip
-            const startGap = Math.max(0, caveIndex - 5);
-            const endGap = Math.min(leftWallPoints.length, caveIndex + 10);
+        // Let's use the explicit wall points generated earlier
+        // Segment 1: Start to Cave
+        // Cave Gap is roughly index 115-125 in the 150-point resolution
+        // caveEntrancePos is (100, 0, -70)
 
-            const wall1 = leftWallPoints.slice(0, startGap);
-            const wall2 = leftWallPoints.slice(endGap);
+        // Re-calculate split indices based on distance to cave
+        let splitIdx = -1;
+        let splitDist = 9999;
+        leftWallPoints.forEach((p, i) => {
+            const d = p.distanceTo(caveEntrancePos);
+            if (d < splitDist) { splitDist = d; splitIdx = i; }
+        });
 
-            if (wall1.length > 1) ObjectGenerator.createInvisibleWall(ctx, wall1, 10, 1.0, 'InvisibleWall_Left_1');
-            if (wall2.length > 1) ObjectGenerator.createInvisibleWall(ctx, wall2, 10, 1.0, 'InvisibleWall_Left_2');
+        // Generate Mountain Slices (Iterate points and build segments)
+        const buildMountainWall = (points: THREE.Vector3[]) => {
+            for (let i = 0; i < points.length - 1; i++) {
+                // Optimization: Combine multiple points into longer segments if straight?
+                // For now, simple segments every 2 points to reduce draw calls slightly?
+                // Or just use every point.
+                // Let's use stride of 1 for smoothness.
+                ObjectGenerator.createMountainSlice(ctx, points[i], points[i + 1], 15 + Math.random() * 5);
+            }
+        };
+
+        if (splitIdx !== -1) {
+            const gapRadiusIdx = 6;
+            const p1 = leftWallPoints.slice(0, Math.max(0, splitIdx - gapRadiusIdx));
+            const p2 = leftWallPoints.slice(Math.min(leftWallPoints.length, splitIdx + gapRadiusIdx));
+
+            buildMountainWall(p1);
+            buildMountainWall(p2);
         } else {
-            ObjectGenerator.createInvisibleWall(ctx, leftWallPoints, 10, 1.0, 'InvisibleWall_Left');
+            buildMountainWall(leftWallPoints);
         }
 
-        // 2. Right Wall (Continuous)
-        ObjectGenerator.createInvisibleWall(ctx, rightWallPoints, 10, 1.0, 'InvisibleWall_Right');
+        // 3. Right Wall (Continuous)
+        buildMountainWall(rightWallPoints);
 
-        // 3. Backward Exit Block (Z=213)
-        const backBlockPoints = [new THREE.Vector3(-34, 0, 213), new THREE.Vector3(34, 0, 213)];
-        ObjectGenerator.createInvisibleWall(ctx, backBlockPoints, 10, 1.0, 'InvisibleWall_BackBlock');
+        // 4. Backward Exit Block
+        ObjectGenerator.createMountainSlice(ctx, new THREE.Vector3(-34, 0, 213), new THREE.Vector3(34, 0, 213), 20);
 
-        // 4. Right Side Block (X=34)
-        const rightBlockPoints = [new THREE.Vector3(165, 0, -88), new THREE.Vector3(165, 0, -17)];
-        ObjectGenerator.createInvisibleWall(ctx, rightBlockPoints, 10, 1.0, 'InvisibleWall_RightBlock');
+        // 5. Right Side Block
+        ObjectGenerator.createMountainSlice(ctx, new THREE.Vector3(165, 0, -88), new THREE.Vector3(165, 0, -17), 20);
 
-        // Debug Visual for Back Block
-        if (ctx.debugMode) {
-            SectorBuilder.visualizePath(ctx, backBlockPoints, 0x0000ff);
-            SectorBuilder.visualizePath(ctx, rightBlockPoints, 0x0000ff);
-        }
-
-        // Mountain Groups
-        const outerMountain = new THREE.Group();
-        outerMountain.name = "Sector2_OuterMountain";
-        scene.add(outerMountain);
-
-        const permanentMountain = new THREE.Group();
-        permanentMountain.name = "Sector2_PermanentMountain";
-        scene.add(permanentMountain);
-
+        // Mountain Groups (Cleanup old empty groups if not used)
         const innerCave = new THREE.Group();
         innerCave.name = "Sector2_InnerCave";
         scene.add(innerCave);
 
         if (ctx.yield) await ctx.yield();
 
-        // 2. Tunnel Arch (Concrete) - Decorative only, blocked
+        // 2. Train tunnel Arch (Concrete) - Decorative only, blocked
         const tunnelGroup = new THREE.Group();
         tunnelGroup.position.copy(tunnelPos);
         tunnelGroup.rotation.y = Math.PI / 2;
@@ -429,102 +419,7 @@ export const Sector2: SectorDef = {
         tunnelGroup.add(tunnelBlock);
         obstacles.push({ mesh: tunnelBlock, collider: { type: 'box', size: new THREE.Vector3(14, 20, 5) } });
 
-        permanentMountain.add(tunnelGroup);
-
-        // 5. Permanent Rocks sealing the Tunnel
-        /* Commented out for performance
-        for (let z = -42; z <= -18; z += 6) {
-            const r = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-            const s = 5 + Math.random() * 4;
-            r.scale.set(s, s, s);
-            r.position.set(167, s / 2 - 1, z);
-            r.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            r.castShadow = true;
-            permanentMountain.add(r);
-            obstacles.push({ mesh: r, collider: { type: 'sphere', radius: s * 0.8 } });
-        }
-        for (let z = -58; z >= -80; z -= 6) {
-            const r = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-            const s = 5 + Math.random() * 4;
-            r.scale.set(s, s, s);
-            r.position.set(167, s / 2 - 1, z);
-            r.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            r.castShadow = true;
-            permanentMountain.add(r);
-            obstacles.push({ mesh: r, collider: { type: 'sphere', radius: s * 0.8 } });
-        }
-        for (let x = 165; x <= 175; x += 5) {
-            const r = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-            r.scale.set(8, 6, 6);
-            r.position.set(x, 18, -50);
-            permanentMountain.add(r);
-        }
-         
-        // --- PART 4: MEGA ROCK SYSTEM (Visuals + Optimized Physics) ---
-        // Replaces Blocky Mountains with Scaled Stone Clusters
-         
-        const createMegaRock = (name: string, x: number, y: number, z: number, w: number, h: number, d: number) => {
-            // 1. Physics: Simple Box Collider (Invisible)
-            // Only generated if touching ground
-            if (y - h / 2 < 2) {
-                const colliderGeo = new THREE.BoxGeometry(w, h, d);
-                const colliderMat = new THREE.MeshBasicMaterial({ visible: false });
-                const collider = new THREE.Mesh(colliderGeo, colliderMat);
-                collider.position.set(x, y, z);
-                collider.name = name + "_Collider";
-                scene.add(collider);
-                collider.updateMatrixWorld();
-                obstacles.push({ mesh: collider, collider: { type: 'box', size: new THREE.Vector3(w, h, d) } });
-            }
-         
-            // 2. Visuals: Composite Scaled Stones
-            // Create a few overlapping stones to break the uniformity
-            // Main mass
-            const mainRock = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-            mainRock.position.set(x, y, z);
-            mainRock.scale.set(w * 0.8, h * 0.9, d * 0.8);
-            mainRock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            mainRock.castShadow = true;
-            mainRock.receiveShadow = true;
-            outerMountain.add(mainRock);
-         
-            // Detail boulders (2-4 extra)
-            const numDetails = 2 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < numDetails; i++) {
-                const detail = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
-                // Random offset within the bounds
-                const jx = (Math.random() - 0.5) * w * 0.6;
-                const jy = (Math.random() - 0.5) * h * 0.6;
-                const jz = (Math.random() - 0.5) * d * 0.6;
-         
-                detail.position.set(x + jx, y + jy, z + jz);
-                // Smaller random scales
-                detail.scale.set(w * (0.3 + Math.random() * 0.4), h * (0.3 + Math.random() * 0.4), d * (0.3 + Math.random() * 0.4));
-                detail.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-                detail.castShadow = true;
-                detail.receiveShadow = true;
-                outerMountain.add(detail);
-            }
-        };
-         
-        // 1. Left Mountain (Ends at X=90. Start at -50. Center = 20. Width = 140.)
-        createMegaRock("Mountain_Left", 20, 20, -80, 140, 40, 60);
-         
-        // 2. Cave Arch (X=90 to 110. Center=100. Width=20.)
-        createMegaRock("Mountain_Arch_Cave", 100, 23, -80, 20, 34, 60);
-         
-        // 3. Middle Mountain (X=110 to 128. Center=119. Width=18.)
-        createMegaRock("Mountain_Center", 119, 20, -80, 18, 40, 60);
-         
-        // 4. Tunnel Arch (X=128 to 146. Center=137. Width=18.)
-        createMegaRock("Mountain_Arch_Tunnel", 137, 24, -80, 18, 32, 60);
-         
-        // 5. Right Mountain (X=146 to 300. Center=223. Width=154.)
-        createMegaRock("Mountain_Right", 223, 20, -80, 154, 40, 60);
-         
-        // 6. Right Side Extension
-        createMegaRock("Mountain_Right_South", 180, 20, 0, 80, 40, 200);
-        */
+        scene.add(tunnelGroup); // Add directly to scene or permanentMountain
 
         // --- PART 5: THE CAVE SYSTEM (7 Rooms) ---
         // Extracted to Sector2_Cave.ts
@@ -534,19 +429,60 @@ export const Sector2: SectorDef = {
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
+        // --- REVERB LOGIC ---
+        // Inside cave bounds (Z < -65)
+        const insideCave = playerPos.z < -65;
+        if (soundManager.core) { // Check if core exists (safe check)
+            // Simple fade handled by setReverb's built-in lerp
+            if (insideCave) {
+                soundManager.setReverb(0.35);
+            } else {
+                soundManager.setReverb(0);
+            }
+        }
+
+        // --- FAMILY FOLLOW LOGIC ---
+        // Generic follower system for all family members
+        const familyMembers = (events as any).scene.children.filter((c: any) =>
+            c.userData.type === 'family' || c.userData.isFamilyMember
+        );
+
+        familyMembers.forEach((member: THREE.Group, index: number) => {
+            // Don't move Jordan during cinematic
+            if (member.userData.name === 'Jordan' && sectorState.jordanCinematic?.phase !== 'COMPLETE') return;
+
+            const ring = member.children.find((c: any) => c.userData.isRing);
+            const familyObj = {
+                mesh: member,
+                following: true,
+                ring: ring,
+                seed: member.userData.seed || 0,
+                // Pass cinematic speaking states if active
+                isSpeaking: (gameState.speakingUntil > now),
+                isThinking: (gameState.thinkingUntil > now)
+            };
+
+            FamilySystem.update(
+                familyObj,
+                { position: playerPos } as THREE.Group,
+                gameState,
+                !!sectorState.jordanCinematic && sectorState.jordanCinematic.phase !== 'NONE',
+                now,
+                delta,
+                {
+                    setFoundMemberName: () => { },
+                    startCinematic: (m) => { if ((events as any).startCinematic) (events as any).startCinematic(m); }
+                },
+                index // Pass follower index for spacing
+            );
+        });
+
         // --- OCCLUSION LOGIC ---
         if ((events as any).scene) {
             const scene = (events as any).scene as THREE.Scene;
-            const outer = scene.getObjectByName("Sector2_OuterMountain");
             const voidRoof = scene.getObjectByName("Sector2_VoidRoof");
-            const curtain = scene.getObjectByName("Sector2_Curtain");
 
-            // Check if inside cave bounds (Z < -60)
-            const insideCave = playerPos.z < -70;
-
-            if (outer) outer.visible = !insideCave;
-            if (curtain) curtain.visible = insideCave;
-            if (voidRoof) voidRoof.visible = true;
+            if (voidRoof) voidRoof.visible = true; // Always active to mask
 
             // --- JORDAN CINEMATIC LOGIC ---
             if (!sectorState.jordanCinematic) {
@@ -565,14 +501,18 @@ export const Sector2: SectorDef = {
                 if (doorFrame && (events as any).startCinematic) {
                     (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                     sectorState.introCinematicPlayed = true;
+                    // Play knocking sound at start of Dialogue 1
+                    soundManager.playMetalKnocking();
                 }
             }
 
-            // Ensure Jordan is hidden if not yet revealed
+
             const jordan = scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Jordan');
+            /*
             if (jordan && sectorState.jordanCinematic.phase === 'NONE' && jordan.visible) {
                 jordan.visible = false;
             }
+            */
 
             const jc = sectorState.jordanCinematic;
             const doorL = scene.getObjectByName('s2_bunker_door_l');
@@ -585,7 +525,7 @@ export const Sector2: SectorDef = {
                         sectorState.jordanCinematic.phase = 'OPENING_DOORS';
                         sectorState.jordanCinematic.timer = performance.now();
                         // Reset Jordan position just in case
-                        if (jordan) jordan.position.set(25, 0, -193);
+                        //if (jordan) jordan.position.set(25, 0, -193);
 
                         // Play sound
                         soundManager.playMetalDoorOpen();
@@ -609,10 +549,13 @@ export const Sector2: SectorDef = {
                     // Dialogue finished! Prepare for boss spawn
                     jc.phase = 'FINISHED_AFTER_DIALOGUE';
 
-                    // Remove Loke from scene after dialogue 2 ends
+                    // NO LONGER Remove Loke from scene after dialogue 2
+                    // Loke stays to fight!
+                    /*
                     if (jc.loke) {
                         jc.loke.visible = false;
                     }
+                    */
 
                     // Trigger closing if not already closing (e.g. if skipped)
                     if (!jc.doorsClosing) {
@@ -633,15 +576,6 @@ export const Sector2: SectorDef = {
                 if (doorL) doorL.position.x = -5 - openDist;
                 if (doorR) doorR.position.x = 5 + openDist;
 
-                if (elapsed > 0 && !jordan?.visible) {
-                    // Reveal Jordan immediately as doors open
-                    if (jordan) {
-                        jordan.visible = true;
-                        jordan.position.set(LOCATIONS.SPAWN.FAMILY.x, LOCATIONS.SPAWN.FAMILY.y, LOCATIONS.SPAWN.FAMILY.z);
-                        jc.jordan = jordan;
-                    }
-                }
-
                 if (elapsed > 2000) {
                     jc.phase = 'JORDAN_WALK';
                     jc.timer = now;
@@ -654,44 +588,6 @@ export const Sector2: SectorDef = {
                         jc.walkTarget.sub(toPlayer.multiplyScalar(2.0));
                     } else {
                         jc.walkTarget = new THREE.Vector3(52, 0, -193);
-                    }
-
-                    // Prepare Loke
-                    let loke = scene.children.find(c =>
-                        (c.userData.isFamilyMember || c.userData.type === 'family' || c.name === 'Loke') &&
-                        c.userData.name === 'Loke'
-                    );
-
-                    if (!loke) {
-                        // Fallback: Manually create Loke (The Camp might have issues with duplicate members if not careful)
-                        const lokeData = FAMILY_MEMBERS.find(f => f.name === 'Loke');
-                        if (lokeData) {
-                            loke = ModelFactory.createFamilyMember(lokeData);
-                            scene.add(loke);
-                        }
-                    }
-
-                    if (loke && playerPos) {
-                        loke.userData.name = 'Loke';
-                        loke.userData.isFamilyMember = true;
-                        loke.userData.type = 'family';
-                        loke.name = 'Loke'; // Also set standard mesh name
-
-                        loke.position.set(playerPos.x + 1, 0, playerPos.z + 1);
-                        loke.lookAt(new THREE.Vector3(41, 0, -193));
-                        loke.visible = true;
-
-                        loke.traverse((child: any) => {
-                            if (child.isMesh) {
-                                if (!child.userData.originalMaterial) child.userData.originalMaterial = child.material.clone();
-                                child.material = child.material.clone();
-                                child.material.transparent = true;
-                                child.material.opacity = 0;
-                                child.material.needsUpdate = true;
-                            }
-                        });
-                        jc.loke = loke;
-                        jc.lokeFadeStart = now;
                     }
                 }
             } else if (jc.doorsClosing) {
@@ -707,41 +603,39 @@ export const Sector2: SectorDef = {
                     jc.doorCloseSoundPlayed = true;
                 }
 
-                if (elapsed > 1000 && jc.phase === 'FINISHED_AFTER_DIALOGUE') {
+                if (elapsed > 500 && jc.phase === 'FINISHED_AFTER_DIALOGUE') {
                     jc.phase = 'COMPLETE';
 
                     // Reset camera and HUD BEFORE boss spawn
                     if ((window as any).clearCameraOverride) (window as any).clearCameraOverride();
                     window.dispatchEvent(new CustomEvent('show_hud'));
-
-                    // Then trigger boss spawn
                     window.dispatchEvent(new CustomEvent('boss-spawn-trigger'));
                     window.dispatchEvent(new CustomEvent('family-follow'));
                 }
             }
 
-            // 2. Loke Fade Update
-            if (jc.loke && jc.lokeFadeStart) {
-                const elapsed = now - jc.lokeFadeStart;
-                const opacity = Math.min(1.0, elapsed / 2000);
-                jc.loke.traverse((child: any) => {
-                    if (child.isMesh && child.material) {
-                        child.material.opacity = opacity;
-                        child.material.transparent = opacity < 0.99;
-                    }
-                });
-                if (opacity >= 1.0) delete jc.lokeFadeStart;
-            }
-
             // --- MAIN STORY PHASE MACHINE ---
             if (jc.phase === 'JORDAN_WALK') {
+                // Ensure we have the mesh reference
+                if (!jc.jordan && jordan) jc.jordan = jordan;
+
                 if (jc.jordan) {
                     const walkTarget = jc.walkTarget || new THREE.Vector3(52, 0, -193);
                     const jordanPos = jc.jordan.position;
                     const moveSpeed = 0.05;
                     jordanPos.lerp(walkTarget, moveSpeed);
 
-                    if (jordanPos.distanceTo(walkTarget) < 1.0) {
+                    // Manually trigger walk animation during walk phase
+                    const familyObj = {
+                        mesh: jc.jordan,
+                        following: false,
+                        isMoving: true,
+                        isSpeaking: (gameState.speakingUntil > now),
+                        seed: jc.jordan.userData.seed || 0
+                    };
+                    FamilySystem.update(familyObj, { position: playerPos } as THREE.Group, gameState, true, now, delta, { setFoundMemberName: () => { }, startCinematic: () => { } });
+
+                    if (jordanPos.distanceTo(walkTarget) < 1.5) {
                         jc.phase = 'START_DIALOGUE_2';
                     }
                 }
@@ -809,6 +703,8 @@ export const Sector2: SectorDef = {
 };
 
 function spawnSectorHordes(ctx: SectorContext) {
+    // TODO: Re-enable when we're done with the cave entrance and mountain
+    return;
     if (!ctx.spawnHorde) return;
 
     // Defined Horde Locations (Forest)

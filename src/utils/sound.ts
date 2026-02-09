@@ -24,6 +24,10 @@ export class SoundManager {
     this.stopRadioStatic();
   }
 
+  setReverb(amount: number) {
+    this.core.setReverb(amount);
+  }
+
   // --- UI Delegate ---
   playUiHover() { UiSounds.playUiHover(this.core); }
   playUiClick() { UiSounds.playClick(this.core); }
@@ -34,6 +38,7 @@ export class SoundManager {
   playTone(freq: number, type: OscillatorType, duration: number, vol: number = 0.1) { UiSounds.playTone(this.core, freq, type, duration, vol); }
   playMetalDoorShut() { GamePlaySounds.playMetalDoorShut(this.core); }
   playMetalDoorOpen() { GamePlaySounds.playMetalDoorOpen(this.core); }
+  playMetalKnocking() { GamePlaySounds.playMetalKnocking(this.core); }
   playCollectibleChime() { UiSounds.playCollectibleChime(this.core); }
 
   // --- Voice Delegate ---

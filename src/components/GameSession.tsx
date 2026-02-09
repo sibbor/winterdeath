@@ -31,6 +31,7 @@ import { WorldLootSystem } from '../core/systems/WorldLootSystem';
 import { PlayerInteractionSystem } from '../core/systems/PlayerInteractionSystem';
 import { EnemySystem } from '../core/systems/EnemySystem';
 import { SectorSystem } from '../core/systems/SectorSystem';
+import { FootprintSystem } from '../core/systems/FootprintSystem';
 import ScreenPlayerDied from './game/ScreenPlayerDied';
 import ScreenCollectibleFound from './game/ScreenCollectibleFound';
 import { COLLECTIBLES } from '../content/collectibles';
@@ -404,7 +405,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     };
 
     let fmMesh: THREE.Group | undefined;
-    const familyMember = useRef({ mesh: null as any, ring: null as any, found: false, following: false, name: '', cooldown: 0, scale: 1.0, seed: Math.random() * 100 }).current;
+    const activeFamilyMembers = useRef<any[]>([]);
 
     const startCinematic = (familyMesh: THREE.Group, scriptId?: number, customParams?: { targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3 }) => {
         if (cinematicRef.current.active) return;
@@ -417,7 +418,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             document.exitPointerLock();
         }
 
-        setFoundMemberName(familyMember.name);
+        if (familyMemberRef.current) setFoundMemberName(familyMemberRef.current.name);
         setCinematicActive(true);
         stateRef.current.isInteractionOpen = true;
         stateRef.current.familyFound = true;
@@ -598,8 +599,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                     break;
                 case 'START_CINEMATIC':
-                    if (familyMember.mesh) {
-                        startCinematic(familyMember.mesh);
+                    if (familyMemberRef.current?.mesh) {
+                        startCinematic(familyMemberRef.current.mesh);
                     }
                     break;
                 case 'TRIGGER_FAMILY_FOLLOW':
@@ -714,6 +715,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // Extract Engine Components for local usage
         const scene = engine.scene;
         const camera = engine.camera;
+        FootprintSystem.init(scene);
 
         // --- HELPER WRAPPERS (Defined early for TDZ safety) ---
         const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
@@ -826,7 +828,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         activeBubbles.current = [];
 
         // --- PRE-INIT VARIABLES (Moved out of setTimeout for scope access) ---
-        const weatherParticles: any[] = [];
         const flickeringLights: any[] = [];
         const burningObjects: any[] = [];
         stateRef.current.chests = [];
@@ -842,7 +843,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const now = performance.now();
             if (!hasEndedSector.current) {
                 hasEndedSector.current = true;
-                if (isExtraction) { state.familyExtracted = true; soundManager.stopRadioStatic(); }
+                if (isExtraction) {
+                    state.familyExtracted = true;
+                    soundManager.stopRadioStatic();
+                    soundManager.setReverb(0);
+                }
 
                 propsRef.current.onSectorEnded({
                     timeElapsed: now - state.startTime,
@@ -919,8 +924,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 moonLight.shadow.camera.right = 100;
                 moonLight.shadow.camera.top = 100;
                 moonLight.shadow.camera.bottom = -100;
-                moonLight.shadow.mapSize.width = 2048;
-                moonLight.shadow.mapSize.height = 2048;
+                const shadowRes = engine.getSettings().shadowResolution;
+                moonLight.shadow.mapSize.width = shadowRes;
+                moonLight.shadow.mapSize.height = shadowRes;
                 scene.add(moonLight);
             }
 
@@ -928,6 +934,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const sun = new THREE.DirectionalLight(0xffffee, 0.5);
                 sun.position.set(env.sunPosition.x, env.sunPosition.y, env.sunPosition.z);
                 sun.castShadow = true;
+                const shadowRes = engine.getSettings().shadowResolution;
+                sun.shadow.mapSize.width = shadowRes;
+                sun.shadow.mapSize.height = shadowRes;
                 scene.add(sun);
             }
 
@@ -1031,66 +1040,126 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             });
             stateRef.current.activeEffects = activeEffects;
 
-            // Weather Particles
-            if (env.weather !== 'none') {
-                const count = WEATHER.PARTICLE_COUNT;
-                const geo = GEOMETRY.weatherParticle;
-                let color = 0xffffff;
-                let opacity = 0.8;
-                let velBase = new THREE.Vector3(0, -0.2, 0);
+            // Weather particles and ground fog are now handled by WeatherSystem.ts using InstancedMesh
 
-                if (env.weather === 'rain') { color = 0x8899ff; opacity = 0.6; velBase.set(0, -0.8, 0); }
-                else if (env.weather === 'ash') { color = 0x555555; opacity = 0.8; velBase.set(0, -0.05, 0); }
-                else if (env.weather === 'embers') { color = 0xff5500; opacity = 1.0; velBase.set(0, 0.05, 0); }
+            // --- PLAYER GROUP SETUP ---
+            const playerGroup = ModelFactory.createPlayer();
+            playerGroupRef.current = playerGroup;
 
-                const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
-                for (let i = 0; i < count; i++) {
-                    const s = new THREE.Mesh(geo, mat);
-                    s.position.set((Math.random() - 0.5) * 300, Math.random() * 40, (Math.random() - 0.5) * 300);
-                    if (env.weather === 'rain') s.scale.set(0.5, 5, 1);
-                    scene.add(s);
-                    const v = velBase.clone();
-                    v.x += (Math.random() - 0.5) * 0.1;
-                    if (env.weather === 'embers') v.y += Math.random() * 0.05;
-                    else v.y -= Math.random() * 0.1;
-                    v.z += (Math.random() - 0.5) * 0.1;
-                    weatherParticles.push({ mesh: s, vel: v, resetY: 40 });
-                }
-            } else {
-                for (let i = 0; i < 30; i++) {
-                    const m = new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog);
-                    m.position.set((Math.random() - 0.5) * 200, 2, (Math.random() - 0.5) * 200);
-                    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * Math.PI;
-                    scene.add(m); weatherParticles.push({ mesh: m, type: 'ground_fog', speed: (Math.random() - 0.5) * 0.5 });
+            const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
+            playerMeshRef.current = bodyMesh as THREE.Mesh;
+
+            const pSpawn = { ...currentSector.playerSpawn };
+            const fSpawn = { ...currentSector.familySpawn };
+
+            playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
+            if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot;
+
+            // Flashlight
+            const fl = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
+            fl.position.set(0, 3.5, 0.5); fl.target.position.set(0, 0, 10); fl.castShadow = true;
+            fl.shadow.camera.near = 1; fl.shadow.camera.far = 40; fl.shadow.bias = -0.0001;
+            playerGroup.add(fl); playerGroup.add(fl.target);
+            flashlightRef.current = fl;
+
+            scene.add(playerGroup);
+            prevPosRef.current = playerGroup.position.clone();
+
+            // --- FAMILY MEMBERS SPAWNING ---
+            activeFamilyMembers.current = [];
+
+            // 1. Spawn already rescued family members (from persistent indices)
+            if (propsRef.current.rescuedFamilyIndices) {
+                propsRef.current.rescuedFamilyIndices.forEach(mapIdx => {
+                    const theme = SECTOR_THEMES[mapIdx];
+                    if (theme && theme.familyMemberId !== undefined) {
+                        const fmData = FAMILY_MEMBERS[theme.familyMemberId];
+                        if (fmData) {
+                            const mesh = ModelFactory.createFamilyMember(fmData);
+                            // Spawn them slightly behind the player
+                            mesh.position.set(pSpawn.x + (Math.random() - 0.5) * 5, 0, pSpawn.z + 5 + Math.random() * 5);
+
+                            const nameParams = createTextSprite(fmData.name);
+                            nameParams.scale.set(12, 3, 1);
+                            nameParams.position.y = 3.5;
+                            mesh.add(nameParams);
+
+                            const markerGroup = new THREE.Group();
+                            markerGroup.position.y = 0.2;
+                            const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
+                            const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+                            fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
+                            const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+                            border.rotation.x = -Math.PI / 2; markerGroup.add(border);
+                            mesh.add(markerGroup);
+
+                            const fLight = new THREE.PointLight(fmData.color, 2, 8); fLight.position.y = 2; mesh.add(fLight);
+                            flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
+
+                            scene.add(mesh);
+                            activeFamilyMembers.current.push({
+                                mesh,
+                                ring: markerGroup,
+                                found: true,
+                                following: true,
+                                name: fmData.name,
+                                id: fmData.id,
+                                scale: fmData.scale,
+                                seed: Math.random() * 100
+                            });
+                        }
+                    }
+                });
+            }
+
+            // 2. Spawn the current sector's target family member
+            if (!propsRef.current.familyAlreadyRescued) {
+                const theme = SECTOR_THEMES[propsRef.current.currentMap];
+                const fmId = theme ? theme.familyMemberId : 0;
+
+                // Only spawn if not already in the party
+                if (!propsRef.current.rescuedFamilyIndices.includes(propsRef.current.currentMap)) {
+                    const fmData = FAMILY_MEMBERS[fmId];
+                    if (fmData) {
+                        const mesh = ModelFactory.createFamilyMember(fmData);
+                        mesh.position.set(fSpawn.x, 0, fSpawn.z);
+                        if (fSpawn.y) mesh.position.y = fSpawn.y;
+
+                        const nameParams = createTextSprite(fmData.name);
+                        nameParams.scale.set(12, 3, 1);
+                        nameParams.position.y = 3.5;
+                        mesh.add(nameParams);
+
+                        const markerGroup = new THREE.Group();
+                        markerGroup.position.y = 0.2;
+                        const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
+                        const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+                        fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
+                        const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+                        border.rotation.x = -Math.PI / 2; markerGroup.add(border);
+                        mesh.add(markerGroup);
+
+                        const fLight = new THREE.PointLight(fmData.color, 2, 8); fLight.position.y = 2; mesh.add(fLight);
+                        flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
+
+                        scene.add(mesh);
+                        const currentFM = {
+                            mesh,
+                            ring: markerGroup,
+                            found: false,
+                            following: false,
+                            name: fmData.name,
+                            id: fmData.id,
+                            scale: fmData.scale,
+                            seed: Math.random() * 100
+                        };
+                        activeFamilyMembers.current.push(currentFM);
+                        familyMemberRef.current = currentFM;
+                    }
                 }
             }
 
-            // Family Member
-            if (!propsRef.current.familyAlreadyRescued) {
-                const theme = SECTOR_THEMES[propsRef.current.currentMap];
-                const fmData = FAMILY_MEMBERS[theme ? theme.familyMemberId : 0];
-                fmMesh = ModelFactory.createFamilyMember(fmData);
-                fmMesh.position.set(fSpawn.x, 0, fSpawn.z);
-                if (fSpawn.y) fmMesh.position.y = fSpawn.y;
-                const nameParams = createTextSprite(fmData.name); nameParams.scale.set(12, 3, 1); nameParams.position.y = 3.5; fmMesh.add(nameParams);
-
-                const markerGroup = new THREE.Group();
-                markerGroup.position.y = 0.2;
-                const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
-                const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
-                fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
-                const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
-                border.rotation.x = -Math.PI / 2; markerGroup.add(border);
-                fmMesh.add(markerGroup); familyMember.ring = markerGroup;
-
-                const fLight = new THREE.PointLight(fmData.color, 2, 8); fLight.position.y = 2; fmMesh.add(fLight);
-                flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
-                scene.add(fmMesh); familyMember.mesh = fmMesh; familyMember.name = fmData.name; familyMember.scale = fmData.scale;
-                familyMemberRef.current = familyMember;
-            } else familyMember.found = true;
-
-            // Player Group
-            const playerGroup = ModelFactory.createPlayer();
+            // --- SYSTEMS INITIALIZATION ---
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new WorldLootSystem(playerGroup, scene));
@@ -1146,38 +1215,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
             }));
-            playerGroupRef.current = playerGroup;
-
-            const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
-            playerMeshRef.current = bodyMesh as THREE.Mesh;
-            // Defensive copy of spawn point
-            const pSpawn = { ...currentSector.playerSpawn };
-            playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
-            if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot; // Set initial rotation
 
             // Set initial aim direction if specified in sector
             if (currentSector.initialAim) {
                 engine.input.state.aimVector = new THREE.Vector2(currentSector.initialAim.x, currentSector.initialAim.y);
             }
 
-            prevPosRef.current = playerGroup.position.clone();
-
-            // Flashlight
-            const fl = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
-            fl.position.set(0, 3.5, 0.5); fl.target.position.set(0, 0, 10); fl.castShadow = true;
-            fl.shadow.camera.near = 1; fl.shadow.camera.far = 40; fl.shadow.bias = -0.0001;
-            playerGroup.add(fl); playerGroup.add(fl.target);
-            flashlightRef.current = fl;
-
             prevInputRef.current = false;
-
-            scene.add(playerGroup);
-
-            if (propsRef.current.startAtCheckpoint && fmMesh) {
-                playerGroupRef.current.position.copy(fmMesh.position).add(new THREE.Vector3(0, 0, 5));
-                if (fSpawn && fSpawn.y) playerGroupRef.current.position.y = 0;
-                prevPosRef.current = playerGroupRef.current.position.clone();
-            }
 
             // SNAP CAMERA (Prevent lerp jump on load)
             camera.position.set(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ);
@@ -1235,9 +1279,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         window.addEventListener('boss-spawn-trigger', spawnBoss);
         const onFamilyFollow = () => {
-            familyMember.following = true;
-            stateRef.current.isInteractionOpen = false;
-            stateRef.current.familyFound = true;
+            if (familyMemberRef.current) {
+                familyMemberRef.current.following = true;
+                stateRef.current.isInteractionOpen = false;
+                stateRef.current.familyFound = true;
+            }
         };
         window.addEventListener('family-follow', onFamilyFollow);
         window.addEventListener('family_follow', onFamilyFollow);
@@ -1272,7 +1318,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (weatherSystemRef.current) {
                 const currentWeather = propsRef.current.weather || 'none';
-                weatherSystemRef.current.sync(currentWeather, WEATHER.PARTICLE_COUNT, 200);
+                weatherSystemRef.current.sync(currentWeather, engine.getSettings().weatherCount, 200);
                 weatherSystemRef.current.update(dt, now);
             }
 
@@ -1344,16 +1390,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (playerMeshRef.current) {
                     PlayerAnimation.update(playerMeshRef.current, { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 }, now, delta);
                 }
-                engine.renderer.render(scene, camera);
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
 
             if (state.isDead) {
-                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMember.mesh || null, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
-                FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
-                engine.renderer.render(scene, camera);
+                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
+                if (playerGroupRef.current) {
+                    FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
+                }
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
@@ -1383,51 +1429,82 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             frame++;
 
-            if (cinematicRef.current.active) {
-                CinematicSystem.update(cinematicRef.current, camera, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine });
-                engine.renderer.render(scene, camera);
+            if (state.isInteractionOpen && !cinematicRef.current.active) {
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
 
-            if (state.isInteractionOpen) { engine.renderer.render(scene, camera); lastTime = now; return; }
-
             const currentInput = engine.input.state;
             let speed = 15 * propsRef.current.stats.speed;
 
-            if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
-                const tgt = propsRef.current.teleportTarget;
-                playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
-                spawnPart(tgt.x, 1, tgt.z, 'smoke', 20); soundManager.playTone(800, 'sine', 0.2, 0.1);
-                lastTeleportRef.current = tgt.timestamp; camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ); camera.lookAt(playerGroupRef.current.position);
-                prevPosRef.current = playerGroupRef.current.position.clone();
+            const isCinematic = cinematicRef.current.active;
+            const isBossIntro = bossIntroRef.current.active;
+
+            // --- GAMEPLAY UPDATES (Gated) ---
+            if (!isCinematic && !isBossIntro) {
+                if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
+                    const tgt = propsRef.current.teleportTarget;
+                    playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
+                    spawnPart(tgt.x, 1, tgt.z, 'smoke', 20); soundManager.playTone(800, 'sine', 0.2, 0.1);
+
+                    // Teleport Family Members
+                    if (activeFamilyMembers.current) {
+                        activeFamilyMembers.current.forEach(fm => {
+                            if (fm.mesh && fm.following) {
+                                const offX = (Math.random() - 0.5) * 3;
+                                const offZ = (Math.random() - 0.5) * 3;
+                                fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
+                                spawnPart(tgt.x + offX, 1, tgt.z + offZ, 'smoke', 10);
+                            }
+                        });
+                    }
+
+                    lastTeleportRef.current = tgt.timestamp; camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ); camera.lookAt(playerGroupRef.current.position);
+                    prevPosRef.current = playerGroupRef.current.position.clone();
+                }
+
+                // Sync input state
+                gameSessionRef.current!.inputDisabled = !!propsRef.current.disableInput || (!!cameraOverrideRef.current?.active);
+                gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
+                gameSessionRef.current!.debugMode = propsRef.current.debugMode;
+
+                // Update Game Session (Systems)
+                gameSessionRef.current!.cameraAngle = cameraAngleRef.current;
+                gameSessionRef.current!.update(delta);
+                const isMoving = state.isMoving;
+
+                if (prevPosRef.current && playerGroupRef.current) { const d = playerGroupRef.current.position.distanceTo(prevPosRef.current); distanceTraveledRef.current += d; }
+                if (playerGroupRef.current) prevPosRef.current = playerGroupRef.current.position.clone();
+
+                if (playerMeshRef.current) {
+                    PlayerAnimation.update(playerMeshRef.current, { isMoving, isRushing: state.isRushing, isRolling: state.isRolling, rollStartTime: state.rollStartTime, staminaRatio: state.stamina / state.maxStamina, isSpeaking: state.speakBounce > 0 || now < state.speakingUntil, isThinking: now < state.thinkingUntil, isIdleLong: (now - state.lastActionTime > 20000), seed: 0 }, now, delta);
+                }
             }
 
-            // Sync input state
-            gameSessionRef.current!.inputDisabled = !!propsRef.current.disableInput || (!!cameraOverrideRef.current?.active);
-            gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
-            gameSessionRef.current!.debugMode = propsRef.current.debugMode;
+            // --- ANIMATION UPDATES (Global) ---
 
-            // Update Game Session (Systems)
-            gameSessionRef.current!.cameraAngle = cameraAngleRef.current;
-            gameSessionRef.current!.update(delta);
-            const isMoving = state.isMoving;
+            // Update all active family members (Always runs, movement restricted internally during cinematic)
+            activeFamilyMembers.current.forEach((fm, index) => {
+                if (fm.mesh) {
+                    FamilySystem.update(fm, playerGroupRef.current, state, cinematicRef.current.active, now, delta, {
+                        setFoundMemberName,
+                        startCinematic
+                    }, index);
+                }
+            });
 
-            // Movement & Rotation System (was Rotation Logic here)
+            // Update Footprints
+            FootprintSystem.update(delta);
 
-            if (prevPosRef.current) { const d = playerGroupRef.current.position.distanceTo(prevPosRef.current); distanceTraveledRef.current += d; }
-            prevPosRef.current = playerGroupRef.current.position.clone();
-
-            if (playerMeshRef.current) {
-                PlayerAnimation.update(playerMeshRef.current, { isMoving, isRushing: state.isRushing, isRolling: state.isRolling, rollStartTime: state.rollStartTime, staminaRatio: state.stamina / state.maxStamina, isSpeaking: state.speakBounce > 0 || now < state.speakingUntil, isThinking: now < state.thinkingUntil, isIdleLong: (now - state.lastActionTime > 20000), seed: 0 }, now, delta);
+            // Cinematic Update (Overrides)
+            if (isCinematic) {
+                // Pass familyMembers as undefined since we handle them globally now, or keep it if needed for specific logic?
+                // We removed the ring pulse hack, so the arg is unused in CinematicSystem.
+                CinematicSystem.update(cinematicRef.current, camera, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine }, activeFamilyMembers.current);
             }
 
-            if (familyMember.mesh) {
-                FamilySystem.update(familyMember, playerGroupRef.current, state, cinematicRef.current.active, now, delta, { setFoundMemberName, startCinematic });
-            }
-
-            if (!cinematicRef.current.active && !bossIntroRef.current.active) {
+            if (!isCinematic && !isBossIntro) {
                 if (cameraOverrideRef.current && cameraOverrideRef.current.active) {
                     const override = cameraOverrideRef.current;
                     if (now > override.endTime) {
@@ -1444,6 +1521,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     CameraSystem.update(camera, playerGroupRef.current.position, currentSector.environment.cameraOffsetZ, state, false, delta, cameraAngleRef.current, cameraHeightModifierRef.current);
                 }
             }
+
+            // Render
+            lastDrawCallsRef.current = engine.renderer.info.render.calls;
+            lastTime = now;
+
 
             // WeaponHandler Inputs removed (Moved to PlayerCombatSystem)
 
@@ -1488,7 +1570,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             const gameContext = {
                 scene, enemies: state.enemies, obstacles: state.obstacles, spawnPart, spawnDecal,
-                explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, scene, state.particles),
+                explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, { spawnPart, spawnDecal }),
                 addScore: (amt: number) => gainXp(amt),
                 trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
                     if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; gainXp(Math.ceil(amt)); }
@@ -1564,6 +1646,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (age < 200) opacity = `${age / 200}`;
                 else if (age > b.duration - 500) opacity = `${(b.duration - age) / 500}`;
 
+                // Update tail position for active dialogue bubbles if they belong to a family member
+                // (Logic could be added here if needed to sync bubbles to world positions)
+
                 // Slide In Effect for Newest
                 let transform = `translate(-50%, -100%)`; // Centered and above the point
                 if (age < 200) {
@@ -1623,11 +1708,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             });
 
-            FXSystem.update(scene, state.particles, weatherParticles, state.bloodDecals, delta, frame, now, playerGroup.position, { spawnPart, spawnDecal });
-
-            // currentSector.onUpdate moved to SectorSystem
-            // Verify Debug Update
-            // Render handled by Engine
+            if (playerGroupRef.current) {
+                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
+            }
         };
 
         return () => {
@@ -1654,6 +1737,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (playerGroupRef.current) {
                 scene.remove(playerGroupRef.current);
             }
+
+            // Reset sound parameters
+            soundManager.setReverb(0);
+            soundManager.stopRadioStatic();
 
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
             session.dispose();
@@ -1713,7 +1800,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 />
             )}
 
-            <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none" />
+            <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
             <CinematicBubble
                 text={currentLine ? t(currentLine.text) : ""}
                 speakerName={currentLine ? currentLine.speaker : ""}
@@ -1790,8 +1877,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
         `}</style>
-            <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
-        </div >
+        </div>
     );
 });
 

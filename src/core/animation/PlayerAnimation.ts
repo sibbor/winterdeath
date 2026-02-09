@@ -1,5 +1,6 @@
 
 import * as THREE from 'three';
+import { FootprintSystem } from '../systems/FootprintSystem';
 
 export interface AnimState {
     // Movement
@@ -23,6 +24,7 @@ export interface AnimState {
     // Seed for random idle behaviors to desync characters
     seed: number;
 }
+
 
 export const PlayerAnimation = {
     update: (
@@ -146,5 +148,35 @@ export const PlayerAnimation = {
         const baseHeight = mesh.userData.baseY || 1.0;
 
         mesh.position.y = (baseHeight * scaleY) + positionY;
+
+        // --- 4. Footprints (New) ---
+        if (animState.isMoving || animState.isRushing) {
+            const sway = Math.cos(now * (animState.isRushing ? 0.020 : 0.012)); // Same calc as rotationZ
+            const lastSway = mesh.userData.lastSway || 0;
+            const threshold = 0.8;
+
+            // Trigger on peaks (Weight shift fully over foot)
+            const worldPos = new THREE.Vector3();
+            mesh.getWorldPosition(worldPos);
+
+            // Calculate world rotation Y
+            const worldQuat = new THREE.Quaternion();
+            mesh.getWorldQuaternion(worldQuat);
+            const euler = new THREE.Euler().setFromQuaternion(worldQuat, 'YXZ');
+            const worldRotY = euler.y;
+
+            if (lastSway < threshold && sway >= threshold) {
+                // Right Step
+                FootprintSystem.addFootprint(worldPos, worldRotY, true);
+            } else if (lastSway > -threshold && sway <= -threshold) {
+                // Left Step
+                FootprintSystem.addFootprint(worldPos, worldRotY, false);
+            }
+
+            mesh.userData.lastSway = sway;
+        } else {
+            // Reset sway tracking when stopped so we don't trigger instantly on resume
+            mesh.userData.lastSway = 0;
+        }
     }
 };

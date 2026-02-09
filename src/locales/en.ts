@@ -332,14 +332,14 @@ export const en = {
             },
             {
                 overlay: "SIGNAL LOST.",
-                narrative: "Robert tries to call Nathalie. Static sound.",
+                narrative: "Robert tries to call Nathalie and the children. Static sound.",
                 image: "Phone with no signal and in skyline of the Borås in the distance.",
                 bubbles: ["No signal...", "Damn it!", "I need to reach Nathalie."],
                 audio: "Distant explosions, gunfire."
             },
             {
                 overlay: "GET HOME.",
-                narrative: "Everything has turned to shit. Robert drives frantically to get home to his family. He sees the front door is smashed open. He draws his weapon and rushes inside.",
+                narrative: "Everything has turned to shit. Robert drives his police car frantically -through the city to get home to his family. .",
                 image: "Police car driving fast through the snowy streets of Borås, zombies in the streets.",
                 audio: "Fast car sound. Heavy breathing."
             },
@@ -359,11 +359,26 @@ export const en = {
         ],
     },
     bosses: {
-        0: { name: "The Yard Master", death: "The creature that started it all in The Village lies dead. Its mutated form suggests it was once human, perhaps a neighbor. Loke is safe now.", lore: "Entity identified in Sector 1 (Forest). wields crude heavy weaponry. High physical resilience." },
-        1: { name: "The Vault Stalker", death: "The armored giant guarding the bunker has fallen. The survivors inside have fled, but Jordan is secured. The caves are silent once more.", lore: "Entity identified in Sector 2 (Graveyard). Capabilities include optical camouflage and rapid repositioning." },
-        2: { name: "The Frequency", death: "A screeching horror that used the radio mast to coordinate the horde. With its death, the interference clears. Esmeralda is safe.", lore: "Entity identified in Sector 3 (Sewers). Emits toxic biological agents. Environmental hazard." },
-        3: { name: "The Metal Crusher", death: "The massive monstrosity that separated Nathalie from Esmeralday is dead. It took everything to bring it down. The family is finally reunited.", lore: "Entity identified in Sector 4 (City). Massive bio-mechanical structure. Extreme threat level." },
-        intro_default: "A massive threat dominates this sector."
+        0: {
+            name: "The Yard Master",
+            lore: "Entity identified at Gånghester Station. A former neighbor mutated into a hulking brute. He wields a heavy railway tool, his massive strength causing the initial fracture of Robert’s family.",
+            death: "The creature that forced the family apart is dead. It was this monstrosity that made Nathalie and Esmeralda flee into the dark woods, leaving Loke behind in the chaos. Loke is safe now, but the trail of the others leads deep into the freezing forest."
+        },
+        1: {
+            name: "The Vault Stalker",
+            lore: "A predatory horror residing in the concrete labyrinths of the Cold War shelter. It thrives in the dark, feeding on the terror of the survivors trapped within. It strikes with lethal precision at the sound of a closing door.",
+            death: "As the massive steel door slammed shut, sending a thunderous echo through the tunnels, the Stalker struck. Robert, Loke, and Jordan stood their ground. The caves are silent once more, and Jordan is finally back in Robert's arms."
+        },
+        2: {
+            name: "The Frequency",
+            lore: "A screeching technician-turned-horror. Along with another beast, it pursued Esmeralda and Nathalie through the brush. It uses the Haglared Mast to amplify its bio-toxic screams, coordinating the surrounding horde.",
+            death: "The interference clears. Nathalie’s brave gamble—luring the other beast away to give Esmeralda a chance to reach the control room—has paid off. Esmeralda is safe, the radio equipment is repaired, and a static-filled voice finally answers the call."
+        },
+        3: {
+            name: "The Metal Crusher",
+            lore: "A catastrophic bio-mechanical threat at the scrapyard. It pursued Nathalie relentlessly until she was cornered in a cramped office. It is a towering mass of rusted chassis and mutated flesh.",
+            death: "The final barrier has been broken. Nathalie is rescued from the ruins of the scrapyard office. The long night in the snow is over; but it's only the beginning."
+        },
     },
     family: {
         dad: "Dad",
@@ -432,12 +447,11 @@ export const en = {
         s3_collectible_2_title: "Esmeralda's Jacket",
         s3_collectible_2_description: "Esmeralda's favorite jacket. It's torn and has bloodstains on the sleeve. My stomach knots... I hope it's not her blood.",
 
-        s3_forest_noise: "The forest is too loud. Every snap of a twig sounds like a runner...",
+        s3_forest_noise: "Every snap of a twig sounds like a runner...",
         s3_dead_bodies: "Poor bastards... Children, look away!",
         s3_tractor: "Nice tractor. Wonder if it's working?",
-        s3_burning_farm: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night.",
-        s3_mast_sight: "There it is. The Häglared Mast. If Esmeralda is anywhere, she's there.",
 
+        s3_poi_burning_farm: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night.",
         s3_poi_the_farm: "The egg farm. This is the place where we used to get our eggs from.",
         s3_poi_the_mast: "The mast is huge! Hard to imagine it was even higher before it was sabotaged in 2016.",
 

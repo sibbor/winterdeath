@@ -13,48 +13,58 @@ import { SectorManager } from '../../core/SectorManager';
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: 0, z: 0 },
-        FAMILY: { x: -200, z: -10, y: 0 },
-        BOSS: { x: -220, z: -10 }
+        FAMILY: { x: 215, z: -25 },
+        BOSS: { x: 220, z: -10 }
     },
     CINEMATIC: {
         OFFSET: { x: 15, y: 15, z: -10 },
         LOOK_AT: { x: 0, y: 2, z: 0 }
     },
     COLLECTIBLES: {
-        C1: { x: 230, z: -130 },
-        C2: { x: 200, z: -100 }
+        C1: { x: 275, z: -180 },
+        C2: { x: 215, z: -25 }
     },
     TRIGGERS: {
-        FOREST_NOISE: { x: 16, z: -4 },
-        MAST_SIGHT: { x: -450, z: -80 },
-        FOUND_ESMERALDA: { x: -200, z: -10 }
+        FOREST_NOISE: { x: 20, z: -18 },
+        POI_MAST: { x: 215, z: -250 },
+        FOUND_ESMERALDA: { x: -215, z: -25 }
+        /*s3_dead_bodies: "Poor bastards... Children, look away!",
+        s3_tractor: "Nice tractor. Wonder if it's working?",
+
+        s3_poi_burning_farm: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night.",
+        s3_poi_the_farm: "The egg farm. This is the place where we used to get our eggs from.",
+        s3_poi_the_mast:
+        */
     },
     POIS: {
         SPAWN: { x: 0, z: 0, rot: Math.PI / 2 },
         FARM: { x: 150, z: -120 },
         FARMHOUSE: { x: 275, z: -175 },
-        MAST: { x: -250, z: -50 },
+        BARN: { x: 305, z: -150 },
+        MAST: { x: 215, z: -25 },
     },
     PATHS: {
         FOREST_TRAIL: [
             new THREE.Vector3(0, 0, 0),
             new THREE.Vector3(40, 0, -30),
             new THREE.Vector3(80, 0, -10),
-            new THREE.Vector3(120, 0, -50)
+            new THREE.Vector3(120, 0, -50),
+            new THREE.Vector3(125, 0, -79)
         ],
         HAGLAREDSVAGEN: [
-            new THREE.Vector3(120, 0, -50),
+            new THREE.Vector3(64, 0, -83),
+            new THREE.Vector3(140, 0, -83),
             new THREE.Vector3(180, 0, -120),
             new THREE.Vector3(250, 0, -150),
             new THREE.Vector3(320, 0, -120),
             new THREE.Vector3(400, 0, -80)
         ],
         ROAD_TO_MAST: [
-            new THREE.Vector3(120, 0, -50),
-            new THREE.Vector3(180, 0, -120),
-            new THREE.Vector3(250, 0, -150),
-            new THREE.Vector3(320, 0, -120),
-            new THREE.Vector3(400, 0, -80)
+            new THREE.Vector3(300, 0, -130),
+            new THREE.Vector3(280, 0, -62),
+            new THREE.Vector3(270, 0, -61),
+            new THREE.Vector3(271, 0, -113),
+            new THREE.Vector3(215, 0, -25)
         ]
     }
 } as const;
@@ -76,7 +86,6 @@ export const Sector3: SectorDef = {
 
     // Automatic Content
     groundType: 'GRAVEL',
-    bounds: { width: 500, depth: 800 },
     ambientLoop: 'ambient_forest_loop',
 
     // --- SPAWN POINTS ---
@@ -104,20 +113,23 @@ export const Sector3: SectorDef = {
         PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.HAGLAREDSVAGEN], 6);
         PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.ROAD_TO_MAST], 6);
 
+        // Reward Chest at boss spawn
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+
         if (ctx.yield) await ctx.yield();
 
-        // 2. Burning Farm
+        // 1. Burning Farm
         const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
         SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
 
-        // 3. Farm House area props and bodies
+        // 1.1. Farm House area props and bodies
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x + 5, LOCATIONS.POIS.FARMHOUSE.z + 5, 'WALKER', Math.random() * Math.PI);
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x - 5, LOCATIONS.POIS.FARMHOUSE.z + 10, 'RUNNER', Math.random() * Math.PI);
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'WALKER', Math.random() * Math.PI);
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
 
         if (ctx.yield) await ctx.yield();
 
-        // 3. Farm House area props
+        // 1.2. Farm House area props
         SectorBuilder.spawnVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
         SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
         SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
@@ -126,8 +138,17 @@ export const Sector3: SectorDef = {
         SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 15, LOCATIONS.POIS.FARMHOUSE.z + 10, Math.PI / 4, 1.2);
         SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 12, LOCATIONS.POIS.FARMHOUSE.z + 14, Math.PI / 3, 1.0);
 
-        // Timber truck on the road near the farm
-        SectorBuilder.spawnVehicle(ctx, 160, -90, -Math.PI / 6, 'timber_truck', 0x334433);
+        // 1.3 Timber truck on the road near the farm
+        SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
+        SectorBuilder.spawnVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
+
+        // 2. Burning Farm
+        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
+        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 20, distance: 40, onRoof: true });
+
+        // 3. Barn
+        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
+        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 20, distance: 40, onRoof: true });
 
         if (ctx.yield) await ctx.yield();
 
@@ -142,7 +163,7 @@ export const Sector3: SectorDef = {
 
         if (ctx.yield) await ctx.yield();
 
-        // --- 5. Forest Clearing ---
+        // --- 5. Forest ---
         const clearingPoly = [
             new THREE.Vector3(0, 0, 0),
             new THREE.Vector3(80, 0, 0),
@@ -209,8 +230,12 @@ export const Sector3: SectorDef = {
             { id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }] },
 
             // Clues
-            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'THOUGHTS', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_mast_sight', position: LOCATIONS.TRIGGERS.MAST_SIGHT, radius: 8, type: 'THOUGHTS', content: "clues.s3_mast_sight", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] }
+            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'SPEECH', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's3_mast_sight', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'SPEECH', content: "clues.s3_poi_the_mast", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's3_dead_bodies', position: LOCATIONS.POIS.FARM, radius: 8, type: 'SPEECH', content: "clues.s3_dead_bodies", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: 'SPEECH', content: "clues.s3_tractor", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's3_poi_burning_farm', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: 'SPEECH', content: "clues.s3_poi_burning_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's3_poi_the_farm', position: LOCATIONS.POIS.BARN, radius: 20, type: 'SPEECH', content: "clues.s3_poi_the_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
         );
 
         // --- 6. COLLECTIBLES (Auto-Spawned) ---

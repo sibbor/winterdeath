@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
+import { ObjectGenerator } from '../world/ObjectGenerator';
 
 let warmedUp = false;
 let lastMapIndex = -1;
@@ -203,7 +204,49 @@ export const AssetPreloader = {
             console.warn("Shader warmup failed", e);
         }
 
-        // 5. Clean up
+        // 5. ObjectGenerator Warmup (Force lazy-load of textures & prototypes)
+        try {
+            // Nature & Buildings
+            await ObjectGenerator.initNaturePrototypes(yieldToMain);
+            await ObjectGenerator.initBuildingPrototypes(yieldToMain);
+
+            // Dummy Vehicle (Triggers texture generation for cars)
+            const dummyCar = ObjectGenerator.createVehicle('station wagon');
+            dummyCar.position.set(10, 0, 10);
+            dummyRoot.add(dummyCar);
+
+            // Dummy Building
+            const dummyBuilding = ObjectGenerator.createBuilding(4, 4, 4, 0x888888);
+            dummyBuilding.position.set(-10, 0, 10);
+            dummyRoot.add(dummyBuilding);
+
+            if (yieldToMain) await yieldToMain();
+        } catch (e) {
+            console.warn("ObjectGenerator warmup failed", e);
+        }
+
+        // 6. Tech-Magic Visuals Warmup (Additive Blending / Depth Write False)
+        const techGroup = new THREE.Group();
+        const techRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.6, 0.7, 32),
+            new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+        );
+        techGroup.add(techRing);
+        const techBeam = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.4, 0.4, 4, 16, 1, true),
+            new THREE.MeshBasicMaterial({
+                color: 0x0088ff,
+                transparent: true,
+                opacity: 0.1,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            })
+        );
+        techGroup.add(techBeam);
+        dummyRoot.add(techGroup);
+
+        // 7. Clean up
         scene.clear();
         warmedUp = true;
     },

@@ -18,12 +18,12 @@ export const WEATHER = {
 
 export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';
 
-export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMapType: THREE.ShadowMapType }> = {
-    OFF: { shadows: false, shadowMapType: 0 },
-    LOW: { shadows: true, shadowMapType: 0 },      // BasicShadowMap
-    MEDIUM: { shadows: true, shadowMapType: 1 },   // PCFShadowMap
-    HIGH: { shadows: true, shadowMapType: 2 },     // PCFSoftShadowMap
-    VERYHIGH: { shadows: true, shadowMapType: 3 }  // VSMShadowMap
+export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMapType: THREE.ShadowMapType; shadowResolution: number; weatherCount: number }> = {
+    OFF: { shadows: false, shadowMapType: 0, shadowResolution: 256, weatherCount: 0 },
+    LOW: { shadows: true, shadowMapType: 0, shadowResolution: 512, weatherCount: 150 },      // BasicShadowMap
+    MEDIUM: { shadows: true, shadowMapType: 1, shadowResolution: 1024, weatherCount: 400 },   // PCFShadowMap
+    HIGH: { shadows: true, shadowMapType: 2, shadowResolution: 2048, weatherCount: 800 },     // PCFSoftShadowMap
+    VERYHIGH: { shadows: true, shadowMapType: 3, shadowResolution: 4096, weatherCount: 1600 }  // VSMShadowMap
 };
 
 export interface GraphicsSettings {
@@ -31,13 +31,17 @@ export interface GraphicsSettings {
     antialias: boolean;
     shadows: boolean;
     shadowMapType: THREE.ShadowMapType;
+    shadowResolution: number;
+    weatherCount: number;
 }
 
 export const DEFAULT_GRAPHICS: GraphicsSettings = {
     pixelRatio: 0.75,
     antialias: false,
     shadows: false,
-    shadowMapType: 0 // SHADOW_PRESETS.OFF
+    shadowMapType: 0, // SHADOW_PRESETS.OFF
+    shadowResolution: 1024,
+    weatherCount: 400
 };
 
 export const INITIAL_STATS: PlayerStats = {
@@ -48,6 +52,7 @@ export const INITIAL_STATS: PlayerStats = {
     maxStamina: 100,
     speed: 1.0,
     skillPoints: 0,
+    rescuedFamilyIds: [],
     kills: 0,
     scrap: 0,
     sectorsCompleted: 0,

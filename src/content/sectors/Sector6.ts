@@ -42,6 +42,9 @@ export const Sector6: SectorDef = {
         ground.receiveShadow = true;
         scene.add(ground);
 
+        // Reward Chest at boss spawn
+        SectorBuilder.spawnChest(ctx, 0, -50, 'big');
+
         // Grass Field (Instanced)
         // 50,000 blades for benchmark
         if (ObjectGenerator.createGrassField) {

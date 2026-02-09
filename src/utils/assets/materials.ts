@@ -93,16 +93,22 @@ export const MATERIALS = {
         polygonOffsetFactor: -2
     }),
     footprintDecal: new THREE.MeshBasicMaterial({
-        color: 0x666666,
+        color: 0x000000,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.8,
+        map: DIFFUSE.footprint,
         side: THREE.DoubleSide,
-        depthWrite: true,
+        depthWrite: false,
         depthTest: true,
         polygonOffset: true,
-        polygonOffsetFactor: -2
+        polygonOffsetFactor: -4
     }),
-    fog: new THREE.MeshBasicMaterial({ color: 0x111116, transparent: true, opacity: 0.1, depthWrite: false }),
+    fog: new THREE.MeshBasicMaterial({
+        color: 0x111116,
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false
+    }),
     building: new THREE.MeshStandardMaterial({
         color: 0x2a2a2a,
         roughness: 0.8,
@@ -113,7 +119,7 @@ export const MATERIALS = {
         color: 0x444444,
         roughness: 0.9,
         bumpMap: TEXTURES.concrete_bump,
-        bumpScale: 0.1 // Increased from 0.05
+        bumpScale: 0.1
     }),
     pipe: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.6, metalness: 0.4 }),
     mast: new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.4, metalness: 0.8, wireframe: true }),

@@ -47,7 +47,7 @@ export const Sector4: SectorDef = {
     },
     // Automatic Content
     groundType: 'DIRT',
-    bounds: { width: 350, depth: 350 },
+    //bounds: { width: 350, depth: 350 },
     ambientLoop: 'ambient_scrapyard_loop',
     // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
@@ -92,6 +92,9 @@ export const Sector4: SectorDef = {
                 actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
         );
+
+        // Reward Chest at boss spawn
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         if (ctx.yield) await ctx.yield();
 

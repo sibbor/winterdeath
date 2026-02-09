@@ -2,7 +2,7 @@
 import { SoundCore } from './SoundCore';
 
 export const Synth = {
-    tone: (core: SoundCore, type: OscillatorType, freq: number, durationMS: number, vol: number, attack: number = 0.01) => {
+    tone: (core: SoundCore, type: OscillatorType, freq: number, durationMS: number, vol: number, attack: number = 0.01, useReverb: boolean = false) => {
         const now = core.ctx.currentTime;
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
@@ -19,9 +19,9 @@ export const Synth = {
 
         osc.start(now);
         osc.stop(now + (durationMS / 1000) + 0.1);
-        core.track(osc as unknown as AudioBufferSourceNode);
+        core.track(osc as unknown as AudioBufferSourceNode, useReverb);
     },
-    noise: (core: SoundCore, durationMS: number, vol: number) => {
+    noise: (core: SoundCore, durationMS: number, vol: number, useReverb: boolean = false) => {
         const now = core.ctx.currentTime;
         const bufferSize = core.ctx.sampleRate * (durationMS / 1000);
         const buffer = core.ctx.createBuffer(1, bufferSize, core.ctx.sampleRate);
@@ -40,7 +40,7 @@ export const Synth = {
         noise.connect(gain);
         gain.connect(core.masterGain);
         noise.start(now);
-        core.track(noise);
+        core.track(noise, useReverb);
     }
 };
 
@@ -152,25 +152,31 @@ export const GamePlaySounds = {
     playMetalDoorOpen: (core: SoundCore) => {
         const now = core.ctx.currentTime;
         const duration = 2.0;
+
         // Continuous grinding noise
         const bufferSize = core.ctx.sampleRate * duration;
         const buffer = core.ctx.createBuffer(1, bufferSize, core.ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) {
             // Modulated noise for "shuddering" feel
-            const mod = 1.0 + Math.sin(i * 0.01) * 0.5;
-            data[i] = (Math.random() * 2 - 1) * 0.05 * mod;
+            const noise = Math.random() * 2 - 1;
+            const modulation = 0.5 + Math.sin(i * 0.005) * 0.4;
+            data[i] = noise * 0.05 * modulation;
         }
-        const noise = core.ctx.createBufferSource();
-        noise.buffer = buffer;
+
+        const source = core.ctx.createBufferSource();
+        source.buffer = buffer;
+
         const gain = core.ctx.createGain();
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-        noise.connect(gain);
+        gain.gain.setTargetAtTime(0, now + duration - 0.2, 0.1);
+
+        source.connect(gain);
         gain.connect(core.masterGain);
-        noise.start(now);
-        core.track(noise);
+
+        source.start(now);
+        core.track(source);
 
         // High pitch metallic creak
         const osc = core.ctx.createOscillator();
@@ -186,6 +192,15 @@ export const GamePlaySounds = {
         osc.start(now);
         osc.stop(now + duration);
         core.track(osc as unknown as AudioBufferSourceNode);
+    },
+    playMetalKnocking: (core: SoundCore) => {
+        const now = core.ctx.currentTime;
+        // 3 sharp thuds
+        [0, 0.3, 0.6].forEach(offset => {
+            const time = now + offset;
+            Synth.noise(core, 100, 0.6); // Sharp impact
+            Synth.tone(core, 'sine', 120, 150, 0.4, 0.01); // Low resonance
+        });
     },
     playAmbientRustle: (core: SoundCore) => {
         Synth.noise(core, 500 + Math.random() * 500, 0.02);
@@ -243,7 +258,7 @@ export const WeaponSounds = {
         }
 
         // Noise Layer (Barrel blast)
-        Synth.noise(core, noiseDur * 1000, noiseVol);
+        Synth.noise(core, noiseDur * 1000, noiseVol, true);
 
         // Tonal Layer (Mechanism/Punch)
         const osc = core.ctx.createOscillator();
@@ -259,7 +274,7 @@ export const WeaponSounds = {
         gain.connect(core.masterGain);
         osc.start(now);
         osc.stop(now + oscDur + 0.05);
-        core.track(osc as unknown as AudioBufferSourceNode);
+        core.track(osc as unknown as AudioBufferSourceNode, true);
     },
     playThrowable: (core: SoundCore, weaponId: string) => {
         const now = core.ctx.currentTime;
@@ -294,7 +309,7 @@ export const WeaponSounds = {
         core.track(osc as unknown as AudioBufferSourceNode);
     },
     playExplosion: (core: SoundCore) => {
-        Synth.noise(core, 800, 0.5);
+        Synth.noise(core, 800, 0.5, true);
         const osc = core.ctx.createOscillator();
         const gain = core.ctx.createGain();
         osc.type = 'sawtooth';
@@ -306,7 +321,7 @@ export const WeaponSounds = {
         gain.connect(core.masterGain);
         osc.start();
         osc.stop(core.ctx.currentTime + 1.0);
-        core.track(osc as unknown as AudioBufferSourceNode);
+        core.track(osc as unknown as AudioBufferSourceNode, true);
     }
 };
 

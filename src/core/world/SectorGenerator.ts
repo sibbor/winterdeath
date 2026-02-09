@@ -82,6 +82,7 @@ export const SectorBuilder = {
         }
 
         const mesh = new THREE.Mesh(geo, mat);
+        mesh.name = `Ground_${type}`;
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05; // Standardized snow/ground base
         mesh.receiveShadow = true;

@@ -12,7 +12,7 @@ export const createProceduralDiffuse = () => {
 
     const gravel = draw(512, 512, ctx => {
         ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, 512, 512);
-        for (let i = 0; i < 25000; i++) {
+        for (let i = 0; i < 10000; i++) {
             ctx.fillStyle = Math.random() > 0.5 ? '#252525' : '#0e0e0e';
             ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
         }
@@ -168,7 +168,7 @@ export const createProceduralDiffuse = () => {
         ctx.fillRect(0, 0, 1024, 1024);
 
         // Aggregate stones (Fine)
-        for (let i = 0; i < 150000; i++) {
+        for (let i = 0; i < 15000; i++) {
             const x = Math.random() * 1024;
             const y = Math.random() * 1024;
             const size = 1 + Math.random();
@@ -203,5 +203,28 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    return { gravel, stone, pineBranch, pine: pineBranch, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt };
+    const footprint = draw(64, 128, ctx => {
+        ctx.clearRect(0, 0, 64, 128);
+        ctx.fillStyle = '#ffffff';
+
+        // Draw simple boot shape
+        ctx.beginPath();
+        ctx.ellipse(32, 35, 20, 30, 0, 0, Math.PI * 2); // Front
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(32, 90, 15, 22, 0, 0, Math.PI * 2); // Heel
+        ctx.fill();
+
+        // Texture grip lines (darker on the white shape)
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.moveTo(15, 25 + i * 15);
+            ctx.lineTo(49, 25 + i * 15);
+            ctx.stroke();
+        }
+    });
+
+    return { gravel, stone, pineBranch, pine: pineBranch, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint };
 }

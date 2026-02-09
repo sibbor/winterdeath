@@ -284,8 +284,12 @@ export const PathGenerator = {
                 prints.lookAt(next.x, 0.04, next.z);
                 prints.rotateX(-Math.PI / 2);
 
-                prints.material.transparent = true;
-                prints.material.opacity = 0.2;
+                if (showBlood) {
+                    prints.material.transparent = true;
+                    prints.material.opacity = 0.2;
+                }
+                // footprints already have the correct opacity from MATERIALS.footprintDecal
+
                 ctx.scene.add(prints);
             }
         }

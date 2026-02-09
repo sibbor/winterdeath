@@ -1,17 +1,15 @@
 
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { t } from '../../utils/i18n';
 
 export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group, caveEntrancePos: THREE.Vector3) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
 
-    // 5.1 Floors (Specific Rooms & Corridors)
-    // Removed giant plane to prevent leakage
-
-    // Will generate floors after spaces are defined...
     interface Box { x: number; z: number; w: number; d: number; rotation?: number; }
     interface RoomData extends Box {
         id: number;
@@ -21,7 +19,6 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         boss?: boolean;
         family?: boolean;
     }
-
 
     // Define Rooms
     const rooms: RoomData[] = [
@@ -77,79 +74,34 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     // --- FLOOR GENERATION ---
     const allSpaces: Box[] = [...rooms, ...corridors];
     allSpaces.forEach(s => {
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w + 6, s.d + 6), MATERIALS.gravel);
-        floor.rotation.x = -Math.PI / 2;
-        if (s.rotation) floor.rotation.z = -s.rotation; // Plane geometry is X-Z, rotation is Y (which becomes Z after rotX)
+        const floorMat = MATERIALS.gravel.clone();
+        floorMat.bumpScale = 0.4; // Reduced from default to be less "silly"
+        if (floorMat.map) {
+            floorMat.map.wrapS = THREE.RepeatWrapping;
+            floorMat.map.wrapT = THREE.RepeatWrapping;
+            floorMat.map.repeat.set((s.w + 6) / 4, (s.d + 6) / 4);
+        }
+        if (floorMat.bumpMap) {
+            floorMat.bumpMap.wrapS = THREE.RepeatWrapping;
+            floorMat.bumpMap.wrapT = THREE.RepeatWrapping;
+            floorMat.bumpMap.repeat.set((s.w + 6) / 4, (s.d + 6) / 4);
+        }
 
-        floor.position.set(s.x, 0.06, s.z); // Lifted to 0.05 for visibility
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w + 6, s.d + 6), floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        if (s.rotation) floor.rotation.z = -s.rotation;
+
+        floor.position.set(s.x, 0.06, s.z);
         floor.receiveShadow = true;
         innerCave.add(floor);
     });
 
     if (ctx.yield) await ctx.yield();
 
-    // Entrance Half-Circle Gravel
-    const entranceGeo = new THREE.CircleGeometry(12, 32, 0, Math.PI);
-    const entranceFloor = new THREE.Mesh(entranceGeo, MATERIALS.gravel);
-    entranceFloor.rotation.x = -Math.PI / 2;
-    // Entrance is at -70. Cave interior goes to -100.
-    // So we want the half-circle to point towards POSITIVE Z (towards track).
-    entranceFloor.rotation.z = 0;
-    entranceFloor.position.set(caveEntrancePos.x, 0.05, caveEntrancePos.z + 2); // Lifted to 0.05
-    innerCave.add(entranceFloor);
-
-    const createStringLight = (p1: THREE.Vector3, p2: THREE.Vector3, intensity: number) => {
-        const dist = p1.distanceTo(p2);
-        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-        mid.y -= 1.0;
-
-        const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
-        const points = curve.getPoints(10);
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0x000000 });
-        const line = new THREE.Line(geometry, material);
-        innerCave.add(line);
-
-        const numLights = Math.max(1, Math.floor(dist / 15)); // Optimized: 15m spacing (was 4m)
-        for (let i = 1; i <= numLights; i++) {
-            const t = i / (numLights + 1);
-            const pos = curve.getPoint(t);
-
-            const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1), new THREE.MeshBasicMaterial({ color: 0xffffcc }));
-            bulb.position.copy(pos);
-            innerCave.add(bulb);
-
-            const light = new THREE.PointLight(0xffaa00, intensity, 15);
-            light.position.copy(pos);
-            innerCave.add(light);
-
-            if (Math.random() > 0.8) {
-                flickeringLights.push({ light, baseInt: intensity, flickerRate: 0.1 });
-            }
-        }
-    };
-
-    const isPointInBox = (px: number, pz: number, b: Box, padding: number = 0) => {
-        const hw = b.w / 2 + padding;
-        const hd = b.d / 2 + padding;
-
-        if (b.rotation) {
-            // Transform point to box local space
-            const dx = px - b.x;
-            const dz = pz - b.z;
-            const cos = Math.cos(-b.rotation);
-            const sin = Math.sin(-b.rotation);
-            const rx = dx * cos - dz * sin;
-            const rz = dx * sin + dz * cos;
-            return (rx >= -hw && rx <= hw && rz >= -hd && rz <= hd);
-        }
-
-        return (px >= b.x - hw && px <= b.x + hw && pz >= b.z - hd && pz <= b.z + hd);
-    };
-
-    const getCorners = (b: Box, padding: number = 0) => {
-        const hw = b.w / 2 + padding;
-        const hd = b.d / 2 + padding;
+    // --- HELPERS ---
+    const getCorners = (b: any, padding: number = 0) => {
+        const hw = (b.w || b.width) / 2 + padding;
+        const hd = (b.d || b.depth) / 2 + padding;
 
         if (b.rotation) {
             const cos = Math.cos(b.rotation);
@@ -173,12 +125,128 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
                 { x: b.x + hw, z: b.z + hd },
                 { x: b.x - hw, z: b.z + hd }
             ];
+        };
+    };
+
+    const isPointInBox = (px: number, pz: number, b: any, padding: number = 0) => {
+        const hw = (b.w || b.width) / 2 + padding;
+        const hd = (b.d || b.depth) / 2 + padding;
+
+        if (b.rotation) {
+            // Transform point to box local space
+            const dx = px - b.x;
+            const dz = pz - b.z;
+            const cos = Math.cos(-b.rotation);
+            const sin = Math.sin(-b.rotation);
+            const rx = dx * cos - dz * sin;
+            const rz = dx * sin + dz * cos;
+            return (rx >= -hw && rx <= hw && rz >= -hd && rz <= hd);
+        }
+
+        return (px >= b.x - hw && px <= b.x + hw && pz >= b.z - hd && pz <= b.z + hd);
+    };
+
+    // --- LIGHTS & DECOR ---
+    const createStringLight = (pos: THREE.Vector3, color = 0xffaa55, intensity = 2.0) => {
+        const group = new THREE.Group();
+        group.position.copy(pos);
+
+        // Wire
+        const wireGeo = new THREE.CylinderGeometry(0.02, 0.02, 2);
+        const wire = new THREE.Mesh(wireGeo, new THREE.MeshBasicMaterial({ color: 0x111111 }));
+        wire.position.y = 1;
+        group.add(wire);
+
+        // Bulb
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        group.add(bulb);
+
+        // Light
+        const pointLight = new THREE.PointLight(color, intensity, 15);
+        pointLight.castShadow = true;
+        pointLight.shadow.bias = -0.001;
+        pointLight.position.y = -0.2;
+        group.add(pointLight);
+
+        innerCave.add(group);
+    };
+
+    const decorateRoom = (room: any) => {
+        const cx = room.x;
+        const cy = 0;
+        const cz = room.z;
+        const w = room.w || room.width;
+        const d = room.d || room.depth;
+
+        // Only decorate non-bunker rooms heavily
+        if (room.type === 'BunkerInterior') return;
+
+        const numProps = Math.floor(Math.random() * 4) + 2;
+        for (let i = 0; i < numProps; i++) {
+            const wall = Math.floor(Math.random() * 4);
+            let px = 0, pz = 0, rot = 0;
+            const offset = 1.0;
+
+            if (wall === 0) { px = cx - w / 2 + offset; pz = cz + (Math.random() - 0.5) * (d - 2); rot = Math.PI / 2; }
+            else if (wall === 1) { px = cx + w / 2 - offset; pz = cz + (Math.random() - 0.5) * (d - 2); rot = -Math.PI / 2; }
+            else if (wall === 2) { pz = cz - d / 2 + offset; px = cx + (Math.random() - 0.5) * (w - 2); rot = 0; }
+            else { pz = cz + d / 2 - offset; px = cx + (Math.random() - 0.5) * (w - 2); rot = Math.PI; }
+
+            const type = Math.random() > 0.5 ? 'shelf' : 'box';
+            const prop = type === 'shelf' ? ObjectGenerator.createShelf() : ObjectGenerator.createBox();
+
+            prop.position.set(px, cy, pz);
+            prop.rotation.y = rot + (Math.random() - 0.5) * 0.2;
+            innerCave.add(prop);
+
+            // Simple collider for props
+            obstacles.push({
+                mesh: prop.children[0] as THREE.Mesh,
+                collider: { type: 'box', size: new THREE.Vector3(1, 2, 1) }
+            });
         }
     };
 
-    // 5.4 Wall Builder (Instanced Visuals + Simplified Physics)
-    // Using InstancedMesh for stones (Draw Call Check: Massive Reduction)
-    // Using Composed Box Colliders for walls (Physics Check: Massive Reduction)
+    // --- WALL GENERATION (Optimized) ---
+    const wallGeometries: THREE.BufferGeometry[] = [];
+    const wallHeight = 6;
+    const wallThick = 4.0;
+
+    // Helper to add UVs properly to a box geometry so textures tile based on world size
+    const addWallGeometry = (width: number, height: number, depth: number, x: number, y: number, z: number, rotationY: number) => {
+        const geo = new THREE.BoxGeometry(width, height, depth);
+
+        // Transform UVs for tiling
+        const uvAttribute = geo.attributes.uv;
+        for (let i = 0; i < uvAttribute.count; i++) {
+            const u = uvAttribute.getX(i);
+            const v = uvAttribute.getY(i);
+
+            if (width > depth) {
+                uvAttribute.setXY(i, u * (width / 4), v * (height / 4));
+            } else {
+                uvAttribute.setXY(i, u * (depth / 4), v * (height / 4));
+            }
+        }
+
+        // Bake transform into geometry
+        geo.rotateY(rotationY);
+        geo.translate(x, y, z);
+
+        wallGeometries.push(geo);
+
+        // Still need individual colliders for physics
+        // Fix: Use a real Object3D so physics system can read matrixWorld
+        const dummy = new THREE.Object3D();
+        dummy.position.set(x, y, z);
+        dummy.rotation.set(0, rotationY, 0);
+        dummy.updateMatrixWorld(); // Essential as it's not in the scene graph
+
+        obstacles.push({
+            mesh: dummy,
+            collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
+        });
+    };
 
     const createWallSegment = (pA: THREE.Vector3, pB: THREE.Vector3) => {
         const vec = new THREE.Vector3().subVectors(pB, pA);
@@ -188,20 +256,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
         const angle = Math.atan2(vec.z, vec.x);
 
-        const wallHeight = 5;
-        const wallThick = 4.0;
-        const wall = new THREE.Mesh(new THREE.BoxGeometry(len, wallHeight, wallThick), MATERIALS.stone);
-
-        wall.position.set(mid.x, wallHeight / 2, mid.z);
-        wall.rotation.y = -angle;
-
-        wall.castShadow = false;
-        wall.receiveShadow = false;
-        wall.name = 'Cave_Wall';
-        scene.add(wall);
-        wall.updateMatrixWorld();
-
-        obstacles.push({ mesh: wall, collider: { type: 'box', size: new THREE.Vector3(len, wallHeight, wallThick) } });
+        addWallGeometry(len, wallHeight, wallThick, mid.x, wallHeight / 2, mid.z, -angle);
     };
 
     for (const r of allSpaces) {
@@ -212,11 +267,11 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             const p1 = corners[i];
             const p2 = corners[(i + 1) % 4];
 
-            const segmentStart = new THREE.Vector3();
+            let segmentStart = new THREE.Vector3();
             let isSegmentActive = false;
 
             const dist = Math.sqrt((p2.x - p1.x) ** 2 + (p2.z - p1.z) ** 2);
-            const steps = Math.ceil(dist / 0.5); // Higher resolution (0.5m steps instead of 2.0m)
+            const steps = Math.ceil(dist / 2.0); // Optimization: Reduced resolution from 0.5 to 2.0.
 
             for (let j = 0; j <= steps; j++) {
                 const t = j / steps;
@@ -252,34 +307,57 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
                 } else {
                     // Found a hole (Doorway/Gap)
                     if (isSegmentActive) {
-                        createWallSegment(segmentStart, new THREE.Vector3(px, 0, pz));
+                        createWallSegment(segmentStart, new THREE.Vector3(px, 0, pz)); // Original pz was correct, just using current point
                         isSegmentActive = false;
                     }
                 }
             }
-
-            // End of edge cleanup
+            // Finish last segment
             if (isSegmentActive) {
                 createWallSegment(segmentStart, new THREE.Vector3(p2.x, 0, p2.z));
             }
         }
-        if (ctx.yield) await ctx.yield();
     }
 
-    // Room Specifics (Lights, Spawns)
+    // --- FINALIZE WALLS (Merge) ---
+    if (wallGeometries.length > 0) {
+        const mergedWallGeo = BufferGeometryUtils.mergeGeometries(wallGeometries);
+        if (mergedWallGeo) {
+            const mat = MATERIALS.stone.clone();
+            if (mat.map) {
+                mat.map.wrapS = THREE.RepeatWrapping;
+                mat.map.wrapT = THREE.RepeatWrapping;
+            }
+            if (mat.bumpMap) {
+                mat.bumpMap.wrapS = THREE.RepeatWrapping;
+                mat.bumpMap.wrapT = THREE.RepeatWrapping;
+            }
+
+            const wallMesh = new THREE.Mesh(mergedWallGeo, mat);
+            wallMesh.castShadow = true;
+            wallMesh.receiveShadow = true;
+            wallMesh.name = 'Cave_Walls_Merged';
+            innerCave.add(wallMesh);
+        }
+
+        // Cleanup geometries
+        wallGeometries.forEach(g => g.dispose());
+    }
+
+    if (ctx.yield) await ctx.yield();
+
+    // Room Specifics (Lights, Spawns, Decor)
     for (const r of rooms) {
         // Lights
-        createStringLight(
-            new THREE.Vector3(r.x - r.w / 3, 8, r.z),
-            new THREE.Vector3(r.x + r.w / 3, 8, r.z),
-            2.0
-        );
+        createStringLight(new THREE.Vector3(r.x, 4.5, r.z), 0xffaa88, 5.0);
 
         if (r.type === 'BunkerInterior') {
-            // Bright light for bunker
             const light = new THREE.PointLight(0xfff0dd, 5, 25);
             light.position.set(r.x, 8, r.z);
             innerCave.add(light);
+        } else {
+            // Decorate normal rooms
+            decorateRoom(r);
         }
 
         // Spawns
@@ -290,67 +368,4 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         }
         if (ctx.yield) await ctx.yield();
     }
-
-    /*
-
-    // --- VOID ROOF (MOUNTAIN TOP) ---
-    // Creates a solid mesh over the entire cave area EXCEPT rooms/corridors
-    const caveRoofShape = new THREE.Shape();
-    // Huge bounding box covering the entire underground area
-    // Top edge at -70 to perfectly align with entrance
-    caveRoofShape.moveTo(-200, -400);
-    caveRoofShape.lineTo(300, -400);
-    caveRoofShape.lineTo(300, -70);
-    caveRoofShape.lineTo(-200, -70);
-    caveRoofShape.lineTo(-200, -400);
-
-    // Punch holes for every room and corridor
-    allSpaces.forEach(s => {
-        const hole = new THREE.Path();
-        const corners = getCorners(s, 0); // No padding for the visual hole
-
-        hole.moveTo(corners[0].x, corners[0].z);
-        hole.lineTo(corners[1].x, corners[1].z);
-        hole.lineTo(corners[2].x, corners[2].z);
-        hole.lineTo(corners[3].x, corners[3].z);
-        hole.lineTo(corners[0].x, corners[0].z);
-
-        caveRoofShape.holes.push(hole);
-    });
-
-    // Extrude high to form the solid mountain mass
-    const roofGeo = new THREE.ExtrudeGeometry(caveRoofShape, { depth: 30, bevelEnabled: false });
-
-    const roofMesh = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({
-        color: 0x111111, roughness: 1.0, side: THREE.DoubleSide
-    }));
-
-    // Rotate: Shape is X/Y (mapped to X/Z). Extrusion is Z (mapped to Y).
-    roofMesh.rotation.x = Math.PI / 2; // Lie flat
-    roofMesh.position.y = 8; // Sit on top of walls
-    roofMesh.castShadow = true;
-    roofMesh.receiveShadow = true;
-    roofMesh.name = "Sector2_VoidRoof";
-    innerCave.add(roofMesh);
-
-    // Curtain to hide entrance transition if needed
-    const curtain = new THREE.Mesh(new THREE.PlaneGeometry(300, 150), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-    curtain.position.set(caveEntrancePos.x, 20, caveEntrancePos.z + 10);
-    curtain.rotation.y = Math.PI;
-    curtain.name = "Sector2_Curtain";
-    curtain.visible = false;
-    scene.add(curtain);
-    */
-
-    // --- RANDOM HORDE SPAWNS (Testing) ---
-    if (ctx.spawnHorde) {
-        // Lobby
-        ctx.spawnHorde(5, 'WALKER', new THREE.Vector3(100, 0, -100));
-        // Mess Hall
-        ctx.spawnHorde(4, 'RUNNER', new THREE.Vector3(150, 0, -200));
-        // Deep Tunnel
-        ctx.spawnHorde(3, 'TANK', new THREE.Vector3(60, 0, -125));
-    }
-
-    (ctx as any).roomData = rooms;
 };

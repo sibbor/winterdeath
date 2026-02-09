@@ -33,15 +33,18 @@ export class WorldLootSystem implements System {
     // Pool
     private pool: ScrapItem[] = [];
 
+    // Spawn Queue to avoid CPU spikes
+    private spawnQueue: { x: number, z: number }[] = [];
+    private lastSoundTime = 0;
+
     constructor(private playerGroup: THREE.Group, scene: THREE.Scene) {
-        // Create Instanced Mesh
+        // ... (existing constructor logic)
         this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.scrap, MATERIALS.scrap, WorldLootSystem.MAX_SCRAP);
-        this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // Provide hint for frequent updates
-        this.instancedMesh.count = 0; // Start with 0 visible
-        this.instancedMesh.frustumCulled = false; // Easier to manage simple loot bounds check manually if needed, or trust Three.js
+        this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.instancedMesh.count = 0;
+        this.instancedMesh.frustumCulled = false;
         scene.add(this.instancedMesh);
 
-        // Initialize Pool
         for (let i = 0; i < WorldLootSystem.MAX_SCRAP; i++) {
             this.pool.push({
                 velocity: new THREE.Vector3(),
@@ -51,19 +54,15 @@ export class WorldLootSystem implements System {
                 life: 0,
                 spawnTime: 0,
                 index: i,
-                position: new THREE.Vector3(0, -100, 0), // Start hidden
+                position: new THREE.Vector3(0, -100, 0),
                 rotation: new THREE.Euler(),
                 scale: new THREE.Vector3(1, 1, 1),
                 active: false
             });
-
-            // Set initial position off-screen
             this.dummy.position.set(0, -100, 0);
             this.dummy.updateMatrix();
             this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
         }
-
-        // Register static accessor for global usage (temporary bridge for legacy calls)
         WorldLootSystem.instance = this;
     }
 
@@ -71,7 +70,15 @@ export class WorldLootSystem implements System {
 
     update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
-        // const scene = session.engine.scene; // No longer adding/removing from scene directly
+
+        // Process Spawn Queue (Max 3 per frame to keep it smooth)
+        const batchSize = Math.min(this.spawnQueue.length, 3);
+        if (batchSize > 0) {
+            for (let i = 0; i < batchSize; i++) {
+                const sps = this.spawnQueue.shift();
+                if (sps) this.spawnSingle(sps.x, sps.z);
+            }
+        }
 
         const collected = this.updateLoot(
             this.playerGroup.position,
@@ -95,15 +102,7 @@ export class WorldLootSystem implements System {
         const magnetSpeed = 25.0;
 
         let needsUpdate = false;
-        let activeCount = 0; // We could track this, but .count property usually determines render count. 
-        // However, with pooling we often keep .count high or manage swap.
-        // Simpler here: Always render all, but move inactive ones far away? 
-        // OR: Keep active ones at indices 0..count. Swapping is complex logic.
-        // EASIEST: Update ALL active ones. Inactive ones stay where they are (offscreen).
-        // We set .count to MAX_SCRAP to ensure all slots are available?
-        // Optimization: Only update dirty matrices.
-
-        this.instancedMesh.count = WorldLootSystem.MAX_SCRAP; // Ensure all slots renderable (some might be hidden)
+        this.instancedMesh.count = WorldLootSystem.MAX_SCRAP;
 
         for (const item of this.pool) {
             if (!item.active) continue;
@@ -113,14 +112,15 @@ export class WorldLootSystem implements System {
             // 1. Physics (Gravity & Bouncing)
             if (!item.magnetized) {
                 if (!item.grounded) {
-                    item.velocity.y -= 30 * delta; // Gravity
-                    item.position.add(item.velocity.clone().multiplyScalar(delta));
+                    item.velocity.y -= 30 * delta;
+                    item.position.x += item.velocity.x * delta;
+                    item.position.y += item.velocity.y * delta;
+                    item.position.z += item.velocity.z * delta;
 
-                    // Ground Bounce
                     if (item.position.y <= 0.3) {
                         item.position.y = 0.3;
-                        item.velocity.y *= -0.5; // Bounce dampening
-                        item.velocity.x *= 0.8;  // Friction
+                        item.velocity.y *= -0.5;
+                        item.velocity.x *= 0.8;
                         item.velocity.z *= 0.8;
 
                         if (Math.abs(item.velocity.y) < 0.5) {
@@ -129,39 +129,38 @@ export class WorldLootSystem implements System {
                         }
                     }
                 }
-
-                // Idle Rotation
                 item.rotation.y += 1.0 * delta;
                 item.rotation.z += 1.0 * delta;
             }
 
-            // 2. Magnetism (Attract to player)
+            // 2. Magnetism
             const distSq = item.position.distanceToSquared(playerPos);
-            const magnetismDelay = 800; // ms to wait before magnetizing
+            const magnetismDelay = 800;
             const canMagnetize = (now - item.spawnTime) > magnetismDelay;
 
             if (canMagnetize && distSq < magnetRange * magnetRange) {
                 item.magnetized = true;
-                item.grounded = false; // Lift off ground
+                item.grounded = false;
             }
 
             if (item.magnetized) {
                 const dir = new THREE.Vector3().subVectors(playerPos, item.position).normalize();
-                // Accelerate towards player
-                const speed = magnetSpeed * (1 + (10 / (distSq + 0.1))); // Faster as it gets closer
+                const speed = magnetSpeed * (1 + (10 / (distSq + 0.1)));
                 item.position.add(dir.multiplyScalar(speed * delta));
-                // Shrink as it gets absorbed
                 const scale = Math.max(0.1, item.scale.x - 2.0 * delta);
                 item.scale.setScalar(scale);
             }
 
             // 3. Collection
-            if (distSq < collectionRange) { // Close enough to collect
+            if (distSq < collectionRange) {
                 collectedAmount += item.value;
                 this.deactivateItem(item);
 
-                // Play small click sound per item
-                if (Math.random() > 0.3) soundManager.playLootingScrap();
+                // Throttle sound to avoid audio clipping/lag
+                if (now - this.lastSoundTime > 50) {
+                    soundManager.playLootingScrap();
+                    this.lastSoundTime = now;
+                }
                 continue;
             }
 
@@ -182,7 +181,6 @@ export class WorldLootSystem implements System {
 
     private deactivateItem(item: ScrapItem) {
         item.active = false;
-        // Move offscreen immediately
         this.dummy.position.set(0, -100, 0);
         this.dummy.updateMatrix();
         this.instancedMesh.setMatrixAt(item.index, this.dummy.matrix);
@@ -190,8 +188,8 @@ export class WorldLootSystem implements System {
     }
 
     public static spawnScrapExplosion(
-        scene: THREE.Scene, // Parameter kept for compatibility but ignored/checked against current
-        scrapItems: any[], // State array kept for compatibility? WE SHOULD REMOVE RELIANCE ON STATE ARRAY
+        _scene: THREE.Scene,
+        _scrapItems: any[],
         x: number,
         z: number,
         amount: number
@@ -201,25 +199,15 @@ export class WorldLootSystem implements System {
 
         const count = Math.min(Math.ceil(amount / 10), 20);
 
-        // Spawn the first few immediately for instant feedback
-        const immediateCount = Math.min(5, count);
-        for (let i = 0; i < immediateCount; i++) {
-            system.spawnSingle(x, z);
-        }
-
-        // Spread the rest across next few frames to avoid lag spike
-        const remaining = count - immediateCount;
-        for (let i = 0; i < remaining; i++) {
-            setTimeout(() => {
-                system.spawnSingle(x, z);
-            }, i * 8); // 8ms between each spawn (spread over ~120ms)
+        // Add to queue for staggered spawning in update()
+        for (let i = 0; i < count; i++) {
+            system.spawnQueue.push({ x, z });
         }
     }
 
     private spawnSingle(x: number, z: number) {
-        // Find free slot
         const item = this.pool.find(p => !p.active);
-        if (!item) return; // Pool exhausted
+        if (!item) return;
 
         const angle = Math.random() * Math.PI * 2;
         const force = 0.2 + Math.random() * 0.3;
@@ -227,7 +215,7 @@ export class WorldLootSystem implements System {
         item.active = true;
         item.position.set(x, 1, z);
         item.velocity.set(Math.cos(angle) * force * 10, 5 + Math.random() * 5, Math.sin(angle) * force * 10);
-        item.rotation.set(0, 0, 0);
+        item.rotation.set(0, Math.random() * Math.PI, 0);
         item.scale.set(1, 1, 1);
         item.value = 10 + Math.floor(Math.random() * 10);
         item.grounded = false;
@@ -235,8 +223,6 @@ export class WorldLootSystem implements System {
         item.life = 60.0;
         item.spawnTime = performance.now();
 
-        // Trigger initial matrix update in next frame loop or do it here if needed immediately?
-        // Doing it immediately requires manual matrix update
         this.dummy.position.copy(item.position);
         this.dummy.rotation.copy(item.rotation);
         this.dummy.scale.copy(item.scale);

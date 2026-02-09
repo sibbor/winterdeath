@@ -20,7 +20,7 @@ const uniqueMeshes: Record<string, THREE.Group[]> = {
     'rock': []
 };
 
-export const initNaturePrototypes = () => {
+export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) => {
     if (uniqueMeshes['spruce'].length > 0) return;
 
     const tex = getSharedTextures();
@@ -104,6 +104,7 @@ export const initNaturePrototypes = () => {
         group.add(foliage);
 
         uniqueMeshes['spruce'].push(group);
+        if (yieldToMain) await yieldToMain();
     }
 
     // 2. PINE (Tall, High Canopy - "Scots Pine")
@@ -174,6 +175,7 @@ export const initNaturePrototypes = () => {
         group.add(foliage);
 
         uniqueMeshes['pine'].push(group);
+        if (yieldToMain) await yieldToMain();
     }
 
     // 3. BIRCH (Slender, Oval Crown)
@@ -238,6 +240,7 @@ export const initNaturePrototypes = () => {
         const foliage = new THREE.Mesh(foliageGeo, birchMat);
         foliage.castShadow = true; group.add(foliage);
         uniqueMeshes['birch'].push(group);
+        if (yieldToMain) await yieldToMain();
     }
 
     // 4. OAK (Sturdy, Broad Crown)
@@ -301,6 +304,7 @@ export const initNaturePrototypes = () => {
         const foliage = new THREE.Mesh(foliageGeo, MATERIALS.treeLeavesOak);
         foliage.castShadow = true; group.add(foliage);
         uniqueMeshes['oak'].push(group);
+        if (yieldToMain) await yieldToMain();
     }
 
     // 5. ROCKS (Simplified)
@@ -317,12 +321,13 @@ export const initNaturePrototypes = () => {
         mesh.castShadow = true; mesh.receiveShadow = true;
         group.add(mesh);
         uniqueMeshes['rock'].push(group);
+        if (yieldToMain && i % 2 === 0) await yieldToMain();
     }
 };
 
 const buildingMeshes: Record<string, THREE.Group> = {};
 
-export const initBuildingPrototypes = () => {
+export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) => {
     if (buildingMeshes['WallSection']) return;
 
     // Wall Section (4m wide, 4m high)
@@ -385,10 +390,12 @@ export const initBuildingPrototypes = () => {
     floor.position.y = -0.1;
     floorGroup.add(floor);
     buildingMeshes['Floor'] = floorGroup;
+    if (yieldToMain) await yieldToMain();
 };
 
 export const ObjectGenerator = {
     initNaturePrototypes,
+    initBuildingPrototypes,
     getPrototypes: () => {
         // Return flatten array of all variants
         return [
@@ -400,7 +407,8 @@ export const ObjectGenerator = {
     },
 
     createTree: (type: 'spruce' | 'pine' | 'birch' | 'oak' = 'spruce', scale: number = 1.0) => {
-        initNaturePrototypes();
+        // Warning: This remains sync to avoid breaking hundreds of call sites.
+        // It relies on prototypes being pre-warmed.
         const list = uniqueMeshes[type] || uniqueMeshes['spruce'];
         const p = list[Math.floor(Math.random() * list.length)];
         const t = p.clone();
@@ -447,8 +455,7 @@ export const ObjectGenerator = {
     },
 
     createRock: (scale: number = 1.0, radius: number = 1.0) => {
-        // Detail is now always 0 for performance as requested
-        initNaturePrototypes();
+        // Warning: Sync, relies on pre-warmed prototypes
         const list = uniqueMeshes['rock'];
         const p = list[Math.floor(Math.random() * list.length)];
         const r = p.clone();
@@ -534,7 +541,7 @@ export const ObjectGenerator = {
     },
 
     createBuildingPiece: (type: string) => {
-        initBuildingPrototypes();
+        // Warning: Sync
         const proto = buildingMeshes[type];
         return proto ? proto.clone() : new THREE.Group();
     },
@@ -628,6 +635,122 @@ export const ObjectGenerator = {
         nonIndexedBody.dispose();
 
         return building;
+    },
+
+    createBox: (scale: number = 1.0) => {
+        const group = new THREE.Group();
+        const mat = MATERIALS.buildingPiece; // Dark wood/metal look
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+        mesh.position.y = 0.5;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        group.scale.setScalar(scale);
+        group.rotation.y = Math.random() * Math.PI * 2;
+        return group;
+    },
+
+    createShelf: (scale: number = 1.0) => {
+        const group = new THREE.Group();
+        const mat = MATERIALS.treeTrunk; // Wood look
+
+        // Frame
+        const w = 2.0; const h = 2.0; const d = 0.5;
+        const sideGeo = new THREE.BoxGeometry(0.1, h, d);
+        const l = new THREE.Mesh(sideGeo, mat); l.position.set(-w / 2, h / 2, 0); group.add(l);
+        const r = new THREE.Mesh(sideGeo, mat); r.position.set(w / 2, h / 2, 0); group.add(r);
+
+        // Shelves
+        const shelfGeo = new THREE.BoxGeometry(w, 0.1, d);
+        for (let y = 0.1; y < h; y += 0.6) {
+            const s = new THREE.Mesh(shelfGeo, mat);
+            s.position.set(0, y, 0);
+            s.castShadow = true;
+            group.add(s);
+
+            // Random Props on shelf
+            if (Math.random() > 0.3) {
+                const numProps = Math.floor(Math.random() * 4);
+                for (let i = 0; i < numProps; i++) {
+                    const prop = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), MATERIALS.barrel);
+                    prop.position.set((Math.random() - 0.5) * w * 0.8, y + 0.15, (Math.random() - 0.5) * d * 0.6);
+                    group.add(prop);
+                }
+            }
+        }
+
+        group.scale.setScalar(scale);
+        return group;
+    },
+
+    createCaveEntrance: () => {
+        const group = new THREE.Group();
+        // A rocky archway
+        const mat = MATERIALS.stone;
+
+        // Left Pillar
+        const left = new THREE.Mesh(new THREE.DodecahedronGeometry(6, 0), mat);
+        left.scale.set(1, 2.5, 1);
+        left.position.set(-8, 6, 0);
+        left.castShadow = true; left.receiveShadow = true;
+        group.add(left);
+
+        // Right Pillar
+        const right = new THREE.Mesh(new THREE.DodecahedronGeometry(6, 0), mat);
+        right.scale.set(1, 2.5, 1);
+        right.position.set(8, 6, 0);
+        right.castShadow = true; right.receiveShadow = true;
+        group.add(right);
+
+        // Top Arch
+        const top = new THREE.Mesh(new THREE.DodecahedronGeometry(6, 0), mat);
+        top.scale.set(2.5, 1, 1.5);
+        top.position.set(0, 14, 0);
+        top.castShadow = true; top.receiveShadow = true;
+        group.add(top);
+
+        return group;
+    },
+
+    createMountainSlice: (ctx: SectorContext, p1: THREE.Vector3, p2: THREE.Vector3, height: number = 15) => {
+        // Optimized wall generation using a stretched cube with texture repeating
+        const vec = new THREE.Vector3().subVectors(p2, p1);
+        const len = vec.length();
+        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+        const angle = Math.atan2(vec.z, vec.x);
+
+        // Create custom material clone for tiling if not exists
+        // Note: For performance, we might want to share this, but "stone" is standard.
+        // To fix bump map stretching, we need to map UVs or use triplanar. 
+        // Simple fix: Repeat texture based on length.
+
+        const mat = MATERIALS.stone.clone();
+        if (mat.map) {
+            mat.map = mat.map.clone();
+            mat.map.wrapS = THREE.RepeatWrapping;
+            mat.map.wrapT = THREE.RepeatWrapping;
+            mat.map.repeat.set(len / 4, height / 4);
+        }
+        if (mat.bumpMap) {
+            mat.bumpMap = mat.bumpMap.clone();
+            mat.bumpMap.wrapS = THREE.RepeatWrapping;
+            mat.bumpMap.wrapT = THREE.RepeatWrapping;
+            mat.bumpMap.repeat.set(len / 4, height / 4);
+        }
+
+        const geo = new THREE.BoxGeometry(len, height, 8); // Thick mountain wall
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(mid.x, height / 2 - 2, mid.z);
+        mesh.rotation.y = -angle;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        ctx.scene.add(mesh);
+
+        // Collider
+        ctx.obstacles.push({
+            mesh: mesh,
+            collider: { type: 'box', size: new THREE.Vector3(len, height, 8) }
+        });
     },
 
     /**
@@ -990,17 +1113,6 @@ export const ObjectGenerator = {
         const validPointsByType: Record<string, { x: number, z: number, r: number, s: number }[]> = {};
         const types = Array.isArray(type) ? type : (type === 'random' ? ['spruce', 'pine', 'birch'] : [type]);
 
-        // Draw visual outline (LineLoop)
-        /*
-        if (polygon.length > 2) {
-            const linePoints = polygon.map(p => new THREE.Vector3(p.x, p.y + 0.1, p.z));
-            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
-            const lineMat = new THREE.LineBasicMaterial({ color: 0x44ff44, linewidth: 1 });
-            const lineLoop = new THREE.LineLoop(lineGeo, lineMat);
-            ctx.scene.add(lineLoop);
-        }
-        */
-
         for (let x = minX; x <= maxX; x += spacing) {
             for (let z = minZ; z <= maxZ; z += spacing) {
                 const jx = x + (Math.random() - 0.5) * spacing;
@@ -1025,73 +1137,71 @@ export const ObjectGenerator = {
                     });
                 }
             }
-            // Yield every horizontal scanline of forest
             if (ctx.yield) await ctx.yield();
         }
 
-        initNaturePrototypes();
-
         for (const treeType of Object.keys(validPointsByType)) {
-            const allPoints = validPointsByType[treeType];
-            if (allPoints.length === 0) continue;
+            ObjectGenerator.addInstancedTrees(ctx, treeType, validPointsByType[treeType]);
+            if (ctx.yield) await ctx.yield();
+        }
+    },
 
-            const protoList = uniqueMeshes[treeType];
-            if (!protoList || protoList.length === 0) continue;
+    addInstancedTrees: (ctx: SectorContext, treeType: string, points: { x: number, z: number, r: number, s: number }[]) => {
+        ObjectGenerator.initNaturePrototypes();
+        const protoList = (uniqueMeshes as any)[treeType];
+        if (!protoList || protoList.length === 0) return;
 
-            const variantCount = protoList.length;
-            const pointsByVariant: { x: number, z: number, r: number, s: number }[][] = Array.from({ length: variantCount }, () => []);
+        const variantCount = protoList.length;
+        const pointsByVariant: { x: number, z: number, r: number, s: number }[][] = Array.from({ length: variantCount }, () => []);
 
-            allPoints.forEach(p => {
-                const vIdx = Math.floor(Math.random() * variantCount);
-                pointsByVariant[vIdx].push(p);
+        points.forEach(p => {
+            const vIdx = Math.floor(Math.random() * variantCount);
+            pointsByVariant[vIdx].push(p);
+        });
+
+        for (let vIdx = 0; vIdx < pointsByVariant.length; vIdx++) {
+            const variantPoints = pointsByVariant[vIdx];
+            if (variantPoints.length === 0) continue;
+            const protoGroup = protoList[vIdx];
+
+            const parts: { geo: THREE.BufferGeometry, mat: THREE.Material }[] = [];
+            protoGroup.traverse((child: any) => {
+                if (child instanceof THREE.Mesh) {
+                    parts.push({ geo: child.geometry, mat: child.material });
+                }
             });
 
-            for (let vIdx = 0; vIdx < pointsByVariant.length; vIdx++) {
-                const points = pointsByVariant[vIdx];
-                if (points.length === 0) continue;
-                const protoGroup = protoList[vIdx];
+            for (const part of parts) {
+                const instancedMesh = new THREE.InstancedMesh(part.geo, part.mat, variantPoints.length);
+                instancedMesh.castShadow = true;
+                instancedMesh.receiveShadow = true;
 
-                const parts: { geo: THREE.BufferGeometry, mat: THREE.Material }[] = [];
-                protoGroup.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        parts.push({ geo: child.geometry, mat: child.material });
-                    }
+                const matrix = new THREE.Matrix4();
+                const position = new THREE.Vector3();
+                const rotation = new THREE.Quaternion();
+                const scale = new THREE.Vector3();
+
+                variantPoints.forEach((p, i) => {
+                    position.set(p.x, 0, p.z);
+                    rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.r);
+                    scale.set(p.s, p.s, p.s);
+                    matrix.compose(position, rotation, scale);
+                    instancedMesh.setMatrixAt(i, matrix);
                 });
 
-                for (const part of parts) {
-                    const instancedMesh = new THREE.InstancedMesh(part.geo, part.mat, points.length);
-                    instancedMesh.castShadow = true;
-                    instancedMesh.receiveShadow = true;
-
-                    const matrix = new THREE.Matrix4();
-                    const position = new THREE.Vector3();
-                    const rotation = new THREE.Quaternion();
-                    const scale = new THREE.Vector3();
-
-                    points.forEach((p, i) => {
-                        position.set(p.x, 0, p.z);
-                        rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.r);
-                        scale.set(p.s, p.s, p.s);
-                        matrix.compose(position, rotation, scale);
-                        instancedMesh.setMatrixAt(i, matrix);
-                    });
-
-                    instancedMesh.instanceMatrix.needsUpdate = true;
-                    ctx.scene.add(instancedMesh);
-                    if (ctx.yield) await ctx.yield();
-                }
+                instancedMesh.instanceMatrix.needsUpdate = true;
+                ctx.scene.add(instancedMesh);
             }
 
-            allPoints.forEach(p => {
+            variantPoints.forEach(p => {
                 const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4, 0.5));
                 c.visible = false;
                 c.name = 'TreeCollision';
                 c.position.set(p.x, 2, p.z);
                 c.updateMatrixWorld();
                 ctx.scene.add(c);
-                ctx.obstacles.push({ mesh: c, collider: { type: 'cylinder', radius: 0.4, height: 4 } });
+                ctx.obstacles.push({ mesh: c, collider: { type: 'cylinder', radius: 0.4 * p.s, height: 4 } });
             });
-            if (ctx.yield) await ctx.yield();
         }
     },
 
@@ -1108,6 +1218,8 @@ export const ObjectGenerator = {
         const rectW = isRect ? (size as any).width : 0;
         const rectH = isRect ? (size as any).height : 0;
         const radius = !isRect ? (size as number) : 0;
+
+        const treePoints: { x: number, z: number, r: number, s: number }[] = [];
 
         for (let i = 0; i < count; i++) {
             let x, z;
@@ -1145,12 +1257,11 @@ export const ObjectGenerator = {
             if (!valid) continue;
 
             if (type === 'tree') {
-                const scale = 0.8 + Math.random() * 0.8;
-                const tree = ObjectGenerator.createTree('spruce', scale);
-                tree.position.set(x, 0, z);
-                tree.rotation.y = Math.random() * Math.PI * 2;
-                ctx.scene.add(tree);
-                ctx.obstacles.push({ mesh: tree, collider: { type: 'sphere', radius: 0.5 * scale } });
+                treePoints.push({
+                    x, z,
+                    r: Math.random() * Math.PI * 2,
+                    s: 0.8 + Math.random() * 0.8
+                });
             } else if (type === 'rock') {
                 const rock = new THREE.Mesh(GEOMETRY.stone, MATERIALS.stone);
                 const s = 0.5 + Math.random();
@@ -1162,8 +1273,11 @@ export const ObjectGenerator = {
                 ctx.obstacles.push({ mesh: rock, collider: { type: 'sphere', radius: s } });
             }
 
-            // Yield every 20 items to allow UI to breathe
             if (ctx.yield && i % 20 === 0) await ctx.yield();
+        }
+
+        if (treePoints.length > 0) {
+            ObjectGenerator.addInstancedTrees(ctx, 'spruce', treePoints);
         }
     },
 

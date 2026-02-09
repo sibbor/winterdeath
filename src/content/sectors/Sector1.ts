@@ -96,6 +96,9 @@ export const Sector1: SectorDef = {
         const { scene, obstacles, flickeringLights, burningObjects, triggers } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
+        // Reward Chest at boss spawn
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+
         // Road: Vargstigen -> Drive Way
         PathGenerator.createRoad(ctx, [
             new THREE.Vector3(-10, 0, 2),

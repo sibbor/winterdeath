@@ -62,6 +62,7 @@ export interface PlayerStats {
   maxStamina: number;
   speed: number;
   skillPoints: number;
+  rescuedFamilyIds: number[]; // IDs of family members currently in the party
   kills: number; // Total kills
   scrap: number; // Current balance
 
@@ -256,6 +257,7 @@ export interface GameCanvasProps {
   onMapInit: (items: MapItem[]) => void;
   bossPermanentlyDefeated: boolean;
   familyAlreadyRescued?: boolean;
+  rescuedFamilyIndices: number[]; // Added to support multiple followers
   onLevelLoaded: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onCollectibleFound: (id: string) => void;

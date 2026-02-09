@@ -381,6 +381,7 @@ const App: React.FC = () => {
                         triggerEndSector={false}
 
                         familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentMap)}
+                        rescuedFamilyIndices={gameState.rescuedFamilyIndices}
                         bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentMap)}
 
                         onLevelLoaded={() => setIsLoadingLevel(false)}

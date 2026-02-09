@@ -14,6 +14,7 @@ export const DeathSystem = {
             playerGroup: THREE.Group | null;
             playerMesh: THREE.Mesh | null;
             fmMesh: THREE.Object3D | null;
+            familyMembers?: any[];
             input: any;
             camera: THREE.Camera;
         },
@@ -100,6 +101,39 @@ export const DeathSystem = {
                 staminaRatio: 0, isSpeaking: false, isThinking: false, isIdleLong: false,
                 seed: 0, isDead: true, deathStartTime: state.deathStartTime
             }, now, 0.016); // Keeping fixed delta for consistent animation framerate
+        }
+
+        // 4. Family Reaction (All members)
+        if (refs.familyMembers) {
+            refs.familyMembers.forEach(fm => {
+                if (fm.mesh) {
+                    // Stop them
+                    fm.following = false;
+                    fm.isMoving = false;
+
+                    // Look at player
+                    if (refs.playerGroup) {
+                        fm.mesh.lookAt(refs.playerGroup.position);
+                    }
+
+                    // Animate (Grief/Thinking)
+                    // We use the Thinking state as a proxy for "Concerned/Grieving"
+                    const body = fm.mesh.children.find((c: any) => c.userData.isBody) as THREE.Mesh;
+                    if (body) {
+                        PlayerAnimation.update(body, {
+                            isMoving: false,
+                            isRushing: false,
+                            isRolling: false,
+                            rollStartTime: 0,
+                            staminaRatio: 1.0,
+                            isSpeaking: false,
+                            isThinking: true, // Grief
+                            isIdleLong: false,
+                            seed: fm.seed || 0
+                        }, now, delta);
+                    }
+                }
+            });
         }
     }
 };

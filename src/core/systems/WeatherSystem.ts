@@ -4,19 +4,20 @@ import { WindSystem } from '../../utils/physics';
 import { GEOMETRY } from '../../utils/assets';
 import { WeatherType } from '../../types';
 
-interface WeatherParticle {
-    mesh: THREE.Mesh;
+interface WeatherParticleData {
+    pos: THREE.Vector3;
     vel: THREE.Vector3;
-    resetY: number;
-    areaSize: number;
 }
 
 export class WeatherSystem {
-    private particles: WeatherParticle[] = [];
+    private instancedMesh: THREE.InstancedMesh | null = null;
+    private particlesData: WeatherParticleData[] = [];
     private scene: THREE.Scene;
     private type: WeatherType = 'none';
     private count: number = 0;
+    private areaSize: number = 100;
     private wind: WindSystem;
+    private dummy = new THREE.Object3D();
 
     constructor(scene: THREE.Scene, wind: WindSystem) {
         this.scene = scene;
@@ -31,8 +32,9 @@ export class WeatherSystem {
 
         this.type = type;
         this.count = count;
+        this.areaSize = areaSize;
 
-        if (type === 'none') return;
+        if (type === 'none' || count <= 0) return;
 
         const geo = GEOMETRY.weatherParticle;
         let color = 0xffffff;
@@ -44,66 +46,84 @@ export class WeatherSystem {
         }
 
         const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+        this.instancedMesh = new THREE.InstancedMesh(geo, mat, count);
+        this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+        this.particlesData = [];
 
         for (let i = 0; i < count; i++) {
-            const mesh = new THREE.Mesh(geo, mat);
-            // Randomly position in area
-            mesh.position.set(
+            const pos = new THREE.Vector3(
                 (Math.random() - 0.5) * areaSize,
                 Math.random() * 40,
                 (Math.random() - 0.5) * areaSize
             );
 
-            if (type === 'rain') {
-                mesh.scale.set(0.5, 4.0, 1.0); // Stretch for rain
-            }
-
-            this.scene.add(mesh);
-
-            // Vel setup (units per second)
             const vel = new THREE.Vector3(0, 0, 0);
             if (type === 'snow') {
-                // Calm and grounded snow: 8 to 15 units/sec
                 vel.y = -(8 + Math.random() * 7);
                 vel.x = (Math.random() - 0.5) * 1.5;
                 vel.z = (Math.random() - 0.5) * 1.5;
             } else if (type === 'rain') {
-                // Fast rain: 50 to 80 units/sec
                 vel.y = -(50 + Math.random() * 30);
             }
 
-            this.particles.push({ mesh, vel, resetY: 40, areaSize });
+            this.particlesData.push({ pos, vel });
+
+            this.dummy.position.copy(pos);
+            if (type === 'rain') {
+                this.dummy.scale.set(0.5, 4.0, 1.0);
+            } else {
+                this.dummy.scale.set(1, 1, 1);
+            }
+            this.dummy.updateMatrix();
+            this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
         }
+
+        this.scene.add(this.instancedMesh);
     }
 
     public update(delta: number, now: number) {
-        if (this.type === 'none') return;
+        if (this.type === 'none' || !this.instancedMesh) return;
 
         const windVec = this.wind.current;
         const windSwayMult = this.type === 'snow' ? 150.0 : 80.0;
 
-        for (const p of this.particles) {
+        for (let i = 0; i < this.count; i++) {
+            const p = this.particlesData[i];
+
             // Apply velocity scaled by delta
-            p.mesh.position.y += p.vel.y * delta;
-            p.mesh.position.x += (p.vel.x + windVec.x * windSwayMult) * delta;
-            p.mesh.position.z += (p.vel.z + windVec.y * windSwayMult) * delta;
+            p.pos.y += p.vel.y * delta;
+            p.pos.x += (p.vel.x + windVec.x * windSwayMult) * delta;
+            p.pos.z += (p.vel.z + windVec.y * windSwayMult) * delta;
 
             // Reset logic
-            if (p.mesh.position.y < -5) {
-                p.mesh.position.y = p.resetY;
-                p.mesh.position.x = (Math.random() - 0.5) * p.areaSize;
-                p.mesh.position.z = (Math.random() - 0.5) * p.areaSize;
+            if (p.pos.y < -5) {
+                p.pos.y = 40;
+                p.pos.x = (Math.random() - 0.5) * this.areaSize;
+                p.pos.z = (Math.random() - 0.5) * this.areaSize;
             }
+
+            this.dummy.position.copy(p.pos);
+            if (this.type === 'rain') {
+                this.dummy.scale.set(0.5, 4.0, 1.0);
+            } else {
+                this.dummy.scale.set(1, 1, 1);
+            }
+            this.dummy.updateMatrix();
+            this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
         }
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
     }
 
     public clear() {
-        for (const p of this.particles) {
-            this.scene.remove(p.mesh);
-            p.mesh.geometry.dispose(); // Careful: shared geo might be disposed if we are not careful
-            // Actually GEOMETRY.weatherParticle is shared. We should NOT dispose it here.
-            // (p.mesh.material as THREE.Material).dispose(); // Material might be shared too if we use the same for all.
+        if (this.instancedMesh) {
+            this.scene.remove(this.instancedMesh);
+            if (this.instancedMesh.material instanceof THREE.Material) {
+                this.instancedMesh.material.dispose();
+            }
+            this.instancedMesh.dispose();
+            this.instancedMesh = null;
         }
-        this.particles = [];
+        this.particlesData = [];
     }
 }

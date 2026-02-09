@@ -55,7 +55,7 @@ export const sv = {
         sector: "SEKTOR",
         play_sector: "GÅ TILL GENOMGÅNG",
         close: "STÄNG",
-        deploy_sector: "ÅK TILL SEKTOR",
+        deploy_sector: "GÅ TILL SEKTOR",
         back_to_overview: "TILLBAKA TILL ÖVERSIKT",
         sector_briefing: "SEKTORGENOMGÅNG",
         settings: "INSTÄLLNINGAR",
@@ -352,11 +352,26 @@ export const sv = {
         ],
     },
     bosses: {
-        0: { name: "Gårdsherren", death: "Varelsen som startade allt i Byn ligger död. Dess muterade form tyder på att den en gång var människa, kanske en granne. Loke är säker nu.", lore: "Entitet identifierad i Sektor 1 (Skogen). Använder primitiva tunga vapen. Hög fysisk tålighet." },
-        1: { name: "Valvväktaren", death: "Den bepansrade jätten som vaktade bunkern har fallit. Överlevarna inuti har flytt, men Jordan är säkrad. Grottorna är tysta igen.", lore: "Entitet identifierad i Sektor 2 (Kyrkogården). Förmågor inkluderar optiskt kamouflage och snabb ompositionering." },
-        2: { name: "Frekvensen", death: "En skrikande fasa som använde radiomasten för att koordinera horden. Med dess död klarnar störningarna. Esmeralda är säker.", lore: "Entitet identifierad i Sektor 3 (Avloppen). Sprider toxiska biologiska agens. Miljöfara." },
-        3: { name: "Metallkrossaren", death: "Den massiva vidrigheten som skilde Nathalie från Esmeralda är död. Det krävdes allt för att fälla den. Familjen är äntligen återförenad.", lore: "Entitet identifierad i Sektor 4 (Staden). Massiv biomekanisk struktur. Extrem hotnivå." },
-        intro_default: "Ett massivt hot dominerar denna sektor."
+        0: {
+            name: "Gårdsherren",
+            lore: "Entitet identifierad vid Gånghester Station. En före detta granne muterad till en enorm särling. Han svingar ett tungt järnvägsverktyg, hans massiva styrka orsakade den inledande splittringen av Roberts familj.",
+            death: "Varelsen som tvingade familjen isär är död. Det var detta vidunder som fick Nathalie och Esmeralda att fly in i de mörka skogarna och lämna Loke kvar i kaoset. Loke är säker nu, men spåren efter de andra leder djupt in i den iskalla skogen."
+        },
+        1: {
+            name: "Valvväktaren",
+            lore: "Enrovlysten fasa som huserar i betonglabyrinterna i det kalla krigets skyddsrum. Den frodas i mörkret och livnär sig på terrorn hos de överlevande som fångats inuti. Den slår till med dödlig precision vid ljudet av en stängd dörr.",
+            death: "När den massiva ståldörren slogs igen och skickade ett dånande eko genom tunnlarna, slog Väktaren till. Robert, Loke och Jordan stod emot. Grottorna är tysta igen, och Jordan är äntligen tillbaka i Roberts famn."
+        },
+        2: {
+            name: "Frekvensen",
+            lore: "En skrikande tekniker som förvandlats till en fasa. Tillsammans med ett annat best jagade den Esmeralda och Nathalie genom snåren. Den använder Häglaredsmasten för att förstärka sina biotoxiska skrik och koordinera den omgivande horden.",
+            death: "Störningarna klarnar. Nathalies modiga chansning – att locka bort den andra besten för att ge Esmeralda en chans att nå kontrollrummet – har gett resultat. Esmeralda är säker, radioutrustningen är lagad och en statisk röst svarar äntligen på anropet."
+        },
+        3: {
+            name: "Metallkrossaren",
+            lore: "Ett katastrofalt biomekaniskt hot vid bilskroten. Den förföljde Nathalie skoningslöst tills hon blev hörnad i ett trångt kontor. Den är en tornande massa av rostiga chassin och muterat kött.",
+            death: "Den sista barriären har brutits. Nathalie räddas från ruinerna av skrotgårdens kontor. Den långa natten i snön är över; men det är bara början."
+        },
     },
     family: {
         dad: "Pappa",

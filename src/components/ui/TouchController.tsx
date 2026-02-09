@@ -151,14 +151,8 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
         >
-            {/* System Buttons (Top Right - Moved down to clear Kill Counter) */}
+            {/* System Buttons (Top Right - Pause Button Only) */}
             <div className="absolute top-14 right-4 flex flex-col gap-3 pointer-events-auto z-[70]">
-                <button
-                    className="w-14 h-14 rounded-full border-2 border-white/20 bg-white/5 text-white font-bold text-xs tracking-widest shadow-lg active:scale-95 active:bg-blue-800 active:border-white transition-all backdrop-blur-sm flex items-center justify-center"
-                    onTouchStart={(e) => { e.stopPropagation(); onOpenMap?.(); }}
-                >
-                    MAP
-                </button>
                 <button
                     className="w-14 h-14 rounded-full border-2 border-white/20 bg-white/5 text-white font-bold text-xs tracking-widest shadow-lg active:scale-95 active:bg-red-800 active:border-white transition-all backdrop-blur-sm flex items-center justify-center"
                     onTouchStart={(e) => { e.stopPropagation(); onPause?.(); }}

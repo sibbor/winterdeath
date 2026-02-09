@@ -1,5 +1,4 @@
 
-// ... existing imports ...
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../utils/assets';
 import { Obstacle } from '../utils/physics';
@@ -11,7 +10,6 @@ import { soundManager } from '../utils/sound';
 export type { Enemy };
 
 export const EnemyManager = {
-    // ... existing spawn methods ...
     spawn: (
         scene: THREE.Scene,
         playerPos: THREE.Vector3,
@@ -47,62 +45,74 @@ export const EnemyManager = {
     explodeEnemy: (
         enemy: Enemy,
         forceVec: THREE.Vector3,
-        scene: THREE.Scene,
-        particleList: any[]
-    ) => {
-        scene.remove(enemy.mesh);
-        enemy.deathState = 'dead';
-        enemy.dead = true;
-        enemy.mesh.userData.exploded = true;
-
-        const scale = enemy.originalScale || 1.0;
-
-        for (let i = 0; i < 6; i++) {
-            const w = 0.2 + Math.random() * 0.2;
-            const h = 0.3 + Math.random() * 0.3;
-            const d = 0.2 + Math.random() * 0.2;
-            const geo = new THREE.BoxGeometry(w, h, d);
-            const colorVar = Math.random() > 0.5 ? 0x8a0303 : 0x550000;
-            const mat = new THREE.MeshStandardMaterial({ color: colorVar, roughness: 0.3, metalness: 0.1 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.scale.setScalar(scale);
-
-            mesh.position.copy(enemy.mesh.position);
-            mesh.position.x += (Math.random() - 0.5) * 0.5 * scale;
-            mesh.position.y += (0.5 + Math.random() * 1.0) * scale;
-            mesh.position.z += (Math.random() - 0.5) * 0.5 * scale;
-            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-
-            scene.add(mesh);
-
-            const limbVel = forceVec.clone().multiplyScalar(0.4 + Math.random() * 0.6);
-            limbVel.x += (Math.random() - 0.5) * 6;
-            limbVel.z += (Math.random() - 0.5) * 6;
-            limbVel.y += 3 + Math.random() * 4;
-
-            particleList.push({ mesh, vel: limbVel, life: 300, maxLife: 300, type: 'limb', rotVel: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(8) });
+        callbacks: {
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number) => void;
+            spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material) => void;
         }
+    ) => {
+        if (enemy.mesh.userData.exploded) return;
+        enemy.mesh.userData.exploded = true;
+        enemy.mesh.visible = false;
+        enemy.dead = true;
+
+        const pos = enemy.mesh.position;
+        const upVec = new THREE.Vector3(0, 5, 0);
+        const exitForce = forceVec.clone().multiplyScalar(0.5).add(upVec);
+
+        // Spawn Blood
+        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 40);
+        callbacks.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.bloodDecal);
+
+        // Create random chunks
+        const limbCount = 4 + Math.floor(Math.random() * 3);
+        const baseScale = enemy.originalScale || 1.0;
+
+        for (let i = 0; i < limbCount; i++) {
+            const mesh = new THREE.Mesh(
+                GEOMETRY.gore,
+                MATERIALS.gore
+            );
+            mesh.position.copy(pos);
+            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            mesh.scale.setScalar((0.4 + Math.random() * 0.4) * baseScale);
+
+            const vel = exitForce.clone();
+            vel.x += (Math.random() - 0.5) * 6;
+            vel.y += Math.random() * 4;
+            vel.z += (Math.random() - 0.5) * 6;
+
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, mesh, vel);
+        }
+
+        soundManager.playExplosion();
     },
 
     generateBossDebris: (enemy: Enemy, count: number) => {
-        const chunks = [];
-        const pos = enemy.mesh.position.clone();
+        const debrisList: { mesh: THREE.Mesh, vel: THREE.Vector3 }[] = [];
+        const pos = enemy.mesh.position;
+        const scale = enemy.originalScale || 1.0;
+
         for (let i = 0; i < count; i++) {
-            const size = 0.5 + Math.random() * 0.8;
-            const geo = GEOMETRY.gore;
-            const mat = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? enemy.color : 0x660000 });
+            const size = (0.5 + Math.random() * 1.5) * scale;
+            const geo = new THREE.BoxGeometry(size, size, size);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
             const mesh = new THREE.Mesh(geo, mat);
-            mesh.scale.setScalar(size);
-            mesh.position.copy(pos);
-            mesh.position.y += 2 + Math.random() * 3;
-            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            const angle = Math.random() * Math.PI * 2;
-            const force = 5 + Math.random() * 10;
-            const upForce = 5 + Math.random() * 10;
-            const vel = new THREE.Vector3(Math.cos(angle) * force, upForce, Math.sin(angle) * force);
-            chunks.push({ mesh, vel, rotVel: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5) });
+            mesh.position.set(pos.x, 2, pos.z);
+            mesh.position.x += (Math.random() - 0.5) * 4;
+            mesh.position.z += (Math.random() - 0.5) * 4;
+
+            const vel = new THREE.Vector3(
+                (Math.random() - 0.5) * 15,
+                10 + Math.random() * 15,
+                (Math.random() - 0.5) * 15
+            );
+
+            debrisList.push({
+                mesh,
+                vel
+            });
         }
-        return chunks;
+        return debrisList;
     },
 
     update: (
@@ -131,12 +141,11 @@ export const EnemyManager = {
         }
     },
 
-    // New Cleanup Method
     cleanupDeadEnemies: (
         scene: THREE.Scene,
         enemies: Enemy[],
         now: number,
-        state: any, // To update scores/stats
+        state: any,
         callbacks: {
             spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
@@ -149,74 +158,49 @@ export const EnemyManager = {
     ) => {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
-            if (e.dead) {
-                const wasBoss = !!e.isBoss;
+            if (!e.dead) continue;
 
-                // Boss Death Logic
-                if (wasBoss) {
-                    if (!state.bossDefeatedTime) {
-                        state.bossDefeatedTime = now;
-                        // Use unique boss death sound
-                        if (e.bossId !== undefined) {
-                            soundManager.playBossDeath(e.bossId);
-                        }
-                        // Play victory fanfare after short delay
-                        setTimeout(() => soundManager.playVictory(), 4000);
+            if (!e.deathTimer) e.deathTimer = now;
+            const age = now - e.deathTimer;
 
-                        callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 200);
-                        if (e.bossId !== undefined && callbacks.onBossKilled) callbacks.onBossKilled(e.bossId);
-                    }
-                } else {
-                    // Regular Enemy Scrap Drop Chance (10%)
-                    // Reduced amount (5-15) compared to Boss/Chests
-                    if (Math.random() < 0.10) {
-                        const amount = 5 + Math.floor(Math.random() * 10);
-                        callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, amount);
-                    }
-                }
+            if (age > 500) { // 0.5s before cleanup (sink/fade)
+                const wasBoss = e.type === 'Tank' || e.type === 'Bomber' || e.isBoss;
 
-                // Visual Cleanup
                 if (!e.mesh.userData.exploded) {
                     if (e.deathState === 'dying_ash') {
-                        // Fire Death: Ash Pile, No Blood
                         scene.remove(e.mesh);
                         const ash = EnemyManager.createAshPile(e);
                         scene.add(ash);
-
-                        // Embers effect
-                        callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'campfire_spark', 10, undefined, undefined, undefined);
+                        callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'campfire_spark', 10);
                     } else {
-                        // Standard Death: Corpse + Blood
                         scene.remove(e.mesh);
                         if (wasBoss) {
-                            callbacks.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'blood', 30, undefined, undefined, undefined);
-                            const debris = EnemyManager.generateBossDebris(e, 15);
+                            callbacks.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'blood', 40);
+                            const debris = EnemyManager.generateBossDebris(e, 12);
                             debris.forEach(d => {
-                                scene.add(d.mesh);
-                                state.particles.push({ mesh: d.mesh, vel: d.vel, life: 200, maxLife: 200, type: 'chunk', rotVel: d.rotVel });
+                                callbacks.spawnPart(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z, 'chunk', 1, d.mesh, d.vel);
                             });
                         } else {
-                            // Normal corpse is created here
-                            const corpse = EnemyManager.createCorpse(e);
-                            corpse.position.copy(e.mesh.position);
-                            // Ensure corpse is flat on ground (y=0.2 approx) and aligned
-                            corpse.position.y = 0.2;
-                            scene.add(corpse);
+                            callbacks.spawnPart(e.mesh.position.x, 1, e.mesh.position.z, 'blood', 15);
+                        }
 
-                            // Safeguard: Ensure blood pool exists if it wasn't spawned during falling animation
-                            if (!e.bloodSpawned) {
-                                const baseScale = e.originalScale || 1.0;
-                                const poolSize = (1.5 + Math.random() * 2.5) * baseScale; // Scaled pool
-                                callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, poolSize, MATERIALS.bloodDecal);
-                                // "Pouring out" effect
-                                callbacks.spawnPart(
-                                    e.mesh.position.x, 0.2, e.mesh.position.z,
-                                    'blood',
-                                    Math.floor(30 * baseScale),
-                                    undefined,
-                                    new THREE.Vector3(0, 0.2, 0)
-                                );
-                            }
+                        const corpse = EnemyManager.createCorpse(e);
+                        corpse.position.copy(e.mesh.position);
+                        corpse.position.y = 0.2;
+                        scene.add(corpse);
+
+                        if (!e.bloodSpawned) {
+                            const baseScale = e.originalScale || 1.0;
+                            const poolSize = (1.5 + Math.random() * 2.5) * baseScale;
+                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, poolSize, MATERIALS.bloodDecal);
+                            // Give particles random spread velocity for more "ooze"
+                            const spreadVel = new THREE.Vector3(
+                                (Math.random() - 0.5) * 1.5,
+                                0.5 + Math.random() * 0.5,
+                                (Math.random() - 0.5) * 1.5
+                            );
+                            callbacks.spawnPart(e.mesh.position.x, 0.4, e.mesh.position.z, 'blood', Math.floor(30 * baseScale), undefined, spreadVel);
+                            e.bloodSpawned = true;
                         }
                     }
                 }
@@ -227,7 +211,6 @@ export const EnemyManager = {
                 state.killsInRun++;
                 callbacks.gainXp(e.score);
 
-                // Special Objective
                 if (state.sectorState && state.sectorState.hordeTarget) {
                     state.sectorState.hordeKilled = (state.sectorState.hordeKilled || 0) + 1;
                 }

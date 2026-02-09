@@ -34,6 +34,10 @@ export const Sector5: SectorDef = {
         await SectorBuilder.generateAutomaticContent(ctx, Sector5);
 
         const { scene, triggers } = ctx;
+
+        // Reward Chest at boss spawn
+        SectorBuilder.spawnChest(ctx, 0, 15, 'big');
+
         // Add more fire/destruction
         for (let i = 0; i < 20; i++) {
             const x = (Math.random() - 0.5) * 100;
