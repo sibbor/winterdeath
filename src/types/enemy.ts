@@ -34,11 +34,13 @@ export interface Enemy {
     lastKnockback: number;
     isBoss?: boolean;
     bossId?: number; // Maps to BOSSES[id]
+    indicatorRing?: THREE.Mesh;
     dead?: boolean;
     hitTime: number;
     color: number;
     originalScale: number;
     widthScale?: number;
+    ashPile?: THREE.Object3D;
 
     // AI State Machine
     state: AIState;

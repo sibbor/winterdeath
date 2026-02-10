@@ -1434,11 +1434,27 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                     if (eff.offset) {
                                         p.add(eff.offset);
                                     }
-                                    // Add some randomness to position
-                                    p.x += (Math.random() - 0.5) * (eff.spread || 0.4);
-                                    p.z += (Math.random() - 0.5) * (eff.spread || 0.4);
 
-                                    const count = eff.particle === 'campfire_flame' ? 2 : (eff.count || 1);
+                                    // AREA DISTRIBUTION LOGIC
+                                    if (eff.area) {
+                                        // Distribute over a rectangle (assume x and z are half-extents or full size)
+                                        // ObjectGenerator.createBuilding uses BoxGeometry(width, height, depth)
+                                        // so area.x is width, area.z is depth.
+                                        p.x += (Math.random() - 0.5) * eff.area.x;
+                                        p.z += (Math.random() - 0.5) * eff.area.z;
+                                    } else {
+                                        // Add some randomness to position (Legacy / Point-based)
+                                        p.x += (Math.random() - 0.5) * (eff.spread || 0.4);
+                                        p.z += (Math.random() - 0.5) * (eff.spread || 0.4);
+                                    }
+
+                                    let count = eff.particle === 'campfire_flame' ? 2 : (eff.count || 1);
+
+                                    // Scale count if it's a large area
+                                    if (eff.area && (eff.area.x * eff.area.z > 50)) {
+                                        count = Math.max(count, 3);
+                                    }
+
                                     spawnPart(p.x, p.y, p.z, eff.particle, count, undefined, undefined, eff.color);
                                 }
                             }

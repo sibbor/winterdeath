@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createProceduralTextures, MATERIALS, GEOMETRY, ModelFactory, createSignMesh } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
+import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 
 // Lazy load textures
 let sharedTextures: any = null;
@@ -1469,7 +1470,8 @@ export const ObjectGenerator = {
             group.add(bloodPool);
         }
 
-        const baseZomb = ModelFactory.createZombie(type, { color: 0x445544 });
+        const typeData = (ZOMBIE_TYPES as any)[type] || { color: 0x445544 };
+        const baseZomb = ModelFactory.createZombie(type, typeData);
         const corpse = ModelFactory.createCorpse(baseZomb);
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);

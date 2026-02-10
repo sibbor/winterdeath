@@ -4,19 +4,17 @@ import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
 
 export const ZombieModels = {
-    createZombie: (typeKey: string, typeData: any, isBoss: boolean = false): THREE.Group => {
+    createZombie: (typeKey: string, typeData: any): THREE.Group => {
         const group = new THREE.Group();
 
-        const isTank = typeKey === 'TANK';
-        const mat = isTank ? MATERIALS.tank : (typeKey === 'RUNNER' ? MATERIALS.runner : (typeKey === 'BOMBER' ? MATERIALS.bomber : MATERIALS.walker));
-
-        const bodyMat = isBoss ? new THREE.MeshStandardMaterial({ color: typeData.color }) : mat;
+        // Use the color from typeData (zombies.ts)
+        const bodyMat = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
+        bodyMat.color.set(typeData.color);
 
         const body = new THREE.Mesh(GEOMETRY.zombie, bodyMat);
 
-        let scale = typeData.scale || 1.0;
-        let widthScale = typeData.widthScale || 1.0;
-        if (isBoss && typeData.scale) scale = typeData.scale;
+        const scale = typeData.scale || 1.0;
+        const widthScale = typeData.widthScale || 1.0;
 
         body.position.y = 1.0; // Pivot is centered in LatheGeometry (-1 to 1), so +1 moves feet to ground
         body.castShadow = true;

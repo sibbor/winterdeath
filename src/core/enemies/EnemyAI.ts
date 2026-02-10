@@ -21,13 +21,14 @@ export const EnemyAI = {
             onDamageDealt: (amount: number) => void;
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void; // Debug
+            onAshStart: (e: Enemy) => void;
         }
     ) => {
         if (e.dead) return;
 
         // --- Handle Death States (Falling/Ash) ---
         if (e.deathState !== 'alive') {
-            handleDeathAnimation(e, delta, callbacks);
+            handleDeathAnimation(e, delta, now, callbacks);
             return;
         }
 
@@ -35,11 +36,14 @@ export const EnemyAI = {
         if (e.hp <= 0) {
             if (e.isBurning) {
                 e.deathState = 'dying_ash';
-                e.deathTimer = 3.0; // Time to crumble
+                e.deathTimer = now; // Store start time
+                e.mesh.visible = true; // Show individual mesh for animation
+                callbacks.onAshStart(e);
             } else {
-                // NEW: Use falling animation for standard death instead of disappearing
+                // Use falling animation for standard death instead of disappearing
                 e.deathState = 'falling';
-                e.deathTimer = 2.0;
+                e.deathTimer = now;
+                e.mesh.visible = true;
                 e.deathVel = e.velocity.clone().multiplyScalar(0.5);
                 e.deathVel.y = 2.0;
                 e.fallForward = Math.random() > 0.5;
@@ -249,10 +253,23 @@ export const EnemyAI = {
                 // Behavior: Stand still, flash red, explode
                 e.explosionTimer = (e.explosionTimer || 0) - delta;
 
+                // Indicator Ring Logic
+                if (e.indicatorRing) {
+                    e.indicatorRing.visible = true;
+                    e.indicatorRing.position.copy(e.mesh.position);
+                    e.indicatorRing.position.y = 0.15; // Slightly above ground
+
+                    // Pulse matching the beep/scale
+                    const pulse = 0.3 + Math.abs(Math.sin(now * 0.01)) * 0.4;
+                    if (e.indicatorRing.material instanceof THREE.Material) {
+                        e.indicatorRing.material.opacity = pulse;
+                    }
+                }
+
                 // Flash Red
                 const flash = Math.sin(now * 0.02) > 0;
-                const pulse = 1.0 + Math.sin(now * 0.05) * 0.2;
-                e.mesh.scale.setScalar(e.originalScale * pulse);
+                const bodyPulse = 1.0 + Math.sin(now * 0.05) * 0.2;
+                e.mesh.scale.setScalar(e.originalScale * bodyPulse);
 
                 // Beeping sound for bomber
                 if (Math.random() < 0.05) callbacks.playSound('bomber_beep');
@@ -264,6 +281,13 @@ export const EnemyAI = {
                         callbacks.onPlayerHit(50, e, 'BOMBER_EXPLOSION');
                     }
                     callbacks.playSound('bomber_explode');
+
+                    // Cleanup Ring
+                    if (e.indicatorRing) {
+                        const scene = e.indicatorRing.parent;
+                        if (scene) scene.remove(e.indicatorRing);
+                        e.indicatorRing = undefined;
+                    }
 
                     // Damage other zombies
                     for (const other of allEnemies) {
@@ -396,13 +420,17 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
     }
 }
 
-function handleDeathAnimation(e: Enemy, delta: number, callbacks: any) {
+function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: any) {
     // Copied from original logic (Falling / Ash)
     // ... (To avoid massive file size, I will trust the user to keep the existing death logic or I can inline it if strictly needed. 
     // I replaced the whole function so I MUST include it.)
 
     if (e.deathState === 'falling') {
-        e.deathTimer -= delta;
+        const age = now - e.deathTimer;
+        const totalDuration = 2000; // ms
+
+        if (e.mesh) e.mesh.visible = true;
+
         if (e.deathVel) {
             e.deathVel.y -= 30 * delta;
             e.mesh.position.add(e.deathVel.clone().multiplyScalar(delta));
@@ -430,19 +458,70 @@ function handleDeathAnimation(e: Enemy, delta: number, callbacks: any) {
                 if (e.mesh.rotation.x > -Math.PI / 2) e.mesh.rotation.x -= 8 * delta;
             }
 
-            if (e.deathVel.lengthSq() < 0.1 || e.deathTimer <= 0) {
-                e.deathState = 'dead';
+            if (e.deathVel.lengthSq() < 0.1 || age >= totalDuration) {
                 e.dead = true;
-                callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0, MATERIALS.bloodDecal);
-                e.bloodSpawned = true;
+                // Note: EnemyManager cleanup handles final corpse conversion and blood pool
             }
         }
     } else if (e.deathState === 'dying_ash') {
-        e.deathTimer -= delta;
+        const totalDuration = 3000; // ms
+        const age = now - e.deathTimer;
+        const progress = Math.max(0, 1.0 - age / totalDuration); // 1.0 down to 0.0
+
         if (e.mesh) {
-            e.mesh.scale.y = Math.max(0.1, e.mesh.scale.y - delta);
-            e.mesh.position.y -= 0.1 * delta;
+            e.mesh.visible = true; // Safety
+            // Uniformly shrink the whole mesh
+            const scale = (e.originalScale || 1.0) * progress;
+            const wScale = (e.widthScale || 1.0) * scale;
+            e.mesh.scale.set(wScale, scale, wScale);
+
+            // Grow Ash Pile
+            if (e.ashPile) {
+                const ashProgress = 1.0 - progress; // 0.0 to 1.0
+                const ashScaleBase = e.originalScale || 1.0;
+                // Add some variety/wobble while growing? Maybe just straight scaling for now.
+                e.ashPile.scale.set(
+                    ashScaleBase * ashProgress * (1 + (e.widthScale || 1.0) * 0.5),
+                    ashScaleBase * ashProgress,
+                    ashScaleBase * ashProgress * (1 + (e.widthScale || 1.0) * 0.5)
+                );
+            }
+
+            // Shrinking Fire Particles
+            const baseParticles = e.isBoss ? 4 : 1;
+            const particleCount = baseParticles + Math.floor(Math.random() * 2);
+            // Scale dispersion and height by current progress
+            const effectRadius = (e.isBoss ? (e.originalScale * 1.2) : 0.6) * progress;
+
+            for (let i = 0; i < particleCount; i++) {
+                const px = e.mesh.position.x + (Math.random() - 0.5) * effectRadius;
+                const pz = e.mesh.position.z + (Math.random() - 0.5) * effectRadius;
+                const pyBase = e.mesh.position.y + (e.isBoss ? 1.0 : 0.5) * progress;
+                callbacks.spawnPart(px, pyBase + Math.random() * (e.isBoss ? 2.0 : 1.0) * progress, pz, 'campfire_flame', 1);
+            }
+
+            // Sink into ground slightly
+            e.mesh.position.y -= 0.2 * delta;
+
+            // Darken material toward black
+            const baseColor = new THREE.Color(e.color);
+            e.mesh.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.material) {
+                    const mat = child.material as THREE.MeshStandardMaterial;
+                    if (mat.color) {
+                        // Smooth transition to black
+                        mat.color.setRGB(
+                            baseColor.r * progress,
+                            baseColor.g * progress,
+                            baseColor.b * progress
+                        );
+                    }
+                }
+            });
         }
-        if (e.deathTimer <= 0) e.dead = true;
+
+        if (age >= totalDuration) {
+            e.dead = true;
+        }
     }
 }

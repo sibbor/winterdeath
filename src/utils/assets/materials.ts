@@ -14,10 +14,7 @@ export const MATERIALS = {
     fire: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),
     fireZone: new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }),
     smoke: new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.6, depthWrite: false }),
-    walker: new THREE.MeshStandardMaterial({ color: 0x5a6e5a, roughness: 0.5 }),
-    runner: new THREE.MeshStandardMaterial({ color: 0x8f3a3a, roughness: 0.5 }),
-    tank: new THREE.MeshStandardMaterial({ color: 0x2d3436, roughness: 0.5 }),
-    bomber: new THREE.MeshStandardMaterial({ color: 0xcf6e36, roughness: 0.5 }),
+    zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
     scrap: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
     stone: new THREE.MeshStandardMaterial({
         color: 0x888888,

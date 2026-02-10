@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { ZOMBIE_TYPES } from '../../content/constants';
-import { ModelFactory } from '../../utils/assets';
+import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
 import { Enemy, AIState } from '../../types/enemy';
 
@@ -48,11 +48,12 @@ export const EnemySpawner = {
             if (roll > 0.95) { typeData = ZOMBIE_TYPES.BOMBER; typeKey = 'BOMBER'; }
             else if (roll > 0.85) { typeData = ZOMBIE_TYPES.TANK; typeKey = 'TANK'; }
             else if (roll > 0.70) { typeData = ZOMBIE_TYPES.RUNNER; typeKey = 'RUNNER'; }
+            else { typeData = ZOMBIE_TYPES.WALKER; typeKey = 'WALKER'; }
         }
 
         const scale = typeData.scale || 1.0;
 
-        const g = ModelFactory.createZombie(typeKey, typeData, false);
+        const g = ModelFactory.createZombie(typeKey, typeData);
         g.position.set(x, 0, z);
 
         scene.add(g);
@@ -103,11 +104,23 @@ export const EnemySpawner = {
 
         g.userData.entity = enemy;
 
+        // Bomber indicator ring
+        if (typeKey === 'BOMBER') {
+            const ring = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(x, 0.1, z);
+            ring.scale.setScalar(5.0); // radius matches Bomber's explosion range (5.0m)
+            ring.visible = false;
+            ring.renderOrder = 8; // On top of roads
+            scene.add(ring);
+            enemy.indicatorRing = ring;
+        }
+
         return enemy;
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any): Enemy => {
-        const g = ModelFactory.createZombie('Boss', bossData, true);
+        const g = ModelFactory.createBoss('Boss', bossData);
         g.position.set(pos.x, 0, pos.z);
         scene.add(g);
 
@@ -135,7 +148,7 @@ export const EnemySpawner = {
             blindUntil: 0,
             slowTimer: 0,
             originalScale: bossData.scale,
-            widthScale: 1.0,
+            widthScale: bossData.widthScale || 1.0,
             deathState: 'alive',
             deathTimer: 0,
             velocity: new THREE.Vector3(0, 0, 0),

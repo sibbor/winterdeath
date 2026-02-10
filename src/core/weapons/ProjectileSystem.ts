@@ -51,6 +51,8 @@ const DEFAULT_MARKER = (radius: number) => {
     const m = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
     m.scale.set(radius, radius, radius);
     m.rotation.x = -Math.PI / 2;
+    m.position.y = 0.22;
+    m.renderOrder = 8;
     return m;
 };
 
@@ -78,12 +80,16 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
 
             for (const e of ctx.enemies) {
                 if (e.dead || e.deathState !== 'alive') continue;
+
                 const dist = e.mesh.position.distanceTo(pos);
-                if (dist < radius) {
+                // Factor in enemy horizontal size: geometry radius is 0.5, scaled by widthScale * scale
+                const enemyRadius = 0.5 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
+
+                if (dist < radius + enemyRadius) {
                     const actualDamage = Math.max(0, Math.min(e.hp, damage));
                     e.hp -= damage;
                     ctx.trackStats('damage', actualDamage, !!e.isBoss);
-                    ctx.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 120);
+                    ctx.spawnPart(e.mesh.position.x, 1.5 * (e.originalScale || 1.0), e.mesh.position.z, 'blood', 120);
 
                     if (e.hp <= 0) {
                         const distRatio = Math.min(1, dist / radius);
@@ -127,8 +133,9 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
                 life: 5.0
             };
             fz.mesh.rotation.x = -Math.PI / 2;
-            fz.mesh.position.set(pos.x, 0.1, pos.z);
+            fz.mesh.position.set(pos.x, 0.24, pos.z);
             fz.mesh.scale.setScalar(fz.radius / 3.5);
+            fz.mesh.renderOrder = 9;
             ctx.scene.add(fz.mesh);
             ctx.addFireZone(fz);
         }
@@ -268,7 +275,10 @@ export const ProjectileSystem = {
 
             fullCtx.enemies.forEach(e => {
                 if (e.dead || e.deathState !== 'alive') return;
-                if (e.mesh.position.distanceTo(fz.mesh.position) < fz.radius) {
+                const dist = e.mesh.position.distanceTo(fz.mesh.position);
+                const enemyRadius = 0.5 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
+
+                if (dist < fz.radius + enemyRadius) {
                     e.isBurning = true;
                     if (e.burnTimer <= 0) e.burnTimer = 0.5;
                     e.afterburnTimer = 2.0;
@@ -330,20 +340,28 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
             if (e.dead || e.deathState !== 'alive') continue;
             if (p.hitEntities && p.hitEntities.has(e.mesh.uuid)) continue;
 
+            const scale = e.originalScale || 1.0;
+            const horizontalScale = (e.widthScale || 1.0) * scale;
+
             const dx = p.mesh.position.x - e.mesh.position.x;
             const dz = p.mesh.position.z - e.mesh.position.z;
-            if (dx * dx + dz * dz < 1.0) {
-                if (Math.abs(p.mesh.position.y - e.mesh.position.y) < 6.0) {
+
+            // Dynamic horizontal hitbox: Base radius is 1.0 for scale 1.0
+            const hitRadius = 1.0 * horizontalScale;
+
+            if (dx * dx + dz * dz < hitRadius * hitRadius) {
+                // Dynamic vertical hitbox: Base range is ±6.0 for scale 1.0
+                if (Math.abs(p.mesh.position.y - e.mesh.position.y) < 6.0 * scale) {
                     ctx.trackStats('hit', 1);
                     const actualDamage = Math.max(0, Math.min(e.hp, p.damage));
                     e.hp -= p.damage;
                     ctx.trackStats('damage', actualDamage, !!e.isBoss);
                     e.hitTime = ctx.now;
 
-                    ctx.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 80);
+                    ctx.spawnPart(e.mesh.position.x, 1.5 * scale, e.mesh.position.z, 'blood', 80);
                     // Audio: Flesh Impact
                     soundManager.playImpact('flesh');
-                    ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 0.7 + Math.random() * 0.5, MATERIALS.bloodDecal);
+                    ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, (0.7 + Math.random() * 0.5) * horizontalScale, MATERIALS.bloodDecal);
                     e.slowTimer = 0.5;
 
                     if (e.isBoss) {
@@ -376,7 +394,8 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                             if (e.isBoss) e.dead = true;
                             else {
                                 e.deathState = 'falling';
-                                e.deathTimer = 2.0;
+                                e.deathTimer = ctx.now;
+                                e.mesh.visible = true;
 
                                 const baseSpeed = e.speed * 10;
                                 const isMoving = e.velocity.lengthSq() > 0.1;

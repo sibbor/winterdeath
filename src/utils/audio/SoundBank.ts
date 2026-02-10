@@ -50,12 +50,11 @@ export class SoundBank {
         }
         return this.buffers.get(key);
     }
-
     /**
      * Play a sound from the bank.
      * Use this as a replacement for ad-hoc synthesis.
      */
-    static play(core: SoundCore, key: string, volume: number = 1.0, playbackRate: number = 1.0, loop: boolean = false): { source: AudioBufferSourceNode; gain: GainNode } | null {
+    static play(core: SoundCore, key: string, volume: number = 1.0, playbackRate: number = 1.0, loop: boolean = false, useReverb: boolean = false): { source: AudioBufferSourceNode; gain: GainNode } | null {
         const buffer = this.get(core, key);
         if (!buffer) return null;
 
@@ -73,7 +72,7 @@ export class SoundBank {
         source.start();
 
         // Track for cleanup/pausing
-        core.track(source);
+        core.track(source, useReverb);
 
         return { source, gain };
     }

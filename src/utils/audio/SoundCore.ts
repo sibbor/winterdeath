@@ -21,22 +21,8 @@ export class SoundCore {
     this.reverbGain = this.ctx.createGain();
     this.reverbGain.gain.value = 0; // Default dry
 
-    // Connect Master to Reverb path (Global Send)
-    this.masterGain.connect(this.convolver);
-
-    // Connect: Source -> Master (Dry) AND Source -> Reverb -> Master (Wet)
-    // NOTE: In this simplifed architecture, we'll connect everything to Master, 
-    // and ALSO selectively send to reverb if we want global reverb.
-    // Ideally, we'd have a 'dry' bus and a 'wet' bus.
-
-    // Let's create a Main Bus that feeds both
-    // But since current architecture connects directly to masterGain, we'll assume global reverb for now.
-    // Correction: To add reverb to everything, we can route masterGain -> destination AND masterGain -> Reverb -> destination?
-    // No, that would double volume.
-    // Better: Create a pre-master generic bus?
-    // For simplicity in this existing class:
-    // We will attach the convolver to the master output for "Global Ambience". 
-    // Uses a separate path for wet signal.
+    // DECOUPLED ROUTING: Sources connect to Master (Dry) AND optionally to Convolver (Wet)
+    // We no longer connect masterGain to convolver to prevent global forced reverb.
 
     this.convolver.connect(this.reverbGain);
     this.reverbGain.connect(this.ctx.destination);
@@ -46,18 +32,36 @@ export class SoundCore {
 
   generateImpulseResponse() {
     const rate = this.ctx.sampleRate;
-    const length = rate * 1.0; // Shortened to 1.0s
-    const decay = 3.0; // Steeper decay for more subtlety
+    const length = rate * 2.0; // Increased to 2.0s for cavernous feel
+    const decay = 4.0;
     const impulse = this.ctx.createBuffer(2, length, rate);
     const left = impulse.getChannelData(0);
     const right = impulse.getChannelData(1);
 
+    const preDelay = Math.floor(rate * 0.03); // 30ms pre-delay
+    const earlyReflections = 5; // Discrete echoes in the first 150ms
+
     let lastL = 0;
     let lastR = 0;
-    const alpha = 0.2; // Low-pass filter coefficient (0.2 = heavy filtering)
+    const alpha = 0.15; // Darker filtering for hollow cave sound
 
     for (let i = 0; i < length; i++) {
-      // Procedural noise with simple one-pole low-pass filter
+      if (i < preDelay) {
+        left[i] = 0;
+        right[i] = 0;
+        continue;
+      }
+
+      // 1. Early Reflections (Slapback)
+      let er = 0;
+      for (let j = 1; j <= earlyReflections; j++) {
+        const reflectionTime = preDelay + Math.floor(rate * 0.02 * j * (1 + Math.random() * 0.5));
+        if (i === reflectionTime) {
+          er += (0.4 / j); // Decreasing intensity
+        }
+      }
+
+      // 2. Late Reverb Tail (Filtered Noise)
       const nL = Math.random() * 2 - 1;
       const nR = Math.random() * 2 - 1;
 
@@ -66,9 +70,10 @@ export class SoundCore {
       lastL = filteredL;
       lastR = filteredR;
 
-      const env = Math.pow(1 - i / length, decay);
-      left[i] = filteredL * env;
-      right[i] = filteredR * env;
+      const env = Math.pow(1 - (i - preDelay) / (length - preDelay), decay);
+
+      left[i] = (filteredL * env) + er;
+      right[i] = (filteredR * env) + er;
     }
 
     this.convolver.buffer = impulse;

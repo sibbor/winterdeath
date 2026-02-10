@@ -64,7 +64,13 @@ export const EnemyManager = {
 
     createCorpse: (enemy: Enemy) => {
         if (corpseRenderer) {
-            corpseRenderer.addCorpse(enemy.mesh.position, enemy.mesh.quaternion, enemy.originalScale || 1.0, enemy.widthScale || 1.0);
+            corpseRenderer.addCorpse(
+                enemy.mesh.position,
+                enemy.mesh.quaternion,
+                enemy.originalScale || 1.0,
+                enemy.widthScale || 1.0,
+                enemy.color
+            );
         }
     },
 
@@ -101,20 +107,22 @@ export const EnemyManager = {
         callbacks.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.bloodDecal);
 
         // Create random chunks
-        const limbCount = 4 + Math.floor(Math.random() * 3);
+        const limbCount = enemy.isBoss ? 15 : 5;
         const baseScale = enemy.originalScale || 1.0;
+
+        // Scale chunks proportionally to body size and number of chunks
+        // Higher base factor (2.5) ensures chunks are visible but proportional
+        const limbScale = (baseScale * 2.5) / limbCount;
 
         for (let i = 0; i < limbCount; i++) {
             const mesh = new THREE.Mesh(
                 GEOMETRY.gore,
-                MATERIALS.gore
+                new THREE.MeshStandardMaterial({ color: enemy.color || 0x660000, roughness: 0.8 })
             );
             mesh.position.copy(pos);
             mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-            // INCREASED SCALE: Make chunks actually visible from top-down
-            const limbScale = (0.4 + Math.random() * 0.3) * baseScale;
-            mesh.scale.setScalar(limbScale);
+            mesh.scale.setScalar(limbScale * (0.8 + Math.random() * 0.4));
 
             const vel = exitForce.clone();
             vel.x += (Math.random() - 0.5) * 10;
@@ -133,9 +141,9 @@ export const EnemyManager = {
         const scale = enemy.originalScale || 1.0;
 
         for (let i = 0; i < count; i++) {
-            const size = (0.5 + Math.random() * 1.5) * scale;
+            const size = (scale * 3.0) / count * (0.8 + Math.random() * 0.4);
             const geo = new THREE.BoxGeometry(size, size, size);
-            const mat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+            const mat = new THREE.MeshStandardMaterial({ color: enemy.color, roughness: 0.8 });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(pos.x, 2, pos.z);
             mesh.position.x += (Math.random() - 0.5) * 4;
@@ -176,13 +184,26 @@ export const EnemyManager = {
                 spawnDecal,
                 onDamageDealt: (amt) => onDamageDealt ? onDamageDealt(amt, !!e.isBoss) : undefined,
                 playSound: (id) => soundManager.playEffect(id),
-                spawnBubble
+                spawnBubble,
+                onAshStart: (enemy) => {
+                    const scene = enemy.mesh.parent as THREE.Scene;
+                    if (scene && !enemy.ashPile) {
+                        const ash = EnemyManager.createAshPile(enemy);
+                        ash.scale.setScalar(0.001); // Start invisible
+                        scene.add(ash);
+                        enemy.ashPile = ash;
+                    }
+                }
             });
         }
 
         if (zombieRenderer) {
-            // Filter out bosses and exploded enemies so they aren't rendered
-            zombieRenderer.sync(enemies.filter(e => !e.isBoss && !e.mesh.userData.exploded));
+            // Filter out bosses, exploded enemies, and those in special death animations
+            zombieRenderer.sync(enemies.filter(e =>
+                !e.isBoss &&
+                !e.mesh.userData.exploded &&
+                e.deathState === 'alive'
+            ));
         }
     },
 
@@ -224,11 +245,21 @@ export const EnemyManager = {
                     if (e.isBoss || e.type === 'BOMBER') {
                         const upForce = new THREE.Vector3(0, 5, 0);
                         EnemyManager.explodeEnemy(e, upForce, callbacks);
-                    } else if (e.deathState === 'dying_ash' && age > 1000) {
-                        scene.remove(e.mesh);
-                        const ash = EnemyManager.createAshPile(e);
-                        scene.add(ash);
-                        callbacks.spawnPart(pos.x, 0.5, pos.z, 'campfire_spark', 10);
+                    } else if (e.deathState === 'dying_ash') {
+                        // Burning death: immediately spawn ash pile if not already growing
+                        if (!e.ashPile) {
+                            scene.remove(e.mesh);
+                            const ash = EnemyManager.createAshPile(e);
+                            scene.add(ash);
+                            e.ashPile = ash;
+                            callbacks.spawnPart(pos.x, 0.5, pos.z, 'campfire_spark', 15);
+                        } else {
+                            // Ensure it's fully grown and visible
+                            scene.remove(e.mesh);
+                            e.ashPile.scale.setScalar(e.originalScale || 1.0);
+                            callbacks.spawnPart(pos.x, 0.5, pos.z, 'campfire_spark', 5);
+                            callbacks.spawnPart(pos.x, 0.2, pos.z, 'smoke', 8); // Final smoke burst
+                        }
                     } else if (age > 2000) {
                         scene.remove(e.mesh);
                         if (!e.isBoss) {
@@ -258,14 +289,24 @@ export const EnemyManager = {
                     state.bossDefeatedTime = now;
                     callbacks.onBossKilled(e.bossId);
 
+                    // Restore Boss Scrap drop
+                    callbacks.spawnScrap(pos.x, pos.z, 50);
+
                     // Specific boss debris on removal if it didn't explode earlier
                     if (!wasExploded) {
                         callbacks.spawnPart(pos.x, 2, pos.z, 'blood', 40);
-                        const debris = EnemyManager.generateBossDebris(e, 12);
+                        const debris = EnemyManager.generateBossDebris(e, 15);
                         debris.forEach(d => {
                             callbacks.spawnPart(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z, 'chunk', 1, d.mesh, d.vel);
                         });
                     }
+                }
+
+                // Cleanup Bomber Ring if any
+                if (e.indicatorRing) {
+                    const scene = e.indicatorRing.parent;
+                    if (scene) scene.remove(e.indicatorRing);
+                    e.indicatorRing = undefined;
                 }
 
                 enemies.splice(i, 1);

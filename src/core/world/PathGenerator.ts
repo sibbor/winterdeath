@@ -142,6 +142,7 @@ export const PathGenerator = {
 
             const mesh = new THREE.Mesh(geo, mat);
             mesh.name = matName || 'Ribbon';
+            mesh.renderOrder = 1;
             mesh.receiveShadow = true;
             mesh.castShadow = false;
             ctx.scene.add(mesh);
@@ -327,6 +328,7 @@ export const PathGenerator = {
                 }
                 // footprints already have the correct opacity from MATERIALS.footprintDecal
 
+                prints.renderOrder = 5;
                 ctx.scene.add(prints);
             }
         }
@@ -338,6 +340,7 @@ export const PathGenerator = {
         geometry.computeVertexNormals();
 
         const mesh = new THREE.Mesh(geometry, material);
+        mesh.renderOrder = 2;
         mesh.receiveShadow = true;
         ctx.scene.add(mesh);
 
@@ -377,6 +380,7 @@ export const PathGenerator = {
         frostGeo.setIndex(frostIndices);
         frostGeo.computeVertexNormals();
         const frostMesh = new THREE.Mesh(frostGeo, MATERIALS.frost);
+        frostMesh.renderOrder = 1;
         frostMesh.receiveShadow = true;
         ctx.scene.add(frostMesh);
 
@@ -483,6 +487,7 @@ export const PathGenerator = {
 
         // Using InstancedMesh for performance
         const mesh = new THREE.InstancedMesh(geo, mat, count);
+        mesh.renderOrder = 5;
         mesh.receiveShadow = true;
         mesh.castShadow = false;
         mesh.name = 'DecalPath';

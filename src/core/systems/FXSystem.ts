@@ -24,10 +24,11 @@ export const FXSystem = {
         // Let's use the pool for decals too.
 
         let d = FXSystem.getPooledMesh(scene, GEOMETRY.decal, material || MATERIALS.bloodDecal);
-        d.position.set(x, 0.12 + Math.random() * 0.05, z);
+        d.position.set(x, 0.2 + Math.random() * 0.05, z);
         d.rotation.x = -Math.PI / 2;
         d.rotation.z = Math.random() * Math.PI * 2;
         d.scale.setScalar(scale);
+        d.renderOrder = 10;
 
         decalList.push(d);
 
@@ -76,9 +77,8 @@ export const FXSystem = {
         let m: THREE.Mesh;
 
         if (customMesh) {
-            // If custom mesh is provided, we clone it (legacy behavior for special meshes)
-            // Ideally we'd pool this too but custom meshes are rare (chunks mainly)
             m = customMesh.clone();
+            m.renderOrder = 11;
             scene.add(m);
         } else {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
@@ -110,6 +110,9 @@ export const FXSystem = {
 
             if (type === 'stun_star') m.scale.setScalar(0.2 + Math.random() * 0.1);
             else if (type !== 'flash' && type !== 'shockwave' && type !== 'fire' && type !== 'limb' && type !== 'campfire_flame' && type !== 'large_fire' && type !== 'large_smoke') m.scale.setScalar(0.3 + Math.random() * 0.3);
+
+            // Ensure particles draw on top of roads while in flight
+            m.renderOrder = 11;
         }
 
         m.position.set(x, y, z);
@@ -263,7 +266,8 @@ export const FXSystem = {
                             p.life = -0.1; // Mark as "has landed and spawned decal"
                         }
                         // Let chunks and limbs stay on ground
-                        p.mesh.position.y = 0.15;
+                        p.mesh.position.y = 0.25;
+                        p.mesh.renderOrder = 11;
                         p.mesh.rotation.set(Math.random() * Math.PI, 0, Math.random() * Math.PI);
                         if (p.vel) p.vel.set(0, 0, 0); // Stop movement
                     } else {

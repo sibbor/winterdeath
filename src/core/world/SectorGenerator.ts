@@ -312,8 +312,15 @@ export const SectorBuilder = {
     },
 
     // Effects will be automatically picked up by the engine's effect discovery
-    setOnFire: (ctx: SectorContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean }) => {
-        if (opts?.onRoof && !opts.offset) {
+    setOnFire: (ctx: SectorContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean, area?: THREE.Vector3 }) => {
+        const finalOpts = opts ? { ...opts } : {};
+
+        // Automatically use object size for area if available
+        if (object.userData.size && !finalOpts.area) {
+            finalOpts.area = object.userData.size as THREE.Vector3;
+        }
+
+        if (finalOpts.onRoof && !finalOpts.offset) {
             let height = 0;
             if (object.userData.size) {
                 height = (object.userData.size as THREE.Vector3).y;
@@ -322,9 +329,10 @@ export const SectorBuilder = {
                 height = box.max.y - box.min.y;
             }
             // 110% height to be clearly above roof
-            opts.offset = new THREE.Vector3(0, height, 0);
+            finalOpts.offset = new THREE.Vector3(0, height, 0);
         }
-        EffectManager.attachEffect(object, 'fire', opts)
+
+        EffectManager.attachEffect(object, 'fire', finalOpts)
         if (ctx.burningObjects) ctx.burningObjects.push(object);
     },
 

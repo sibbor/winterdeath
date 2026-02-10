@@ -97,12 +97,12 @@ export const AssetPreloader = {
 
         const zombieKeys = Object.keys(ZOMBIE_TYPES);
         for (const type of zombieKeys) {
-            const z = ModelFactory.createZombie(type, ZOMBIE_TYPES[type as keyof typeof ZOMBIE_TYPES], false);
+            const z = ModelFactory.createZombie(type, ZOMBIE_TYPES[type as keyof typeof ZOMBIE_TYPES]);
             dummyRoot.add(z);
             if (yieldToMain) await yieldToMain();
         }
 
-        const boss = ModelFactory.createZombie('Boss', { color: 0xff0000, scale: 3 } as any, true);
+        const boss = ModelFactory.createBoss('Boss', { color: 0xff0000, scale: 3 } as any);
         dummyRoot.add(boss);
 
         // -- Environmental Props --
@@ -163,6 +163,16 @@ export const AssetPreloader = {
         dummyRoot.add(blood);
         const scorch = new THREE.Mesh(GEOMETRY.decal, MATERIALS.scorchDecal);
         dummyRoot.add(scorch);
+
+        const bomberRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+        dummyRoot.add(bomberRing);
+
+        // -- Darkened Corpse Warmup --
+        // Ensures that the material.clone() and multiplyScalar(0.5) logic used for corpses is warmed up
+        const deadMat = MATERIALS.zombie.clone();
+        deadMat.color.multiplyScalar(0.5);
+        const dummyCorpse = new THREE.Mesh(GEOMETRY.zombie, deadMat);
+        dummyRoot.add(dummyCorpse);
 
 
         // Pre-warm FX Pool

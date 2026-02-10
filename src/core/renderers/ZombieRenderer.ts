@@ -1,6 +1,7 @@
 
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { ZOMBIE_TYPES } from '../../content/constants';
 import { Enemy } from '../../types/enemy';
 
 export class ZombieRenderer {
@@ -12,11 +13,17 @@ export class ZombieRenderer {
         this.scene = scene;
         this.maxInstances = maxInstances;
 
-        // Initialize InstancedMeshes for each type
-        this.createInstances('WALKER', MATERIALS.walker);
-        this.createInstances('RUNNER', MATERIALS.runner);
-        this.createInstances('TANK', MATERIALS.tank);
-        this.createInstances('BOMBER', MATERIALS.bomber);
+        // Initialize InstancedMeshes for each type using data-driven colors
+        this.createInstances('WALKER', this.getMat(ZOMBIE_TYPES.WALKER.color));
+        this.createInstances('RUNNER', this.getMat(ZOMBIE_TYPES.RUNNER.color));
+        this.createInstances('TANK', this.getMat(ZOMBIE_TYPES.TANK.color));
+        this.createInstances('BOMBER', this.getMat(ZOMBIE_TYPES.BOMBER.color));
+    }
+
+    private getMat(color: number) {
+        const m = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
+        m.color.set(color);
+        return m;
     }
 
     public reAttach(scene: THREE.Scene) {

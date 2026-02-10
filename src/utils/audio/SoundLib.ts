@@ -587,13 +587,13 @@ export const GamePlaySounds = {
         // Random pitch and volume variance for natural feel
         const pitch = 0.9 + Math.random() * 0.3;
         const vol = 0.15 + Math.random() * 0.05;
-        SoundBank.play(core, key, vol, pitch);
+        SoundBank.play(core, key, vol, pitch, false, true);
     },
 
     playImpact: (core: SoundCore, type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') => {
         const key = `impact_${type}`;
         const pitch = 0.9 + Math.random() * 0.2;
-        SoundBank.play(core, key, 0.3, pitch);
+        SoundBank.play(core, key, 0.3, pitch, false, true);
     }
 };
 
@@ -608,13 +608,13 @@ export const WeaponSounds = {
 
         // Random pitch map
         const pitch = 0.95 + Math.random() * 0.1;
-        SoundBank.play(core, key, 1.0, pitch);
+        SoundBank.play(core, key, 1.0, pitch, false, true);
     },
     playThrowable: (core: SoundCore, weaponId: string) => {
         if (weaponId === 'Molotov') SoundBank.play(core, 'ignite', 0.5);
         else SoundBank.play(core, 'pin_pull', 0.3);
     },
-    playExplosion: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.7),
+    playExplosion: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.7, 1.0, false, true),
 
     playMagOut: (core: SoundCore) => SoundBank.play(core, 'mech_mag_out', 0.2),
     playMagIn: (core: SoundCore) => SoundBank.play(core, 'mech_mag_in', 0.2),
@@ -623,26 +623,26 @@ export const WeaponSounds = {
 };
 
 export const EnemySounds = {
-    playWalkerGroan: (core: SoundCore) => SoundBank.play(core, 'walker_groan', 0.2, 0.9 + Math.random() * 0.2),
-    playWalkerAttack: (core: SoundCore) => SoundBank.play(core, 'walker_attack', 0.4, 0.9 + Math.random() * 0.2),
-    playWalkerDeath: (core: SoundCore) => SoundBank.play(core, 'walker_death', 0.3, 0.9 + Math.random() * 0.2),
+    playWalkerGroan: (core: SoundCore) => SoundBank.play(core, 'walker_groan', 0.2, 0.9 + Math.random() * 0.2, false, true),
+    playWalkerAttack: (core: SoundCore) => SoundBank.play(core, 'walker_attack', 0.4, 0.9 + Math.random() * 0.2, false, true),
+    playWalkerDeath: (core: SoundCore) => SoundBank.play(core, 'walker_death', 0.3, 0.9 + Math.random() * 0.2, false, true),
 
-    playRunnerScream: (core: SoundCore) => SoundBank.play(core, 'runner_scream', 0.3, 0.9 + Math.random() * 0.2),
-    playRunnerAttack: (core: SoundCore) => SoundBank.play(core, 'runner_attack', 0.4, 0.9 + Math.random() * 0.2),
-    playRunnerDeath: (core: SoundCore) => SoundBank.play(core, 'runner_death', 0.3, 0.9 + Math.random() * 0.2),
+    playRunnerScream: (core: SoundCore) => SoundBank.play(core, 'runner_scream', 0.3, 0.9 + Math.random() * 0.2, false, true),
+    playRunnerAttack: (core: SoundCore) => SoundBank.play(core, 'runner_attack', 0.4, 0.9 + Math.random() * 0.2, false, true),
+    playRunnerDeath: (core: SoundCore) => SoundBank.play(core, 'runner_death', 0.3, 0.9 + Math.random() * 0.2, false, true),
 
-    playTankRoar: (core: SoundCore) => SoundBank.play(core, 'tank_roar', 0.5, 0.9 + Math.random() * 0.2),
-    playTankSmash: (core: SoundCore) => SoundBank.play(core, 'tank_smash', 0.6),
-    playTankDeath: (core: SoundCore) => SoundBank.play(core, 'tank_death', 0.5),
+    playTankRoar: (core: SoundCore) => SoundBank.play(core, 'tank_roar', 0.5, 0.9 + Math.random() * 0.2, false, true),
+    playTankSmash: (core: SoundCore) => SoundBank.play(core, 'tank_smash', 0.6, 1.0, false, true),
+    playTankDeath: (core: SoundCore) => SoundBank.play(core, 'tank_death', 0.5, 1.0, false, true),
 
-    playBomberBeep: (core: SoundCore) => SoundBank.play(core, 'bomber_beep', 0.3),
-    playBomberExplode: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.8)
+    playBomberBeep: (core: SoundCore) => SoundBank.play(core, 'bomber_beep', 0.3, 1.0, false, true),
+    playBomberExplode: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.8, 1.0, false, true)
 };
 
 export const BossSounds = {
-    playBossSpawn: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_roar', 0.8, 0.5),
-    playBossAttack: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_smash', 0.8),
-    playBossDeath: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_death', 0.8, 0.5)
+    playBossSpawn: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_roar', 0.8, 0.5, false, true),
+    playBossAttack: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_smash', 0.8, 1.0, false, true),
+    playBossDeath: (core: SoundCore, id: number) => SoundBank.play(core, 'tank_death', 0.8, 0.5, false, true)
 };
 
 export const VoiceSounds = {

@@ -6,7 +6,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
         speed: 0.9,
         damage: 5,
         score: 20,
-        color: 0x5a6e5a,
+        color: 0xc27ba0, // Pinkish
         scale: 1.0
     },
     RUNNER: {
@@ -14,7 +14,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
         speed: 1.10,
         damage: 2.5,
         score: 10,
-        color: 0x8f3a3a,
+        color: 0x33a366, // Green
         scale: 0.8
     },
     TANK: {
@@ -22,7 +22,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
         speed: 0.80,
         damage: 10,
         score: 50,
-        color: 0x2d3436,
+        color: 0x2b6599, // Blue
         scale: 1.15,
         widthScale: 1.1
     },
