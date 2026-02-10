@@ -310,6 +310,16 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
         if (distSq < r * r) {
             destroy = true;
             ctx.spawnPart(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, 'smoke', 2);
+            // Audio: Obstacle Impact
+            let type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete';
+            const mat = obs.mesh.userData?.material;
+            if (mat === 'METAL') type = 'metal';
+            else if (mat === 'STONE') type = 'stone';
+            else if (mat === 'WOOD') type = 'wood';
+            else if (mat === 'FLESH') type = 'flesh';
+            else if (mat === 'CONCRETE') type = 'concrete';
+
+            soundManager.playImpact(type);
             break;
         }
     }
@@ -331,6 +341,8 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                     e.hitTime = ctx.now;
 
                     ctx.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 80);
+                    // Audio: Flesh Impact
+                    soundManager.playImpact('flesh');
                     ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 0.7 + Math.random() * 0.5, MATERIALS.bloodDecal);
                     e.slowTimer = 0.5;
 
@@ -347,10 +359,10 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                         let shouldGib = false;
                         if (!e.isBoss) {
                             if (isShotgun) shouldGib = distFromOrigin < 5.0;
-                            else if (isRevolver) {
-                                const hitCount = p.hitEntities ? p.hitEntities.size : 0;
-                                shouldGib = hitCount <= 1;
-                            }
+                            else if (isRevolver) shouldGib = true;
+                            else if (e.type === 'BOMBER') shouldGib = true;
+                        } else {
+                            shouldGib = true;
                         }
 
                         if (shouldGib) {

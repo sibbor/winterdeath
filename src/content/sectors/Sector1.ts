@@ -10,7 +10,7 @@ import { CAMERA_HEIGHT } from '../constants';
 
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: -6, z: 35, rot: Math.PI / 1.25 },
+        PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
         FAMILY: { x: 144, z: 400, y: 4 },
         BOSS: { x: 174, z: 380 }
     },
@@ -147,10 +147,10 @@ export const Sector1: SectorDef = {
 
         // Path: Home -> Forest Path (Footprints)
         PathGenerator.createDecalPath(ctx, [
-            new THREE.Vector3(3, 0, 26),
-            new THREE.Vector3(9, 0, 29),
-            new THREE.Vector3(21, 0, 29),
-            new THREE.Vector3(26, 0, 31)
+            new THREE.Vector3(9, 0, 4),
+            new THREE.Vector3(14, 0, 10),
+            new THREE.Vector3(22, 0, 26),
+            new THREE.Vector3(27, 0, 31)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
 
         // Path: SMU -> Collectible 1 -> Main Road (Footprints)
@@ -170,7 +170,7 @@ export const Sector1: SectorDef = {
         // Home: Police car and family's car
         SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
         const familyCar = SectorBuilder.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
-        SectorBuilder.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 20, onRoof: true });
+        SectorBuilder.setOnFire(ctx, familyCar, { smoke: true, intensity: 200, distance: 50, onRoof: true });
 
         // Home: Hedges
         SectorBuilder.createHedge(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
@@ -220,7 +220,7 @@ export const Sector1: SectorDef = {
         smu.castShadow = true;
         scene.add(smu);
         obstacles.push({ mesh: smu, collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) } });
-        SectorBuilder.setOnFire(ctx, smu, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+        SectorBuilder.setOnFire(ctx, smu, { smoke: true, intensity: 200, distance: 50, onRoof: true });
         // 2 blue colored containers behind (west of) the building
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z + 5, 0, 0x0044cc);
@@ -229,9 +229,10 @@ export const Sector1: SectorDef = {
         const carColors = [0x3355ff, 0xcccccc, 0xcc2222]; // Blue, Silver, Red
         const carType = ['suv', 'station wagon', 'sedan'] as const;
         for (let i = 0; i < 3; i++) {
+            const rotation = Math.random() * Math.PI;
             const carPos = { x: LOCATIONS.POIS.SMU.x + 35, z: LOCATIONS.POIS.SMU.z + (i * 12) - 10 };
-            const car = SectorBuilder.spawnVehicle(ctx, carPos.x, carPos.z, 0.3, carType[i], carColors[i]);
-            SectorBuilder.setOnFire(ctx, car, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+            const car = SectorBuilder.spawnVehicle(ctx, carPos.x, carPos.z, rotation, carType[i], carColors[i]);
+            SectorBuilder.setOnFire(ctx, car, { smoke: true, intensity: 200, distance: 50, onRoof: true });
         }
 
         // Hedges:
@@ -798,12 +799,10 @@ export const Sector1: SectorDef = {
         if (!sectorState.spawns) sectorState.spawns = {};
 
         // 1. Initial Group (3 walkers, 1.5s after start)
-        if (!sectorState.spawns.initial && now - state.startTime > 1500) {
+        if (!sectorState.spawns.initial && now - state.startTime > 0) {
             sectorState.spawns.initial = true;
             for (let i = 0; i < 3; i++) {
-                const offX = (Math.random() - 0.5) * 10;
-                const offZ = (Math.random() - 0.5) * 10;
-                events.spawnZombie('WALKER', new THREE.Vector3(-20 + offX, 0, 45 + offZ));
+                events.spawnZombie('WALKER', new THREE.Vector3(14, 0, 1));
             }
         }
 

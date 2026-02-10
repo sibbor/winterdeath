@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ObjectGenerator } from '../world/ObjectGenerator';
+import { registerSoundGenerators } from '../../utils/audio/SoundLib';
+import { SoundBank } from '../../utils/audio/SoundBank';
 
 let warmedUp = false;
 let lastMapIndex = -1;
@@ -10,6 +12,23 @@ let lastMapIndex = -1;
 export const AssetPreloader = {
     warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, yieldToMain?: () => Promise<void>) => {
         if (warmedUp) return;
+
+        // 0. Initialize Sound System
+        registerSoundGenerators();
+
+        // Preload essential sounds (non-blocking, handled by Bank)
+        const soundCore = (window as any).gameEngine?.sound;
+        if (soundCore) {
+            [
+                'ui_hover', 'ui_click', 'shot_pistol', 'walker_groan',
+                'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone', 'impact_wood',
+                'door_metal_shut', 'fx_heartbeat', 'ui_level_up',
+                'loot_scrap', 'chest_open'
+            ].forEach(k => {
+                SoundBank.get(soundCore, k);
+            });
+        }
+
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 

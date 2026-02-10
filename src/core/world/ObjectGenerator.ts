@@ -103,6 +103,7 @@ export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) =>
         foliage.castShadow = true; foliage.receiveShadow = true;
         group.add(foliage);
 
+        group.userData.material = 'WOOD';
         uniqueMeshes['spruce'].push(group);
         if (yieldToMain) await yieldToMain();
     }
@@ -174,6 +175,7 @@ export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) =>
         foliage.castShadow = true; foliage.receiveShadow = true;
         group.add(foliage);
 
+        group.userData.material = 'WOOD';
         uniqueMeshes['pine'].push(group);
         if (yieldToMain) await yieldToMain();
     }
@@ -239,6 +241,7 @@ export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) =>
 
         const foliage = new THREE.Mesh(foliageGeo, birchMat);
         foliage.castShadow = true; group.add(foliage);
+        group.userData.material = 'WOOD';
         uniqueMeshes['birch'].push(group);
         if (yieldToMain) await yieldToMain();
     }
@@ -303,6 +306,7 @@ export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) =>
 
         const foliage = new THREE.Mesh(foliageGeo, MATERIALS.treeLeavesOak);
         foliage.castShadow = true; group.add(foliage);
+        group.userData.material = 'WOOD';
         uniqueMeshes['oak'].push(group);
         if (yieldToMain) await yieldToMain();
     }
@@ -320,6 +324,7 @@ export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) =>
         const mesh = new THREE.Mesh(geo, MATERIALS.stone); // Use stone material for bump mapping
         mesh.castShadow = true; mesh.receiveShadow = true;
         group.add(mesh);
+        group.userData.material = 'STONE';
         uniqueMeshes['rock'].push(group);
         if (yieldToMain && i % 2 === 0) await yieldToMain();
     }
@@ -337,6 +342,7 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     wall.castShadow = true;
     wall.receiveShadow = true;
     wallGroup.add(wall);
+    wallGroup.userData.material = 'CONCRETE';
     buildingMeshes['WallSection'] = wallGroup;
 
     // Corner
@@ -349,6 +355,7 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     c2.position.set(1.8, 2, 0);
     c2.castShadow = true;
     cornerGroup.add(c2);
+    cornerGroup.userData.material = 'CONCRETE';
     buildingMeshes['Corner'] = cornerGroup;
 
     // Door Frame
@@ -362,6 +369,7 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     const top = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.4), MATERIALS.building || MATERIALS.concrete);
     top.position.set(0, 3.25, 0);
     doorGroup.add(top);
+    doorGroup.userData.material = 'CONCRETE';
     buildingMeshes['DoorFrame'] = doorGroup;
 
     // Window Frame
@@ -382,6 +390,7 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), MATERIALS.glass);
     glass.position.set(0, 2, 0);
     windowGroup.add(glass);
+    windowGroup.userData.material = 'CONCRETE'; // Default to concrete for the frame
     buildingMeshes['WindowFrame'] = windowGroup;
 
     // Floor
@@ -389,6 +398,7 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4), MATERIALS.concrete);
     floor.position.y = -0.1;
     floorGroup.add(floor);
+    floorGroup.userData.material = 'CONCRETE';
     buildingMeshes['Floor'] = floorGroup;
     if (yieldToMain) await yieldToMain();
 };
@@ -414,6 +424,7 @@ export const ObjectGenerator = {
         const t = p.clone();
         t.scale.multiplyScalar(scale);
         t.rotation.y = Math.random() * Math.PI * 2; // Use Math.PI * 2 for full rotation
+        t.userData.material = 'WOOD';
         return t;
     },
 
@@ -437,6 +448,7 @@ export const ObjectGenerator = {
 
         group.scale.setScalar(scale);
         group.rotation.y = Math.random() * Math.PI * 2;
+        group.userData.material = 'WOOD';
         return group;
     },
 
@@ -461,7 +473,30 @@ export const ObjectGenerator = {
         const r = p.clone();
         r.scale.multiplyScalar(scale * radius);
         r.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        r.userData.material = 'STONE';
         return r;
+    },
+
+    createStone: (scale: number = 1.0) => {
+        const group = new THREE.Group();
+        const geo = new THREE.BoxGeometry(1, 1, 1);
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+            pos.setXYZ(i,
+                pos.getX(i) + (Math.random() - 0.5) * 0.2,
+                pos.getY(i) + (Math.random() - 0.5) * 0.2,
+                pos.getZ(i) + (Math.random() - 0.5) * 0.2
+            );
+        }
+        geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, MATERIALS.stone);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        group.scale.setScalar(scale);
+        group.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        group.userData.material = 'STONE';
+        return group;
     },
 
     createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
@@ -479,6 +514,7 @@ export const ObjectGenerator = {
             leaf.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
             group.add(leaf);
         }
+        group.userData.material = 'WOOD';
         return group;
     },
 
@@ -494,6 +530,7 @@ export const ObjectGenerator = {
         const railGeo = new THREE.BoxGeometry(0.1, 0.15, length);
         const r1 = new THREE.Mesh(railGeo, mat); r1.position.set(0, 0.4, 0); group.add(r1);
         const r2 = new THREE.Mesh(railGeo, mat); r2.position.set(0, 0.9, 0); group.add(r2);
+        group.userData.material = 'WOOD';
         return group;
     },
 
@@ -520,7 +557,7 @@ export const ObjectGenerator = {
         rail.rotation.x = Math.PI / 2;
         rail.position.set(0, height * 0.95, 0);
         group.add(rail);
-
+        group.userData.material = 'METAL';
         return group;
     },
 
@@ -537,6 +574,7 @@ export const ObjectGenerator = {
             stone.rotation.set(Math.random(), Math.random(), Math.random());
             group.add(stone);
         }
+        group.userData.material = 'STONE';
         return group;
     },
 
@@ -553,6 +591,7 @@ export const ObjectGenerator = {
         mesh.position.y = 0.75;
         mesh.castShadow = true;
         group.add(mesh);
+        group.userData.material = 'METAL';
         return group;
     },
 
@@ -571,12 +610,12 @@ export const ObjectGenerator = {
         const light = new THREE.PointLight(0xaaddff, 4, 30);
         light.position.set(0, 7.4, 1.5);
         group.add(light);
-
+        group.userData.material = 'METAL';
         return group;
     },
 
     createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true) => {
-        const material = MATERIALS.building.clone();
+        const material = MATERIALS.brick.clone();
         material.color.setHex(color);
 
         // 1. Create the main building body
@@ -629,7 +668,10 @@ export const ObjectGenerator = {
         building.receiveShadow = true;
 
         // Expose dimensions if needed by caller (e.g. for collision)
-        building.userData = { size: new THREE.Vector3(width, height + actualRoofHeight, depth) };
+        building.userData = {
+            size: new THREE.Vector3(width, height + actualRoofHeight, depth),
+            material: 'CONCRETE'
+        };
 
         bodyGeo.dispose();
         nonIndexedBody.dispose();
@@ -712,7 +754,8 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createMountainSlice: (ctx: SectorContext, p1: THREE.Vector3, p2: THREE.Vector3, height: number = 15) => {
+    createMountainSlice: (ctx: SectorContext, p1: THREE.Vector3, p2: THREE.Vector3, height: number = 15, options?: { visible?: boolean }) => {
+        const { visible = true } = options || {};
         // Optimized wall generation using a stretched cube with texture repeating
         const vec = new THREE.Vector3().subVectors(p2, p1);
         const len = vec.length();
@@ -740,10 +783,12 @@ export const ObjectGenerator = {
 
         const geo = new THREE.BoxGeometry(len, height, 8); // Thick mountain wall
         const mesh = new THREE.Mesh(geo, mat);
+        mesh.visible = visible;
         mesh.position.set(mid.x, height / 2 - 2, mid.z);
         mesh.rotation.y = -angle;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.userData.material = 'STONE';
         ctx.scene.add(mesh);
 
         // Collider
@@ -792,6 +837,7 @@ export const ObjectGenerator = {
                 rock.rotation.set(Math.random() * 10, Math.random() * 10, Math.random() * 10);
                 rock.castShadow = true;
                 rock.receiveShadow = true;
+                rock.userData.material = 'STONE';
                 ctx.scene.add(rock);
             }
 
@@ -804,37 +850,6 @@ export const ObjectGenerator = {
             ctx.obstacles.push({
                 mesh: colMesh,
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, thickness) }
-            });
-        }
-    },
-
-    /**
-     * Creates an invisible collision wall along a path.
-     */
-    createInvisibleWall: (ctx: SectorContext, points: THREE.Vector3[], height: number = 3, thickness: number = 1.0, name: string = 'InvisibleWall') => {
-        const curve = new THREE.CatmullRomCurve3(points);
-        const length = curve.getLength();
-        const steps = Math.ceil(length / 2);
-        const pointsList = curve.getSpacedPoints(steps);
-
-        for (let i = 0; i < pointsList.length - 1; i++) {
-            const curr = pointsList[i];
-            const next = pointsList[i + 1];
-            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
-
-            const segment = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, 2.1));
-            mid.y = height / 2;
-            segment.position.copy(mid);
-            segment.lookAt(next.x, mid.y, next.z);
-            segment.visible = false; // Invisible
-            segment.name = `${name}_${i}`;
-            segment.updateMatrixWorld(); // Ensure matrix is ready
-
-            ctx.scene.add(segment);
-
-            ctx.obstacles.push({
-                mesh: segment,
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.0) }
             });
         }
     },
@@ -975,6 +990,7 @@ export const ObjectGenerator = {
         // ctx.scene.add(vehicleBody); -- Handled by caller (SectorBuilder)
         // ctx.obstacles.push({ mesh: vehicleBody }); -- Handled by caller
 
+        vehicleBody.userData.material = 'METAL';
         return vehicleBody;
     },
 
@@ -1366,6 +1382,7 @@ export const ObjectGenerator = {
         colL.translateX(-width / 2 - wallThick / 2);
         colL.visible = false;
         colL.updateMatrixWorld();
+        colL.userData.material = 'STONE';
         ctx.scene.add(colL);
         ctx.obstacles.push({ mesh: colL, collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) } });
 
@@ -1375,6 +1392,7 @@ export const ObjectGenerator = {
         colR.translateX(width / 2 + wallThick / 2);
         colR.visible = false;
         colR.updateMatrixWorld();
+        colR.userData.material = 'STONE';
         ctx.scene.add(colR);
         ctx.obstacles.push({ mesh: colR, collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) } });
 
@@ -1392,6 +1410,7 @@ export const ObjectGenerator = {
         mesh.receiveShadow = true;
         group.add(mesh);
         group.scale.setScalar(scale);
+        group.userData.material = 'WOOD';
         return group;
     },
 
@@ -1437,6 +1456,7 @@ export const ObjectGenerator = {
         group.scale.setScalar(scale);
         return group;
     },
+
     createDeadBody: (type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
         const group = new THREE.Group();
         group.rotation.y = rot;
@@ -1453,6 +1473,7 @@ export const ObjectGenerator = {
         const corpse = ModelFactory.createCorpse(baseZomb);
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);
+        group.userData.material = 'FLESH';
 
         return group;
     },
@@ -1477,8 +1498,10 @@ export const ObjectGenerator = {
             group.add(snow);
         }
 
+        group.userData.material = 'METAL';
         return group;
     },
+
     createGrassField: (ctx: SectorContext, x: number, z: number, width: number, depth: number, count: number) => {
         const dummy = new THREE.Object3D();
         // Simple Grass Blade: Triangle

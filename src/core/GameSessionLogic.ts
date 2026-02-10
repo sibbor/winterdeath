@@ -78,6 +78,7 @@ export class GameSessionLogic {
             speakingUntil: 0,
             deathStartTime: 0,
             killerType: '',
+            killerName: '',
             playerBloodSpawned: false,
             deathVel: new THREE.Vector3(),
             lastTrailPos: null as THREE.Vector3 | null,

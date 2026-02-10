@@ -7,7 +7,7 @@ import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { t } from '../../utils/i18n';
 
-export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group, caveEntrancePos: THREE.Vector3) => {
+export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
 
     interface Box { x: number; z: number; w: number; d: number; rotation?: number; }
@@ -22,20 +22,20 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     // Define Rooms
     const rooms: RoomData[] = [
-        { id: 1, x: 100, z: -100, w: 30, d: 30, type: 'Lobby', zombies: 5 },
+        { id: 1, x: 100, z: -100, w: 30, d: 30, type: 'Lobby', zombies: 3 },
         { id: 2, x: 150, z: -150, w: 50, d: 20, type: 'Material', chests: 2 },
         { id: 3, x: 150, z: -200, w: 30, d: 30, type: 'Mess', zombies: 5 },
         { id: 4, x: 100, z: -200, w: 30, d: 30, type: 'Food', chests: 3 },
         { id: 5, x: 100, z: -125, w: 20, d: 20, type: 'Social1', zombies: 5 },
         { id: 6, x: 60, z: -125, w: 30, d: 30, type: 'Social2', zombies: 5 },
         { id: 7, x: 61, z: -193, w: 40, d: 50, type: 'Boss', boss: true, family: true },
-        { id: 8, x: 25, z: -193, w: 20, d: 20, type: 'BunkerInterior' } // Room behind the doors
+        { id: 8, x: 25, z: -193, w: 20, d: 20, type: 'ShelterRoom' }
     ];
 
     // Define Explicit Corridors to Connect Rooms
     const corridors: Box[] = [
         // Entrance Tunnel (From -70 to R1 -100)
-        { x: 100, z: -85, w: 14, d: 35 },
+        { x: 100, z: -80, w: 14, d: 35 },
 
         // R5 <-> R2 Connection (Diagonal) - Modified to be truly diagonal
         { x: 118, z: -138, w: 35, d: 12, rotation: -Math.PI / 4 },
@@ -58,24 +58,24 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
         // New R6 (North) <-> R4 (West)
         // R6 (60, -125) -> R4 (100, -200)
-        { x: 60, z: -145, w: 10, d: 50 },  // North from R6
-        { x: 75, z: -160, w: 30, d: 10 },  // East step
-        { x: 85, z: -180, w: 10, d: 40 },  // South to R4 West side
+        { x: 60, z: -145, w: 10, d: 50 },    // North from R6
+        { x: 75, z: -160, w: 30, d: 10 },    // East step
+        { x: 85, z: -180, w: 10, d: 40 },    // South to R4 West side
 
         // New R4 (North) <-> R7 (East)
         // R4 (100, -200) -> R7 (61, -193)
         { x: 100, z: -182.5, w: 10, d: 15 }, // North from R4
         { x: 90, z: -175, w: 30, d: 10 },    // West step
-        { x: 81, z: -184, w: 10, d: 20 },     // South to R7 East side
-        // Bunker interior connection - Widened to 24 to fit the 22m door frame
-        { x: 38, z: -193, w: 10, d: 24 }      // R8 <-> R7 (Connecting behind doors)
+        { x: 81, z: -184, w: 10, d: 20 },    // South to R7 East side
+        // Shelter Room - Widened to 24 to fit the 22m door frame
+        { x: 38, z: -193, w: 10, d: 24 }     // R8 <-> R7 (Connecting behind doors)
     ];
 
-    // --- FLOOR GENERATION ---
+    // Floor generation
     const allSpaces: Box[] = [...rooms, ...corridors];
     allSpaces.forEach(s => {
         const floorMat = MATERIALS.gravel.clone();
-        floorMat.bumpScale = 0.4; // Reduced from default to be less "silly"
+        floorMat.bumpScale = 3.0;
         if (floorMat.map) {
             floorMat.map.wrapS = THREE.RepeatWrapping;
             floorMat.map.wrapT = THREE.RepeatWrapping;
@@ -87,7 +87,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             floorMat.bumpMap.repeat.set((s.w + 6) / 4, (s.d + 6) / 4);
         }
 
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w + 6, s.d + 6), floorMat);
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.d), floorMat);
         floor.rotation.x = -Math.PI / 2;
         if (s.rotation) floor.rotation.z = -s.rotation;
 
@@ -98,7 +98,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     if (ctx.yield) await ctx.yield();
 
-    // --- HELPERS ---
+    // Helpers
     const getCorners = (b: any, padding: number = 0) => {
         const hw = (b.w || b.width) / 2 + padding;
         const hd = (b.d || b.depth) / 2 + padding;
@@ -146,7 +146,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         return (px >= b.x - hw && px <= b.x + hw && pz >= b.z - hd && pz <= b.z + hd);
     };
 
-    // --- LIGHTS & DECOR ---
+    // Lights
     const createStringLight = (pos: THREE.Vector3, color = 0xffaa55, intensity = 2.0) => {
         const group = new THREE.Group();
         group.position.copy(pos);
@@ -162,10 +162,10 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         group.add(bulb);
 
         // Light
-        const pointLight = new THREE.PointLight(color, intensity, 15);
+        const pointLight = new THREE.PointLight(color, intensity, 50);
         pointLight.castShadow = true;
         pointLight.shadow.bias = -0.001;
-        pointLight.position.y = -0.2;
+        pointLight.position.y = 0.2;
         group.add(pointLight);
 
         innerCave.add(group);
@@ -179,7 +179,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         const d = room.d || room.depth;
 
         // Only decorate non-bunker rooms heavily
-        if (room.type === 'BunkerInterior') return;
+        if (room.type === 'ShelterRoom') return;
 
         const numProps = Math.floor(Math.random() * 4) + 2;
         for (let i = 0; i < numProps; i++) {
@@ -349,10 +349,11 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     // Room Specifics (Lights, Spawns, Decor)
     for (const r of rooms) {
         // Lights
-        createStringLight(new THREE.Vector3(r.x, 4.5, r.z), 0xffaa88, 5.0);
+        //FIXME: Add lights to rooms
+        createStringLight(new THREE.Vector3(r.x, 4.5, r.z), 0xffaa88, 50);
 
-        if (r.type === 'BunkerInterior') {
-            const light = new THREE.PointLight(0xfff0dd, 5, 25);
+        if (r.type === 'ShelterRoom') {
+            const light = new THREE.PointLight(0xfff0dd, 100, 50);
             light.position.set(r.x, 8, r.z);
             innerCave.add(light);
         } else {
@@ -368,4 +369,38 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         }
         if (ctx.yield) await ctx.yield();
     }
+
+    // --- PART 3: THE SHELTER PORT ---
+    // 1. Frame - Hollow construction to allow seeing through
+    const frameGroup = new THREE.Group();
+    frameGroup.name = 's2_shelter_port_frame';
+    frameGroup.position.set(41, 8.5, -193); // Centered on the boss room West wall
+    frameGroup.rotation.y = Math.PI / 2; // Rotate 90 deg to face East/West
+
+    const frameMat = MATERIALS.concrete;
+    // Top cap
+    const topFrame = new THREE.Mesh(new THREE.BoxGeometry(22, 1, 4), frameMat);
+    topFrame.position.y = 7.5;
+    frameGroup.add(topFrame);
+    // Left post
+    const leftPost = new THREE.Mesh(new THREE.BoxGeometry(2, 16, 4), frameMat);
+    leftPost.position.x = -10;
+    frameGroup.add(leftPost);
+    // Right post
+    const rightPost = new THREE.Mesh(new THREE.BoxGeometry(2, 16, 4), frameMat);
+    rightPost.position.x = 10;
+    frameGroup.add(rightPost);
+    scene.add(frameGroup);
+
+    // 2. The Doors (L/R) - Widened to 10m each, 17m height, lowered to reach ground
+    const doorL = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
+    doorL.name = 's2_shelter_port_left';
+    doorL.position.set(-5, -1, 0); // Relative to frame, positioned to close gap
+    frameGroup.add(doorL);
+
+    const doorR = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
+    doorR.name = 's2_shelter_port_right';
+    doorR.position.set(5, -1, 0); // Relative to frame, positioned to close gap
+    frameGroup.add(doorR);
+
 };

@@ -7,7 +7,7 @@ export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
     stats: INITIAL_STATS,
     currentMap: 0,
-    loadout: { primary: WeaponType.SMG, secondary: WeaponType.PISTOL, throwable: WeaponType.GRENADE },
+    loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV },
     weaponLevels: {
         [WeaponType.PISTOL]: 1, [WeaponType.SMG]: 1, [WeaponType.SHOTGUN]: 1, [WeaponType.RIFLE]: 1,
         [WeaponType.REVOLVER]: 1, [WeaponType.GRENADE]: 1, [WeaponType.MOLOTOV]: 1, [WeaponType.MINIGUN]: 1, [WeaponType.RADIO]: 1, [WeaponType.FLASHBANG]: 1

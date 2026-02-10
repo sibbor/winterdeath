@@ -10,6 +10,8 @@ export class SoundManager {
   fireGain: GainNode | null = null;
   radioOsc: AudioBufferSourceNode | null = null;
   radioGain: GainNode | null = null;
+  windSource: AudioBufferSourceNode | null = null;
+  windGain: GainNode | null = null;
 
   constructor() {
     this.core = new SoundCore();
@@ -40,6 +42,9 @@ export class SoundManager {
   playMetalDoorOpen() { GamePlaySounds.playMetalDoorOpen(this.core); }
   playMetalKnocking() { GamePlaySounds.playMetalKnocking(this.core); }
   playCollectibleChime() { UiSounds.playCollectibleChime(this.core); }
+  playLevelUp() { UiSounds.playLevelUp(this.core); }
+  playFootstep(type: 'snow' | 'metal' | 'wood' = 'snow') { GamePlaySounds.playFootstep(this.core, type); }
+  playImpact(type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') { GamePlaySounds.playImpact(this.core, type); }
 
   // --- Voice Delegate ---
   playVoice(name: string) { VoiceSounds.playVoice(this.core, name); }
@@ -51,6 +56,13 @@ export class SoundManager {
   playShot(weaponId: string) { WeaponSounds.playShot(this.core, weaponId); }
   playThrowable(weaponId: string) { WeaponSounds.playThrowable(this.core, weaponId); }
   playExplosion() { WeaponSounds.playExplosion(this.core); }
+  playMagOut() { WeaponSounds.playMagOut(this.core); }
+  playMagIn() { WeaponSounds.playMagIn(this.core); }
+  playEmptyClick() { WeaponSounds.playEmptyClick(this.core); }
+  playWeaponSwap() { WeaponSounds.playWeaponSwap(this.core); }
+
+  // --- Feedback ---
+  playHeartbeat() { GamePlaySounds.playHeartbeat(this.core); }
 
   // --- Enemy Delegate ---
   playWalkerGroan() { EnemySounds.playWalkerGroan(this.core); }
@@ -190,6 +202,29 @@ export class SoundManager {
     }
   }
 
+  startWind() {
+    if (this.windSource) return;
+    const wind = GamePlaySounds.startWind(this.core);
+    if (wind) {
+      this.windSource = wind.source;
+      this.windGain = wind.gain;
+    }
+  }
+
+  updateWind(intensity: number, speed: number = 1.0) {
+    if (!this.windSource || !this.windGain) this.startWind();
+    if (this.windGain && this.windSource) {
+      const now = this.core.ctx.currentTime;
+      // Volume scales with intensity (noise floor of 0.05)
+      const targetVol = 0.05 + intensity * 0.25;
+      this.windGain.gain.setTargetAtTime(targetVol, now, 0.5);
+
+      // Pitch/Speed scales with wind speed
+      const targetPitch = 0.8 + speed * 0.4;
+      this.windSource.playbackRate.setTargetAtTime(targetPitch, now, 0.5);
+    }
+  }
+
   playEffect(id: string) {
     switch (id) {
       case 'ambient_rustle': GamePlaySounds.playAmbientRustle(this.core); break;
@@ -210,7 +245,6 @@ export class SoundManager {
       case 'tank_roar': this.playTankRoar(); break;
       case 'tank_death': this.playTankDeath(); break;
 
-      case 'bomber_beep': this.playBomberBeep(); break;
       case 'bomber_beep': this.playBomberBeep(); break;
       case 'bomber_explode': this.playBomberExplode(); break;
 

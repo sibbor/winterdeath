@@ -11,6 +11,7 @@ export class PlayerCombatSystem implements System {
     private reloadBar: { bg: THREE.Mesh; fg: THREE.Mesh } | null = null;
     private prevInput: Record<string, boolean> = {};
     private aimCross: THREE.Group | null = null;
+    private trajectoryLine: THREE.Line | null = null;
     private initialized = false;
 
     constructor(private playerGroup: THREE.Group) { }
@@ -42,6 +43,14 @@ export class PlayerCombatSystem implements System {
         scene.add(crossGroup);
 
         this.aimCross = crossGroup;
+
+        // --- Create Trajectory Line ---
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(new Array(20).fill(new THREE.Vector3()));
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.8, depthWrite: false });
+        this.trajectoryLine = new THREE.Line(lineGeo, lineMat);
+        this.trajectoryLine.visible = false;
+        this.trajectoryLine.frustumCulled = false;
+        scene.add(this.trajectoryLine);
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
@@ -102,6 +111,7 @@ export class PlayerCombatSystem implements System {
                 now,
                 state.loadout,
                 this.aimCross,
+                this.trajectoryLine,
                 session.debugMode // Using session debugMode
             );
         }
@@ -116,6 +126,9 @@ export class PlayerCombatSystem implements System {
         }
         if (this.aimCross) {
             scene.remove(this.aimCross);
+        }
+        if (this.trajectoryLine) {
+            scene.remove(this.trajectoryLine);
         }
     }
 }

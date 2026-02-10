@@ -32,13 +32,13 @@ export const SectorBuilder = {
         if (ctx.yield) await ctx.yield();
         if (def.bounds) {
             SectorBuilder.generateBoundaries(ctx, def.bounds);
-            if (ctx.debugMode) {
-                SectorBuilder.visualizeBounds(ctx, def.bounds);
-            }
         }
 
         if (ctx.debugMode) {
             SectorBuilder.visualizeTriggers(ctx);
+            if (def.bounds) {
+                SectorBuilder.visualizeBounds(ctx, def.bounds);
+            }
         }
 
         if (ctx.yield) await ctx.yield();
@@ -133,23 +133,6 @@ export const SectorBuilder = {
         ctx.scene.add(line);
     },
 
-    visualizeForests: (ctx: SectorContext) => {
-        // We don't track forests explicitly in context, but they are often added to obstacles or just scene.
-        // However, if the user wants to visualize the polygon used for creation, that polygon is lost unless stored.
-        // The user mentioned "Sector2.ts (line 273-292) to draw lines for forrests and invisible walls".
-        // In Sector2, the polygons are local variables.
-        // To visualize them universally, we'd need to change createForest to store the debug info in ctx.debugShapes or similar?
-        // OR we just provide a helper "SectorBuilder.visualizePolygon(points, color)" that the Sector script calls?
-        // The user asked "Is it also possible to use the special code from Sector2.ts... Then we have to store forests in the SectorManager or so?"
-        // So yes, we need to store them.
-        // Let's verify if 'obstacles' has enough info? No, it has meshes.
-        // We'll add 'debugShapes' to SectorContext? Or just rely on Sector scripts calling a visualization helper.
-        // The user's request implies automatic visualization if possible, or "store forests in SectorManager".
-        // Let's add a `SectorBuilder.debugPolygon(ctx, points, color)` helper and call it inside `createForest` if debugMode is on.
-
-        // Actually, let's update createForest to auto-visualize if debugMode.
-    },
-
     visualizePolygon: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x00ff00, yOffset: number = 1) => {
         if (!ctx.debugMode) return;
         const pts = [...points, points[0]]; // Close loop
@@ -160,12 +143,12 @@ export const SectorBuilder = {
         ctx.scene.add(line);
     },
 
-    visualizePath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff) => {
+    visualizePath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 2) => {
         if (!ctx.debugMode) return;
         const geo = new THREE.BufferGeometry().setFromPoints(points);
         const mat = new THREE.LineBasicMaterial({ color });
         const line = new THREE.Line(geo, mat);
-        line.position.y = 2;
+        line.position.y = yOffset;
         ctx.scene.add(line);
     },
 
@@ -338,9 +321,10 @@ export const SectorBuilder = {
                 const box = new THREE.Box3().setFromObject(object);
                 height = box.max.y - box.min.y;
             }
-            opts.offset = new THREE.Vector3(0, height * 1.3, 0); // 110% height to be clearly above roof
+            // 110% height to be clearly above roof
+            opts.offset = new THREE.Vector3(0, height, 0);
         }
-        EffectManager.attachEffect(object, 'fire', opts);
+        EffectManager.attachEffect(object, 'fire', opts)
         if (ctx.burningObjects) ctx.burningObjects.push(object);
     },
 
@@ -563,11 +547,68 @@ export const SectorBuilder = {
 
     // Area Fillers
     fillArea: async (ctx: SectorContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: 'tree' | 'rock' | 'debris', avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
+        if (ctx.debugMode) {
+            let w = 0, d = 0;
+            if (typeof size === 'number') { w = size / 2; d = size / 2; }
+            else { w = size.width / 2; d = size.height / 2; }
+
+            SectorBuilder.visualizePolygon(ctx, [
+                new THREE.Vector3(center.x - w, 0, center.z - d),
+                new THREE.Vector3(center.x + w, 0, center.z - d),
+                new THREE.Vector3(center.x + w, 0, center.z + d),
+                new THREE.Vector3(center.x - w, 0, center.z + d)
+            ], 0xffff00); // Yellow for generic areas
+        }
         await ObjectGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius, exclusionZones);
     },
 
     fillWheatField: async (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
+        if (ctx.debugMode) {
+            SectorBuilder.visualizePolygon(ctx, polygon, 0xffff00); // Yellow for wheat
+        }
         await ObjectGenerator.fillWheatField(ctx, polygon, density);
+    },
+
+    createInvisibleWall: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
+        if (ctx.debugMode) {
+            SectorBuilder.visualizePath(ctx, polygon, 0xff0000); // Use path instead of polygon
+        }
+        PathGenerator.createInvisibleWall(ctx, polygon, name);
+    },
+
+    /**
+     * Creates mountain rows along both sides of a path, with optional gaps.
+     */
+    createMountainBoundary: (ctx: SectorContext, pointsWest: THREE.Vector3[], pointsEast: THREE.Vector3[], splitPos?: THREE.Vector3, gap: number = 6) => {
+        const buildWall = (pts: THREE.Vector3[]) => {
+            if (ctx.debugMode) {
+                SectorBuilder.visualizePath(ctx, pts, 0xff0000); // Correctly visualize individual segments
+            }
+            for (let i = 0; i < pts.length - 1; i++) {
+                ObjectGenerator.createMountainSlice(ctx, pts[i], pts[i + 1], 15 + Math.random() * 5, { visible: false });
+            }
+        };
+
+        // Handle West wall splitting
+        if (splitPos) {
+            let splitIdx = -1;
+            let minDist = Infinity;
+            pointsWest.forEach((p, i) => {
+                const d = p.distanceTo(splitPos);
+                if (d < minDist) { minDist = d; splitIdx = i; }
+            });
+
+            if (splitIdx !== -1) {
+                buildWall(pointsWest.slice(0, Math.max(0, splitIdx - gap)));
+                buildWall(pointsWest.slice(Math.min(pointsWest.length, splitIdx + gap)));
+            } else {
+                buildWall(pointsWest);
+            }
+        } else {
+            buildWall(pointsWest);
+        }
+
+        buildWall(pointsEast);
     },
 
     createForest: async (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
@@ -639,9 +680,14 @@ export const SectorBuilder = {
             // Tag for GameSession to pick up
             parent.userData.isFire = true;
             if (parent.userData.effects === undefined) parent.userData.effects = [];
+
+            const isLarge = (eff as any).onRoof || (eff.intensity && eff.intensity > 100);
+            const firePart = isLarge ? 'large_fire' : 'campfire_flame';
+            const smokePart = isLarge ? 'large_smoke' : 'campfire_spark';
+
             parent.userData.effects.push(
-                { type: 'emitter', particle: 'campfire_flame', interval: 50, count: 1, offset: new THREE.Vector3(offset.x, offset.y + 0.5, offset.z), spread: 0.3, color: 0xffaa00 },
-                { type: 'emitter', particle: 'campfire_spark', interval: 150, count: 1, offset: new THREE.Vector3(offset.x, offset.y + 1.0, offset.z), spread: 0.4, color: 0xffdd00 }
+                { type: 'emitter', particle: firePart, interval: isLarge ? 40 : 50, count: 1, offset: new THREE.Vector3(offset.x, offset.y + (isLarge ? 1.0 : 0.5), offset.z), spread: isLarge ? 1.5 : 0.3, color: 0xffaa00 },
+                { type: 'emitter', particle: smokePart, interval: isLarge ? 80 : 150, count: 1, offset: new THREE.Vector3(offset.x, offset.y + (isLarge ? 2.0 : 1.0), offset.z), spread: isLarge ? 2.0 : 0.4, color: isLarge ? 0x333333 : 0xffdd00 }
             );
         }
     }

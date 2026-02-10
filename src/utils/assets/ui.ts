@@ -10,7 +10,12 @@ export const createTextSprite = (text: string) => {
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        depthTest: true
+    });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(4, 1, 1);
     return sprite;

@@ -15,7 +15,7 @@ export const EnemyAI = {
         allEnemies: Enemy[],
         shakeIntensity: number,
         callbacks: {
-            onPlayerHit: (damage: number, type: string, enemyPos: THREE.Vector3) => void;
+            onPlayerHit: (damage: number, attacker: any, type: string) => void;
             spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
             onDamageDealt: (amount: number) => void;
@@ -37,7 +37,12 @@ export const EnemyAI = {
                 e.deathState = 'dying_ash';
                 e.deathTimer = 3.0; // Time to crumble
             } else {
-                e.dead = true; // Standard death
+                // NEW: Use falling animation for standard death instead of disappearing
+                e.deathState = 'falling';
+                e.deathTimer = 2.0;
+                e.deathVel = e.velocity.clone().multiplyScalar(0.5);
+                e.deathVel.y = 2.0;
+                e.fallForward = Math.random() > 0.5;
             }
             return;
         }
@@ -147,13 +152,11 @@ export const EnemyAI = {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
 
                     // Random Groan/Scream (Low chance)
-                    /* 
                     if (Math.random() < 0.005) {
                         if (e.type === 'RUNNER') callbacks.playSound('runner_scream');
                         else if (e.type === 'TANK') callbacks.playSound('tank_roar');
                         else callbacks.playSound('walker_groan');
                     }
-                    */
 
                     // --- BOMBER LOGIC ---
                     if (e.type === 'BOMBER' && dist < 3.0) {
@@ -173,10 +176,10 @@ export const EnemyAI = {
                             e.attackCooldown = 3000; // 3s cooldown
 
                             if (e.isBoss && e.bossId !== undefined) {
-                                callbacks.onPlayerHit(e.damage, 'Boss', e.mesh.position);
+                                callbacks.onPlayerHit(e.damage, e, 'Boss');
                                 callbacks.playSound('boss_attack_' + e.bossId);
                             } else {
-                                callbacks.onPlayerHit(20, 'TANK_SMASH', e.mesh.position);
+                                callbacks.onPlayerHit(20, e, 'TANK_SMASH');
                                 callbacks.playSound('tank_smash');
                                 callbacks.playSound('tank_roar');
                             }
@@ -225,7 +228,7 @@ export const EnemyAI = {
 
                 // DoT
                 if (now % 500 < 20) {
-                    callbacks.onPlayerHit(e.damage * 0.2, 'BITING', e.mesh.position);
+                    callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
                     // Use specific bite/attack sound
                     if (e.type === 'RUNNER') callbacks.playSound('runner_attack');
                     else callbacks.playSound('walker_attack');
@@ -258,7 +261,7 @@ export const EnemyAI = {
                     // BOOM
                     const boomDist = e.mesh.position.distanceTo(playerPos);
                     if (boomDist < 5.0) {
-                        callbacks.onPlayerHit(50, 'BOMBER_EXPLOSION', e.mesh.position);
+                        callbacks.onPlayerHit(50, e, 'BOMBER_EXPLOSION');
                     }
                     callbacks.playSound('bomber_explode');
 
@@ -353,12 +356,17 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
     // Burning
     if (e.isBurning) {
         // High frequency burn particles (at least 1 per frame, often 2)
-        const particleCount = 1 + Math.floor(Math.random() * 2);
+        // Bosses get more particles scaled by their size
+        const baseParticles = e.isBoss ? 4 : 1;
+        const particleCount = baseParticles + Math.floor(Math.random() * 2);
+        const effectRadius = e.isBoss ? (e.originalScale * 1.2) : 0.6;
+
         for (let i = 0; i < particleCount; i++) {
-            const px = e.mesh.position.x + (Math.random() - 0.5) * 0.6;
-            const pz = e.mesh.position.z + (Math.random() - 0.5) * 0.6;
-            // Rise up from body center
-            callbacks.spawnPart(px, e.mesh.position.y + 0.5 + Math.random() * 1.0, pz, 'campfire_flame', 1);
+            const px = e.mesh.position.x + (Math.random() - 0.5) * effectRadius;
+            const pz = e.mesh.position.z + (Math.random() - 0.5) * effectRadius;
+            // Rise up from body center, scale height for bosses
+            const pyBase = e.mesh.position.y + (e.isBoss ? 1.0 : 0.5);
+            callbacks.spawnPart(px, pyBase + Math.random() * (e.isBoss ? 2.0 : 1.0), pz, 'campfire_flame', 1);
         }
 
         if (e.burnTimer > 0) {

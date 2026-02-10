@@ -12,9 +12,10 @@ export const ZombieModels = {
 
         const bodyMat = isBoss ? new THREE.MeshStandardMaterial({ color: typeData.color }) : mat;
 
-        const body = new THREE.Mesh(GEOMETRY.human, bodyMat);
+        const body = new THREE.Mesh(GEOMETRY.zombie, bodyMat);
 
-        let scale = isTank ? 1.5 : 1.0;
+        let scale = typeData.scale || 1.0;
+        let widthScale = typeData.widthScale || 1.0;
         if (isBoss && typeData.scale) scale = typeData.scale;
 
         body.position.y = 1.0; // Pivot is centered in LatheGeometry (-1 to 1), so +1 moves feet to ground
@@ -22,7 +23,7 @@ export const ZombieModels = {
 
         body.userData = { isBody: true, baseY: body.position.y };
 
-        group.scale.setScalar(scale);
+        group.scale.set(widthScale * scale, scale, widthScale * scale);
         group.add(body);
         return group;
     },

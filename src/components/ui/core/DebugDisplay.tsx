@@ -23,8 +23,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps, debugInfo }) => {
         return (
             <div
                 onClick={() => setIsMinimized(false)}
-                className="fixed top-20 right-4 bg-black border-2 border-white/20 p-2 cursor-pointer z-[9999] shadow-xl pointer-events-auto hover:border-white transition-colors"
-                title="Click to expand debug info"
+                className="fixed top-1/2 -translate-y-1/2 right-4 bg-green-700 px-2 rounded cursor-pointer z-[9999] shadow-xl pointer-events-auto hover:border-white transition-colors"
             >
                 <div className="font-mono font-bold text-white text-xs">
                     FPS: {Math.round(fps)}
@@ -38,11 +37,10 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps, debugInfo }) => {
         <div
             onClick={() => setIsMinimized(true)}
             className="fixed top-1/2 -translate-y-1/2 right-4 bg-black/80 p-4 rounded text-xs font-mono text-green-400 z-[9999] pointer-events-auto cursor-pointer border border-green-900 shadow-2xl hover:bg-black/90 transition-colors select-none"
-            title="Click to minimize"
         >
             <div className="flex justify-between items-center mb-2 border-b border-green-900/50 pb-1">
                 <span className="font-bold text-white">DEBUG MONITOR</span>
-                <span className="text-white bg-green-900/40 px-2 rounded">FPS: {Math.round(fps)}</span>
+                <span className="text-white bg-green-700 px-2 rounded">FPS: {Math.round(fps)}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">

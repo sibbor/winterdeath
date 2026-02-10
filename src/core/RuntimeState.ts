@@ -79,6 +79,7 @@ export interface RuntimeState {
     speakingUntil: number;
     deathStartTime: number;
     killerType: string;
+    killerName: string;
     playerBloodSpawned: boolean;
     deathVel: THREE.Vector3;
     lastTrailPos: THREE.Vector3 | null;

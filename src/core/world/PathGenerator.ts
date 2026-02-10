@@ -7,13 +7,63 @@ import { ObjectGenerator } from './ObjectGenerator';
 let pathLayer = 0; // Deterministic Y-stacking to prevent Z-fighting
 
 export const PathGenerator = {
-    resetPathLayer: () => { pathLayer = 0; },
+    resetPathLayer() {
+        pathLayer = 0;
+    },
+
+    /**
+     * Calculates points offset from a spline path along the normal.
+     */
+    getOffsetPoints: (points: THREE.Vector3[], offset: number): THREE.Vector3[] => {
+        return points.map((pt, i) => {
+            let tangent = new THREE.Vector3();
+            if (i < points.length - 1) tangent.subVectors(points[i + 1], pt).normalize();
+            else if (i > 0) tangent.subVectors(pt, points[i - 1]).normalize();
+            else tangent.set(0, 0, 1);
+
+            const up = new THREE.Vector3(0, 1, 0);
+            const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
+            return pt.clone().add(normal.multiplyScalar(offset));
+        });
+    },
+
+    /**
+     * Creates an invisible collision wall along a path.
+     */
+    createInvisibleWall: (ctx: SectorContext, points: THREE.Vector3[], name: string = 'InvisibleWall') => {
+        const height = 50;
+        const thickness = 2.0;
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const length = curve.getLength();
+        const steps = Math.ceil(length / 2);
+        const pointsList = curve.getSpacedPoints(steps);
+
+        for (let i = 0; i < pointsList.length - 1; i++) {
+            const curr = pointsList[i];
+            const next = pointsList[i + 1];
+            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+
+            const segment = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, 2.1));
+            mid.y = height / 2;
+            segment.position.copy(mid);
+            segment.lookAt(next.x, mid.y, next.z);
+            segment.visible = false;
+            segment.name = `${name}_${i}`;
+            segment.updateMatrixWorld();
+
+            ctx.scene.add(segment);
+
+            ctx.obstacles.push({
+                mesh: segment,
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.0) }
+            });
+        }
+    },
+
 
     /**
      * Creates a curved railway track along a set of points.
-     */
-    /**
-     * Creates a curved railway track with continuous geometry.
      */
     createRailTrack: (ctx: SectorContext, points: THREE.Vector3[]) => {
         const curve = new THREE.CatmullRomCurve3(points);
@@ -145,21 +195,8 @@ export const PathGenerator = {
         // My `generateRibbon` takes a center line.
         // I need to offset the POINTS first.
 
-        const createOffsetPoints = (offset: number) => {
-            return pointsList.map((pt, i) => {
-                let tangent = new THREE.Vector3();
-                if (i < pointsList.length - 1) tangent.subVectors(pointsList[i + 1], pt).normalize();
-                else if (i > 0) tangent.subVectors(pt, pointsList[i - 1]).normalize();
-                else tangent.set(0, 0, 1);
-
-                const up = new THREE.Vector3(0, 1, 0);
-                const normal = new THREE.Vector3().crossVectors(tangent, up).normalize();
-                return pt.clone().add(normal.multiplyScalar(offset));
-            });
-        };
-
-        const leftRailPoints = createOffsetPoints(-1.0); // 1.435m gauge approx -> +/- 0.7? Game scale: +/- 1.0 looks robust.
-        const rightRailPoints = createOffsetPoints(1.0);
+        const leftRailPoints = PathGenerator.getOffsetPoints(pointsList, -1.0);
+        const rightRailPoints = PathGenerator.getOffsetPoints(pointsList, 1.0);
 
         // Rail Top Surface (Shiny)
         const railMat = MATERIALS.blackMetal || new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
@@ -788,5 +825,69 @@ export const PathGenerator = {
             ctx.scene.add(col);
             ctx.obstacles.push({ mesh: col, collider: { type: 'box', size: new THREE.Vector3(colWidth, height, colLen) } });
         }
+    },
+
+    /**
+     * Creates a concrete arch train tunnel along a path.
+     */
+    createTrainTunnel: (ctx: SectorContext, points: THREE.Vector3[]) => {
+        const tunnelWidthOuter = 16;
+        const tunnelHeightWalls = 7;
+        const tunnelArchRise = 5;
+        const tunnelThickness = 2;
+        const tunnelDepth = 30;
+
+        const start = points[0];
+        const end = points[points.length - 1];
+        const dir = new THREE.Vector3().subVectors(end, start).normalize();
+        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+
+        const halfWidthO = tunnelWidthOuter / 2;
+        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
+        const group = new THREE.Group();
+        group.position.copy(mid);
+        group.lookAt(end);
+        group.rotateY(Math.PI / 2); // Orient arch correctly
+
+        const archShape = new THREE.Shape();
+        archShape.moveTo(-halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
+        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
+        archShape.lineTo(halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, 0);
+
+        const halfWidthI = halfWidthO - tunnelThickness;
+        const wallHeightI = tunnelHeightWalls;
+        const controlPointY_I = controlPointY_O - tunnelThickness;
+
+        const holePath = new THREE.Path();
+        holePath.moveTo(halfWidthI, 0);
+        holePath.lineTo(halfWidthI, wallHeightI);
+        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
+        holePath.lineTo(-halfWidthI, 0);
+        holePath.lineTo(halfWidthI, 0);
+
+        archShape.holes.push(holePath);
+
+        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
+        archGeo.translate(0, 0, -tunnelDepth / 2); // Center along depth
+
+        const tunnelMat = MATERIALS.concrete.clone();
+        tunnelMat.side = THREE.DoubleSide;
+        const arch = new THREE.Mesh(archGeo, tunnelMat);
+        group.add(arch);
+
+        const floorGeo = new THREE.PlaneGeometry(halfWidthI * 2, tunnelDepth);
+        const gravelMat = MATERIALS.gravel.clone();
+        if (gravelMat.map) {
+            gravelMat.map.wrapS = gravelMat.map.wrapT = THREE.RepeatWrapping;
+            gravelMat.map.repeat.set(halfWidthI, tunnelDepth / 2);
+        }
+        const floor = new THREE.Mesh(floorGeo, gravelMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0.02;
+        group.add(floor);
+
+        ctx.scene.add(group);
     }
 };

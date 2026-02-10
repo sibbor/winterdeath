@@ -46,7 +46,7 @@ export class EnemySystem implements System {
                 session.noiseEvents,
                 state.shakeIntensity,
                 // onPlayerHit
-                (damage: number, type: string, enemyPos: THREE.Vector3) => {
+                (damage: number, attacker: any, type: string) => {
 
                     if (now < state.invulnerableUntil) return;
                     state.damageTaken += damage;
@@ -65,6 +65,18 @@ export class EnemySystem implements System {
                         state.deathStartTime = now;
                         state.killerType = type;
 
+                        // NEW: Capture killer name (localized)
+                        if (attacker && attacker.isBoss && attacker.bossId !== undefined) {
+                            // It's a boss, get name from boss constants if possible, or use type
+                            state.killerType = attacker.type;
+                            state.killerName = this.callbacks.t(`bosses.${attacker.bossId}.name`);
+                        } else if (attacker) {
+                            state.killerType = attacker.type;
+                            state.killerName = this.callbacks.t(`enemies.${attacker.type}.name`);
+                        } else {
+                            state.killerName = this.callbacks.t('ui.unknown_threat');
+                        }
+
                         // Calculate deathVel
                         const input = session.engine.input.state;
                         const playerMoveDir = new THREE.Vector3(0, 0, 0);
@@ -74,7 +86,7 @@ export class EnemySystem implements System {
                         if (input.d) playerMoveDir.x += 1;
 
                         if (playerMoveDir.lengthSq() > 0) state.deathVel = playerMoveDir.normalize().multiplyScalar(15);
-                        else state.deathVel = new THREE.Vector3().subVectors(this.playerGroup.position, enemyPos).normalize().multiplyScalar(12);
+                        else state.deathVel = new THREE.Vector3().subVectors(this.playerGroup.position, attacker ? attacker.mesh.position : this.playerGroup.position).normalize().multiplyScalar(12);
                         state.deathVel.y = 4;
                     }
                 },

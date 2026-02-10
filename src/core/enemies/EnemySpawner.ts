@@ -36,8 +36,8 @@ export const EnemySpawner = {
         const roll = Math.random();
 
         if (forcedType) {
-            typeKey = forcedType;
-            typeData = ZOMBIE_TYPES[forcedType as keyof typeof ZOMBIE_TYPES];
+            typeKey = forcedType.toUpperCase();
+            typeData = ZOMBIE_TYPES[typeKey as keyof typeof ZOMBIE_TYPES] || ZOMBIE_TYPES.WALKER;
         } else {
             // Updated Rates: Walker 70%, Runner 15%, Tank 10%, Bomber 5%
             // Random is 0-1.
@@ -50,15 +50,13 @@ export const EnemySpawner = {
             else if (roll > 0.70) { typeData = ZOMBIE_TYPES.RUNNER; typeKey = 'RUNNER'; }
         }
 
-        const isTank = typeKey === 'TANK';
-        const scale = isTank ? 1.5 : 1.0;
+        const scale = typeData.scale || 1.0;
 
         const g = ModelFactory.createZombie(typeKey, typeData, false);
         g.position.set(x, 0, z);
 
         scene.add(g);
-
-        scene.add(g);
+        g.visible = true; // Safety net visibility to verify spawning while debugging InstancedMesh
 
         const enemy: Enemy = {
             mesh: g,
@@ -79,6 +77,7 @@ export const EnemySpawner = {
             blindUntil: 0,
             slowTimer: 0,
             originalScale: scale,
+            widthScale: typeData.widthScale || 1.0,
             deathState: 'alive',
             deathTimer: 0,
             velocity: new THREE.Vector3(0, 0, 0),
@@ -124,6 +123,7 @@ export const EnemySpawner = {
             score: 500,
             attackCooldown: 0,
             isBoss: true,
+            bossId: bossData.id,
             fleeing: false,
             lastKnockback: 0,
             hitTime: 0,
@@ -135,6 +135,7 @@ export const EnemySpawner = {
             blindUntil: 0,
             slowTimer: 0,
             originalScale: bossData.scale,
+            widthScale: 1.0,
             deathState: 'alive',
             deathTimer: 0,
             velocity: new THREE.Vector3(0, 0, 0),

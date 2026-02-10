@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets/materials';
+import { soundManager } from '../../utils/sound';
 
 const MAX_FOOTPRINTS = 50;
-const FADE_DURATION = 5000; // 5 seconds fade
+const FADE_DURATION = 15000; // 15 seconds fade
 const START_OPACITY = 0.8;
 
 interface Footprint {
@@ -113,6 +114,15 @@ class FootprintSystemClass {
 
         footprint.mesh.updateMatrix();
         footprint.mesh.updateMatrixWorld(true);
+
+        // Sound Feedback: Procedural Step
+        const surface = this.getLastSurfaceType();
+        soundManager.playFootstep(surface);
+    }
+
+    private lastSurface: 'snow' | 'metal' | 'wood' = 'snow';
+    private getLastSurfaceType(): 'snow' | 'metal' | 'wood' {
+        return this.lastSurface;
     }
 
     private caster = new THREE.Raycaster();
@@ -135,7 +145,17 @@ class FootprintSystemClass {
 
         if (hits.length > 0) {
             const hit = hits[0];
-            if (hit.object.name.includes('SNOW')) {
+            const name = hit.object.name.toUpperCase();
+
+            if (name.includes('METAL')) {
+                this.lastSurface = 'metal';
+                return hit.point.y;
+            } else if (name.includes('WOOD') || name.includes('PLANK')) {
+                this.lastSurface = 'wood';
+                return hit.point.y;
+            } else {
+                // Default to snow/ground
+                this.lastSurface = 'snow';
                 return hit.point.y;
             }
         }

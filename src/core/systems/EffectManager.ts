@@ -15,9 +15,9 @@ export class EffectManager {
         switch (type) {
             case 'fire':
                 // Standard Fire Effect (Light + Particles)
-                object.userData.isFire = true; // Tag for potential logic interactions
+                object.userData.isFire = true;
                 object.userData.effects.push(
-                    { type: 'light', color: 0xff7722, intensity: 10, distance: 15, offset: opts?.offset || new THREE.Vector3(0, 1, 0), flicker: true },
+                    { type: 'light', color: 0xff7722, intensity: opts?.intensity || 20, distance: opts?.distance || 30, offset: opts?.offset || new THREE.Vector3(0, 1, 0), flicker: true },
                     { type: 'emitter', particle: 'campfire_flame', interval: 50, count: 1, offset: (opts?.offset ? opts.offset.clone().add(new THREE.Vector3(0, 0.5, 0)) : new THREE.Vector3(0, 0.5, 0)), spread: 0.3, color: 0xffaa00 },
                     { type: 'emitter', particle: 'campfire_spark', interval: 150, count: 1, offset: opts?.offset ? opts.offset.clone().add(new THREE.Vector3(0, 0.5, 0)) : new THREE.Vector3(0, 1.0, 0), spread: 0.4, color: 0xffdd00 }
                 );
@@ -33,8 +33,8 @@ export class EffectManager {
                 object.userData.effects.push({
                     type: 'light',
                     color: opts?.color || 0xffffaa,
-                    intensity: opts?.intensity || 5,
-                    distance: opts?.distance || 10,
+                    intensity: opts?.intensity || 20,
+                    distance: opts?.distance || 30,
                     flicker: true,
                     offset: opts?.offset || new THREE.Vector3(0, 2, 0)
                 });
@@ -44,10 +44,10 @@ export class EffectManager {
                 object.userData.effects.push({
                     type: 'emitter',
                     particle: 'black_smoke',
-                    interval: opts?.interval || 150,
+                    interval: opts?.interval || 100,
                     count: 1,
                     offset: opts?.offset || new THREE.Vector3(0, 0, 0),
-                    spread: opts?.spread || 0.5
+                    spread: opts?.spread || 20
                 });
                 break;
         }

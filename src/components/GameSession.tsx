@@ -525,7 +525,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             state.currentXp -= state.nextLevelXp;
             state.level++;
             state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
-            soundManager.playUiConfirm();
+            soundManager.playLevelUp();
         }
     };
 
@@ -716,6 +716,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const scene = engine.scene;
         const camera = engine.camera;
         FootprintSystem.init(scene);
+        EnemyManager.init(scene);
 
         // --- HELPER WRAPPERS (Defined early for TDZ safety) ---
         const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
@@ -789,6 +790,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // Reset Runtime State to Fresh Defaults
         stateRef.current.startTime = performance.now();
         stateRef.current.isDead = false;
+        stateRef.current.bossDefeatedTime = 0;
         stateRef.current.hp = propsRef.current.stats.maxHp;
         stateRef.current.maxHp = propsRef.current.stats.maxHp;
         stateRef.current.stamina = propsRef.current.stats.maxStamina;
@@ -1054,11 +1056,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot;
 
             // Flashlight
-            const fl = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
-            fl.position.set(0, 3.5, 0.5); fl.target.position.set(0, 0, 10); fl.castShadow = true;
-            fl.shadow.camera.near = 1; fl.shadow.camera.far = 40; fl.shadow.bias = -0.0001;
-            playerGroup.add(fl); playerGroup.add(fl.target);
-            flashlightRef.current = fl;
+            const flashlight = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
+            flashlight.name = 'flashlight';
+            flashlight.position.set(0, 3.5, 0.5);
+            flashlight.target.position.set(0, 0, 10);
+            flashlight.castShadow = true;
+            flashlight.shadow.camera.near = 1;
+            flashlight.shadow.camera.far = 40;
+            flashlight.shadow.bias = -0.0001;
+            playerGroup.add(flashlight);
+            playerGroup.add(flashlight.target);
+            flashlightRef.current = flashlight;
 
             scene.add(playerGroup);
             prevPosRef.current = playerGroup.position.clone();
@@ -1228,8 +1236,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             // Call Loaded Callbacks
             if (isMounted.current) setIsSectorLoading(false);
 
-            // Store Map Items in State for Runtime Access (e.g. SectorSystem)
+            // Store Map Items in State for Runtime Access
             stateRef.current.mapItems = mapItems;
+
+            // --- CRITICAL: Initialize Renderers and Enemy Logic ---
+            EnemyManager.init(engine.scene);
 
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
             if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
@@ -1318,6 +1329,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const currentWeather = propsRef.current.weather || 'none';
                 weatherSystemRef.current.sync(currentWeather, engine.getSettings().weatherCount, 200);
                 weatherSystemRef.current.update(dt, now);
+
+                // Audio: Update Ambient Wind based on weather system
+                const windIntensity = weatherSystemRef.current.intensity || 0.1;
+                const windSpeed = windSystemRef.current.speed || 1.0;
+                soundManager.updateWind(windIntensity, windSpeed);
             }
 
             // Wait for Init
@@ -1396,6 +1412,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             // --- RESTORED: Effect Updates (Fire, Smoke on objects) ---
             // Run every 5 frames to save CPU, but ensure fire spawns
             if (frame % 5 === 0) {
+                // Audio: Low Health Heartbeat
+                if (state.health < state.maxHealth * 0.3 && !state.isDead) {
+                    if (now - (state.lastHeartbeat || 0) > 800) {
+                        state.lastHeartbeat = now;
+                        soundManager.playHeartbeat();
+                    }
+                }
+
                 // Use the dedicated tracking list instead of iterating all obstacles
                 for (let i = 0; i < burningObjects.length; i++) {
                     const mesh = burningObjects[i];
@@ -1405,16 +1429,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             const eff = effs[j];
                             if (eff.type === 'emitter') {
                                 // Simple probability based on interval
-                                if (Math.random() < 0.5) {
+                                if (Math.random() < 0.8) {
                                     const p = mesh.position.clone();
                                     if (eff.offset) {
                                         p.add(eff.offset);
                                     }
                                     // Add some randomness to position
-                                    p.x += (Math.random() - 0.5) * (eff.spread || 0.3);
-                                    p.z += (Math.random() - 0.5) * (eff.spread || 0.3);
+                                    p.x += (Math.random() - 0.5) * (eff.spread || 0.4);
+                                    p.z += (Math.random() - 0.5) * (eff.spread || 0.4);
 
-                                    spawnPart(p.x, p.y, p.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
+                                    const count = eff.particle === 'campfire_flame' ? 2 : (eff.count || 1);
+                                    spawnPart(p.x, p.y, p.z, eff.particle, count, undefined, undefined, eff.color);
                                 }
                             }
                         }
@@ -1472,15 +1497,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 });
 
                 lights.sort((a, b) => a.distSq - b.distSq);
-
                 for (let i = 0; i < lights.length; i++) {
                     const l = lights[i];
                     // Keep Flashlight always on (it's very close usually)
-                    // Limit to 12 closest
-                    if (i < 12) {
+                    if (l.light.name === 'flashlight') {
                         l.light.visible = true;
+                        continue;
                     } else {
-                        l.light.visible = false;
+                        if (i < 12) {
+                            l.light.visible = true;
+                        } else {
+                            l.light.visible = false;
+                        }
                     }
                 }
             }
@@ -1805,12 +1833,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
             session.dispose();
+            EnemyManager.cleanup();
         };
     }, [props.currentMap, props.startAtCheckpoint, textures]);
 
     // Helper to get Boss Name or Killer Name
-    // Helper to get Boss Name or Killer Name
     const getKillerName = () => {
+        if (stateRef.current.killerName) return stateRef.current.killerName.toUpperCase();
         if (!stateRef.current.killerType) return "UNKNOWN";
 
         const type = stateRef.current.killerType;

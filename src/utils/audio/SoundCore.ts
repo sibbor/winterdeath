@@ -21,6 +21,9 @@ export class SoundCore {
     this.reverbGain = this.ctx.createGain();
     this.reverbGain.gain.value = 0; // Default dry
 
+    // Connect Master to Reverb path (Global Send)
+    this.masterGain.connect(this.convolver);
+
     // Connect: Source -> Master (Dry) AND Source -> Reverb -> Master (Wet)
     // NOTE: In this simplifed architecture, we'll connect everything to Master, 
     // and ALSO selectively send to reverb if we want global reverb.

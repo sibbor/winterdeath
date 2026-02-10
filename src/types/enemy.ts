@@ -11,6 +11,16 @@ export enum AIState {
     STUNNED = 'STUNNED'
 }
 
+export interface ZombieTypeData {
+    hp: number;
+    speed: number;
+    damage: number;
+    score: number;
+    color: number;
+    scale: number;
+    widthScale?: number;
+}
+
 export interface Enemy {
     mesh: THREE.Group;
     type: string;
@@ -28,6 +38,7 @@ export interface Enemy {
     hitTime: number;
     color: number;
     originalScale: number;
+    widthScale?: number;
 
     // AI State Machine
     state: AIState;

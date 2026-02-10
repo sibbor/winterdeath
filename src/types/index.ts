@@ -120,6 +120,16 @@ export interface SectorStats {
   aborted?: boolean;
 }
 
+export interface GraphicsSettings {
+  pixelRatio: number;
+  antialias: boolean;
+  shadows: boolean;
+  shadowMapType: number;
+  shadowResolution: number;
+  weatherCount: number;
+  textureQuality: number;
+}
+
 export interface GameState {
   screen: GameScreen;
   stats: PlayerStats;
@@ -132,16 +142,11 @@ export interface GameState {
   weaponLevels: Record<WeaponType, number>;
   sectorBriefing: string;
   debugMode: boolean;
-  showFps: boolean; // New
+  showFps: boolean;
   sectorStats?: SectorStats;
-  rescuedFamilyIndices: number[]; // Array of Map IDs where family was found
-  deadBossIndices: number[]; // Array of Map IDs where boss was defeated
-  graphics?: {
-    pixelRatio: number;
-    antialias: boolean;
-    shadows: boolean;
-    shadowMapType: number;
-  };
+  rescuedFamilyIndices: number[];
+  deadBossIndices: number[];
+  graphics?: GraphicsSettings;
   weather: WeatherType;
 }
 

@@ -93,8 +93,8 @@ export const FXSystem = {
                 }
                 mat = MATERIALS['_blackSmoke'];
             }
-            else if (type === 'fire') { geo = new THREE.DodecahedronGeometry(0.4); mat = MATERIALS.fire; }
-            else if (type === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+            else if (type === 'fire') { geo = new THREE.DodecahedronGeometry(0.4); mat = MATERIALS.fire.clone(); }
+            else if (type === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire.clone(); }
             else if (type === 'campfire_spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; }
             else if (type === 'debris') { geo = GEOMETRY.particle; mat = MATERIALS.stone; }
             else if (type === 'debris_trail') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.stone; }
@@ -103,16 +103,18 @@ export const FXSystem = {
             else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
             else if (type === 'spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; }
             else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
+            else if (type === 'large_fire') { geo = new THREE.DodecahedronGeometry(0.8); mat = MATERIALS.fire.clone(); }
+            else if (type === 'large_smoke') { geo = new THREE.DodecahedronGeometry(1.2); mat = MATERIALS.smoke.clone(); }
 
             m = FXSystem.getPooledMesh(scene, geo, mat);
 
             if (type === 'stun_star') m.scale.setScalar(0.2 + Math.random() * 0.1);
-            else if (type !== 'flash' && type !== 'shockwave' && type !== 'fire' && type !== 'limb' && type !== 'campfire_flame') m.scale.setScalar(0.3 + Math.random() * 0.3);
+            else if (type !== 'flash' && type !== 'shockwave' && type !== 'fire' && type !== 'limb' && type !== 'campfire_flame' && type !== 'large_fire' && type !== 'large_smoke') m.scale.setScalar(0.3 + Math.random() * 0.3);
         }
 
         m.position.set(x, y, z);
         if (type === 'shockwave') { m.rotation.x = -Math.PI / 2; m.position.y = 0.5; }
-        if (type === 'fire' || type === 'campfire_flame') { m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI); m.scale.setScalar(Math.random()); }
+        if (type === 'fire' || type === 'campfire_flame' || type === 'large_fire' || type === 'large_smoke') { m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI); m.scale.setScalar(Math.random()); }
         if (type === 'limb') m.scale.set(0.3, 0.6, 0.3);
         if (type === 'stun_star') m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
@@ -135,18 +137,20 @@ export const FXSystem = {
         }
         else if (type === 'glass') { vel.x = (Math.random() - 0.5) * 5; vel.z = (Math.random() - 0.5) * 5; vel.y = Math.random() * 3; life = 60; }
         else if (type === 'debris') { vel.x = (Math.random() - 0.5) * 8; vel.z = (Math.random() - 0.5) * 8; vel.y = 2 + Math.random() * 4; life = 200; }
-        else if (type === 'fire') { vel = new THREE.Vector3(0, 0.03 + Math.random() * 0.04, 0); life = 1.0; }
-        else if (type === 'campfire_flame') { vel = new THREE.Vector3(0, 0.05 + Math.random() * 0.05, 0); life = 1.0; }
+        else if (type === 'fire') { vel = new THREE.Vector3(0, 0.03 + Math.random() * 0.04, 0); life = 30 + Math.random() * 20; }
+        else if (type === 'campfire_flame') { vel = new THREE.Vector3(0, 0.05 + Math.random() * 0.05, 0); life = 25 + Math.random() * 15; }
         else if (type === 'spark') {
             if (!customVel) vel = new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.05 + Math.random() * 0.05, (Math.random() - 0.5) * 0.02);
-            life = 1.0;
+            life = 20 + Math.random() * 10;
         }
-        else if (type === 'campfire_spark') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.1 + Math.random() * 0.1, (Math.random() - 0.5) * 0.05); life = 1.0; }
-        else if (type === 'limb') { life = 300; }
+        else if (type === 'campfire_spark') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.1 + Math.random() * 0.1, (Math.random() - 0.5) * 0.05); life = 20 + Math.random() * 10; }
+        else if (type === 'limb' || type === 'chunk' || type === 'gore') { life = 300; }
         else if (type === 'debris_trail') { vel = new THREE.Vector3(0, 0, 0); life = 10; }
         else if (type === 'stun_star') { vel = new THREE.Vector3(0, 0.05, 0); life = 40; }
+        else if (type === 'large_fire') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.08 + Math.random() * 0.12, (Math.random() - 0.5) * 0.05); life = 45 + Math.random() * 35; }
+        else if (type === 'large_smoke') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.1, 0.06 + Math.random() * 0.08, (Math.random() - 0.5) * 0.1); life = 80 + Math.random() * 60; }
 
-        if (type === 'chunk' || type === 'limb') life = 200;
+        if (type === 'chunk' || type === 'limb' || type === 'gore') life = 300;
         if (type === 'shockwave') life = 10;
         if (type === 'flash') life = 5;
 
@@ -157,7 +161,8 @@ export const FXSystem = {
             maxLife: life,
             type,
             rotVel: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
-            isPooled: !customMesh // Track if we should recycle or remove
+            isPooled: !customMesh, // Track if we should recycle or remove
+            landed: false
         });
     },
 
@@ -224,7 +229,7 @@ export const FXSystem = {
             const decay = delta * 44;
             p.life -= decay;
 
-            if (p.type === 'chunk' || p.type === 'debris' || p.type === 'glass' || p.type === 'limb' || p.type === 'blood') {
+            if (p.type === 'chunk' || p.type === 'debris' || p.type === 'glass' || p.type === 'limb' || p.type === 'blood' || p.type === 'gore') {
                 if (p.vel && p.vel.y !== undefined) {
                     p.vel.y -= 25 * delta;
                     p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
@@ -241,43 +246,42 @@ export const FXSystem = {
 
                 if (p.mesh.position.y <= 0.05) {
                     p.mesh.position.y = 0.05;
+                    p.landed = true;
+
                     if (p.type === 'blood') {
                         if (Math.random() < 0.2) {
                             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.4 + Math.random() * 0.4, MATERIALS.bloodDecal);
                         }
                         if (p.isPooled) FXSystem.recycleMesh(p.mesh);
                         else scene.remove(p.mesh);
-                        p.life = 0;
-                    } else {
-                        p.life = 0;
-                        if (p.type === 'chunk' || p.type === 'limb') {
+                        particlesList.splice(i, 1);
+                        continue;
+                    } else if (p.type === 'chunk' || p.type === 'limb' || p.type === 'gore') {
+                        // Only spawn decal once
+                        if (p.life > 0) {
                             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.5, MATERIALS.bloodDecal);
-                            if (p.type === 'chunk') {
-                                if (p.isPooled) FXSystem.recycleMesh(p.mesh);
-                                else scene.remove(p.mesh);
-                            }
-                            else {
-                                p.mesh.position.y = 0.15;
-                                p.mesh.rotation.set(Math.random(), 0, Math.random());
-                            }
-                        } else if (p.type === 'debris') {
+                            p.life = -0.1; // Mark as "has landed and spawned decal"
+                        }
+                        // Let chunks and limbs stay on ground
+                        p.mesh.position.y = 0.15;
+                        p.mesh.rotation.set(Math.random() * Math.PI, 0, Math.random() * Math.PI);
+                        if (p.vel) p.vel.set(0, 0, 0); // Stop movement
+                    } else {
+                        if (p.type === 'debris') {
                             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.0, MATERIALS.scorchDecal);
-                            if (p.isPooled) FXSystem.recycleMesh(p.mesh);
-                            else scene.remove(p.mesh);
                         }
-                        else if (p.type === 'glass') {
-                            if (p.isPooled) FXSystem.recycleMesh(p.mesh);
-                            else scene.remove(p.mesh);
-                        }
+                        if (p.isPooled) FXSystem.recycleMesh(p.mesh);
+                        else scene.remove(p.mesh);
+                        particlesList.splice(i, 1);
+                        continue;
                     }
-                    particlesList.splice(i, 1);
-                    continue;
                 }
             } else if (p.type === 'campfire_flame') {
                 p.mesh.position.y += p.vel.y;
-                p.mesh.scale.setScalar(Math.max(0, p.life * (1.0 + Math.random() * 0.5)));
-                p.mesh.rotation.y += 0.1;
-                p.mesh.material.opacity = p.life;
+                const lifeRatio = p.life / p.maxLife;
+                p.mesh.scale.setScalar(Math.max(0.01, lifeRatio * (1.0 + Math.random() * 0.2)));
+                p.mesh.rotation.y += 2.0 * delta;
+                (p.mesh.material as THREE.MeshBasicMaterial).opacity = lifeRatio * 0.8;
             } else if (p.type === 'black_smoke') {
                 p.mesh.position.y += delta * 2.0;
                 p.mesh.position.x += (Math.random() - 0.5) * delta * 1.0;
@@ -312,14 +316,14 @@ export const FXSystem = {
                     (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - progress);
                 } else if (p.type === 'debris_trail') {
                     (p.mesh.material as THREE.MeshBasicMaterial).opacity = (p.life / p.maxLife);
-                } else if (p.type !== 'chunk' && p.type !== 'debris' && p.type !== 'glass' && p.type !== 'limb' && p.type !== 'blood' && p.type !== 'stun_star') {
+                } else if (p.type !== 'chunk' && p.type !== 'debris' && p.type !== 'glass' && p.type !== 'limb' && p.type !== 'blood' && p.type !== 'stun_star' && p.type !== 'gore') {
                     p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
                     p.mesh.scale.multiplyScalar(0.95);
                 }
                 if (p.life <= 0) isDead = true;
             }
 
-            if (isDead && p.type !== 'limb') {
+            if (isDead && p.type !== 'limb' && p.type !== 'chunk' && p.type !== 'gore') {
                 if (p.isPooled) FXSystem.recycleMesh(p.mesh);
                 else {
                     if (p.mesh.parent) p.mesh.parent.remove(p.mesh);

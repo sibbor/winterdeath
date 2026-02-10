@@ -65,7 +65,7 @@ export class PlayerInteractionSystem implements System {
         }
 
         // Check Triggers for knock_on_port
-        const knockTrigger = triggers.find(t => t.id === 's2_cave_knock_port' && !t.triggered);
+        const knockTrigger = triggers.find(t => t.id === 's2_cave_knock_shelter_port' && !t.triggered);
         if (knockTrigger) {
             const triggerPos = new THREE.Vector3(knockTrigger.position.x, 0.5, knockTrigger.position.z);
             if (playerPos.distanceTo(triggerPos) < knockTrigger.radius) {
@@ -154,7 +154,7 @@ export class PlayerInteractionSystem implements System {
                 this.onSectorEnded(true);
             }
         } else if (type === 'knock_on_port') {
-            const knockTrigger = state.triggers.find((t: any) => t.id === 's2_cave_knock_port');
+            const knockTrigger = state.triggers.find((t: any) => t.id === 's2_cave_knock_shelter_port');
             if (knockTrigger) {
                 knockTrigger.triggered = true;
                 soundManager.playUiConfirm();

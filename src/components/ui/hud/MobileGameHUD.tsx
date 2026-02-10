@@ -364,8 +364,8 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                     )}
 
                     {/* Camera Rotation Controls (Only Visible in Debug Mode) */}
-                    {debugMode && (
-                        <div className="absolute top-20 right-4 flex gap-2 pointer-events-auto">
+                    {debugMode && !isBossIntro && (
+                        <div className="absolute top-20 right-4 flex translate-y-10 gap-2 pointer-events-auto">
                             <button onClick={() => onRotateCamera && onRotateCamera(1)} className="w-10 h-10 rounded-full bg-zinc-900/60 border border-zinc-500 text-white flex items-center justify-center active:bg-zinc-700 backdrop-blur-sm shadow-lg">
                                 <span className="text-lg font-black">↺</span>
                             </button>
@@ -383,7 +383,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                     <div className="w-4"></div>
 
                     {/* Centered Action Bar (Weapons) -- MOVED TO BOTTOM LEFT FOR MOBILE */}
-                    <div className={`absolute bottom-0 left-4 transform -translate-y-4`}>
+                    <div className={`absolute bottom-0 left-4 transform`}>
                         <div className={`gap-2 flex items-end pb-2 pointer-events-auto`}>
                             {/* Clickable for mobile weapon switching */}
                             {renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}
@@ -394,7 +394,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                     </div>
 
                     {/* Right Weapon Details */}
-                    <div className={`flex flex-col items-end gap-2 mb-2 justify-end -translate-y-4 right-4 absolute bottom-0`}>
+                    <div className={`flex flex-col items-end gap-2 mb-2 justify-end right-4 absolute bottom-0`}>
                         {wep && (
                             <>
                                 {/* Weapon Name & Level (or Signal Strength for Radio) */}

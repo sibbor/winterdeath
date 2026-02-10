@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { PlayerStats } from '../types';
+import { PlayerStats, GraphicsSettings } from '../types';
 
 // Re-export Data
 export { ZOMBIE_TYPES } from './enemies/zombies';
@@ -26,22 +26,15 @@ export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMap
     VERYHIGH: { shadows: true, shadowMapType: 3, shadowResolution: 4096, weatherCount: 1600 }  // VSMShadowMap
 };
 
-export interface GraphicsSettings {
-    pixelRatio: number;
-    antialias: boolean;
-    shadows: boolean;
-    shadowMapType: THREE.ShadowMapType;
-    shadowResolution: number;
-    weatherCount: number;
-}
 
 export const DEFAULT_GRAPHICS: GraphicsSettings = {
     pixelRatio: 0.75,
     antialias: false,
     shadows: false,
-    shadowMapType: 0, // SHADOW_PRESETS.OFF
-    shadowResolution: 1024,
-    weatherCount: 400
+    shadowMapType: 1,
+    shadowResolution: 512,
+    weatherCount: 400,
+    textureQuality: 1.0
 };
 
 export const INITIAL_STATS: PlayerStats = {

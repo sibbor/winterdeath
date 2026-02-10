@@ -11,9 +11,9 @@ export const MATERIALS = {
     molotov: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     blood: new THREE.MeshBasicMaterial({ color: 0xaa0000 }),
     gore: new THREE.MeshStandardMaterial({ color: 0x660000, roughness: 0.2 }),
-    fire: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 }),
-    fireZone: new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
-    smoke: new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.6 }),
+    fire: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),
+    fireZone: new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }),
+    smoke: new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.6, depthWrite: false }),
     walker: new THREE.MeshStandardMaterial({ color: 0x5a6e5a, roughness: 0.5 }),
     runner: new THREE.MeshStandardMaterial({ color: 0x8f3a3a, roughness: 0.5 }),
     tank: new THREE.MeshStandardMaterial({ color: 0x2d3436, roughness: 0.5 }),
@@ -54,14 +54,14 @@ export const MATERIALS = {
         side: THREE.DoubleSide
     }), // Snowy foliage
     family: new THREE.MeshStandardMaterial({ color: 0x00aaff, roughness: 0.5 }),
-    familyRing: new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
-    familyArrow: new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8 }),
-    trackerArrow: new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
+    familyRing: new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
+    familyArrow: new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, depthWrite: false }),
+    trackerArrow: new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
     skin: new THREE.MeshStandardMaterial({ color: 0xffccaa }),
     gun: new THREE.MeshStandardMaterial({ color: 0x222222 }),
     chestStandard: new THREE.MeshStandardMaterial({ color: 0x5c4033 }),
     chestBig: new THREE.MeshStandardMaterial({ color: 0xffd700 }),
-    blastRadius: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
+    blastRadius: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }),
     bloodDecal: new THREE.MeshBasicMaterial({
         color: 0x660000,
         transparent: true,
@@ -135,12 +135,15 @@ export const MATERIALS = {
     vehicleBody: new THREE.MeshStandardMaterial({
         color: 0x888888,
         roughness: 0.8,
-        metalness: 0.1,
-        bumpMap: TEXTURES.concrete_bump,
-        bumpScale: 0.02
+        metalness: 0.1
     }),
     steel: new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.4, metalness: 0.8 }),
     redWood: new THREE.MeshStandardMaterial({ color: 0x8a2be2, roughness: 0.9 }),
+    brick: new THREE.MeshStandardMaterial({
+        roughness: 0.95,
+        bumpMap: TEXTURES.brick_bump,
+        bumpScale: 0.06
+    }),
     yellowBrick: new THREE.MeshStandardMaterial({
         color: 0xd4c685,
         roughness: 0.95,
@@ -215,8 +218,8 @@ export const MATERIALS = {
     landingMarker: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
     ash: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 }),
     flashWhite: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }),
-    glassShard: new THREE.MeshBasicMaterial({ color: 0xccffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
-    shockwave: new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    glassShard: new THREE.MeshBasicMaterial({ color: 0xccffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
+    shockwave: new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }),
     hay: new THREE.MeshStandardMaterial({ color: 0xedc05d, roughness: 1.0, bumpMap: DIFFUSE.gravel, bumpScale: 0.2 }),
     wheat: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 1.0, flatShading: true, side: THREE.DoubleSide }),
     logEnd: new THREE.MeshStandardMaterial({ color: 0xbc8f8f, roughness: 0.8, bumpMap: DIFFUSE.stone, bumpScale: 0.1 }),

@@ -55,6 +55,7 @@ export const WeaponHandler = {
             state.isReloading = false;
             state.reloadEndTime = 0;
             state.throwChargeStart = 0;
+            soundManager.playWeaponSwap();
         }
     },
 
@@ -89,7 +90,7 @@ export const WeaponHandler = {
                     state.isReloading = false;
                     state.reloadEndTime = 0;
                     state.throwChargeStart = 0;
-                    soundManager.playUiHover();
+                    soundManager.playWeaponSwap();
                 }
                 input.scrollDown = false;
                 input.scrollUp = false;
@@ -107,14 +108,14 @@ export const WeaponHandler = {
         if (input.r && !state.isReloading && !isThrowable && !isRadio && state.weaponAmmo[state.activeWeapon] < wep.magSize) {
             state.isReloading = true;
             state.reloadEndTime = now + wep.reloadTime;
-            soundManager.playUiClick();
+            soundManager.playMagOut();
         }
 
         // 4. Reload Completion
         if (state.isReloading && now > state.reloadEndTime) {
             state.isReloading = false;
             state.weaponAmmo[state.activeWeapon] = wep.magSize;
-            soundManager.playUiConfirm();
+            soundManager.playMagIn();
         }
     },
 
@@ -163,6 +164,7 @@ export const WeaponHandler = {
         now: number,
         loadout: any,
         aimCrossMesh: THREE.Group | null,
+        trajectoryLineMesh?: THREE.Line | null,
         debugMode: boolean = false
     ) => {
         if (state.isRolling || state.isReloading) return;
@@ -181,6 +183,7 @@ export const WeaponHandler = {
         if (isRadio) {
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
+            if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             return;
         }
 
@@ -188,6 +191,7 @@ export const WeaponHandler = {
         if (!isThrowable) {
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
+            if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
                 const currentAmmo = state.weaponAmmo[state.activeWeapon];
@@ -226,10 +230,17 @@ export const WeaponHandler = {
                         ProjectileSystem.spawnBullet(scene, state.projectiles, origin, dir, wep.name, wep.baseDamage);
                     }
 
-                } else if (state.weaponAmmo[state.activeWeapon] <= 0 && !state.isReloading) {
-                    // Auto Reload (only if actually empty)
+                } else if (input.fire && !state.isReloading && state.weaponAmmo[state.activeWeapon] <= 0) {
+                    // Empty Click feedback
+                    if (now > state.lastShotTime + 250) {
+                        state.lastShotTime = now;
+                        soundManager.playEmptyClick();
+                    }
+
+                    // Auto Reload (only if actually empty and just tried to fire)
                     state.isReloading = true;
-                    state.reloadEndTime = now + wep.reloadTime + 1000;
+                    state.reloadEndTime = now + wep.reloadTime;
+                    soundManager.playMagOut();
                 }
             }
             return;
@@ -242,14 +253,40 @@ export const WeaponHandler = {
                     // Charging
                     if (state.throwChargeStart === 0) state.throwChargeStart = now;
 
+                    const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
+                    const aimDir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                    const origin = playerGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+                    const maxDist = 25;
+                    const throwDist = Math.max(2, ratio * maxDist);
+
                     // Update Aim Cross
                     if (aimCrossMesh) {
-                        const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
                         aimCrossMesh.visible = true;
-                        const aimDir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                        const targetPos = playerGroup.position.clone().add(aimDir.multiplyScalar(ratio * 25));
+                        const targetPos = playerGroup.position.clone().add(aimDir.clone().multiplyScalar(throwDist));
                         aimCrossMesh.position.set(targetPos.x, 0.2, targetPos.z);
                         aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
+                    }
+
+                    // Update Trajectory Line
+                    if (trajectoryLineMesh) {
+                        trajectoryLineMesh.visible = true;
+                        const points: THREE.Vector3[] = [];
+                        const gravity = 30;
+                        const timeToTarget = 1.0; // Assume 1s fuse/time for arc viz
+                        const vx = (aimDir.x * throwDist) / timeToTarget;
+                        const vz = (aimDir.z * throwDist) / timeToTarget;
+                        const vy = (0 - origin.y + 0.5 * gravity * timeToTarget * timeToTarget) / timeToTarget;
+
+                        const segments = 20;
+                        for (let i = 0; i <= segments; i++) {
+                            const t = (i / segments) * timeToTarget;
+                            const px = origin.x + vx * t;
+                            const pz = origin.z + vz * t;
+                            const py = Math.max(0.1, origin.y + vy * t - 0.5 * gravity * t * t);
+                            points.push(new THREE.Vector3(px, py, pz));
+                        }
+                        trajectoryLineMesh.geometry.setFromPoints(points);
+                        (trajectoryLineMesh.material as THREE.LineBasicMaterial).opacity = 0.4 + ratio * 0.6;
                     }
                 }
             } else {
@@ -271,10 +308,12 @@ export const WeaponHandler = {
 
                     state.throwChargeStart = 0;
                     if (aimCrossMesh) aimCrossMesh.visible = false;
+                    if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
                 } else {
                     // Cancel/Reset
                     state.throwChargeStart = 0;
                     if (aimCrossMesh) aimCrossMesh.visible = false;
+                    if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
                 }
             }
         }

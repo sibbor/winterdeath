@@ -1,6 +1,26 @@
 
 import * as THREE from 'three';
 
+const createZombieBodyGeo = () => {
+    const points = [];
+    const r = 0.5;
+    const totalH = 2.0;
+    const base = -totalH / 2; // -1.0
+    const cylHeight = totalH - r; // 1.5 (Cylinder part)
+    const domeStart = base + cylHeight; // 0.5
+
+    points.push(new THREE.Vector2(0, base));
+    points.push(new THREE.Vector2(r, base));
+    points.push(new THREE.Vector2(r, domeStart));
+    for (let i = 0; i <= 8; i++) {
+        const a = (i / 8) * (Math.PI / 2);
+        const x = r * Math.cos(a);
+        const y = domeStart + r * Math.sin(a);
+        points.push(new THREE.Vector2(x, y));
+    }
+    return new THREE.LatheGeometry(points, 16);
+};
+
 const createHumanBodyGeo = () => {
     const points = [];
     const r = 0.5;
@@ -73,6 +93,7 @@ export const GEOMETRY = {
     treeLeaves: new THREE.ConeGeometry(3, 18, 7),
     foliageCluster: new THREE.DodecahedronGeometry(1.0, 0),
     human: createHumanBodyGeo(),
+    zombie: createZombieBodyGeo(),
     petBody: createPetBodyGeo(),
     petTail: createPetTailGeo(),
     familyRing: new THREE.RingGeometry(1.5, 1.8, 32),
