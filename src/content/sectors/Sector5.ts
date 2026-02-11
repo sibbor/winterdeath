@@ -30,11 +30,7 @@ export const Sector5: SectorDef = {
         rotationSpeed: 0.05
     },
 
-    generate: async (ctx: SectorContext) => {
-        await SectorBuilder.generateAutomaticContent(ctx, Sector5);
-
-        const { scene, triggers } = ctx;
-
+    setupProps: async (ctx: SectorContext) => {
         // Reward Chest at boss spawn
         SectorBuilder.spawnChest(ctx, 0, 15, 'big');
 
@@ -43,12 +39,15 @@ export const Sector5: SectorDef = {
             const x = (Math.random() - 0.5) * 100;
             const z = (Math.random() - 0.5) * 100;
             //ObjectGenerator.createFire(ctx, x, z);
-            if (i % 5 === 0 && ctx.yield) await ctx.yield();
         }
 
         // Remove the Sector 1 trigger for start tracks if present, to avoid confusion
         const trackTrig = ctx.triggers.find(t => t.id === 's1_start_tracks');
         if (trackTrig) trackTrig.triggered = true;
+    },
+
+    setupContent: async (ctx: SectorContext) => {
+        const { triggers } = ctx;
 
         // --- FIND PETS EVENT ---
         triggers.push({

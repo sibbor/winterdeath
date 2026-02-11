@@ -140,10 +140,10 @@ export const Sector2: SectorDef = {
     environment: {
         bgColor: 0x050510,
         fogDensity: 0.02,
-        ambientIntensity: 0.15,
+        ambientIntensity: 0.3, // Increased for better visibility
         groundColor: 0x111111,
         fov: 50,
-        moon: { visible: true, color: 0x8899aa, intensity: 0.7, position: { x: -40, y: 30, z: -20 } },
+        moon: { visible: true, color: 0x8899aa, intensity: 1.0, position: { x: -40, y: 30, z: -20 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'snow'
@@ -167,56 +167,12 @@ export const Sector2: SectorDef = {
         zoom: 0.1
     },
 
-    generate: async (ctx: SectorContext) => {
-        const { scene, obstacles, triggers } = ctx;
+    setupProps: async (ctx: SectorContext) => {
+        const { scene } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
+        // Reward Chest at boss spawn
         SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
-
-        triggers.push(
-            {
-                id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHTS', content: "clues.s2_start", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'SPEECH', content: "clues.s2_campfire", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEECH', content: "clues.s2_combat", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'SPEECH', content: "clues.s2_train_tunnel", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEECH', content: "clues.s2_cave_lights", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_cave_watch_out', position: { x: LOCATIONS.POIS.CAVE_ENTRANCE.x, z: -80 }, radius: 10, type: 'SPEECH', content: "clues.s2_cave_watch_out", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot_more", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's2_cave_knock_shelter_port', position: { x: 35, z: -193 }, radius: 10, type: 'EVENT', content: '', triggered: false,
-                actions: []
-            },
-            {
-                id: 's2_cave_shelter_port_room', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'SPEECH', content: "clues.s2_cave_shelter_port_room", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-        );
-
-        if (ctx.yield) await ctx.yield();
 
         // --- RAILWAY ---
         const railRoadPath = [
@@ -229,30 +185,19 @@ export const Sector2: SectorDef = {
         ];
         const railTrackCurve = PathGenerator.createRailTrack(ctx, railRoadPath);
 
+        // Electric Poles along Railway
+        const polyline = railTrackCurve.getSpacedPoints(15);
+        polyline.forEach((p, i) => {
+            if (i % 3 === 0) {
+                SectorBuilder.spawnElectricPole(ctx, p.x + 8, p.z, 0);
+            }
+        });
 
         // --- FOREST ---
         const forestOffset = 8;
         const forestDepth = 70;
         const forestSamples = 80;
         const fPoints = railTrackCurve.getSpacedPoints(forestSamples);
-
-        const leftInner: THREE.Vector3[] = [];
-        const leftOuter: THREE.Vector3[] = [];
-        const rightInner: THREE.Vector3[] = [];
-        const rightOuter: THREE.Vector3[] = [];
-
-        fPoints.forEach((pt, i) => {
-            let tangent;
-            if (i < fPoints.length - 1) tangent = new THREE.Vector3().subVectors(fPoints[i + 1], pt).normalize();
-            else if (i > 0) tangent = new THREE.Vector3().subVectors(pt, fPoints[i - 1]).normalize();
-            else tangent = new THREE.Vector3(0, 0, -1);
-
-            const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
-            leftInner.push(pt.clone().add(normal.clone().multiplyScalar(-forestOffset)));
-            leftOuter.push(pt.clone().add(normal.clone().multiplyScalar(-(forestOffset + forestDepth))));
-            rightInner.push(pt.clone().add(normal.clone().multiplyScalar(forestOffset)));
-            rightOuter.push(pt.clone().add(normal.clone().multiplyScalar(forestOffset + forestDepth)));
-        });
 
         const filterPointsBeforeCave = (points: THREE.Vector3[]) => {
             return points.filter(p => !(p.x > 86 && p.z < -62) && p.z > -55);
@@ -272,7 +217,6 @@ export const Sector2: SectorDef = {
 
         SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
         SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
-
 
         // --- BOUNDARIES ---
         createBoundries(ctx, railTrackCurve);
@@ -302,17 +246,8 @@ export const Sector2: SectorDef = {
         ctx.obstacles.push({ mesh: trainTunnel });
         scene.add(trainTunnel);
 
-
-        // CAVE SYSTEM --
-        const innerCave = new THREE.Group();
-        innerCave.name = "Sector2_InnerCave";
-        scene.add(innerCave);
-        await generateCaveSystem(ctx, innerCave);
-
-
         // --- PROPS ---
-        addProps(ctx);
-
+        await addProps(ctx);
 
         // --- PATHS ---
         PathGenerator.createDecalPath(ctx, [
@@ -326,9 +261,29 @@ export const Sector2: SectorDef = {
         PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(157, 0, -58), new THREE.Vector3(150, 0, -63), new THREE.Vector3(147, 0, -71), new THREE.Vector3(135, 0, -75), new THREE.Vector3(122, 0, -78), new THREE.Vector3(110, 0, -76), new THREE.Vector3(100, 0, -80)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
+    },
 
-        // --- ENEMIES ---
-        spawnSectorHordes(ctx);
+    setupContent: async (ctx: SectorContext) => {
+        const { scene, triggers } = ctx;
+
+        triggers.push(
+            { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHTS', content: "clues.s2_start", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'SPEECH', content: "clues.s2_campfire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEECH', content: "clues.s2_combat", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'SPEECH', content: "clues.s2_train_tunnel", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEECH', content: "clues.s2_cave_lights", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_cave_watch_out', position: { x: LOCATIONS.POIS.CAVE_ENTRANCE.x, z: -80 }, radius: 10, type: 'SPEECH', content: "clues.s2_cave_watch_out", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot_more", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's2_cave_knock_shelter_port', position: { x: 35, z: -193 }, radius: 10, type: 'EVENT', content: '', triggered: false, actions: [] },
+            { id: 's2_cave_shelter_port_room', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'SPEECH', content: "clues.s2_cave_shelter_port_room", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+        );
+
+        // CAVE SYSTEM
+        const innerCave = new THREE.Group();
+        innerCave.name = "Sector2_InnerCave";
+        scene.add(innerCave);
+        await generateCaveSystem(ctx, innerCave);
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {

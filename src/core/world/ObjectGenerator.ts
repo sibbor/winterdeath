@@ -1,9 +1,10 @@
 
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createProceduralTextures, MATERIALS, GEOMETRY, ModelFactory, createSignMesh } from '../../utils/assets';
+import { createProceduralTextures, MATERIALS, GEOMETRY, ModelFactory, createSignMesh, createTextSprite } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
+import { EffectManager } from '../systems/EffectManager';
 
 // Lazy load textures
 let sharedTextures: any = null;
@@ -689,7 +690,8 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true) => {
+    createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) => {
+        const group = new THREE.Group();
         const material = MATERIALS.brick.clone();
         material.color.setHex(color);
 
@@ -741,9 +743,33 @@ export const ObjectGenerator = {
         const building = new THREE.Mesh(mergedGeometry || nonIndexedBody, material);
         building.castShadow = true;
         building.receiveShadow = true;
+        group.add(building);
+
+        // 5. Windows / Lights
+        if (withLights) {
+            const litWinMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 1 });
+            const darkWinMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 });
+            const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
+
+            // Front windows
+            for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
+                for (let y = 2; y < height - 1; y += 4) {
+                    const isLit = Math.random() < lightProbability;
+                    const win = new THREE.Mesh(winGeo, isLit ? litWinMat : darkWinMat);
+                    win.position.set(x, y, depth / 2 + 0.05);
+                    group.add(win);
+
+                    if (isLit) {
+                        const pLight = new THREE.PointLight(0xffffaa, 4, 15);
+                        pLight.position.set(x, y, depth / 2 + 0.5);
+                        group.add(pLight);
+                    }
+                }
+            }
+        }
 
         // Expose dimensions if needed by caller (e.g. for collision)
-        building.userData = {
+        group.userData = {
             size: new THREE.Vector3(width, height + actualRoofHeight, depth),
             material: 'CONCRETE'
         };
@@ -751,7 +777,7 @@ export const ObjectGenerator = {
         bodyGeo.dispose();
         nonIndexedBody.dispose();
 
-        return building;
+        return group;
     },
 
     createBox: (scale: number = 1.0) => {
@@ -1508,6 +1534,218 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = 'METAL';
+        return group;
+    },
+
+    createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true) => {
+        const group = new THREE.Group();
+        if (withBacking) {
+            const base = new THREE.Mesh(new THREE.BoxGeometry(text.length * 0.4 + 1, 0.8, 0.2), MATERIALS.blackMetal);
+            group.add(base);
+        }
+
+        const label = createTextSprite(text);
+        label.position.z = withBacking ? 0.12 : 0;
+        label.scale.set(text.length * 0.6, 0.8, 1);
+        group.add(label);
+
+        // Actual lighting effect
+        EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
+
+        group.userData.material = 'METAL';
+        return group;
+    },
+
+    createCaveLamp: () => {
+        const group = new THREE.Group();
+        const fixture = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2), MATERIALS.blackMetal);
+        group.add(fixture);
+
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 2 }));
+        bulb.position.y = -0.15;
+        group.add(bulb);
+
+        const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.5, 6, 1, true), new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true }));
+        cage.position.y = -0.2;
+        group.add(cage);
+
+        // Actual light
+        const light = new THREE.PointLight(0xffffcc, 10, 25);
+        light.position.y = -0.2;
+        group.add(light);
+
+        group.userData.material = 'METAL';
+        return group;
+    },
+
+    createElectricPole: (withWires: boolean = false) => {
+        const group = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 10), MATERIALS.treeTrunk);
+        pole.position.y = 5;
+        group.add(pole);
+
+        const crossArm = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 0.2), MATERIALS.treeTrunk);
+        crossArm.position.y = 9;
+        group.add(crossArm);
+
+        // Insulators
+        const insGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3);
+        const insMat = MATERIALS.stone;
+        [-1.2, 0, 1.2].forEach(x => {
+            const ins = new THREE.Mesh(insGeo, insMat);
+            ins.position.set(x, 9.2, 0);
+            group.add(ins);
+        });
+
+        group.userData.material = 'WOOD';
+        return group;
+    },
+
+    createCrashedCar: (color: number = 0x888888) => {
+        const group = ObjectGenerator.createVehicle('sedan', 1.0, color, false);
+        group.rotation.x = Math.PI / 12; // Tilted
+        group.rotation.z = Math.PI / 8;
+
+        // Headlights (Spotlights)
+        const leftLight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 6, 0.5);
+        leftLight.position.set(-0.8, 0.5, 1.5);
+        leftLight.target.position.set(-0.8, -1, 10);
+        group.add(leftLight);
+        group.add(leftLight.target);
+
+        const rightLight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 6, 0.5);
+        rightLight.position.set(0.8, 0.5, 1.5);
+        rightLight.target.position.set(0.8, -1, 10);
+        group.add(rightLight);
+        group.add(rightLight.target);
+
+        // Debris / Scorch
+        const scorch = new THREE.Mesh(new THREE.CircleGeometry(2, 16), MATERIALS.scorchDecal);
+        scorch.rotation.x = -Math.PI / 2;
+        scorch.position.y = -0.4;
+        return group;
+    },
+
+    createGlassStaircase: (width: number, height: number, depth: number) => {
+        const group = new THREE.Group();
+
+        const boxMat = MATERIALS.glass;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), boxMat);
+        box.position.y = height / 2;
+        group.add(box);
+
+        const stepMat = MATERIALS.concrete;
+        const numSteps = 12;
+        const stepHeight = height / numSteps;
+        const stepDepth = depth / numSteps;
+        for (let i = 0; i < numSteps; i++) {
+            const step = new THREE.Mesh(new THREE.BoxGeometry(width - 0.2, 0.1, stepDepth), stepMat);
+            step.position.set(0, i * stepHeight + 0.1, -depth / 2 + i * stepDepth + stepDepth / 2);
+            group.add(step);
+        }
+
+        EffectManager.attachEffect(group, 'flicker_light', { color: 0x88ccff, intensity: 10, distance: 15 });
+
+        return group;
+    },
+
+    createStorefrontBuilding: (width: number, height: number, depth: number, opts: {
+        lowerMat?: THREE.Material,
+        upperMat?: THREE.Material,
+        withRoof?: boolean,
+        withLights?: boolean,
+        shopWindows?: boolean,
+        upperWindows?: boolean
+    } = {}) => {
+        const group = new THREE.Group();
+        const { lowerMat, upperMat, withRoof = true, withLights = true, shopWindows = true, upperWindows = true } = opts;
+
+        const midPoint = height * 0.4;
+
+        const lowerGeo = new THREE.BoxGeometry(width, midPoint, depth);
+        lowerGeo.translate(0, midPoint / 2, 0);
+        const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat || MATERIALS.whiteBrick);
+        lowerMesh.castShadow = true;
+        lowerMesh.receiveShadow = true;
+        group.add(lowerMesh);
+
+        const upperHeight = height - midPoint;
+        const upperGeo = new THREE.BoxGeometry(width, upperHeight, depth);
+        upperGeo.translate(0, midPoint + upperHeight / 2, 0);
+        const upperMesh = new THREE.Mesh(upperGeo, upperMat || MATERIALS.wooden_fasade);
+        upperMesh.castShadow = true;
+        upperMesh.receiveShadow = true;
+        group.add(upperMesh);
+
+        if (withRoof) {
+            const roofHeight = 3;
+            const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.7, roofHeight, 4);
+            roofGeo.rotateY(Math.PI / 4);
+            roofGeo.translate(0, height + roofHeight / 2, 0);
+            const roof = new THREE.Mesh(roofGeo, MATERIALS.stone);
+            roof.castShadow = true;
+            group.add(roof);
+        }
+
+        if (shopWindows) {
+            const winMat = MATERIALS.glass;
+            const winHeight = midPoint * 0.7;
+            const winGeo = new THREE.PlaneGeometry(3.5, winHeight);
+
+            for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) {
+                const win = new THREE.Mesh(winGeo, winMat);
+                win.position.set(x, midPoint / 2, depth / 2 + 0.05);
+                group.add(win);
+
+                if (withLights) {
+                    const light = new THREE.PointLight(0xffffaa, 4, 10);
+                    light.position.set(x, midPoint / 2, depth / 2 - 1);
+                    group.add(light);
+                }
+            }
+        }
+
+        if (upperWindows) {
+            const upWinMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 });
+            const upWinGeo = new THREE.PlaneGeometry(1.2, 1.5);
+            for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) {
+                const win = new THREE.Mesh(upWinGeo, upWinMat);
+                win.position.set(x, midPoint + (height - midPoint) / 2, depth / 2 + 0.05);
+                group.add(win);
+            }
+        }
+
+        group.userData = {
+            size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth),
+            material: 'CONCRETE'
+        };
+
+        return group;
+    },
+
+    createNeonHeart: (color: number = 0xff0000) => {
+        const group = new THREE.Group();
+        const x = 0, y = 0;
+        const heartShape = new THREE.Shape();
+        heartShape.moveTo(x + 5, y + 5);
+        heartShape.bezierCurveTo(x + 5, y + 5, x + 4, y, x, y);
+        heartShape.bezierCurveTo(x - 6, y, x - 6, y + 7, x - 6, y + 7);
+        heartShape.bezierCurveTo(x - 6, y + 11, x - 3, y + 15.4, x + 5, y + 19);
+        heartShape.bezierCurveTo(x + 12, y + 15.4, x + 16, y + 11, x + 16, y + 7);
+        heartShape.bezierCurveTo(x + 16, y + 7, x + 16, y, x + 10, y);
+        heartShape.bezierCurveTo(x + 7, y, x + 5, y + 5, x + 5, y + 5);
+
+        const geo = new THREE.ShapeGeometry(heartShape);
+        geo.scale(0.04, -0.04, 0.04);
+        geo.translate(-0.2, 0.4, 0);
+        const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat);
+        group.add(mesh);
+
+        const light = new THREE.PointLight(color, 15, 12);
+        light.position.set(0, 0, 0.5);
+        group.add(light);
+
         return group;
     },
 

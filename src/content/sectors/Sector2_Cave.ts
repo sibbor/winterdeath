@@ -147,28 +147,8 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     };
 
     // Lights
-    const createStringLight = (pos: THREE.Vector3, color = 0xffaa55, intensity = 2.0) => {
-        const group = new THREE.Group();
-        group.position.copy(pos);
-
-        // Wire
-        const wireGeo = new THREE.CylinderGeometry(0.02, 0.02, 2);
-        const wire = new THREE.Mesh(wireGeo, new THREE.MeshBasicMaterial({ color: 0x111111 }));
-        wire.position.y = 1;
-        group.add(wire);
-
-        // Bulb
-        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-        group.add(bulb);
-
-        // Light
-        const pointLight = new THREE.PointLight(color, intensity, 50);
-        pointLight.castShadow = true;
-        pointLight.shadow.bias = -0.001;
-        pointLight.position.y = 0.2;
-        group.add(pointLight);
-
-        innerCave.add(group);
+    const createRoomLight = (pos: THREE.Vector3) => {
+        SectorBuilder.spawnCaveLamp(ctx, pos.x, 4.5, pos.z);
     };
 
     const decorateRoom = (room: any) => {
@@ -349,7 +329,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     // Room Specifics (Lights, Spawns, Decor)
     for (const r of rooms) {
         // Lights
-        createStringLight(new THREE.Vector3(r.x, 4.5, r.z), 0xffaa88, 50);
+        createRoomLight(new THREE.Vector3(r.x, 4.5, r.z));
 
         if (r.type === 'ShelterRoom') {
             const light = new THREE.PointLight(0xff0000, 100, 50);

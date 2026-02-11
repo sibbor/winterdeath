@@ -77,10 +77,10 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                     const displayUpgrade = skill.id === 'speed' ? upgradeVal.toFixed(2) : upgradeVal;
 
                     return (
-                        <div key={skill.id} className="bg-gray-900/40 border-2 border-purple-900/50 p-8 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group">
-                            <h3 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">{t(skill.labelKey)}</h3>
+                        <div key={skill.id} className={`${isMobileDevice ? 'p-4' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
+                            <h3 className={`${isMobileDevice ? 'text-xl mb-2' : 'text-3xl mb-4'} font-black text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
                             {/* Reduced mb-6 to mb-2 */}
-                            <p className="text-gray-400 text-lg leading-snug mb-2 h-16">{t(skill.descKey)}</p>
+                            <p className={`${isMobileDevice ? 'text-xs h-12' : 'text-lg h-16'} text-gray-400 leading-snug mb-2`}>{t(skill.descKey)}</p>
 
                             <div className="flex items-baseline justify-center gap-2 mb-8">
                                 <span className="text-5xl font-mono text-white font-bold">{displayBase}</span>

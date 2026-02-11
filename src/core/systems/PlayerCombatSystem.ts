@@ -95,10 +95,10 @@ export class PlayerCombatSystem implements System {
         }
 
         // Laser sight automatically follows player rotation (attached to playerGroup)
-        // Just hide it when dead or input disabled
+        // Just hide it when dead
         const laserSight = this.playerGroup.children.find(c => c.userData.isLaserSight) as THREE.Mesh;
         if (laserSight) {
-            laserSight.visible = !disableInput && !state.isDead;
+            laserSight.visible = !state.isDead;
         }
 
         // --- Firing ---

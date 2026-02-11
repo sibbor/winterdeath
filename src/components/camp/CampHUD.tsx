@@ -110,11 +110,11 @@ const CampHUD: React.FC<CampHUDProps> = ({
 
             {/* 3D Floating Labels */}
             {hoveredStation && !hoveredStation.startsWith('family_') && !hoveredStation.startsWith('player_') && !isIdle && (
-                <div className={`absolute transform -translate-x-1/2 pointer-events-none z-20 ${uiFadeClass}`} style={{ ...getLabelPos(hoveredStation) }}>
-                    <div className={`${getStationColorClass(hoveredStation)} text-white px-8 py-2 text-2xl font-black uppercase tracking-widest border-2 shadow-2xl mb-2`}>{t(STATIONS.find(s => s.id === hoveredStation)?.labelKey || '')}</div>
+                <div className={`absolute transform -translate-x-1/2 pointer-events-none z-20 ${uiFadeClass} ${isMobileDevice ? 'scale-75' : ''}`} style={{ ...getLabelPos(hoveredStation) }}>
+                    <div className={`${getStationColorClass(hoveredStation)} text-white px-4 md:px-8 py-1 md:py-2 text-lg md:text-2xl font-black uppercase tracking-widest border-2 shadow-2xl mb-2`}>{t(STATIONS.find(s => s.id === hoveredStation)?.labelKey || '')}</div>
                     {hoveredStation === 'armory' && (
-                        <div className="bg-black/80 text-slate-300 px-4 py-2 border border-slate-700 text-center text-xs font-bold uppercase">
-                            <div className="flex gap-4"><span>{t('ui.pri')}: {currentLoadoutNames.pri}</span><span>{t('ui.sec')}: {currentLoadoutNames.sec}</span><span>{t('ui.thr')}: {currentLoadoutNames.thr}</span></div>
+                        <div className="bg-black/80 text-slate-300 px-4 py-2 border border-slate-700 text-center text-[10px] md:text-xs font-bold uppercase whitespace-nowrap">
+                            <div className="flex gap-2 md:gap-4"><span>{t('ui.pri')}: {currentLoadoutNames.pri}</span><span>{t('ui.sec')}: {currentLoadoutNames.sec}</span><span>{t('ui.thr')}: {currentLoadoutNames.thr}</span></div>
                         </div>
                     )}
                 </div>

@@ -31,7 +31,7 @@ export const Sector6: SectorDef = {
 
     collectibles: [],
 
-    generate: async (ctx: SectorContext) => {
+    setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
 
         // Ground Plane (Grass)

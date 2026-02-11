@@ -85,7 +85,12 @@ export interface SectorDef {
     cinematic?: CinematicConfig;
 
     // Logic
-    generate: (ctx: SectorContext) => Promise<void>;
+    setupEnvironment?: (ctx: SectorContext) => void;
+    setupProps?: (ctx: SectorContext) => void;
+    setupContent?: (ctx: SectorContext) => void;
+    setupZombies?: (ctx: SectorContext) => void;
+
+    generate?: (ctx: SectorContext) => Promise<void>;
     onUpdate: (
         delta: number,
         now: number,

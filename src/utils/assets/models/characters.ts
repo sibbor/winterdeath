@@ -56,6 +56,7 @@ export const CharacterModels = {
         laserSight.rotation.x = -Math.PI / 2; // Horizontal plane
         laserSight.visible = true; // Always visible when player is active
         laserSight.userData.isLaserSight = true;
+        laserSight.name = 'laserSight';
         group.add(laserSight);
 
         return group;

@@ -44,50 +44,99 @@ export const SectorBuilder = {
         if (ctx.yield) await ctx.yield();
     },
 
+    /**
+     * Main Orchestrator for building a sector.
+     * Uses the new structured lifecycle to standardize generation.
+     */
+    build: async (ctx: SectorContext, def: any) => {
+        // 1. Automatic Content (Ground, Bounds, Collectibles)
+        await SectorBuilder.generateAutomaticContent(ctx, def);
+
+        // 2. Setup Environment (Lights, Fog, etc.)
+        if (def.setupEnvironment) {
+            await def.setupEnvironment(ctx);
+            if (ctx.yield) await ctx.yield();
+        }
+
+        // 3. Setup Props (Static Objects)
+        if (def.setupProps) {
+            await def.setupProps(ctx);
+            if (ctx.yield) await ctx.yield();
+        }
+
+        // 4. Setup Custom Content (POIs, Cinematics, Special Logic)
+        if (def.setupContent) {
+            await def.setupContent(ctx);
+            if (ctx.yield) await ctx.yield();
+        }
+
+        // 5. Setup Zombies (Hordes, Spawning)
+        if (def.setupZombies) {
+            await def.setupZombies(ctx);
+            if (ctx.yield) await ctx.yield();
+        }
+
+        // 6. Legacy Support (Escape Hatch)
+        if (def.generate) {
+            await def.generate(ctx);
+        }
+    },
+
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
-        let mat: THREE.MeshStandardMaterial;
+        const TILE_SIZE = 20;
+        const halfW = size.width / 2;
+        const halfD = size.depth / 2;
 
-        if (type === 'GRAVEL') {
-            mat = MATERIALS.gravel.clone();
-            mat.bumpScale = 0.5; // Increased bumpScale for gravel
-        } else if (type === 'DIRT') {
-            mat = MATERIALS.gravel.clone();
-            mat.color.setHex(0x3d2b1f);
-            mat.bumpScale = 0.5; // Increased bumpScale for dirt
-        } else {
-            mat = MATERIALS.snow.clone();
-            mat.bumpScale = 0.5; // Increased bumpScale for snow
-        }
+        const baseMat: THREE.MeshStandardMaterial = (type === 'GRAVEL' ? MATERIALS.gravel : (type === 'DIRT' ? MATERIALS.gravel : MATERIALS.snow)).clone();
+        if (type === 'DIRT') baseMat.color.setHex(0x3d2b1f);
+        baseMat.bumpScale = 0.5;
 
-        const geo = new THREE.PlaneGeometry(size.width, size.depth);
+        const cols = Math.ceil(size.width / TILE_SIZE);
+        const rows = Math.ceil(size.depth / TILE_SIZE);
 
-        // Use UV scaling on geometry instead of modifying shared texture objects (Safe & efficient)
-        const repeatX = size.width / 10;
-        const repeatY = size.depth / 10;
-        const uvAttr = geo.attributes.uv;
-        for (let i = 0; i < uvAttr.count; i++) {
-            uvAttr.setXY(i, uvAttr.getX(i) * repeatX, uvAttr.getY(i) * repeatY);
-            if (ctx.yield && i % 1000 === 0) await ctx.yield(); // Yield for large geometry updates
-        }
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const xStart = -halfW + col * TILE_SIZE;
+                const zStart = -halfD + row * TILE_SIZE;
+                const xEnd = Math.min(xStart + TILE_SIZE, halfW);
+                const zEnd = Math.min(zStart + TILE_SIZE, halfD);
+                const tileW = xEnd - xStart;
+                const tileD = zEnd - zStart;
 
-        // Ensure shared textures have RepeatWrapping (set once globally)
-        if (mat.map) {
-            mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
-        }
-        if (mat.bumpMap) {
-            mat.bumpMap.wrapS = mat.bumpMap.wrapT = THREE.RepeatWrapping;
-        }
-        if ((mat as any).normalMap) {
-            (mat as any).normalMap.wrapS = (mat as any).normalMap.wrapT = THREE.RepeatWrapping;
-        }
+                if (tileW <= 0 || tileD <= 0) continue;
 
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `Ground_${type}`;
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.y = -0.05; // Standardized snow/ground base
-        mesh.receiveShadow = true;
-        ctx.scene.add(mesh);
-        if (ctx.yield) await ctx.yield();
+                const geo = new THREE.PlaneGeometry(tileW, tileD);
+                const mat = baseMat.clone(); // Critical: Unique material per tile for PointLight limits
+
+                // Calculate UVs to be seamless across tiles
+                const uvAttr = geo.attributes.uv;
+                for (let i = 0; i < uvAttr.count; i++) {
+                    const localU = uvAttr.getX(i);
+                    const localV = uvAttr.getY(i);
+                    // World UV based on 10m repeat
+                    const worldX = xStart + localU * tileW;
+                    const worldZ = zStart + (1 - localV) * tileD;
+                    uvAttr.setXY(i, worldX / 10, worldZ / 10);
+                }
+
+                // Ensure textures wrap
+                [mat.map, mat.bumpMap, (mat as any).normalMap].forEach(t => {
+                    if (t) {
+                        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                        t.needsUpdate = true;
+                    }
+                });
+
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.name = `Ground_${type}_${col}_${row}`;
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.set(xStart + tileW / 2, -0.05, zStart + tileD / 2);
+                mesh.receiveShadow = true;
+
+                ctx.scene.add(mesh);
+            }
+            if (ctx.yield) await ctx.yield();
+        }
     },
 
     generateBoundaries: (ctx: SectorContext, bounds: { width: number, depth: number }) => {
@@ -187,6 +236,12 @@ export const SectorBuilder = {
     },
 
     spawnCollectible: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy') => {
+        // Robustness: Don't spawn at exactly (0,0) if it's likely a missing coordinate
+        if (Math.abs(x) < 0.001 && Math.abs(z) < 0.001) {
+            console.warn(`Attempted to spawn collectible ${id} at (0,0). Skipping to avoid ghost prompts.`);
+            return;
+        }
+
         // Persistence Check: Don't spawn if already found
         const foundList = (ctx as any).collectiblesFound || []; // Fallback if type not updated yet
         if (foundList.includes(id)) {
@@ -373,10 +428,12 @@ export const SectorBuilder = {
         depth: number,
         rotation: number,
         color: number,
-        createRoof: boolean = true
+        createRoof: boolean = true,
+        withLights: boolean = false,
+        lightProbability: number = 0.5
     ) {
         // Use ObjectGenerator to create the mesh with merged geometry
-        const building = ObjectGenerator.createBuilding(width, height, depth, color, createRoof);
+        const building = ObjectGenerator.createBuilding(width, height, depth, color, createRoof, withLights, lightProbability);
 
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
@@ -437,6 +494,92 @@ export const SectorBuilder = {
         });
 
         return container;
+    },
+
+    spawnNeonSign: (ctx: SectorContext, x: number, z: number, rotation: number, text: string, color: number = 0x00ffff, withBacking: boolean = true) => {
+        const sign = ObjectGenerator.createNeonSign(text, color, withBacking);
+        sign.position.set(x, 5.5, z); // Elevated
+        sign.rotation.y = rotation;
+        ctx.scene.add(sign);
+        return sign;
+    },
+
+    spawnStreetLight: (ctx: SectorContext, x: number, z: number, rotation: number = 0) => {
+        const light = ObjectGenerator.createStreetLamp();
+        light.position.set(x, 0, z);
+        light.rotation.y = rotation;
+        ctx.scene.add(light);
+        return light;
+    },
+
+    spawnCaveLamp: (ctx: SectorContext, x: number, y: number, z: number) => {
+        const lamp = ObjectGenerator.createCaveLamp();
+        lamp.position.set(x, y, z);
+        ctx.scene.add(lamp);
+        return lamp;
+    },
+
+    spawnStorefrontBuilding: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number, opts: any = {}) => {
+        const building = ObjectGenerator.createStorefrontBuilding(width, height, depth, opts);
+        building.position.set(x, 0, z);
+        building.rotation.y = rotation;
+        ctx.scene.add(building);
+
+        const size = building.userData.size;
+        ctx.obstacles.push({
+            mesh: building,
+            collider: { type: 'box', size: size.clone() }
+        });
+
+        return building;
+    },
+
+    spawnNeonHeart: (ctx: SectorContext, x: number, y: number, z: number, rotation: number, color: number = 0xff0000) => {
+        const heart = ObjectGenerator.createNeonHeart(color);
+        heart.position.set(x, y, z);
+        heart.rotation.y = rotation;
+        ctx.scene.add(heart);
+        return heart;
+    },
+
+    spawnGlassStaircase: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number) => {
+        const stairs = ObjectGenerator.createGlassStaircase(width, height, depth);
+        stairs.position.set(x, 0, z);
+        stairs.rotation.y = rotation;
+        ctx.scene.add(stairs);
+
+        ctx.obstacles.push({
+            mesh: stairs,
+            collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
+        });
+
+        return stairs;
+    },
+
+    spawnElectricPole: (ctx: SectorContext, x: number, z: number, rotation: number = 0) => {
+        const pole = ObjectGenerator.createElectricPole();
+        pole.position.set(x, 0, z);
+        pole.rotation.y = rotation;
+        ctx.scene.add(pole);
+        ctx.obstacles.push({ mesh: pole, collider: { type: 'sphere', radius: 1 } });
+        return pole;
+    },
+
+    spawnCrashedCar: (ctx: SectorContext, x: number, z: number, rotation: number, color?: number) => {
+        const car = ObjectGenerator.createCrashedCar(color);
+        car.position.set(x, 0, z);
+        car.rotation.y = rotation;
+        ctx.scene.add(car);
+
+        // Add Collision
+        const box = new THREE.Box3().setFromObject(car);
+        const size = box.getSize(new THREE.Vector3());
+        ctx.obstacles.push({
+            mesh: car,
+            collider: { type: 'box', size: size }
+        });
+
+        return car;
     },
 
     spawnContainerStack: (ctx: SectorContext, x: number, z: number, rotation: number, stackHeight: number = 2, colorOverride?: number, addSnow: boolean = true) => {
@@ -839,20 +982,23 @@ export const SectorBuilder = {
 
     attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: string, color?: number, intensity?: number, offset?: { x: number, y: number, z: number } }) => {
         const offset = eff.offset || { x: 0, y: 0, z: 0 };
+        // Calculate world position to attach light to scene (Fixes parent-culling issues)
+        const worldPos = new THREE.Vector3();
+        parent.updateMatrixWorld();
+        worldPos.setFromMatrixPosition(parent.matrixWorld).add(new THREE.Vector3(offset.x, offset.y, offset.z));
+
         if (eff.type === 'light') {
             const light = new THREE.PointLight(eff.color || 0xffaa00, eff.intensity || 1, 15);
-            light.position.set(offset.x, offset.y, offset.z);
-            parent.add(light);
+            light.position.copy(worldPos);
+            ctx.scene.add(light);
             // Auto-enable flickering for atmosphere if it's a "warm" light
             if ((eff.color || 0) > 0xffaa00 || !eff.color) {
                 ctx.flickeringLights.push({ light, baseInt: eff.intensity || 1, flickerRate: 0.05 + Math.random() * 0.1 });
             }
         } else if (eff.type === 'fire') {
-            // We'll use a direct point light for the glow and assume the fire asset handles its own particle effects
-            // if we actually spawned a full fire object.
             const light = new THREE.PointLight(0xff6600, 2, 10);
-            light.position.set(offset.x, offset.y + 1, offset.z);
-            parent.add(light);
+            light.position.copy(worldPos).y += 1;
+            ctx.scene.add(light);
             ctx.flickeringLights.push({ light, baseInt: 2, flickerRate: 0.15 });
 
             // Tag for GameSession to pick up

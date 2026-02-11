@@ -117,7 +117,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
         >
             <div className={`flex h-full gap-4 md:gap-8 ${isMobileDevice ? 'flex-col overflow-y-auto touch-auto' : ''}`}>
                 {/* LEFT: Sector List */}
-                <div className={`${isMobileDevice ? 'w-full shrink-0 flex gap-2 overflow-x-auto pb-4 px-2 touch-pan-x' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar`} style={isMobileDevice ? { WebkitOverflowScrolling: 'touch' } : {}}>
+                <div className={`${isMobileDevice ? 'w-full shrink-0 flex gap-2 overflow-x-auto pb-4 px-2 snap-x snap-mandatory' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar shadow-inner`} style={isMobileDevice ? { WebkitOverflowScrolling: 'touch' } : {}}>
                     {SECTOR_THEMES.map((map, i) => {
                         const isSel = selectedMapIndex === i;
                         // re-eval locked for list
@@ -128,7 +128,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                                 key={i}
                                 onClick={() => handleSelect(i)}
                                 disabled={locked}
-                                className={`text-left p-4 md:p-6 border-l-4 transition-all group relative overflow-hidden shrink-0 whitespace-nowrap md:whitespace-normal
+                                className={`text-left p-4 md:p-6 border-l-4 transition-all group relative overflow-hidden shrink-0 whitespace-nowrap md:whitespace-normal snap-center
                                     ${locked ? 'opacity-50 cursor-not-allowed bg-black border-gray-800' : 'cursor-pointer hover:bg-red-900/10'}
                                     ${isSel ? 'bg-red-900/20 border-red-500' : 'border-gray-800'}
                                     ${isMobileDevice ? 'border-l-0 border-b-4 min-w-[150px]' : ''}
@@ -137,21 +137,31 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                                 <h3 className={`text-base md:text-xl font-black uppercase tracking-wider ${isSel ? 'text-white' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
                                     {locked ? `${t('ui.sector')} ${i + 1} - ${t('ui.locked')}` : t(map.name)}
                                 </h3>
+                                {isMobileDevice && isSel && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-500 animate-pulse" />}
                             </button>
                         );
                     })}
                 </div>
 
+                {/* Mobile Paging Indicators */}
+                {isMobileDevice && (
+                    <div className="flex justify-center gap-1 mb-2">
+                        {SECTOR_THEMES.map((_, i) => (
+                            <div key={i} className={`h-1 w-4 transition-colors ${selectedMapIndex === i ? 'bg-red-500' : 'bg-gray-800'}`} />
+                        ))}
+                    </div>
+                )}
+
                 {/* RIGHT: Detail View */}
-                <div className={`flex-1 flex flex-col bg-black/40 border-2 border-gray-800 p-4 md:p-8 relative ${isMobileDevice ? 'min-h-[300px]' : ''}`}>
+                <div className={`flex-1 flex flex-col bg-black/40 border-2 border-gray-800 p-4 md:p-8 relative ${isMobileDevice ? 'min-h-[300px] overflow-visible' : ''}`}>
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
-                            <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter text-gray-400 mb-2">
+                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-black uppercase tracking-tighter text-gray-400 mb-2`}>
                                 {t(mapTheme.name)}
                             </h2>
                             {/* Stats Row */}
-                            <div className="flex flex-wrap gap-2 md:gap-4 text-sm md:text-lg font-bold font-mono text-gray-400 mt-1">
+                            <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
                                 <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total || '?'}</span></span>
                                 <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
                                 <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total || '?'}</span></span>
@@ -162,13 +172,13 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
 
                         <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start">
                             {/* Boss Status Check */}
-                            <div className={`px-4 py-1 md:py-2 text-xs md:text-sm font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
+                            <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
                                 {t('ui.boss_status')}: {t(bossStatusKey)}
                             </div>
 
                             {/* Family Status Check */}
                             {selectedMapIndex < 4 && (
-                                <div className={`px-4 py-1 md:py-2 text-xs md:text-sm font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
+                                <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                     {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedMapIndex]?.name || 'Unknown') : '???'}
                                     <span className="text-[10px] md:text-xs ml-1 md:ml-2 opacity-100">
                                         ({t(familyStatusKey)})
@@ -179,7 +189,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                     </div>
 
                     {/* Briefing Text */}
-                    <div className="flex-1 bg-black overflow-y-auto mb-4 md:mb-6 shadow-inner font-mono text-sm md:text-xl leading-relaxed text-gray-300 whitespace-pre-wrap">
+                    <div className={`flex-1 bg-black ${isMobileDevice ? 'overflow-visible' : 'overflow-y-auto'} mb-4 md:mb-6 shadow-inner font-mono text-sm md:text-xl leading-relaxed text-gray-300 whitespace-pre-wrap`}>
                         {briefingText}
                         <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
                     </div>

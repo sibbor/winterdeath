@@ -75,10 +75,10 @@ export const Sector3: SectorDef = {
     environment: {
         bgColor: 0x051015,
         fogDensity: 0.02,
-        ambientIntensity: 0.5,
+        ambientIntensity: 0.3, // Increased for readability
         groundColor: 0x112211,
         fov: 50,
-        moon: { visible: true, color: 0x88ffaa, intensity: 0.4 },
+        moon: { visible: true, color: 0x88ffaa, intensity: 0.8, position: { x: 50, y: 35, z: 50 } }, // Slightly brighter moon
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'rain'
@@ -105,8 +105,8 @@ export const Sector3: SectorDef = {
         rotationSpeed: 0.02
     },
 
-    generate: async (ctx: SectorContext) => {
-        const { scene, obstacles, triggers } = ctx;
+    setupProps: async (ctx: SectorContext) => {
+        const { scene } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
         PathGenerator.createDirtPath(ctx, [...LOCATIONS.PATHS.FOREST_TRAIL], 3);
@@ -116,8 +116,6 @@ export const Sector3: SectorDef = {
         // Reward Chest at boss spawn
         SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
-        if (ctx.yield) await ctx.yield();
-
         // 1. Burning Farm
         const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
         SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
@@ -126,8 +124,6 @@ export const Sector3: SectorDef = {
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x + 5, LOCATIONS.POIS.FARMHOUSE.z + 5, 'WALKER', Math.random() * Math.PI);
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x - 5, LOCATIONS.POIS.FARMHOUSE.z + 10, 'RUNNER', Math.random() * Math.PI);
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
-
-        if (ctx.yield) await ctx.yield();
 
         // 1.2. Farm House area props
         SectorBuilder.spawnVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
@@ -142,15 +138,16 @@ export const Sector3: SectorDef = {
         SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
         SectorBuilder.spawnVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
 
+        // Crashed car with headlights near the farm entrance
+        SectorBuilder.spawnCrashedCar(ctx, 160, -85, -Math.PI / 4, 0xcc2222);
+
         // 2. Burning Farm
-        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
-        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 20, distance: 40, onRoof: true });
+        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
+        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
 
         // 3. Barn
-        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
-        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 20, distance: 40, onRoof: true });
-
-        if (ctx.yield) await ctx.yield();
+        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
+        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
 
         // --- 4. Wheat Field ---
         const fieldPoly = [
@@ -160,8 +157,6 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(100, 0, -180)
         ];
         await SectorBuilder.fillWheatField(ctx, fieldPoly, 0.4);
-
-        if (ctx.yield) await ctx.yield();
 
         // --- 5. Forest ---
         const clearingPoly = [
@@ -182,7 +177,6 @@ export const Sector3: SectorDef = {
         asphalt.receiveShadow = true;
         scene.add(asphalt);
 
-        // Stängsel runt området
         // Stängsel runt området
         SectorBuilder.createFence(ctx, [
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30),
@@ -224,12 +218,13 @@ export const Sector3: SectorDef = {
         mastGroup.add(lightHub);
         mastGroup.userData.isObstacle = true;
         scene.add(mastGroup);
+    },
 
-        // --- 5. TRIGGERS ---
+    setupContent: async (ctx: SectorContext) => {
+        const { triggers } = ctx;
+
         triggers.push(
             { id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }] },
-
-            // Clues
             { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'SPEECH', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's3_mast_sight', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'SPEECH', content: "clues.s3_poi_the_mast", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's3_dead_bodies', position: LOCATIONS.POIS.FARM, radius: 8, type: 'SPEECH', content: "clues.s3_dead_bodies", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -238,12 +233,27 @@ export const Sector3: SectorDef = {
             { id: 's3_poi_the_farm', position: LOCATIONS.POIS.BARN, radius: 20, type: 'SPEECH', content: "clues.s3_poi_the_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
         );
 
-        // --- 6. COLLECTIBLES (Auto-Spawned) ---
         if (ctx.debugMode) {
             SectorBuilder.visualizeTriggers(ctx);
         }
+    },
 
-        spawnSectorHordes(ctx);
+    setupZombies: async (ctx: SectorContext) => {
+        if (!ctx.spawnHorde) return;
+
+        // Defined Horde Locations (Farm / Mast)
+        const hordeSpots = [
+            new THREE.Vector3(40, 0, -30),   // Forest Trail
+            new THREE.Vector3(150, 0, -120), // Farm
+            new THREE.Vector3(180, 0, -130), // Wheat Field
+            new THREE.Vector3(-250, 0, -50), // Mast Area
+            new THREE.Vector3(300, 0, -100)  // Road
+        ];
+
+        hordeSpots.forEach((pos, i) => {
+            const count = 5 + Math.floor(ctx.rng() * 5);
+            ctx.spawnHorde(count, undefined, pos);
+        });
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
@@ -257,21 +267,3 @@ export const Sector3: SectorDef = {
         */
     }
 };
-
-function spawnSectorHordes(ctx: SectorContext) {
-    if (!ctx.spawnHorde) return;
-
-    // Defined Horde Locations (Farm / Mast)
-    const hordeSpots = [
-        new THREE.Vector3(40, 0, -30),   // Forest Trail
-        new THREE.Vector3(150, 0, -120), // Farm
-        new THREE.Vector3(180, 0, -130), // Wheat Field
-        new THREE.Vector3(-250, 0, -50), // Mast Area
-        new THREE.Vector3(300, 0, -100)  // Road
-    ];
-
-    hordeSpots.forEach((pos, i) => {
-        const count = 5 + Math.floor(ctx.rng() * 5);
-        ctx.spawnHorde(count, undefined, pos);
-    });
-}

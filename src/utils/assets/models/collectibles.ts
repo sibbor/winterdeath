@@ -5,7 +5,7 @@ import { GEOMETRY, MATERIALS } from '../../assets';
 export const CollectibleModels = {
     createCollectible: (type: string): THREE.Group => {
         const group = new THREE.Group();
-        group.userData = { isCollectible: true, type };
+        group.userData = { type };
 
         switch (type) {
             case 'phone': {

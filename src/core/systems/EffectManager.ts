@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 // Define standardized effects
-export type EffectType = 'fire' | 'flicker_light' | 'smoke_plume';
+export type EffectType = 'fire' | 'flicker_light' | 'smoke_plume' | 'neon_sign';
 
 export class EffectManager {
     /**
@@ -17,7 +17,7 @@ export class EffectManager {
                 // Standard Fire Effect (Light + Particles)
                 object.userData.isFire = true;
                 object.userData.effects.push(
-                    { type: 'light', color: 0xff7722, intensity: opts?.intensity || 20, distance: opts?.distance || 30, offset: opts?.offset || new THREE.Vector3(0, 1, 0), flicker: true },
+                    { type: 'light', color: 0xff7722, intensity: opts?.intensity || 40, distance: opts?.distance || 50, offset: opts?.offset || new THREE.Vector3(0, 1, 0), flicker: true },
                     { type: 'emitter', particle: 'campfire_flame', interval: 50, count: 1, offset: (opts?.offset ? opts.offset.clone().add(new THREE.Vector3(0, 0.5, 0)) : new THREE.Vector3(0, 0.5, 0)), spread: 0.3, color: 0xffaa00, area: opts?.area },
                     { type: 'emitter', particle: 'campfire_spark', interval: 150, count: 1, offset: opts?.offset ? opts.offset.clone().add(new THREE.Vector3(0, 0.5, 0)) : new THREE.Vector3(0, 1.0, 0), spread: 0.4, color: 0xffdd00, area: opts?.area }
                 );
@@ -37,6 +37,17 @@ export class EffectManager {
                     distance: opts?.distance || 30,
                     flicker: true,
                     offset: opts?.offset || new THREE.Vector3(0, 2, 0)
+                });
+                break;
+
+            case 'neon_sign':
+                object.userData.effects.push({
+                    type: 'light',
+                    color: opts?.color || 0x00ffff,
+                    intensity: opts?.intensity || 15,
+                    distance: opts?.distance || 20,
+                    flicker: false,
+                    offset: opts?.offset || new THREE.Vector3(0, 0, 0.5)
                 });
                 break;
 

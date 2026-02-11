@@ -66,51 +66,21 @@ export const Sector4: SectorDef = {
         rotationSpeed: 0.05
     },
 
-    generate: async (ctx: SectorContext) => {
-        const { scene, obstacles, triggers } = ctx;
-
-        // --- TRIGGERS ---
-        triggers.push(
-            // Flavor
-            {
-                id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s4_noise", triggered: false,
-                actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-            {
-                id: 's4_shed_sight', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'THOUGHTS', content: "clues.s4_shed", triggered: false,
-                actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }]
-            },
-
-            // --- FIND NATHALIE EVENT ---
-            {
-                id: 'found_nathalie',
-                position: LOCATIONS.TRIGGERS.FOUND_NATHALIE, // Shed
-                radius: 8,
-                type: 'EVENT',
-                content: '',
-                triggered: false,
-                actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
-            }
-        );
+    setupProps: async (ctx: SectorContext) => {
+        const { scene, obstacles } = ctx;
+        (ctx as any).sectorState.ctx = ctx;
 
         // Reward Chest at boss spawn
         SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
-
-        if (ctx.yield) await ctx.yield();
 
         // Stacks of Cars (Maze) - Sektor 4 Bilskroten
         for (let i = 0; i < 60; i++) {
             const x = (Math.random() - 0.5) * 160;
             const z = -20 - Math.random() * 140;
-
             if (Math.abs(x) < 10 && z > -100) continue;
-
             const carStackHeight = 1 + Math.floor(Math.random() * 3);
             const rotY = Math.random() * Math.PI * 2;
-
             await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
-
-            if (i % 10 === 0 && ctx.yield) await ctx.yield();
         }
 
         // Perimeter Trees
@@ -119,17 +89,7 @@ export const Sector4: SectorDef = {
             const r = 100 + Math.random() * 60;
             const x = Math.cos(angle) * r;
             const z = -80 + Math.sin(angle) * r;
-
             await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
-
-            if (i % 20 === 0 && ctx.yield) await ctx.yield();
-        }
-
-        // Burning Fire Pits
-        for (let i = 0; i < 3; i++) {
-            const x = (Math.random() - 0.5) * 40;
-            const z = -60 - (Math.random() * 80);
-            //ObjectGenerator.createFire(ctx, x, z);
         }
 
         // The Dealership Building
@@ -140,18 +100,26 @@ export const Sector4: SectorDef = {
         shedGroup.add(shed);
         scene.add(shedGroup);
         obstacles.push({ mesh: shedGroup, radius: 12 });
+    },
 
-        obstacles.push({ mesh: shedGroup, radius: 12 });
+    setupContent: async (ctx: SectorContext) => {
+        const { triggers } = ctx;
 
-        if (ctx.yield) await ctx.yield();
-
-        // --- ZOMBIE SPAWNING ---
-        for (let i = 0; i < 5; i++) {
-            ctx.spawnZombie('WALKER');
-        }
+        triggers.push(
+            { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHTS', content: "clues.s4_noise", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's4_shed_sight', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'THOUGHTS', content: "clues.s4_shed", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 'found_nathalie', position: LOCATIONS.TRIGGERS.FOUND_NATHALIE, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] }
+        );
 
         if (ctx.debugMode) {
             SectorBuilder.visualizeTriggers(ctx);
+        }
+    },
+
+    setupZombies: async (ctx: SectorContext) => {
+        // --- ZOMBIE SPAWNING ---
+        for (let i = 0; i < 5; i++) {
+            ctx.spawnZombie('WALKER');
         }
 
         spawnSectorHordes(ctx);

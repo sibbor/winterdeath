@@ -185,6 +185,28 @@ export const AssetPreloader = {
         const circle = new THREE.Mesh(new THREE.CircleGeometry(1, 8), MATERIALS.ash);
         dummyRoot.add(circle);
 
+        // -- Lighting Prop Geometries --
+        const streetPole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 8), MATERIALS.blackMetal);
+        dummyRoot.add(streetPole);
+        const streetHead = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.8), MATERIALS.blackMetal);
+        dummyRoot.add(streetHead);
+        const caveFixture = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2), MATERIALS.blackMetal);
+        dummyRoot.add(caveFixture);
+        const winPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), MATERIALS.stone);
+        dummyRoot.add(winPlane);
+
+        // -- New POI Materials Warmup --
+        [
+            MATERIALS.plaster,
+            MATERIALS.whiteBrick,
+            MATERIALS.wooden_fasade,
+            MATERIALS.sheet_metal,
+            MATERIALS.glass
+        ].forEach(mat => {
+            const m = new THREE.Mesh(GEOMETRY.zombie, mat);
+            dummyRoot.add(m);
+        });
+
 
         // Pre-warm FX Pool
         // Create 200 particles of various types to fill the pool

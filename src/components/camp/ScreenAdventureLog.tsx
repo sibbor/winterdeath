@@ -199,35 +199,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
                                 const isNew = isFound && !viewedIds.includes(item.id);
                                 return (
                                     <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'}`}>
-
-                                        {/* 3D Preview Area */}
-                                        <div className={`aspect-square w-full bg-black/40 relative border-b border-zinc-800/50 ${stats.isMobileDevice ? 'max-h-[140px]' : ''}`}>
-                                            <CollectiblePreview type={item.modelType} isLocked={!isFound} />
-
-                                            {/* NEW Badge - Only shows for unviewed collectibles */}
-                                            {isNew && (
-                                                <div className="absolute top-2 right-2 bg-yellow-600 text-black text-[10px] font-black px-2 py-0.5 uppercase tracking-tighter skew-x-[-10deg] shadow-lg">
-                                                    {t('ui.new')}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Info Area */}
-                                        <div className={`${stats.isMobileDevice ? 'p-2 h-20' : 'p-4 h-32'} flex flex-col`}>
-                                            <h4 className={`${stats.isMobileDevice ? 'text-xs' : 'text-lg'} font-black uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
-                                                {isFound ? t(item.nameKey) : '???'}
-                                            </h4>
-                                            {!stats.isMobileDevice && (
-                                                <p className={`text-xs font-mono leading-relaxed line-clamp-3 ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                                                    {isFound ? t(item.descriptionKey) : 'Data encrypted. Item location unknown.'}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Hover Overlay */}
-                                        {!isFound && (
-                                            <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors pointer-events-none"></div>
-                                        )}
+                                        <DescriptionExpansion item={item} isFound={isFound} isMobile={stats.isMobileDevice} />
                                     </div>
                                 );
                             })}
@@ -300,6 +272,38 @@ const getBossDescription = (id: string) => {
         case 'colossus': return "Entity identified in Sector 4 (City). Massive bio-mechanical structure. Extreme threat level.";
         default: return "Classified threat data.";
     }
+};
+
+
+const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobile?: boolean }> = ({ item, isFound, isMobile }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    return (
+        <div className="flex flex-col h-full cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+            {/* 3D Preview Area */}
+            <div className={`aspect-square w-full bg-black/40 relative border-b border-zinc-800/50 ${isMobile ? 'max-h-[140px]' : ''}`}>
+                <CollectiblePreview type={item.modelType} isLocked={!isFound} />
+            </div>
+
+            {/* Info Area */}
+            <div className={`${isMobile ? 'p-2' : 'p-4'} flex-1 flex flex-col`}>
+                <h4 className={`${isMobile ? 'text-xs' : 'text-lg'} font-black uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
+                    {isFound ? t(item.nameKey) : '???'}
+                </h4>
+                <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
+                    {isFound ? t(item.descriptionKey) : 'Data encrypted. Item location unknown.'}
+                </p>
+                {isFound && !isExpanded && !isMobile && (
+                    <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>
+                )}
+            </div>
+
+            {/* Hover Overlay */}
+            {!isFound && (
+                <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors pointer-events-none"></div>
+            )}
+        </div>
+    );
 };
 
 export default ScreenAdventureLog;

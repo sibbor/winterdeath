@@ -136,11 +136,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (props.isMobileDevice) return;
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (stateRef.current.isPaused) return;
+            if (propsRef.current.isPaused) return;
             // Prevent default scrolling
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                 // ONLY ALLOW IN DEBUG MODE
-                if (!stateRef.current.debugMode) return;
+                if (!propsRef.current.debugMode) return;
                 e.preventDefault();
             }
 
@@ -880,11 +880,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-        const yieldToMain = () => new Promise<void>(resolve => {
-            requestAnimationFrame(() => {
-                setTimeout(resolve, 0);
-            });
-        });
+        let lastYieldTime = performance.now();
+        const yieldToMain = async () => {
+            const now = performance.now();
+            // Yield if we've spent more than 12ms in this frame
+            if (now - lastYieldTime > 12) {
+                await new Promise<void>(resolve => {
+                    requestAnimationFrame(() => {
+                        setTimeout(resolve, 0);
+                    });
+                });
+                lastYieldTime = performance.now();
+            }
+        };
 
         // --- ENVIRONMENT SETUP (Async) ---
         const runSetup = async () => {
@@ -979,11 +987,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 yield: yielder
             };
 
-            // 2. Asynchronous Sector Generation (Preceded by automatic content)
-            await SectorBuilder.generateAutomaticContent(ctx, currentSector);
-
+            // 2. Structured Sector Generation
             PathGenerator.resetPathLayer();
-            await currentSector.generate(ctx);
+            await SectorBuilder.build(ctx, currentSector);
 
             // Update global tracker for next time
             AssetPreloader.setLastMapIndex(propsRef.current.currentMap);

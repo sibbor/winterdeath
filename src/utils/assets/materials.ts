@@ -141,6 +141,12 @@ export const MATERIALS = {
         bumpMap: TEXTURES.brick_bump,
         bumpScale: 0.06
     }),
+    whiteBrick: new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.9,
+        bumpMap: TEXTURES.brick_bump,
+        bumpScale: 0.05
+    }),
     yellowBrick: new THREE.MeshStandardMaterial({
         color: 0xd4c685,
         roughness: 0.95,
@@ -208,6 +214,25 @@ export const MATERIALS = {
     buildingPiece: new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.8 }),
     metalPanel: new THREE.MeshStandardMaterial({ color: 0x778899, roughness: 0.3, metalness: 0.7 }),
     neonSign: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    plaster: new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        roughness: 0.9,
+        bumpMap: TEXTURES.concrete_bump,
+        bumpScale: 0.05
+    }),
+    wooden_fasade: new THREE.MeshStandardMaterial({
+        color: 0x111111,
+        map: DIFFUSE.wood,
+        roughness: 0.9,
+        bumpMap: DIFFUSE.containerMetal,
+        bumpScale: 0.1
+    }),
+    sheet_metal: new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        map: DIFFUSE.containerMetal,
+        roughness: 0.4,
+        metalness: 0.6
+    }),
     blackMetal: new THREE.MeshStandardMaterial({ color: 0x050505, metalness: 0.6, roughness: 0.4 }),
     crossEmissive: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.0 }),
     aimCross: new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
