@@ -83,7 +83,7 @@ export const SectorBuilder = {
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
-        const TILE_SIZE = 20;
+        const TILE_SIZE = 10;
         const halfW = size.width / 2;
         const halfD = size.depth / 2;
 
@@ -988,7 +988,7 @@ export const SectorBuilder = {
         worldPos.setFromMatrixPosition(parent.matrixWorld).add(new THREE.Vector3(offset.x, offset.y, offset.z));
 
         if (eff.type === 'light') {
-            const light = new THREE.PointLight(eff.color || 0xffaa00, eff.intensity || 1, 15);
+            const light = new THREE.PointLight(eff.color || 0xffaa00, eff.intensity || 1, 25);
             light.position.copy(worldPos);
             ctx.scene.add(light);
             // Auto-enable flickering for atmosphere if it's a "warm" light
@@ -996,7 +996,7 @@ export const SectorBuilder = {
                 ctx.flickeringLights.push({ light, baseInt: eff.intensity || 1, flickerRate: 0.05 + Math.random() * 0.1 });
             }
         } else if (eff.type === 'fire') {
-            const light = new THREE.PointLight(0xff6600, 2, 10);
+            const light = new THREE.PointLight(0xff6600, 2, 25);
             light.position.copy(worldPos).y += 1;
             ctx.scene.add(light);
             ctx.flickeringLights.push({ light, baseInt: 2, flickerRate: 0.15 });

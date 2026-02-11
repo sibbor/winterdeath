@@ -1504,15 +1504,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             frame++;
 
             // --- OPTIMIZATION: Light Culling ---
-            // Only keep the closest 12 lights active to save GPU performance
+            // Only keep the closest lights active to save GPU performance (relaxing to 32)
             if (frame % 15 === 0 && playerGroupRef.current) {
                 const pPos = playerGroupRef.current.position;
                 const lights: { light: THREE.Light, distSq: number }[] = [];
 
                 scene.traverse((obj) => {
                     if (obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight) {
-                        // Skip lights that should always be on (like flashlight if we had one as a child of camera/player separately detected)
-                        // But flashlight is usually attached to player, so distance is 0.
                         const distSq = obj.position.distanceToSquared(pPos);
                         lights.push({ light: obj, distSq });
                     }
@@ -1521,12 +1519,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 lights.sort((a, b) => a.distSq - b.distSq);
                 for (let i = 0; i < lights.length; i++) {
                     const l = lights[i];
-                    // Keep Flashlight always on (it's very close usually)
-                    if (l.light.name === 'flashlight') {
+                    // Always show the flashlight and lights within 60m
+                    if (l.light.name === 'flashlight' || l.distSq < 3600) { // 60m
                         l.light.visible = true;
                         continue;
                     } else {
-                        if (i < 12) {
+                        // Max 32 dynamic lights total
+                        if (i < 32) {
                             l.light.visible = true;
                         } else {
                             l.light.visible = false;
