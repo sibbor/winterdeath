@@ -88,6 +88,25 @@ export const EnemyAI = {
             }
         }
 
+        // --- KNOCKBACK PHYSICS ---
+        if (e.knockbackVel.lengthSq() > 0.01) {
+            e.mesh.position.add(e.knockbackVel.clone().multiplyScalar(delta));
+
+            // Gravity
+            e.knockbackVel.y -= 25 * delta;
+
+            // Friction (XZ)
+            const friction = Math.max(0, 1 - 2 * delta);
+            e.knockbackVel.x *= friction;
+            e.knockbackVel.z *= friction;
+
+            // Ground collision
+            if (e.mesh.position.y <= 0) {
+                e.mesh.position.y = 0;
+                e.knockbackVel.y = 0;
+                e.knockbackVel.multiplyScalar(0.7); // Bounciness/Friction
+            }
+        }
 
         // --- STATE MACHINE ---
 
@@ -305,6 +324,14 @@ export const EnemyAI = {
                 }
                 break;
 
+            case AIState.STUNNED:
+                // Behavior: Stand still, shake
+                // Recovery handled in handleStatusEffects
+                e.velocity.set(0, 0, 0);
+                // Visual shake in handleStatusEffects or here
+                e.mesh.rotation.y += Math.sin(now * 0.1) * 0.2;
+                break;
+
             case AIState.SEARCH:
                 // Behavior: Go to last seen pos, then look around
 
@@ -416,6 +443,27 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
             // Shake/Cower
             e.mesh.rotation.y += Math.sin(now * 0.05) * 0.3;
             // ... (rest of visual logic)
+        }
+    }
+
+    // Stunned
+    if (e.stunTimer && e.stunTimer > 0) {
+        e.stunTimer -= delta;
+
+        // Visual Feedback: Shake
+        e.mesh.position.x += Math.sin(now * 0.1) * 0.05;
+        e.mesh.position.z += Math.cos(now * 0.1) * 0.05;
+
+        // Visual Feedback: Stars
+        if (now % 100 < 20) {
+            // Spawn stars above head
+            callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + (e.isBoss ? 4 : 2.2), e.mesh.position.z, 'stun_star', 1);
+        }
+
+        if (e.stunTimer <= 0) {
+            e.stunTimer = 0;
+            // Transition back to CHASE if player exists, otherwise IDLE
+            e.state = AIState.CHASE;
         }
     }
 }

@@ -98,7 +98,7 @@ export interface SectorStats {
   shotsHit: number;
   throwablesThrown: number;
   killsByType: Record<string, number>;
-  totalScrapCollected?: number; // Added to match persistence if needed
+  totalScrapCollected?: number;
   scrapLooted: number;
   xpGained: number;
   familyFound: boolean;

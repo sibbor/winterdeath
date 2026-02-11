@@ -71,6 +71,7 @@ export interface Enemy {
     deathTimer: number;
     deathVel?: THREE.Vector3; // Velocity during death fall
     velocity: THREE.Vector3; // Current movement velocity
+    knockbackVel: THREE.Vector3; // Physics-based knockback velocity
     lastTrailPos?: THREE.Vector3; // For spacing blood trail
 
     // Physics

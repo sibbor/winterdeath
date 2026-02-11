@@ -143,7 +143,7 @@ export const SectorBuilder = {
         ctx.scene.add(line);
     },
 
-    visualizePath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 2) => {
+    visualizePath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 0) => {
         if (!ctx.debugMode) return;
         const geo = new THREE.BufferGeometry().setFromPoints(points);
         const mat = new THREE.LineBasicMaterial({ color });
@@ -577,53 +577,223 @@ export const SectorBuilder = {
         await ObjectGenerator.fillWheatField(ctx, polygon, density);
     },
 
-    createInvisibleWall: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
+    createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
         if (ctx.debugMode) {
             SectorBuilder.visualizePath(ctx, polygon, 0xff0000); // Use path instead of polygon
         }
-        PathGenerator.createInvisibleWall(ctx, polygon, name);
+        PathGenerator.createBoundry(ctx, polygon, name);
     },
 
     /**
-     * Creates mountain rows along both sides of a path, with optional gaps.
+     * Creates a low-poly mountain along a path with snow-capped peaks and tunnel carving.
+     * @param ctx The sector context containing the scene and materials.
+     * @param points The vector points defining the mountain ridge/path.
+     * @param opening Optional opening (tunnel/cave) to carve out.
      */
-    createMountainBoundary: (ctx: SectorContext, pointsWest: THREE.Vector3[], pointsEast: THREE.Vector3[], splitPos?: THREE.Vector3, gap: number = 6) => {
-        const buildWall = (pts: THREE.Vector3[]) => {
-            if (ctx.debugMode) {
-                SectorBuilder.visualizePath(ctx, pts, 0xff0000); // Correctly visualize individual segments
-            }
-            for (let i = 0; i < pts.length - 1; i++) {
-                ObjectGenerator.createMountainSlice(ctx, pts[i], pts[i + 1], 15 + Math.random() * 5, { visible: false });
-            }
+    createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
+        if (!points || points.length < 2) return;
+
+        // Visual debugging
+        if (ctx.debugMode) SectorBuilder.visualizePath(ctx, points, 0xffffff);
+
+        // --- CONFIGURATION ---
+        const mountainWidth = 30;
+        const mountainHeightPeak = 10;
+        const segmentsX = 70; // Resolution along the path
+        const segmentsZ = 30; // Resolution across the width
+
+        // 0.0 = Curve is left edge, 0.5 = Curve is center, 1.0 = Curve is right edge
+        const mountainSideBias = 1.0;
+
+        const COLORS = {
+            SNOW: new THREE.Color(0xffffff),
+            ROCK_LIGHT: new THREE.Color(0x888899),
+            ROCK_DARK: new THREE.Color(0x444455),
         };
 
-        // Handle West wall splitting
-        if (splitPos) {
-            let splitIdx = -1;
-            let minDist = Infinity;
-            pointsWest.forEach((p, i) => {
-                const d = p.distanceTo(splitPos);
-                if (d < minDist) { minDist = d; splitIdx = i; }
-            });
+        const curve = new THREE.CatmullRomCurve3(points);
+        const totalLength = curve.getLength();
 
-            if (splitIdx !== -1) {
-                buildWall(pointsWest.slice(0, Math.max(0, splitIdx - gap)));
-                buildWall(pointsWest.slice(Math.min(pointsWest.length, splitIdx + gap)));
-            } else {
-                buildWall(pointsWest);
+        // 1. INITIALIZE GEOMETRY
+        // We use a dummy size because we set XYZ manually in the loop
+        const planeGeo = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsZ);
+        const posAttr = planeGeo.getAttribute('position');
+
+        const vertex = new THREE.Vector3();
+        const targetPointOnCurve = new THREE.Vector3();
+
+        // 2. SHAPE THE TERRAIN ALONG THE CURVE
+        for (let i = 0; i <= segmentsX; i++) {
+            const t = i / segmentsX;
+            curve.getPointAt(t, targetPointOnCurve);
+            const tangent = curve.getTangentAt(t).normalize();
+
+            // Calculate perpendicular direction for the width of the mountain
+            const sideDirection = new THREE.Vector3(-tangent.z, 0, tangent.x);
+
+            for (let j = 0; j <= segmentsZ; j++) {
+                const index = i * (segmentsZ + 1) + j;
+
+                // vFactor goes from 0 to 1 across the width
+                const vFactor = j / segmentsZ;
+
+                // Offset from the curve based on bias
+                const vOffset = (vFactor - mountainSideBias) * mountainWidth;
+
+                // Distance to the "ridge" (the highest point). 
+                // We'll place the ridge at a 0.3 offset to make it look organic
+                const distToRidge = Math.abs(vFactor - 0.4) * mountainWidth;
+
+                let baseHeight = 0;
+                const maxDist = mountainWidth * 0.7; // Falloff area
+                if (distToRidge < maxDist) {
+                    // Smooth cosine falloff for the ridge
+                    baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
+                }
+
+                // Low-poly Jitter
+                let finalY = 0;
+                let xJitter = 0;
+                let zJitter = 0;
+
+                if (baseHeight > 1.0) {
+                    finalY = Math.max(0, baseHeight + (Math.random() - 0.5) * 12);
+                    xJitter = (Math.random() - 0.5) * 4;
+                    zJitter = (Math.random() - 0.5) * 4;
+                }
+
+                // Set final vertex position
+                const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
+                const finalZ = targetPointOnCurve.z + (sideDirection.z * vOffset) + zJitter;
+                const finalYPos = targetPointOnCurve.y + finalY;
+
+                posAttr.setXYZ(index, finalX, finalYPos, finalZ);
             }
-        } else {
-            buildWall(pointsWest);
         }
 
-        buildWall(pointsEast);
+        // 3. CARVE THE OPENING (Pushing vertices underground)
+        if (opening) {
+            const openingPos = new THREE.Vector3();
+            opening.getWorldPosition(openingPos);
+            const safeZoneRadius = 14;
+            const clearanceHeight = 10;
+
+            for (let i = 0; i < posAttr.count; i++) {
+                vertex.fromBufferAttribute(posAttr, i);
+                const dist = Math.sqrt(Math.pow(vertex.x - openingPos.x, 2) + Math.pow(vertex.z - openingPos.z, 2));
+
+                if (dist < safeZoneRadius && vertex.y < clearanceHeight) {
+                    posAttr.setY(i, -25); // Hide vertices below the floor
+                }
+            }
+        }
+
+        posAttr.needsUpdate = true;
+
+        // 4. PREPARE LOW-POLY MESH
+        // Convert to non-indexed to get sharp faceted edges
+        let mountainGeo: THREE.BufferGeometry = planeGeo.toNonIndexed();
+        mountainGeo.computeVertexNormals();
+
+        // 5. VERTEX COLORING (Snow Logic)
+        const count = mountainGeo.getAttribute('position').count;
+        const colors = new Float32Array(count * 3);
+        const finalPosAttr = mountainGeo.getAttribute('position');
+        const normalAttr = mountainGeo.getAttribute('normal');
+
+        const normal = new THREE.Vector3();
+        const up = new THREE.Vector3(0, 1, 0);
+        const color = new THREE.Color();
+
+        for (let i = 0; i < count; i += 3) {
+            // Sample height from triangle center
+            const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
+            normal.fromBufferAttribute(normalAttr, i);
+            const upwardness = normal.dot(up);
+
+            // Snow if high enough and relatively flat, otherwise rock
+            if ((h > mountainHeightPeak * 0.55 && upwardness > 0.65) || (upwardness > 0.9 && h > 10)) {
+                color.copy(COLORS.SNOW);
+            } else {
+                color.copy(Math.random() > 0.5 ? COLORS.ROCK_LIGHT : COLORS.ROCK_DARK);
+            }
+
+            for (let j = 0; j < 3; j++) {
+                const idx = (i + j) * 3;
+                colors[idx] = color.r;
+                colors[idx + 1] = color.g;
+                colors[idx + 2] = color.b;
+            }
+        }
+
+        mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        // 6. FINAL MESH
+        const mountainMat = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            flatShading: true,
+            roughness: 0.9,
+            side: THREE.DoubleSide
+        });
+
+        const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+        ctx.scene.add(mountain);
     },
 
-    createForest: async (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
+    /**
+     * Creates a cave opening at the specified position.
+     */
+    createMountainOpening: () => {
+        const tunnelWidthOuter = 16;
+        const tunnelHeightWalls = 5;
+        const tunnelArchRise = 2;
+        const tunnelThickness = 3;
+        const tunnelDepth = 5;
+
+        const start = 0;
+        const end = 10;
+
+        const halfWidthO = tunnelWidthOuter / 2;
+        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
+        const caveOpeningGroup = new THREE.Group();
+        //caveOpeningGroup.rotateY(Math.PI / 2); // Orient arch correctly
+
+        const archShape = new THREE.Shape();
+        archShape.moveTo(-halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
+        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
+        archShape.lineTo(halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, 0);
+
+        const halfWidthI = halfWidthO - tunnelThickness;
+        const wallHeightI = tunnelHeightWalls;
+        const controlPointY_I = controlPointY_O - tunnelThickness;
+
+        const holePath = new THREE.Path();
+        holePath.moveTo(halfWidthI, 0);
+        holePath.lineTo(halfWidthI, wallHeightI);
+        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
+        holePath.lineTo(-halfWidthI, 0);
+        holePath.lineTo(halfWidthI, 0);
+
+        archShape.holes.push(holePath);
+
+        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
+        archGeo.translate(0, 0, -tunnelDepth / 2); // Center along depth
+
+        const tunnelMat = MATERIALS.concrete.clone();
+        tunnelMat.side = THREE.DoubleSide;
+        const arch = new THREE.Mesh(archGeo, tunnelMat);
+        caveOpeningGroup.add(arch);
+
+        return caveOpeningGroup;
+    },
+
+    createForest: (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
         if (ctx.debugMode) {
             SectorBuilder.visualizePolygon(ctx, polygon, 0x00ff00);
         }
-        await ObjectGenerator.createForest(ctx, polygon, spacing, type);
+        ObjectGenerator.createForest(ctx, polygon, spacing, type);
     },
 
     // Linear Paths (Routed to PathGenerator)

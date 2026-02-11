@@ -3,6 +3,8 @@ import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { resolveCollision } from '../../utils/physics';
+import { soundManager } from '../../utils/sound';
+import { AIState } from '../../types/enemy';
 
 export class PlayerMovementSystem implements System {
     id = 'player_movement';
@@ -126,20 +128,36 @@ export class PlayerMovementSystem implements System {
                             // CHECK FOR ENEMY KNOCKBACK
                             if ((state.isRushing || state.isRolling) && obs.mesh && obs.mesh.userData.entity) {
                                 const enemy = obs.mesh.userData.entity;
-                                // Can only knockback if not boss?
-                                if (!enemy.isBoss && enemy.state !== 'STUNNED' && enemy.state !== 'dead') {
-                                    enemy.state = 'STUNNED';
-                                    enemy.stunTimer = 1.0; // 1 second stun
 
-                                    // Apply Knockback Force
-                                    const force = state.isRolling ? 2.5 : 1.5;
+                                // Can only knockback if not dead
+                                if (!enemy.dead) {
+                                    // Mass calculation: scale^2 * widthScale (relative to Walker = 1.0)
+                                    const mass = (enemy.originalScale * enemy.originalScale * enemy.widthScale);
+                                    const massInverse = 1.0 / Math.max(0.5, mass);
+
+                                    // Enhanced Knockback Force (Fly around) - Bosses get less push
+                                    const pushMultiplier = (enemy.isBoss ? 0.2 : 1.0) * massInverse;
+                                    const force = (state.isRushing ? 10.0 : 4.0) * pushMultiplier;
+                                    const lift = (state.isRushing ? 4.0 : 1.5) * pushMultiplier;
                                     const pushDir = baseMoveVec.clone().normalize();
-                                    enemy.mesh.position.add(pushDir.multiplyScalar(force));
 
-                                    // Visual/Sound?
-                                    // e.g. spawnPart(enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 5);
+                                    enemy.knockbackVel.set(
+                                        pushDir.x * force,
+                                        lift,
+                                        pushDir.z * force
+                                    );
+
+                                    enemy.state = AIState.STUNNED;
+                                    enemy.stunTimer = state.isRushing ? 1.5 : 0.8;
+                                    enemy.isBlinded = true;
+                                    enemy.blindUntil = now + (state.isRushing ? 1500 : 800);
+
+                                    // Visual/Sound
+                                    spawnPart(enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
+                                    soundManager.playImpact('flesh');
                                 }
                             }
+
 
                             // Apply push
                             testPos.add(push);
@@ -158,7 +176,23 @@ export class PlayerMovementSystem implements System {
             }
         };
 
-        // --- Rolling Logic ---
+        // --- DODGE / RUSH INITIAL HIT (ON ATTACHED ENEMIES) ---
+        if (state.isRushing || state.isRolling) {
+            for (const enemy of session.state.enemies) {
+                if (enemy.dead) continue;
+                // If biting us, disorient them!
+                if (enemy.state === AIState.BITING) {
+                    enemy.state = AIState.STUNNED;
+                    enemy.stunTimer = 1.0;
+                    enemy.isBlinded = true;
+                    enemy.blindUntil = now + 1000;
+                    // Note: No knockback force for attached enemies as requested
+                    soundManager.playImpact('flesh');
+                }
+            }
+        }
+
+        // --- COLLISION ---
         if (state.isRolling) {
             if (state.rollDir.lengthSq() === 0) {
                 if (playerGroup) state.rollDir.copy(new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize());

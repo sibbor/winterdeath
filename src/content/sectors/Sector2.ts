@@ -28,7 +28,7 @@ const LOCATIONS = {
     },
     POIS: {
         CAVE_ENTRANCE: { x: 100, z: -70 },
-        TUNNEL: { x: 170, z: -50 },
+        TUNNEL: { x: 165, z: -54 },
         CAMPFIRE: { x: -1, z: 13 },
         TRAIN_TUNNEL: { x: 170, z: -50 },
         BOSS_ROOM: { x: 61, z: -193 }
@@ -46,6 +46,93 @@ const LOCATIONS = {
         CAVE_LOOT_2: { x: 100, z: -200 }
     }
 } as const;
+
+async function addProps(ctx: SectorContext) {
+    ctx.scene.add(ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0));
+
+    const barrel = ObjectGenerator.createBarrel();
+    barrel.position.set(106, 0, -65);
+    barrel.rotateX(Math.PI * 0.5);
+    barrel.rotateY(Math.PI * 0.75);
+    ctx.scene.add(barrel);
+    const barrel2 = ObjectGenerator.createBarrel();
+    barrel2.position.set(108, 0, -67);
+    ctx.scene.add(barrel2);
+
+    const timberPile = ObjectGenerator.createTimberPile(2);
+    timberPile.position.set(92, 0, -60);
+    timberPile.rotateY(Math.PI * 0.25);
+    ctx.scene.add(timberPile);
+
+    const timberPile2 = ObjectGenerator.createTimberPile(1.5);
+    timberPile2.position.set(88, 0, -55);
+    timberPile2.rotateY(Math.PI * 0.20);
+    ctx.scene.add(timberPile2);
+
+    const timberTruck = ObjectGenerator.createVehicle('timber_truck', 1.5);
+    timberTruck.position.set(111, 0, -64);
+    timberTruck.rotateY(Math.PI * 1.25);
+    ctx.scene.add(timberTruck);
+
+    ObjectGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
+}
+
+function spawnSectorHordes(ctx: SectorContext) {
+    return;
+}
+
+function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) {
+    const boundryPoints = curve.getSpacedPoints(150);
+    const wallOffset = 35;
+
+    const blockPointsWest = PathGenerator.getOffsetPoints(boundryPoints, -wallOffset);
+    const blockPointsEast = PathGenerator.getOffsetPoints(boundryPoints, wallOffset);
+
+    // West wall needs a gap for the cave entrance
+    const cavePos = new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z);
+    let splitIdx = -1;
+    let minDist = Infinity;
+    blockPointsWest.forEach((p, i) => {
+        const d = p.distanceTo(cavePos);
+        if (d < minDist) { minDist = d; splitIdx = i; }
+    });
+
+    if (splitIdx !== -1) {
+        const gap = 10;
+        const part1 = blockPointsWest.slice(0, Math.max(0, splitIdx - gap));
+        const part2 = blockPointsWest.slice(Math.min(blockPointsWest.length, splitIdx + gap));
+
+        if (part1.length > 1) SectorBuilder.createBoundry(ctx, part1, 'BoundryWall_West_A');
+        if (part2.length > 1) SectorBuilder.createBoundry(ctx, part2, 'BoundryWall_West_B');
+    } else {
+        SectorBuilder.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
+    }
+
+    // East wall is continuous
+    SectorBuilder.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
+
+    SectorBuilder.createBoundry(ctx, [
+        new THREE.Vector3(-34, 0, 213),
+        new THREE.Vector3(34, 0, 213)
+    ], 'BoundryWall_Back');
+
+    SectorBuilder.createBoundry(ctx, [
+        new THREE.Vector3(158, 0, -88),
+        new THREE.Vector3(158, 0, -17),
+    ], 'BoundryWall_Tunnel');
+
+    SectorBuilder.createBoundry(ctx, [
+        new THREE.Vector3(55, 0, -65),
+        new THREE.Vector3(94, 0, -70),
+
+    ], 'BoundryWall_LeftOfCave');
+
+    SectorBuilder.createBoundry(ctx, [
+        new THREE.Vector3(107, 0, -70),
+        new THREE.Vector3(118, 0, -85),
+        new THREE.Vector3(135, 0, -90),
+    ], 'BoundryWall_RightOfCave');
+}
 
 export const Sector2: SectorDef = {
     id: 1,
@@ -140,14 +227,14 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, -50),
             new THREE.Vector3(200, 0, -53)
         ];
-        const curve = PathGenerator.createRailTrack(ctx, railRoadPath);
+        const railTrackCurve = PathGenerator.createRailTrack(ctx, railRoadPath);
 
 
         // --- FOREST ---
         const forestOffset = 8;
         const forestDepth = 70;
         const forestSamples = 80;
-        const fPoints = curve.getSpacedPoints(forestSamples);
+        const fPoints = railTrackCurve.getSpacedPoints(forestSamples);
 
         const leftInner: THREE.Vector3[] = [];
         const leftOuter: THREE.Vector3[] = [];
@@ -186,56 +273,35 @@ export const Sector2: SectorDef = {
         SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
         SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
 
-        if (ctx.yield) await ctx.yield();
 
+        // --- BOUNDARIES ---
+        createBoundries(ctx, railTrackCurve);
 
-        // --- INVISIBLE BOUNDARIES ---
-        const boundryPoints = curve.getSpacedPoints(150);
-        const wallOffset = 35;
+        // --- MOUNTAIN & CAVE OPENING ---
+        const mountainPoints = [
+            new THREE.Vector3(-19, 0, -68),
+            new THREE.Vector3(94, 0, -70),
+            new THREE.Vector3(107, 0, -70),
+            new THREE.Vector3(118, 0, -85),
+            new THREE.Vector3(158, 0, -90),
+            new THREE.Vector3(158, 0, -25),
+            new THREE.Vector3(200, 0, -14)
+        ];
 
-        const blockPointsWest = PathGenerator.getOffsetPoints(boundryPoints, -wallOffset);
-        const blockPointsEast = PathGenerator.getOffsetPoints(boundryPoints, wallOffset);
+        const caveOpening = SectorBuilder.createMountainOpening();
+        caveOpening.position.x = LOCATIONS.POIS.CAVE_ENTRANCE.x;
+        caveOpening.position.z = LOCATIONS.POIS.CAVE_ENTRANCE.z - 2;
+        scene.add(caveOpening);
+        SectorBuilder.createMountain(ctx, mountainPoints, caveOpening);
 
-        // --- APPLY BOUNDARIES ---
-        // East wall is continuous
-        SectorBuilder.createInvisibleWall(ctx, blockPointsEast, 'InvisibleWall_East');
-
-        // West wall needs a gap for the cave entrance
-        const cavePos = new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z);
-        let splitIdx = -1;
-        let minDist = Infinity;
-        blockPointsWest.forEach((p, i) => {
-            const d = p.distanceTo(cavePos);
-            if (d < minDist) { minDist = d; splitIdx = i; }
-        });
-
-        if (splitIdx !== -1) {
-            const gap = 10;
-            const part1 = blockPointsWest.slice(0, Math.max(0, splitIdx - gap));
-            const part2 = blockPointsWest.slice(Math.min(blockPointsWest.length, splitIdx + gap));
-
-            if (part1.length > 1) SectorBuilder.createInvisibleWall(ctx, part1, 'InvisibleWall_West_A');
-            if (part2.length > 1) SectorBuilder.createInvisibleWall(ctx, part2, 'InvisibleWall_West_B');
-        } else {
-            SectorBuilder.createInvisibleWall(ctx, blockPointsWest, 'InvisibleWall_West');
-        }
-
-        SectorBuilder.createInvisibleWall(ctx, [new THREE.Vector3(-34, 0, 213), new THREE.Vector3(34, 0, 213)], 'InvisibleWall_Back');
-        SectorBuilder.createInvisibleWall(ctx, [new THREE.Vector3(165, 0, -88), new THREE.Vector3(165, 0, -17)], 'InvisibleWall_Tunnel');
-
-        // --- MOUNTAINS ---
-        SectorBuilder.createMountainBoundary(ctx, blockPointsWest, blockPointsEast, cavePos);
-        ObjectGenerator.createMountainSlice(ctx, new THREE.Vector3(-34, 0, 213), new THREE.Vector3(34, 0, 213), 20, { visible: false });
-        ObjectGenerator.createMountainSlice(ctx, new THREE.Vector3(165, 0, -88), new THREE.Vector3(165, 0, -17), 20, { visible: false });
-
-        // --- TRAIN TUNNEL ---
-        PathGenerator.createTrainTunnel(ctx, [
-            new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x - 20, 0, LOCATIONS.POIS.TUNNEL.z),
+        // Train Tunnel
+        const trainTunnel = ObjectGenerator.createTrainTunnel([
+            new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z),
             new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
         ]);
+        ctx.obstacles.push({ mesh: trainTunnel });
+        scene.add(trainTunnel);
 
-        // --- CAVE OPENING ---
-        createCaveOpening(ctx);
 
         // CAVE SYSTEM --
         const innerCave = new THREE.Group();
@@ -243,10 +309,12 @@ export const Sector2: SectorDef = {
         scene.add(innerCave);
         await generateCaveSystem(ctx, innerCave);
 
-        // --- PROPS ---
-        scene.add(ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0));
 
-        // Paths
+        // --- PROPS ---
+        addProps(ctx);
+
+
+        // --- PATHS ---
         PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(12, 0, 43), new THREE.Vector3(8, 0, 33), new THREE.Vector3(3, 0, 29), new THREE.Vector3(2, 0, 21), new THREE.Vector3(-1, 0, 13)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
@@ -442,10 +510,10 @@ export const Sector2: SectorDef = {
         // --- SPAWNING LOGIC ---
         if (!sectorState.spawnedRooms) sectorState.spawnedRooms = {};
         const roomCenters = [
-            { id: 1, x: 100, z: -100, zomb: 5 },
-            { id: 3, x: 150, z: -200, zomb: 5 },
-            { id: 5, x: 100, z: -125, zomb: 5 },
-            { id: 6, x: 60, z: -125, zomb: 5 },
+            { id: 1, x: 100, z: -100, zombies: 0 },
+            { id: 3, x: 150, z: -200, zombies: 3 },
+            { id: 5, x: 100, z: -125, zombies: 5 },
+            { id: 6, x: 60, z: -125, zombies: 5 },
         ];
 
         roomCenters.forEach(r => {
@@ -453,34 +521,18 @@ export const Sector2: SectorDef = {
                 const dist = Math.sqrt((playerPos.x - r.x) ** 2 + (playerPos.z - r.z) ** 2);
                 if (dist < 30) {
                     sectorState.spawnedRooms[r.id] = true;
-                    for (let i = 0; i < r.zomb; i++) {
+                    for (let i = 0; i < r.zombies; i++) {
                         const offX = (Math.random() - 0.5) * 20;
                         const offZ = (Math.random() - 0.5) * 20;
                         let type = 'WALKER';
                         if (r.id === 6 && Math.random() > 0.8) type = 'TANK';
+                        if (r.id === 5 && Math.random() > 0.7) type = 'BOMBER';
                         else if (Math.random() > 0.7) type = 'RUNNER';
                         events.spawnZombie(type, new THREE.Vector3(r.x + offX, 0, r.z + offZ));
                     }
                 }
             }
         });
-
-        if (playerPos.z < -90 && playerPos.z > -130 && Math.abs(playerPos.x - 100) < 10) {
-            if (gameState.enemies.length < 5 && Math.random() < 0.02) {
-                events.spawnZombie('RUNNER', new THREE.Vector3(100, 0, -120));
-            }
-        }
     }
 };
 
-
-/**
- * Creates a cave opening in the mountain
- */
-function createCaveOpening(ctx: SectorContext) {
-
-}
-
-function spawnSectorHordes(ctx: SectorContext) {
-    return;
-}

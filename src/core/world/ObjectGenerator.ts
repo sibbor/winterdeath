@@ -22,7 +22,8 @@ const uniqueMeshes: Record<string, THREE.Group[]> = {
 };
 
 export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) => {
-    if (uniqueMeshes['spruce'].length > 0) return;
+    // Check if both trees and rocks are initialized
+    if (uniqueMeshes['spruce'].length > 0 && uniqueMeshes['rock'].length > 0) return;
 
     const tex = getSharedTextures();
 
@@ -413,18 +414,21 @@ export const ObjectGenerator = {
             ...uniqueMeshes['spruce'],
             ...uniqueMeshes['pine'],
             ...uniqueMeshes['birch'],
-            ...uniqueMeshes['oak']
+            ...uniqueMeshes['oak'],
+            ...uniqueMeshes['rock']
         ];
     },
 
     createTree: (type: 'spruce' | 'pine' | 'birch' | 'oak' = 'spruce', scale: number = 1.0) => {
-        // Warning: This remains sync to avoid breaking hundreds of call sites.
-        // It relies on prototypes being pre-warmed.
         const list = uniqueMeshes[type] || uniqueMeshes['spruce'];
+        if (list.length === 0) {
+            console.warn(`ObjectGenerator: No prototypes for ${type}, falling back to stone box.`);
+            return ObjectGenerator.createStone(scale);
+        }
         const p = list[Math.floor(Math.random() * list.length)];
         const t = p.clone();
         t.scale.multiplyScalar(scale);
-        t.rotation.y = Math.random() * Math.PI * 2; // Use Math.PI * 2 for full rotation
+        t.rotation.y = Math.random() * Math.PI * 2;
         t.userData.material = 'WOOD';
         return t;
     },
@@ -468,11 +472,14 @@ export const ObjectGenerator = {
     },
 
     createRock: (scale: number = 1.0, radius: number = 1.0) => {
-        // Warning: Sync, relies on pre-warmed prototypes
         const list = uniqueMeshes['rock'];
+        if (list.length === 0) {
+            console.warn("ObjectGenerator: No rock prototypes, falling back to stone box.");
+            return ObjectGenerator.createStone(scale);
+        }
         const p = list[Math.floor(Math.random() * list.length)];
         const r = p.clone();
-        r.scale.multiplyScalar(scale * radius);
+        r.scale.setScalar(scale * radius);
         r.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
         r.userData.material = 'STONE';
         return r;
@@ -577,6 +584,73 @@ export const ObjectGenerator = {
         }
         group.userData.material = 'STONE';
         return group;
+    },
+
+    /**
+     * Creates a concrete arch train tunnel along a path.
+     */
+    createTrainTunnel: (points: THREE.Vector3[]) => {
+        if (!points || points.length < 2) {
+            console.warn("createTrainTunnel called with insufficient points", points);
+            return new THREE.Group();
+        }
+
+        const tunnelWidthOuter = 16;
+        const tunnelHeightWalls = 7;
+        const tunnelArchRise = 5;
+        const tunnelThickness = 2;
+        const tunnelDepth = 30;
+
+        const start = points[0];
+        const end = points[points.length - 1];
+        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+
+        const halfWidthO = tunnelWidthOuter / 2;
+        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
+        const tunnelGroup = new THREE.Group();
+        tunnelGroup.position.copy(mid);
+        tunnelGroup.lookAt(end);
+
+        const archShape = new THREE.Shape();
+        archShape.moveTo(-halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
+        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
+        archShape.lineTo(halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, 0);
+
+        const halfWidthI = halfWidthO - tunnelThickness;
+        const wallHeightI = tunnelHeightWalls;
+        const controlPointY_I = controlPointY_O - tunnelThickness;
+
+        const holePath = new THREE.Path();
+        holePath.moveTo(halfWidthI, 0);
+        holePath.lineTo(halfWidthI, wallHeightI);
+        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
+        holePath.lineTo(-halfWidthI, 0);
+        holePath.lineTo(halfWidthI, 0);
+
+        archShape.holes.push(holePath);
+
+        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
+        archGeo.translate(0, 0, -tunnelDepth / 2); // Center along depth
+
+        const tunnelMat = MATERIALS.concrete.clone();
+        tunnelMat.side = THREE.DoubleSide;
+        const arch = new THREE.Mesh(archGeo, tunnelMat);
+        tunnelGroup.add(arch);
+
+        const floorGeo = new THREE.PlaneGeometry(halfWidthI * 2, tunnelDepth);
+        const gravelMat = MATERIALS.gravel.clone();
+        if (gravelMat.map) {
+            gravelMat.map.wrapS = gravelMat.map.wrapT = THREE.RepeatWrapping;
+            gravelMat.map.repeat.set(halfWidthI, tunnelDepth / 2);
+        }
+        const floor = new THREE.Mesh(floorGeo, gravelMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0.02;
+        tunnelGroup.add(floor);
+
+        return tunnelGroup;
     },
 
     createBuildingPiece: (type: string) => {
@@ -726,78 +800,6 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createCaveEntrance: () => {
-        const group = new THREE.Group();
-        // A rocky archway
-        const mat = MATERIALS.stone;
-
-        // Left Pillar
-        const left = new THREE.Mesh(new THREE.DodecahedronGeometry(6, 0), mat);
-        left.scale.set(1, 2.5, 1);
-        left.position.set(-8, 6, 0);
-        left.castShadow = true; left.receiveShadow = true;
-        group.add(left);
-
-        // Right Pillar
-        const right = new THREE.Mesh(new THREE.DodecahedronGeometry(6, 0), mat);
-        right.scale.set(1, 2.5, 1);
-        right.position.set(8, 6, 0);
-        right.castShadow = true; right.receiveShadow = true;
-        group.add(right);
-
-        // Top Arch
-        const top = new THREE.Mesh(new THREE.DodecahedronGeometry(6, 0), mat);
-        top.scale.set(2.5, 1, 1.5);
-        top.position.set(0, 14, 0);
-        top.castShadow = true; top.receiveShadow = true;
-        group.add(top);
-
-        return group;
-    },
-
-    createMountainSlice: (ctx: SectorContext, p1: THREE.Vector3, p2: THREE.Vector3, height: number = 15, options?: { visible?: boolean }) => {
-        const { visible = true } = options || {};
-        // Optimized wall generation using a stretched cube with texture repeating
-        const vec = new THREE.Vector3().subVectors(p2, p1);
-        const len = vec.length();
-        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-        const angle = Math.atan2(vec.z, vec.x);
-
-        // Create custom material clone for tiling if not exists
-        // Note: For performance, we might want to share this, but "stone" is standard.
-        // To fix bump map stretching, we need to map UVs or use triplanar. 
-        // Simple fix: Repeat texture based on length.
-
-        const mat = MATERIALS.stone.clone();
-        if (mat.map) {
-            mat.map = mat.map.clone();
-            mat.map.wrapS = THREE.RepeatWrapping;
-            mat.map.wrapT = THREE.RepeatWrapping;
-            mat.map.repeat.set(len / 4, height / 4);
-        }
-        if (mat.bumpMap) {
-            mat.bumpMap = mat.bumpMap.clone();
-            mat.bumpMap.wrapS = THREE.RepeatWrapping;
-            mat.bumpMap.wrapT = THREE.RepeatWrapping;
-            mat.bumpMap.repeat.set(len / 4, height / 4);
-        }
-
-        const geo = new THREE.BoxGeometry(len, height, 8); // Thick mountain wall
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.visible = visible;
-        mesh.position.set(mid.x, height / 2 - 2, mid.z);
-        mesh.rotation.y = -angle;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mesh.userData.material = 'STONE';
-        ctx.scene.add(mesh);
-
-        // Collider
-        ctx.obstacles.push({
-            mesh: mesh,
-            collider: { type: 'box', size: new THREE.Vector3(len, height, 8) }
-        });
-    },
 
     /**
      * Creates a massive rock wall along a path.
@@ -982,8 +984,9 @@ export const ObjectGenerator = {
 
         if (type === 'timber_truck') {
             const logs = ObjectGenerator.createTimberPile(1.0);
-            logs.position.set(-2, chassis.position.y + 0.4, 0);
-            logs.scale.set(1.5, 1.5, 0.6); // Scale to fit flatbed
+            logs.position.set(chassis.position.x - 1.8, chassis.position.y + 0.4, 0);
+            logs.rotation.set(0, Math.PI * 0.5, 0);
+            logs.scale.set(1, 1, 1.3); // Scale to fit flatbed
             vehicleBody.add(logs);
         }
 
@@ -1034,7 +1037,9 @@ export const ObjectGenerator = {
         ];
 
         ctx.scene.add(group);
-        ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
+        if (ctx.obstacles) {
+            ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
+        }
     },
 
 
@@ -1111,7 +1116,9 @@ export const ObjectGenerator = {
         ];
 
         ctx.scene.add(group);
-        ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
+        if (ctx.obstacles) {
+            ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
+        }
         return group;
     },
 

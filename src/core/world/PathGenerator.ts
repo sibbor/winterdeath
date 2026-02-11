@@ -30,7 +30,7 @@ export const PathGenerator = {
     /**
      * Creates an invisible collision wall along a path.
      */
-    createInvisibleWall: (ctx: SectorContext, points: THREE.Vector3[], name: string = 'InvisibleWall') => {
+    createBoundry: (ctx: SectorContext, points: THREE.Vector3[], name: string = 'BoundryWall') => {
         const height = 50;
         const thickness = 2.0;
 
@@ -832,67 +832,4 @@ export const PathGenerator = {
         }
     },
 
-    /**
-     * Creates a concrete arch train tunnel along a path.
-     */
-    createTrainTunnel: (ctx: SectorContext, points: THREE.Vector3[]) => {
-        const tunnelWidthOuter = 16;
-        const tunnelHeightWalls = 7;
-        const tunnelArchRise = 5;
-        const tunnelThickness = 2;
-        const tunnelDepth = 30;
-
-        const start = points[0];
-        const end = points[points.length - 1];
-        const dir = new THREE.Vector3().subVectors(end, start).normalize();
-        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-
-        const halfWidthO = tunnelWidthOuter / 2;
-        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
-        const group = new THREE.Group();
-        group.position.copy(mid);
-        group.lookAt(end);
-        group.rotateY(Math.PI / 2); // Orient arch correctly
-
-        const archShape = new THREE.Shape();
-        archShape.moveTo(-halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
-        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
-        archShape.lineTo(halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, 0);
-
-        const halfWidthI = halfWidthO - tunnelThickness;
-        const wallHeightI = tunnelHeightWalls;
-        const controlPointY_I = controlPointY_O - tunnelThickness;
-
-        const holePath = new THREE.Path();
-        holePath.moveTo(halfWidthI, 0);
-        holePath.lineTo(halfWidthI, wallHeightI);
-        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
-        holePath.lineTo(-halfWidthI, 0);
-        holePath.lineTo(halfWidthI, 0);
-
-        archShape.holes.push(holePath);
-
-        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
-        archGeo.translate(0, 0, -tunnelDepth / 2); // Center along depth
-
-        const tunnelMat = MATERIALS.concrete.clone();
-        tunnelMat.side = THREE.DoubleSide;
-        const arch = new THREE.Mesh(archGeo, tunnelMat);
-        group.add(arch);
-
-        const floorGeo = new THREE.PlaneGeometry(halfWidthI * 2, tunnelDepth);
-        const gravelMat = MATERIALS.gravel.clone();
-        if (gravelMat.map) {
-            gravelMat.map.wrapS = gravelMat.map.wrapT = THREE.RepeatWrapping;
-            gravelMat.map.repeat.set(halfWidthI, tunnelDepth / 2);
-        }
-        const floor = new THREE.Mesh(floorGeo, gravelMat);
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = 0.02;
-        group.add(floor);
-
-        ctx.scene.add(group);
-    }
 };

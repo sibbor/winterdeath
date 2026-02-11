@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ObjectGenerator } from '../world/ObjectGenerator';
+import { SectorBuilder } from '../world/SectorGenerator';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 
@@ -174,6 +175,16 @@ export const AssetPreloader = {
         const dummyCorpse = new THREE.Mesh(GEOMETRY.zombie, deadMat);
         dummyRoot.add(dummyCorpse);
 
+        // -- UI & Geometries --
+        const dummySprite = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false }));
+        dummyRoot.add(dummySprite);
+
+        const dodeca = new THREE.Mesh(new THREE.DodecahedronGeometry(1), MATERIALS.stone);
+        dummyRoot.add(dodeca);
+
+        const circle = new THREE.Mesh(new THREE.CircleGeometry(1, 8), MATERIALS.ash);
+        dummyRoot.add(circle);
+
 
         // Pre-warm FX Pool
         // Create 200 particles of various types to fill the pool
@@ -207,6 +218,21 @@ export const AssetPreloader = {
             g.position.set(0, -1000, 0);
             scene.add(g);
             FXSystem.MESH_POOL.push(g);
+        }
+
+        // Add explicit campfire particles to pool
+        for (let i = 0; i < 10; i++) {
+            const f = new THREE.Mesh(GEOMETRY.flame, MATERIALS.fire);
+            f.visible = false;
+            f.position.set(0, -1000, 0);
+            scene.add(f);
+            FXSystem.MESH_POOL.push(f);
+
+            const s = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), MATERIALS.bullet);
+            s.visible = false;
+            s.position.set(0, -1000, 0);
+            scene.add(s);
+            FXSystem.MESH_POOL.push(s);
         }
 
         const ring = new THREE.Mesh(GEOMETRY.familyRing, MATERIALS.familyRing);
@@ -283,6 +309,34 @@ export const AssetPreloader = {
             const dummyBuilding = ObjectGenerator.createBuilding(4, 4, 4, 0x888888);
             dummyBuilding.position.set(-10, 0, 10);
             dummyRoot.add(dummyBuilding);
+
+            // Sector 2 Specific Props
+            const dummyRock = ObjectGenerator.createRock(2, 2);
+            dummyRock.position.set(5, 0, 5);
+            dummyRoot.add(dummyRock);
+
+            const dummyCampfire = ObjectGenerator.createCampfire({ scene: dummyRoot, obstacles: [] } as any, 0, 0, 0, 1.0);
+            dummyCampfire.position.set(-5, 0, -5);
+
+            const dummyTimberTruck = ObjectGenerator.createVehicle('timber_truck');
+            dummyTimberTruck.position.set(0, 0, 15);
+            dummyRoot.add(dummyTimberTruck);
+
+            const dummyTimberPile = ObjectGenerator.createTimberPile();
+            dummyTimberPile.position.set(5, 0, -5);
+            dummyRoot.add(dummyTimberPile);
+
+            const dummyBarrel = ObjectGenerator.createBarrel();
+            dummyBarrel.position.set(-5, 0, 5);
+            dummyRoot.add(dummyBarrel);
+
+            const dummyStump = ObjectGenerator.createTreeStump();
+            dummyStump.position.set(2, 0, 2);
+            dummyRoot.add(dummyStump);
+
+            const dummyOpening = SectorBuilder.createMountainOpening();
+            dummyOpening.position.set(0, 0, -20);
+            dummyRoot.add(dummyOpening);
 
             if (yieldToMain) await yieldToMain();
         } catch (e) {

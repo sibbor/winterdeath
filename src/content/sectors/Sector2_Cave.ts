@@ -22,7 +22,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     // Define Rooms
     const rooms: RoomData[] = [
-        { id: 1, x: 100, z: -100, w: 30, d: 30, type: 'Lobby', zombies: 3 },
+        { id: 1, x: 100, z: -100, w: 30, d: 30, type: 'Lobby', zombies: 0 },
         { id: 2, x: 150, z: -150, w: 50, d: 20, type: 'Material', chests: 2 },
         { id: 3, x: 150, z: -200, w: 30, d: 30, type: 'Mess', zombies: 5 },
         { id: 4, x: 100, z: -200, w: 30, d: 30, type: 'Food', chests: 3 },
@@ -34,8 +34,8 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     // Define Explicit Corridors to Connect Rooms
     const corridors: Box[] = [
-        // Entrance Tunnel (From -70 to R1 -100)
-        { x: 100, z: -80, w: 14, d: 35 },
+        // Entrance Tunnel (From -80 to R1 -100)
+        { x: 100, z: -90, w: 14, d: 40 },
 
         // R5 <-> R2 Connection (Diagonal) - Modified to be truly diagonal
         { x: 118, z: -138, w: 35, d: 12, rotation: -Math.PI / 4 },
@@ -349,25 +349,23 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     // Room Specifics (Lights, Spawns, Decor)
     for (const r of rooms) {
         // Lights
-        //FIXME: Add lights to rooms
         createStringLight(new THREE.Vector3(r.x, 4.5, r.z), 0xffaa88, 50);
 
         if (r.type === 'ShelterRoom') {
-            const light = new THREE.PointLight(0xfff0dd, 100, 50);
+            const light = new THREE.PointLight(0xff0000, 100, 50);
             light.position.set(r.x, 8, r.z);
             innerCave.add(light);
         } else {
             // Decorate normal rooms
-            decorateRoom(r);
+            //decorateRoom(r);
         }
 
-        // Spawns
+        // Chest spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
                 await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
             }
         }
-        if (ctx.yield) await ctx.yield();
     }
 
     // --- PART 3: THE SHELTER PORT ---
