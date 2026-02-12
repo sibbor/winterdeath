@@ -6,6 +6,7 @@ import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 
 const LOCATIONS = {
@@ -186,7 +187,10 @@ export const Sector1: SectorDef = {
         kindergarten.position.set(LOCATIONS.BUILDINGS.KINDGARTEN.x, 0, LOCATIONS.BUILDINGS.KINDGARTEN.z);
         kindergarten.castShadow = true;
         scene.add(kindergarten);
-        obstacles.push({ mesh: kindergarten, collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) } });
+        SectorBuilder.addObstacle(ctx, {
+            mesh: kindergarten,
+            collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) }
+        });
 
         // Fence between SMU/Kindergarten
         SectorBuilder.createFence(ctx, [
@@ -220,8 +224,12 @@ export const Sector1: SectorDef = {
         smu.position.set(LOCATIONS.POIS.SMU.x, 5, LOCATIONS.POIS.SMU.z);
         smu.castShadow = true;
         scene.add(smu);
-        obstacles.push({ mesh: smu, collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) } });
+        SectorBuilder.addObstacle(ctx, {
+            mesh: smu,
+            collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) }
+        });
         SectorBuilder.setOnFire(ctx, smu, { smoke: true, intensity: 200, distance: 50, onRoof: true });
+
         // 2 blue colored containers behind (west of) the building
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z + 5, 0, 0x0044cc);
@@ -243,23 +251,36 @@ export const Sector1: SectorDef = {
         // POI: Church 
         const churchGroup = new THREE.Group();
         churchGroup.position.set(LOCATIONS.POIS.CHURCH.x, 0, LOCATIONS.POIS.CHURCH.z);
-        const churchBody = new THREE.Mesh(new THREE.BoxGeometry(15, 12, 15), MATERIALS.brownBrick);
-        churchBody.position.y = 6;
+
+        // Merge body and tower parts
+        const churchBodyGeo = new THREE.BoxGeometry(15, 12, 15);
+        churchBodyGeo.translate(0, 6, 0);
+        const churchBody = new THREE.Mesh(churchBodyGeo, MATERIALS.brownBrick);
         churchGroup.add(churchBody);
-        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4, 0.2), MATERIALS.crossEmissive);
-        const crossH = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.5, 0.2), MATERIALS.crossEmissive);
-        crossV.position.set(0, 8, 7.6);
-        crossH.position.set(0, 8.5, 7.6);
-        churchGroup.add(crossV);
-        churchGroup.add(crossH);
-        const tower = new THREE.Mesh(new THREE.BoxGeometry(4, 12, 4), MATERIALS.blackMetal);
-        const towerTop = new THREE.Mesh(new THREE.ConeGeometry(6, 2, 6), MATERIALS.blackMetal);
-        tower.position.set(-10, 8, -15);
-        towerTop.position.y = 12;
-        tower.add(towerTop);
+
+        // Cross (Merged)
+        const crossVGeo = new THREE.BoxGeometry(0.5, 4, 0.2);
+        crossVGeo.translate(0, 8, 7.6);
+        const crossHGeo = new THREE.BoxGeometry(2.5, 0.5, 0.2);
+        crossHGeo.translate(0, 8.5, 7.6);
+        const mergedCrossGeo = BufferGeometryUtils.mergeGeometries([crossVGeo, crossHGeo]);
+        const cross = new THREE.Mesh(mergedCrossGeo, MATERIALS.crossEmissive);
+        churchGroup.add(cross);
+
+        // Tower (Merged)
+        const towerGeo = new THREE.BoxGeometry(4, 12, 4);
+        towerGeo.translate(-10, 6, -15);
+        const towerTopGeo = new THREE.ConeGeometry(6, 2, 6);
+        towerTopGeo.translate(-10, 12, -15);
+        const mergedTowerGeo = BufferGeometryUtils.mergeGeometries([towerGeo, towerTopGeo]);
+        const tower = new THREE.Mesh(mergedTowerGeo, MATERIALS.blackMetal);
         churchGroup.add(tower);
+
         scene.add(churchGroup);
-        obstacles.push({ mesh: churchGroup, collider: { type: 'box', size: new THREE.Vector3(15, 20, 15) } });
+        SectorBuilder.addObstacle(ctx, {
+            mesh: churchGroup,
+            collider: { type: 'box', size: new THREE.Vector3(15, 20, 25) }
+        });
         // Church burning on roof
         SectorBuilder.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 50, onRoof: true });
 
@@ -267,18 +288,20 @@ export const Sector1: SectorDef = {
         const cafeGroup = new THREE.Group();
         cafeGroup.position.set(LOCATIONS.POIS.CAFE.x, 6, LOCATIONS.POIS.CAFE.z);
 
-        const cafeBodyLeft = new THREE.Mesh(new THREE.BoxGeometry(5, 12, 12), MATERIALS.yellowBrick);
-        cafeBodyLeft.position.x = -6;
-        const cafeBodyRight = new THREE.Mesh(new THREE.BoxGeometry(5, 12, 12), MATERIALS.yellowBrick);
-        cafeBodyRight.position.x = 6;
-        const cafeBodyCenter = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 5), MATERIALS.yellowBrick);
-        cafeBodyCenter.position.z = -3;
-        cafeGroup.castShadow = true;
-        cafeGroup.add(cafeBodyLeft);
-        cafeGroup.add(cafeBodyRight);
-        cafeGroup.add(cafeBodyCenter);
+        const cafeLeftGeo = new THREE.BoxGeometry(5, 12, 12);
+        cafeLeftGeo.translate(-6, 0, 0);
+        const cafeRightGeo = new THREE.BoxGeometry(5, 12, 12);
+        cafeRightGeo.translate(6, 0, 0);
+        const cafeCenterGeo = new THREE.BoxGeometry(12, 12, 5);
+        cafeCenterGeo.translate(0, 0, -3);
 
-        obstacles.push({ mesh: cafeGroup, collider: { type: 'box', size: new THREE.Vector3(15, 20, 12) } });
+        const mergedCafeGeo = BufferGeometryUtils.mergeGeometries([cafeLeftGeo, cafeRightGeo, cafeCenterGeo]);
+        const cafeBody = new THREE.Mesh(mergedCafeGeo, MATERIALS.yellowBrick);
+        cafeGroup.add(cafeBody);
+        cafeGroup.castShadow = true;
+
+        const obstacle_cafe = { mesh: cafeGroup, collider: { type: 'box' as const, size: new THREE.Vector3(15, 20, 12) } };
+        SectorBuilder.addObstacle(ctx, obstacle_cafe);
 
         const cafeSign = createTextSprite(t('clues.s1_poi_cafe'));
         cafeSign.position.set(0, 3, 6.5);
@@ -453,7 +476,8 @@ export const Sector1: SectorDef = {
         scene.add(colMesh);
 
         const busIdx = obstacles.length;
-        obstacles.push({ mesh: colMesh, collider: { type: 'box', size: busSize } });
+        const obstacle_bus = { mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
+        SectorBuilder.addObstacle(ctx, obstacle_bus);
 
         // Bus - Burn effect (Relative to center of top face)
         SectorBuilder.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
@@ -487,19 +511,34 @@ export const Sector1: SectorDef = {
         train.position.set(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
         train.rotation.y = -0.05;
         const matBody = MATERIALS.train; const matBlack = MATERIALS.blackMetal;
-        const chassis = new THREE.Mesh(new THREE.BoxGeometry(16, 1.5, 4), matBlack); chassis.position.y = 1.5; train.add(chassis);
-        const boiler = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 10, 16), matBody); boiler.rotation.z = Math.PI / 2; boiler.position.set(2, 4.0, 0); train.add(boiler);
-        const cabinGroup = new THREE.Group(); cabinGroup.position.set(-5, 2.3, 0);
-        cabinGroup.add(new THREE.Mesh(new THREE.BoxGeometry(5, 2, 4.2), matBody));
-        train.add(cabinGroup);
+
+        // Chassis (Black Metal)
+        const chassis = new THREE.Mesh(new THREE.BoxGeometry(16, 1.5, 4), matBlack);
+        chassis.position.y = 1.5;
+        train.add(chassis);
+
+        // Boiler and Cabin merged (Train Mat)
+        const boilerGeo = new THREE.CylinderGeometry(1.8, 1.8, 10, 16);
+        boilerGeo.rotateZ(Math.PI / 2);
+        boilerGeo.translate(2, 4.0, 0);
+
+        const cabinBodyGeo = new THREE.BoxGeometry(5, 2, 4.2);
+        cabinBodyGeo.translate(-5, 2.3, 0);
+
+        const mergedTrainGeo = BufferGeometryUtils.mergeGeometries([boilerGeo, cabinBodyGeo]);
+        const trainBody = new THREE.Mesh(mergedTrainGeo, matBody);
+        train.add(trainBody);
         scene.add(train);
-        obstacles.push({ mesh: train, collider: { type: 'box', size: new THREE.Vector3(18, 12, 6) } });
+        SectorBuilder.addObstacle(ctx, {
+            mesh: train,
+            collider: { type: 'box', size: new THREE.Vector3(18, 12, 6) }
+        });
 
-        // FOREST
-        ObjectGenerator.createForest(ctx, [new THREE.Vector3(37, 0, 44), new THREE.Vector3(36, 0, 30), new THREE.Vector3(103, 0, 30), new THREE.Vector3(99, 0, 67), new THREE.Vector3(76, 0, 43)], 8, 'spruce');
-        ObjectGenerator.createForest(ctx, [new THREE.Vector3(128, 0, 200), new THREE.Vector3(65, 0, 234), new THREE.Vector3(138, 0, 253)], 12, 'birch');
+        // --- FOREST ---
+        SectorBuilder.createForest(ctx, [new THREE.Vector3(37, 0, 44), new THREE.Vector3(36, 0, 30), new THREE.Vector3(103, 0, 30), new THREE.Vector3(99, 0, 67), new THREE.Vector3(76, 0, 43)], 8, 'spruce');
+        SectorBuilder.createForest(ctx, [new THREE.Vector3(128, 0, 200), new THREE.Vector3(65, 0, 234), new THREE.Vector3(138, 0, 253)], 12, 'birch');
 
-        // Fences
+        // --- FENCES ---
         const ty2 = LOCATIONS.POIS.TRAIN_YARD;
         SectorBuilder.createFence(ctx, [new THREE.Vector3(ty2.x - 60, 0, ty2.z - 40), new THREE.Vector3(ty2.x + 60, 0, ty2.z - 40)], 'mesh', 4, true);
 

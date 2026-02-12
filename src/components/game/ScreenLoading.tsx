@@ -6,14 +6,29 @@ interface ScreenLoadingProps {
     mapIndex: number;
     isCamp?: boolean;
     isMobileDevice?: boolean;
+    debugInfo?: {
+        fps?: number;
+        sceneChildren?: number;
+        obstacles?: number;
+    };
 }
 
-const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobileDevice }) => {
+const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobileDevice, debugInfo }) => {
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
 
     const mapKeys = ['village', 'bunker', 'mast', 'scrapyard', 'home'];
     const mapKey = isCamp ? 'camp' : (mapKeys[mapIndex] || 'village');
+
+    const [isMinimized, setIsMinimized] = useState(() => {
+        return localStorage.getItem('vinterdod_debug_minimized') === 'true';
+    });
+
+    const toggleMinimized = () => {
+        const newState = !isMinimized;
+        setIsMinimized(newState);
+        localStorage.setItem('vinterdod_debug_minimized', String(newState));
+    };
 
     useEffect(() => {
         if (tips && Array.isArray(tips) && tips.length > 0) {
@@ -53,6 +68,32 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobil
                 <div className="w-full h-3 bg-gray-900 border border-black rounded-full overflow-hidden relative skew-x-[-10deg]">
                     <div className="h-full bg-red-600 animate-[loading-progress_3s_ease-in-out_infinite] shadow-[0_0_10px_rgba(220,38,38,0.5)]" />
                 </div>
+
+                {/* Debug Info */}
+                {debugInfo && (
+                    isMinimized ? (
+                        <div
+                            onClick={toggleMinimized}
+                            className="absolute top-4 right-4 bg-red-900 px-2 py-1 rounded cursor-pointer z-[110] shadow-lg pointer-events-auto hover:bg-red-800 transition-colors border border-red-700"
+                        >
+                            <div className="font-mono font-bold text-white text-[10px]">
+                                FPS: {debugInfo.fps?.toFixed(0) || '?'}
+                            </div>
+                        </div>
+                    ) : (
+                        <div
+                            onClick={toggleMinimized}
+                            className="absolute top-4 right-4 bg-black/80 border border-red-900/50 rounded px-4 py-3 text-xs font-mono z-[110] cursor-pointer hover:bg-black/90 transition-colors pointer-events-auto"
+                        >
+                            <div className="text-red-500 font-bold mb-2">DEBUG INFO</div>
+                            <div className="space-y-1 text-gray-300">
+                                <div>FPS: <span className={debugInfo.fps && debugInfo.fps < 30 ? 'text-red-500 font-bold' : 'text-green-500'}>{debugInfo.fps?.toFixed(1) || '?'}</span></div>
+                                <div>Scene Children: <span className="text-yellow-500">{debugInfo.sceneChildren || 0}</span></div>
+                                <div>Obstacles: <span className="text-yellow-500">{debugInfo.obstacles || 0}</span></div>
+                            </div>
+                        </div>
+                    )
+                )}
             </div>
 
             <style>{`

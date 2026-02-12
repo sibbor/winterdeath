@@ -5,6 +5,7 @@ import type { Enemy } from '../types/enemy';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
 import { soundManager } from '../utils/sound';
+import { SpatialGrid } from './world/SpatialGrid';
 import { ZombieRenderer } from './renderers/ZombieRenderer';
 import { CorpseRenderer } from './renderers/CorpseRenderer';
 
@@ -103,16 +104,17 @@ export const EnemyManager = {
         const exitForce = forceVec.clone().multiplyScalar(0.5).add(upVec);
 
         // Spawn Blood
-        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 40);
-        callbacks.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.bloodDecal);
+        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 60);
+        callbacks.spawnDecal(pos.x, pos.z, 3.0, MATERIALS.bloodDecal);
 
         // Create random chunks
-        const limbCount = enemy.isBoss ? 15 : 5;
         const baseScale = enemy.originalScale || 1.0;
+        const widthScale = enemy.widthScale || 1.0;
+        const bodyMass = baseScale * widthScale;
 
-        // Scale chunks proportionally to body size and number of chunks
-        // Higher base factor (2.5) ensures chunks are visible but proportional
-        const limbScale = (baseScale * 2.5) / limbCount;
+        // Formula: Large enemies explode into many more objects
+        const limbCount = Math.max(5, Math.floor(bodyMass * 12));
+        const limbScaleBase = (baseScale * 2.0) / Math.sqrt(limbCount);
 
         for (let i = 0; i < limbCount; i++) {
             const mesh = new THREE.Mesh(
@@ -122,12 +124,13 @@ export const EnemyManager = {
             mesh.position.copy(pos);
             mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-            mesh.scale.setScalar(limbScale * (0.8 + Math.random() * 0.4));
+            // Chunks vary in size but relate to mass
+            mesh.scale.setScalar(limbScaleBase * (0.6 + Math.random() * 0.8));
 
             const vel = exitForce.clone();
-            vel.x += (Math.random() - 0.5) * 10;
-            vel.y += Math.random() * 5;
-            vel.z += (Math.random() - 0.5) * 8;
+            vel.x += (Math.random() - 0.5) * 12;
+            vel.y += Math.random() * 6;
+            vel.z += (Math.random() - 0.5) * 10;
 
             callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, mesh, vel);
         }
@@ -168,7 +171,7 @@ export const EnemyManager = {
         now: number,
         playerPos: THREE.Vector3,
         enemies: Enemy[],
-        obstacles: Obstacle[],
+        collisionGrid: SpatialGrid,
         noiseEvents: { pos: THREE.Vector3, radius: number, time: number }[],
         shakeIntensity: number,
         onPlayerHit: (damage: number, attacker: any, type: string) => void,
@@ -178,7 +181,7 @@ export const EnemyManager = {
         onDamageDealt?: (amount: number, isBoss?: boolean) => void
     ) => {
         for (const e of enemies) {
-            EnemyAI.updateEnemy(e, now, delta, playerPos, obstacles, noiseEvents, enemies, shakeIntensity, {
+            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, {
                 onPlayerHit,
                 spawnPart,
                 spawnDecal,

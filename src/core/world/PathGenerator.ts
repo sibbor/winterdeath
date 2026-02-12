@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { ObjectGenerator } from './ObjectGenerator';
+import { SectorBuilder } from './SectorGenerator';
 
 let pathLayer = 0; // Deterministic Y-stacking to prevent Z-fighting
 
@@ -34,29 +35,47 @@ export const PathGenerator = {
         const height = 50;
         const thickness = 2.0;
 
-        const curve = new THREE.CatmullRomCurve3(points);
-        const length = curve.getLength();
-        const steps = Math.ceil(length / 2);
-        const pointsList = curve.getSpacedPoints(steps);
+        const proto = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, 2.1));
+        proto.visible = false;
+        proto.name = name;
+        ctx.scene.add(proto);
 
-        for (let i = 0; i < pointsList.length - 1; i++) {
-            const curr = pointsList[i];
-            const next = pointsList[i + 1];
-            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+        // OPTIMIZATION: Combine segments if they are close to a straight line
+        const consolidatedPoints: THREE.Vector3[] = [points[0]];
+        for (let i = 1; i < points.length - 1; i++) {
+            const prev = points[i - 1];
+            const curr = points[i];
+            const next = points[i + 1];
 
-            const segment = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, 2.1));
-            mid.y = height / 2;
-            segment.position.copy(mid);
-            segment.lookAt(next.x, mid.y, next.z);
-            segment.visible = false;
-            segment.name = `${name}_${i}`;
-            segment.updateMatrixWorld();
+            const d1 = new THREE.Vector3().subVectors(curr, prev).normalize();
+            const d2 = new THREE.Vector3().subVectors(next, curr).normalize();
 
-            ctx.scene.add(segment);
+            if (d1.dot(d2) < 0.999) { // If angle is significant, keep the point
+                consolidatedPoints.push(curr);
+            }
+        }
+        consolidatedPoints.push(points[points.length - 1]);
 
-            ctx.obstacles.push({
-                mesh: segment,
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.0) }
+        for (let i = 0; i < consolidatedPoints.length - 1; i++) {
+            const curr = consolidatedPoints[i];
+            const next = consolidatedPoints[i + 1];
+            const segVec = new THREE.Vector3().subVectors(next, curr);
+            const segLen = segVec.length();
+            const segMid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+            const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
+
+            // FIX: Use a temporary mesh/object for each segment to avoid the shared prototype origin bug
+            const collisionDummy = new THREE.Object3D();
+            collisionDummy.position.copy(segMid).setY(height / 2);
+            collisionDummy.rotation.y = angle;
+            collisionDummy.updateMatrixWorld(true);
+
+            SectorBuilder.addObstacle(ctx, {
+                mesh: collisionDummy,
+                collider: {
+                    type: 'box' as const,
+                    size: new THREE.Vector3(thickness, height, segLen)
+                }
             });
         }
     },
@@ -329,7 +348,17 @@ export const PathGenerator = {
                 // footprints already have the correct opacity from MATERIALS.footprintDecal
 
                 prints.renderOrder = 5;
-                ctx.scene.add(prints);
+                const obstacle = {
+                    mesh: prints,
+                    collider: {
+                        type: 'box' as const,
+                        size: new THREE.Vector3(0.4, 0.01, 0.6), // Approximate size of the decal
+                        position: prints.position.clone(),
+                        rotation: prints.rotation.clone()
+                    }
+                };
+                ctx.obstacles.push(obstacle);
+                ctx.collisionGrid.add(obstacle as any);
             }
         }
 
@@ -578,41 +607,90 @@ export const PathGenerator = {
         }
 
         const colorHex = color === 'white' ? 0xffffff : (color === 'black' ? 0x333333 : 0x4a3728);
+        const segmentCount = pointsList.length - 1;
+        if (segmentCount <= 0) return;
 
-        for (let i = 0; i < pointsList.length - 1; i++) {
+        // Calculate segment distance (uniform due to getSpacedPoints)
+        const sampleDist = pointsList[0].distanceTo(pointsList[1]);
+
+        // Create prototypes to extract geometry
+        const proto = color === 'mesh' ? ObjectGenerator.createMeshFence(sampleDist, height) : ObjectGenerator.createFence(sampleDist);
+
+        // Extract all meshes from prototype
+        const meshParts: { mesh: THREE.Mesh, matrix: THREE.Matrix4 }[] = [];
+        proto.traverse((child: any) => {
+            if (child.isMesh) {
+                // Ensure matrix is up to date for relative offsets
+                child.updateMatrix();
+                meshParts.push({ mesh: child, matrix: child.matrix.clone() });
+            }
+        });
+
+        // For each mesh part, create an InstancedMesh
+        meshParts.forEach(part => {
+            const instancedMesh = new THREE.InstancedMesh(part.mesh.geometry, part.mesh.material, segmentCount);
+            instancedMesh.castShadow = true;
+            instancedMesh.receiveShadow = true;
+
+            // Apply color if needed
+            if (color !== 'wood' && color !== 'mesh') {
+                const mat = (part.mesh.material as THREE.Material).clone();
+                if ((mat as any).color) (mat as any).color.setHex(colorHex);
+                instancedMesh.material = mat;
+            }
+
+            const matrix = new THREE.Matrix4();
+            const segmentMatrix = new THREE.Matrix4();
+            const rotation = new THREE.Quaternion();
+            const position = new THREE.Vector3();
+            const scale = new THREE.Vector3(1, (color !== 'mesh' && height !== 1.2) ? height / 1.2 : 1, 1);
+            const lookAtTarget = new THREE.Vector3();
+
+            for (let i = 0; i < segmentCount; i++) {
+                const curr = pointsList[i];
+                const next = pointsList[i + 1];
+                const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+
+                position.set(mid.x, mid.y, mid.z);
+                lookAtTarget.set(next.x, mid.y, next.z);
+
+                segmentMatrix.lookAt(position, lookAtTarget, new THREE.Vector3(0, 1, 0));
+                rotation.setFromRotationMatrix(segmentMatrix);
+
+                matrix.compose(position, rotation, scale);
+
+                // Multiply by the part's local matrix within its group
+                matrix.multiply(part.matrix);
+
+                instancedMesh.setMatrixAt(i, matrix);
+            }
+            instancedMesh.instanceMatrix.needsUpdate = true;
+            ctx.scene.add(instancedMesh);
+        });
+
+        // Add to obstacles using a single reference group or just the prototype (invisible)
+        proto.visible = false;
+        ctx.scene.add(proto); // Add once to scene to satisfy any systems checking for scene presence
+
+        for (let i = 0; i < segmentCount; i++) {
             const curr = pointsList[i];
             const next = pointsList[i + 1];
-            const vec = new THREE.Vector3().subVectors(next, curr);
-            const dist = vec.length();
+            const dist = curr.distanceTo(next);
             const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+            const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
 
-            // Create fence segment
-            const fence = color === 'mesh' ? ObjectGenerator.createMeshFence(dist, height) : ObjectGenerator.createFence(dist);
-            fence.position.copy(mid);
-            fence.lookAt(next.x, mid.y, next.z);
+            // FIX: Use a temporary mesh/object for each segment to avoid the shared prototype origin bug
+            const collisionDummy = new THREE.Object3D();
+            collisionDummy.position.copy(mid);
+            collisionDummy.rotation.y = angle;
+            collisionDummy.updateMatrixWorld(true);
 
-            // Apply Height Scaling (if not mesh, as mesh uses height param)
-            if (color !== 'mesh' && height !== 1.2) {
-                const scaleY = height / 1.2;
-                fence.scale.y = scaleY;
-            }
-
-            // Apply Color
-            if (color !== 'wood' && color !== 'mesh') {
-                fence.traverse((child: any) => {
-                    if (child.isMesh) {
-                        child.material = child.material.clone();
-                        child.material.color.setHex(colorHex);
-                    }
-                });
-            }
-
-            ctx.scene.add(fence);
-
-            // Collision
-            ctx.obstacles.push({
-                mesh: fence,
-                collider: { type: 'box', size: new THREE.Vector3(0.2, height, dist) }
+            SectorBuilder.addObstacle(ctx, {
+                mesh: collisionDummy,
+                collider: {
+                    type: 'box',
+                    size: new THREE.Vector3(0.2, height, dist)
+                }
             });
         }
     },
@@ -625,20 +703,73 @@ export const PathGenerator = {
         const length = curve.getLength();
         const steps = Math.ceil(length / 2.0);
         const pointsList = curve.getSpacedPoints(steps);
+        const segmentCount = pointsList.length - 1;
+        if (segmentCount <= 0) return;
 
-        for (let i = 0; i < pointsList.length - 1; i++) {
+        // Create prototype to extract meshes
+        const proto = ObjectGenerator.createHedge(2.2, height, thickness);
+        const meshParts: { geometry: THREE.BufferGeometry, material: THREE.Material, matrix: THREE.Matrix4 }[] = [];
+
+        proto.traverse((child: any) => {
+            if (child.isMesh) {
+                child.updateMatrix();
+                meshParts.push({ geometry: child.geometry, material: child.material, matrix: child.matrix.clone() });
+            }
+        });
+
+        // Create InstancedMesh for each part
+        meshParts.forEach(part => {
+            const im = new THREE.InstancedMesh(part.geometry, part.material, segmentCount);
+            im.castShadow = true;
+            im.receiveShadow = true;
+
+            const matrix = new THREE.Matrix4();
+            const segmentMatrix = new THREE.Matrix4();
+            const rotation = new THREE.Quaternion();
+            const position = new THREE.Vector3();
+            const lookAtTarget = new THREE.Vector3();
+
+            for (let i = 0; i < segmentCount; i++) {
+                const curr = pointsList[i];
+                const next = pointsList[i + 1];
+                const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+
+                position.set(mid.x, mid.y, mid.z);
+                lookAtTarget.set(next.x, mid.y, next.z);
+
+                segmentMatrix.lookAt(position, lookAtTarget, new THREE.Vector3(0, 1, 0));
+                rotation.setFromRotationMatrix(segmentMatrix);
+
+                matrix.compose(position, rotation, new THREE.Vector3(1, 1, 1));
+                matrix.multiply(part.matrix);
+
+                im.setMatrixAt(i, matrix);
+            }
+            im.instanceMatrix.needsUpdate = true;
+            ctx.scene.add(im);
+        });
+
+        // Lightweight Collision
+        proto.visible = false;
+        ctx.scene.add(proto);
+        for (let i = 0; i < segmentCount; i++) {
             const curr = pointsList[i];
             const next = pointsList[i + 1];
             const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+            const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
 
-            const hedge = ObjectGenerator.createHedge(2.2, height, thickness);
-            hedge.position.copy(mid);
-            hedge.lookAt(next.x, mid.y, next.z);
-            ctx.scene.add(hedge);
+            // FIX: Use a temporary mesh/object for each segment to avoid the shared prototype origin bug
+            const collisionDummy = new THREE.Object3D();
+            collisionDummy.position.copy(mid);
+            collisionDummy.rotation.y = angle;
+            collisionDummy.updateMatrixWorld(true);
 
-            ctx.obstacles.push({
-                mesh: hedge,
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) }
+            SectorBuilder.addObstacle(ctx, {
+                mesh: collisionDummy,
+                collider: {
+                    type: 'box' as const,
+                    size: new THREE.Vector3(thickness, height, 2.2)
+                }
             });
         }
     },
@@ -649,20 +780,63 @@ export const PathGenerator = {
     createStoneWall: (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
-        const steps = Math.ceil(length / 1.5); // Adjusted steps for potentially denser stone wall segments
+        const steps = Math.ceil(length / 1.5);
         const pointsList = curve.getSpacedPoints(steps);
+        const segmentCount = pointsList.length - 1;
+        if (segmentCount <= 0) return;
 
-        for (let i = 0; i < pointsList.length - 1; i++) {
+        const sampleDist = pointsList[0].distanceTo(pointsList[1]);
+        const geo = new THREE.BoxGeometry(thickness, height, sampleDist);
+        const wallMesh = new THREE.InstancedMesh(geo, MATERIALS.stone, segmentCount);
+        wallMesh.castShadow = true;
+        wallMesh.receiveShadow = true;
+
+        const matrix = new THREE.Matrix4();
+        const segmentMatrix = new THREE.Matrix4();
+        const rotation = new THREE.Quaternion();
+        const position = new THREE.Vector3();
+        const lookAtTarget = new THREE.Vector3();
+
+        for (let i = 0; i < segmentCount; i++) {
             const curr = pointsList[i];
             const next = pointsList[i + 1];
             const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
-            const dist = curr.distanceTo(next);
 
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, dist), MATERIALS.stone);
-            wall.position.copy(mid);
-            wall.lookAt(next.x, mid.y, next.z);
-            ctx.scene.add(wall);
-            ctx.obstacles.push({ mesh: wall, collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) } });
+            position.set(mid.x, mid.y, mid.z);
+            lookAtTarget.set(next.x, mid.y, next.z);
+
+            segmentMatrix.lookAt(position, lookAtTarget, new THREE.Vector3(0, 1, 0));
+            rotation.setFromRotationMatrix(segmentMatrix);
+
+            matrix.compose(position, rotation, new THREE.Vector3(1, 1, 1));
+            wallMesh.setMatrixAt(i, matrix);
+        }
+        wallMesh.instanceMatrix.needsUpdate = true;
+        ctx.scene.add(wallMesh);
+
+        // Invisible prototype for collision
+        const proto = new THREE.Mesh(geo);
+        proto.visible = false;
+        // Lightweight Colliders
+        for (let i = 0; i < segmentCount; i++) {
+            const curr = pointsList[i];
+            const next = pointsList[i + 1];
+            const mid = new THREE.Vector3().addVectors(curr, next).multiplyScalar(0.5);
+            const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
+
+            // FIX: Use a temporary mesh/object for each segment to avoid the shared prototype origin bug
+            const collisionDummy = new THREE.Object3D();
+            collisionDummy.position.copy(mid);
+            collisionDummy.rotation.y = angle;
+            collisionDummy.updateMatrixWorld(true);
+
+            SectorBuilder.addObstacle(ctx, {
+                mesh: collisionDummy,
+                collider: {
+                    type: 'box',
+                    size: new THREE.Vector3(thickness, height, sampleDist)
+                }
+            });
         }
     },
 
@@ -676,52 +850,67 @@ export const PathGenerator = {
     createGuardrail: (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
-        // Posts every 2 meters
         const steps = Math.ceil(length / 2.0);
         const pointsList = curve.getSpacedPoints(steps);
+        const segmentCount = pointsList.length - 1;
 
         const postGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.0, 6);
-        const railGeo = new THREE.BoxGeometry(0.15, 0.3, 1); // scalable Z
+        const railGeo = new THREE.BoxGeometry(0.15, 0.3, 1);
 
+        const postIM = new THREE.InstancedMesh(postGeo, MATERIALS.guardrail, pointsList.length);
+        const railIM = new THREE.InstancedMesh(railGeo, MATERIALS.guardrail, segmentCount);
+        postIM.castShadow = true;
+        railIM.castShadow = true;
+
+        const matrix = new THREE.Matrix4();
+        const dummyPos = new THREE.Vector3();
+        const dummyRot = new THREE.Quaternion();
+        const dummyScale = new THREE.Vector3(1, 1, 1);
+        const lookAtTarget = new THREE.Vector3();
+
+        // 1. Posts
         for (let i = 0; i < pointsList.length; i++) {
-            // Post
+            dummyPos.copy(pointsList[i]).add(new THREE.Vector3(0, 0.5, 0));
+            matrix.compose(dummyPos, new THREE.Quaternion(), dummyScale);
+            postIM.setMatrixAt(i, matrix);
+        }
+        postIM.instanceMatrix.needsUpdate = true;
+        ctx.scene.add(postIM);
+
+        // 2. Rails & Collision
+        const proto = new THREE.Group();
+        proto.visible = false;
+        ctx.scene.add(proto);
+
+        for (let i = 0; i < segmentCount; i++) {
             const pt = pointsList[i];
-            const post = new THREE.Mesh(postGeo, MATERIALS.guardrail);
-            post.position.copy(pt).add(new THREE.Vector3(0, 0.5, 0));
-            post.castShadow = true;
-            ctx.scene.add(post);
+            const next = pointsList[i + 1];
+            const mid = new THREE.Vector3().addVectors(pt, next).multiplyScalar(0.5);
+            const dist = pt.distanceTo(next);
 
-            // Rail segment to next point
-            if (i < pointsList.length - 1) {
-                const next = pointsList[i + 1];
-                const mid = new THREE.Vector3().addVectors(pt, next).multiplyScalar(0.5);
-                const dist = pt.distanceTo(next);
+            dummyPos.copy(mid).add(new THREE.Vector3(0, 0.8, 0));
+            lookAtTarget.set(next.x, dummyPos.y, next.z);
 
-                const rail = new THREE.Mesh(railGeo, MATERIALS.guardrail);
-                rail.position.copy(mid).add(new THREE.Vector3(0, 0.8, 0)); // 0.8m height
-                rail.scale.z = dist; // Stretch to fit
-                rail.lookAt(next.x, mid.y + 0.8, next.z);
-                rail.castShadow = true;
-                ctx.scene.add(rail);
+            matrix.lookAt(dummyPos, lookAtTarget, new THREE.Vector3(0, 1, 0));
+            dummyRot.setFromRotationMatrix(matrix);
 
-                // Collision
-                // If floating, we only collide with the rail itself (high up).
-                // If NOT floating, we extend the collider to the ground.
-                const collHeight = floating ? 0.3 : (mid.y + 1.0);
-                const collY = floating ? (mid.y + 0.8) : (collHeight / 2);
+            matrix.compose(dummyPos, dummyRot, new THREE.Vector3(1, 1, dist)); // Stretch by dist
+            railIM.setMatrixAt(i, matrix);
 
-                const colGeo = new THREE.BoxGeometry(0.2, collHeight, dist);
-                const colMesh = new THREE.Mesh(colGeo);
-                colMesh.position.set(mid.x, collY, mid.z);
-                colMesh.lookAt(next.x, collY, next.z);
-                colMesh.visible = false;
-                ctx.scene.add(colMesh);
+            const collHeight = floating ? 0.3 : (mid.y + 1.0);
+            const collY = floating ? (mid.y + 0.8) : (collHeight / 2);
 
-                ctx.obstacles.push({
-                    mesh: colMesh,
-                    collider: { type: 'box', size: new THREE.Vector3(0.2, collHeight, dist) }
-                });
-            }
+            const obstacle = {
+                mesh: proto,
+                collider: {
+                    type: 'box' as const,
+                    size: new THREE.Vector3(0.2, collHeight, dist),
+                    position: new THREE.Vector3(mid.x, collY, mid.z),
+                    rotation: new THREE.Euler(0, Math.atan2(next.x - pt.x, next.z - pt.z), 0)
+                }
+            };
+            ctx.obstacles.push(obstacle);
+            ctx.collisionGrid.add(obstacle as any);
         }
     },
 
@@ -812,24 +1001,30 @@ export const PathGenerator = {
         ctx.scene.add(mesh);
 
         const colSteps = Math.ceil(length / 5);
+        const proto = new THREE.Group();
+        proto.visible = false;
+        ctx.scene.add(proto);
+
+        // Pre-calculate constant collision variables
+        const colLen = (length / colSteps) * 1.05;
+        const colWidth = width * 0.8;
+
         for (let i = 0; i < colSteps; i++) {
             const t = (i + 0.5) / colSteps;
             const pt = curve.getPoint(t);
             const tan = curve.getTangent(t);
-            const colLen = (length / colSteps) * 1.05; // Slight overlap
 
-            // Reduced collider width to prevent blocking underlying paths (e.g. tunnels)
-            const colWidth = width * 0.8;
-
-            const col = new THREE.Mesh(new THREE.BoxGeometry(colWidth, height, colLen));
-            col.position.copy(pt).setY(height / 2);
-            col.lookAt(pt.clone().add(tan).setY(height / 2));
-
-            col.visible = false; // Always invisible, only for physics and internal debug
-            col.updateMatrixWorld();
-            ctx.scene.add(col);
-            ctx.obstacles.push({ mesh: col, collider: { type: 'box', size: new THREE.Vector3(colWidth, height, colLen) } });
+            const obstacle = {
+                mesh: proto,
+                collider: {
+                    type: 'box' as const,
+                    size: new THREE.Vector3(colWidth, height, colLen),
+                    position: pt.clone().setY(height / 2),
+                    rotation: new THREE.Euler(0, Math.atan2(tan.x, tan.z), 0)
+                }
+            };
+            ctx.obstacles.push(obstacle);
+            ctx.collisionGrid.add(obstacle as any);
         }
     },
-
 };

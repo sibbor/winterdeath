@@ -476,7 +476,16 @@ const App: React.FC = () => {
             )}
 
             {(isLoadingLevel || isLoadingCamp) && (
-                <ScreenLoading mapIndex={gameState.currentMap} isCamp={isLoadingCamp} isMobileDevice={isMobileDevice} />
+                <ScreenLoading
+                    mapIndex={gameState.currentMap}
+                    isCamp={isLoadingCamp}
+                    isMobileDevice={isMobileDevice}
+                    debugInfo={{
+                        fps,
+                        sceneChildren: hudState.debugInfo?.sceneChildren,
+                        obstacles: hudState.debugInfo?.obstacles
+                    }}
+                />
             )}
 
             {/* Map Screen (Overlay for Sector) */}

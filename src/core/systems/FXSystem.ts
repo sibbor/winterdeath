@@ -1,29 +1,148 @@
-
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
+// --- TYPES & INTERFACES ---
+
+/** * Safely access transparency and color properties 
+ * across different material classes (Basic, Standard, etc.)
+ */
+type FXMaterial = THREE.Material & {
+    opacity: number;
+    transparent: boolean;
+    color?: THREE.Color
+};
+
+/**
+ * Particle state structure for Zero-GC updates
+ */
+interface ParticleState {
+    mesh: THREE.Mesh;
+    vel: THREE.Vector3;
+    rotVel: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    type: string;
+    isPooled: boolean;
+    isInstanced: boolean;
+    landed: boolean;
+    inUse: boolean;
+    _poolIdx: number;
+}
+
+// Scratchpad for math to avoid Garbage Collection (GC) overhead
+const _tempVec = new THREE.Vector3();
+
+// Types that MUST have unique material instances for independent fading/opacity
+const UNIQUE_MATERIAL_TYPES = [
+    'fire', 'campfire_flame', 'large_fire', 'large_smoke',
+    'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash'
+];
+
 export const FXSystem = {
+    // Queues with pointers to avoid O(n) .shift() overhead
     particleQueue: [] as any[],
+    _particleQueueIndex: 0,
     decalQueue: [] as any[],
+    _decalQueueIndex: 0,
+
+    // Fast Pool Access (O(1)) using stacks
     MESH_POOL: [] as THREE.Mesh[],
+    FREE_MESH_INDICES: [] as number[],
 
-    // Internal immediate methods
-    _spawnDecalImmediate: (
-        scene: THREE.Scene,
-        decalList: any[],
-        x: number,
-        z: number,
-        scale: number,
-        material?: THREE.Material
-    ) => {
-        // Decals are permanent until limit reached, so we don't pool them in the same way 
-        // OR we could pool them but they stay in scene longer.
-        // For now, let's keep decal logic as-is but use pool for the mesh creation if possible, 
-        // or just keep existing logic since decals are low frequency.
-        // Actually, optimization report says ALL particles/decals. 
-        // Let's use the pool for decals too.
+    // Per-type Material Pool to avoid GPU recompilation (Solving Global Hide bug)
+    MATERIAL_POOL: {} as Record<string, THREE.Material[]>,
 
-        let d = FXSystem.getPooledMesh(scene, GEOMETRY.decal, material || MATERIALS.bloodDecal);
+    PARTICLE_STATE_POOL: [] as ParticleState[],
+    FREE_STATE_INDICES: [] as number[],
+
+    _instancedMeshes: {} as Record<string, THREE.InstancedMesh>,
+    _instancedCounts: {} as Record<string, number>,
+    _MAX_INSTANCES: 2000,
+
+    // --- POOLING METHODS ---
+
+    getPooledMesh: (scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material, type: string, isInstanced: boolean = false): THREE.Mesh => {
+        let m: THREE.Mesh;
+        let finalMat = mat;
+
+        // Handle unique vs shared material
+        if (!isInstanced && UNIQUE_MATERIAL_TYPES.includes(type)) {
+            finalMat = FXSystem._getUniqueMaterial(mat, type);
+        }
+
+        if (FXSystem.FREE_MESH_INDICES.length > 0) {
+            const idx = FXSystem.FREE_MESH_INDICES.pop()!;
+            m = FXSystem.MESH_POOL[idx];
+            m.geometry = geo;
+            m.material = finalMat;
+            m.visible = true;
+            m.scale.setScalar(1);
+            m.rotation.set(0, 0, 0);
+        } else {
+            m = new THREE.Mesh(geo, finalMat);
+            FXSystem.MESH_POOL.push(m);
+        }
+
+        if (!isInstanced && m.parent !== scene) scene.add(m);
+        if (isInstanced && m.parent === scene) scene.remove(m);
+
+        return m;
+    },
+
+    _getUniqueMaterial: (baseMat: THREE.Material, type: string): THREE.Material => {
+        if (!FXSystem.MATERIAL_POOL[type]) FXSystem.MATERIAL_POOL[type] = [];
+
+        if (FXSystem.MATERIAL_POOL[type].length > 0) {
+            const mat = FXSystem.MATERIAL_POOL[type].pop()! as FXMaterial;
+            if (mat.transparent) mat.opacity = 1.0; // Reset for new particle
+            return mat;
+        }
+
+        // Only clone when pool is empty (prevents GPU stutter)
+        const clone = baseMat.clone();
+        clone.transparent = true;
+        return clone;
+    },
+
+    recycleMesh: (m: THREE.Mesh, type: string) => {
+        m.visible = false;
+        m.position.set(0, -1000, 0);
+
+        // Return material to pool if it was a unique instance
+        if (UNIQUE_MATERIAL_TYPES.includes(type)) {
+            if (!FXSystem.MATERIAL_POOL[type]) FXSystem.MATERIAL_POOL[type] = [];
+            FXSystem.MATERIAL_POOL[type].push(m.material as THREE.Material);
+        }
+
+        const idx = FXSystem.MESH_POOL.indexOf(m);
+        if (idx !== -1) FXSystem.FREE_MESH_INDICES.push(idx);
+    },
+
+    getPooledState: (): ParticleState => {
+        if (FXSystem.FREE_STATE_INDICES.length > 0) {
+            const idx = FXSystem.FREE_STATE_INDICES.pop()!;
+            const p = FXSystem.PARTICLE_STATE_POOL[idx];
+            p.inUse = true;
+            return p;
+        }
+
+        const p: ParticleState = {
+            mesh: null as any,
+            vel: new THREE.Vector3(),
+            rotVel: new THREE.Vector3(),
+            life: 0, maxLife: 0,
+            type: '', isPooled: false, isInstanced: false,
+            landed: false, inUse: true,
+            _poolIdx: FXSystem.PARTICLE_STATE_POOL.length
+        };
+        FXSystem.PARTICLE_STATE_POOL.push(p);
+        return p;
+    },
+
+    // --- SPAWNING ---
+
+    _spawnDecalImmediate: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material) => {
+        const d = FXSystem.getPooledMesh(scene, GEOMETRY.decal, material || MATERIALS.bloodDecal, 'decal');
         d.position.set(x, 0.2 + Math.random() * 0.05, z);
         d.rotation.x = -Math.PI / 2;
         d.rotation.z = Math.random() * Math.PI * 2;
@@ -32,309 +151,243 @@ export const FXSystem = {
 
         decalList.push(d);
 
-        // Limit decals to 250
         if (decalList.length > 250) {
             const old = decalList.shift();
-            FXSystem.recycleMesh(old);
+            if (old) FXSystem.recycleMesh(old, 'decal');
         }
     },
 
-    getPooledMesh: (scene: THREE.Scene, geo: THREE.BufferGeometry, mat: THREE.Material) => {
-        let m = FXSystem.MESH_POOL.find(mesh => !mesh.visible);
-        if (!m) {
-            // Expand pool
-            m = new THREE.Mesh(geo, mat);
-            scene.add(m);
-            FXSystem.MESH_POOL.push(m);
-        } else {
-            m.geometry = geo;
-            m.material = mat;
-            m.visible = true;
-            m.scale.set(1, 1, 1);
-            m.rotation.set(0, 0, 0);
-            // Ensure it's in the scene (might have been removed in old logic, but here we just hide)
-            if (m.parent !== scene) scene.add(m);
-        }
-        return m;
-    },
+    _spawnPartImmediate: (scene: THREE.Scene, particlesList: any[], x: number, y: number, z: number, type: string, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => {
+        // Anti-flicker: Prevent NaN data entering the GPU
+        if (isNaN(x) || isNaN(y) || isNaN(z)) return;
 
-    recycleMesh: (m: THREE.Mesh) => {
-        m.visible = false;
-        m.position.set(0, -1000, 0); // Move out of view just in case
-    },
+        const isInstanced = ['blood', 'spark', 'campfire_spark', 'debris', 'debris_trail', 'glass', 'stun_star'].includes(type);
+        const p = FXSystem.getPooledState();
 
-    _spawnPartImmediate: (
-        scene: THREE.Scene,
-        particlesList: any[],
-        x: number,
-        y: number,
-        z: number,
-        type: string,
-        customMesh?: THREE.Mesh,
-        customVel?: THREE.Vector3,
-        color?: number
-    ) => {
+        p.type = type;
+        p.landed = false;
+        p.isPooled = !customMesh;
+        p.isInstanced = isInstanced;
+
         let m: THREE.Mesh;
 
         if (customMesh) {
-            m = customMesh.clone();
+            m = customMesh;
+            if (m.parent !== scene) scene.add(m);
             m.renderOrder = 11;
-            scene.add(m);
         } else {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
-            let mat: THREE.Material = MATERIALS.smoke;
+            let mat: THREE.Material = MATERIALS.blood;
 
+            // Strict Type Mapping
             if (type === 'gore' || type === 'limb') { geo = GEOMETRY.gore; mat = MATERIALS.gore; }
-            else if (type === 'blood') { geo = GEOMETRY.particle; mat = MATERIALS.blood; }
             else if (type === 'black_smoke') {
-                geo = GEOMETRY.particle;
                 if (!MATERIALS['_blackSmoke']) {
                     MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
                 }
-                mat = MATERIALS['_blackSmoke'];
+                geo = GEOMETRY.particle; mat = MATERIALS['_blackSmoke'];
             }
-            else if (type === 'fire') { geo = new THREE.DodecahedronGeometry(0.4); mat = MATERIALS.fire.clone(); }
-            else if (type === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire.clone(); }
-            else if (type === 'campfire_spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; }
-            else if (type === 'debris') { geo = GEOMETRY.particle; mat = MATERIALS.stone; }
-            else if (type === 'debris_trail') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.stone; }
+            else if (['fire', 'campfire_flame', 'large_fire'].includes(type)) { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+            else if (['campfire_spark', 'spark'].includes(type)) { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
+            else if (['debris', 'debris_trail'].includes(type)) { geo = GEOMETRY.particle; mat = MATERIALS.stone; }
             else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (type === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
             else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
-            else if (type === 'spark') { geo = new THREE.BoxGeometry(0.05, 0.05, 0.05); mat = MATERIALS.bullet; }
             else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
-            else if (type === 'large_fire') { geo = new THREE.DodecahedronGeometry(0.8); mat = MATERIALS.fire.clone(); }
-            else if (type === 'large_smoke') { geo = new THREE.DodecahedronGeometry(1.2); mat = MATERIALS.smoke.clone(); }
+            else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
 
-            m = FXSystem.getPooledMesh(scene, geo, mat);
-
-            if (type === 'stun_star') m.scale.setScalar(0.2 + Math.random() * 0.1);
-            else if (type !== 'flash' && type !== 'shockwave' && type !== 'fire' && type !== 'limb' && type !== 'campfire_flame' && type !== 'large_fire' && type !== 'large_smoke') m.scale.setScalar(0.3 + Math.random() * 0.3);
-
-            // Ensure particles draw on top of roads while in flight
+            m = FXSystem.getPooledMesh(scene, geo, mat, type, isInstanced);
             m.renderOrder = 11;
         }
 
         m.position.set(x, y, z);
+
+        // Transform logic
         if (type === 'shockwave') { m.rotation.x = -Math.PI / 2; m.position.y = 0.5; }
-        if (type === 'fire' || type === 'campfire_flame' || type === 'large_fire' || type === 'large_smoke') { m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI); m.scale.setScalar(Math.random()); }
-        if (type === 'limb') m.scale.set(0.3, 0.6, 0.3);
-        if (type === 'stun_star') m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-
-        // Velocity & Life Logic (Same as before)
-        let vel = customVel ? customVel.clone() : new THREE.Vector3((Math.random() - 0.5) * 0.2, Math.random() * 0.5, (Math.random() - 0.5) * 0.5);
-        let life = 30 + Math.random() * 20;
-
-        if (type === 'blood') {
-            if (customVel) {
-                vel = customVel.clone();
-                vel.x += (Math.random() - 0.5) * 0.5;
-                vel.y += Math.random() * 0.5;
-                vel.z += (Math.random() - 0.5) * 0.5;
-                vel.multiplyScalar(0.5 + Math.random() * 0.5);
-            } else {
-                vel = new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.5 + Math.random() * 1.5, (Math.random() - 0.5) * 1.2);
-            }
-            life = 60 + Math.random() * 40;
-            m.scale.setScalar(0.25 + Math.random() * 0.35);
+        else if (['fire', 'campfire_flame', 'large_fire', 'large_smoke', 'stun_star'].includes(type)) {
+            m.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
         }
-        else if (type === 'glass') { vel.x = (Math.random() - 0.5) * 5; vel.z = (Math.random() - 0.5) * 5; vel.y = Math.random() * 3; life = 60; }
-        else if (type === 'debris') { vel.x = (Math.random() - 0.5) * 8; vel.z = (Math.random() - 0.5) * 8; vel.y = 2 + Math.random() * 4; life = 200; }
-        else if (type === 'fire') { vel = new THREE.Vector3(0, 0.03 + Math.random() * 0.04, 0); life = 30 + Math.random() * 20; }
-        else if (type === 'campfire_flame') { vel = new THREE.Vector3(0, 0.05 + Math.random() * 0.05, 0); life = 25 + Math.random() * 15; }
-        else if (type === 'spark') {
-            if (!customVel) vel = new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.05 + Math.random() * 0.05, (Math.random() - 0.5) * 0.02);
-            life = 20 + Math.random() * 10;
-        }
-        else if (type === 'campfire_spark') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.1 + Math.random() * 0.1, (Math.random() - 0.5) * 0.05); life = 20 + Math.random() * 10; }
-        else if (type === 'limb' || type === 'chunk' || type === 'gore') { life = 300; }
-        else if (type === 'debris_trail') { vel = new THREE.Vector3(0, 0, 0); life = 10; }
-        else if (type === 'stun_star') { vel = new THREE.Vector3(0, 0.05, 0); life = 40; }
-        else if (type === 'large_fire') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.08 + Math.random() * 0.12, (Math.random() - 0.5) * 0.05); life = 45 + Math.random() * 35; }
-        else if (type === 'large_smoke') { vel = new THREE.Vector3((Math.random() - 0.5) * 0.1, 0.06 + Math.random() * 0.08, (Math.random() - 0.5) * 0.1); life = 80 + Math.random() * 60; }
 
-        if (type === 'chunk' || type === 'limb' || type === 'gore') life = 300;
-        if (type === 'shockwave') life = 10;
-        if (type === 'flash') life = 5;
+        const s = scale || 1.0;
+        if (type === 'large_fire') m.scale.setScalar(1.6 * Math.random() * s);
+        else if (type === 'large_smoke') m.scale.setScalar(2.4 * Math.random() * s);
+        else if (['campfire_spark', 'debris_trail', 'spark'].includes(type)) m.scale.setScalar(0.33 * s);
+        else m.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
-        particlesList.push({
-            mesh: m,
-            vel,
-            life,
-            maxLife: life,
-            type,
-            rotVel: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
-            isPooled: !customMesh, // Track if we should recycle or remove
-            landed: false
-        });
+        p.mesh = m;
+
+        if (customVel) p.vel.copy(customVel);
+        else p.vel.set((Math.random() - 0.5) * 0.4, Math.random() * 0.5, (Math.random() - 0.5) * 0.4);
+
+        p.life = 30 + Math.random() * 20;
+        if (type === 'blood') p.life = 60 + Math.random() * 40;
+        else if (type === 'debris') p.life = 200;
+        else if (['limb', 'gore', 'chunk'].includes(type)) p.life = 300;
+
+        p.maxLife = p.life;
+        p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
+
+        particlesList.push(p);
     },
 
-    // Public methods (Enqueue)
-    spawnDecal: (
-        scene: THREE.Scene,
-        decalList: any[],
-        x: number,
-        z: number,
-        scale: number,
-        material?: THREE.Material
-    ) => {
+    // --- INTERFACE ---
+
+    spawnDecal: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material) => {
         FXSystem.decalQueue.push({ scene, decalList, x, z, scale, material });
     },
 
-    spawnPart: (
-        scene: THREE.Scene,
-        particlesList: any[],
-        x: number,
-        y: number,
-        z: number,
-        type: string,
-        count: number,
-        customMesh?: THREE.Mesh,
-        customVel?: THREE.Vector3,
-        color?: number
-    ) => {
-        // High count effects are flattened into the queue
+    spawnPart: (scene: THREE.Scene, particlesList: any[], x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => {
         for (let i = 0; i < count; i++) {
-            FXSystem.particleQueue.push({ scene, particlesList, x, y, z, type, customMesh, customVel, color });
+            FXSystem.particleQueue.push({ scene, particlesList, x, y, z, type, customMesh, customVel, color, scale });
         }
     },
 
-    update: (
-        scene: THREE.Scene,
-        particlesList: any[],
-        decalList: any[],
-        delta: number,
-        frame: number,
-        now: number,
-        playerPos: THREE.Vector3,
-        callbacks: {
-            spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
-            spawnDecal: (x: number, z: number, scale: number, mat?: THREE.Material) => void;
+    // --- MAIN UPDATE LOOP ---
+
+    update: (scene: THREE.Scene, particlesList: any[], decalList: any[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
+
+        // Safety: Clamp delta to prevent NaN jumps during frame drops
+        const safeDelta = Math.min(delta, 0.1);
+
+        // 1. Process Queue (Budgeted)
+        const pLimit = Math.min(FXSystem.particleQueue.length - FXSystem._particleQueueIndex, 30);
+        for (let i = 0; i < pLimit; i++) {
+            const req = FXSystem.particleQueue[FXSystem._particleQueueIndex++];
+            FXSystem._spawnPartImmediate(req.scene, req.particlesList, req.x, req.y, req.z, req.type, req.customMesh, req.customVel, req.color, req.scale);
         }
-    ) => {
-        // --- QUEUE PROCESSING ---
-        // Staggered spawning to prevent CPU spikes (Budget: max 30 parts, 2 decals per frame)
-        const partBudget = Math.min(FXSystem.particleQueue.length, 30);
-        for (let i = 0; i < partBudget; i++) {
-            const req = FXSystem.particleQueue.shift();
-            if (req) FXSystem._spawnPartImmediate(req.scene, req.particlesList, req.x, req.y, req.z, req.type, req.customMesh, req.customVel, req.color);
+        if (FXSystem._particleQueueIndex > 100) {
+            FXSystem.particleQueue.splice(0, FXSystem._particleQueueIndex);
+            FXSystem._particleQueueIndex = 0;
         }
 
-        const decalBudget = Math.min(FXSystem.decalQueue.length, 2);
-        for (let i = 0; i < decalBudget; i++) {
-            const req = FXSystem.decalQueue.shift();
-            if (req) FXSystem._spawnDecalImmediate(req.scene, req.decalList, req.x, req.z, req.scale, req.material);
+        // --- NEW: Process Decal Queue (Budgeted) ---
+        const dLimit = Math.min(FXSystem.decalQueue.length - FXSystem._decalQueueIndex, 10);
+        for (let i = 0; i < dLimit; i++) {
+            const req = FXSystem.decalQueue[FXSystem._decalQueueIndex++];
+            FXSystem._spawnDecalImmediate(req.scene, req.decalList, req.x, req.z, req.scale, req.material);
+        }
+        if (FXSystem._decalQueueIndex > 50) {
+            FXSystem.decalQueue.splice(0, FXSystem._decalQueueIndex);
+            FXSystem._decalQueueIndex = 0;
         }
 
-        // --- PARTICLES ---
+        // 2. Clear Instanced Counts
+        for (const type in FXSystem._instancedCounts) FXSystem._instancedCounts[type] = 0;
+
+        // 3. Update Particles
+        const decay = safeDelta * 44;
         for (let i = particlesList.length - 1; i >= 0; i--) {
             const p = particlesList[i];
-            const decay = delta * 44;
             p.life -= decay;
 
-            if (p.type === 'chunk' || p.type === 'debris' || p.type === 'glass' || p.type === 'limb' || p.type === 'blood' || p.type === 'gore') {
-                if (p.vel && p.vel.y !== undefined) {
-                    p.vel.y -= 25 * delta;
-                    p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
+            if (p.life <= 0 || isNaN(p.life)) {
+                FXSystem._killParticle(i, particlesList);
+                continue;
+            }
+
+            // Movement & Physics
+            if (!p.landed) {
+                p.mesh.position.addScaledVector(p.vel, safeDelta);
+
+                // Cleanup NaN positions to avoid black screen flicker
+                if (isNaN(p.mesh.position.x)) {
+                    FXSystem._killParticle(i, particlesList);
+                    continue;
                 }
 
-                if (p.type !== 'blood') {
-                    p.mesh.rotation.x += p.rotVel.x * 10 * delta;
-                    p.mesh.rotation.z += p.rotVel.z * 10 * delta;
-                }
-
-                if (p.type === 'debris' && frame % 3 === 0) {
-                    callbacks.spawnPart(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, 'debris_trail', 1);
-                }
-
-                if (p.mesh.position.y <= 0.05) {
-                    p.mesh.position.y = 0.05;
-                    p.landed = true;
-
-                    if (p.type === 'blood') {
-                        if (Math.random() < 0.2) {
-                            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.4 + Math.random() * 0.4, MATERIALS.bloodDecal);
-                        }
-                        if (p.isPooled) FXSystem.recycleMesh(p.mesh);
-                        else scene.remove(p.mesh);
-                        particlesList.splice(i, 1);
-                        continue;
-                    } else if (p.type === 'chunk' || p.type === 'limb' || p.type === 'gore') {
-                        // Only spawn decal once
-                        if (p.life > 0) {
-                            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.5, MATERIALS.bloodDecal);
-                            p.life = -0.1; // Mark as "has landed and spawned decal"
-                        }
-                        // Let chunks and limbs stay on ground
-                        p.mesh.position.y = 0.25;
-                        p.mesh.renderOrder = 11;
-                        p.mesh.rotation.set(Math.random() * Math.PI, 0, Math.random() * Math.PI);
-                        if (p.vel) p.vel.set(0, 0, 0); // Stop movement
-                    } else {
-                        if (p.type === 'debris') {
-                            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.0, MATERIALS.scorchDecal);
-                        }
-                        if (p.isPooled) FXSystem.recycleMesh(p.mesh);
-                        else scene.remove(p.mesh);
-                        particlesList.splice(i, 1);
-                        continue;
+                if (['chunk', 'debris', 'glass', 'limb', 'blood', 'gore'].includes(p.type)) {
+                    p.vel.y -= 25 * safeDelta;
+                    if (p.type !== 'blood') {
+                        p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
+                        p.mesh.rotation.z += p.rotVel.z * 10 * safeDelta;
                     }
+                    if (p.mesh.position.y <= 0.05) {
+                        FXSystem._handleLanding(p, i, particlesList, callbacks);
+                        if (!p.inUse) continue;
+                    }
+                } else {
+                    if (!p.isInstanced) p.mesh.scale.multiplyScalar(0.95);
                 }
-            } else if (p.type === 'campfire_flame') {
-                p.mesh.position.y += p.vel.y;
-                const lifeRatio = p.life / p.maxLife;
-                p.mesh.scale.setScalar(Math.max(0.01, lifeRatio * (1.0 + Math.random() * 0.2)));
-                p.mesh.rotation.y += 2.0 * delta;
-                (p.mesh.material as THREE.MeshBasicMaterial).opacity = lifeRatio * 0.8;
-            } else if (p.type === 'black_smoke') {
-                p.mesh.position.y += delta * 2.0;
-                p.mesh.position.x += (Math.random() - 0.5) * delta * 1.0;
-                p.mesh.position.z += (Math.random() - 0.5) * delta * 1.0;
-                const progress = 1 - (p.life / p.maxLife);
-                const scale = 1.0 + progress * 3.0;
-                p.mesh.scale.set(scale, scale, scale);
-                p.mesh.rotation.z += delta * 0.2;
-                (p.mesh.material as THREE.MeshBasicMaterial).opacity = (p.life / p.maxLife) * 0.6;
-            } else if (p.type === 'campfire_spark') {
-                p.mesh.position.add(p.vel);
-                p.mesh.position.x += Math.sin(now * 0.01) * 0.01;
-            } else if (p.type === 'stun_star') {
-                p.mesh.position.add(p.vel);
-                p.mesh.rotation.y += 0.2;
-                const blink = Math.abs(Math.sin(frame * 0.3));
-                (p.mesh.material as THREE.MeshBasicMaterial).opacity = blink;
             }
 
-            let isDead = false;
-            if (p.type === 'campfire_flame' || p.type === 'campfire_spark' || p.type === 'fire') {
-                if (p.life <= 0) isDead = true;
-            } else {
-                if (p.type === 'shockwave') {
-                    const progress = 1 - (p.life / p.maxLife);
-                    const scale = 1 + progress * 20;
-                    p.mesh.scale.set(scale, scale, scale);
-                    (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.6 * (1 - progress);
-                } else if (p.type === 'flash') {
-                    const progress = 1 - (p.life / p.maxLife);
-                    p.mesh.scale.setScalar(20 + progress * 10);
-                    (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - progress);
-                } else if (p.type === 'debris_trail') {
-                    (p.mesh.material as THREE.MeshBasicMaterial).opacity = (p.life / p.maxLife);
-                } else if (p.type !== 'chunk' && p.type !== 'debris' && p.type !== 'glass' && p.type !== 'limb' && p.type !== 'blood' && p.type !== 'stun_star' && p.type !== 'gore') {
-                    p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
-                    p.mesh.scale.multiplyScalar(0.95);
+            // Sync Opacity (Using FXMaterial for safety)
+            if (!p.isInstanced) {
+                const mat = p.mesh.material as FXMaterial;
+                if (mat.transparent) {
+                    mat.opacity = Math.max(0, p.life / p.maxLife);
                 }
-                if (p.life <= 0) isDead = true;
             }
 
-            if (isDead && p.type !== 'limb' && p.type !== 'chunk' && p.type !== 'gore') {
-                if (p.isPooled) FXSystem.recycleMesh(p.mesh);
-                else {
-                    if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
-                    else scene.remove(p.mesh);
+            // Sync with InstancedMesh
+            if (p.isInstanced) {
+                const imesh = FXSystem._getInstancedMesh(scene, p.type);
+                const idx = FXSystem._instancedCounts[p.type];
+                if (imesh && idx < FXSystem._MAX_INSTANCES) {
+                    p.mesh.updateMatrix();
+                    imesh.setMatrixAt(idx, p.mesh.matrix);
+                    FXSystem._instancedCounts[p.type]++;
                 }
-                particlesList.splice(i, 1);
             }
         }
+
+        // 4. Finalize Instancing (Anti-Blink Fix)
+        for (const type in FXSystem._instancedMeshes) {
+            const imesh = FXSystem._instancedMeshes[type];
+
+            // Set precise instance count to avoid overdraw and flicker
+            imesh.count = FXSystem._instancedCounts[type];
+            imesh.instanceMatrix.needsUpdate = true;
+
+            // Ensure bounding volume is current so it doesn't vanish at screen edges
+            if (imesh.count > 0) {
+                imesh.computeBoundingSphere();
+            }
+        }
+    },
+
+    _killParticle: (index: number, list: any[]) => {
+        const p = list[index];
+        if (p.isPooled) FXSystem.recycleMesh(p.mesh, p.type);
+        else if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
+
+        p.inUse = false;
+        FXSystem.FREE_STATE_INDICES.push(p._poolIdx);
+
+        // SWAP AND POP (O(1) removal)
+        list[index] = list[list.length - 1];
+        list.pop();
+    },
+
+    _handleLanding: (p: any, index: number, list: any[], callbacks: any) => {
+        p.mesh.position.y = 0.05;
+        p.landed = true;
+
+        if (p.type === 'blood') {
+            if (Math.random() < 0.2) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.5, MATERIALS.bloodDecal);
+            FXSystem._killParticle(index, list);
+        } else if (['chunk', 'limb', 'gore'].includes(p.type)) {
+            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.5, MATERIALS.bloodDecal);
+            p.vel.set(0, 0, 0);
+        } else {
+            FXSystem._killParticle(index, list);
+        }
+    },
+
+    _getInstancedMesh: (scene: THREE.Scene, type: string): THREE.InstancedMesh => {
+        if (!FXSystem._instancedMeshes[type]) {
+            let geo: THREE.BufferGeometry = GEOMETRY.particle;
+            let mat: THREE.Material = MATERIALS.blood;
+
+            if (type === 'spark') mat = MATERIALS.bullet;
+            if (type === 'debris') mat = MATERIALS.stone;
+            if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
+
+            const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
+            imesh.frustumCulled = true; // Optimization
+            scene.add(imesh);
+            FXSystem._instancedMeshes[type] = imesh;
+            FXSystem._instancedCounts[type] = 0;
+        }
+        return FXSystem._instancedMeshes[type];
     }
 };

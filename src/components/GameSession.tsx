@@ -954,6 +954,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const ctx: SectorContext = {
                 scene,
                 obstacles: stateRef.current.obstacles,
+                collisionGrid: stateRef.current.collisionGrid,
                 chests,
                 flickeringLights,
                 burningObjects,
@@ -1679,7 +1680,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             const gameContext = {
-                scene, enemies: state.enemies, obstacles: state.obstacles, spawnPart, spawnDecal,
+                scene, enemies: state.enemies, obstacles: state.obstacles, collisionGrid: state.collisionGrid, spawnPart, spawnDecal,
                 explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, { spawnPart, spawnDecal }),
                 addScore: (amt: number) => gainXp(amt),
                 trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {

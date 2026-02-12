@@ -188,7 +188,6 @@ export const Sector3: SectorDef = {
 
         // Kontrollrummet (Byggnaden under masten)
         const controlRoom = SectorBuilder.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
-        controlRoom.userData.isObstacle = true;
 
         // Masten (Sammanslagen geometri)
         const mastGroup = new THREE.Group();
@@ -218,6 +217,10 @@ export const Sector3: SectorDef = {
         mastGroup.add(lightHub);
         mastGroup.userData.isObstacle = true;
         scene.add(mastGroup);
+        SectorBuilder.addObstacle(ctx, {
+            mesh: mastGroup,
+            collider: { type: 'sphere', radius: 8 } // Simple radial collider for the mast base area
+        });
     },
 
     setupContent: async (ctx: SectorContext) => {

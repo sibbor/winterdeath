@@ -1,6 +1,6 @@
-
 import * as THREE from 'three';
 import { SectorTrigger, MapItem, WeatherType, SectorState } from './index';
+import { SpatialGrid } from '../core/world/SpatialGrid';
 
 export interface SectorEnvironment {
     bgColor: number;
@@ -38,6 +38,7 @@ export interface CinematicConfig {
 export interface SectorContext {
     scene: THREE.Scene;
     obstacles: any[];
+    collisionGrid: SpatialGrid;
     chests: any[];
     flickeringLights: any[];
     burningObjects: any[];

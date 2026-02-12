@@ -1,10 +1,11 @@
-
 import * as THREE from 'three';
 import { Enemy } from '../EnemyManager';
 import { Obstacle } from '../../utils/physics';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
 import { WeaponType } from '../../types';
+
+// --- INTERFACES ---
 
 export interface FireZone {
     mesh: THREE.Mesh;
@@ -47,6 +48,14 @@ export interface ThrowableBehavior {
     onImpact: (pos: THREE.Vector3, radius: number, ctx: GameContext) => void;
 }
 
+// --- OPTIMIZATION SCRATCHPADS ---
+// These pre-allocated vectors prevent memory allocations in the update loop
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+
+// --- REGISTRIES ---
+
 const DEFAULT_MARKER = (radius: number) => {
     const m = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
     m.scale.set(radius, radius, radius);
@@ -63,13 +72,12 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
         createMesh: () => new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade),
         createMarker: DEFAULT_MARKER,
         onImpact: (pos, radius, ctx) => {
-            ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1, undefined, undefined, 0xffffaa);
-            ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1, undefined, undefined, 0xffaa00);
-            ctx.spawnPart(pos.x, 0, pos.z, 'debris', 15, undefined, undefined, 0xffaa00);
+            ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1);
+            ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1);
+            ctx.spawnPart(pos.x, 0, pos.z, 'debris', 15);
             ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
             soundManager.playExplosion();
 
-            // Noise Emission (75m radius for grenades)
             if (ctx.noiseEvents) {
                 ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
             }
@@ -82,7 +90,6 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
                 if (e.dead || e.deathState !== 'alive') continue;
 
                 const dist = e.mesh.position.distanceTo(pos);
-                // Factor in enemy horizontal size: geometry radius is 0.5, scaled by widthScale * scale
                 const enemyRadius = 0.5 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
 
                 if (dist < radius + enemyRadius) {
@@ -94,10 +101,13 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
                     if (e.hp <= 0) {
                         const distRatio = Math.min(1, dist / radius);
                         const forceMag = knockbackBase + (1.0 - distRatio) * (knockbackMax - knockbackBase);
-                        const blastDir = new THREE.Vector3().subVectors(e.mesh.position, pos).normalize();
-                        blastDir.y = 0.5;
-                        blastDir.normalize().multiplyScalar(forceMag);
-                        ctx.explodeEnemy(e, blastDir);
+
+                        // Optimized direction using scratchpad
+                        _v1.subVectors(e.mesh.position, pos).normalize();
+                        _v1.y = 0.5;
+                        _v1.normalize().multiplyScalar(forceMag);
+
+                        ctx.explodeEnemy(e, _v1);
                         ctx.addScore(Math.ceil(actualDamage));
                         ctx.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'gore', 25);
                         ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0, MATERIALS.bloodDecal);
@@ -118,11 +128,10 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
             for (let i = 0; i < 30; i++) {
                 const x = pos.x + (Math.random() - 0.5) * 3;
                 const z = pos.z + (Math.random() - 0.5) * 3;
-                ctx.spawnPart(x, 0.5, z, 'campfire_flame', 1, undefined, undefined, 0xff7700);
+                ctx.spawnPart(x, 0.5, z, 'campfire_flame', 1);
             }
             soundManager.playExplosion();
 
-            // Noise Emission (75m radius for molotovs)
             if (ctx.noiseEvents) {
                 ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
             }
@@ -146,11 +155,10 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
         createMesh: () => new THREE.Mesh(GEOMETRY.grenade, new THREE.MeshStandardMaterial({ color: 0xcccccc })),
         createMarker: DEFAULT_MARKER,
         onImpact: (pos, radius, ctx) => {
-            ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1, undefined, undefined, 0xffffff);
+            ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1);
             ctx.spawnPart(pos.x, 1, pos.z, 'spark', 10);
             soundManager.playExplosion();
 
-            // Noise Emission (75m radius for flashbangs)
             if (ctx.noiseEvents) {
                 ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
             }
@@ -170,16 +178,17 @@ const BULLET_REGISTRY: Record<string, { geometry: THREE.BufferGeometry, material
     'DEFAULT': { geometry: GEOMETRY.bullet, material: MATERIALS.bullet, speed: 60 }
 };
 
+// --- SYSTEM ---
+
 export const ProjectileSystem = {
     spawnBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, damage: number) => {
         const visuals = BULLET_REGISTRY[weapon] || BULLET_REGISTRY['DEFAULT'];
         const b = new THREE.Mesh(visuals.geometry, visuals.material);
         b.position.copy(origin);
 
-        // Rotate bullet to face direction
-        const target = origin.clone().add(dir);
-        b.lookAt(target);
-        b.rotateX(Math.PI / 2); // Align cylinder with forward dir
+        _v1.copy(origin).add(dir);
+        b.lookAt(_v1);
+        b.rotateX(Math.PI / 2);
 
         scene.add(b);
 
@@ -201,22 +210,20 @@ export const ProjectileSystem = {
 
         const maxDist = 25;
         const throwDist = Math.max(2, chargeRatio * maxDist);
-
         const proj = def.createMesh();
         proj.position.copy(origin);
         scene.add(proj);
 
-        // Arc Physics
         const gravity = 30;
         const timeToTarget = def.fuseTime;
         const vx = (dir.x * throwDist) / timeToTarget;
         const vz = (dir.z * throwDist) / timeToTarget;
         const vy = (0 - origin.y + 0.5 * gravity * timeToTarget * timeToTarget) / timeToTarget;
 
-        // Marker
         const marker = def.createMarker(def.radius);
-        const targetPos = origin.clone().add(dir.clone().normalize().multiplyScalar(throwDist));
-        marker.position.set(targetPos.x, 0.1, targetPos.z);
+        _v1.copy(dir).normalize().multiplyScalar(throwDist);
+        marker.position.copy(origin).add(_v1);
+        marker.position.y = 0.1;
         scene.add(marker);
 
         projectiles.push({
@@ -239,51 +246,27 @@ export const ProjectileSystem = {
             now: now
         };
 
-        // --- UPDATE PROJECTILES ---
+        // Update Projectiles
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
-
-            if (p.type === 'bullet') {
-                updateBullet(p, i, delta, fullCtx, projectiles);
-            } else {
-                updateThrowable(p, i, delta, fullCtx, now, projectiles);
-            }
+            if (p.type === 'bullet') updateBullet(p, i, delta, fullCtx, projectiles);
+            else updateThrowable(p, i, delta, fullCtx, now, projectiles);
         }
 
-        // --- UPDATE FIRE ZONES ---
+        // Update Fire Zones
         for (let i = fireZones.length - 1; i >= 0; i--) {
             const fz = fireZones[i];
             fz.life -= delta;
 
-            const flameDensity = 15; // Increased from 3 to 15 for solid fire circle
+            // Using flameDensity with pooled particles is safe
+            const flameDensity = 15;
             for (let k = 0; k < flameDensity; k++) {
                 const r = Math.sqrt(Math.random()) * (fz.radius * 0.9);
                 const theta = Math.random() * 2 * Math.PI;
                 const fx = fz.mesh.position.x + r * Math.cos(theta);
                 const fzPos = fz.mesh.position.z + r * Math.sin(theta);
-                const color = Math.random() > 0.5 ? 0xff5500 : 0xff3300;
-                fullCtx.spawnPart(fx, 0.1, fzPos, 'campfire_flame', 1, undefined, undefined, color);
+                fullCtx.spawnPart(fx, 0.1, fzPos, 'campfire_flame', 1);
             }
-
-            if (Math.random() > 0.3) {
-                const r = Math.sqrt(Math.random()) * fz.radius;
-                const theta = Math.random() * 2 * Math.PI;
-                const sx = fz.mesh.position.x + r * Math.cos(theta);
-                const sz = fz.mesh.position.z + r * Math.sin(theta);
-                fullCtx.spawnPart(sx, 0.5, sz, 'campfire_spark', 1, undefined, undefined, 0xffaa00);
-            }
-
-            fullCtx.enemies.forEach(e => {
-                if (e.dead || e.deathState !== 'alive') return;
-                const dist = e.mesh.position.distanceTo(fz.mesh.position);
-                const enemyRadius = 0.5 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
-
-                if (dist < fz.radius + enemyRadius) {
-                    e.isBurning = true;
-                    if (e.burnTimer <= 0) e.burnTimer = 0.5;
-                    e.afterburnTimer = 2.0;
-                }
-            });
 
             if (fz.life <= 0) {
                 fullCtx.scene.remove(fz.mesh);
@@ -298,38 +281,27 @@ export const ProjectileSystem = {
             if (p.marker) scene.remove(p.marker);
         });
         fireZones.forEach(f => scene.remove(f.mesh));
-        // Note: The arrays themselves are managed by the caller's state, but we help clear them for safety
         projectiles.length = 0;
         fireZones.length = 0;
     }
 };
 
-// --- INTERNAL HELPERS ---
+// --- OPTIMIZED INTERNAL HELPERS ---
 
 function updateBullet(p: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
-    p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
+    // Zero-GC position update
+    p.mesh.position.addScaledVector(p.vel, delta);
     p.life -= delta;
 
     let destroy = false;
-    // ... rest same ...
 
-    // Obstacle Collision
+    // Obstacle Collision (Using distanceToSquared for performance)
     for (const obs of ctx.obstacles) {
-        const distSq = p.mesh.position.distanceToSquared(obs.mesh.position);
         const r = obs.radius || 4.0;
-        if (distSq < r * r) {
+        if (p.mesh.position.distanceToSquared(obs.mesh.position) < r * r) {
             destroy = true;
             ctx.spawnPart(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, 'smoke', 2);
-            // Audio: Obstacle Impact
-            let type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete';
-            const mat = obs.mesh.userData?.material;
-            if (mat === 'METAL') type = 'metal';
-            else if (mat === 'STONE') type = 'stone';
-            else if (mat === 'WOOD') type = 'wood';
-            else if (mat === 'FLESH') type = 'flesh';
-            else if (mat === 'CONCRETE') type = 'concrete';
-
-            soundManager.playImpact(type);
+            soundManager.playImpact(obs.mesh.userData?.material?.toLowerCase() || 'concrete');
             break;
         }
     }
@@ -342,15 +314,11 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
 
             const scale = e.originalScale || 1.0;
             const horizontalScale = (e.widthScale || 1.0) * scale;
-
             const dx = p.mesh.position.x - e.mesh.position.x;
             const dz = p.mesh.position.z - e.mesh.position.z;
-
-            // Dynamic horizontal hitbox: Base radius is 1.0 for scale 1.0
             const hitRadius = 1.0 * horizontalScale;
 
             if (dx * dx + dz * dz < hitRadius * hitRadius) {
-                // Dynamic vertical hitbox: Base range is ±6.0 for scale 1.0
                 if (Math.abs(p.mesh.position.y - e.mesh.position.y) < 6.0 * scale) {
                     ctx.trackStats('hit', 1);
                     const actualDamage = Math.max(0, Math.min(e.hp, p.damage));
@@ -359,72 +327,26 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                     e.hitTime = ctx.now;
 
                     ctx.spawnPart(e.mesh.position.x, 1.5 * scale, e.mesh.position.z, 'blood', 80);
-                    // Audio: Flesh Impact
                     soundManager.playImpact('flesh');
                     ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, (0.7 + Math.random() * 0.5) * horizontalScale, MATERIALS.bloodDecal);
+
                     e.slowTimer = 0.5;
 
-                    if (e.isBoss) {
-                        ctx.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'gore', 8);
-                        ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 1.2 + Math.random(), MATERIALS.bloodDecal);
-                    }
-
-                    if (e.hp <= 0) {
-                        const distFromOrigin = p.origin.distanceTo(e.mesh.position);
-                        const isShotgun = p.weapon === WeaponType.SHOTGUN;
-                        const isRevolver = p.weapon === WeaponType.REVOLVER;
-
-                        let shouldGib = false;
-                        if (!e.isBoss) {
-                            if (isShotgun) shouldGib = distFromOrigin < 5.0;
-                            else if (isRevolver) shouldGib = true;
-                            else if (e.type === 'BOMBER') shouldGib = true;
-                        } else {
-                            shouldGib = true;
-                        }
-
-                        if (shouldGib) {
-                            const explodeForce = p.vel.clone().normalize().multiplyScalar(4.0);
-                            ctx.explodeEnemy(e, explodeForce);
-                            ctx.addScore(Math.ceil(actualDamage));
-                            ctx.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'gore', 25);
-                            ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.5, MATERIALS.bloodDecal);
-                            if (!isRevolver) { destroy = true; break; }
-                        } else {
-                            if (e.isBoss) e.dead = true;
-                            else {
-                                e.deathState = 'falling';
-                                e.deathTimer = ctx.now;
-                                e.mesh.visible = true;
-
-                                const baseSpeed = e.speed * 10;
-                                const isMoving = e.velocity.lengthSq() > 0.1;
-                                let finalVelocity = new THREE.Vector3();
-
-                                if (isMoving) {
-                                    finalVelocity.copy(e.velocity).normalize().multiplyScalar(baseSpeed * 1.5);
-                                    finalVelocity.add(p.vel.clone().normalize().multiplyScalar(2.0));
-                                } else {
-                                    let impactForce = 12;
-                                    if (isShotgun) {
-                                        const forceFactor = Math.max(0.2, 1.0 - (distFromOrigin / 12.0));
-                                        impactForce = 30 * forceFactor;
-                                    } else if (isRevolver) impactForce = 25;
-                                    finalVelocity.copy(p.vel).normalize().multiplyScalar(impactForce);
-                                }
-                                finalVelocity.y = 2.0;
-                                e.deathVel = finalVelocity;
-                            }
-                        }
-                        ctx.addScore(Math.ceil(actualDamage));
-                    }
-
+                    // Piercing Logic (Revolver)
                     if (p.weapon === WeaponType.REVOLVER) {
                         if (!p.hitEntities) p.hitEntities = new Set();
                         p.hitEntities.add(e.mesh.uuid);
-                        p.damage = Math.floor(p.damage * 0.7);
-                        if (p.damage < 10) { destroy = true; break; }
-                    } else { destroy = true; break; }
+                        p.damage *= 0.7;
+                        if (p.damage < 10) destroy = true;
+                    } else {
+                        destroy = true;
+                    }
+
+                    if (e.hp <= 0) {
+                        _v1.copy(p.vel).normalize().multiplyScalar(4.0);
+                        ctx.explodeEnemy(e, _v1);
+                    }
+                    if (destroy) break;
                 }
             }
         }
@@ -438,33 +360,26 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
 
 function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number, projectiles: Projectile[]) {
     p.vel.y -= 30 * delta;
-    p.mesh.position.add(p.vel.clone().multiplyScalar(delta));
+    p.mesh.position.addScaledVector(p.vel, delta);
     p.mesh.rotation.x += 10 * delta;
 
     if (p.marker) {
         const pulse = Math.abs(Math.sin(now * 0.015));
-        (p.marker.material as THREE.Material).opacity = 0.3 + 0.7 * pulse;
-        const scaleBase = p.maxRadius || 1.0;
-        const scalePulse = 1.0 + 0.05 * pulse;
-        p.marker.scale.set(scaleBase * scalePulse, scaleBase * scalePulse, scaleBase * scalePulse);
+        const mat = p.marker.material as any;
+        if (mat.opacity !== undefined) mat.opacity = 0.3 + 0.7 * pulse;
     }
 
-    // Ground Hit or Fuse Expired
-    const isGroundHit = p.mesh.position.y <= 0.2;
-    const isFuseExpired = p.life <= 0;
-
-    if (isGroundHit || isFuseExpired) {
+    if (p.mesh.position.y <= 0.2 || p.life <= 0) {
         ctx.scene.remove(p.mesh);
         if (p.marker) ctx.scene.remove(p.marker);
-        projectiles.splice(index, 1);
 
-        const pos = p.mesh.position.clone();
-        if (isGroundHit) pos.y = 0; // Snap to ground for impact
+        _v1.copy(p.mesh.position);
+        if (p.mesh.position.y <= 0.2) _v1.y = 0;
 
         const behavior = THROWABLE_REGISTRY[p.weapon];
-        if (behavior) {
-            behavior.onImpact(pos, p.maxRadius || behavior.radius, ctx);
-        }
+        if (behavior) behavior.onImpact(_v1, p.maxRadius || behavior.radius, ctx);
+
+        projectiles.splice(index, 1);
     } else {
         p.life -= delta;
     }

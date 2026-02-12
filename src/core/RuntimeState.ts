@@ -3,6 +3,7 @@ import { WeaponType, SectorTrigger, SectorState } from '../types';
 import { Obstacle } from '../utils/physics';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
+import { SpatialGrid } from './world/SpatialGrid';
 
 export interface RuntimeState {
     isDead: boolean;
@@ -71,6 +72,7 @@ export interface RuntimeState {
     sectorState: SectorState;
     triggers: SectorTrigger[];
     obstacles: Obstacle[];
+    collisionGrid: SpatialGrid;
     busUnlocked: boolean;
     clueActive: boolean;
     bossDefeatedTime: number;

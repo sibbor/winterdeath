@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { Engine } from './engine/Engine';
 import { GameCanvasProps, SectorState, SectorTrigger, WeaponType } from '../types';
-import { Obstacle } from '../utils/physics';
 import { RuntimeState } from './RuntimeState';
 import { System } from './systems/System';
 import { WEAPONS } from '../content/constants';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
+import { SpatialGrid } from './world/SpatialGrid';
+import { Obstacle } from '../utils/physics';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -69,6 +70,7 @@ export class GameSessionLogic {
             sectorState: {} as SectorState,
             triggers: [] as SectorTrigger[],
             obstacles: [] as Obstacle[],
+            collisionGrid: new SpatialGrid(),
             busUnlocked: false,
             clueActive: false,
             bossesDefeated: [],

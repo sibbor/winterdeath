@@ -122,7 +122,8 @@ export class PlayerMovementSystem implements System {
                 // Collision Resolution (Iterative)
                 for (let i = 0; i < 4; i++) {
                     let adjusted = false;
-                    for (const obs of obstacles) {
+                    const nearby = state.collisionGrid.getNearby(testPos, 2.0);
+                    for (const obs of nearby) {
                         const push = resolveCollision(testPos, 0.5, obs);
                         if (push) {
                             // CHECK FOR ENEMY KNOCKBACK

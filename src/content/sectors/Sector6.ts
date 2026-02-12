@@ -54,9 +54,9 @@ export const Sector6: SectorDef = {
         // A few props to test lighting/shadows
         SectorBuilder.spawnContainerStack(ctx, 20, 20, 0.5, 3, 0xcc3333);
 
-        const t1 = ObjectGenerator.createTree('oak'); t1.position.set(30, 0, -30); scene.add(t1);
-        const t2 = ObjectGenerator.createTree('pine'); t2.position.set(-40, 0, 40); scene.add(t2);
-        const t3 = ObjectGenerator.createTree('birch'); t3.position.set(-20, 0, -20); scene.add(t3);
+        SectorBuilder.spawnTree(ctx, 'pine', 30, -30);
+        SectorBuilder.spawnTree(ctx, 'pine', -40, 40);
+        SectorBuilder.spawnTree(ctx, 'birch', -20, -20);
 
         // Lighting Test (Point Light)
         const pl = new THREE.PointLight(0xffaa00, 5, 20);

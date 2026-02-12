@@ -180,9 +180,9 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             innerCave.add(prop);
 
             // Simple collider for props
-            obstacles.push({
+            SectorBuilder.addObstacle(ctx, {
                 mesh: prop.children[0] as THREE.Mesh,
-                collider: { type: 'box', size: new THREE.Vector3(1, 2, 1) }
+                collider: { type: 'box' as const, size: new THREE.Vector3(1, 2, 1) }
             });
         }
     };
@@ -222,9 +222,9 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         dummy.rotation.set(0, rotationY, 0);
         dummy.updateMatrixWorld(); // Essential as it's not in the scene graph
 
-        obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: dummy,
-            collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
+            collider: { type: 'box' as const, size: new THREE.Vector3(width, height, depth) }
         });
     };
 

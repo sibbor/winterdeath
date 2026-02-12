@@ -99,7 +99,10 @@ export const Sector4: SectorDef = {
         shed.position.y = 4;
         shedGroup.add(shed);
         scene.add(shedGroup);
-        obstacles.push({ mesh: shedGroup, radius: 12 });
+        SectorBuilder.addObstacle(ctx, {
+            mesh: shedGroup,
+            collider: { type: 'sphere', radius: 12 }
+        });
     },
 
     setupContent: async (ctx: SectorContext) => {

@@ -42,7 +42,7 @@ export class EnemySystem implements System {
                 now,
                 this.playerGroup.position,
                 state.enemies,
-                state.obstacles,
+                state.collisionGrid,
                 session.noiseEvents,
                 state.shakeIntensity,
                 // onPlayerHit

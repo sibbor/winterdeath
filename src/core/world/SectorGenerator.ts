@@ -12,6 +12,22 @@ import { getCollectibleById } from '../../content/collectibles';
 // Shared Utilities for Sector Building
 export const SectorBuilder = {
 
+    addObstacle: (ctx: SectorContext, obstacle: any) => {
+        if (!obstacle.mesh) return;
+
+        // Ensure it's in the legacy list
+        if (!ctx.obstacles.includes(obstacle)) {
+            ctx.obstacles.push(obstacle);
+        }
+
+        // Always ensure matrixWorld is up to date before adding to spatial grid
+        // to prevent (0,0,0) index bug if added before first render
+        obstacle.mesh.updateMatrixWorld(true);
+
+        // Ensure it's in the spatial grid
+        ctx.collisionGrid.add(obstacle);
+    },
+
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
         if (def.groundType && def.groundType !== 'NONE') {
             await SectorBuilder.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
@@ -83,60 +99,49 @@ export const SectorBuilder = {
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
-        const TILE_SIZE = 10;
-        const halfW = size.width / 2;
-        const halfD = size.depth / 2;
+        let mat: THREE.MeshStandardMaterial;
 
-        const baseMat: THREE.MeshStandardMaterial = (type === 'GRAVEL' ? MATERIALS.gravel : (type === 'DIRT' ? MATERIALS.gravel : MATERIALS.snow)).clone();
-        if (type === 'DIRT') baseMat.color.setHex(0x3d2b1f);
-        baseMat.bumpScale = 0.5;
-
-        const cols = Math.ceil(size.width / TILE_SIZE);
-        const rows = Math.ceil(size.depth / TILE_SIZE);
-
-        for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-                const xStart = -halfW + col * TILE_SIZE;
-                const zStart = -halfD + row * TILE_SIZE;
-                const xEnd = Math.min(xStart + TILE_SIZE, halfW);
-                const zEnd = Math.min(zStart + TILE_SIZE, halfD);
-                const tileW = xEnd - xStart;
-                const tileD = zEnd - zStart;
-
-                if (tileW <= 0 || tileD <= 0) continue;
-
-                const geo = new THREE.PlaneGeometry(tileW, tileD);
-                const mat = baseMat.clone(); // Critical: Unique material per tile for PointLight limits
-
-                // Calculate UVs to be seamless across tiles
-                const uvAttr = geo.attributes.uv;
-                for (let i = 0; i < uvAttr.count; i++) {
-                    const localU = uvAttr.getX(i);
-                    const localV = uvAttr.getY(i);
-                    // World UV based on 10m repeat
-                    const worldX = xStart + localU * tileW;
-                    const worldZ = zStart + (1 - localV) * tileD;
-                    uvAttr.setXY(i, worldX / 10, worldZ / 10);
-                }
-
-                // Ensure textures wrap
-                [mat.map, mat.bumpMap, (mat as any).normalMap].forEach(t => {
-                    if (t) {
-                        t.wrapS = t.wrapT = THREE.RepeatWrapping;
-                        t.needsUpdate = true;
-                    }
-                });
-
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.name = `Ground_${type}_${col}_${row}`;
-                mesh.rotation.x = -Math.PI / 2;
-                mesh.position.set(xStart + tileW / 2, -0.05, zStart + tileD / 2);
-                mesh.receiveShadow = true;
-
-                ctx.scene.add(mesh);
-            }
-            if (ctx.yield) await ctx.yield();
+        if (type === 'GRAVEL') {
+            mat = MATERIALS.gravel.clone();
+            mat.bumpScale = 0.5; // Increased bumpScale for gravel
+        } else if (type === 'DIRT') {
+            mat = MATERIALS.gravel.clone();
+            mat.color.setHex(0x3d2b1f);
+            mat.bumpScale = 0.5; // Increased bumpScale for dirt
+        } else {
+            mat = MATERIALS.snow.clone();
+            mat.bumpScale = 0.5; // Increased bumpScale for snow
         }
+
+        const geo = new THREE.PlaneGeometry(size.width, size.depth);
+
+        // Use UV scaling on geometry instead of modifying shared texture objects (Safe & efficient)
+        const repeatX = size.width / 10;
+        const repeatY = size.depth / 10;
+        const uvAttr = geo.attributes.uv;
+        for (let i = 0; i < uvAttr.count; i++) {
+            uvAttr.setXY(i, uvAttr.getX(i) * repeatX, uvAttr.getY(i) * repeatY);
+            if (ctx.yield && i % 1000 === 0) await ctx.yield(); // Yield for large geometry updates
+        }
+
+        // Ensure shared textures have RepeatWrapping (set once globally)
+        if (mat.map) {
+            mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+        }
+        if (mat.bumpMap) {
+            mat.bumpMap.wrapS = mat.bumpMap.wrapT = THREE.RepeatWrapping;
+        }
+        if ((mat as any).normalMap) {
+            (mat as any).normalMap.wrapS = (mat as any).normalMap.wrapT = THREE.RepeatWrapping;
+        }
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.name = `Ground_${type}`;
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.y = -0.05; // Standardized snow/ground base
+        mesh.receiveShadow = true;
+        ctx.scene.add(mesh);
+        if (ctx.yield) await ctx.yield();
     },
 
     generateBoundaries: (ctx: SectorContext, bounds: { width: number, depth: number }) => {
@@ -152,10 +157,10 @@ export const SectorBuilder = {
             const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, h, sz), wallMat);
             mesh.position.set(x, h / 2, z);
             ctx.scene.add(mesh);
-            ctx.obstacles.push({
+            SectorBuilder.addObstacle(ctx, {
                 mesh,
                 collider: {
-                    type: 'box',
+                    type: 'box' as const,
                     size: new THREE.Vector3(sx, h, sz)
                 }
             });
@@ -223,7 +228,9 @@ export const SectorBuilder = {
         chest.add(glow);
 
         ctx.scene.add(chest);
-        ctx.chests.push({ mesh: chest, type, scrap: isBig ? 100 : 25, radius: 2, opened: false });
+        const obs = { mesh: chest, type, scrap: isBig ? 100 : 25, radius: 2, opened: false };
+        ctx.chests.push(obs);
+        SectorBuilder.addObstacle(ctx, { mesh: chest, collider: { type: 'sphere', radius: 2 } });
 
         ctx.mapItems.push({
             id: `chest_${Math.random()}`,
@@ -243,7 +250,7 @@ export const SectorBuilder = {
         }
 
         // Persistence Check: Don't spawn if already found
-        const foundList = (ctx as any).collectiblesFound || []; // Fallback if type not updated yet
+        const foundList = (ctx as any).collectiblesFound || [];
         if (foundList.includes(id)) {
             return;
         }
@@ -293,10 +300,6 @@ export const SectorBuilder = {
         innerRing.position.y = 1.0;
         group.add(innerRing);
 
-        // Animation Hook (using userData to rotate rings in game loop if possible, or just static for now)
-        // We'll trust the engine or add a simple rotation effect if we can.
-        // For now, let's just add the light and particles.
-
         const light = new THREE.PointLight(colorPrimary, 3, 10);
         light.position.set(0, 1.2, 0);
         group.add(light);
@@ -306,13 +309,13 @@ export const SectorBuilder = {
         group.userData.effects.push(
             {
                 type: 'emitter',
-                particle: 'spark', // Generic spark, assuming texture exists
+                particle: 'spark',
                 interval: 100,
                 count: 1,
                 offset: new THREE.Vector3(0, 0.2, 0),
                 spread: 0.2,
                 color: colorPrimary,
-                velocity: new THREE.Vector3(0, 2, 0) // Upward velocity
+                velocity: new THREE.Vector3(0, 2, 0)
             }
         );
 
@@ -403,7 +406,8 @@ export const SectorBuilder = {
         bale.position.set(x, 0, z);
         bale.rotation.y = rotation;
         ctx.scene.add(bale);
-        ctx.obstacles.push({ mesh: bale, collider: { type: 'sphere', radius: 1.2 * scale } });
+        const obs = { mesh: bale, collider: { type: 'sphere' as const, radius: 1.2 * scale } };
+        SectorBuilder.addObstacle(ctx, obs);
     },
 
     spawnTimberPile: (ctx: SectorContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
@@ -412,7 +416,8 @@ export const SectorBuilder = {
         timber.rotation.y = rotation;
         ctx.scene.add(timber);
         // Box obstacle for timber pile
-        ctx.obstacles.push({ mesh: timber, collider: { type: 'box', size: new THREE.Vector3(6 * scale, 3 * scale, 6 * scale) } });
+        const obs = { mesh: timber, collider: { type: 'box' as const, size: new THREE.Vector3(6 * scale, 3 * scale, 6 * scale) } };
+        SectorBuilder.addObstacle(ctx, obs);
     },
 
     /**
@@ -437,26 +442,23 @@ export const SectorBuilder = {
 
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
-        // Shadow properties are set in createBuilding, but we verify here if needed or if createBuilding changes
         building.castShadow = true;
         building.receiveShadow = true;
 
         ctx.scene.add(building);
 
-        // Get dimensions from userData if available (ObjectGenerator should set this)
-        // If not, calculate from params.
+        // Get dimensions from userData if available
         const sizeY = building.userData.size ? building.userData.size.y : (createRoof ? height * 1.5 : height);
 
         // 6. Collision
-        if (ctx.obstacles) {
-            ctx.obstacles.push({
-                mesh: building,
-                collider: {
-                    type: 'box',
-                    size: new THREE.Vector3(width, sizeY, depth)
-                }
-            });
-        }
+        SectorBuilder.addObstacle(ctx, {
+            mesh: building,
+            collider: {
+                type: 'box' as const,
+                size: (building.userData.size as THREE.Vector3).clone(),
+                position: building.position.clone().add(new THREE.Vector3(0, (building.userData.size as THREE.Vector3).y / 2, 0))
+            }
+        });
 
         return building;
     },
@@ -473,7 +475,7 @@ export const SectorBuilder = {
         // Add Collision
         const box = new THREE.Box3().setFromObject(vehicle);
         const size = box.getSize(new THREE.Vector3());
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: vehicle,
             collider: { type: 'box', size: size }
         });
@@ -488,7 +490,7 @@ export const SectorBuilder = {
         ctx.scene.add(container);
 
         // Add Collision (6.0m L x 2.6m H x 2.4m W)
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: container,
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6, 2.4) }
         });
@@ -509,6 +511,13 @@ export const SectorBuilder = {
         light.position.set(x, 0, z);
         light.rotation.y = rotation;
         ctx.scene.add(light);
+
+        // Add collision (Street lamps are small but should block)
+        SectorBuilder.addObstacle(ctx, {
+            mesh: light,
+            collider: { type: 'sphere', radius: 1.0 }
+        });
+
         return light;
     },
 
@@ -526,7 +535,7 @@ export const SectorBuilder = {
         ctx.scene.add(building);
 
         const size = building.userData.size;
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: building,
             collider: { type: 'box', size: size.clone() }
         });
@@ -548,7 +557,7 @@ export const SectorBuilder = {
         stairs.rotation.y = rotation;
         ctx.scene.add(stairs);
 
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: stairs,
             collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
         });
@@ -561,7 +570,7 @@ export const SectorBuilder = {
         pole.position.set(x, 0, z);
         pole.rotation.y = rotation;
         ctx.scene.add(pole);
-        ctx.obstacles.push({ mesh: pole, collider: { type: 'sphere', radius: 1 } });
+        SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
         return pole;
     },
 
@@ -574,7 +583,7 @@ export const SectorBuilder = {
         // Add Collision
         const box = new THREE.Box3().setFromObject(car);
         const size = box.getSize(new THREE.Vector3());
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: car,
             collider: { type: 'box', size: size }
         });
@@ -595,7 +604,7 @@ export const SectorBuilder = {
         }
 
         // Add Collision for the whole stack
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: group,
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6 * stackHeight, 2.4) }
         });
@@ -616,30 +625,19 @@ export const SectorBuilder = {
 
         for (let i = 0; i < stackIndex; i++) {
             const vehicle = ObjectGenerator.createVehicle(undefined, 1.0, undefined);
-
-            // 1. Mät bilens höjd för exakt stapling
             const box = new THREE.Box3().setFromObject(vehicle);
             const size = box.getSize(new THREE.Vector3());
             const vehicleHeight = size.y;
 
-            // 2. Positionera fordonet plant
-            // Vi lägger till en minimal slumpmässig förskjutning i X och Z 
-            // så att bilarna inte står exakt centrerat ovanpå varandra.
             const offsetX = (Math.random() - 0.5) * posJitter;
             const offsetZ = (Math.random() - 0.5) * posJitter;
 
             vehicle.position.set(offsetX, currentY + (vehicleHeight / 2), offsetZ);
-
-            // 3. Endast Y-rotation med ditt önskade låga jitter
             vehicle.rotation.y = (Math.random() - 0.5) * toRad(maxJitter);
-
-            // Säkerställ att X och Z är nollade (ingen lutning)
             vehicle.rotation.x = 0;
             vehicle.rotation.z = 0;
 
             vehicleStack.add(vehicle);
-
-            // 4. Öka höjden inför nästa bil
             currentY += vehicleHeight;
         }
 
@@ -648,9 +646,9 @@ export const SectorBuilder = {
         // Add Collision for the entire stack
         const box = new THREE.Box3().setFromObject(vehicleStack);
         const size = box.getSize(new THREE.Vector3());
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: vehicleStack,
-            collider: { type: 'box', size: size }
+            collider: { type: 'box' as const, size: size }
         });
     },
 
@@ -662,7 +660,7 @@ export const SectorBuilder = {
 
         // Collision (Trunk)
         const colRadius = 0.5 * scaleMultiplier;
-        ctx.obstacles.push({
+        SectorBuilder.addObstacle(ctx, {
             mesh: tree,
             collider: { type: 'sphere', radius: colRadius }
         });
@@ -673,9 +671,8 @@ export const SectorBuilder = {
         piece.position.set(x, 0, z);
         piece.rotation.y = rotY;
         ctx.scene.add(piece);
-
         if (type.includes('Wall') || type.includes('Frame')) {
-            ctx.obstacles.push({
+            SectorBuilder.addObstacle(ctx, {
                 mesh: piece,
                 collider: { type: 'box', size: new THREE.Vector3(4, 4, 1) }
             });
@@ -693,7 +690,7 @@ export const SectorBuilder = {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
         ctx.scene.add(barrel);
-        ctx.obstacles.push({ mesh: barrel, collider: { type: 'sphere', radius: 0.6 } });
+        SectorBuilder.addObstacle(ctx, { mesh: barrel, collider: { type: 'sphere', radius: 0.6 } });
     },
 
     // Area Fillers
@@ -708,44 +705,34 @@ export const SectorBuilder = {
                 new THREE.Vector3(center.x + w, 0, center.z - d),
                 new THREE.Vector3(center.x + w, 0, center.z + d),
                 new THREE.Vector3(center.x - w, 0, center.z + d)
-            ], 0xffff00); // Yellow for generic areas
+            ], 0xffff00);
         }
         await ObjectGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius, exclusionZones);
     },
 
     fillWheatField: async (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
         if (ctx.debugMode) {
-            SectorBuilder.visualizePolygon(ctx, polygon, 0xffff00); // Yellow for wheat
+            SectorBuilder.visualizePolygon(ctx, polygon, 0xffff00);
         }
         await ObjectGenerator.fillWheatField(ctx, polygon, density);
     },
 
     createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
         if (ctx.debugMode) {
-            SectorBuilder.visualizePath(ctx, polygon, 0xff0000); // Use path instead of polygon
+            SectorBuilder.visualizePath(ctx, polygon, 0xff0000);
         }
         PathGenerator.createBoundry(ctx, polygon, name);
     },
 
-    /**
-     * Creates a low-poly mountain along a path with snow-capped peaks and tunnel carving.
-     * @param ctx The sector context containing the scene and materials.
-     * @param points The vector points defining the mountain ridge/path.
-     * @param opening Optional opening (tunnel/cave) to carve out.
-     */
     createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
         if (!points || points.length < 2) return;
 
-        // Visual debugging
         if (ctx.debugMode) SectorBuilder.visualizePath(ctx, points, 0xffffff);
 
-        // --- CONFIGURATION ---
         const mountainWidth = 30;
         const mountainHeightPeak = 10;
-        const segmentsX = 70; // Resolution along the path
-        const segmentsZ = 30; // Resolution across the width
-
-        // 0.0 = Curve is left edge, 0.5 = Curve is center, 1.0 = Curve is right edge
+        const segmentsX = 70;
+        const segmentsZ = 30;
         const mountainSideBias = 1.0;
 
         const COLORS = {
@@ -755,46 +742,29 @@ export const SectorBuilder = {
         };
 
         const curve = new THREE.CatmullRomCurve3(points);
-        const totalLength = curve.getLength();
-
-        // 1. INITIALIZE GEOMETRY
-        // We use a dummy size because we set XYZ manually in the loop
         const planeGeo = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsZ);
         const posAttr = planeGeo.getAttribute('position');
-
         const vertex = new THREE.Vector3();
         const targetPointOnCurve = new THREE.Vector3();
 
-        // 2. SHAPE THE TERRAIN ALONG THE CURVE
         for (let i = 0; i <= segmentsX; i++) {
             const t = i / segmentsX;
             curve.getPointAt(t, targetPointOnCurve);
             const tangent = curve.getTangentAt(t).normalize();
-
-            // Calculate perpendicular direction for the width of the mountain
             const sideDirection = new THREE.Vector3(-tangent.z, 0, tangent.x);
 
             for (let j = 0; j <= segmentsZ; j++) {
                 const index = i * (segmentsZ + 1) + j;
-
-                // vFactor goes from 0 to 1 across the width
                 const vFactor = j / segmentsZ;
-
-                // Offset from the curve based on bias
                 const vOffset = (vFactor - mountainSideBias) * mountainWidth;
-
-                // Distance to the "ridge" (the highest point). 
-                // We'll place the ridge at a 0.3 offset to make it look organic
                 const distToRidge = Math.abs(vFactor - 0.4) * mountainWidth;
 
                 let baseHeight = 0;
-                const maxDist = mountainWidth * 0.7; // Falloff area
+                const maxDist = mountainWidth * 0.7;
                 if (distToRidge < maxDist) {
-                    // Smooth cosine falloff for the ridge
                     baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
                 }
 
-                // Low-poly Jitter
                 let finalY = 0;
                 let xJitter = 0;
                 let zJitter = 0;
@@ -805,7 +775,6 @@ export const SectorBuilder = {
                     zJitter = (Math.random() - 0.5) * 4;
                 }
 
-                // Set final vertex position
                 const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
                 const finalZ = targetPointOnCurve.z + (sideDirection.z * vOffset) + zJitter;
                 const finalYPos = targetPointOnCurve.y + finalY;
@@ -814,7 +783,6 @@ export const SectorBuilder = {
             }
         }
 
-        // 3. CARVE THE OPENING (Pushing vertices underground)
         if (opening) {
             const openingPos = new THREE.Vector3();
             opening.getWorldPosition(openingPos);
@@ -824,37 +792,29 @@ export const SectorBuilder = {
             for (let i = 0; i < posAttr.count; i++) {
                 vertex.fromBufferAttribute(posAttr, i);
                 const dist = Math.sqrt(Math.pow(vertex.x - openingPos.x, 2) + Math.pow(vertex.z - openingPos.z, 2));
-
                 if (dist < safeZoneRadius && vertex.y < clearanceHeight) {
-                    posAttr.setY(i, -25); // Hide vertices below the floor
+                    posAttr.setY(i, -25);
                 }
             }
         }
 
         posAttr.needsUpdate = true;
-
-        // 4. PREPARE LOW-POLY MESH
-        // Convert to non-indexed to get sharp faceted edges
-        let mountainGeo: THREE.BufferGeometry = planeGeo.toNonIndexed();
+        let mountainGeo = planeGeo.toNonIndexed();
         mountainGeo.computeVertexNormals();
 
-        // 5. VERTEX COLORING (Snow Logic)
         const count = mountainGeo.getAttribute('position').count;
         const colors = new Float32Array(count * 3);
         const finalPosAttr = mountainGeo.getAttribute('position');
         const normalAttr = mountainGeo.getAttribute('normal');
-
         const normal = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
         const color = new THREE.Color();
 
         for (let i = 0; i < count; i += 3) {
-            // Sample height from triangle center
             const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
             normal.fromBufferAttribute(normalAttr, i);
             const upwardness = normal.dot(up);
 
-            // Snow if high enough and relatively flat, otherwise rock
             if ((h > mountainHeightPeak * 0.55 && upwardness > 0.65) || (upwardness > 0.9 && h > 10)) {
                 color.copy(COLORS.SNOW);
             } else {
@@ -870,8 +830,6 @@ export const SectorBuilder = {
         }
 
         mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-        // 6. FINAL MESH
         const mountainMat = new THREE.MeshStandardMaterial({
             vertexColors: true,
             flatShading: true,
@@ -883,9 +841,6 @@ export const SectorBuilder = {
         ctx.scene.add(mountain);
     },
 
-    /**
-     * Creates a cave opening at the specified position.
-     */
     createMountainOpening: () => {
         const tunnelWidthOuter = 16;
         const tunnelHeightWalls = 5;
@@ -893,13 +848,9 @@ export const SectorBuilder = {
         const tunnelThickness = 3;
         const tunnelDepth = 5;
 
-        const start = 0;
-        const end = 10;
-
         const halfWidthO = tunnelWidthOuter / 2;
         const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
         const caveOpeningGroup = new THREE.Group();
-        //caveOpeningGroup.rotateY(Math.PI / 2); // Orient arch correctly
 
         const archShape = new THREE.Shape();
         archShape.moveTo(-halfWidthO, 0);
@@ -922,7 +873,7 @@ export const SectorBuilder = {
         archShape.holes.push(holePath);
 
         const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
-        archGeo.translate(0, 0, -tunnelDepth / 2); // Center along depth
+        archGeo.translate(0, 0, -tunnelDepth / 2);
 
         const tunnelMat = MATERIALS.concrete.clone();
         tunnelMat.side = THREE.DoubleSide;
@@ -939,7 +890,6 @@ export const SectorBuilder = {
         ObjectGenerator.createForest(ctx, polygon, spacing, type);
     },
 
-    // Linear Paths (Routed to PathGenerator)
     createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
         PathGenerator.createFence(ctx, points, color as any, height, strict);
     },
@@ -959,7 +909,6 @@ export const SectorBuilder = {
     createGuardrail: (ctx: SectorContext, points: THREE.Vector3[], floating: boolean = false) => {
         return PathGenerator.createGuardrail(ctx, points, floating);
     },
-
 
     visualizeTriggers: (ctx: SectorContext) => {
         ctx.triggers.forEach(trig => {
@@ -982,7 +931,6 @@ export const SectorBuilder = {
 
     attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: string, color?: number, intensity?: number, offset?: { x: number, y: number, z: number } }) => {
         const offset = eff.offset || { x: 0, y: 0, z: 0 };
-        // Calculate world position to attach light to scene (Fixes parent-culling issues)
         const worldPos = new THREE.Vector3();
         parent.updateMatrixWorld();
         worldPos.setFromMatrixPosition(parent.matrixWorld).add(new THREE.Vector3(offset.x, offset.y, offset.z));
@@ -991,7 +939,6 @@ export const SectorBuilder = {
             const light = new THREE.PointLight(eff.color || 0xffaa00, eff.intensity || 1, 25);
             light.position.copy(worldPos);
             ctx.scene.add(light);
-            // Auto-enable flickering for atmosphere if it's a "warm" light
             if ((eff.color || 0) > 0xffaa00 || !eff.color) {
                 ctx.flickeringLights.push({ light, baseInt: eff.intensity || 1, flickerRate: 0.05 + Math.random() * 0.1 });
             }
@@ -1001,7 +948,6 @@ export const SectorBuilder = {
             ctx.scene.add(light);
             ctx.flickeringLights.push({ light, baseInt: 2, flickerRate: 0.15 });
 
-            // Tag for GameSession to pick up
             parent.userData.isFire = true;
             if (parent.userData.effects === undefined) parent.userData.effects = [];
 

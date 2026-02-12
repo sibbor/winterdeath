@@ -50,29 +50,13 @@ const LOCATIONS = {
 async function addProps(ctx: SectorContext) {
     ctx.scene.add(ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0));
 
-    const barrel = ObjectGenerator.createBarrel();
-    barrel.position.set(106, 0, -65);
-    barrel.rotateX(Math.PI * 0.5);
-    barrel.rotateY(Math.PI * 0.75);
-    ctx.scene.add(barrel);
-    const barrel2 = ObjectGenerator.createBarrel();
-    barrel2.position.set(108, 0, -67);
-    ctx.scene.add(barrel2);
+    SectorBuilder.spawnBarrel(ctx, 106, -65);
+    SectorBuilder.spawnBarrel(ctx, 108, -67);
 
-    const timberPile = ObjectGenerator.createTimberPile(2);
-    timberPile.position.set(92, 0, -60);
-    timberPile.rotateY(Math.PI * 0.25);
-    ctx.scene.add(timberPile);
+    SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
+    SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
 
-    const timberPile2 = ObjectGenerator.createTimberPile(1.5);
-    timberPile2.position.set(88, 0, -55);
-    timberPile2.rotateY(Math.PI * 0.20);
-    ctx.scene.add(timberPile2);
-
-    const timberTruck = ObjectGenerator.createVehicle('timber_truck', 1.5);
-    timberTruck.position.set(111, 0, -64);
-    timberTruck.rotateY(Math.PI * 1.25);
-    ctx.scene.add(timberTruck);
+    SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
 
     ObjectGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
@@ -243,8 +227,11 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z),
             new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
         ]);
-        ctx.obstacles.push({ mesh: trainTunnel });
         scene.add(trainTunnel);
+        SectorBuilder.addObstacle(ctx, {
+            mesh: trainTunnel,
+            collider: { type: 'box', size: new THREE.Vector3(12, 6, 10) }
+        });
 
         // --- PROPS ---
         await addProps(ctx);

@@ -673,15 +673,21 @@ export const ObjectGenerator = {
 
     createStreetLamp: () => {
         const group = new THREE.Group();
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.2, 8), MATERIALS.blackMetal);
-        pole.position.y = 4;
-        group.add(pole);
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 2), MATERIALS.blackMetal);
-        arm.position.set(0, 7.5, 0.5);
-        group.add(arm);
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.8), MATERIALS.blackMetal);
-        head.position.set(0, 7.5, 1.5);
-        group.add(head);
+
+        // Merge geometries for the pole, arm, and head
+        const poleGeo = new THREE.CylinderGeometry(0.1, 0.2, 8);
+        poleGeo.translate(0, 4, 0);
+
+        const armGeo = new THREE.BoxGeometry(0.2, 0.2, 2);
+        armGeo.translate(0, 7.5, 0.5);
+
+        const headGeo = new THREE.BoxGeometry(0.6, 0.2, 0.8);
+        headGeo.translate(0, 7.5, 1.5);
+
+        const mergedGeo = BufferGeometryUtils.mergeGeometries([poleGeo, armGeo, headGeo]);
+        const lampMesh = new THREE.Mesh(mergedGeo, MATERIALS.blackMetal);
+        lampMesh.castShadow = true;
+        group.add(lampMesh);
 
         const light = new THREE.PointLight(0xaaddff, 4, 30);
         light.position.set(0, 7.4, 1.5);
@@ -751,20 +757,44 @@ export const ObjectGenerator = {
             const darkWinMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 });
             const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
 
+            // Collect window positions first
+            const litPositions: Array<{ x: number, y: number }> = [];
+            const darkPositions: Array<{ x: number, y: number }> = [];
+
             // Front windows
             for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                 for (let y = 2; y < height - 1; y += 4) {
                     const isLit = Math.random() < lightProbability;
-                    const win = new THREE.Mesh(winGeo, isLit ? litWinMat : darkWinMat);
-                    win.position.set(x, y, depth / 2 + 0.05);
-                    group.add(win);
-
                     if (isLit) {
-                        const pLight = new THREE.PointLight(0xffffaa, 4, 15);
-                        pLight.position.set(x, y, depth / 2 + 0.5);
-                        group.add(pLight);
+                        litPositions.push({ x, y });
+                    } else {
+                        darkPositions.push({ x, y });
                     }
                 }
+            }
+
+            // Create InstancedMesh for lit windows (if any)
+            if (litPositions.length > 0) {
+                const litWindows = new THREE.InstancedMesh(winGeo, litWinMat, litPositions.length);
+                const matrix = new THREE.Matrix4();
+                litPositions.forEach((pos, i) => {
+                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
+                    litWindows.setMatrixAt(i, matrix);
+                });
+                litWindows.instanceMatrix.needsUpdate = true;
+                group.add(litWindows);
+            }
+
+            // Create InstancedMesh for dark windows (if any)
+            if (darkPositions.length > 0) {
+                const darkWindows = new THREE.InstancedMesh(winGeo, darkWinMat, darkPositions.length);
+                const matrix = new THREE.Matrix4();
+                darkPositions.forEach((pos, i) => {
+                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
+                    darkWindows.setMatrixAt(i, matrix);
+                });
+                darkWindows.instanceMatrix.needsUpdate = true;
+                group.add(darkWindows);
             }
         }
 
@@ -1201,11 +1231,9 @@ export const ObjectGenerator = {
         const protoList = (uniqueMeshes as any)[treeType];
         if (!protoList || protoList.length === 0) return;
 
-        const variantCount = protoList.length;
-        const pointsByVariant: { x: number, z: number, r: number, s: number }[][] = Array.from({ length: variantCount }, () => []);
-
+        const pointsByVariant: { x: number, z: number, r: number, s: number }[][] = Array.from({ length: protoList.length }, () => []);
         points.forEach(p => {
-            const vIdx = Math.floor(Math.random() * variantCount);
+            const vIdx = Math.floor(Math.random() * protoList.length);
             pointsByVariant[vIdx].push(p);
         });
 
@@ -1226,31 +1254,30 @@ export const ObjectGenerator = {
                 instancedMesh.castShadow = true;
                 instancedMesh.receiveShadow = true;
 
+                const rotAxis = new THREE.Vector3(0, 1, 0);
                 const matrix = new THREE.Matrix4();
-                const position = new THREE.Vector3();
-                const rotation = new THREE.Quaternion();
-                const scale = new THREE.Vector3();
+                const quat = new THREE.Quaternion();
 
-                variantPoints.forEach((p, i) => {
-                    position.set(p.x, 0, p.z);
-                    rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.r);
-                    scale.set(p.s, p.s, p.s);
-                    matrix.compose(position, rotation, scale);
+                for (let i = 0; i < variantPoints.length; i++) {
+                    const p = variantPoints[i];
+                    quat.setFromAxisAngle(rotAxis, p.r);
+                    matrix.compose(new THREE.Vector3(p.x, 0, p.z), quat, new THREE.Vector3(p.s, p.s, p.s));
                     instancedMesh.setMatrixAt(i, matrix);
-                });
-
+                }
                 instancedMesh.instanceMatrix.needsUpdate = true;
                 ctx.scene.add(instancedMesh);
             }
 
             variantPoints.forEach(p => {
-                const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4, 0.5));
+                const c = new THREE.Object3D();
                 c.visible = false;
                 c.name = 'TreeCollision';
                 c.position.set(p.x, 2, p.z);
                 c.updateMatrixWorld();
                 ctx.scene.add(c);
-                ctx.obstacles.push({ mesh: c, collider: { type: 'cylinder', radius: 0.4 * p.s, height: 4 } });
+                const obstacle = { mesh: c, collider: { type: 'sphere' as const, radius: 0.4 * p.s, height: 4 } };
+                ctx.obstacles.push(obstacle);
+                ctx.collisionGrid.add(obstacle);
             });
         }
     },
@@ -1320,7 +1347,9 @@ export const ObjectGenerator = {
                 rock.rotation.set(Math.random(), Math.random(), Math.random());
                 rock.castShadow = true;
                 ctx.scene.add(rock);
-                ctx.obstacles.push({ mesh: rock, collider: { type: 'sphere', radius: s } });
+                const obstacle = { mesh: rock, collider: { type: 'sphere' as const, radius: s } };
+                ctx.obstacles.push(obstacle);
+                ctx.collisionGrid.add(obstacle as any);
             }
 
             if (ctx.yield && i % 20 === 0) await ctx.yield();
@@ -1692,10 +1721,9 @@ export const ObjectGenerator = {
             const winHeight = midPoint * 0.7;
             const winGeo = new THREE.PlaneGeometry(3.5, winHeight);
 
+            const winPositions: Array<{ x: number, y: number }> = [];
             for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) {
-                const win = new THREE.Mesh(winGeo, winMat);
-                win.position.set(x, midPoint / 2, depth / 2 + 0.05);
-                group.add(win);
+                winPositions.push({ x, y: midPoint / 2 });
 
                 if (withLights) {
                     const light = new THREE.PointLight(0xffffaa, 4, 10);
@@ -1703,15 +1731,37 @@ export const ObjectGenerator = {
                     group.add(light);
                 }
             }
+
+            if (winPositions.length > 0) {
+                const instancedWindows = new THREE.InstancedMesh(winGeo, winMat, winPositions.length);
+                const matrix = new THREE.Matrix4();
+                winPositions.forEach((pos, i) => {
+                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
+                    instancedWindows.setMatrixAt(i, matrix);
+                });
+                instancedWindows.instanceMatrix.needsUpdate = true;
+                group.add(instancedWindows);
+            }
         }
 
         if (upperWindows) {
             const upWinMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 });
             const upWinGeo = new THREE.PlaneGeometry(1.2, 1.5);
+
+            const upWinPositions: Array<{ x: number, y: number }> = [];
             for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) {
-                const win = new THREE.Mesh(upWinGeo, upWinMat);
-                win.position.set(x, midPoint + (height - midPoint) / 2, depth / 2 + 0.05);
-                group.add(win);
+                upWinPositions.push({ x, y: midPoint + (height - midPoint) / 2 });
+            }
+
+            if (upWinPositions.length > 0) {
+                const instancedUpWindows = new THREE.InstancedMesh(upWinGeo, upWinMat, upWinPositions.length);
+                const matrix = new THREE.Matrix4();
+                upWinPositions.forEach((pos, i) => {
+                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
+                    instancedUpWindows.setMatrixAt(i, matrix);
+                });
+                instancedUpWindows.instanceMatrix.needsUpdate = true;
+                group.add(instancedUpWindows);
             }
         }
 

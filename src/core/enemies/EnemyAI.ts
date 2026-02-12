@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Enemy, AIState } from '../../types/enemy';
 import { Obstacle, resolveCollision } from '../../utils/physics';
 import { MATERIALS } from '../../utils/assets';
+import { SpatialGrid } from '../world/SpatialGrid';
 
 export const EnemyAI = {
     updateEnemy: (
@@ -10,7 +11,7 @@ export const EnemyAI = {
         now: number,
         delta: number,
         playerPos: THREE.Vector3,
-        obstacles: Obstacle[],
+        collisionGrid: SpatialGrid,
         noiseEvents: { pos: THREE.Vector3, radius: number, time: number }[],
         allEnemies: Enemy[],
         shakeIntensity: number,
@@ -190,7 +191,7 @@ export const EnemyAI = {
                         return; // Stop processing chase
                     }
 
-                    moveEntity(e, target, delta, e.speed, obstacles);
+                    moveEntity(e, target, delta, e.speed, collisionGrid);
 
                     // ATTACK LOGIC
                     if (e.type === 'TANK') {
@@ -337,7 +338,7 @@ export const EnemyAI = {
 
                 let arrived = false;
                 if (e.lastSeenPos && e.mesh.position.distanceTo(e.lastSeenPos) > 2.0) {
-                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, obstacles);
+                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid);
                 } else {
                     arrived = true;
                     // Reached spot, look around (spin)
@@ -374,7 +375,7 @@ export const EnemyAI = {
 
 // --- HELPERS ---
 
-function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, obstacles: Obstacle[]) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid) {
     // Flatten target Y
     const flatTarget = target.clone();
     flatTarget.y = e.mesh.position.y;
@@ -394,7 +395,8 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     const testPos = e.mesh.position.clone().add(moveVec);
 
     // Collision
-    for (const obs of obstacles) {
+    const nearby = collisionGrid.getNearby(testPos, 2.0);
+    for (const obs of nearby) {
         const push = resolveCollision(testPos, 0.5, obs, 2.0, 1.0); // height 2.0, offset 1.0 (centered)
         if (push) testPos.add(push);
     }
