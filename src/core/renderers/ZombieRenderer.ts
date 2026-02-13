@@ -9,7 +9,7 @@ export class ZombieRenderer {
     private scene: THREE.Scene;
     private maxInstances: number;
 
-    constructor(scene: THREE.Scene, maxInstances: number = 200) {
+    constructor(scene: THREE.Scene, maxInstances: number = 500) {
         this.scene = scene;
         this.maxInstances = maxInstances;
 

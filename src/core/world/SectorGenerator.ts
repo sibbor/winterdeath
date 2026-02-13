@@ -233,6 +233,8 @@ export const SectorBuilder = {
         ctx.chests.push(obs);
         SectorBuilder.addObstacle(ctx, { mesh: chest, collider: { type: 'sphere', radius: 2 } });
 
+        if (ctx.dynamicLights) ctx.dynamicLights.push(glow);
+
         ctx.mapItems.push({
             id: `chest_${Math.random()}`,
             x, z,
@@ -321,6 +323,7 @@ export const SectorBuilder = {
         );
 
         ctx.scene.add(group);
+        if (ctx.collectibles) ctx.collectibles.push(group);
 
         ctx.mapItems.push({
             id: `collectible_${id}`,
@@ -518,6 +521,9 @@ export const SectorBuilder = {
             mesh: light,
             collider: { type: 'sphere', radius: 1.0 }
         });
+
+        const pointLight = light.getObjectByProperty('isPointLight', true) as THREE.PointLight;
+        if (pointLight && ctx.dynamicLights) ctx.dynamicLights.push(pointLight);
 
         return light;
     },

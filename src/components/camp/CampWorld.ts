@@ -97,7 +97,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const interactables: THREE.Mesh[] = [];
     const outlines: Record<string, THREE.LineSegments> = {};
 
-    // --- HJÄLPFUNKTIONER ---
+    // --- Helper: Create outline ---
     const createOutline = (geo: THREE.BufferGeometry, color: number) => {
         const edges = new THREE.EdgesGeometry(geo);
         const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
@@ -105,7 +105,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         return line;
     };
 
-    // Skapar texturer för karta och papper direkt i koden
+    // Map and paper texture
     const createCanvasTexture = (width: number, height: number, type: 'map' | 'note') => {
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
@@ -115,7 +115,6 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         ctx.strokeStyle = '#332211'; ctx.lineWidth = 2;
 
         if (type === 'map') {
-            // Skissad terräng och rött kryss
             for (let i = 0; i < 8; i++) {
                 ctx.beginPath();
                 ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 30, 0, Math.PI * 2);

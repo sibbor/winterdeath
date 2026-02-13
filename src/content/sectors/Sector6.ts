@@ -10,7 +10,7 @@ import { CAMERA_HEIGHT } from '../constants';
 
 export const Sector6: SectorDef = {
     id: 5,
-    name: "maps.sector_6_name",
+    name: "sectors.sector_6_name",
     environment: {
         bgColor: 0x111116,
         fogDensity: 0.00, // Dense storm fog

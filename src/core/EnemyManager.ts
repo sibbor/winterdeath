@@ -88,7 +88,7 @@ export const EnemyManager = {
         enemy: Enemy,
         forceVec: THREE.Vector3,
         callbacks: {
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number) => void;
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number, scale?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material) => void;
         }
     ) => {
@@ -107,63 +107,45 @@ export const EnemyManager = {
         callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 60);
         callbacks.spawnDecal(pos.x, pos.z, 3.0, MATERIALS.bloodDecal);
 
-        // Create random chunks
+        // Create random chunks using instanced particles (Massive performance gain)
         const baseScale = enemy.originalScale || 1.0;
         const widthScale = enemy.widthScale || 1.0;
         const bodyMass = baseScale * widthScale;
+        const color = enemy.color || 0x660000;
 
         // Formula: Large enemies explode into many more objects
-        const limbCount = Math.max(5, Math.floor(bodyMass * 12));
-        const limbScaleBase = (baseScale * 2.0) / Math.sqrt(limbCount);
+        const chunkCount = Math.max(5, Math.floor(bodyMass * 12));
 
-        for (let i = 0; i < limbCount; i++) {
-            const mesh = new THREE.Mesh(
-                GEOMETRY.gore,
-                new THREE.MeshStandardMaterial({ color: enemy.color || 0x660000, roughness: 0.8 })
-            );
-            mesh.position.copy(pos);
-            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-
-            // Chunks vary in size but relate to mass
-            mesh.scale.setScalar(limbScaleBase * (0.6 + Math.random() * 0.8));
-
+        for (let i = 0; i < chunkCount; i++) {
             const vel = exitForce.clone();
             vel.x += (Math.random() - 0.5) * 12;
             vel.y += Math.random() * 6;
             vel.z += (Math.random() - 0.5) * 10;
 
-            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, mesh, vel);
+            const chunkScale = (baseScale * 0.8) * (0.6 + Math.random() * 0.8);
+
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, vel, color, chunkScale);
         }
 
         soundManager.playExplosion();
     },
 
-    generateBossDebris: (enemy: Enemy, count: number) => {
-        const debrisList: { mesh: THREE.Mesh, vel: THREE.Vector3 }[] = [];
+    generateBossDebris: (enemy: Enemy, count: number, spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) => void) => {
         const pos = enemy.mesh.position;
         const scale = enemy.originalScale || 1.0;
+        const color = enemy.color || 0x660000;
 
         for (let i = 0; i < count; i++) {
-            const size = (scale * 3.0) / count * (0.8 + Math.random() * 0.4);
-            const geo = new THREE.BoxGeometry(size, size, size);
-            const mat = new THREE.MeshStandardMaterial({ color: enemy.color, roughness: 0.8 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(pos.x, 2, pos.z);
-            mesh.position.x += (Math.random() - 0.5) * 4;
-            mesh.position.z += (Math.random() - 0.5) * 4;
-
+            const chunkScale = (scale * 3.0) / count * (0.8 + Math.random() * 0.4);
             const vel = new THREE.Vector3(
                 (Math.random() - 0.5) * 15,
                 10 + Math.random() * 15,
                 (Math.random() - 0.5) * 15
             );
 
-            debrisList.push({
-                mesh,
-                vel
-            });
+            // Directly spawn using instanced particles
+            spawnPart(pos.x + (Math.random() - 0.5) * 4, 1.5, pos.z + (Math.random() - 0.5) * 4, 'chunk', 1, undefined, vel, color, chunkScale);
         }
-        return debrisList;
     },
 
     update: (
@@ -216,7 +198,7 @@ export const EnemyManager = {
         now: number,
         state: any,
         callbacks: {
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) => void;
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
             spawnScrap: (x: number, z: number, amount: number) => void;
             spawnBubble: (text: string, duration: number) => void;
@@ -298,10 +280,7 @@ export const EnemyManager = {
                     // Specific boss debris on removal if it didn't explode earlier
                     if (!wasExploded) {
                         callbacks.spawnPart(pos.x, 2, pos.z, 'blood', 40);
-                        const debris = EnemyManager.generateBossDebris(e, 15);
-                        debris.forEach(d => {
-                            callbacks.spawnPart(d.mesh.position.x, d.mesh.position.y, d.mesh.position.z, 'chunk', 1, d.mesh, d.vel);
-                        });
+                        EnemyManager.generateBossDebris(e, 15, callbacks.spawnPart);
                     }
                 }
 

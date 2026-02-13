@@ -11,7 +11,7 @@ interface ScreenSectorReportProps {
     deathDetails: { killer: string } | null;
     onReturnCamp: () => void;
     onRetry: () => void;
-    currentMap: number;
+    currentSector: number;
     isMobileDevice?: boolean;
 }
 
@@ -27,7 +27,7 @@ const formatDistance = (meters: number) => {
     return `${Math.floor(meters)} m`;
 };
 
-const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentMap, isMobileDevice }) => {
+const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentSector, isMobileDevice }) => {
 
     const buttonStyle = "flex-1 max-w-xs py-4 font-black uppercase tracking-widest transition-colors skew-x-[-10deg] border-2 shadow-[0_0_20px_rgba(220,38,38,0.4)]";
 
@@ -38,7 +38,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     const totalKills = (Object.values(stats.killsByType) as number[]).reduce((a, b) => a + b, 0);
 
     const bossKilled = (stats.killsByType && (stats.killsByType['Boss'] as number) > 0);
-    const bossName = t(BOSSES[currentMap]?.name || "Boss");
+    const bossName = t(BOSSES[currentSector]?.name || "Boss");
 
     // Family Status Logic
     let familyStatusKey = 'ui.family_member_missing';
@@ -148,7 +148,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
                             <StatBlock
                                 label={t('ui.log_collectibles')}
-                                value={`${stats.collectiblesFound?.length || 0} / ${getCollectiblesBySector(currentMap + 1).length}`}
+                                value={`${stats.collectiblesFound?.length || 0} / ${getCollectiblesBySector(currentSector + 1).length}`}
                                 color="text-yellow-400"
                             />
                             <StatBlock label={t('ui.clues_found')} value={stats.cluesFound.length} color="text-yellow-400" />

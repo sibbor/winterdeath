@@ -220,6 +220,9 @@ export const WeaponHandler = {
                     const isShotgun = wep.name === WeaponType.SHOTGUN;
                     const pellets = isShotgun ? 8 : 1;
 
+                    const level = state.weaponLevels[state.activeWeapon] || 1;
+                    const scaledDamage = wep.baseDamage * (1 + (level - 1) * 0.1);
+
                     for (let i = 0; i < pellets; i++) {
                         // Direction with spread
                         const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
@@ -227,7 +230,7 @@ export const WeaponHandler = {
                         dir.z += (Math.random() - 0.5) * wep.spread;
                         dir.normalize();
 
-                        ProjectileSystem.spawnBullet(scene, state.projectiles, origin, dir, wep.name, wep.baseDamage);
+                        ProjectileSystem.spawnBullet(scene, state.projectiles, origin, dir, wep.name, scaledDamage);
                     }
 
                 } else if (input.fire && !state.isReloading && state.weaponAmmo[state.activeWeapon] <= 0) {
@@ -301,7 +304,10 @@ export const WeaponHandler = {
                     const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
                     const origin = playerGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
 
-                    ProjectileSystem.spawnThrowable(scene, state.projectiles, origin, dir, state.activeWeapon, ratio);
+                    const level = state.weaponLevels[state.activeWeapon] || 1;
+                    const scaledDamage = wep.baseDamage * (1 + (level - 1) * 0.1);
+
+                    ProjectileSystem.spawnThrowable(scene, state.projectiles, origin, dir, state.activeWeapon, ratio, scaledDamage);
 
                     // Auto switch back to primary if empty (Skip in debug mode)
                     if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {

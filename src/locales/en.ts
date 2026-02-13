@@ -53,7 +53,7 @@ export const en = {
         status: "STATUS",
         not_completed: "NOT COMPLETED",
         sector_cleared: "SECTOR CLEARED",
-        threat_neutralized: "THREAT NEUTRALIZED",
+        zombies_neutralized: "ZOMBIES NEUTRALIZED",
         target_extracted: "TARGET EXTRACTED",
         missing: "MISSING",
         found: "FOUND",
@@ -194,7 +194,7 @@ export const en = {
         survivor_tip: "Survivor Tip",
         editor: {
             title: "Sector Editor",
-            desc: "Create and edit maps in real-time",
+            desc: "Create and edit sectors in real-time",
             open: "OPEN",
             save: "SAVE SECTOR",
             export: "EXPORT CODE",
@@ -298,7 +298,7 @@ export const en = {
         "Upgrading 'Adrenaline' helps you run for longer periods of time.",
         "Upgrading 'Reflexes' helps you outrun the zombies."
     ],
-    maps: {
+    sectors: {
         sector_1_name: "The Village",
         sector_2_name: "The Mountain Vault",
         sector_3_name: "The Mast",
@@ -307,12 +307,12 @@ export const en = {
         sector_6_name: "The Playground",
     },
     story: {
-        sector_1_desc: "Robert, you arrived at the villa in The Village only to find chaos. Your car is burning in the driveway, the front door smashed open. Inside, there are signs of struggle and blood.\n\nA note found in your son's room reads: \"We went to D...\", the rest is illegible. You missed them.\n\nTracks lead from the house into the dark urban sprawl. You must follow the trail. Find your family.",
-        sector_2_desc: "Your eldest son is safe. He told you that the family fled towards the old military defense bunker in the forest (Bergrummet). However, the survivors inside were hostile.\n\nThey refused entry to the others due to lack of space, but they took your youngest son inside.\n\nYou must infiltrate the caves, deal with the hostiles, and rescue him.",
-        sector_3_desc: "The survivors in the bunker forced your wife and daughter away. Your son said they headed North through the dense pine forest, towards the Häglared Radio Mast.\n\nIt's a long trek through heavy vegetation and the infected are everywhere. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
-        sector_4_desc: "Your daughter is safe. She revealed the heartbreaking truth: a massive Titan zombie attacked them in the woods. Your wife sacrificed herself, screaming to lure it away so your daughter could escape.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
-        sector_5_desc: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the zombies, but we made a promise. Return to The Village one last time. Save them.",
-        sector_6_desc: "Test new functions and play with values, weapons and enemies",
+        sector_1_briefing: "Robert, you arrived at the villa in The Village only to find chaos. Your car is burning in the driveway, the front door smashed open. Inside, there are signs of struggle and blood.\n\nA note found in your son's room reads: \"We went to D...\", the rest is illegible. You missed them.\n\nTracks lead from the house into the dark urban sprawl. You must follow the trail. Find your family.",
+        sector_2_briefing: "Your eldest son is safe. He told you that the family fled towards the old military defense bunker in the forest (Bergrummet). However, the survivors inside were hostile.\n\nThey refused entry to the others due to lack of space, but they took your youngest son inside.\n\nYou must infiltrate the caves, deal with the hostiles, and rescue him.",
+        sector_3_briefing: "The survivors in the bunker forced your wife and daughter away. Your son said they headed North through the dense pine forest, towards the Häglared Radio Mast.\n\nIt's a long trek through heavy vegetation and the infected are everywhere. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
+        sector_4_briefing: "Your daughter is safe. She revealed the heartbreaking truth: a massive Titan zombie attacked them in the woods. Your wife sacrificed herself, screaming to lure it away so your daughter could escape.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
+        sector_5_briefing: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the zombies, but we made a promise. Return to The Village one last time. Save them.",
+        sector_6_briefing: "Test new functions and play with values, weapons and enemies",
         prologue: [
             {
                 overlay: "GÅNGHESTER. 48 HOURS SINCE VMA.",

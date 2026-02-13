@@ -34,7 +34,7 @@ const LOCATIONS = {
 
 export const Sector4: SectorDef = {
     id: 3,
-    name: "maps.sector_4_name",
+    name: "sectors.sector_4_name",
     environment: {
         bgColor: 0x110500, // Rusty orange/red sky
         fogDensity: 0.02,

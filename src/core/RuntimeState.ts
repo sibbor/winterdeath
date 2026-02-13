@@ -18,6 +18,7 @@ export interface RuntimeState {
     nextLevelXp: number;
     activeWeapon: WeaponType;
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; };
+    weaponLevels: Record<WeaponType, number>;
     weaponAmmo: Record<WeaponType, number>;
     isReloading: boolean;
     reloadEndTime: number;

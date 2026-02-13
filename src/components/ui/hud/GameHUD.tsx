@@ -99,7 +99,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
         if (level > prevLevel.current && (level - prevLevel.current === 1) && !isLoad) {
             setShowLevelUp(true);
-            setTimeout(() => setShowLevelUp(false), 1000);
+            setTimeout(() => setShowLevelUp(false), 500);
         }
         prevLevel.current = level;
     }, [level, distanceTraveled]);

@@ -195,12 +195,6 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                     </div>
 
                                     <div className="flex gap-2 items-center mt-auto">
-                                        {isEquippable && !isEquipped && (
-                                            <div className="text-[9px] font-bold text-gray-500 uppercase flex-1 hidden md:block">
-                                                {t('ui.click_to_equip')}
-                                            </div>
-                                        )}
-
                                         {isUpgradeable && (
                                             <button
                                                 onClick={(e) => handleUpgradeWeapon(e, weapon.name)}

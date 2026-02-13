@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../utils/i18n';
-import { SECTOR_THEMES } from '../../content/constants';
 
 interface ScreenLoadingProps {
-    mapIndex: number;
+    sectorIndex: number;
     isCamp?: boolean;
     isMobileDevice?: boolean;
     debugInfo?: {
@@ -13,12 +12,12 @@ interface ScreenLoadingProps {
     };
 }
 
-const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobileDevice, debugInfo }) => {
+const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isMobileDevice, debugInfo }) => {
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
 
-    const mapKeys = ['sector_1', 'sector_2', 'sector_3', 'sector_4', 'sector_5', 'sector_6'];
-    const mapKey = isCamp ? 'camp' : (mapKeys[mapIndex] || 'sector_1');
+    const sectorKeys = ['sector_1', 'sector_2', 'sector_3', 'sector_4', 'sector_5', 'sector_6'];
+    const sectorKey = isCamp ? 'camp' : (sectorKeys[sectorIndex] || 'sector_1');
 
     const [isMinimized, setIsMinimized] = useState(() => {
         return localStorage.getItem('vinterdod_debug_minimized') === 'true';
@@ -52,7 +51,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobil
                         {t('ui.loading')}
                     </h4>
                     <h2 className={`${isMobileDevice ? 'text-3xl' : 'text-5xl md:text-6xl'} font-black italic tracking-tighter uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] skew-x-[-10deg]`}>
-                        {t(`maps.${mapKey}_name`)}
+                        {t(`sectors.${sectorKey}_name`)}
                     </h2>
                     <div className="h-1 w-32 bg-red-600 rounded-full mt-2" />
 

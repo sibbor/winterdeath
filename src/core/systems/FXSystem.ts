@@ -26,11 +26,11 @@ interface ParticleState {
     isInstanced: boolean;
     landed: boolean;
     inUse: boolean;
+    color?: number;
     _poolIdx: number;
 }
 
-// Scratchpad for math to avoid Garbage Collection (GC) overhead
-const _tempVec = new THREE.Vector3();
+const _tempColor = new THREE.Color();
 
 // Types that MUST have unique material instances for independent fading/opacity
 const UNIQUE_MATERIAL_TYPES = [
@@ -147,7 +147,7 @@ export const FXSystem = {
         d.rotation.x = -Math.PI / 2;
         d.rotation.z = Math.random() * Math.PI * 2;
         d.scale.setScalar(scale);
-        d.renderOrder = 10;
+        d.renderOrder = 50; // High order to clear roads/paths
 
         decalList.push(d);
 
@@ -161,13 +161,14 @@ export const FXSystem = {
         // Anti-flicker: Prevent NaN data entering the GPU
         if (isNaN(x) || isNaN(y) || isNaN(z)) return;
 
-        const isInstanced = ['blood', 'spark', 'campfire_spark', 'debris', 'debris_trail', 'glass', 'stun_star'].includes(type);
+        const isInstanced = ['blood', 'spark', 'campfire_spark', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb'].includes(type);
         const p = FXSystem.getPooledState();
 
         p.type = type;
         p.landed = false;
         p.isPooled = !customMesh;
         p.isInstanced = isInstanced;
+        p.color = color;
 
         let m: THREE.Mesh;
 
@@ -180,7 +181,11 @@ export const FXSystem = {
             let mat: THREE.Material = MATERIALS.blood;
 
             // Strict Type Mapping
-            if (type === 'gore' || type === 'limb') { geo = GEOMETRY.gore; mat = MATERIALS.gore; }
+            if (type === 'blood') { m = FXSystem.getPooledMesh(scene, GEOMETRY.particle, MATERIALS.blood, 'blood', isInstanced); m.renderOrder = 11; }
+            else if (['gore', 'limb', 'chunk'].includes(type)) {
+                m = FXSystem.getPooledMesh(scene, GEOMETRY.gore, MATERIALS.gore, type, isInstanced);
+                m.renderOrder = 11;
+            }
             else if (type === 'black_smoke') {
                 if (!MATERIALS['_blackSmoke']) {
                     MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
@@ -212,6 +217,7 @@ export const FXSystem = {
         if (type === 'large_fire') m.scale.setScalar(1.6 * Math.random() * s);
         else if (type === 'large_smoke') m.scale.setScalar(2.4 * Math.random() * s);
         else if (['campfire_spark', 'debris_trail', 'spark'].includes(type)) m.scale.setScalar(0.33 * s);
+        else if (type === 'blood') m.scale.setScalar((1.2 + Math.random() * 0.8) * s); // Larger blood platter
         else m.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
         p.mesh = m;
@@ -325,6 +331,12 @@ export const FXSystem = {
                 if (imesh && idx < FXSystem._MAX_INSTANCES) {
                     p.mesh.updateMatrix();
                     imesh.setMatrixAt(idx, p.mesh.matrix);
+
+                    if (p.color !== undefined) {
+                        imesh.setColorAt(idx, _tempColor.setHex(p.color));
+                        if (imesh.instanceColor) imesh.instanceColor.needsUpdate = true;
+                    }
+
                     FXSystem._instancedCounts[p.type]++;
                 }
             }
@@ -363,10 +375,10 @@ export const FXSystem = {
         p.landed = true;
 
         if (p.type === 'blood') {
-            if (Math.random() < 0.2) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.5, MATERIALS.bloodDecal);
+            if (Math.random() < 0.2) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.3, MATERIALS.bloodDecal); // Smaller decal
             FXSystem._killParticle(index, list);
         } else if (['chunk', 'limb', 'gore'].includes(p.type)) {
-            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 1.5, MATERIALS.bloodDecal);
+            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8, MATERIALS.bloodDecal); // Smaller chunky decal
             p.vel.set(0, 0, 0);
         } else {
             FXSystem._killParticle(index, list);
@@ -380,6 +392,11 @@ export const FXSystem = {
 
             if (type === 'spark') mat = MATERIALS.bullet;
             if (type === 'debris') mat = MATERIALS.stone;
+            if (['gore', 'limb', 'chunk'].includes(type)) {
+                geo = GEOMETRY.gore;
+                mat = MATERIALS.gore.clone(); // Clone to allow tinting
+                (mat as any).color.set(0xffffff); // Set to white for setColorAt multiplier
+            }
             if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
 
             const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);

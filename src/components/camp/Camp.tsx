@@ -29,13 +29,13 @@ interface CampProps {
     weaponLevels: Record<WeaponType, number>;
     onSaveStats: (newStats: PlayerStats) => void;
     onSaveLoadout: (loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType }, levels: Record<WeaponType, number>) => void;
-    onSelectMap: (mapIndex: number) => void;
+    onSelectSector: (sectorIndex: number) => void;
     onStartSector: () => void;
-    currentMap: number;
+    currentSector: number;
     debugMode: boolean;
     onToggleDebug: (val: boolean) => void;
     rescuedFamilyIndices: number[];
-    isMapLoaded: boolean;
+    isSectorLoaded: boolean;
     deadBossIndices: number[];
     onResetGame: () => void;
     onSaveGraphics: (graphics: GraphicsSettings) => void;
@@ -54,7 +54,7 @@ const STATIONS = [
     { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
 ];
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectMap, onStartSector, currentMap, debugMode, onToggleDebug, rescuedFamilyIndices, isMapLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectSector, onStartSector, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, isSectorLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const lastDrawCallsRef = useRef(0);
@@ -186,9 +186,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         if (debugMode) FAMILY_MEMBERS.forEach(m => activeMembers.push(m));
         else {
-            (rescuedFamilyIndices || []).forEach(mapId => {
-                if (mapId < 4) activeMembers.push(FAMILY_MEMBERS[mapId]);
-                else if (mapId === 4) { activeMembers.push(FAMILY_MEMBERS[4]); activeMembers.push(FAMILY_MEMBERS[5]); }
+            (rescuedFamilyIndices || []).forEach(sectorId => {
+                if (sectorId < 4) activeMembers.push(FAMILY_MEMBERS[sectorId]);
+                else if (sectorId === 4) { activeMembers.push(FAMILY_MEMBERS[4]); activeMembers.push(FAMILY_MEMBERS[5]); }
             });
         }
 
@@ -481,7 +481,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             {!activeModal && (
                 <CampHUD
-                    stats={stats} hoveredStation={hoveredStation} currentMapName={t(SECTOR_THEMES[currentMap]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
+                    stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(WEAPONS[currentLoadout.primary].displayName), sec: t(WEAPONS[currentLoadout.secondary].displayName), thr: t(WEAPONS[currentLoadout.throwable].displayName) }}
                     onOpenStats={() => openModal('stats')} onOpenArmory={() => openModal('armory')} onOpenSkills={() => openModal('skills')}
                     onOpenSettings={() => openModal('settings')} onStartSector={() => { }}
@@ -507,7 +507,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     onSaveStats({ ...stats, viewedCollectibles: updated });
                 }}
             />}
-            {activeModal === 'sectors' && <ScreenSectorOverview currentMap={currentMap} rescuedFamilyIndices={rescuedFamilyIndices} deadBossIndices={deadBossIndices} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectMap={onSelectMap} onStartSector={onStartSector} isMobileDevice={isMobileDevice} />}
+            {activeModal === 'sectors' && <ScreenSectorOverview currentSector={currentSector} rescuedFamilyIndices={rescuedFamilyIndices} deadBossIndices={deadBossIndices} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectSector={onSelectSector} onStartSector={onStartSector} isMobileDevice={isMobileDevice} />}
             {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} isMobileDevice={isMobileDevice} />}
             {activeModal === 'settings' && (
                 <ScreenSettings

@@ -39,6 +39,7 @@ export class GameSessionLogic {
             nextLevelXp: props.stats.nextLevelXp,
             activeWeapon: props.loadout.primary,
             loadout: props.loadout,
+            weaponLevels: props.weaponLevels,
             weaponAmmo: {
                 [props.loadout.primary]: WEAPONS[props.loadout.primary].magSize,
                 [props.loadout.secondary]: WEAPONS[props.loadout.secondary].magSize,

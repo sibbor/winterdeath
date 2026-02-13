@@ -66,6 +66,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const containerRef = useRef<HTMLDivElement>(null);
     // Remove chatOverlayRef unused here? Or keep if needed.
     const chatOverlayRef = useRef<HTMLDivElement>(null);
+    const sectorContextRef = useRef<SectorContext | null>(null);
 
     // Keep GameState Refs (Rules, Stats)
     const stateRef = useRef<ReturnType<typeof GameSessionLogic.createInitialState>>(null!);
@@ -80,19 +81,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     useEffect(() => { propsRef.current = props; }, [props]);
 
-    // Determine if we can do an "Instant Load" (Respawn on same map + Assets warm)
+    // Determine if we can do an "Instant Load" (Respawn on same sector + Assets warm)
     // Use persistent store from AssetPreloader to survive heavy reloads/unmounts
-    const lastMapIndex = AssetPreloader.getLastMapIndex();
-    const isSameMap = lastMapIndex === props.currentMap;
+    const lastSectorIndex = AssetPreloader.getLastSectorIndex();
+    const isSameSector = lastSectorIndex === props.currentSector;
     const isWarmedUp = AssetPreloader.isWarmedUp();
 
     // Debug logic for mobile performance tuning
     // If we expect instant load but don't get it, we need to know why.
-    if (!isSameMap && isWarmedUp && props.currentMap === 0 && lastMapIndex === -1) {
+    if (!isSameSector && isWarmedUp && props.currentSector === 0 && lastSectorIndex === -1) {
         // First load logic - expected
     }
 
-    const useInstantLoad = isSameMap && isWarmedUp;
+    const useInstantLoad = isSameSector && isWarmedUp;
 
     // Start with loading screen ONLY if not instant loading
     const [isSectorLoading, setIsSectorLoading] = useState(!useInstantLoad);
@@ -194,7 +195,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const requestRef = useRef<number>();
     const isMounted = useRef(true);
     const setupIdRef = useRef(0);
-    // prevMapRef removed as AssetPreloader handles warmup logic globally
     useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
 
     const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
@@ -385,10 +385,24 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const textures = useMemo(() => createProceduralTextures(), []);
     const { groundTex, laserTex } = textures;
 
-    const currentSector = useMemo(() => SectorManager.getSector(props.currentMap), [props.currentMap]);
-    const currentScript = useMemo(() => STORY_SCRIPTS[props.currentMap] || [], [props.currentMap]);
+    const currentSector = useMemo(() => SectorManager.getSector(props.currentSector), [props.currentSector]);
+    const currentScript = useMemo(() => STORY_SCRIPTS[props.currentSector] || [], [props.currentSector]);
 
-    // ... (rest of methods: spawnBubble, startCinematic, endCinematic, handleTriggerAction)
+    const spawnNotification = (text: string, duration: number = 3000) => {
+        if (!chatOverlayRef.current) return;
+        const el = document.createElement('div');
+        el.className = 'absolute bg-red-500 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none transition-opacity duration-300 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
+        el.innerText = text;
+        chatOverlayRef.current.appendChild(el);
+
+        activeBubbles.current.push({
+            element: el,
+            startTime: performance.now(),
+            duration: duration,
+            text: text
+        });
+    };
+
     const spawnBubble = (text: string, duration: number = 3000) => {
         if (!chatOverlayRef.current) return;
         const el = document.createElement('div');
@@ -564,7 +578,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (payload && payload.id === 'bus') {
                         stateRef.current.busUnlocked = true;
                         stateRef.current.sectorState.busUnlocked = true;
-                        spawnBubble(`🚌 ${t('clues.bus_clear')}`);
+                        spawnBubble(`${t('clues.bus_clear')}`);
                         soundManager.playUiConfirm();
                     }
                     break;
@@ -595,7 +609,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         stateRef.current.sectorState.hordeKilled = 0;
                         stateRef.current.sectorState.hordeTarget = payload.count;
                         stateRef.current.sectorState.waveActive = true;
-                        spawnBubble(`⚠️ ${t('ui.threat_neutralized')}`);
+                        spawnNotification(`${t('ui.zombie_wave')}`);
                     }
                     break;
                 case 'START_CINEMATIC':
@@ -900,7 +914,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             setIsSectorLoading(true);
 
-            const rng = seededRandom(propsRef.current.currentMap + 4242);
+            const rng = seededRandom(propsRef.current.currentSector + 4242);
             const env = currentSector.environment;
 
             // 1. Asynchronous Warmup (Internal flag ensures it only runs once per session)
@@ -982,19 +996,22 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 },
                 cluesFound: propsRef.current.stats.cluesFound || [],
                 collectiblesFound: propsRef.current.stats.collectiblesFound || [],
-                sectorId: propsRef.current.currentMap,
+                collectibles: [],
+                dynamicLights: [],
+                sectorId: propsRef.current.currentSector,
                 smokeEmitters: [],
                 sectorState: stateRef.current.sectorState,
                 state: stateRef.current, // RuntimeState reference for systems (waterSystem, windSystem)
                 yield: yielder
             };
+            sectorContextRef.current = ctx;
 
             // 2. Structured Sector Generation
             PathGenerator.resetPathLayer();
             await SectorBuilder.build(ctx, currentSector);
 
             // Update global tracker for next time
-            AssetPreloader.setLastMapIndex(propsRef.current.currentMap);
+            AssetPreloader.setLastSectorIndex(propsRef.current.currentSector);
 
             // If we weren't instant loading (and thus showed loading screen), hide it now.
             if (!useInstantLoad) {
@@ -1002,8 +1019,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             // Notify parent that level is loaded (Clean up global loading screen if any)
-            if (propsRef.current.onLevelLoaded) {
-                propsRef.current.onLevelLoaded();
+            if (propsRef.current.onSectorLoaded) {
+                propsRef.current.onSectorLoaded();
             }
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
@@ -1084,8 +1101,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // 1. Spawn already rescued family members (from persistent indices)
             if (propsRef.current.rescuedFamilyIndices) {
-                propsRef.current.rescuedFamilyIndices.forEach(mapIdx => {
-                    const theme = SECTOR_THEMES[mapIdx];
+                propsRef.current.rescuedFamilyIndices.forEach(sectorIdx => {
+                    const theme = SECTOR_THEMES[sectorIdx];
                     if (theme && theme.familyMemberId !== undefined) {
                         const fmData = FAMILY_MEMBERS[theme.familyMemberId];
                         if (fmData) {
@@ -1128,11 +1145,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // 2. Spawn the current sector's target family member
             if (!propsRef.current.familyAlreadyRescued) {
-                const theme = SECTOR_THEMES[propsRef.current.currentMap];
+                const theme = SECTOR_THEMES[propsRef.current.currentSector];
                 const fmId = theme ? theme.familyMemberId : 0;
 
                 // Only spawn if not already in the party
-                if (!propsRef.current.rescuedFamilyIndices.includes(propsRef.current.currentMap)) {
+                if (!propsRef.current.rescuedFamilyIndices.includes(propsRef.current.currentSector)) {
                     const fmData = FAMILY_MEMBERS[fmId];
                     if (fmData) {
                         const mesh = ModelFactory.createFamilyMember(fmData);
@@ -1178,10 +1195,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new WorldLootSystem(playerGroup, scene));
 
-            const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, onCollectibleFoundInternal);
+            const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, ctx.collectibles, onCollectibleFoundInternal);
             session.addSystem(interactionSystem);
 
-            session.addSystem(new SectorSystem(playerGroup, props.currentMap, {
+            session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
                 setNotification: (n: any) => {
                     if (n && n.visible && n.text) {
                         spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000);
@@ -1251,7 +1268,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             EnemyManager.init(engine.scene);
 
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
-            if (propsRef.current.onLevelLoaded) propsRef.current.onLevelLoaded();
+            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
         };
 
         runSetup();
@@ -1265,7 +1282,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         const spawnBoss = () => {
             if (stateRef.current.bossSpawned) return;
-            const bossData = BOSSES[propsRef.current.currentMap] || BOSSES[0];
+            const bossData = BOSSES[propsRef.current.currentSector] || BOSSES[0];
             const bSpawn = currentSector.bossSpawn;
             const newBoss = EnemyManager.spawnBoss(scene, { x: bSpawn.x, z: bSpawn.z }, bossData);
             newBoss.bossId = bossData.id;
@@ -1510,13 +1527,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (frame % 15 === 0 && playerGroupRef.current) {
                 const pPos = playerGroupRef.current.position;
                 const lights: { light: THREE.Light, distSq: number }[] = [];
+                const context = sectorContextRef.current;
 
-                scene.traverse((obj) => {
-                    if (obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight) {
+                if (context && context.dynamicLights) {
+                    context.dynamicLights.forEach((obj) => {
                         const distSq = obj.position.distanceToSquared(pPos);
                         lights.push({ light: obj, distSq });
-                    }
-                });
+                    });
+                }
 
                 lights.sort((a, b) => a.distSq - b.distSq);
                 for (let i = 0; i < lights.length; i++) {
@@ -1538,8 +1556,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (state.isInteractionOpen && !cinematicRef.current.active) {
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
+                engine.isRenderingPaused = true;
                 lastTime = now;
                 return;
+            } else {
+                engine.isRenderingPaused = false;
             }
 
             const currentInput = engine.input.state;
@@ -1868,7 +1889,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             session.dispose();
             EnemyManager.cleanup();
         };
-    }, [props.currentMap, props.startAtCheckpoint, textures]);
+    }, [props.currentSector, props.startAtCheckpoint, textures]);
 
     // Helper to get Boss Name or Killer Name
     const getKillerName = () => {
@@ -1879,7 +1900,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         // 1. Boss Special Case
         if (type === 'Boss') {
-            return t(BOSSES[props.currentMap]?.name || "ui.boss").toUpperCase();
+            return t(BOSSES[props.currentSector]?.name || "ui.boss").toUpperCase();
         }
 
         // 2. Standard Enemy Mapping (e.g. TANK_SMASH -> TANK -> "Tank")

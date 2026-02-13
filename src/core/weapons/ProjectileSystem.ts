@@ -45,7 +45,7 @@ export interface ThrowableBehavior {
     fuseTime: number;
     createMesh: () => THREE.Mesh;
     createMarker: (radius: number) => THREE.Mesh;
-    onImpact: (pos: THREE.Vector3, radius: number, ctx: GameContext) => void;
+    onImpact: (pos: THREE.Vector3, radius: number, ctx: GameContext, damage?: number) => void;
 }
 
 // --- OPTIMIZATION SCRATCHPADS ---
@@ -71,7 +71,7 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
         fuseTime: 1.0,
         createMesh: () => new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade),
         createMarker: DEFAULT_MARKER,
-        onImpact: (pos, radius, ctx) => {
+        onImpact: (pos, radius, ctx, damage = 150) => {
             ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1);
             ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1);
             ctx.spawnPart(pos.x, 0, pos.z, 'debris', 15);
@@ -82,32 +82,40 @@ const THROWABLE_REGISTRY: Record<string, ThrowableBehavior> = {
                 ctx.noiseEvents.push({ pos: pos.clone(), radius: 75, time: ctx.now });
             }
 
-            const damage = 150;
             const knockbackBase = 1.0;
             const knockbackMax = 10.0;
 
             for (const e of ctx.enemies) {
                 if (e.dead || e.deathState !== 'alive') continue;
 
-                const dist = e.mesh.position.distanceTo(pos);
-                const enemyRadius = 0.5 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
+                // AOE Fix: Use horizontal 2D distance for reliability on uneven terrain
+                // Optimized: don't use pos directly if it could be mutated
+                const dx = e.mesh.position.x - pos.x;
+                const dz = e.mesh.position.z - pos.z;
+                const distSq = dx * dx + dz * dz;
 
-                if (dist < radius + enemyRadius) {
+                const enemyRadius = 0.5 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
+                const hitRadius = radius + enemyRadius;
+
+                if (distSq < hitRadius * hitRadius) {
                     const actualDamage = Math.max(0, Math.min(e.hp, damage));
                     e.hp -= damage;
                     ctx.trackStats('damage', actualDamage, !!e.isBoss);
                     ctx.spawnPart(e.mesh.position.x, 1.5 * (e.originalScale || 1.0), e.mesh.position.z, 'blood', 120);
 
                     if (e.hp <= 0) {
+                        const dist = Math.sqrt(distSq);
                         const distRatio = Math.min(1, dist / radius);
                         const forceMag = knockbackBase + (1.0 - distRatio) * (knockbackMax - knockbackBase);
 
-                        // Optimized direction using scratchpad
-                        _v1.subVectors(e.mesh.position, pos).normalize();
-                        _v1.y = 0.5;
-                        _v1.normalize().multiplyScalar(forceMag);
+                        // CRITICAL FIX: Use _v2 instead of _v1! 
+                        // _v1 is often passed as 'pos' from the outer updateThrowable loop.
+                        // Overwriting it here sabotages subsequent distance checks in the same frame.
+                        _v2.subVectors(e.mesh.position, pos).normalize();
+                        _v2.y = 0.5;
+                        _v2.normalize().multiplyScalar(forceMag);
 
-                        ctx.explodeEnemy(e, _v1);
+                        ctx.explodeEnemy(e, _v2);
                         ctx.addScore(Math.ceil(actualDamage));
                         ctx.spawnPart(e.mesh.position.x, 2, e.mesh.position.z, 'gore', 25);
                         ctx.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0, MATERIALS.bloodDecal);
@@ -204,7 +212,7 @@ export const ProjectileSystem = {
         });
     },
 
-    spawnThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, throwableId: string, chargeRatio: number) => {
+    spawnThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, throwableId: string, chargeRatio: number, damage: number = 0) => {
         const def = THROWABLE_REGISTRY[throwableId];
         if (!def) return;
 
@@ -232,7 +240,7 @@ export const ProjectileSystem = {
             weapon: throwableId,
             vel: new THREE.Vector3(vx, vy, vz),
             origin: origin.clone(),
-            damage: 0,
+            damage: damage,
             life: timeToTarget + 0.5,
             maxRadius: def.radius,
             marker: marker
@@ -257,6 +265,27 @@ export const ProjectileSystem = {
         for (let i = fireZones.length - 1; i >= 0; i--) {
             const fz = fireZones[i];
             fz.life -= delta;
+
+            // Damage detection (Tick-based)
+            const damageInterval = 0.5; // Damage every 0.5s
+            if (!fz['_lastDamageTime'] || now - fz['_lastDamageTime'] > damageInterval * 1000) {
+                fz['_lastDamageTime'] = now;
+
+                for (const e of fullCtx.enemies) {
+                    if (e.dead || e.deathState !== 'alive') continue;
+
+                    const distSq = e.mesh.position.distanceToSquared(fz.mesh.position);
+                    const rad = fz.radius + 1.0; // Buffer for hitboxes
+                    if (distSq < rad * rad) {
+                        e.hp -= 15; // 15 damage per tick
+                        e.isBurning = true;
+                        e.afterburnTimer = 5.0; // 5s afterburn
+                        e.burnTimer = 0.5;
+                        fullCtx.trackStats('damage', 15, !!e.isBoss);
+                        fullCtx.spawnPart(e.mesh.position.x, 1, e.mesh.position.z, 'campfire_flame', 3);
+                    }
+                }
+            }
 
             // Using flameDensity with pooled particles is safe
             const flameDensity = 15;
@@ -377,7 +406,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
         if (p.mesh.position.y <= 0.2) _v1.y = 0;
 
         const behavior = THROWABLE_REGISTRY[p.weapon];
-        if (behavior) behavior.onImpact(_v1, p.maxRadius || behavior.radius, ctx);
+        if (behavior) behavior.onImpact(_v1, p.maxRadius || behavior.radius, ctx, p.damage);
 
         projectiles.splice(index, 1);
     } else {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { DEFAULT_GRAPHICS, GraphicsSettings } from '../../content/constants';
+import { DEFAULT_GRAPHICS } from '../../content/constants';
+import { GraphicsSettings } from '../../types';
 export type { GraphicsSettings };
 import { InputManager } from './InputManager';
 
@@ -35,6 +36,7 @@ export class Engine {
     // Loop callback for game logic (dependency injection)
     public onUpdate: ((dt: number) => void) | null = null;
     public onRender: (() => void) | null = null;
+    public isRenderingPaused: boolean = false;
 
     constructor() {
         // 1. Scene
@@ -107,7 +109,7 @@ export class Engine {
         const shadowTypeChanged = this.renderer.shadowMap.type !== this.settings.shadowMapType;
 
         this.renderer.shadowMap.enabled = this.settings.shadows;
-        this.renderer.shadowMap.type = this.settings.shadowMapType;
+        this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
 
         // If shadows were toggled or type changed, we need to force material recompilation
         // otherwise Three.js might keep using shaders that expect different shadow map configurations
@@ -207,7 +209,9 @@ export class Engine {
         const dt = Math.min(this.clock.getDelta(), 0.1);
 
         if (this.onUpdate) this.onUpdate(dt);
-        if (this.onRender) this.onRender();
-        else this.renderer.render(this.scene, this.camera);
+        if (!this.isRenderingPaused) {
+            if (this.onRender) this.onRender();
+            else this.renderer.render(this.scene, this.camera);
+        }
     };
 }

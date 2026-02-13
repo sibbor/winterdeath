@@ -52,6 +52,8 @@ export interface SectorContext {
     smokeEmitters: any[];
     cluesFound: string[];
     collectiblesFound: string[];
+    collectibles: THREE.Group[]; // Optimized Cache
+    dynamicLights: THREE.Light[];  // Optimized Cache
     sectorId: number;
     sectorState: SectorState;
     state: any; // RuntimeState (for systems like waterSystem, windSystem)

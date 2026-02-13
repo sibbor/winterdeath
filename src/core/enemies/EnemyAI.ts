@@ -218,7 +218,7 @@ export const EnemyAI = {
                                     other.mesh.position.add(away.multiplyScalar(0.5));
                                 }
                             }
-                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 3.0, MATERIALS.bloodDecal);
+                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 1.2, MATERIALS.bloodDecal);
                             callbacks.spawnPart(e.mesh.position.x, 0.1, e.mesh.position.z, 'muck', 20);
                         }
                     } else {
@@ -493,7 +493,7 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
                 // Blood Trail
                 if (!e.lastTrailPos) e.lastTrailPos = e.mesh.position.clone();
                 if (e.mesh.position.distanceTo(e.lastTrailPos) > 1.5) {
-                    callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 1.0, MATERIALS.bloodDecal);
+                    callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 0.4, MATERIALS.bloodDecal);
                     e.lastTrailPos.copy(e.mesh.position);
                 }
             }

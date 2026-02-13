@@ -112,7 +112,7 @@ import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 
 export const ${sector.name.replace(/\s+/g, '')}: SectorDef = {
     id: 999, // Custom ID
-    name: "maps.${sector.name.toLowerCase().replace(/\s+/g, '_')}",
+    name: "sectors.${sector.name.toLowerCase().replace(/\s+/g, '_')}",
     environment: {
         bgColor: ${sector.environment.bgColor},
         fogDensity: ${sector.environment.fogDensity},

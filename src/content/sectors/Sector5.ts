@@ -6,7 +6,7 @@ import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
 export const Sector5: SectorDef = {
     id: 4,
-    name: "maps.sector_5_name",
+    name: "sectors.sector_5_name",
     environment: {
         bgColor: 0x111116,
         fogDensity: 0.04, // Dense storm fog

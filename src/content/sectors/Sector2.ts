@@ -144,7 +144,7 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
 
 export const Sector2: SectorDef = {
     id: 1,
-    name: "maps.sector_2_name",
+    name: "sectors.sector_2_name",
     environment: {
         bgColor: 0x050510,
         fogDensity: 0.02,

@@ -52,7 +52,7 @@ Maintain a strict 3-tier separation for all world-building logic:
 ## 🗺 Maps: Sectors
 - **Lifecycle**: individual levels (Sectors) handle their own initialization (`onInit`) and per-frame logic (`onUpdate`).
 - **State Persistence**: Sector-specific state should be kept in the `sectorState` object. Global state (xp, items) belongs in `gameState`.
-- **SectorBuilder**: Always use the 3-tier architecture defined in the World Generation section for building maps.
+- **SectorBuilder**: Always use the 3-tier architecture defined in the World Generation section for building sectors.
 
 ## 🏕 Hub: Camp
 - **React-3D Hybrid**: The Camp (in `src/components/camp/Camp.tsx`) is a React component that mounts the 3D `Engine`.
@@ -67,7 +67,7 @@ Maintain a strict 3-tier separation for all world-building logic:
    - Upgrade weapons in the Armory.
    - Invest skill points in the Medical Cabinet.
    - Review story progress in the Adventure Log.
-   - Choose the next mission via the Tactical Map (Sectors).
+   - Choose the next mission via the Sector Overview.
 3. **Sector (Mission)**:
    - Combat, exploration, and objective completion.
    - Successful extraction returns the player to Camp with rewards (scrap, xp).

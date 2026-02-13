@@ -133,7 +133,7 @@ export interface GraphicsSettings {
 export interface GameState {
   screen: GameScreen;
   stats: PlayerStats;
-  currentMap: number;
+  currentSector: number;
   loadout: {
     primary: WeaponType;
     secondary: WeaponType;
@@ -249,7 +249,7 @@ export interface GameCanvasProps {
   weaponLevels: Record<WeaponType, number>;
   onDie: (stats: SectorStats, killer: string) => void;
   onUpdateHUD: (data: any) => void;
-  currentMap: number;
+  currentSector: number;
   debugMode: boolean;
   onSectorEnded: (stats: SectorStats) => void;
   onPauseToggle: (paused: boolean) => void;
@@ -263,7 +263,7 @@ export interface GameCanvasProps {
   bossPermanentlyDefeated: boolean;
   familyAlreadyRescued?: boolean;
   rescuedFamilyIndices: number[]; // Added to support multiple followers
-  onLevelLoaded: () => void;
+  onSectorLoaded: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onCollectibleFound: (id: string) => void;
   onClueFound: (clue: SectorTrigger) => void;

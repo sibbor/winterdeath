@@ -9,7 +9,7 @@ import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 
 let warmedUp = false;
-let lastMapIndex = -1;
+let lastSectorIndex = -1;
 
 export const AssetPreloader = {
     warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, yieldToMain?: () => Promise<void>) => {
@@ -406,9 +406,9 @@ export const AssetPreloader = {
     },
 
     isWarmedUp: () => warmedUp,
-    reset: () => { warmedUp = false; lastMapIndex = -1; },
+    reset: () => { warmedUp = false; lastSectorIndex = -1; },
 
-    // Track map persistence to allow instant-reloads
-    getLastMapIndex: () => lastMapIndex,
-    setLastMapIndex: (idx: number) => { lastMapIndex = idx; }
+    // Track sector persistence to allow instant-reloads
+    getLastSectorIndex: () => lastSectorIndex,
+    setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; }
 };

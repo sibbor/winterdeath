@@ -109,7 +109,7 @@ ${locationsCode}
 
 export const ${safeName}: SectorDef = {
     id: 999, 
-    name: "maps.${localizationKey}",
+    name: "sectors.${localizationKey}",
     environment: {
         bgColor: ${sector.environment.bgColor},
         fogDensity: ${sector.environment.fogDensity.toFixed(4)},

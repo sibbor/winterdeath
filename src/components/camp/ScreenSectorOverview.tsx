@@ -7,52 +7,53 @@ import CampModalLayout from './CampModalLayout';
 import { PlayerStats } from '../../types';
 
 interface ScreenSectorOverviewProps {
-    currentMap: number;
+    currentSector: number;
     rescuedFamilyIndices: number[];
     deadBossIndices: number[];
     debugMode: boolean;
     stats: PlayerStats;
-    onSelectMap: (mapIndex: number) => void;
+    onSelectSector: (sectorIndex: number) => void;
     onStartSector: () => void;
     onClose: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap, rescuedFamilyIndices, deadBossIndices, debugMode, stats, onSelectMap, onStartSector, onClose, isMobileDevice }) => {
-    const [selectedMapIndex, setSelectedMapIndex] = useState(currentMap);
+const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSector, rescuedFamilyIndices, deadBossIndices, debugMode, stats, onSelectSector, onStartSector, onClose, isMobileDevice }) => {
+    const [selectedSectorIndex, setSelectedSectorIndex] = useState(currentSector);
     const [briefingText, setBriefingText] = useState("");
 
-    const mapTheme = SECTOR_THEMES[selectedMapIndex];
-    const boss = BOSSES[selectedMapIndex] || BOSSES[0];
-    const isRescued = rescuedFamilyIndices.includes(selectedMapIndex);
-    const isCleared = deadBossIndices.includes(selectedMapIndex);
-    const isLocked = !debugMode && (selectedMapIndex > 0 && !deadBossIndices.includes(selectedMapIndex - 1));
+    const sectorTheme = SECTOR_THEMES[selectedSectorIndex];
+    const boss = BOSSES[selectedSectorIndex] || BOSSES[0];
+    const isRescued = rescuedFamilyIndices.includes(selectedSectorIndex);
+    const isCleared = deadBossIndices.includes(selectedSectorIndex);
+    const isLocked = !debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1));
 
     // -- Briefing Text Logic --
-    const fullBriefingText = useMemo(() => {
-        const mapName = t(mapTheme.name);
-        const sectorBriefing = t(mapTheme.briefing);
+    const briefingData = useMemo(() => {
+        const sectorName = t(sectorTheme.name);
+        const sectorBriefing = t(sectorTheme.briefing);
         const bossName = t(boss.name);
 
-        return { map: mapName, boss: bossName, briefing: sectorBriefing };
-    }, [isRescued, selectedMapIndex, mapTheme, boss]);
+        return { map: sectorName, boss: bossName, briefing: sectorBriefing };
+    }, [selectedSectorIndex, sectorTheme, boss]);
 
     useEffect(() => {
         // Reset and type-write text when selection changes
         setBriefingText("");
         let i = 0;
         const speed = 5; // Faster typing
+        const briefingText = briefingData.briefing;
         const interval = setInterval(() => {
-            setBriefingText(fullBriefingText.briefing.slice(0, i));
+            setBriefingText(briefingText.slice(0, i));
             i++;
-            if (i > fullBriefingText.briefing.length) clearInterval(interval);
+            if (i > briefingText.length) clearInterval(interval);
         }, speed);
         return () => clearInterval(interval);
-    }, [fullBriefingText]);
+    }, [briefingData]);
 
     // -- Stats Calculation --
     const { collectibles, clues, pois } = useMemo(() => {
-        const sectorNum = selectedMapIndex + 1;
+        const sectorNum = selectedSectorIndex + 1;
 
         // Accurate Collectible Count
         const sectorCollectibles = getCollectiblesBySector(sectorNum);
@@ -76,22 +77,19 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
             clues: { found: foundCluesCount, total: clueKeys.length },
             pois: { found: foundPoisCount, total: poiKeys.length }
         };
-    }, [selectedMapIndex, stats]);
+    }, [selectedSectorIndex, stats]);
 
 
     const handleSelect = (index: number) => {
         if ((!debugMode && (index > 0 && !deadBossIndices.includes(index - 1)))) return; // Locked
-        setSelectedMapIndex(index);
-        onSelectMap(index);
+        setSelectedSectorIndex(index);
+        onSelectSector(index);
     };
 
     const handleDeploy = () => {
-        onSelectMap(selectedMapIndex);
+        onSelectSector(selectedSectorIndex);
         onStartSector();
     };
-
-
-
 
     const bossStatusKey = isCleared ? 'ui.boss_dead' : 'ui.boss_alive';
     const bossStatusColor = isCleared ? 'text-green-500 border-green-600 bg-green-900/20' : 'text-red-500 border-red-600 bg-red-900/20';
@@ -106,14 +104,14 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
-            canConfirm={!(!debugMode && (selectedMapIndex > 0 && !deadBossIndices.includes(selectedMapIndex - 1)))} // Lock logic
+            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))} // Lock logic
             isMobile={isMobileDevice}
         >
             <div className={`flex h-full gap-4 md:gap-8 ${isMobileDevice ? 'flex-col overflow-y-auto touch-auto' : ''}`}>
                 {/* LEFT: Sector List */}
                 <div className={`${isMobileDevice ? 'w-full shrink-0 flex gap-2 overflow-x-auto pb-4 px-2 snap-x snap-mandatory' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar shadow-inner`} style={isMobileDevice ? { WebkitOverflowScrolling: 'touch' } : {}}>
                     {SECTOR_THEMES.map((map, i) => {
-                        const isSel = selectedMapIndex === i;
+                        const isSel = selectedSectorIndex === i;
                         // re-eval locked for list
                         const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
 
@@ -141,7 +139,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                 {isMobileDevice && (
                     <div className="flex justify-center gap-1 mb-2">
                         {SECTOR_THEMES.map((_, i) => (
-                            <div key={i} className={`h-1 w-4 transition-colors ${selectedMapIndex === i ? 'bg-red-500' : 'bg-gray-800'}`} />
+                            <div key={i} className={`h-1 w-4 transition-colors ${selectedSectorIndex === i ? 'bg-red-500' : 'bg-gray-800'}`} />
                         ))}
                     </div>
                 )}
@@ -152,7 +150,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
                             <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-black uppercase tracking-tighter text-gray-400 mb-2`}>
-                                {t(mapTheme.name)}
+                                {t(sectorTheme.name)}
                             </h2>
                             {/* Stats Row */}
                             <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
@@ -171,9 +169,9 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
                             </div>
 
                             {/* Family Status Check */}
-                            {selectedMapIndex < 4 && (
+                            {selectedSectorIndex < 4 && (
                                 <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
-                                    {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedMapIndex]?.name || 'Unknown') : '???'}
+                                    {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name || 'Unknown') : '???'}
                                     <span className="text-[10px] md:text-xs ml-1 md:ml-2 opacity-100">
                                         ({t(familyStatusKey)})
                                     </span>

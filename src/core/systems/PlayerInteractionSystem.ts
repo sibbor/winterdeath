@@ -12,6 +12,7 @@ export class PlayerInteractionSystem implements System {
     constructor(
         private playerGroup: THREE.Group,
         private onSectorEnded: (isExtraction: boolean) => void,
+        private collectibles: THREE.Group[],
         onCollectibleFound?: (collectibleId: string) => void
     ) {
         this.onCollectibleFound = onCollectibleFound;
@@ -59,7 +60,7 @@ export class PlayerInteractionSystem implements System {
         sectorState: any
     ): { type: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null, position: THREE.Vector3 | null } {
         // Check Collectibles first (highest priority)
-        const collectible = this.findNearbyCollectible(playerPos, scene);
+        const collectible = this.findNearbyCollectible(playerPos);
         if (collectible) {
             return { type: 'collectible', position: collectible.position.clone() };
         }
@@ -96,16 +97,8 @@ export class PlayerInteractionSystem implements System {
         return { type: null, position: null };
     }
 
-    private findNearbyCollectible(playerPos: THREE.Vector3, scene: THREE.Scene): THREE.Group | null {
-        // Search specifically for groups tagged as collectibles to avoid traversing everything
-        const collectibles: THREE.Group[] = [];
-        scene.traverse((obj) => {
-            if (obj instanceof THREE.Group && obj.userData.isCollectible && !obj.userData.pickedUp) {
-                collectibles.push(obj);
-            }
-        });
-
-        for (const collectible of collectibles) {
+    private findNearbyCollectible(playerPos: THREE.Vector3): THREE.Group | null {
+        for (const collectible of this.collectibles) {
             // Check distance (3.5m radius)
             if (playerPos.distanceTo(collectible.position) < 3.5) {
                 return collectible;
@@ -163,7 +156,7 @@ export class PlayerInteractionSystem implements System {
     }
 
     private handleCollectiblePickup(playerPos: THREE.Vector3, session: GameSessionLogic) {
-        const collectible = this.findNearbyCollectible(playerPos, session.engine.scene);
+        const collectible = this.findNearbyCollectible(playerPos);
         if (!collectible) return;
 
         // Check if already picked up (prevents double-pickup during animation)
@@ -226,8 +219,10 @@ export class PlayerInteractionSystem implements System {
             if (progress < 1) {
                 requestAnimationFrame(animate);
             } else {
-                // Animation complete - remove from scene
+                // Animation complete - remove from scene and cache
                 session.engine.scene.remove(collectible);
+                const idx = this.collectibles.indexOf(collectible);
+                if (idx > -1) this.collectibles.splice(idx, 1);
             }
         };
 

@@ -22,7 +22,7 @@ export const HudSystem = {
             activeBoss = activeBossObj;
             bossInfo = {
                 active: true,
-                name: activeBossObj.type === 'Boss' ? (BOSSES[props.currentMap]?.name || 'Unknown') : 'Boss',
+                name: activeBossObj.type === 'Boss' ? (BOSSES[props.currentSector]?.name || 'Unknown') : 'Boss',
                 hp: activeBossObj.hp,
                 maxHp: activeBossObj.maxHp
             };

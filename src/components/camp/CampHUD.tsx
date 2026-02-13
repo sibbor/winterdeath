@@ -8,7 +8,7 @@ import { soundManager } from '../../utils/sound';
 interface CampHUDProps {
     stats: PlayerStats;
     hoveredStation: string | null;
-    currentMapName: string;
+    currentSectorName: string;
     hasCheckpoint: boolean;
     isIdle: boolean;
     currentLoadoutNames: { pri: string, sec: string, thr: string };
@@ -33,11 +33,11 @@ const STATIONS = [
     { id: 'sectors', labelKey: 'stations.sectors' },
     { id: 'skills', labelKey: 'stations.skills' },
     { id: 'adventure_log', labelKey: 'stations.adventure_log' },
-    { id: 'stats', labelKey: 'stations.stats' }, // Statistics
+    { id: 'stats', labelKey: 'stations.stats' },
 ];
 
 const CampHUD: React.FC<CampHUDProps> = ({
-    stats, hoveredStation, currentMapName, hasCheckpoint, isIdle, currentLoadoutNames,
+    stats, hoveredStation, currentSectorName, hasCheckpoint, isIdle, currentLoadoutNames,
     onOpenStats, onOpenArmory, onOpenSkills, onOpenSettings, onStartSector,
     debugMode, onToggleDebug, onResetGame, onDebugScrap, onDebugSkill, fpsRef, isMobileDevice
 }) => {

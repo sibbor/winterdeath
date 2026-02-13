@@ -6,7 +6,7 @@ import { INITIAL_STATS, DEFAULT_GRAPHICS } from '../content/constants';
 export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
     stats: INITIAL_STATS,
-    currentMap: 0,
+    currentSector: 0,
     loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV },
     weaponLevels: {
         [WeaponType.PISTOL]: 1, [WeaponType.SMG]: 1, [WeaponType.SHOTGUN]: 1, [WeaponType.RIFLE]: 1,
@@ -24,7 +24,7 @@ export const DEFAULT_STATE: GameState = {
 export const getPersistentState = (state: GameState) => {
     return {
         stats: state.stats,
-        currentMap: state.currentMap,
+        currentSector: state.currentSector,
         loadout: state.loadout,
         weaponLevels: state.weaponLevels,
         debugMode: state.debugMode,

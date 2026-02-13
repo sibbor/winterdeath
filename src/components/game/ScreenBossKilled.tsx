@@ -6,14 +6,14 @@ import { BOSSES } from '../../content/constants';
 import { SectorStats } from '../../types';
 
 interface ScreenBossKilledProps {
-    mapIndex: number;
+    sectorIndex: number;
     onProceed: () => void;
     stats?: SectorStats;
     isMobileDevice?: boolean;
 }
 
-const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ mapIndex, onProceed, stats, isMobileDevice }) => {
-    const bossData = BOSSES[mapIndex];
+const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProceed, stats, isMobileDevice }) => {
+    const bossData = BOSSES[sectorIndex];
     const buttonStyle = "px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 skew-x-[-10deg]";
     const bossName = t(bossData?.name || "ui.boss").toUpperCase();
 

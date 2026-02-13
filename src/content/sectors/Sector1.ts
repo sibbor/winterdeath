@@ -60,7 +60,7 @@ const LOCATIONS = {
 
 export const Sector1: SectorDef = {
     id: 0,
-    name: "maps.sector_1_name",
+    name: "sectors.sector_1_name",
     environment: {
         bgColor: 0x020208,
         fogDensity: 0.02,
@@ -615,6 +615,7 @@ export const Sector1: SectorDef = {
         // ===== ENVIRONMENTAL FEATURES =====
 
         // Grass patch around player home
+        /*
         const homeGrass = [
             new THREE.Vector3(-15, 0, -10),
             new THREE.Vector3(15, 0, -10),
@@ -640,7 +641,7 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(30, 0, 45)
         ];
         EnvironmentGenerator.fillAreaWithGrass(ctx, forestPathGrass, 2.0);
-
+        */
         // Wildflowers near church area
         const churchFlowers = [
             new THREE.Vector3(160, 0, 235),

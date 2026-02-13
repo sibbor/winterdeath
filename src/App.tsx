@@ -33,7 +33,7 @@ const App: React.FC = () => {
     const [showTeleportMenu, setShowTeleportMenu] = useState(false);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
-    const [isLoadingLevel, setIsLoadingLevel] = useState(false);
+    const [isLoadingSector, setIsLoadingSector] = useState(false);
     const [isLoadingCamp, setIsLoadingCamp] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
@@ -53,7 +53,7 @@ const App: React.FC = () => {
     const [isDialogueOpen, setIsDialogueOpen] = useState(false);
     const [isAdventureLogOpen, setIsAdventureLogOpen] = useState(false);
     const [isBossIntroActive, setIsBossIntroActive] = useState(false);
-    const [currentMapItems, setCurrentMapItems] = useState<MapItem[]>([]);
+    const [currentMapItems, setCurrentSectorMapItems] = useState<MapItem[]>([]);
     const [fps, setFps] = useState(0);
 
     // Sector Results
@@ -99,16 +99,16 @@ const App: React.FC = () => {
         let newUniqueAchievements = 0;
         const bossKilled = stats.killsByType['Boss'] > 0;
         const newBosses = [...gameState.deadBossIndices];
-        if (bossKilled && !gameState.deadBossIndices.includes(gameState.currentMap)) {
-            newBosses.push(gameState.currentMap);
+        if (bossKilled && !gameState.deadBossIndices.includes(gameState.currentSector)) {
+            newBosses.push(gameState.currentSector);
             newUniqueAchievements++;
         }
 
         const newFamily = [...gameState.rescuedFamilyIndices];
         // Note: On death, if they were found earlier in the same run, we still award it
         // Or if the boss was killed, we automatically rescue the family member
-        if ((stats.familyFound || bossKilled) && !gameState.rescuedFamilyIndices.includes(gameState.currentMap)) {
-            newFamily.push(gameState.currentMap);
+        if ((stats.familyFound || bossKilled) && !gameState.rescuedFamilyIndices.includes(gameState.currentSector)) {
+            newFamily.push(gameState.currentSector);
             newUniqueAchievements++;
         }
 
@@ -120,7 +120,7 @@ const App: React.FC = () => {
             rescuedFamilyIndices: newFamily,
             screen: GameScreen.RECAP
         }));
-    }, [gameState.stats, gameState.currentMap, gameState.deadBossIndices, gameState.rescuedFamilyIndices]);
+    }, [gameState.stats, gameState.currentSector, gameState.deadBossIndices, gameState.rescuedFamilyIndices]);
 
     const handleSectorEnded = useCallback((stats: SectorStats) => {
         setDeathDetails(null);
@@ -132,16 +132,16 @@ const App: React.FC = () => {
         let newUniqueAchievements = 0;
         const bossKilled = stats.killsByType['Boss'] > 0;
         const newBosses = [...gameState.deadBossIndices];
-        if (bossKilled && !gameState.deadBossIndices.includes(gameState.currentMap)) {
-            newBosses.push(gameState.currentMap);
+        if (bossKilled && !gameState.deadBossIndices.includes(gameState.currentSector)) {
+            newBosses.push(gameState.currentSector);
             newUniqueAchievements++;
         }
 
         const newFamily = [...gameState.rescuedFamilyIndices];
         // For sector end, we check if family found in this run (and not already found globally)
         // Or if the boss was killed, we automatically rescue the family member
-        if ((stats.familyFound || bossKilled) && !gameState.rescuedFamilyIndices.includes(gameState.currentMap)) {
-            newFamily.push(gameState.currentMap);
+        if ((stats.familyFound || bossKilled) && !gameState.rescuedFamilyIndices.includes(gameState.currentSector)) {
+            newFamily.push(gameState.currentSector);
             newUniqueAchievements++;
         }
 
@@ -159,7 +159,7 @@ const App: React.FC = () => {
         // ScreenSectorReport filters them by sector anyway? No, it takes the list as is.
 
         // Filter global found list to only include those from the current sector
-        const sectorCollectibles = getCollectiblesBySector(gameState.currentMap + 1).map(c => c.id);
+        const sectorCollectibles = getCollectiblesBySector(gameState.currentSector + 1).map(c => c.id);
         stats.collectiblesFound = newStats.collectiblesFound.filter(id => sectorCollectibles.includes(id));
 
         setSectorStats(stats);
@@ -172,7 +172,7 @@ const App: React.FC = () => {
             screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP, // Go to Boss Killed screen first if boss died
             midRunCheckpoint: null // Clear checkpoint on success
         }));
-    }, [gameState.stats, gameState.currentMap, gameState.deadBossIndices, gameState.rescuedFamilyIndices]);
+    }, [gameState.stats, gameState.currentSector, gameState.deadBossIndices, gameState.rescuedFamilyIndices]);
 
     const handleAbortSector = () => {
         setIsPaused(false);
@@ -222,16 +222,16 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
     };
 
-    const handleSelectMap = (mapIndex: number) => {
-        setGameState(prev => ({ ...prev, currentMap: mapIndex }));
+    const handleSelectSector = (sectorIndex: number) => {
+        setGameState(prev => ({ ...prev, currentSector: sectorIndex }));
     };
 
     const handleStartSector = () => {
-        setIsLoadingLevel(true);
+        setIsLoadingSector(true);
         setTeleportTarget(null);
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setHudState({});
-        setCurrentMapItems([]);
+        setCurrentSectorMapItems([]);
         setActiveCollectible(null);
         setIsPaused(false);
         setIsMapOpen(false);
@@ -243,7 +243,7 @@ const App: React.FC = () => {
         setGameState(prev => ({
             ...prev,
             screen: GameScreen.SECTOR, // Was CAMP
-            currentMap: 0, // Ensure we are on Sector 1
+            currentSector: 0, // Ensure we are on Sector 1
             stats: {
                 ...prev.stats,
                 prologueSeen: true
@@ -322,23 +322,23 @@ const App: React.FC = () => {
             <CustomCursor hidden={cursorHidden} />
 
 
-            {gameState.debugMode && !isLoadingLevel && !isLoadingCamp && <DebugDisplay fps={fps} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
+            {gameState.debugMode && !isLoadingSector && !isLoadingCamp && <DebugDisplay fps={fps} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
 
             {gameState.screen === GameScreen.CAMP && (
                 <Camp
                     stats={gameState.stats}
                     currentLoadout={gameState.loadout}
                     weaponLevels={gameState.weaponLevels}
-                    currentMap={gameState.currentMap}
+                    currentSector={gameState.currentSector}
                     rescuedFamilyIndices={gameState.rescuedFamilyIndices}
                     deadBossIndices={gameState.deadBossIndices}
                     debugMode={gameState.debugMode}
                     onSaveStats={handleSaveStats}
                     onSaveLoadout={handleSaveLoadout}
-                    onSelectMap={handleSelectMap}
+                    onSelectSector={handleSelectSector}
                     onStartSector={handleStartSector}
                     onToggleDebug={(val) => setGameState(prev => ({ ...prev, debugMode: val }))}
-                    isMapLoaded={true}
+                    aaaaaaaaaaLoaded={true}
                     onUpdateHUD={handleUpdateHUD}
                     onResetGame={handleResetGame}
                     onSaveGraphics={handleSaveGraphics}
@@ -366,12 +366,12 @@ const App: React.FC = () => {
                         stats={gameState.stats}
                         loadout={gameState.loadout}
                         weaponLevels={gameState.weaponLevels}
-                        currentMap={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentMap} // Force Map 0 during pre-load
+                        currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector} // Force Map 0 during pre-load
                         debugMode={gameState.debugMode}
                         // Only run loop if actually playing Sector
-                        isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeCollectible && !isLoadingLevel && !isAdventureLogOpen}
-                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeCollectible || isLoadingLevel || gameState.screen === GameScreen.PROLOGUE || isAdventureLogOpen}
-                        disableInput={!!activeCollectible || isLoadingLevel || isAdventureLogOpen}
+                        isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeCollectible && !isLoadingSector && !isAdventureLogOpen}
+                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeCollectible || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || isAdventureLogOpen}
+                        disableInput={!!activeCollectible || isLoadingSector || isAdventureLogOpen}
 
                         onUpdateHUD={handleUpdateHUD}
                         onDie={handleDie}
@@ -380,11 +380,11 @@ const App: React.FC = () => {
                         onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
                         triggerEndSector={false}
 
-                        familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentMap)}
+                        familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
                         rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                        bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentMap)}
+                        bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
 
-                        onLevelLoaded={() => setIsLoadingLevel(false)}
+                        onSectorLoaded={() => setIsLoadingSector(false)}
                         startAtCheckpoint={false}
                         onCheckpointReached={() => { }}
 
@@ -396,7 +396,7 @@ const App: React.FC = () => {
                         onDialogueStateChange={setIsDialogueOpen}
                         onDeathStateChange={setIsDeathScreenActive}
                         onBossIntroStateChange={setIsBossIntroActive}
-                        onMapInit={setCurrentMapItems}
+                        onMapInit={setCurrentSectorMapItems}
                         onFPSUpdate={handleFPSUpdate}
                         initialGraphics={gameState.graphics}
                         isMobileDevice={isMobileDevice}
@@ -475,9 +475,9 @@ const App: React.FC = () => {
                 </>
             )}
 
-            {(isLoadingLevel || isLoadingCamp) && (
+            {(isLoadingSector || isLoadingCamp) && (
                 <ScreenLoading
-                    mapIndex={gameState.currentMap}
+                    sectorIndex={gameState.currentSector}
                     isCamp={isLoadingCamp}
                     isMobileDevice={isMobileDevice}
                     debugInfo={{
@@ -518,7 +518,7 @@ const App: React.FC = () => {
 
             {gameState.screen === GameScreen.BOSS_KILLED && (
                 <ScreenBossKilled
-                    mapIndex={gameState.currentMap}
+                    sectorIndex={gameState.currentSector}
                     stats={sectorStats || undefined}
                     onProceed={() => {
                         soundManager.playUiConfirm();
@@ -532,26 +532,26 @@ const App: React.FC = () => {
                 <ScreenSectorReport
                     stats={sectorStats}
                     deathDetails={deathDetails}
-                    currentMap={gameState.currentMap}
+                    currentSector={gameState.currentSector}
                     onReturnCamp={() => {
                         setIsDeathScreenActive(false);
                         setIsLoadingCamp(true);
                         setGameState(prev => {
-                            const isCleared = prev.deadBossIndices.includes(prev.currentMap);
-                            // Advance to next map if cleared and not already at the last one (Sector 4 / Epilogue is index 4, but benchmark is 5)
-                            const nextMap = (isCleared && prev.currentMap < 4) ? prev.currentMap + 1 : prev.currentMap;
-                            return { ...prev, screen: GameScreen.CAMP, currentMap: nextMap };
+                            const isCleared = prev.deadBossIndices.includes(prev.currentSector);
+                            // Advance to next sector if cleared and not already at the last one (Sector 4 / Epilogue is index 4, but benchmark is 5)
+                            const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
+                            return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector };
                         });
                         soundManager.playUiConfirm();
                     }}
                     onRetry={() => {
                         setIsDeathScreenActive(false);
-                        setIsLoadingLevel(true);
+                        setIsLoadingSector(true);
                         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
                         setSectorStats(null);
                         setDeathDetails(null);
                         setHudState({});
-                        setCurrentMapItems([]);
+                        setCurrentSectorMapItems([]);
                         setActiveCollectible(null);
                         setIsPaused(false);
                         soundManager.playUiConfirm();
