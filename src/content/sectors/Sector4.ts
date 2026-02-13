@@ -4,6 +4,7 @@ import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
 
@@ -33,7 +34,7 @@ const LOCATIONS = {
 
 export const Sector4: SectorDef = {
     id: 3,
-    name: "maps.scrapyard_name",
+    name: "maps.sector_4_name",
     environment: {
         bgColor: 0x110500, // Rusty orange/red sky
         fogDensity: 0.02,
@@ -103,6 +104,32 @@ export const Sector4: SectorDef = {
             mesh: shedGroup,
             collider: { type: 'sphere', radius: 12 }
         });
+
+        // ===== INDUSTRIAL DECAY =====
+
+        // Sparse weeds breaking through concrete
+        const industrialWeeds = [
+            new THREE.Vector3(-20, 0, -20),
+            new THREE.Vector3(20, 0, -20),
+            new THREE.Vector3(20, 0, 20),
+            new THREE.Vector3(-20, 0, 20)
+        ];
+        await EnvironmentGenerator.fillAreaWithGrass(ctx, industrialWeeds, 0.4);
+
+        // Dead/dying trees (only standing, industrial feel)
+        for (let i = 0; i < 15; i++) {
+            const deadTree = EnvironmentGenerator.createDeadTree('standing', 0.6 + Math.random() * 0.4);
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 30 + Math.random() * 40;
+            deadTree.position.set(
+                Math.cos(angle) * dist,
+                0,
+                Math.sin(angle) * dist
+            );
+            ctx.scene.add(deadTree);
+        }
+
+        // ===== END INDUSTRIAL DECAY =====
     },
 
     setupContent: async (ctx: SectorContext) => {

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ObjectGenerator } from '../world/ObjectGenerator';
+import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { SectorBuilder } from '../world/SectorGenerator';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
@@ -316,10 +317,10 @@ export const AssetPreloader = {
             console.warn("Shader warmup failed", e);
         }
 
-        // 5. ObjectGenerator Warmup (Force lazy-load of textures & prototypes)
+        // 5. ObjectGenerator & EnvironmentGenerator Warmup (Force lazy-load of textures & prototypes)
         try {
-            // Nature & Buildings
-            await ObjectGenerator.initNaturePrototypes(yieldToMain);
+            // Nature (EnvironmentGenerator) & Buildings (ObjectGenerator)
+            await EnvironmentGenerator.initPrototypes(yieldToMain);
             await ObjectGenerator.initBuildingPrototypes(yieldToMain);
 
             // Dummy Vehicle (Triggers texture generation for cars)
@@ -333,7 +334,7 @@ export const AssetPreloader = {
             dummyRoot.add(dummyBuilding);
 
             // Sector 2 Specific Props
-            const dummyRock = ObjectGenerator.createRock(2, 2);
+            const dummyRock = EnvironmentGenerator.createRock(2, 2);
             dummyRock.position.set(5, 0, 5);
             dummyRoot.add(dummyRock);
 
@@ -352,9 +353,22 @@ export const AssetPreloader = {
             dummyBarrel.position.set(-5, 0, 5);
             dummyRoot.add(dummyBarrel);
 
-            const dummyStump = ObjectGenerator.createTreeStump();
+            const dummyStump = EnvironmentGenerator.createTreeStump();
             dummyStump.position.set(2, 0, 2);
             dummyRoot.add(dummyStump);
+
+            // Environmental Features (Grass & Flowers)
+            const dummyGrass = EnvironmentGenerator.createGrassTuft();
+            dummyGrass.position.set(-2, 0, -2);
+            dummyRoot.add(dummyGrass);
+
+            const dummyFlowerPink = EnvironmentGenerator.createFlower(0);
+            dummyFlowerPink.position.set(3, 0, -3);
+            dummyRoot.add(dummyFlowerPink);
+
+            const dummyFlowerYellow = EnvironmentGenerator.createFlower(1);
+            dummyFlowerYellow.position.set(-3, 0, 3);
+            dummyRoot.add(dummyFlowerYellow);
 
             const dummyOpening = SectorBuilder.createMountainOpening();
             dummyOpening.position.set(0, 0, -20);

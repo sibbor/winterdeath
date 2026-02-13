@@ -266,12 +266,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         let lastFpsUpdate = Date.now();
 
         const animate = () => {
+            const frameStart = performance.now();
             frameId = requestAnimationFrame(animate);
             frame++;
             // activeRef is managed by the sync effect now, or we read from activeModalRef directly. 
             // But to be safe with existing logic:
             activeRef.current = activeModalRef.current;
             const now = Date.now();
+
+            // Performance timing
+            const timings: Record<string, number> = {};
+            let lastTime = frameStart;
 
             // Update FPS / Debug Info
             framesSinceUpdate++;
@@ -303,10 +308,18 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 }
             }
 
+            let perfTime = performance.now();
+            timings.hud = perfTime - lastTime;
+            lastTime = perfTime;
+
             // Update Environment (Wind, Stars, Fire, Particles)
             if (envStateRef.current) {
                 CampEnvironment.updateEffects(scene, envStateRef.current, 0.016, now, frame);
             }
+
+            perfTime = performance.now();
+            timings.environment = perfTime - lastTime;
+            lastTime = perfTime;
 
             const talkingMembers = new Set(activeChats.current.map(c => (now >= c.startTime && now <= c.startTime + c.duration) ? c.mesh.uuid : null).filter(Boolean));
 
@@ -314,6 +327,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
             currentLookAt.lerp(targetLookAt, isIdleRef.current ? 0.002 : 0.05);
             camera.lookAt(currentLookAt);
+
+            perfTime = performance.now();
+            timings.camera = perfTime - lastTime;
+            lastTime = perfTime;
 
             // Family Animations
             familyMembers.forEach(fm => {
@@ -324,6 +341,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     PlayerAnimation.update(body, { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking, isThinking: false, isIdleLong: isIdleRef.current, seed: fm.seed }, now, 0.016);
                 }
             });
+
+            perfTime = performance.now();
+            timings.familyAnimation = perfTime - lastTime;
+            lastTime = perfTime;
 
             // Chatter
             if (now > nextChatterTime.current && activeMembers.length > 1) {
@@ -349,6 +370,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
             }
 
+            perfTime = performance.now();
+            timings.chatter = perfTime - lastTime;
+            lastTime = perfTime;
+
             // Update Chats
             for (let i = activeChats.current.length - 1; i >= 0; i--) {
                 const chat = activeChats.current[i];
@@ -364,6 +389,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     chat.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`; chat.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`; chat.element.style.transform = 'translate(-50%, -100%)';
                 }
             }
+
+            perfTime = performance.now();
+            timings.chatUpdate = perfTime - lastTime;
+            lastTime = perfTime;
 
             // Raycasting
             raycaster.setFromCamera(mouse, camera);
@@ -384,6 +413,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
             setTooltip((newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) ? { text: toolTipText, x: tooltipX, y: tooltipY } : null);
 
+            perfTime = performance.now();
+            timings.raycasting = perfTime - lastTime;
+            lastTime = perfTime;
+
             Object.keys(outlines).forEach(key => { outlines[key].visible = !isIdleRef.current && (hoveredRef.current === key); });
             interactables.forEach(o => {
                 if (o.userData.type === 'family') {
@@ -391,8 +424,35 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
                 }
             });
+
+            perfTime = performance.now();
+            timings.outlines = perfTime - lastTime;
+            lastTime = perfTime;
+
             engine.renderer.render(scene, camera);
+
+            perfTime = performance.now();
+            timings.render = perfTime - lastTime;
+            lastTime = perfTime;
+
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
+
+            const totalTime = performance.now() - frameStart;
+
+            // Log if frame took >50ms (slow frame)
+            if (totalTime > 50) {
+                console.log(`[Camp Performance] Frame took ${totalTime.toFixed(2)}ms:`, {
+                    hud: timings.hud.toFixed(2) + 'ms',
+                    environment: timings.environment.toFixed(2) + 'ms',
+                    camera: timings.camera.toFixed(2) + 'ms',
+                    familyAnimation: timings.familyAnimation.toFixed(2) + 'ms',
+                    chatter: timings.chatter.toFixed(2) + 'ms',
+                    chatUpdate: timings.chatUpdate.toFixed(2) + 'ms',
+                    raycasting: timings.raycasting.toFixed(2) + 'ms',
+                    outlines: timings.outlines.toFixed(2) + 'ms',
+                    render: timings.render.toFixed(2) + 'ms'
+                });
+            }
         };
 
         let frameId = requestAnimationFrame(animate);

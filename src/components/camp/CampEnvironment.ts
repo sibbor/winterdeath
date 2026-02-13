@@ -28,7 +28,8 @@ export const CampEnvironment = {
     initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType): CampEffectsState => {
         const wind = new WindSystem();
         const weatherSystem = new WeatherSystem(scene, wind);
-        weatherSystem.sync(weatherType, WEATHER.PARTICLE_COUNT, 100);
+        // Constrain weather to visible terrain area (60x60)
+        weatherSystem.sync(weatherType, WEATHER.PARTICLE_COUNT, 60); // Reduced from 100
 
         const starSystem = CampEnvironment.setupSky(scene, textures);
         const fireLight = CampEnvironment.setupCampfire(scene, textures);
@@ -56,22 +57,22 @@ export const CampEnvironment = {
         scene.add(moonLight);
         scene.add(moon);
 
-        // Halo
+        // Halo (Enhanced visibility)
         const haloSprite = new THREE.Sprite(new THREE.SpriteMaterial({
             map: textures.halo,
             color: 0xffffee,
             transparent: true,
-            opacity: 0.1,
+            opacity: 0.25, // Increased from 0.1 for better visibility
             blending: THREE.AdditiveBlending,
             fog: false,
             depthWrite: false
         }));
-        haloSprite.scale.set(120, 120, 1);
+        haloSprite.scale.set(150, 150, 1); // Increased from 120 for prominence
         haloSprite.position.copy(moon.position);
         scene.add(haloSprite);
 
-        // Stars
-        const starCount = 3600;
+        // Stars (Reduced for performance - only visible area)
+        const starCount = 1200; // Reduced from 3600
         const starGeo = new THREE.BufferGeometry();
         const positions = new Float32Array(starCount * 3);
         const sizes = new Float32Array(starCount);

@@ -4,6 +4,7 @@ import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/sound';
 import { EnemyManager } from '../../core/EnemyManager';
@@ -71,7 +72,7 @@ const LOCATIONS = {
 
 export const Sector3: SectorDef = {
     id: 2,
-    name: "maps.mast_name",
+    name: "maps.sector_3_name",
     environment: {
         bgColor: 0x051015,
         fogDensity: 0.02,
@@ -221,6 +222,13 @@ export const Sector3: SectorDef = {
             mesh: mastGroup,
             collider: { type: 'sphere', radius: 8 } // Simple radial collider for the mast base area
         });
+
+        // ===== DENSE FOREST VEGETATION =====
+        const meadow = [new THREE.Vector3(-50, 0, -50), new THREE.Vector3(50, 0, -50), new THREE.Vector3(50, 0, 50), new THREE.Vector3(-50, 0, 50)];
+        await EnvironmentGenerator.fillAreaWithGrass(ctx, meadow, 2.8);
+        const flowers = [new THREE.Vector3(-30, 0, 180), new THREE.Vector3(0, 0, 180), new THREE.Vector3(0, 0, 210), new THREE.Vector3(-30, 0, 210)];
+        await EnvironmentGenerator.fillAreaWithFlowers(ctx, flowers, 0.9);
+        // ===== END =====
     },
 
     setupContent: async (ctx: SectorContext) => {

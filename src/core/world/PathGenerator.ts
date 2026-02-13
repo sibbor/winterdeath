@@ -1001,9 +1001,6 @@ export const PathGenerator = {
         ctx.scene.add(mesh);
 
         const colSteps = Math.ceil(length / 5);
-        const proto = new THREE.Group();
-        proto.visible = false;
-        ctx.scene.add(proto);
 
         // Pre-calculate constant collision variables
         const colLen = (length / colSteps) * 1.05;
@@ -1014,13 +1011,19 @@ export const PathGenerator = {
             const pt = curve.getPoint(t);
             const tan = curve.getTangent(t);
 
+            // Create individual collision mesh for each segment (invisible)
+            const collisionMesh = new THREE.Mesh(new THREE.BoxGeometry(colWidth, height, colLen));
+            collisionMesh.position.copy(pt.clone().setY(height / 2));
+            collisionMesh.rotation.y = Math.atan2(tan.x, tan.z);
+            collisionMesh.visible = false;
+            collisionMesh.updateMatrixWorld();
+            ctx.scene.add(collisionMesh);
+
             const obstacle = {
-                mesh: proto,
+                mesh: collisionMesh,
                 collider: {
                     type: 'box' as const,
-                    size: new THREE.Vector3(colWidth, height, colLen),
-                    position: pt.clone().setY(height / 2),
-                    rotation: new THREE.Euler(0, Math.atan2(tan.x, tan.z), 0)
+                    size: new THREE.Vector3(colWidth, height, colLen)
                 }
             };
             ctx.obstacles.push(obstacle);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
 interface Textures {
     gravel: THREE.Texture;
@@ -12,7 +13,7 @@ interface Textures {
 }
 
 // Separate function to avoid circular dependency issues in object literal
-const setupTrees = (scene: THREE.Scene) => {
+const setupTrees = async (scene: THREE.Scene) => {
     // Seeded random for deterministic layout
     let seed = 12345;
     const srandom = () => {
@@ -55,8 +56,8 @@ const setupTrees = (scene: THREE.Scene) => {
 
     // --- TREE INSTANTIATION ---
     // Ensure prototypes are ready
-    ObjectGenerator.initNaturePrototypes();
-    const prototypes = ObjectGenerator.getPrototypes(); // Returns flat array: Spruce, Pine, Birch
+    await EnvironmentGenerator.initPrototypes();
+    const prototypes = EnvironmentGenerator.getPrototypes(); // Returns flat array: Spruce, Pine, Birch
 
     if (!prototypes || prototypes.length === 0) return;
 
@@ -367,15 +368,17 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
 
 export const CampWorld = {
     setupTerrain: (scene: THREE.Scene, textures: Textures) => {
-        // Ground
+        // Ground - Optimized to visible camera frustum area only
+        // Camera at (0, 10, 22) looking at (0, 2, -5)
+        // Visible ground area is approximately 60x60 units
         const groundMat = MATERIALS.dirt.clone();
         if (groundMat.map) {
-            groundMat.map.repeat.set(100, 100);
+            groundMat.map.repeat.set(30, 30); // Reduced from 100
         }
         if (groundMat.bumpMap) {
-            groundMat.bumpMap.repeat.set(100, 100);
+            groundMat.bumpMap.repeat.set(30, 30); // Reduced from 100
         }
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), groundMat);
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), groundMat); // Reduced from 1000
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);

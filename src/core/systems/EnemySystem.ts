@@ -25,18 +25,7 @@ export class EnemySystem implements System {
         const state = session.state;
         const scene = session.engine.scene;
 
-        if (!state.bossIntroActive) { // Need to verify if bossIntroActive is in state or ref
-            // Logic from GameCanvas:
-            /* 
-            if (!bossIntroRef.current.active) {
-               EnemyManager.update(...)
-            }
-            */
-            // I'll assume for now I should run it if not told otherwise.
-            // Wait, bossIntroRef is logic specific to Canvas. 
-            // I might need to add `bossIntroActive` to RuntimeState if it's not there, or pass it.
-            // Checking RuntimeState might be good.
-
+        if (!state.bossIntroActive) {
             EnemyManager.update(
                 dt,
                 now,

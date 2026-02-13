@@ -4,15 +4,17 @@ import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { WaterSystem } from '../../core/systems/WaterSystem';
 import { CAMERA_HEIGHT } from '../constants';
 
 export const Sector6: SectorDef = {
     id: 5,
-    name: "maps.benchmark",
+    name: "maps.sector_6_name",
     environment: {
         bgColor: 0x111116,
-        fogDensity: 0.04, // Dense storm fog
-        ambientIntensity: 0.1, // Dark
+        fogDensity: 0.00, // Dense storm fog
+        ambientIntensity: 0.5, // Dark
         groundColor: 0x4a6e4a, // Grass color
         fov: 50,
         moon: { visible: false, color: 0x445566, intensity: 0.2 },
@@ -45,11 +47,86 @@ export const Sector6: SectorDef = {
         // Reward Chest at boss spawn
         SectorBuilder.spawnChest(ctx, 0, -50, 'big');
 
-        // Grass Field (Instanced)
-        // 50,000 blades for benchmark
-        if (ObjectGenerator.createGrassField) {
-            ObjectGenerator.createGrassField(ctx, 0, 0, 180, 180, 50000);
-        }
+        // ===== NEW: Wind-Animated Grass Meadows =====
+
+        // Large central meadow (around player spawn)
+        const centralMeadow = [
+            new THREE.Vector3(-40, 0, -40),
+            new THREE.Vector3(40, 0, -40),
+            new THREE.Vector3(40, 0, 40),
+            new THREE.Vector3(-40, 0, 40)
+        ];
+        await EnvironmentGenerator.fillAreaWithGrass(ctx, centralMeadow, 2.5);
+
+        // Flower patches in corners
+        const northFlowers = [
+            new THREE.Vector3(-80, 0, -80),
+            new THREE.Vector3(-50, 0, -80),
+            new THREE.Vector3(-50, 0, -50),
+            new THREE.Vector3(-80, 0, -50)
+        ];
+        await EnvironmentGenerator.fillAreaWithFlowers(ctx, northFlowers, 0.8);
+
+        const southFlowers = [
+            new THREE.Vector3(50, 0, 50),
+            new THREE.Vector3(80, 0, 50),
+            new THREE.Vector3(80, 0, 80),
+            new THREE.Vector3(50, 0, 80)
+        ];
+        await EnvironmentGenerator.fillAreaWithFlowers(ctx, southFlowers, 0.8);
+
+        // Dense grass around trees
+        const treeGrass1 = [
+            new THREE.Vector3(25, 0, -35),
+            new THREE.Vector3(35, 0, -35),
+            new THREE.Vector3(35, 0, -25),
+            new THREE.Vector3(25, 0, -25)
+        ];
+        await EnvironmentGenerator.fillAreaWithGrass(ctx, treeGrass1, 3.0);
+
+        const treeGrass2 = [
+            new THREE.Vector3(-45, 0, 35),
+            new THREE.Vector3(-35, 0, 35),
+            new THREE.Vector3(-35, 0, 45),
+            new THREE.Vector3(-45, 0, 45)
+        ];
+        await EnvironmentGenerator.fillAreaWithGrass(ctx, treeGrass2, 3.0);
+
+        // ===== END Grass & Flowers =====
+
+        // ===== WATER SYSTEM: Test Lake =====
+
+        // Initialize Water System
+        ctx.state.waterSystem = new WaterSystem(scene, 50);
+
+        // Create test lake: 50m east of spawn, 30x50 meters, crystal clear
+        const lake = ctx.state.waterSystem.addSurface(
+            50,  // x: 50m east
+            0,   // z: centered on spawn
+            30,  // width: 30m
+            50,  // depth: 50m
+            'crystal' // Crystal clear water
+        );
+
+        // Add collision boundary to prevent walking through water
+        const lakeCollider = new THREE.Mesh(
+            new THREE.BoxGeometry(30, 10, 50)
+        );
+        lakeCollider.position.set(50, 5, 0);
+        lakeCollider.visible = false;
+        lakeCollider.updateMatrixWorld();
+        scene.add(lakeCollider);
+
+        ctx.obstacles.push({
+            mesh: lakeCollider,
+            collider: { type: 'box', size: new THREE.Vector3(30, 10, 50) }
+        });
+        ctx.collisionGrid.add({
+            mesh: lakeCollider,
+            collider: { type: 'box', size: new THREE.Vector3(30, 10, 50) }
+        });
+
+        // ===== END WATER SYSTEM =====
 
         // A few props to test lighting/shadows
         SectorBuilder.spawnContainerStack(ctx, 20, 20, 0.5, 3, 0xcc3333);

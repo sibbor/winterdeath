@@ -31,16 +31,10 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
     // -- Briefing Text Logic --
     const fullBriefingText = useMemo(() => {
         const mapName = t(mapTheme.name);
+        const sectorBriefing = t(mapTheme.briefing);
         const bossName = t(boss.name);
 
-        switch (selectedMapIndex) {
-            case 0: return t('story.prologue_text');
-            case 1: return t('story.intel_bunker_text');
-            case 2: return t('story.intel_mast_text');
-            case 3: return t('story.intel_scrap_text');
-            case 4: return t('story.epilogue_text');
-            default: return t('story.generic_briefing', { map: mapName, boss: bossName });
-        }
+        return { map: mapName, boss: bossName, briefing: sectorBriefing };
     }, [isRescued, selectedMapIndex, mapTheme, boss]);
 
     useEffect(() => {
@@ -49,9 +43,9 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentMap,
         let i = 0;
         const speed = 5; // Faster typing
         const interval = setInterval(() => {
-            setBriefingText(fullBriefingText.slice(0, i));
+            setBriefingText(fullBriefingText.briefing.slice(0, i));
             i++;
-            if (i > fullBriefingText.length) clearInterval(interval);
+            if (i > fullBriefingText.briefing.length) clearInterval(interval);
         }, speed);
         return () => clearInterval(interval);
     }, [fullBriefingText]);

@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Engine } from '../engine/Engine';
 import { EditorObject, EditorPath, EditorSector, EditorPersistence } from '../../utils/editorPersistence';
 import { ObjectGenerator } from '../world/ObjectGenerator';
+import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { PathGenerator } from '../world/PathGenerator';
 import { ShapeGenerator } from '../world/ShapeGenerator';
 import { CharacterModels } from '../../utils/assets/models/characters';
@@ -731,13 +732,13 @@ export class EditorSystem {
             );
         }
         switch (type) {
-            case 'spruce': return ObjectGenerator.createTree('spruce');
-            case 'pine': return ObjectGenerator.createTree('pine');
-            case 'birch': return ObjectGenerator.createTree('birch');
-            case 'rock': return ObjectGenerator.createRock(obj?.scale?.x || 1.0, obj?.properties?.radius || 1.0);
+            case 'spruce': return EnvironmentGenerator.createTree('spruce');
+            case 'pine': return EnvironmentGenerator.createTree('pine');
+            case 'birch': return EnvironmentGenerator.createTree('birch');
+            case 'rock': return EnvironmentGenerator.createRock(obj?.scale?.x || 1.0, obj?.properties?.radius || 1.0);
             case 'hedge': return ObjectGenerator.createHedge();
             case 'fence': return ObjectGenerator.createFence();
-            case 'stonewall': return ObjectGenerator.createStoneWall();
+            // case 'stonewall': return ObjectGenerator.createStoneWall(); // REMOVED: createStoneWall deleted
             case 'standard_chest': return new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0x8b4513 }));
             case 'big_chest': return new THREE.Mesh(new THREE.BoxGeometry(2, 1, 1.2), new THREE.MeshStandardMaterial({ color: 0x8b4513 }));
             case 'car': return new THREE.Mesh(new THREE.BoxGeometry(4, 1.5, 2), new THREE.MeshStandardMaterial({ color: 0x666666 }));

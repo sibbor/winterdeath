@@ -54,6 +54,7 @@ export interface SectorContext {
     collectiblesFound: string[];
     sectorId: number;
     sectorState: SectorState;
+    state: any; // RuntimeState (for systems like waterSystem, windSystem)
     yield: () => Promise<void>;
 }
 

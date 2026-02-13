@@ -285,7 +285,9 @@ export const WeaponHandler = {
                             const py = Math.max(0.1, origin.y + vy * t - 0.5 * gravity * t * t);
                             points.push(new THREE.Vector3(px, py, pz));
                         }
-                        trajectoryLineMesh.geometry.setFromPoints(points);
+                        // Dispose old geometry to prevent buffer size errors
+                        trajectoryLineMesh.geometry.dispose();
+                        trajectoryLineMesh.geometry = new THREE.BufferGeometry().setFromPoints(points);
                         (trajectoryLineMesh.material as THREE.LineBasicMaterial).opacity = 0.4 + ratio * 0.6;
                     }
                 }

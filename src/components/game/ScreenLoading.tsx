@@ -17,8 +17,8 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobil
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
 
-    const mapKeys = ['village', 'bunker', 'mast', 'scrapyard', 'home'];
-    const mapKey = isCamp ? 'camp' : (mapKeys[mapIndex] || 'village');
+    const mapKeys = ['sector_1', 'sector_2', 'sector_3', 'sector_4', 'sector_5', 'sector_6'];
+    const mapKey = isCamp ? 'camp' : (mapKeys[mapIndex] || 'sector_1');
 
     const [isMinimized, setIsMinimized] = useState(() => {
         return localStorage.getItem('vinterdod_debug_minimized') === 'true';
@@ -56,7 +56,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ mapIndex, isCamp, isMobil
                     </h2>
                     <div className="h-1 w-32 bg-red-600 rounded-full mt-2" />
 
-                    <p className="text-gray-400 text-sm italic max-w-md mt-2">
+                    <p className="text-gray-400 text italic max-w-md mt-2">
                         <span className="text-red-500 uppercase tracking-[0.2em] block mb-2">
                             {t('ui.survivor_tip')}
                         </span>

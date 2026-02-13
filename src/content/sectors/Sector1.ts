@@ -4,6 +4,7 @@ import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils
 import { SectorBuilder } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -59,7 +60,7 @@ const LOCATIONS = {
 
 export const Sector1: SectorDef = {
     id: 0,
-    name: "maps.village_name",
+    name: "maps.sector_1_name",
     environment: {
         bgColor: 0x020208,
         fogDensity: 0.02,
@@ -610,6 +611,62 @@ export const Sector1: SectorDef = {
                 actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
         );
+
+        // ===== ENVIRONMENTAL FEATURES =====
+
+        // Grass patch around player home
+        const homeGrass = [
+            new THREE.Vector3(-15, 0, -10),
+            new THREE.Vector3(15, 0, -10),
+            new THREE.Vector3(15, 0, 15),
+            new THREE.Vector3(-15, 0, 15)
+        ];
+        EnvironmentGenerator.fillAreaWithGrass(ctx, homeGrass, 1.8);
+
+        // Flower garden near home
+        const homeFlowers = [
+            new THREE.Vector3(8, 0, -8),
+            new THREE.Vector3(12, 0, -8),
+            new THREE.Vector3(12, 0, -2),
+            new THREE.Vector3(8, 0, -2)
+        ];
+        EnvironmentGenerator.fillAreaWithFlowers(ctx, homeFlowers, 1.0);
+
+        // Grass patches along forest path (Home -> SMU)
+        const forestPathGrass = [
+            new THREE.Vector3(30, 0, 30),
+            new THREE.Vector3(50, 0, 35),
+            new THREE.Vector3(50, 0, 50),
+            new THREE.Vector3(30, 0, 45)
+        ];
+        EnvironmentGenerator.fillAreaWithGrass(ctx, forestPathGrass, 2.0);
+
+        // Wildflowers near church area
+        const churchFlowers = [
+            new THREE.Vector3(160, 0, 235),
+            new THREE.Vector3(170, 0, 235),
+            new THREE.Vector3(170, 0, 245),
+            new THREE.Vector3(160, 0, 245)
+        ];
+        EnvironmentGenerator.fillAreaWithFlowers(ctx, churchFlowers, 0.7);
+
+        // Dead trees in logging/deforested area (near train yard)
+        EnvironmentGenerator.createDeforestation(ctx, 130, 380, 30, 25, 12);
+
+        // Scattered dead trees along approach to village
+        for (let i = 0; i < 5; i++) {
+            const deadTree = EnvironmentGenerator.createDeadTree(Math.random() > 0.5 ? 'standing' : 'fallen', 0.8 + Math.random() * 0.6);
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 15 + Math.random() * 25;
+            deadTree.position.set(
+                LOCATIONS.SPAWN.PLAYER.x + Math.cos(angle) * dist,
+                0,
+                LOCATIONS.SPAWN.PLAYER.z + Math.sin(angle) * dist
+            );
+            ctx.scene.add(deadTree);
+        }
+
+        // ===== END ENVIRONMENTAL FEATURES =====
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {

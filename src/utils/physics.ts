@@ -4,14 +4,32 @@ export class WindSystem {
   current: THREE.Vector2;
   target: THREE.Vector2;
   nextChange: number;
+  windAnimatedObjects: THREE.Object3D[]; // Track objects with wind shaders
+  direction: THREE.Vector3; // Exposed for EnvironmentGenerator
+  strength: number;
 
   constructor() {
     this.current = new THREE.Vector2(0, 0);
     this.target = new THREE.Vector2(0, 0);
     this.nextChange = 0;
+    this.windAnimatedObjects = [];
+    this.direction = new THREE.Vector3(0, 0, 0);
+    this.strength = 0;
   }
 
-  update(now: number): THREE.Vector2 {
+  /**
+   * Register an object for wind animation (should have windAnimated userData)
+   */
+  register(obj: THREE.Object3D) {
+    if (!this.windAnimatedObjects.includes(obj)) {
+      this.windAnimatedObjects.push(obj);
+    }
+  }
+
+  /**
+   * Update wind direction and strength, then update shader uniforms
+   */
+  update(now: number, deltaTime: number = 0.016): THREE.Vector2 {
     if (now > this.nextChange) {
       if (Math.random() > 0.4) {
         // Wind picks up
@@ -31,9 +49,35 @@ export class WindSystem {
     // Low lerp factor for sluggish, airy movement
     this.current.lerp(this.target, 0.01);
 
+    // Update exposed properties
+    this.direction.set(this.current.x, 0, this.current.y);
+    this.strength = this.current.length();
+
+    // Update shader uniforms for wind-animated objects
+    this.updateWindUniforms(now / 1000.0); // Convert to seconds for shader time
+
     return this.current;
   }
+
+  /**
+   * Update time and wind uniforms for all registered wind-animated objects
+   */
+  private updateWindUniforms(timeInSeconds: number) {
+    for (const obj of this.windAnimatedObjects) {
+      obj.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+          const mat = child.material;
+          if (mat.uniforms.time) mat.uniforms.time.value = timeInSeconds;
+          if (mat.uniforms.windStrength) mat.uniforms.windStrength.value = this.strength * 10; // Scale for visibility
+          if (mat.uniforms.windDirection) {
+            mat.uniforms.windDirection.value.set(this.direction.x, this.direction.z);
+          }
+        }
+      });
+    }
+  }
 }
+
 
 // --- Collision System ---
 

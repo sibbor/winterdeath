@@ -985,6 +985,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 sectorId: propsRef.current.currentMap,
                 smokeEmitters: [],
                 sectorState: stateRef.current.sectorState,
+                state: stateRef.current, // RuntimeState reference for systems (waterSystem, windSystem)
                 yield: yielder
             };
 
@@ -1599,6 +1600,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }, index);
                 }
             });
+
+            // Update Wind System
+            if (state.windSystem) {
+                state.windSystem.update(delta);
+            }
+
+            // Update Water System
+            if (state.waterSystem) {
+                state.waterSystem.update(delta);
+            }
 
             // Update Footprints
             FootprintSystem.update(delta);

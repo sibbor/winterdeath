@@ -225,7 +225,7 @@ export const sv = {
     },
     stations: {
         armory: "VAPENFÖRRÅD",
-        sectors: "SEKTOR-ÖVERSIKT",
+        sectors: "SEKTORÖVERSIKT",
         skills: "FÄRDIGHETER",
         adventure_log: "ÄVENTYRLOGG",
         stats: "STATISTIK"
@@ -292,30 +292,21 @@ export const sv = {
         "Tryck på [F] för att använda ficklampan."
     ],
     maps: {
-        village_name: "Byn",
-        village_desc: "Ditt hem är förstört och din familj saknas. Hitta ledtrådar för att återförenas med dina familjemedlemmar.",
-        bunker_name: "Bergrummet",
-        bunker_desc: "Gammalt skyddsrum djupt inne i berget. Berget är som en mörk, trång labyrint, fylld av zombier.",
-        mast_name: "Häglaredsmasten",
-        mast_desc: "Vi måste nå Häglaredsmasten. Den syns i fjärran på hög höjd. Skogen som omger den är tät och farlig.",
-        scrapyard_name: "Skroten",
-        scrapyard_desc: "En industriell skrotgård full av bilvrak, metalldelar och olja. Labyrinten av bilvrak gör den till en dödsfälla.",
-        home_name: "Hem",
-        home_desc: "Återvänd hem tillsammans med dina återförenade familjemedlemmar.",
-        camp_name: "Lägret",
-        camp_desc: "Din fristad. Fyll på förråd, uppgradera färdigheter och förbered dig för nästa sektor."
+        sector_1_name: "Byn",
+        sector_2_name: "Bergrummet",
+        sector_3_name: "Häglaredsmasten",
+        sector_4_name: "Skroten",
+        sector_5_name: "Hem",
+        sector_6_name: "Lekplatsen",
     },
     story: {
-        prologue_title: "PROLOG: HEMKOMSTEN",
-        prologue_text: "Robert, du anländer till villan i Byn bara för att mötas av kaos. Din bil brinner på uppfarten, framdörren är uppbruten. Inuti syns tecken på strid och blod.\n\nEn lapp i din sons rum lyder: \"Vi åkte till D...\", resten är oläsligt. Du missade dem precis.\n\nSpår leder från huset ut i den mörka stadsmiljön. Du måste följa spåren. Hitta din familj.",
-        intel_bunker_title: "INTEL: BUNKERN",
-        intel_bunker_text: "Din äldsta son är i säkerhet. Han berättade att familjen flydde mot det gamla militära skyddsrummet i skogen (Bergrummet). Men överlevarna där inne var fientliga.\n\nDe vägrade släppa in de andra på grund av platsbrist, men de tog in din yngsta son.\n\nDu måste infiltrera grottorna, hantera de fientliga och rädda honom.",
-        intel_mast_title: "INTEL: RADIOSKUGGA",
-        intel_mast_text: "Överlevarna i bunkern tvingade iväg din fru och dotter. Din son sa att de begav sig norrut genom den täta tallskogen, mot Häglaredsmasten.\n\nDet är en lång vandring genom tät vegetation och de infekterade finns överallt. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
-        intel_scrap_title: "INTEL: OFFRET",
-        intel_scrap_text: "Din dotter är i säkerhet. Hon avslöjade den hjärtskärande sanningen: en massiv Titan-zombie attackerade dem i skogen. Din fru offrade sig själv och skrek för att locka bort den så att din dotter kunde fly.\n\nHon sprang mot industriområdet, närmare bestämt den gamla bilfirman. Hon kan fortfarande vara vid liv. Du måste tro på det. Hämta hem din fru, Robert.",
-        epilogue_title: "EPILOG: INGEN LÄMNAS KVAR",
-        epilogue_text: "Familjen är återförenad. Du har gjort det omöjliga. Men när ni satt runda elden kom din son ihåg en sista sak.\n\nFamiljens husdjur. De lämnades låsta i huset när kaoset började. Området kryllar av odöda, men vi gav ett löfte. Återvänd till Byn en sista gång. Rädda dem.",
+        sector_1: "Robert, du anländer till villan i Byn bara för att mötas av kaos. Familjens bil brinner på uppfarten, framdörren är uppbruten. Inuti syns tecken på strid och blod.\n\nEn lapp i din sons rum lyder: \"Vi åkte till D...\", resten är oläsligt. Du missade dem precis.\n\nSpåren leder från huset ut i den mörka stadsmiljön. Du måste följa spåren. Hitta din familj.",
+        sector_2: "Din äldsta son är i säkerhet. Han berättade att familjen flydde mot det gamla militära skyddsrummet i skogen (Bergrummet). Men överlevarna där inne var fientliga.\n\nDe vägrade släppa in de andra på grund av platsbrist, men de tog in din yngsta son.\n\nDu måste infiltrera grottorna, hantera de fientliga och rädda honom.",
+        sector_3: "Överlevarna i bunkern tvingade iväg din fru och dotter. Din son sa att de begav sig norrut genom den täta tallskogen, mot Häglaredsmasten.\n\nDet är en lång vandring genom tät vegetation och de infekterade finns överallt. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
+        sector_4: "Din dotter är i säkerhet. Hon avslöjade den hjärtskärande sanningen: en massiv Titan-zombie attackerade dem i skogen. Din fru offrade sig själv och skrek för att locka bort den så att din dotter kunde fly.\n\nHon sprang mot industriområdet, närmare bestämt den gamla bilfirman. Hon kan fortfarande vara vid liv. Du måste tro på det. Hämta hem din fru, Robert.",
+        sector_5: "Familjen är återförenad. Du har gjort det omöjliga. Men när ni satt runda elden kom din son ihåg en sista sak.\n\nFamiljens husdjur. De lämnades låsta i huset när kaoset började. Området kryllar av odöda, men vi gav ett löfte. Återvänd till Byn en sista gång. Rädda dem.",
+        sector_6: "Testa nya funktioner och lek med värden, vapen och fiender",
+
         prologue: [
             {
                 overlay: "GÅNGHESTER. 48 TIMMAR SEDAN VMA.",

@@ -539,7 +539,6 @@ const App: React.FC = () => {
                         setGameState(prev => {
                             const isCleared = prev.deadBossIndices.includes(prev.currentMap);
                             // Advance to next map if cleared and not already at the last one (Sector 4 / Epilogue is index 4, but benchmark is 5)
-                            // We typically want to advance if we just cleared a regular sector (0-3)
                             const nextMap = (isCleared && prev.currentMap < 4) ? prev.currentMap + 1 : prev.currentMap;
                             return { ...prev, screen: GameScreen.CAMP, currentMap: nextMap };
                         });

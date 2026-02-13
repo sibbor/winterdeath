@@ -2,10 +2,11 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
 export const Sector5: SectorDef = {
     id: 4,
-    name: "maps.epilogue",
+    name: "maps.sector_5_name",
     environment: {
         bgColor: 0x111116,
         fogDensity: 0.04, // Dense storm fog
@@ -44,6 +45,36 @@ export const Sector5: SectorDef = {
         // Remove the Sector 1 trigger for start tracks if present, to avoid confusion
         const trackTrig = ctx.triggers.find(t => t.id === 's1_start_tracks');
         if (trackTrig) trackTrig.triggered = true;
+
+        // ===== PEACEFUL EPILOGUE MEADOWS =====
+
+        // Dense grass around spawn
+        const epilogueGrass = [
+            new THREE.Vector3(-30, 0, -30),
+            new THREE.Vector3(30, 0, -30),
+            new THREE.Vector3(30, 0, 30),
+            new THREE.Vector3(-30, 0, 30)
+        ];
+        await EnvironmentGenerator.fillAreaWithGrass(ctx, epilogueGrass, 2.5);
+
+        // Abundant flowers (peaceful ending)
+        const epilogueFlowers1 = [
+            new THREE.Vector3(-40, 0, -40),
+            new THREE.Vector3(-10, 0, -40),
+            new THREE.Vector3(-10, 0, -10),
+            new THREE.Vector3(-40, 0, -10)
+        ];
+        await EnvironmentGenerator.fillAreaWithFlowers(ctx, epilogueFlowers1, 1.2);
+
+        const epilogueFlowers2 = [
+            new THREE.Vector3(10, 0, 10),
+            new THREE.Vector3(40, 0, 10),
+            new THREE.Vector3(40, 0, 40),
+            new THREE.Vector3(10, 0, 40)
+        ];
+        await EnvironmentGenerator.fillAreaWithFlowers(ctx, epilogueFlowers2, 1.2);
+
+        // ===== END EPILOGUE MEADOWS =====
     },
 
     setupContent: async (ctx: SectorContext) => {

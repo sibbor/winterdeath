@@ -5,6 +5,7 @@ import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils
 import { SectorContext } from '../../types/sectors';
 import { TriggerType, TriggerAction } from '../../types';
 import { ObjectGenerator } from './ObjectGenerator';
+import { EnvironmentGenerator } from './EnvironmentGenerator';
 import { PathGenerator } from './PathGenerator';
 import { EffectManager } from '../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
@@ -653,7 +654,7 @@ export const SectorBuilder = {
     },
 
     spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
-        const tree = ObjectGenerator.createTree(type, scaleMultiplier);
+        const tree = EnvironmentGenerator.createTree(type, scaleMultiplier);
         tree.position.set(x, 0, z);
         tree.rotation.y = Math.random() * Math.PI * 2;
         ctx.scene.add(tree);
@@ -707,14 +708,14 @@ export const SectorBuilder = {
                 new THREE.Vector3(center.x - w, 0, center.z + d)
             ], 0xffff00);
         }
-        await ObjectGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius, exclusionZones);
+        await EnvironmentGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius, exclusionZones);
     },
 
     fillWheatField: async (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
         if (ctx.debugMode) {
             SectorBuilder.visualizePolygon(ctx, polygon, 0xffff00);
         }
-        await ObjectGenerator.fillWheatField(ctx, polygon, density);
+        await EnvironmentGenerator.fillWheatField(ctx, polygon, density);
     },
 
     createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
@@ -887,7 +888,7 @@ export const SectorBuilder = {
         if (ctx.debugMode) {
             SectorBuilder.visualizePolygon(ctx, polygon, 0x00ff00);
         }
-        ObjectGenerator.createForest(ctx, polygon, spacing, type);
+        EnvironmentGenerator.createForest(ctx, polygon, spacing, type);
     },
 
     createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
