@@ -4,71 +4,83 @@ import { GraphicsSettings } from '../../types';
 export type { GraphicsSettings };
 import { InputManager } from './InputManager';
 
-// Remove local interface
-
+/**
+ * The Engine class acts as the central hub for the 3D environment.
+ * Optimized for high performance and clean resource management.
+ */
 export class Engine {
-    // Singleton-like access for shared resources
     private static instance: Engine | null = null;
-    public static getInstance() {
+
+    public static getInstance(): Engine {
         if (!this.instance) this.instance = new Engine();
         return this.instance;
     }
 
-    // Core systems
+    // Core Systems
     public scene: THREE.Scene;
     public camera: THREE.PerspectiveCamera;
-    public renderer: THREE.WebGLRenderer;
+    public renderer!: THREE.WebGLRenderer; // Assigned via initRenderer
     public input: InputManager;
-    private sceneStack: THREE.Scene[] = [];
-    private originalScene: THREE.Scene | null = null;
 
-    // Settings
+    private sceneStack: THREE.Scene[] = [];
     private settings: GraphicsSettings = { ...DEFAULT_GRAPHICS };
 
-    // Time tracking
+    // Lifecycle & Timing
     private clock: THREE.Clock;
     private requestID: number | null = null;
-
-    // Lifecycle state
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
 
-    // Loop callback for game logic (dependency injection)
+    // Callbacks
     public onUpdate: ((dt: number) => void) | null = null;
     public onRender: (() => void) | null = null;
     public isRenderingPaused: boolean = false;
 
     constructor() {
-        // 1. Scene
         this.scene = new THREE.Scene();
+        this.clock = new THREE.Clock();
 
-        // 2. Camera
+        // Setup Camera with a standard 50deg FOV
         this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.camera.position.set(0, 40, 20);
         this.camera.lookAt(0, 0, 0);
 
-        // 3. Renderer
-        this.renderer = new THREE.WebGLRenderer({
-            antialias: this.settings.antialias,
-            powerPreference: 'high-performance'
-        });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.applySettings();
+        this.initRenderer();
 
-        // 4. Input
         this.input = new InputManager();
         this.input.enable();
-
-        this.clock = new THREE.Clock();
 
         window.addEventListener('resize', this.handleResize);
     }
 
+    /**
+     * Initializes or re-initializes the WebGLRenderer.
+     * Note: Antialiasing is a context parameter and requires renderer recreation.
+     */
+    private initRenderer() {
+        const params: THREE.WebGLRendererParameters = {
+            antialias: this.settings.antialias,
+            powerPreference: 'high-performance',
+            precision: 'highp'
+        };
+
+        this.renderer = new THREE.WebGLRenderer(params);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.settings.pixelRatio));
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+        // Shadow mapping setup
+        this.renderer.shadowMap.enabled = this.settings.shadows;
+        this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
+
+        // Color space management for modern displays
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    }
+
     public updateSettings(newSettings: Partial<GraphicsSettings>) {
-        const antialiasChanged = newSettings.antialias !== undefined && newSettings.antialias !== this.settings.antialias;
+        const needsRecreation = newSettings.antialias !== undefined && newSettings.antialias !== this.settings.antialias;
         this.settings = { ...this.settings, ...newSettings };
 
-        if (antialiasChanged) {
+        if (needsRecreation) {
             this.recreateRenderer();
         } else {
             this.applySettings();
@@ -76,66 +88,45 @@ export class Engine {
     }
 
     private recreateRenderer() {
-        // 1. Dispose old renderer
         const oldDom = this.renderer.domElement;
         const parent = oldDom.parentNode;
+
+        // Deep dispose to free GPU memory
         this.renderer.dispose();
+        if (parent) parent.removeChild(oldDom);
 
-        // 2. Create new renderer with updated settings
-        this.renderer = new THREE.WebGLRenderer({
-            antialias: this.settings.antialias,
-            powerPreference: 'high-performance'
-        });
+        this.initRenderer();
 
-        // 3. Restore DOM state
-        const targetParent = parent || this.container;
-        if (targetParent) {
-            if (oldDom.parentNode === targetParent) {
-                targetParent.removeChild(oldDom);
-            }
-            targetParent.appendChild(this.renderer.domElement);
-        }
-
-        // 4. Restore renderer state
-        this.applySettings();
-        this.handleResize(); // Ensure size is correct
+        if (parent) parent.appendChild(this.renderer.domElement);
+        this.handleResize();
     }
 
     private applySettings() {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.settings.pixelRatio));
 
-        // Update shadow map settings
-        const shadowsChanged = this.renderer.shadowMap.enabled !== this.settings.shadows;
-        const shadowTypeChanged = this.renderer.shadowMap.type !== this.settings.shadowMapType;
+        const shadowsEnabled = this.settings.shadows;
+        const shadowType = this.settings.shadowMapType as THREE.ShadowMapType;
 
-        this.renderer.shadowMap.enabled = this.settings.shadows;
-        this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
+        if (this.renderer.shadowMap.enabled !== shadowsEnabled || this.renderer.shadowMap.type !== shadowType) {
+            this.renderer.shadowMap.enabled = shadowsEnabled;
+            this.renderer.shadowMap.type = shadowType;
 
-        // If shadows were toggled or type changed, we need to force material recompilation
-        // otherwise Three.js might keep using shaders that expect different shadow map configurations
-        if ((shadowsChanged || shadowTypeChanged) && this.scene) {
-            this.scene.traverse(obj => {
-                if ((obj as any).isMesh && (obj as any).material) {
-                    const mat = (obj as any).material;
-                    if (Array.isArray(mat)) {
-                        mat.forEach(m => m.needsUpdate = true);
+            // Force material recompilation to sync with new shadow state
+            this.scene.traverse((obj) => {
+                if ((obj as THREE.Mesh).isMesh) {
+                    const mesh = obj as THREE.Mesh;
+                    if (Array.isArray(mesh.material)) {
+                        mesh.material.forEach(m => m.needsUpdate = true);
                     } else {
-                        mat.needsUpdate = true;
+                        mesh.material.needsUpdate = true;
                     }
                 }
             });
         }
-
-        // Note: Antialias cannot be changed after creation in standard WebGL context without re-creating renderer
-    }
-
-    public getSettings() {
-        return { ...this.settings };
     }
 
     public mount(container: HTMLElement) {
         this.container = container;
-        // Optimization: Ensure we don't duplicate the canvas if re-mounting
         if (this.renderer.domElement.parentNode && this.renderer.domElement.parentNode !== container) {
             this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
         }
@@ -173,24 +164,22 @@ export class Engine {
         Engine.instance = null;
     }
 
-    /**
-     * Replaces the current scene with a new one, saving the old one on a stack.
-     */
+    // --- Scene Management ---
+
     public pushScene(newScene: THREE.Scene) {
         this.sceneStack.push(this.scene);
         this.scene = newScene;
-        this.applySettings(); // Re-apply shadow settings to new scene
+        this.applySettings();
     }
 
-    /**
-     * Restores the previous scene from the stack.
-     */
     public popScene() {
         if (this.sceneStack.length > 0) {
             this.scene = this.sceneStack.pop()!;
             this.applySettings();
         }
     }
+
+    // --- Core Loop ---
 
     private handleResize = () => {
         if (!this.container) return;
@@ -202,16 +191,30 @@ export class Engine {
         this.renderer.setSize(width, height);
     };
 
+    /**
+     * Main animation loop. Optimized for Zero-GC and consistent frame timing.
+     */
     private animate = () => {
         if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
 
-        const dt = Math.min(this.clock.getDelta(), 0.1);
+        // Delta time clamping (dt) prevents "teleporting" during lag spikes
+        const dt = Math.min(this.clock.getDelta(), 0.05);
 
+        // 1. Logic Update
         if (this.onUpdate) this.onUpdate(dt);
+
+        // 2. Render Pass
         if (!this.isRenderingPaused) {
-            if (this.onRender) this.onRender();
-            else this.renderer.render(this.scene, this.camera);
+            if (this.onRender) {
+                this.onRender();
+            } else {
+                this.renderer.render(this.scene, this.camera);
+            }
         }
     };
+
+    public getSettings(): GraphicsSettings {
+        return { ...this.settings };
+    }
 }

@@ -1,118 +1,150 @@
-
 import * as THREE from 'three';
-import { WindSystem } from '../../utils/physics';
+import { WindSystem } from './WindSystem';
 import { GEOMETRY } from '../../utils/assets';
 import { WeatherType } from '../../types';
 
-interface WeatherParticleData {
-    pos: THREE.Vector3;
-    vel: THREE.Vector3;
-}
+// --- PERFORMANCE SCRATCHPADS ---
+const _dummy = new THREE.Object3D();
+const _v1 = new THREE.Vector3();
 
 export class WeatherSystem {
     private instancedMesh: THREE.InstancedMesh | null = null;
-    private particlesData: WeatherParticleData[] = [];
+
+    // Using Typed Arrays instead of Array<Vector3> for massive GC reduction
+    private positions: Float32Array;
+    private velocities: Float32Array;
+
     private scene: THREE.Scene;
     private type: WeatherType = 'none';
     private count: number = 0;
     private areaSize: number = 100;
     private wind: WindSystem;
-    private dummy = new THREE.Object3D();
+    private maxCount: number;
 
-    constructor(scene: THREE.Scene, wind: WindSystem) {
+    constructor(scene: THREE.Scene, wind: WindSystem, maxCount: number = 1000) {
         this.scene = scene;
         this.wind = wind;
+        this.maxCount = maxCount;
+
+        // Pre-allocate memory buffers once
+        this.positions = new Float32Array(maxCount * 3);
+        this.velocities = new Float32Array(maxCount * 3);
     }
 
+    /**
+     * Reconfigures the weather type and particle count.
+     * Reuses existing mesh and buffers where possible.
+     */
     public sync(type: WeatherType, count: number, areaSize: number = 100) {
         if (this.type === type && this.count === count) return;
 
-        // Clear existing
-        this.clear();
-
+        const actualCount = Math.min(count, this.maxCount);
         this.type = type;
-        this.count = count;
+        this.count = actualCount;
         this.areaSize = areaSize;
 
-        if (type === 'none' || count <= 0) return;
+        // Cleanup if switching to none
+        if (type === 'none' || actualCount <= 0) {
+            if (this.instancedMesh) this.instancedMesh.visible = false;
+            return;
+        }
 
-        const geo = GEOMETRY.weatherParticle;
+        // Setup visuals
         let color = 0xffffff;
         let opacity = 0.8;
-
         if (type === 'rain') {
             color = 0xaaaaff;
             opacity = 0.4;
         }
 
-        const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
-        this.instancedMesh = new THREE.InstancedMesh(geo, mat, count);
-        this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-
-        this.particlesData = [];
-
-        for (let i = 0; i < count; i++) {
-            const pos = new THREE.Vector3(
-                (Math.random() - 0.5) * areaSize,
-                Math.random() * 40,
-                (Math.random() - 0.5) * areaSize
-            );
-
-            const vel = new THREE.Vector3(0, 0, 0);
-            if (type === 'snow') {
-                vel.y = -(8 + Math.random() * 7);
-                vel.x = (Math.random() - 0.5) * 1.5;
-                vel.z = (Math.random() - 0.5) * 1.5;
-            } else if (type === 'rain') {
-                vel.y = -(50 + Math.random() * 30);
-            }
-
-            this.particlesData.push({ pos, vel });
-
-            this.dummy.position.copy(pos);
-            if (type === 'rain') {
-                this.dummy.scale.set(0.5, 4.0, 1.0);
-            } else {
-                this.dummy.scale.set(1, 1, 1);
-            }
-            this.dummy.updateMatrix();
-            this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
+        // (Re)create mesh only if material properties changed significantly
+        if (!this.instancedMesh) {
+            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+            this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, mat, this.maxCount);
+            this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.scene.add(this.instancedMesh);
+        } else {
+            const mat = this.instancedMesh.material as THREE.MeshBasicMaterial;
+            mat.color.set(color);
+            mat.opacity = opacity;
+            this.instancedMesh.visible = true;
         }
 
-        this.scene.add(this.instancedMesh);
+        this.instancedMesh.count = actualCount;
+
+        // Initialize particle buffers
+        for (let i = 0; i < actualCount; i++) {
+            const i3 = i * 3;
+            // X, Y, Z positions
+            this.positions[i3 + 0] = (Math.random() - 0.5) * areaSize;
+            this.positions[i3 + 1] = Math.random() * 40;
+            this.positions[i3 + 2] = (Math.random() - 0.5) * areaSize;
+
+            // X, Y, Z velocities
+            if (type === 'snow') {
+                this.velocities[i3 + 0] = (Math.random() - 0.5) * 1.5; // Sway
+                this.velocities[i3 + 1] = -(8 + Math.random() * 7);   // Fall speed
+                this.velocities[i3 + 2] = (Math.random() - 0.5) * 1.5; // Sway
+            } else {
+                this.velocities[i3 + 0] = 0;
+                this.velocities[i3 + 1] = -(50 + Math.random() * 30); // Fast rain
+                this.velocities[i3 + 2] = 0;
+            }
+
+            this.updateInstanceMatrix(i);
+        }
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
     }
 
+    /**
+     * Main update loop. 
+     * Runs at Zero-GC using Float32Array indexing.
+     */
     public update(delta: number, now: number) {
         if (this.type === 'none' || !this.instancedMesh) return;
 
         const windVec = this.wind.current;
         const windSwayMult = this.type === 'snow' ? 150.0 : 80.0;
+        const isRain = this.type === 'rain';
 
         for (let i = 0; i < this.count; i++) {
-            const p = this.particlesData[i];
+            const i3 = i * 3;
 
-            // Apply velocity scaled by delta
-            p.pos.y += p.vel.y * delta;
-            p.pos.x += (p.vel.x + windVec.x * windSwayMult) * delta;
-            p.pos.z += (p.vel.z + windVec.y * windSwayMult) * delta;
+            // Apply movement logic directly to buffer values
+            this.positions[i3 + 1] += this.velocities[i3 + 1] * delta; // Vertical
+            this.positions[i3 + 0] += (this.velocities[i3 + 0] + windVec.x * windSwayMult) * delta; // Horizontal X
+            this.positions[i3 + 2] += (this.velocities[i3 + 2] + windVec.y * windSwayMult) * delta; // Horizontal Z
 
-            // Reset logic
-            if (p.pos.y < -5) {
-                p.pos.y = 40;
-                p.pos.x = (Math.random() - 0.5) * this.areaSize;
-                p.pos.z = (Math.random() - 0.5) * this.areaSize;
+            // Seamless Reset (Teleport back to top)
+            if (this.positions[i3 + 1] < -5) {
+                this.positions[i3 + 1] = 40;
+                this.positions[i3 + 0] = (Math.random() - 0.5) * this.areaSize;
+                this.positions[i3 + 2] = (Math.random() - 0.5) * this.areaSize;
             }
 
-            this.dummy.position.copy(p.pos);
-            if (this.type === 'rain') {
-                this.dummy.scale.set(0.5, 4.0, 1.0);
-            } else {
-                this.dummy.scale.set(1, 1, 1);
-            }
-            this.dummy.updateMatrix();
-            this.instancedMesh.setMatrixAt(i, this.dummy.matrix);
+            // Sync with GPU
+            this.updateInstanceMatrix(i);
         }
         this.instancedMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    /**
+     * Internal helper to set matrix values from buffer data
+     */
+    private updateInstanceMatrix(index: number) {
+        if (!this.instancedMesh) return;
+        const i3 = index * 3;
+
+        _dummy.position.set(this.positions[i3], this.positions[i3 + 1], this.positions[i3 + 2]);
+
+        if (this.type === 'rain') {
+            _dummy.scale.set(0.5, 4.0, 1.0);
+        } else {
+            _dummy.scale.set(1, 1, 1);
+        }
+
+        _dummy.updateMatrix();
+        this.instancedMesh.setMatrixAt(index, _dummy.matrix);
     }
 
     public clear() {
@@ -124,6 +156,6 @@ export class WeatherSystem {
             this.instancedMesh.dispose();
             this.instancedMesh = null;
         }
-        this.particlesData = [];
+        // No need to clear Float32Arrays, just leave them allocated
     }
 }

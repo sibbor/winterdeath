@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { WeaponType } from '../../../types';
+import { WeaponType } from '../../../content/weapons';
 import { WEAPONS, RANKS } from '../../../content/constants';
 import { t } from '../../../utils/i18n';
 

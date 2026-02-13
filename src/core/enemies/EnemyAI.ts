@@ -1,10 +1,27 @@
-
 import * as THREE from 'three';
 import { Enemy, AIState } from '../../types/enemy';
-import { Obstacle, resolveCollision } from '../../utils/physics';
+import { Obstacle, applyCollisionResolution } from '../systems/WindSystem';
 import { MATERIALS } from '../../utils/assets';
 import { SpatialGrid } from '../world/SpatialGrid';
+import { WeaponType } from '../../content/weapons';
 
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _color = new THREE.Color();
+
+// --- DEBUG ASSETS ---
+const _debugRingGeo = new THREE.RingGeometry(0.95, 1.0, 16);
+_debugRingGeo.rotateX(-Math.PI / 2);
+const _debugRingMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+
+/**
+ * EnemyAI System
+ * Handles behavioral logic, mass-based physics, and context-sensitive death transitions.
+ */
 export const EnemyAI = {
     updateEnemy: (
         e: Enemy,
@@ -12,566 +29,311 @@ export const EnemyAI = {
         delta: number,
         playerPos: THREE.Vector3,
         collisionGrid: SpatialGrid,
-        noiseEvents: { pos: THREE.Vector3, radius: number, time: number }[],
+        noiseEvents: any[],
         allEnemies: Enemy[],
         shakeIntensity: number,
+        debugMode: boolean,
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: string) => void;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number) => void;
+            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number, scale?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
             onDamageDealt: (amount: number) => void;
             playSound: (id: string) => void;
-            spawnBubble: (text: string, duration: number) => void; // Debug
+            spawnBubble: (text: string, duration: number) => void;
             onAshStart: (e: Enemy) => void;
+            getLastDamageType: () => string;
         }
     ) => {
-        if (e.dead) return;
+        // Guard: If entity is fully processed or missing mesh, abort
+        if (e.deathState === 'dead' || !e.mesh) return;
 
-        // --- Handle Death States (Falling/Ash) ---
-        if (e.deathState !== 'alive') {
-            handleDeathAnimation(e, delta, now, callbacks);
-            return;
-        }
+        // --- 1. HANDLE INITIAL DEATH TRIGGER ---
+        if (e.hp <= 0 && e.deathState === 'alive') {
+            e.deathTimer = now;
+            const dmgType = e.lastDamageType; // Provided by ProjectileSystem
+            const isHighImpact = e.lastHitWasHighImpact; // Provided by ProjectileSystem
 
-        // Standard HP Check
-        if (e.hp <= 0) {
-            if (e.isBurning) {
-                e.deathState = 'dying_ash';
-                e.deathTimer = now; // Store start time
-                e.mesh.visible = true; // Show individual mesh for animation
+            // Death Branching Logic
+            // Priority 1: Fire (Ash)
+            if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER) {
+                e.deathState = 'burning';
                 callbacks.onAshStart(e);
-            } else {
-                // Use falling animation for standard death instead of disappearing
-                e.deathState = 'falling';
-                e.deathTimer = now;
-                e.mesh.visible = true;
-                e.deathVel = e.velocity.clone().multiplyScalar(0.5);
-                e.deathVel.y = 2.0;
+            }
+            // Priority 2: Explosions (Instant Gib)
+            else if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER') {
+                e.deathState = 'exploded';
+            }
+            // Priority 3: Heavy Ballistics (Conditional Gibbing)
+            else if (dmgType === WeaponType.REVOLVER || dmgType === WeaponType.SHOTGUN) {
+                if (isHighImpact) {
+                    e.deathState = 'gibbed'; // Meat explosion
+                } else {
+                    e.deathState = 'shot'; // Physical fall
+                    e.fallForward = false; // Heavy impact usually pushes them back
+                    if (e.deathVel) e.deathVel.copy(e.velocity).multiplyScalar(-0.5).setY(2.5);
+                }
+            }
+            // Priority 4: Electricity
+            else if (dmgType === WeaponType.TESLA_CANNON) {
+                e.deathState = 'electrified';
+            }
+            // Priority 5: Standard (SMG, Pistol, Rifle)
+            else {
+                e.deathState = 'shot';
+                if (e.deathVel) {
+                    // Slight upward and backward force on death
+                    _v1.subVectors(e.mesh.position, playerPos).normalize();
+                    e.deathVel.copy(_v1).multiplyScalar(5.0).setY(2.0);
+                }
                 e.fallForward = Math.random() > 0.5;
             }
             return;
         }
 
-        // --- Status Effects ---
-        handleStatusEffects(e, delta, now, callbacks);
-        if (e.isBlinded) return; // Stunned/Blinded logic inside handleStatusEffects handles visual, we just skip movement here
-
-        // --- SENSORS: LINE OF SIGHT & SOUND ---
-        const distSq = e.mesh.position.distanceToSquared(playerPos);
-        const dist = Math.sqrt(distSq);
-
-        // DEBUG: Trace first enemy
-        //if (allEnemies.length > 0 && allEnemies[0] === e) {
-        //    if (Math.random() < 0.05) console.log(`Enemy 0: State=${e.state} Dist=${dist.toFixed(2)} Player=${playerPos.x.toFixed(1)},${playerPos.z.toFixed(1)}`);
-        //}
-
-        // 1. Line Of Sight (Raycast Simulation)
-        let canSeePlayer = false;
-        if (dist < 30) { // Increased from 15m to 30m
-            canSeePlayer = true;
+        // --- 2. HANDLE DEATH ANIMATIONS ---
+        if (e.deathState !== 'alive') {
+            handleDeathAnimation(e, delta, now, callbacks);
+            if (e.mesh.userData.debugRing) e.mesh.userData.debugRing.visible = false;
+            return;
         }
 
-        // 2. Sound Detection
+        // --- 3. POOLING SCALE RECOVERY ---
+        const targetScaleY = e.originalScale || 1.0;
+        if (Math.abs(e.mesh.scale.y - targetScaleY) > 0.05) {
+            const w = e.widthScale || 1.0;
+            e.mesh.scale.set(targetScaleY * w, targetScaleY, targetScaleY * w);
+            e.mesh.visible = true;
+        }
+
+        // --- 4. STATUS EFFECTS & STUNS ---
+        handleStatusEffects(e, delta, now, callbacks);
+        if (e.stunTimer && e.stunTimer > 0) {
+            e.stunTimer -= delta;
+            // Visual jitter for electrified/stunned enemies
+            e.mesh.position.x += (Math.random() - 0.5) * 0.1;
+            return;
+        }
+        if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
+
+        // --- 5. SENSORS ---
+        const dx = playerPos.x - e.mesh.position.x;
+        const dz = playerPos.z - e.mesh.position.z;
+        const distSq = dx * dx + dz * dz;
+        const canSeePlayer = distSq < 900; // 30m detection
+
         let heardNoise = false;
         let noisePos: THREE.Vector3 | null = null;
-        if (!canSeePlayer && noiseEvents && noiseEvents.length > 0) {
-            for (const n of noiseEvents) {
-                const age = now - n.time;
-                if (age > 2000) continue; // Noise is too old
-
-                const noiseDist = e.mesh.position.distanceTo(n.pos);
-                // Hearing sensitivity check
-                if (noiseDist < n.radius * (e.hearingThreshold || 1.0)) {
-                    heardNoise = true;
-                    noisePos = n.pos.clone();
-                    break;
+        if (!canSeePlayer && noiseEvents.length > 0) {
+            for (let i = 0; i < noiseEvents.length; i++) {
+                const n = noiseEvents[i];
+                if (!n.active || now - n.time > 2000) continue;
+                if (e.mesh.position.distanceToSquared(n.pos) < (n.radius * n.radius)) {
+                    heardNoise = true; noisePos = n.pos; break;
                 }
             }
         }
 
-        // --- KNOCKBACK PHYSICS ---
-        if (e.knockbackVel.lengthSq() > 0.01) {
-            e.mesh.position.add(e.knockbackVel.clone().multiplyScalar(delta));
+        // --- 6. MASS-BASED KNOCKBACK PHYSICS ---
+        if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
+            // Body Mass: Bigger enemies are harder to push
+            const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+            const moveInertia = delta / Math.max(0.5, mass);
 
-            // Gravity
-            e.knockbackVel.y -= 25 * delta;
+            e.mesh.position.addScaledVector(e.knockbackVel, moveInertia);
 
-            // Friction (XZ)
-            const friction = Math.max(0, 1 - 2 * delta);
-            e.knockbackVel.x *= friction;
-            e.knockbackVel.z *= friction;
+            // Gravity effect on knockback
+            e.knockbackVel.y -= 50 * delta;
 
-            // Ground collision
+            // Friction/Drag: Heavier enemies stop sliding faster
+            const friction = 1.0 + (mass * 2.0);
+            e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
+
             if (e.mesh.position.y <= 0) {
                 e.mesh.position.y = 0;
-                e.knockbackVel.y = 0;
-                e.knockbackVel.multiplyScalar(0.7); // Bounciness/Friction
+                e.knockbackVel.set(0, 0, 0);
             }
         }
 
-        // --- STATE MACHINE ---
-
+        // --- 7. STATE MACHINE ---
         switch (e.state) {
             case AIState.IDLE:
-                // Behavior: Stand still, look around
                 e.idleTimer -= delta;
-                if (canSeePlayer) {
-                    e.state = AIState.CHASE;
-                    e.lastSeenPos = playerPos.clone();
-                    e.lastSeenTime = now;
-                } else if (heardNoise && noisePos) {
-                    e.state = AIState.SEARCH;
-                    e.lastSeenPos = noisePos;
-                    e.lastSeenTime = now;
-                    e.searchTimer = 5.0;
-                } else if (e.idleTimer <= 0) {
-                    // Pick random point to wander
+                if (canSeePlayer) { e.state = AIState.CHASE; updateLastSeen(e, playerPos, now); }
+                else if (heardNoise && noisePos) { e.state = AIState.SEARCH; updateLastSeen(e, noisePos, now); e.searchTimer = 5.0; }
+                else if (e.idleTimer <= 0) {
                     e.state = AIState.WANDER;
-                    const wanderRadius = 5; // Reduced from 10m to 5m
                     const angle = Math.random() * Math.PI * 2;
-                    const wx = e.spawnPos.x + Math.cos(angle) * wanderRadius * Math.random();
-                    const wz = e.spawnPos.z + Math.sin(angle) * wanderRadius * Math.random();
-                    e.velocity.set(wx - e.mesh.position.x, 0, wz - e.mesh.position.z).normalize().multiplyScalar(e.speed * 0.5);
-                    e.searchTimer = 2.0 + Math.random() * 2.0;
+                    _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
+                    e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 5);
+                    e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
                 break;
 
             case AIState.WANDER:
-                // Behavior: Walk forward (velocity set in IDLE transition)
                 e.searchTimer -= delta;
-
-                // Physics Move
-                e.mesh.position.add(e.velocity.clone().multiplyScalar(delta));
-                e.mesh.rotation.y = Math.atan2(e.velocity.x, e.velocity.z); // Face move dir
-
-                if (canSeePlayer) {
-                    e.state = AIState.CHASE;
-                    e.lastSeenPos = playerPos.clone();
-                    e.lastSeenTime = now;
-                } else if (heardNoise && noisePos) {
-                    e.state = AIState.SEARCH;
-                    e.lastSeenPos = noisePos;
-                    e.lastSeenTime = now;
-                    e.searchTimer = 5.0;
-                } else if (e.searchTimer <= 0) {
-                    e.state = AIState.IDLE;
-                    e.idleTimer = 1.0 + Math.random() * 2.0;
-                }
+                _v1.copy(e.mesh.position).addScaledVector(e.velocity, delta);
+                moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid);
+                if (canSeePlayer) e.state = AIState.CHASE;
+                else if (e.searchTimer <= 0) { e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0; }
                 break;
 
             case AIState.CHASE:
-                // Update Knowledge
-                if (canSeePlayer) {
-                    e.lastSeenPos = playerPos.clone();
-                    e.lastSeenTime = now;
-                }
-
-                // Lost Track Condition: (LOS broken for > 5s) OR (Dist > 50m)
-                const timeSinceSeen = now - e.lastSeenTime;
-                if ((!canSeePlayer && timeSinceSeen > 5000) || dist > 50) { // Increased from 25m to 50m
-                    e.state = AIState.SEARCH;
-                    e.searchTimer = 5.0; // Search for 5 seconds
-                } else {
-                    // MOVEMENT: Run to Player (or last seen)
+                if (canSeePlayer) updateLastSeen(e, playerPos, now);
+                if ((!canSeePlayer && now - e.lastSeenTime > 5000) || distSq > 2500) { e.state = AIState.SEARCH; e.searchTimer = 5.0; }
+                else {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
-
-                    // Random Groan/Scream (Low chance)
-                    if (Math.random() < 0.005) {
-                        if (e.type === 'RUNNER') callbacks.playSound('runner_scream');
-                        else if (e.type === 'TANK') callbacks.playSound('tank_roar');
-                        else callbacks.playSound('walker_groan');
-                    }
-
-                    // --- BOMBER LOGIC ---
-                    if (e.type === 'BOMBER' && dist < 3.0) {
-                        e.state = AIState.EXPLODING;
-                        e.explosionTimer = 2.0;
-                        e.velocity.set(0, 0, 0);
-                        // SFX: Fuse sound?
-                        return; // Stop processing chase
-                    }
+                    if (e.type === 'BOMBER' && distSq < 12.0) { e.state = AIState.EXPLODING; e.explosionTimer = 1.5; return; }
 
                     moveEntity(e, target, delta, e.speed, collisionGrid);
 
-                    // ATTACK LOGIC
-                    if (e.type === 'TANK') {
-                        // Tank Smash (Shared Logic for Boss and Tank)
-                        if (dist < 2.5 && e.attackCooldown <= 0) {
-                            e.attackCooldown = 3000; // 3s cooldown
-
-                            if (e.isBoss && e.bossId !== undefined) {
-                                callbacks.onPlayerHit(e.damage, e, 'Boss');
-                                callbacks.playSound('boss_attack_' + e.bossId);
-                            } else {
-                                callbacks.onPlayerHit(20, e, 'TANK_SMASH');
-                                callbacks.playSound('tank_smash');
-                                callbacks.playSound('tank_roar');
-                            }
-
-                            for (const other of allEnemies) {
-                                if (other === e || other.dead) continue;
-                                if (other.mesh.position.distanceTo(e.mesh.position) < 3.0) {
-                                    other.hp -= other.maxHp ? other.maxHp * 0.1 : 10;
-                                    other.slowTimer = 2.0;
-                                    callbacks.onDamageDealt(10);
-                                    const away = new THREE.Vector3().subVectors(other.mesh.position, e.mesh.position).normalize();
-                                    other.mesh.position.add(away.multiplyScalar(0.5));
-                                }
-                            }
-                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 1.2, MATERIALS.bloodDecal);
-                            callbacks.spawnPart(e.mesh.position.x, 0.1, e.mesh.position.z, 'muck', 20);
-                        }
-                    } else {
-                        // Standard Attack (Walker/Runner)
-                        // Increased range from 1.2 to 1.8 to ensure they can hit even with collision buffer
-                        if (dist < 1.8 && e.attackCooldown <= 0) {
-                            e.state = AIState.BITING;
-                            e.grappleTimer = 2.0;
-                            e.attackCooldown = 2000;
-                            // Trigger attack sound immediately
-                            if (e.type === 'RUNNER') callbacks.playSound('runner_scream');
-                            else callbacks.playSound('walker_attack');
+                    const attackRange = e.type === 'TANK' ? 7.0 : 3.8;
+                    if (distSq < attackRange && e.attackCooldown <= 0) {
+                        if (e.type === 'TANK') {
+                            e.attackCooldown = 3000; callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH'); callbacks.playSound('tank_smash');
+                        } else {
+                            e.state = AIState.BITING; e.grappleTimer = 2.0; e.attackCooldown = 2000;
                         }
                     }
                 }
                 break;
 
             case AIState.BITING:
-                // Behavior: Stick to player, deal DoT
-                let drain = delta;
-                if (shakeIntensity > 1.0) drain += delta * 4.0; // 5x speed if shaking hard
-                else if (shakeIntensity > 0.1) drain += delta * 1.5;
-
-                e.grappleTimer = (e.grappleTimer || 0) - drain;
-
-                // Stick to player (Visual)
-                // We don't have direct control of player pos, but we can move enemy TO player.
-                // Offset slightly front/side
-                const attachOffset = new THREE.Vector3(0, 0, 0.5).applyQuaternion(e.mesh.quaternion);
-                e.mesh.position.copy(playerPos).add(attachOffset);
-
-                // DoT
-                if (now % 500 < 20) {
-                    callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
-                    // Use specific bite/attack sound
-                    if (e.type === 'RUNNER') callbacks.playSound('runner_attack');
-                    else callbacks.playSound('walker_attack');
-                }
-
-                // Break conditions handled by Player (Knockback/Rush)
-                // But also timeout:
-                if (e.grappleTimer <= 0) {
-                    e.state = AIState.CHASE;
-                    // Knockback self slightly
-                    e.spawnPos.copy(e.mesh.position);
-                    const back = new THREE.Vector3(0, 0, 1).applyQuaternion(e.mesh.quaternion);
-                    e.mesh.position.add(back);
-                }
+                e.grappleTimer -= delta * (shakeIntensity > 1.0 ? 6.0 : 1.0);
+                _v1.set(0, 0, 0.4).applyQuaternion(e.mesh.quaternion);
+                e.mesh.position.copy(playerPos).add(_v1);
+                if (now % 500 < 30) callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
+                if (e.grappleTimer <= 0) e.state = AIState.CHASE;
                 break;
 
             case AIState.EXPLODING:
-                // Behavior: Stand still, flash red, explode
-                e.explosionTimer = (e.explosionTimer || 0) - delta;
-
-                // Indicator Ring Logic
+                e.explosionTimer -= delta;
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
                     e.indicatorRing.position.copy(e.mesh.position);
-                    e.indicatorRing.position.y = 0.15; // Slightly above ground
-
-                    // Pulse matching the beep/scale
-                    const pulse = 0.3 + Math.abs(Math.sin(now * 0.01)) * 0.4;
-                    if (e.indicatorRing.material instanceof THREE.Material) {
-                        e.indicatorRing.material.opacity = pulse;
-                    }
+                    const pulse = 0.3 + Math.abs(Math.sin(now * 0.015)) * 0.5;
+                    (e.indicatorRing.material as any).opacity = pulse;
                 }
-
-                // Flash Red
-                const flash = Math.sin(now * 0.02) > 0;
-                const bodyPulse = 1.0 + Math.sin(now * 0.05) * 0.2;
-                e.mesh.scale.setScalar(e.originalScale * bodyPulse);
-
-                // Beeping sound for bomber
-                if (Math.random() < 0.05) callbacks.playSound('bomber_beep');
-
                 if (e.explosionTimer <= 0) {
-                    // BOOM
-                    const boomDist = e.mesh.position.distanceTo(playerPos);
-                    if (boomDist < 5.0) {
-                        callbacks.onPlayerHit(50, e, 'BOMBER_EXPLOSION');
-                    }
-                    callbacks.playSound('bomber_explode');
-
-                    // Cleanup Ring
-                    if (e.indicatorRing) {
-                        const scene = e.indicatorRing.parent;
-                        if (scene) scene.remove(e.indicatorRing);
-                        e.indicatorRing = undefined;
-                    }
-
-                    // Damage other zombies
-                    for (const other of allEnemies) {
-                        if (other === e || other.dead) continue;
-                        if (other.mesh.position.distanceTo(e.mesh.position) < 5.0) {
-                            other.hp -= 500;
-                            callbacks.onDamageDealt(500);
-                        }
-                    }
-
-                    // Self Destruct
-                    e.hp = 0;
-                    e.dead = true;
-                    e.mesh.userData.forceExplode = true;
+                    if (e.mesh.position.distanceToSquared(playerPos) < 30.0) callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
+                    e.hp = 0; e.deathState = 'exploded';
                 }
-                break;
-
-            case AIState.STUNNED:
-                // Behavior: Stand still, shake
-                // Recovery handled in handleStatusEffects
-                e.velocity.set(0, 0, 0);
-                // Visual shake in handleStatusEffects or here
-                e.mesh.rotation.y += Math.sin(now * 0.1) * 0.2;
                 break;
 
             case AIState.SEARCH:
-                // Behavior: Go to last seen pos, then look around
-
-                let arrived = false;
-                if (e.lastSeenPos && e.mesh.position.distanceTo(e.lastSeenPos) > 2.0) {
-                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid);
-                } else {
-                    arrived = true;
-                    // Reached spot, look around (spin)
-                    e.mesh.rotation.y += delta * 2.0;
-                }
-
-                // Only burn search timer if we have arrived at the disturbance
-                if (arrived) {
-                    e.searchTimer -= delta;
-                }
-
-                if (canSeePlayer) {
-                    e.state = AIState.CHASE;
-                    e.lastSeenPos = playerPos.clone();
-                    e.lastSeenTime = now;
-                } else if (e.searchTimer <= 0) {
-                    e.state = AIState.WANDER;
-                    // Set spawn pos to current pos? Or return to original? 
-                    // "wander around last seen location" -> Update spawnPos anchor
-                    e.spawnPos.copy(e.mesh.position);
-                }
+                e.searchTimer -= delta;
+                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid);
+                else e.mesh.rotation.y += delta * 2.5;
+                if (canSeePlayer) e.state = AIState.CHASE; else if (e.searchTimer <= 0) e.state = AIState.IDLE;
                 break;
         }
 
-        // Cooldowns
+        // --- 8. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
-        // Bobbing
-        const bob = Math.sin(now * 0.01 * (e.state === AIState.CHASE ? 1.5 : 0.5));
-        e.mesh.position.y = (e.mesh.userData.baseY || 1.0) + Math.abs(bob) * 0.1;
+        // Idle bobbing movement
+        if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
+        e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
+
+        // Debug Hitboxes
+        if (debugMode) {
+            if (!e.mesh.userData.debugRing) {
+                const ring = new THREE.Mesh(_debugRingGeo, _debugRingMat);
+                e.mesh.add(ring);
+                e.mesh.userData.debugRing = ring;
+            }
+            const hitRadius = 0.5 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
+            e.mesh.userData.debugRing.visible = true;
+            e.mesh.userData.debugRing.scale.setScalar(hitRadius);
+            e.mesh.userData.debugRing.position.set(0, -e.mesh.position.y + 0.05, 0);
+        }
     }
 };
 
 // --- HELPERS ---
 
+
+
 function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid) {
-    // Flatten target Y
-    const flatTarget = target.clone();
-    flatTarget.y = e.mesh.position.y;
+    _v1.set(target.x, e.mesh.position.y, target.z);
+    _v2.subVectors(_v1, e.mesh.position);
+    const dist = _v2.length();
+    if (dist < 0.01) return;
 
-    // Direction
-    const dir = new THREE.Vector3().subVectors(flatTarget, e.mesh.position).normalize();
+    _v2.divideScalar(dist);
+    let curSpeed = speed * 10;
+    if (e.slowTimer > 0) curSpeed *= 0.55;
 
-    // Speed Modifiers
-    let currentSpeed = speed * 10; // Base speed multiplier
-    if (e.slowTimer > 0) currentSpeed *= 0.5;
+    _v3.copy(_v2).multiplyScalar(curSpeed * delta);
+    e.velocity.copy(_v2).multiplyScalar(curSpeed);
+    _v4.copy(e.mesh.position).add(_v3);
 
-    const moveVec = dir.multiplyScalar(currentSpeed * delta);
+    const baseScale = e.originalScale || 1.0;
+    const hitRadius = 0.5 * baseScale * (e.widthScale || 1.0);
 
-    // Apply Velocity for Physics readouts
-    e.velocity.copy(dir).multiplyScalar(currentSpeed);
-
-    const testPos = e.mesh.position.clone().add(moveVec);
-
-    // Collision
-    const nearby = collisionGrid.getNearby(testPos, 2.0);
-    for (const obs of nearby) {
-        const push = resolveCollision(testPos, 0.5, obs, 2.0, 1.0); // height 2.0, offset 1.0 (centered)
-        if (push) testPos.add(push);
+    const nearby = collisionGrid.getNearbyObstacles(_v4, hitRadius + 1.5);
+    for (let i = 0; i < nearby.length; i++) {
+        applyCollisionResolution(_v4, hitRadius, nearby[i]);
     }
 
-    e.mesh.position.copy(testPos);
-    e.mesh.lookAt(target.x, e.mesh.position.y, target.z);
+    e.mesh.position.copy(_v4);
+
+    // Smooth lookAt
+    _v5.set(_v1.x, e.mesh.position.y, _v1.z);
+    e.mesh.lookAt(_v5);
+}
+
+function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
+    if (!e.lastSeenPos) e.lastSeenPos = new THREE.Vector3();
+    e.lastSeenPos.copy(pos);
+    e.lastSeenTime = now;
 }
 
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
-    // Burning
     if (e.isBurning) {
-        // High frequency burn particles (at least 1 per frame, often 2)
-        // Bosses get more particles scaled by their size
-        const baseParticles = e.isBoss ? 4 : 1;
-        const particleCount = baseParticles + Math.floor(Math.random() * 2);
-        const effectRadius = e.isBoss ? (e.originalScale * 1.2) : 0.6;
-
-        for (let i = 0; i < particleCount; i++) {
-            const px = e.mesh.position.x + (Math.random() - 0.5) * effectRadius;
-            const pz = e.mesh.position.z + (Math.random() - 0.5) * effectRadius;
-            // Rise up from body center, scale height for bosses
-            const pyBase = e.mesh.position.y + (e.isBoss ? 1.0 : 0.5);
-            callbacks.spawnPart(px, pyBase + Math.random() * (e.isBoss ? 2.0 : 1.0), pz, 'campfire_flame', 1);
+        if (Math.random() > 0.75) {
+            _v1.set(e.mesh.position.x + (Math.random() - 0.5), e.mesh.position.y + 1.2, e.mesh.position.z + (Math.random() - 0.5));
+            callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'campfire_flame', 1);
         }
-
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
-            if (e.burnTimer <= 0) {
-                e.hp -= 5;
-                callbacks.onDamageDealt(5);
-                e.burnTimer = 0.5;
-            }
+            if (e.burnTimer <= 0) { e.hp -= 6; callbacks.onDamageDealt(6); e.burnTimer = 0.5; }
         }
         if (e.afterburnTimer > 0) {
             e.afterburnTimer -= delta;
             if (e.afterburnTimer <= 0) e.isBurning = false;
         }
     }
-
-    // Blinded (Visuals only, movement handled in Update)
-    if (e.isBlinded) {
-        if (now > e.blindUntil) {
-            e.isBlinded = false;
-            e.mesh.scale.setScalar(e.originalScale);
-        } else {
-            // Shake/Cower
-            e.mesh.rotation.y += Math.sin(now * 0.05) * 0.3;
-            // ... (rest of visual logic)
-        }
-    }
-
-    // Stunned
-    if (e.stunTimer && e.stunTimer > 0) {
-        e.stunTimer -= delta;
-
-        // Visual Feedback: Shake
-        e.mesh.position.x += Math.sin(now * 0.1) * 0.05;
-        e.mesh.position.z += Math.cos(now * 0.1) * 0.05;
-
-        // Visual Feedback: Stars
-        if (now % 100 < 20) {
-            // Spawn stars above head
-            callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + (e.isBoss ? 4 : 2.2), e.mesh.position.z, 'stun_star', 1);
-        }
-
-        if (e.stunTimer <= 0) {
-            e.stunTimer = 0;
-            // Transition back to CHASE if player exists, otherwise IDLE
-            e.state = AIState.CHASE;
-        }
-    }
 }
 
+
+
 function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: any) {
-    // Copied from original logic (Falling / Ash)
-    // ... (To avoid massive file size, I will trust the user to keep the existing death logic or I can inline it if strictly needed. 
-    // I replaced the whole function so I MUST include it.)
+    const age = now - e.deathTimer!;
 
-    if (e.deathState === 'falling') {
-        const age = now - e.deathTimer;
-        const totalDuration = 2000; // ms
-
-        if (e.mesh) e.mesh.visible = true;
-
+    if (e.deathState === 'shot' || e.deathState === 'electrified') {
         if (e.deathVel) {
-            e.deathVel.y -= 30 * delta;
-            e.mesh.position.add(e.deathVel.clone().multiplyScalar(delta));
-            if (e.mesh.position.y <= 0.2) {
-                e.mesh.position.y = 0.2;
-                e.deathVel.y = 0;
-                e.deathVel.x *= 0.9; // Friction
-                e.deathVel.z *= 0.9;
+            e.deathVel.y -= 35 * delta; // Gravity
+            e.mesh.position.addScaledVector(e.deathVel, delta);
 
-                // Blood Trail
-                if (!e.lastTrailPos) e.lastTrailPos = e.mesh.position.clone();
-                if (e.mesh.position.distanceTo(e.lastTrailPos) > 1.5) {
-                    callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 0.4, MATERIALS.bloodDecal);
-                    e.lastTrailPos.copy(e.mesh.position);
-                }
-            }
-            // Tumble
-            if (e.deathVel.lengthSq() > 0.5) e.mesh.rotation.y += 2.0 * delta;
+            if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
 
-            // Flatten
-            const targetRot = e.fallForward ? Math.PI / 2 : -Math.PI / 2;
-            if (e.fallForward) {
-                if (e.mesh.rotation.x < Math.PI / 2) e.mesh.rotation.x += 8 * delta;
-            } else {
-                if (e.mesh.rotation.x > -Math.PI / 2) e.mesh.rotation.x -= 8 * delta;
-            }
+            // Rotate towards ground
+            const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
+            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
 
-            if (e.deathVel.lengthSq() < 0.1 || age >= totalDuration) {
-                e.dead = true;
-                // Note: EnemyManager cleanup handles final corpse conversion and blood pool
+            // Electric jitter
+            if (e.deathState === 'electrified' && age < 1000) {
+                e.mesh.position.x += (Math.random() - 0.5) * 0.15;
+                if (Math.random() > 0.9) callbacks.spawnPart(e.mesh.position.x, 1, e.mesh.position.z, 'spark', 1);
             }
         }
-    } else if (e.deathState === 'dying_ash') {
-        const totalDuration = 3000; // ms
-        const age = now - e.deathTimer;
-        const progress = Math.max(0, 1.0 - age / totalDuration); // 1.0 down to 0.0
+    } else if (e.deathState === 'burning') {
+        const progress = Math.max(0, 1.0 - age / 2500);
+        const s = (e.originalScale || 1.0) * progress;
+        e.mesh.scale.set(s * (e.widthScale || 1.0), s, s * (e.widthScale || 1.0));
 
-        if (e.mesh) {
-            e.mesh.visible = true; // Safety
-            // Uniformly shrink the whole mesh
-            const scale = (e.originalScale || 1.0) * progress;
-            const wScale = (e.widthScale || 1.0) * scale;
-            e.mesh.scale.set(wScale, scale, wScale);
-
-            // Grow Ash Pile
-            if (e.ashPile) {
-                const ashProgress = 1.0 - progress; // 0.0 to 1.0
-                const ashScaleBase = e.originalScale || 1.0;
-                // Add some variety/wobble while growing? Maybe just straight scaling for now.
-                e.ashPile.scale.set(
-                    ashScaleBase * ashProgress * (1 + (e.widthScale || 1.0) * 0.5),
-                    ashScaleBase * ashProgress,
-                    ashScaleBase * ashProgress * (1 + (e.widthScale || 1.0) * 0.5)
-                );
-            }
-
-            // Shrinking Fire Particles
-            const baseParticles = e.isBoss ? 4 : 1;
-            const particleCount = baseParticles + Math.floor(Math.random() * 2);
-            // Scale dispersion and height by current progress
-            const effectRadius = (e.isBoss ? (e.originalScale * 1.2) : 0.6) * progress;
-
-            for (let i = 0; i < particleCount; i++) {
-                const px = e.mesh.position.x + (Math.random() - 0.5) * effectRadius;
-                const pz = e.mesh.position.z + (Math.random() - 0.5) * effectRadius;
-                const pyBase = e.mesh.position.y + (e.isBoss ? 1.0 : 0.5) * progress;
-                callbacks.spawnPart(px, pyBase + Math.random() * (e.isBoss ? 2.0 : 1.0) * progress, pz, 'campfire_flame', 1);
-            }
-
-            // Sink into ground slightly
-            e.mesh.position.y -= 0.2 * delta;
-
-            // Darken material toward black
-            const baseColor = new THREE.Color(e.color);
-            e.mesh.traverse((child) => {
-                if (child instanceof THREE.Mesh && child.material) {
-                    const mat = child.material as THREE.MeshStandardMaterial;
-                    if (mat.color) {
-                        // Smooth transition to black
-                        mat.color.setRGB(
-                            baseColor.r * progress,
-                            baseColor.g * progress,
-                            baseColor.b * progress
-                        );
-                    }
-                }
-            });
-        }
-
-        if (age >= totalDuration) {
-            e.dead = true;
-        }
+        _color.set(e.color).multiplyScalar(progress);
+        e.mesh.traverse((c: any) => { if (c.material?.color) c.material.color.copy(_color); });
     }
 }

@@ -1,98 +1,118 @@
 import * as THREE from 'three';
-import { Obstacle } from '../../utils/physics';
+import { Obstacle } from '../systems/WindSystem';
+import { Enemy } from '../../types/enemy';
 
 /**
- * A simple 2D spatial grid for fast neighborhood lookups of obstacles.
- * This significantly reduces the complexity of collision checks from O(N) to O(1) nearby.
+ * A 2D Spatial Hash Grid.
+ * Optimized for O(1) lookups of nearby entities and obstacles.
  */
 export class SpatialGrid {
-    private cells: Map<string, Obstacle[]> = new Map();
+    private obstacleCells: Map<number, Obstacle[]> = new Map();
+    private enemyCells: Map<number, Enemy[]> = new Map();
     private cellSize: number;
+
+    // Reusable result array to prevent GC pressure (Zero-GC)
+    private queryResults: any[] = [];
+    private seenIds = new Set<any>();
 
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
     }
 
-    private getCellKey(x: number, z: number): string {
+    /**
+     * Converts coordinates to a unique integer key.
+     * Faster than string keys like "x,z".
+     */
+    private getHash(x: number, z: number): number {
         const cx = Math.floor(x / this.cellSize);
         const cz = Math.floor(z / this.cellSize);
-        return `${cx},${cz}`;
+        // Using a large prime multiplier to avoid collisions in a reasonable world size
+        return (cx * 73856093) ^ (cz * 19349663);
     }
 
-    /**
-     * Adds an obstacle to the grid. 
-     * If it's a box with size, it adds it to all overlapping cells.
-     */
-    add(obstacle: Obstacle) {
+    // --- OBSTACLE MANAGEMENT (Static) ---
+
+    addObstacle(obstacle: Obstacle) {
         if (!obstacle.mesh) return;
-
         const pos = obstacle.mesh.position;
-        let radius = obstacle.radius || 2.0;
+        const radius = obstacle.radius || 2.0;
 
-        // Calculate bounding box for the obstacle to find overlapping cells
-        let minX = pos.x - radius;
-        let maxX = pos.x + radius;
-        let minZ = pos.z - radius;
-        let maxZ = pos.z + radius;
-
-        if (obstacle.collider?.type === 'box' && obstacle.collider.size) {
-            // For boxes, we need to consider rotation too? 
-            // Simplified: Use a conservative AABB.
-            // Rotating a box of size(w, h, d) around Y:
-            const s = obstacle.collider.size;
-            const maxDim = Math.max(s.x, s.z);
-            minX = pos.x - maxDim;
-            maxX = pos.x + maxDim;
-            minZ = pos.z - maxDim;
-            maxZ = pos.z + maxDim;
-        }
-
-        const startX = Math.floor(minX / this.cellSize);
-        const endX = Math.floor(maxX / this.cellSize);
-        const startZ = Math.floor(minZ / this.cellSize);
-        const endZ = Math.floor(maxZ / this.cellSize);
-
-        for (let x = startX; x <= endX; x++) {
-            for (let z = startZ; z <= endZ; z++) {
-                const key = `${x},${z}`;
-                if (!this.cells.has(key)) {
-                    this.cells.set(key, []);
-                }
-                this.cells.get(key)!.push(obstacle);
-            }
-        }
+        // Cover all cells the obstacle might overlap
+        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
+            if (!this.obstacleCells.has(hash)) this.obstacleCells.set(hash, []);
+            this.obstacleCells.get(hash)!.push(obstacle);
+        });
     }
 
-    /**
-     * Returns all obstacles in cells overlapping the area (pos + radius).
-     */
-    getNearby(pos: THREE.Vector3, radius: number): Obstacle[] {
-        const startX = Math.floor((pos.x - radius) / this.cellSize);
-        const endX = Math.floor((pos.x + radius) / this.cellSize);
-        const startZ = Math.floor((pos.z - radius) / this.cellSize);
-        const endZ = Math.floor((pos.z + radius) / this.cellSize);
+    getNearbyObstacles(pos: THREE.Vector3, radius: number): Obstacle[] {
+        this.queryResults.length = 0;
+        this.seenIds.clear();
 
-        const result: Obstacle[] = [];
-        const seen = new Set<Obstacle>();
-
-        for (let x = startX; x <= endX; x++) {
-            for (let z = startZ; z <= endZ; z++) {
-                const key = `${x},${z}`;
-                const cell = this.cells.get(key);
-                if (cell) {
-                    for (const obs of cell) {
-                        if (!seen.has(obs)) {
-                            seen.add(obs);
-                            result.push(obs);
-                        }
+        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
+            const cell = this.obstacleCells.get(hash);
+            if (cell) {
+                for (let i = 0; i < cell.length; i++) {
+                    const obs = cell[i];
+                    if (!this.seenIds.has(obs)) {
+                        this.seenIds.add(obs);
+                        this.queryResults.push(obs);
                     }
                 }
             }
+        });
+        return this.queryResults as Obstacle[];
+    }
+
+    // --- ENEMY MANAGEMENT (Dynamic) ---
+
+    /**
+     * Clears and rebuilds the enemy grid. 
+     * Call this once at the start of your frame logic.
+     */
+    updateEnemyGrid(enemies: Enemy[]) {
+        this.enemyCells.clear();
+        for (let i = 0; i < enemies.length; i++) {
+            const e = enemies[i];
+            if (e.dead) continue;
+
+            const hash = this.getHash(e.mesh.position.x, e.mesh.position.z);
+            if (!this.enemyCells.has(hash)) this.enemyCells.set(hash, []);
+            this.enemyCells.get(hash)!.push(e);
         }
-        return result;
+    }
+
+    getNearbyEnemies(pos: THREE.Vector3, radius: number): Enemy[] {
+        const results: Enemy[] = []; // Using local array for enemies to avoid conflict with obstacle queries
+
+        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
+            const cell = this.enemyCells.get(hash);
+            if (cell) {
+                for (let i = 0; i < cell.length; i++) {
+                    results.push(cell[i]);
+                }
+            }
+        });
+        return results;
+    }
+
+    // --- HELPERS ---
+
+    private forEachCellInRange(x: number, z: number, radius: number, callback: (hash: number) => void) {
+        const sX = Math.floor((x - radius) / this.cellSize);
+        const eX = Math.floor((x + radius) / this.cellSize);
+        const sZ = Math.floor((z - radius) / this.cellSize);
+        const eZ = Math.floor((z + radius) / this.cellSize);
+
+        for (let ix = sX; ix <= eX; ix++) {
+            for (let iz = sZ; iz <= eZ; iz++) {
+                // Manually compute hash in loop for maximum speed
+                callback((ix * 73856093) ^ (iz * 19349663));
+            }
+        }
     }
 
     clear() {
-        this.cells.clear();
+        this.obstacleCells.clear();
+        this.enemyCells.clear();
     }
 }

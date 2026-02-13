@@ -3,15 +3,15 @@ import * as THREE from 'three';
 import TouchController from './ui/TouchController';
 import { Engine } from '../core/engine/Engine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
-import { PlayerStats, WeaponType, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
+import { PlayerStats, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
+import { WeaponType } from '../content/weapons';
 import { SectorContext } from '../types/sectors';
 import { WEAPONS, BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP, CAMERA_HEIGHT } from '../content/constants';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { t } from '../utils/i18n';
 import { createProceduralTextures, createTextSprite, GEOMETRY, MATERIALS, ModelFactory } from '../utils/assets';
-import { SectorManager } from '../core/SectorManager';
-import { SectorBuilder } from '../core/world/SectorGenerator';
+import { SectorGenerator } from '../core/world/SectorGenerator';
 import { PathGenerator } from '../core/world/PathGenerator';
 import { ProjectileSystem } from '../core/weapons/ProjectileSystem';
 import { FXSystem } from '../core/systems/FXSystem';
@@ -39,7 +39,7 @@ import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
 import { WEATHER } from '../content/constants';
 import { WeatherSystem } from '../core/systems/WeatherSystem';
-import { WindSystem } from '../utils/physics';
+import { WindSystem } from '../core/systems/WindSystem';
 import { WeatherType } from '../types';
 
 const seededRandom = (seed: number) => {
@@ -378,14 +378,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, [isInputEnabled]);
 
-    // Pointer Lock removed from useEffect to avoid NotAllowedError. 
-    // It is now handled via ref.requestPointerLock() called from user gestures in App.tsx.
-
-
     const textures = useMemo(() => createProceduralTextures(), []);
     const { groundTex, laserTex } = textures;
 
-    const currentSector = useMemo(() => SectorManager.getSector(props.currentSector), [props.currentSector]);
+    const currentSector = useMemo(() => SectorSystem.getSector(props.currentSector), [props.currentSector]);
     const currentScript = useMemo(() => STORY_SCRIPTS[props.currentSector] || [], [props.currentSector]);
 
     const spawnNotification = (text: string, duration: number = 3000) => {
@@ -779,7 +775,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         soundManager.resume();
 
-
         isMounted.current = true;
         hasEndedSector.current = false;
 
@@ -1008,7 +1003,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             // 2. Structured Sector Generation
             PathGenerator.resetPathLayer();
-            await SectorBuilder.build(ctx, currentSector);
+            await SectorGenerator.build(ctx, currentSector);
 
             // Update global tracker for next time
             AssetPreloader.setLastSectorIndex(propsRef.current.currentSector);
@@ -1231,7 +1226,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     cameraOverrideRef.current = params;
                 },
                 emitNoise: (pos: THREE.Vector3, radius: number, type: string) => {
-                    session.noiseEvents.push({ pos: pos.clone(), radius, type: type as any, time: performance.now() });
+                    // Använd den poolade metoden istället för manuell push
+                    session.makeNoise(pos, radius, type as any);
                 }
             }));
 
@@ -1723,13 +1719,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             };
 
             // Noise System (Player)
-            if (state.isMoving) {
-                const noiseType = state.isRushing || state.isRolling ? 'run' : 'walk';
-                const noiseRadius = state.isRushing || state.isRolling ? 20 : 15;
-                // Throttle: Only every 500ms? Or every frame?
-                // AI checks every frame, so persistent noise is fine, but maybe spammy?
-                // Actually, let's just emit it. The AI Loop clears events.
-                session.noiseEvents.push({ pos: playerGroupRef.current.position.clone(), radius: noiseRadius, type: 'footstep', time: now });
+            if (state.isMoving && playerGroupRef.current) {
+                const noiseRadius = (state.isRushing || state.isRolling) ? 20 : 15;
+
+                // makeNoise hanterar kopiering av position internt via poolen (Zero-GC)
+                session.makeNoise(playerGroupRef.current.position, noiseRadius, 'footstep');
             }
 
             ProjectileSystem.update(delta, now, gameContext, state.projectiles, state.fireZones);

@@ -162,17 +162,6 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                     </div>
                 </div>
 
-                {/* Editor Access */}
-                <div onClick={() => (window as any).setGameScreen?.('EDITOR')} className="w-full bg-blue-900/40 p-6 border border-blue-700 flex justify-between items-center transition-colors hover:border-white cursor-pointer group rounded-lg">
-                    <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.editor.title')}</h3>
-                        <p className="text-gray-400 text-xs font-mono">{t('ui.editor.desc')}</p>
-                    </div>
-                    <div className="bg-blue-600 px-4 py-2 font-bold uppercase rounded shadow-lg group-hover:bg-blue-500 transition-colors">{t('ui.editor.open')}</div>
-                </div>
-
-                {/* FPS Toggle Removed */}
-
             </div>
         </CampModalLayout>
     );

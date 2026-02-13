@@ -5,6 +5,10 @@ import { soundManager } from '../../utils/sound';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../../content/collectibles';
 
+// --- PERFORMANCE SCRATCHPADS ---
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+
 export class PlayerInteractionSystem implements System {
     id = 'player_interaction';
     public onCollectibleFound?: (collectibleId: string) => void;
@@ -22,19 +26,18 @@ export class PlayerInteractionSystem implements System {
         const state = session.state;
         const input = session.engine.input.state;
 
+        // 1. Detect nearby interactive objects (Optimized distance checks)
         const detection = this.detectInteraction(
             this.playerGroup.position,
             state.chests,
-            state.obstacles,
-            state.busUnlocked,
-            session.engine.scene,
             state.triggers,
             state.sectorState
         );
+
         state.interactionType = detection.type;
         state.interactionTargetPos = detection.position;
 
-        // 2. Handle Interaction Press
+        // 2. Handle Interaction Press (Edge Triggered)
         if (input.e && !state.eDepressed) {
             state.eDepressed = true;
 
@@ -50,65 +53,63 @@ export class PlayerInteractionSystem implements System {
         if (!input.e) state.eDepressed = false;
     }
 
+    /**
+     * Scans the environment for the closest interactable object.
+     * Priority: Collectibles > Triggers > Chests > Mission Objects
+     */
     private detectInteraction(
         playerPos: THREE.Vector3,
         chests: any[],
-        obstacles: any[],
-        busUnlocked: boolean,
-        scene: THREE.Scene,
         triggers: any[],
         sectorState: any
     ): { type: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null, position: THREE.Vector3 | null } {
-        // Check Collectibles first (highest priority)
-        const collectible = this.findNearbyCollectible(playerPos);
-        if (collectible) {
-            return { type: 'collectible', position: collectible.position.clone() };
-        }
 
-        // Check Triggers for knock_on_port
-        const knockTrigger = triggers.find(t => t.id === 's2_cave_knock_shelter_port' && !t.triggered);
-        if (knockTrigger) {
-            const triggerPos = new THREE.Vector3(knockTrigger.position.x, 0.5, knockTrigger.position.z);
-            if (playerPos.distanceTo(triggerPos) < knockTrigger.radius) {
-                return { type: 'knock_on_port', position: triggerPos };
+        // --- 1. Check Collectibles (3.5m radius) ---
+        for (let i = 0; i < this.collectibles.length; i++) {
+            const c = this.collectibles[i];
+            if (playerPos.distanceToSquared(c.position) < 12.25) { // 3.5 * 3.5
+                _v1.copy(c.position);
+                return { type: 'collectible', position: _v1.clone() };
             }
         }
 
-        // Check Chests
-        for (const chest of chests) {
-            if (!chest.opened && playerPos.distanceTo(chest.mesh.position) < 3.5) {
-                return { type: 'chest', position: chest.mesh.position.clone() };
-            }
-        }
-
-        // Check Bus / Explosive
-        if (sectorState && !sectorState.busExploded && sectorState.ctx && sectorState.ctx.busObject) {
-            // Respect the Sector's specific logic for when interaction is allowed (e.g. kill count)
-            if (sectorState.busCanBeInteractedWith) {
-                const bus = sectorState.ctx.busObject;
-                if (playerPos.distanceTo(bus.position) < 8) {
-                    return {
-                        type: 'plant_explosive',
-                        position: bus.position.clone().setY(2.5) // Position prompt slightly above ground 
-                    };
+        // --- 2. Check Specific Mission Triggers ---
+        for (let i = 0; i < triggers.length; i++) {
+            const t = triggers[i];
+            if (t.id === 's2_cave_knock_shelter_port' && !t.triggered) {
+                _v1.set(t.position.x, 0.5, t.position.z);
+                if (playerPos.distanceToSquared(_v1) < (t.radius * t.radius)) {
+                    return { type: 'knock_on_port', position: _v1.clone() };
                 }
             }
         }
+
+        // --- 3. Check Chests (3.5m radius) ---
+        for (let i = 0; i < chests.length; i++) {
+            const chest = chests[i];
+            if (!chest.opened && playerPos.distanceToSquared(chest.mesh.position) < 12.25) {
+                _v1.copy(chest.mesh.position);
+                return { type: 'chest', position: _v1.clone() };
+            }
+        }
+
+        // --- 4. Check Mission Extraction (Bus/Explosive) ---
+        if (sectorState && !sectorState.busExploded && sectorState.ctx?.busObject) {
+            if (sectorState.busCanBeInteractedWith) {
+                const bus = sectorState.ctx.busObject;
+                if (playerPos.distanceToSquared(bus.position) < 64) { // 8.0 * 8.0
+                    _v1.copy(bus.position);
+                    _v1.y = 2.5;
+                    return { type: 'plant_explosive', position: _v1.clone() };
+                }
+            }
+        }
+
         return { type: null, position: null };
     }
 
-    private findNearbyCollectible(playerPos: THREE.Vector3): THREE.Group | null {
-        for (const collectible of this.collectibles) {
-            // Check distance (3.5m radius)
-            if (playerPos.distanceTo(collectible.position) < 3.5) {
-                return collectible;
-            }
-        }
-        return null;
-    }
-
     private handleInteraction(
-        type: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null,
+        type: string | null,
         playerPos: THREE.Vector3,
         chests: any[],
         state: any,
@@ -118,35 +119,39 @@ export class PlayerInteractionSystem implements System {
 
         if (type === 'collectible') {
             this.handleCollectiblePickup(playerPos, session);
-        } else if (type === 'chest') {
-            const chest = chests.find((c: any) => !c.opened && playerPos.distanceTo(c.mesh.position) < 3.5);
-            if (chest) {
-                chest.opened = true;
-                soundManager.playOpenChest();
-                this.spawnScrapExplosion(session, chest.mesh.position.x, chest.mesh.position.z, chest.scrap);
+        }
+        else if (type === 'chest') {
+            // Find the specific chest we are interacting with
+            for (let i = 0; i < chests.length; i++) {
+                const c = chests[i];
+                if (!c.opened && playerPos.distanceToSquared(c.mesh.position) < 12.25) {
+                    c.opened = true;
+                    soundManager.playOpenChest();
+                    WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
-                // Remove Glow Light
-                const light = chest.mesh.getObjectByName('chestLight');
-                if (light) chest.mesh.remove(light);
+                    const light = c.mesh.getObjectByName('chestLight');
+                    if (light) c.mesh.remove(light);
 
-                // Animate Lid
-                if (chest.mesh.children[1]) {
-                    chest.mesh.children[1].rotation.x = -Math.PI / 2;
-                    chest.mesh.children[1].position.add(new THREE.Vector3(0, 0, -0.5));
+                    // Lid animation
+                    if (c.mesh.children[1]) {
+                        c.mesh.children[1].rotation.x = -Math.PI / 2;
+                        c.mesh.children[1].position.y -= 0.5;
+                    }
+
+                    state.chestsOpened++;
+                    if (c.type === 'big') state.bigChestsOpened++;
+                    break;
                 }
-
-                state.chestsOpened++;
-                if (chest.type === 'big') state.bigChestsOpened++;
             }
-        } else if (type === 'plant_explosive') {
+        }
+        else if (type === 'plant_explosive') {
             if (state.sectorState) {
                 state.sectorState.busInteractionTriggered = true;
             } else {
-                // Fallback for safety, though sectorState should exist
-                console.warn("Sector state not found provided, forcing extraction");
                 this.onSectorEnded(true);
             }
-        } else if (type === 'knock_on_port') {
+        }
+        else if (type === 'knock_on_port') {
             const knockTrigger = state.triggers.find((t: any) => t.id === 's2_cave_knock_shelter_port');
             if (knockTrigger) {
                 knockTrigger.triggered = true;
@@ -156,80 +161,68 @@ export class PlayerInteractionSystem implements System {
     }
 
     private handleCollectiblePickup(playerPos: THREE.Vector3, session: GameSessionLogic) {
-        const collectible = this.findNearbyCollectible(playerPos);
-        if (!collectible) return;
+        let collectible: THREE.Group | null = null;
 
-        // Check if already picked up (prevents double-pickup during animation)
-        if (collectible.userData.pickedUp) return;
-
-        const collectibleId = collectible.userData.collectibleId;
-        const collectibleDef = getCollectibleById(collectibleId);
-        if (!collectibleDef) return;
-
-        // Mark as picked up IMMEDIATELY to prevent re-pickup
-        collectible.userData.pickedUp = true;
-
-        // Reward SP is now tracked via sessionCollectiblesFound list
-
-        // Play pickup sound
-        soundManager.playUiPickup();
-
-        // Trigger callback to show modal with a short delay
-        // This allows the animation to start and the HUD to show the SP flash before it's hidden by the modal
-        if (this.onCollectibleFound) {
-            console.log(`[InteractionSystem] Picking up collectible: ${collectibleId}`);
-            setTimeout(() => {
-                if (this.onCollectibleFound) {
-                    this.onCollectibleFound(collectibleId);
-                }
-            }, 500);
+        // Find the closest one
+        for (let i = 0; i < this.collectibles.length; i++) {
+            const c = this.collectibles[i];
+            if (playerPos.distanceToSquared(c.position) < 12.25) {
+                collectible = c;
+                break;
+            }
         }
 
-        // Animate pickup (float up and fade out)
-        const startY = collectible.position.y;
-        const startTime = Date.now();
-        const duration = 800;
+        if (!collectible || collectible.userData.pickedUp) return;
 
-        // Clone materials to avoid affecting shared materials (e.g. enemies)
-        collectible.traverse((child) => {
+        const collectibleId = collectible.userData.collectibleId;
+        if (!getCollectibleById(collectibleId)) return;
+
+        collectible.userData.pickedUp = true;
+        soundManager.playUiPickup();
+
+        if (this.onCollectibleFound) {
+            const cb = this.onCollectibleFound;
+            setTimeout(() => cb(collectibleId), 500);
+        }
+
+        // --- Optimized Pickup Animation ---
+        const obj = collectible;
+        const startY = obj.position.y;
+        let progress = 0;
+        const duration = 0.8; // seconds
+
+        // Clone materials only once to avoid affecting global assets
+        obj.traverse((child) => {
             if (child instanceof THREE.Mesh && child.material) {
                 child.material = child.material.clone();
+                child.material.transparent = true;
             }
         });
 
-        const animate = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
+        const animatePickup = (timeDelta: number) => {
+            progress += timeDelta / duration;
+            if (progress > 1) progress = 1;
 
-            // Float up
-            collectible.position.y = startY + progress * 2;
+            obj.position.y = startY + progress * 2.0;
+            obj.rotation.y += 3.0 * timeDelta;
 
-            // Rotate
-            collectible.rotation.y += 0.05;
-
-            // Fade out
-            collectible.traverse((child) => {
+            obj.traverse((child) => {
                 if (child instanceof THREE.Mesh && child.material) {
-                    const mat = child.material as THREE.Material;
-                    mat.transparent = true;
-                    mat.opacity = 1 - progress;
+                    child.material.opacity = 1.0 - progress;
                 }
             });
 
             if (progress < 1) {
-                requestAnimationFrame(animate);
+                // Request next frame from engine delta if possible, 
+                // but RAF is a safe fallback for UI-like animations
+                requestAnimationFrame(() => animatePickup(0.016));
             } else {
-                // Animation complete - remove from scene and cache
-                session.engine.scene.remove(collectible);
-                const idx = this.collectibles.indexOf(collectible);
+                session.engine.scene.remove(obj);
+                const idx = this.collectibles.indexOf(obj);
                 if (idx > -1) this.collectibles.splice(idx, 1);
             }
         };
 
-        animate();
-    }
-
-    private spawnScrapExplosion(session: GameSessionLogic, x: number, z: number, amount: number) {
-        WorldLootSystem.spawnScrapExplosion(session.engine.scene, session.state.scrapItems, x, z, amount);
+        animatePickup(0.016);
     }
 }

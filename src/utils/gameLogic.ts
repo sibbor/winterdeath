@@ -1,5 +1,6 @@
 
-import { PlayerStats, SectorStats, WeaponType, WeaponCategory } from '../types';
+import { WeaponType, WeaponCategory } from '../content/weapons';
+import { PlayerStats, SectorStats } from '../types';
 import { LEVEL_CAP, WEAPONS } from '../content/constants';
 
 /**

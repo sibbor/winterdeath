@@ -2,8 +2,7 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS } from '../../utils/assets';
-import { SectorBuilder } from '../../core/world/SectorGenerator';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { WaterSystem } from '../../core/systems/WaterSystem';
 import { CAMERA_HEIGHT } from '../constants';
@@ -45,7 +44,7 @@ export const Sector6: SectorDef = {
         scene.add(ground);
 
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, 0, -50, 'big');
+        SectorGenerator.spawnChest(ctx, 0, -50, 'big');
 
         // ===== NEW: Wind-Animated Grass Meadows =====
 
@@ -117,11 +116,7 @@ export const Sector6: SectorDef = {
         lakeCollider.updateMatrixWorld();
         scene.add(lakeCollider);
 
-        ctx.obstacles.push({
-            mesh: lakeCollider,
-            collider: { type: 'box', size: new THREE.Vector3(30, 10, 50) }
-        });
-        ctx.collisionGrid.add({
+        SectorGenerator.addObstacle(ctx, {
             mesh: lakeCollider,
             collider: { type: 'box', size: new THREE.Vector3(30, 10, 50) }
         });
@@ -129,11 +124,11 @@ export const Sector6: SectorDef = {
         // ===== END WATER SYSTEM =====
 
         // A few props to test lighting/shadows
-        SectorBuilder.spawnContainerStack(ctx, 20, 20, 0.5, 3, 0xcc3333);
+        SectorGenerator.spawnContainerStack(ctx, 20, 20, 0.5, 3, 0xcc3333);
 
-        SectorBuilder.spawnTree(ctx, 'pine', 30, -30);
-        SectorBuilder.spawnTree(ctx, 'pine', -40, 40);
-        SectorBuilder.spawnTree(ctx, 'birch', -20, -20);
+        SectorGenerator.spawnTree(ctx, 'pine', 30, -30);
+        SectorGenerator.spawnTree(ctx, 'pine', -40, 40);
+        SectorGenerator.spawnTree(ctx, 'birch', -20, -20);
 
         // Lighting Test (Point Light)
         const pl = new THREE.PointLight(0xffaa00, 5, 20);

@@ -1,17 +1,14 @@
 
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
-import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
-import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { MATERIALS } from '../../utils/assets';
+import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
-import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/sound';
-import { EnemyManager } from '../../core/EnemyManager';
-import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
-import { SectorManager } from '../../core/SectorManager';
+import { BOSSES, CAMERA_HEIGHT } from '../../content/constants';
 import { FamilySystem } from '../../core/systems/FamilySystem';
 
 const LOCATIONS = {
@@ -51,13 +48,13 @@ const LOCATIONS = {
 async function addProps(ctx: SectorContext) {
     ctx.scene.add(ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0));
 
-    SectorBuilder.spawnBarrel(ctx, 106, -65);
-    SectorBuilder.spawnBarrel(ctx, 108, -67);
+    SectorGenerator.spawnBarrel(ctx, 106, -65);
+    SectorGenerator.spawnBarrel(ctx, 108, -67);
 
-    SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
-    SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
+    SectorGenerator.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
+    SectorGenerator.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
 
-    SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
+    SectorGenerator.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
 
     EnvironmentGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 }
@@ -87,32 +84,32 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
         const part1 = blockPointsWest.slice(0, Math.max(0, splitIdx - gap));
         const part2 = blockPointsWest.slice(Math.min(blockPointsWest.length, splitIdx + gap));
 
-        if (part1.length > 1) SectorBuilder.createBoundry(ctx, part1, 'BoundryWall_West_A');
-        if (part2.length > 1) SectorBuilder.createBoundry(ctx, part2, 'BoundryWall_West_B');
+        if (part1.length > 1) SectorGenerator.createBoundry(ctx, part1, 'BoundryWall_West_A');
+        if (part2.length > 1) SectorGenerator.createBoundry(ctx, part2, 'BoundryWall_West_B');
     } else {
-        SectorBuilder.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
+        SectorGenerator.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
     }
 
     // East wall is continuous
-    SectorBuilder.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
+    SectorGenerator.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
 
-    SectorBuilder.createBoundry(ctx, [
+    SectorGenerator.createBoundry(ctx, [
         new THREE.Vector3(-34, 0, 213),
         new THREE.Vector3(34, 0, 213)
     ], 'BoundryWall_Back');
 
-    SectorBuilder.createBoundry(ctx, [
+    SectorGenerator.createBoundry(ctx, [
         new THREE.Vector3(158, 0, -88),
         new THREE.Vector3(158, 0, -17),
     ], 'BoundryWall_Tunnel');
 
-    SectorBuilder.createBoundry(ctx, [
+    SectorGenerator.createBoundry(ctx, [
         new THREE.Vector3(55, 0, -65),
         new THREE.Vector3(94, 0, -70),
 
     ], 'BoundryWall_LeftOfCave');
 
-    SectorBuilder.createBoundry(ctx, [
+    SectorGenerator.createBoundry(ctx, [
         new THREE.Vector3(107, 0, -70),
         new THREE.Vector3(118, 0, -85),
         new THREE.Vector3(135, 0, -90),
@@ -180,7 +177,7 @@ export const Sector2: SectorDef = {
         (ctx as any).sectorState.ctx = ctx;
 
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // --- RAILWAY ---
         const railRoadPath = [
@@ -197,7 +194,7 @@ export const Sector2: SectorDef = {
         const polyline = railTrackCurve.getSpacedPoints(15);
         polyline.forEach((p, i) => {
             if (i % 3 === 0) {
-                SectorBuilder.spawnElectricPole(ctx, p.x + 8, p.z, 0);
+                SectorGenerator.spawnElectricPole(ctx, p.x + 8, p.z, 0);
             }
         });
 
@@ -223,8 +220,8 @@ export const Sector2: SectorDef = {
         forestLeft.forEach(p => p.y = 0);
         forestRight.forEach(p => p.y = 0);
 
-        SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
-        SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
+        SectorGenerator.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
+        SectorGenerator.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
 
         // --- BOUNDARIES ---
         createBoundries(ctx, railTrackCurve);
@@ -240,11 +237,11 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(200, 0, -14)
         ];
 
-        const caveOpening = SectorBuilder.createMountainOpening();
+        const caveOpening = SectorGenerator.createMountainOpening();
         caveOpening.position.x = LOCATIONS.POIS.CAVE_ENTRANCE.x;
         caveOpening.position.z = LOCATIONS.POIS.CAVE_ENTRANCE.z - 2;
         scene.add(caveOpening);
-        SectorBuilder.createMountain(ctx, mountainPoints, caveOpening);
+        SectorGenerator.createMountain(ctx, mountainPoints, caveOpening);
 
         // Train Tunnel
         const trainTunnel = ObjectGenerator.createTrainTunnel([
@@ -252,7 +249,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
         ]);
         scene.add(trainTunnel);
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: trainTunnel,
             collider: { type: 'box', size: new THREE.Vector3(12, 6, 10) }
         });

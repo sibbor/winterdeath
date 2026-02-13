@@ -192,36 +192,6 @@ export const en = {
         collected: "COLLECTED",
         new: "NEW",
         survivor_tip: "Survivor Tip",
-        editor: {
-            title: "Sector Editor",
-            desc: "Create and edit sectors in real-time",
-            open: "OPEN",
-            save: "SAVE SECTOR",
-            export: "EXPORT CODE",
-            play_mode: "PLAY TEST",
-            edit_mode: "EDIT MODE",
-            assets: "ASSETS",
-            properties: "PROPERTIES",
-            selected: "Selected",
-            position: "Position",
-            rotation: "Rotation",
-            scale: "Scale",
-            categories: {
-                props: "Props",
-                buildings: "Buildings",
-                enemies: "Enemies",
-                triggers: "Triggers",
-                paths: "Paths"
-            },
-            tools: {
-                select: "Select",
-                place: "Place",
-                path: "Path Tool",
-                delete: "Delete"
-            },
-            snapping: "Grid Snapping",
-            placed_objects: "Placed Objects"
-        }
     },
     categories: {
         primary: "PRIMARY",

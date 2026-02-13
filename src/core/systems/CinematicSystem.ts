@@ -1,15 +1,20 @@
-
 import * as THREE from 'three';
 import React from 'react';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
 import { soundManager } from '../../utils/sound';
-import { t } from '../../utils/i18n';
+
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+const _v1 = new THREE.Vector3(); // Target position
+const _v2 = new THREE.Vector3(); // Rotated offset
+const _v3 = new THREE.Vector3(); // Current position
+const _v4 = new THREE.Vector3(); // Bubble world position
+const _UP = new THREE.Vector3(0, 1, 0);
 
 export const CinematicSystem = {
     update: (
-        cinematic: any, // Assuming CinematicState from instruction snippet, but keeping 'any' as it's not fully defined in original
+        cinematic: any,
         camera: THREE.Camera,
-        playerMesh: THREE.Mesh | null, // Assuming THREE.Group from instruction snippet, but keeping original as it's not fully defined
+        playerMesh: THREE.Mesh | null,
         bubbleRef: React.RefObject<HTMLDivElement>,
         now: number,
         delta: number,
@@ -22,58 +27,49 @@ export const CinematicSystem = {
         },
         familyMembers?: any[]
     ) => {
-        // Added from instruction snippet
         if (!cinematic.active) return;
 
         const timeInLine = now - cinematic.lineStartTime;
         const activeScriptLine = cinematic.script[cinematic.lineIndex];
-
-        // Camera Orbit & Zoom Logic
-        // Skip zoom/rotation if custom camera override is active (keeps camera fixed)
-        let currentTargetPos = cinematic.cameraBasePos.clone();
         const totalElapsed = now - cinematic.startTime;
         const hasCustomCamera = cinematic.customCameraOverride;
 
-        // Apply Zoom (moves camera closer along the relative offset vector)
-        // Only apply if no custom camera override
-        if (cinematic.zoom > 0 && !hasCustomCamera) {
-            const zoomProgress = Math.min(1.0, totalElapsed / 5000); // Zoom in over 5 seconds
-            const zoomFactor = 1.0 - (zoomProgress * cinematic.zoom);
-            currentTargetPos = cinematic.midPoint.clone().add(cinematic.relativeOffset.clone().multiplyScalar(zoomFactor));
-        }
+        // --- 1. OPTIMIZED CAMERA LOGIC ---
+        // Default target is the base position
+        _v1.copy(cinematic.cameraBasePos);
 
-        if (cinematic.rotationSpeed > 0 && !hasCustomCamera) {
-            const totalElapsedTime = (cinematic.lineIndex * 2000) + timeInLine; // Legacy calc or use totalElapsed
-            const rotAngle = totalElapsedTime * 0.001 * cinematic.rotationSpeed;
-            const rotatedOffset = cinematic.relativeOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotAngle);
-
-            // Re-apply zoom if active
-            if (cinematic.zoom > 0) {
-                const zoomProgress = Math.min(1.0, totalElapsed / 5000);
-                const zoomFactor = 1.0 - (zoomProgress * cinematic.zoom);
-                currentTargetPos = cinematic.midPoint.clone().add(rotatedOffset.multiplyScalar(zoomFactor));
+        if (!hasCustomCamera) {
+            // Apply Orbit Rotation
+            if (cinematic.rotationSpeed > 0) {
+                const rotAngle = totalElapsed * 0.001 * cinematic.rotationSpeed;
+                _v2.copy(cinematic.relativeOffset).applyAxisAngle(_UP, rotAngle);
             } else {
-                currentTargetPos = cinematic.midPoint.clone().add(rotatedOffset);
+                _v2.copy(cinematic.relativeOffset);
             }
+
+            // Apply Zoom
+            const zoomProgress = Math.min(1.0, totalElapsed / 5000);
+            const zoomFactor = 1.0 - (zoomProgress * (cinematic.zoom || 0));
+
+            // Final target = midPoint + (rotatedOffset * zoomFactor)
+            _v1.copy(cinematic.midPoint).addScaledVector(_v2, zoomFactor);
         }
 
-        const currentPos = camera.position.clone();
-        currentPos.lerp(currentTargetPos, 0.05);
-        camera.position.copy(currentPos);
+        // Smooth camera movement (Lerp)
+        camera.position.lerp(_v1, 0.05);
+        camera.lookAt(cinematic.cameraLookAt);
 
+        // --- 2. SPEAKER IDENTIFICATION ---
         const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
         const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
 
-        // --- 1. Identify Active Speaker Mesh ---
         let activeSpeakerMesh: THREE.Object3D | undefined;
 
         if (isPlayerSpeaking) {
-            activeSpeakerMesh = cinematic.speakers[0]; // Player
+            activeSpeakerMesh = cinematic.speakers[0];
         } else {
-            // Default to the primary Quest Giver / Family Member
             activeSpeakerMesh = cinematic.speakers[1];
-
-            // If the name doesn't match, search for the correct actor in our familyMembers array
+            // Name mismatch fallback: Search family members
             if (currentSpeakerName !== 'Unknown' && (!activeSpeakerMesh || activeSpeakerMesh.userData.name !== currentSpeakerName)) {
                 if (familyMembers) {
                     const match = familyMembers.find(fm => fm.name === currentSpeakerName || fm.mesh.userData.name === currentSpeakerName);
@@ -82,154 +78,80 @@ export const CinematicSystem = {
             }
         }
 
-        camera.lookAt(cinematic.cameraLookAt);
+        // --- 3. BUBBLE POSITIONING (3D -> 2D) ---
+        if (bubbleRef.current && activeScriptLine && activeSpeakerMesh) {
+            activeSpeakerMesh.getWorldPosition(_v4);
 
-        // --- 2. Animation (Bounce & Settle) ---
+            const isDoor = !isPlayerSpeaking && currentSpeakerName === 'Unknown' &&
+                (activeSpeakerMesh.name.toLowerCase().includes('door') || activeSpeakerMesh.name.toLowerCase().includes('frame'));
 
-        // Helper to lerp scale back to 1.0 (Idle)
-        const settleMesh = (mesh: THREE.Object3D) => {
-            // Cache body lookup for performance
-            let body = mesh.userData.cachedBody;
-            if (!body) {
-                body = mesh.children.find((c: any) => c.userData.isBody);
-                if (body) mesh.userData.cachedBody = body;
+            if (isDoor) {
+                _v4.y += 3.5;
+            } else {
+                const scale = activeSpeakerMesh.scale.y || 1.0;
+                const height = (activeSpeakerMesh.userData.geometryHeight || 2.0) * scale;
+                _v4.y += height + 0.5;
             }
 
-            if (body) {
-                body.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
-            }
-        };
+            // Project 3D to Normalized Screen Space
+            _v4.project(camera);
 
-        // Settle active family members only (much faster than scene traversal)
-        if (familyMembers) {
-            familyMembers.forEach(fm => {
-                if (fm.mesh) settleMesh(fm.mesh);
-            });
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+            let activeX = (_v4.x * 0.5 + 0.5) * screenW;
+            let activeY = (-(_v4.y * 0.5) + 0.5) * screenH;
+
+            // Clamping & Tail Logic
+            const marginX = 200;
+            const marginY = 150;
+            let tailPos: 'bottom' | 'top' | 'left' | 'right' = 'bottom';
+
+            if (isDoor) tailPos = 'left';
+            if (activeX < marginX) { activeX = marginX; tailPos = 'left'; }
+            else if (activeX > screenW - marginX) { activeX = screenW - marginX; tailPos = 'right'; }
+
+            if (activeY < marginY) { activeY = marginY; tailPos = 'top'; }
+            else if (activeY > screenH - marginY) { activeY = screenH - marginY; tailPos = 'bottom'; }
+
+            bubbleRef.current.style.transform = `translate3d(${activeX}px, ${activeY}px, 0)`; // translate3d is faster than left/top
+            cinematic.tailPosition = tailPos;
         }
 
-        // Typing Sounds
-        if (timeInLine < cinematic.typingDuration) {
-            if (frame % 6 === 0) {
-                soundManager.playVoice(currentSpeakerName);
-            }
+        // --- 4. ANIMATION & SOUND ---
+        if (timeInLine < cinematic.typingDuration && frame % 6 === 0) {
+            soundManager.playVoice(currentSpeakerName);
         }
 
+        // Progress line
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             cinematic.fadingOut = true;
             if (activeScriptLine.trigger) {
-                const triggers = activeScriptLine.trigger.split(',');
-                triggers.forEach(t => window.dispatchEvent(new CustomEvent(t.trim())));
+                activeScriptLine.trigger.split(',').forEach((t: string) => window.dispatchEvent(new CustomEvent(t.trim())));
             }
             callbacks.playCinematicLine(cinematic.lineIndex + 1);
         }
 
-        // --- 3. Bubble Positioning ---
-        if (bubbleRef.current && activeScriptLine && activeSpeakerMesh) {
-            const vec = new THREE.Vector3();
-            activeSpeakerMesh.getWorldPosition(vec);
+        // Update Animations for all involved actors
+        const currentSpeakerLower = currentSpeakerName.toLowerCase();
+        const actors = familyMembers ? [...familyMembers.map(f => f.mesh), playerMesh] : [playerMesh];
 
-            // Determine if this is a door/static environmental speaker
-            const isDoor = !isPlayerSpeaking && currentSpeakerName === 'Unknown' && (activeSpeakerMesh.name.toLowerCase().includes('door') || activeSpeakerMesh.name.toLowerCase().includes('frame'));
+        for (let i = 0; i < actors.length; i++) {
+            const actor = actors[i];
+            if (!actor) continue;
 
-            if (isDoor) {
-                vec.y += 3.5;
-            } else {
-                // Standard height for characters, adjust by scale
-                const scale = activeSpeakerMesh.scale.y || 1.0;
-                const height = (activeSpeakerMesh.userData.geometryHeight || 2.0) * scale;
-                vec.y += height + 0.5;
+            // Cache body lookup once
+            if (!actor.userData.cachedBody) {
+                actor.userData.cachedBody = actor.userData.isBody ? actor : actor.children.find((c: any) => c.userData.isBody);
             }
 
-            vec.project(camera);
+            const body = actor.userData.cachedBody;
+            if (!body) continue;
 
-            let activeX = (vec.x * 0.5 + 0.5) * window.innerWidth;
-            let activeY = (-(vec.y * 0.5) + 0.5) * window.innerHeight;
-
-            const screenW = window.innerWidth;
-            const screenH = window.innerHeight;
-            const marginX = 200;
-            const marginY = 150;
-
-            let tailPos: 'bottom' | 'top' | 'left' | 'right' = 'bottom';
-            if (isDoor) tailPos = 'left';
-
-            if (activeX < marginX) {
-                activeX = marginX;
-                tailPos = 'left';
-            } else if (activeX > screenW - marginX) {
-                activeX = screenW - marginX;
-                tailPos = 'right';
-            }
-
-            if (activeY < marginY) {
-                activeY = marginY;
-                tailPos = 'top';
-            } else if (activeY > screenH - marginY) {
-                activeY = screenH - marginY;
-                tailPos = 'bottom';
-            }
-
-            bubbleRef.current.style.left = `${activeX}px`;
-            bubbleRef.current.style.top = `${activeY}px`;
-            cinematic.tailPosition = tailPos;
-        }
-
-        // --- 4. Animation Updates (All Actors) ---
-        const allActors: THREE.Object3D[] = [];
-        if (playerMesh) {
-            if (!playerMesh.userData.name) playerMesh.userData.name = 'Player';
-            allActors.push(playerMesh);
-        }
-
-        if (familyMembers) {
-            familyMembers.forEach((fm: any) => {
-                if (fm.mesh && !allActors.includes(fm.mesh)) {
-                    allActors.push(fm.mesh);
-                }
-            });
-        }
-
-        allActors.forEach(actor => {
             const actorName = (actor.userData.name || '').toLowerCase();
+            const isSpeaking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking))
+                && timeInLine < cinematic.typingDuration;
 
-            // 1. Find/Cache Body Mesh
-            let body = actor.userData.cachedBody;
-            if (!body) {
-                if (actor.type === 'Group' || !actor.userData.isPlayer) {
-                    const findBody = (obj: THREE.Object3D): THREE.Mesh | undefined => {
-                        if (obj.userData.isBody) return obj as THREE.Mesh;
-                        for (const child of obj.children) {
-                            const found = findBody(child);
-                            if (found) return found;
-                        }
-                        return undefined;
-                    };
-                    body = findBody(actor);
-                } else {
-                    body = actor as THREE.Mesh;
-                }
-                if (body) actor.userData.cachedBody = body;
-            }
-
-            if (!body) return;
-
-            // 2. Determine if Speaking
-            const currentSpeaker = (currentSpeakerName || '').toLowerCase();
-            const isPlayerActor = actor.userData.isPlayer || actorName === 'player' || actorName === 'robert';
-            let isSpeaking = false;
-
-            if (isPlayerActor) {
-                isSpeaking = (currentSpeaker === 'player' || currentSpeaker === 'robert');
-            } else {
-                isSpeaking = (actorName === currentSpeaker) && (currentSpeaker !== 'unknown');
-            }
-
-            if (timeInLine >= cinematic.typingDuration) {
-                isSpeaking = false;
-            }
-
-            // 3. Animate
-            PlayerAnimation.update(body, {
+            PlayerAnimation.update(body as THREE.Mesh, {
                 isMoving: false,
                 isRushing: false,
                 isRolling: false,
@@ -238,8 +160,8 @@ export const CinematicSystem = {
                 isSpeaking: isSpeaking,
                 isThinking: false,
                 isIdleLong: false,
-                seed: actor.userData.seed || (actor.id * 0.1)
+                seed: actor.userData.seed || 0
             }, now, delta);
-        });
+        }
     }
 };

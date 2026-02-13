@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { WindSystem } from '../../utils/physics';
+import { WindSystem } from '../../core/systems/WindSystem';
 import { WEATHER } from '../../content/constants';
 import { GEOMETRY } from '../../utils/assets';
 import { WeatherSystem } from '../../core/systems/WeatherSystem';

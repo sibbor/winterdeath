@@ -1,7 +1,8 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
-import { PlayerStats, WeaponType } from '../../types';
+import { PlayerStats } from '../../types';
+import { WeaponType } from '../../content/weapons';
 import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
 import { soundManager } from '../../utils/sound';
 import { t } from '../../utils/i18n';

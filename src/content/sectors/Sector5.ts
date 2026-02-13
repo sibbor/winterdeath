@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
-import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
 export const Sector5: SectorDef = {
@@ -33,7 +33,7 @@ export const Sector5: SectorDef = {
 
     setupProps: async (ctx: SectorContext) => {
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, 0, 15, 'big');
+        SectorGenerator.spawnChest(ctx, 0, 15, 'big');
 
         // Add more fire/destruction
         for (let i = 0; i < 20; i++) {

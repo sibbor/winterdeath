@@ -2,10 +2,8 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
-import { SectorBuilder } from '../../core/world/SectorGenerator';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
-import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
 
 const LOCATIONS = {
@@ -72,7 +70,7 @@ export const Sector4: SectorDef = {
         (ctx as any).sectorState.ctx = ctx;
 
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // Stacks of Cars (Maze) - Sektor 4 Bilskroten
         for (let i = 0; i < 60; i++) {
@@ -81,7 +79,7 @@ export const Sector4: SectorDef = {
             if (Math.abs(x) < 10 && z > -100) continue;
             const carStackHeight = 1 + Math.floor(Math.random() * 3);
             const rotY = Math.random() * Math.PI * 2;
-            await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
+            await SectorGenerator.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
         }
 
         // Perimeter Trees
@@ -90,7 +88,7 @@ export const Sector4: SectorDef = {
             const r = 100 + Math.random() * 60;
             const x = Math.cos(angle) * r;
             const z = -80 + Math.sin(angle) * r;
-            await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
+            await SectorGenerator.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
         }
 
         // The Dealership Building
@@ -100,7 +98,7 @@ export const Sector4: SectorDef = {
         shed.position.y = 4;
         shedGroup.add(shed);
         scene.add(shedGroup);
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: shedGroup,
             collider: { type: 'sphere', radius: 12 }
         });
@@ -142,7 +140,7 @@ export const Sector4: SectorDef = {
         );
 
         if (ctx.debugMode) {
-            SectorBuilder.visualizeTriggers(ctx);
+            SectorGenerator.visualizeTriggers(ctx);
         }
     },
 

@@ -15,22 +15,27 @@ export interface InputState {
     '4': boolean;
     scrollUp: boolean;
     scrollDown: boolean;
-    mouse: THREE.Vector2; // Normalized device coordinates (-1 to 1)
-    aimVector: THREE.Vector2; // Direction from center of screen (or relative movement)
-    cursorPos: { x: number, y: number }; // Screen pixels
-    joystickMove: THREE.Vector2; // Left stick input (-1 to 1)
-    joystickAim: THREE.Vector2;  // Right stick input (-1 to 1)
+    mouse: THREE.Vector2;
+    aimVector: THREE.Vector2;
+    cursorPos: { x: number, y: number };
+    joystickMove: THREE.Vector2;
+    joystickAim: THREE.Vector2;
     locked: boolean;
 }
+
+// Map for quick keyboard status updates
+const KEY_MAP: Record<string, keyof InputState> = {
+    'w': 'w', 'a': 'a', 's': 's', 'd': 'd',
+    ' ': 'space', 'r': 'r', 'e': 'e',
+    '1': '1', '2': '2', '3': '3', '4': '4'
+};
 
 export class InputManager {
     public state: InputState;
     private isEnabled: boolean = false;
-    private aimAngle: number = -Math.PI / 2; // Start facing Up
-    private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200); // Virtual cursor position relative to player
+    private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);
 
-
-    // Callbacks for discrete actions (optional, for UI/Systems)
+    // Callbacks for discrete actions
     public onKeyDown?: (key: string) => void;
     public onKeyUp?: (key: string) => void;
 
@@ -61,21 +66,12 @@ export class InputManager {
     }
 
     private resetState() {
-        this.state.w = false;
-        this.state.a = false;
-        this.state.s = false;
-        this.state.d = false;
-        this.state.space = false;
-        this.state.fire = false;
-        this.state.r = false;
-        this.state.e = false;
-        this.state['1'] = false;
-        this.state['2'] = false;
-        this.state['3'] = false;
-        this.state['4'] = false;
+        // Full reset of all boolean states to prevent "stuck" keys on disable
+        const keys: (keyof InputState)[] = ['w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', '1', '2', '3', '4'];
+        keys.forEach(k => (this.state[k] as boolean) = false);
+
         this.state.joystickMove.set(0, 0);
         this.state.joystickAim.set(0, 0);
-        // Keep mouse/aim to avoid snapping
     }
 
     private bindEvents() {
@@ -84,7 +80,7 @@ export class InputManager {
         window.addEventListener('mousemove', this.handleMouseMove);
         window.addEventListener('mousedown', this.handleMouseDown);
         window.addEventListener('mouseup', this.handleMouseUp);
-        window.addEventListener('wheel', this.handleWheel);
+        window.addEventListener('wheel', this.handleWheel, { passive: true });
         document.addEventListener('pointerlockchange', this.handleLockChange);
     }
 
@@ -99,113 +95,89 @@ export class InputManager {
     }
 
     private handleKeyDown = (e: KeyboardEvent) => {
-        // Always track keys, but state reflects active only if enabled? 
-        // Or should we block tracking? Usually better to block logic, not state updates, 
-        // but for safety let's check isEnabled.
         if (!this.isEnabled) return;
+        const key = e.key.toLowerCase();
+        const stateKey = KEY_MAP[key];
 
-        const k = e.key ? e.key.toLowerCase() : '';
-        if (k === 'w') this.state.w = true;
-        if (k === 'a') this.state.a = true;
-        if (k === 's') this.state.s = true;
-        if (k === 'd') this.state.d = true;
-        if (k === ' ') this.state.space = true;
-        if (k === 'r') this.state.r = true;
-        if (k === 'e') this.state.e = true;
-        if (k === '1') this.state['1'] = true;
-        if (k === '2') this.state['2'] = true;
-        if (k === '3') this.state['3'] = true;
-        if (k === '4') this.state['4'] = true;
+        if (stateKey) {
+            (this.state[stateKey] as boolean) = true;
+        }
 
         if (this.onKeyDown) this.onKeyDown(e.key);
     };
 
     private handleKeyUp = (e: KeyboardEvent) => {
         if (!this.isEnabled) return;
+        const key = e.key.toLowerCase();
+        const stateKey = KEY_MAP[key];
 
-        const k = e.key ? e.key.toLowerCase() : '';
-        if (k === 'w') this.state.w = false;
-        if (k === 'a') this.state.a = false;
-        if (k === 's') this.state.s = false;
-        if (k === 'd') this.state.d = false;
-        if (k === ' ') this.state.space = false;
-        if (k === 'r') this.state.r = false;
-        if (k === 'e') this.state.e = false;
-        if (k === '1') this.state['1'] = false;
-        if (k === '2') this.state['2'] = false;
-        if (k === '3') this.state['3'] = false;
-        if (k === '4') this.state['4'] = false;
+        if (stateKey) {
+            (this.state[stateKey] as boolean) = false;
+        }
 
         if (this.onKeyUp) this.onKeyUp(e.key);
     };
 
     private handleMouseMove = (e: MouseEvent) => {
-        // Always track locked state
-        if (document.pointerLockElement) {
-            if (!this.isEnabled) return;
+        if (!this.isEnabled) {
+            // Still track cursor for UI even if game input is disabled
+            this.state.cursorPos.x = e.clientX;
+            this.state.cursorPos.y = e.clientY;
+            return;
+        }
 
-            // Accumulate movement into virtual cursor
+        if (document.pointerLockElement) {
+            // --- Pointer Locked: Virtual "Tether" Cursor ---
             this.virtualAimPos.x += e.movementX;
             this.virtualAimPos.y += e.movementY;
 
-            // Clamp radius to keep it responsive (like a tether)
             const maxRadius = 300;
             const minRadius = 50;
-            const length = this.virtualAimPos.length();
+            const distSq = this.virtualAimPos.lengthSq();
 
-            if (length > maxRadius) {
-                this.virtualAimPos.multiplyScalar(maxRadius / length);
-            } else if (length < minRadius && length > 0) {
-                this.virtualAimPos.multiplyScalar(minRadius / length);
+            // Clamping using squared distance (Math.sqrt only when needed)
+            if (distSq > maxRadius * maxRadius) {
+                this.virtualAimPos.setLength(maxRadius);
+            } else if (distSq < minRadius * minRadius && distSq > 0) {
+                this.virtualAimPos.setLength(minRadius);
             }
 
-            // Update aimAngle and vectors from virtual cursor
-            this.aimAngle = Math.atan2(this.virtualAimPos.y, this.virtualAimPos.x);
-
             this.state.aimVector.copy(this.virtualAimPos);
+            // Normalize to -1 -> 1 range for consistency
             this.state.mouse.x = this.virtualAimPos.x / maxRadius;
             this.state.mouse.y = this.virtualAimPos.y / maxRadius;
         } else {
+            // --- Standard Mouse: Center-relative ---
             this.state.cursorPos.x = e.clientX;
             this.state.cursorPos.y = e.clientY;
-
-            if (!this.isEnabled) return;
-
-            this.state.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            this.state.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
             const centerX = window.innerWidth / 2;
             const centerY = window.innerHeight / 2;
 
-            this.state.aimVector.x = e.clientX - centerX;
-            this.state.aimVector.y = e.clientY - centerY;
+            this.state.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this.state.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-            // Sync angle for smooth transition
-            this.aimAngle = Math.atan2(this.state.aimVector.y, this.state.aimVector.x);
+            this.state.aimVector.set(e.clientX - centerX, e.clientY - centerY);
         }
     };
 
     private handleMouseDown = (e: MouseEvent) => {
-        if (!this.isEnabled) return;
-        if (e.button === 0) this.state.fire = true;
+        if (this.isEnabled && e.button === 0) this.state.fire = true;
     };
 
     private handleMouseUp = (e: MouseEvent) => {
-        if (!this.isEnabled) return;
-        if (e.button === 0) this.state.fire = false;
+        if (this.isEnabled && e.button === 0) this.state.fire = false;
     };
 
     private handleWheel = (e: WheelEvent) => {
         if (!this.isEnabled) return;
+
         if (e.deltaY < 0) {
             this.state.scrollUp = true;
-            // Auto reset scroll "impulse" next frame is tricky in event listener...
-            // Use setTimeout for now like the hook
-            setTimeout(() => this.state.scrollUp = false, 100);
-        }
-        if (e.deltaY > 0) {
+            setTimeout(() => this.state.scrollUp = false, 50);
+        } else if (e.deltaY > 0) {
             this.state.scrollDown = true;
-            setTimeout(() => this.state.scrollDown = false, 100);
+            setTimeout(() => this.state.scrollDown = false, 50);
         }
     };
 
@@ -215,15 +187,7 @@ export class InputManager {
 
     public requestPointerLock(element: HTMLElement) {
         if (this.state.locked) return;
-        try {
-            // Some browsers require a user gesture, which this call should be part of
-            const promise = element.requestPointerLock() as any;
-            if (promise && promise.catch) {
-                promise.catch((e: any) => console.warn("Pointer lock error:", e));
-            }
-        } catch (e) {
-            console.warn("Pointer lock failed:", e);
-        }
+        element.requestPointerLock();
     }
 
     public setJoystickMove(x: number, y: number) {

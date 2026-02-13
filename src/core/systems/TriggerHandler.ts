@@ -1,10 +1,21 @@
-
 import * as THREE from 'three';
-import { SectorTrigger, PlayerStats, TriggerAction } from '../../types';
+import { SectorTrigger, TriggerAction } from '../../types';
 import { soundManager } from '../../utils/sound';
 import { PLAYER_CHARACTER } from '../../content/constants';
 
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+let _localX = 0;
+let _localZ = 0;
+let _tx = 0;
+let _tz = 0;
+let _sin = 0;
+let _cos = 0;
+
 export const TriggerHandler = {
+    /**
+     * Checks all sector triggers against player position.
+     * Optimized for 60fps execution with minimal memory pressure.
+     */
     checkTriggers: (
         playerPos: THREE.Vector3,
         state: any,
@@ -14,93 +25,91 @@ export const TriggerHandler = {
             removeVisual: (id: string) => void;
             onClueFound: (clue: SectorTrigger) => void;
             onTrigger: (type: string, duration: number) => void;
-            onAction: (action: TriggerAction) => void; // New generic callback
+            onAction: (action: TriggerAction) => void;
             collectedCluesRef: any;
             t: (key: string) => string;
         }
     ) => {
-        state.triggers.forEach((trig: SectorTrigger) => {
-            // Handle Repeating Triggers
+        const triggers = state.triggers;
+        if (!triggers) return;
+
+        for (let i = 0; i < triggers.length; i++) {
+            const trig = triggers[i];
+
+            // 1. QUICK DISCARD: Handle Cooling Down / One-shots
             if (trig.triggered) {
                 if (trig.repeatInterval && trig.repeatInterval > 0) {
                     if (trig.lastTriggerTime && now - trig.lastTriggerTime > trig.repeatInterval) {
-                        trig.triggered = false; // Reset
+                        trig.triggered = false; // Reset for reuse
                     } else {
-                        return; // Still cooling down
+                        continue; // Still cooling down
                     }
                 } else {
-                    return; // One-shot and already triggered
+                    continue; // One-shot already used
                 }
             }
 
             let isInside = false;
 
+            // 2. COLLISION CHECK
             if (trig.size) {
-                // BOX TRIGGER CHECK
-                const localX = playerPos.x - trig.position.x;
-                const localZ = playerPos.z - trig.position.z;
-
-                let tx = localX;
-                let tz = localZ;
+                // --- BOX TRIGGER (Rotated OBB) ---
+                _localX = playerPos.x - trig.position.x;
+                _localZ = playerPos.z - trig.position.z;
 
                 if (trig.rotation) {
-                    const sin = Math.sin(-trig.rotation);
-                    const cos = Math.cos(-trig.rotation);
-                    tx = localX * cos - localZ * sin;
-                    tz = localX * sin + localZ * cos;
+                    _sin = Math.sin(-trig.rotation);
+                    _cos = Math.cos(-trig.rotation);
+                    _tx = _localX * _cos - _localZ * _sin;
+                    _tz = _localX * _sin + _localZ * _cos;
+                } else {
+                    _tx = _localX;
+                    _tz = _localZ;
                 }
 
-                const halfW = trig.size.width / 2;
-                const halfD = trig.size.depth / 2;
-
-                if (Math.abs(tx) <= halfW && Math.abs(tz) <= halfD) {
+                if (Math.abs(_tx) <= trig.size.width * 0.5 && Math.abs(_tz) <= trig.size.depth * 0.5) {
                     isInside = true;
                 }
-            } else {
-                // CIRCLE TRIGGER CHECK
-                if (trig.radius) {
-                    const dx = playerPos.x - trig.position.x;
-                    const dz = playerPos.z - trig.position.z;
-                    const distSq = dx * dx + dz * dz;
-                    if (distSq < trig.radius * trig.radius) {
-                        isInside = true;
-                    }
+            } else if (trig.radius) {
+                // --- CIRCLE TRIGGER (Fast Squared Distance) ---
+                const dx = playerPos.x - trig.position.x;
+                const dz = playerPos.z - trig.position.z;
+                if ((dx * dx + dz * dz) < (trig.radius * trig.radius)) {
+                    isInside = true;
                 }
             }
 
+            // 3. EXECUTION
             if (isInside) {
                 trig.triggered = true;
                 trig.lastTriggerTime = now;
 
-                // --- NEW ACTION SYSTEM ---
+                // Fire Actions
                 if (trig.actions && trig.actions.length > 0) {
-                    trig.actions.forEach(action => {
-                        callbacks.onAction(action);
-                    });
-
-                    // Allow legacy text fallback if 'content' exists alongside actions, 
-                    // otherwise return to prevent default behavior.
-                    if (!trig.content) return;
+                    for (let j = 0; j < trig.actions.length; j++) {
+                        callbacks.onAction(trig.actions[j]);
+                    }
+                    // Prevent narrative fallback if only actions are intended
+                    if (!trig.content) continue;
                 }
 
-                // --- LEGACY / STANDARD BEHAVIOR ---
+                // Fire Narrative / UI
                 if (trig.content) {
-                    // Narrative / Flavor Triggers
-                    const text = callbacks.t(trig.content);
-                    callbacks.spawnBubble(text);
+                    const translatedText = callbacks.t(trig.content);
+                    callbacks.spawnBubble(translatedText);
 
-                    // Estimate duration based on text length
-                    const duration = 2000 + text.length * 50;
+                    // Dynamic duration based on readability speed
+                    const duration = 2000 + translatedText.length * 50;
 
                     if (trig.type === 'SPEECH') {
                         soundManager.playVoice(PLAYER_CHARACTER.name);
                         callbacks.onTrigger('SPEECH', duration);
                     } else {
                         soundManager.playUiHover();
-                        callbacks.onTrigger(trig.type, duration);
+                        callbacks.onTrigger(trig.type || 'INFO', duration);
                     }
                 }
             }
-        });
+        }
     }
 };

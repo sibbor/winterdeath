@@ -1,15 +1,10 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sectors';
 import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
-import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
-import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
-import { EnemyManager } from '../../core/EnemyManager';
 import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
-import { SectorManager } from '../../core/SectorManager';
 
 const LOCATIONS = {
     SPAWN: {
@@ -115,40 +110,40 @@ export const Sector3: SectorDef = {
         PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.ROAD_TO_MAST], 6);
 
         // Reward Chest at boss spawn
-        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // 1. Burning Farm
-        const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
-        SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
+        const farm = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
+        SectorGenerator.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
 
         // 1.1. Farm House area props and bodies
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x + 5, LOCATIONS.POIS.FARMHOUSE.z + 5, 'WALKER', Math.random() * Math.PI);
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x - 5, LOCATIONS.POIS.FARMHOUSE.z + 10, 'RUNNER', Math.random() * Math.PI);
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x + 5, LOCATIONS.POIS.FARMHOUSE.z + 5, 'WALKER', Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x - 5, LOCATIONS.POIS.FARMHOUSE.z + 10, 'RUNNER', Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
 
         // 1.2. Farm House area props
-        SectorBuilder.spawnVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
+        SectorGenerator.spawnVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
+        SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
+        SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
+        SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
 
-        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 15, LOCATIONS.POIS.FARMHOUSE.z + 10, Math.PI / 4, 1.2);
-        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 12, LOCATIONS.POIS.FARMHOUSE.z + 14, Math.PI / 3, 1.0);
+        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 15, LOCATIONS.POIS.FARMHOUSE.z + 10, Math.PI / 4, 1.2);
+        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 12, LOCATIONS.POIS.FARMHOUSE.z + 14, Math.PI / 3, 1.0);
 
         // 1.3 Timber truck on the road near the farm
-        SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
-        SectorBuilder.spawnVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
+        SectorGenerator.spawnTimberPile(ctx, 122, -92, 0, 2.0);
+        SectorGenerator.spawnVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
 
         // Crashed car with headlights near the farm entrance
-        SectorBuilder.spawnCrashedCar(ctx, 160, -85, -Math.PI / 4, 0xcc2222);
+        SectorGenerator.spawnCrashedCar(ctx, 160, -85, -Math.PI / 4, 0xcc2222);
 
         // 2. Burning Farm
-        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
+        const farmHouse = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
+        SectorGenerator.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
 
         // 3. Barn
-        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
+        const barn = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
+        SectorGenerator.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
 
         // --- 4. Wheat Field ---
         const fieldPoly = [
@@ -157,7 +152,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(250, 0, -180),
             new THREE.Vector3(100, 0, -180)
         ];
-        await SectorBuilder.fillWheatField(ctx, fieldPoly, 0.4);
+        await SectorGenerator.fillWheatField(ctx, fieldPoly, 0.4);
 
         // --- 5. Forest ---
         const clearingPoly = [
@@ -166,7 +161,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(80, 0, -80),
             new THREE.Vector3(0, 0, -80)
         ];
-        await SectorBuilder.createForest(ctx, clearingPoly, 12, ['spruce', 'pine', 'birch']);
+        await SectorGenerator.createForest(ctx, clearingPoly, 12, ['spruce', 'pine', 'birch']);
 
         // --- 6. The Mast ---
         const mastPos = LOCATIONS.POIS.MAST;
@@ -179,7 +174,7 @@ export const Sector3: SectorDef = {
         scene.add(asphalt);
 
         // Stängsel runt området
-        SectorBuilder.createFence(ctx, [
+        SectorGenerator.createFence(ctx, [
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30),
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z - 30),
             new THREE.Vector3(mastPos.x + 30, 0, mastPos.z - 30),
@@ -188,7 +183,7 @@ export const Sector3: SectorDef = {
         ], 'black', 2.5);
 
         // Kontrollrummet (Byggnaden under masten)
-        const controlRoom = SectorBuilder.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
+        const controlRoom = SectorGenerator.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
 
         // Masten (Sammanslagen geometri)
         const mastGroup = new THREE.Group();
@@ -218,7 +213,7 @@ export const Sector3: SectorDef = {
         mastGroup.add(lightHub);
         mastGroup.userData.isObstacle = true;
         scene.add(mastGroup);
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: mastGroup,
             collider: { type: 'sphere', radius: 8 } // Simple radial collider for the mast base area
         });
@@ -245,7 +240,7 @@ export const Sector3: SectorDef = {
         );
 
         if (ctx.debugMode) {
-            SectorBuilder.visualizeTriggers(ctx);
+            SectorGenerator.visualizeTriggers(ctx);
         }
     },
 

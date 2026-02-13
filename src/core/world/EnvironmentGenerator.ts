@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
+import { SectorGenerator } from './SectorGenerator';
 
 // Lazy load textures (reuse from ObjectGenerator pattern)
 const NATURE_VARIANTS = 8;
@@ -635,8 +636,8 @@ export const EnvironmentGenerator = {
                 c.updateMatrixWorld();
                 ctx.scene.add(c);
                 const obstacle = { mesh: c, collider: { type: 'sphere' as const, radius: 0.4 * p.s, height: 4 } };
-                ctx.obstacles.push(obstacle);
-                ctx.collisionGrid.add(obstacle);
+
+                SectorGenerator.addObstacle(ctx, obstacle);
             });
         }
     },
@@ -709,8 +710,8 @@ export const EnvironmentGenerator = {
                 const rock = EnvironmentGenerator.createRock(0.8 + Math.random() * 0.6, 0.8 + Math.random() * 0.5);
                 rock.position.set(px, 0, pz);
                 ctx.scene.add(rock);
-                ctx.obstacles.push({ mesh: rock, collider: { type: 'sphere', radius: 0.8 } });
-                ctx.collisionGrid.add({ mesh: rock, collider: { type: 'sphere', radius: 0.8 } });
+
+                SectorGenerator.addObstacle(ctx, { mesh: rock, collider: { type: 'sphere', radius: 0.8 } });
             } else if (type === 'debris') {
                 const debris = EnvironmentGenerator.createStone(0.3 + Math.random() * 0.4);
                 debris.position.set(px, 0, pz);

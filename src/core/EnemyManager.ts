@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, ModelFactory } from '../utils/assets';
-import { Obstacle } from '../utils/physics';
+import { GEOMETRY, MATERIALS } from '../utils/assets';
 import type { Enemy } from '../types/enemy';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
@@ -11,22 +10,28 @@ import { CorpseRenderer } from './renderers/CorpseRenderer';
 
 export type { Enemy };
 
+// --- INTERNAL POOLING & SCRATCHPADS ---
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 5, 0);
+const _syncList: Enemy[] = [];
+const enemyPool: Enemy[] = [];
+
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 
 export const EnemyManager = {
+    /**
+     * Initierar renderare och rensar poolen.
+     */
     init: (scene: THREE.Scene) => {
-        if (!zombieRenderer) {
-            zombieRenderer = new ZombieRenderer(scene);
-        } else {
-            zombieRenderer.reAttach(scene);
-        }
+        if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
+        else zombieRenderer.reAttach(scene);
 
-        if (!corpseRenderer) {
-            corpseRenderer = new CorpseRenderer(scene);
-        } else {
-            corpseRenderer.reAttach(scene);
-        }
+        if (!corpseRenderer) corpseRenderer = new CorpseRenderer(scene);
+        else corpseRenderer.reAttach(scene);
+
+        enemyPool.length = 0;
     },
 
     cleanup: () => {
@@ -34,21 +39,85 @@ export const EnemyManager = {
         corpseRenderer?.destroy();
         zombieRenderer = null;
         corpseRenderer = null;
+        enemyPool.length = 0;
     },
 
-    spawn: (
-        scene: THREE.Scene,
-        playerPos: THREE.Vector3,
-        forcedType?: string,
-        forcedPos?: THREE.Vector3,
-        bossSpawned: boolean = false,
-        enemyCount: number = 0
-    ) => {
-        const enemy = EnemySpawner.spawn(scene, playerPos, forcedType, forcedPos, bossSpawned, enemyCount);
-        if (enemy && !enemy.isBoss) {
-            enemy.mesh.visible = false;
+    /**
+     * Spawna fiende med Object Pooling. 
+     * Om en fiende återanvänds skrivs dess "DNA" över för att matcha den nya typen.
+     */
+    spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: string, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0): Enemy | null => {
+        let enemy: Enemy | null = null;
+
+        // Bestäm vilken typ som ska skapas (viktigt för pooling reset)
+        const typeToSpawn = forcedType || EnemySpawner.determineType(enemyCount, bossSpawned);
+
+        if (enemyPool.length > 0) {
+            enemy = enemyPool.pop()!;
+            // VIKTIGT: Vi skickar med typen för att nollställa stats (DNA)
+            EnemyManager.resetEnemy(enemy, typeToSpawn, playerPos, forcedPos);
+            if (!enemy.mesh.parent) scene.add(enemy.mesh);
+        } else {
+            enemy = EnemySpawner.spawn(scene, playerPos, typeToSpawn, forcedPos, bossSpawned, enemyCount);
         }
+
+        if (enemy) {
+            // InstancedMesh kräver att original-mesh är osynlig
+            if (!enemy.isBoss) enemy.mesh.visible = false;
+            else enemy.mesh.visible = true;
+        }
+
         return enemy;
+    },
+
+    /**
+     * Nollställer en fiende för återanvändning.
+     * Återställer stats, skala, färg och tillstånd.
+     */
+    resetEnemy: (e: Enemy, newType: string, playerPos: THREE.Vector3, forcedPos?: THREE.Vector3) => {
+        // 1. Applicera stats för den nya typen (Hastighet, HP, Skada, Färg)
+        EnemySpawner.applyTypeStats(e, newType);
+
+        // 2. Positionering
+        if (forcedPos) {
+            e.mesh.position.copy(forcedPos).add({ x: (Math.random() - 0.5) * 4, y: 0, z: (Math.random() - 0.5) * 4 } as any);
+        } else {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 45 + Math.random() * 30;
+            e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
+        }
+
+        // 3. Logisk Reset
+        e.dead = false;
+        e.hp = e.maxHp;
+        e.deathState = 'alive';
+        e.velocity.set(0, 0, 0);
+        e.knockbackVel.set(0, 0, 0);
+        e.deathTimer = 0;
+        e.bloodSpawned = false;
+        e.lastDamageType = 'standard';
+
+        // 4. Visuell Reset (Fixar osynliga/svarta zombies)
+        const s = e.originalScale || 1.0;
+        const w = e.widthScale || 1.0;
+        e.mesh.scale.set(s * w, s, s * w);
+
+        e.mesh.traverse((child: any) => {
+            if (child.isMesh && child.material) {
+                if (child.material.color) child.material.color.set(e.color || 0xffffff);
+                if (child.material.opacity !== undefined) child.material.opacity = 1.0;
+            }
+        });
+
+        // 5. Status Reset
+        e.stunTimer = 0;
+        e.blindTimer = 0;
+        e.burnTimer = 0;
+        e.isBurning = false;
+        e.mesh.userData.exploded = false;
+        e.mesh.userData.baseY = undefined;
+
+        if (e.indicatorRing) e.indicatorRing.visible = false;
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any) => {
@@ -58,8 +127,11 @@ export const EnemyManager = {
     },
 
     spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number) => {
-        const horde = EnemySpawner.spawnHorde(scene, startPos, count, bossSpawned, currentCount);
-        horde.forEach(e => { if (!e.isBoss) e.mesh.visible = false; });
+        const horde: Enemy[] = [];
+        for (let i = 0; i < count; i++) {
+            const enemy = EnemyManager.spawn(scene, startPos, undefined, startPos, bossSpawned, currentCount + i);
+            if (enemy) horde.push(enemy);
+        }
         return horde;
     },
 
@@ -79,137 +151,71 @@ export const EnemyManager = {
         const ash = new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash);
         ash.position.copy(enemy.mesh.position);
         ash.position.y = 0.2;
-        const baseScale = enemy.originalScale || 1.0;
-        ash.scale.set((1 + Math.random() * 0.5) * baseScale, 1 * baseScale, (1 + Math.random() * 0.5) * baseScale);
+        const s = enemy.originalScale || 1.0;
+        ash.scale.set((1 + Math.random() * 0.5) * s, 1 * s, (1 + Math.random() * 0.5) * s);
         return ash;
     },
 
-    explodeEnemy: (
-        enemy: Enemy,
-        forceVec: THREE.Vector3,
-        callbacks: {
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number, scale?: number) => void;
-            spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material) => void;
-        }
-    ) => {
+    explodeEnemy: (enemy: Enemy, forceVec: THREE.Vector3, callbacks: any) => {
         if (enemy.mesh.userData.exploded) return;
         enemy.mesh.userData.exploded = true;
-        enemy.dead = true;
 
         const scene = enemy.mesh.parent as THREE.Scene;
         if (scene) scene.remove(enemy.mesh);
 
         const pos = enemy.mesh.position;
-        const upVec = new THREE.Vector3(0, 5, 0);
-        const exitForce = forceVec.clone().multiplyScalar(0.5).add(upVec);
+        _v1.copy(forceVec).multiplyScalar(0.5).add(_up);
 
-        // Spawn Blood
         callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 60);
         callbacks.spawnDecal(pos.x, pos.z, 3.0, MATERIALS.bloodDecal);
 
-        // Create random chunks using instanced particles (Massive performance gain)
         const baseScale = enemy.originalScale || 1.0;
-        const widthScale = enemy.widthScale || 1.0;
-        const bodyMass = baseScale * widthScale;
-        const color = enemy.color || 0x660000;
-
-        // Formula: Large enemies explode into many more objects
-        const chunkCount = Math.max(5, Math.floor(bodyMass * 12));
-
-        for (let i = 0; i < chunkCount; i++) {
-            const vel = exitForce.clone();
-            vel.x += (Math.random() - 0.5) * 12;
-            vel.y += Math.random() * 6;
-            vel.z += (Math.random() - 0.5) * 10;
-
-            const chunkScale = (baseScale * 0.8) * (0.6 + Math.random() * 0.8);
-
-            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, vel, color, chunkScale);
+        for (let i = 0; i < 8; i++) {
+            _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, _v2.clone(), enemy.color, baseScale * 0.8);
         }
-
         soundManager.playExplosion();
     },
 
-    generateBossDebris: (enemy: Enemy, count: number, spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) => void) => {
-        const pos = enemy.mesh.position;
-        const scale = enemy.originalScale || 1.0;
-        const color = enemy.color || 0x660000;
+    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any) => {
+        collisionGrid.updateEnemyGrid(enemies);
+        _syncList.length = 0;
 
-        for (let i = 0; i < count; i++) {
-            const chunkScale = (scale * 3.0) / count * (0.8 + Math.random() * 0.4);
-            const vel = new THREE.Vector3(
-                (Math.random() - 0.5) * 15,
-                10 + Math.random() * 15,
-                (Math.random() - 0.5) * 15
-            );
+        for (let i = 0; i < enemies.length; i++) {
+            const e = enemies[i];
 
-            // Directly spawn using instanced particles
-            spawnPart(pos.x + (Math.random() - 0.5) * 4, 1.5, pos.z + (Math.random() - 0.5) * 4, 'chunk', 1, undefined, vel, color, chunkScale);
-        }
-    },
-
-    update: (
-        delta: number,
-        now: number,
-        playerPos: THREE.Vector3,
-        enemies: Enemy[],
-        collisionGrid: SpatialGrid,
-        noiseEvents: { pos: THREE.Vector3, radius: number, time: number }[],
-        shakeIntensity: number,
-        onPlayerHit: (damage: number, attacker: any, type: string) => void,
-        spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) => void,
-        spawnDecal: (x: number, z: number, scale: number, mat?: any) => void,
-        spawnBubble: (text: string, duration: number) => void,
-        onDamageDealt?: (amount: number, isBoss?: boolean) => void
-    ) => {
-        for (const e of enemies) {
-            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, {
-                onPlayerHit,
-                spawnPart,
-                spawnDecal,
-                onDamageDealt: (amt) => onDamageDealt ? onDamageDealt(amt, !!e.isBoss) : undefined,
-                playSound: (id) => soundManager.playEffect(id),
-                spawnBubble,
-                onAshStart: (enemy) => {
+            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, false, {
+                onPlayerHit, spawnPart, spawnDecal, spawnBubble,
+                onDamageDealt: (amt: number) => onDamageDealt?.(amt, !!e.isBoss),
+                playSound: (id: string) => soundManager.playEffect(id),
+                onAshStart: (enemy: Enemy) => {
                     const scene = enemy.mesh.parent as THREE.Scene;
                     if (scene && !enemy.ashPile) {
                         const ash = EnemyManager.createAshPile(enemy);
-                        ash.scale.setScalar(0.001); // Start invisible
+                        ash.scale.setScalar(0.001);
                         scene.add(ash);
                         enemy.ashPile = ash;
                     }
-                }
+                },
+                getLastDamageType: () => e.lastDamageType || 'standard'
             });
+
+            // --- SYNC RENDERER ---
+            const s = e.deathState;
+            // Rendera alla som inte är poolade ('dead') eller borttagna ('exploded')
+            if (!e.isBoss && !e.mesh.userData.exploded && (s === 'alive' || s === 'shot' || s === 'burning' || s === 'electrified')) {
+                _syncList.push(e);
+            }
         }
 
-        if (zombieRenderer) {
-            // Filter out bosses, exploded enemies, and those in special death animations
-            zombieRenderer.sync(enemies.filter(e =>
-                !e.isBoss &&
-                !e.mesh.userData.exploded &&
-                e.deathState === 'alive'
-            ));
-        }
+        if (zombieRenderer) zombieRenderer.sync(_syncList);
     },
 
-    cleanupDeadEnemies: (
-        scene: THREE.Scene,
-        enemies: Enemy[],
-        now: number,
-        state: any,
-        callbacks: {
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) => void;
-            spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
-            spawnScrap: (x: number, z: number, amount: number) => void;
-            spawnBubble: (text: string, duration: number) => void;
-            t: (key: string) => string;
-            gainXp: (amount: number) => void;
-            onBossKilled?: (id: number) => void;
-        }
-    ) => {
+    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], now: number, state: any, callbacks: any) => {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
-            if (!e.dead) continue;
+
+            if (e.deathState === 'alive') continue;
 
             if (!e.deathTimer) {
                 e.deathTimer = now;
@@ -222,76 +228,50 @@ export const EnemyManager = {
 
             const age = now - e.deathTimer;
 
-            if (age > 500) {
-                const pos = e.mesh.position.clone();
+            // Vänta 2 sekunder på animationer innan slutgiltig borttagning
+            if (age > 2000 && e.deathState !== 'dead') {
+                e.deathState = 'dead';
+            }
+
+            if (e.deathState === 'dead' || e.mesh.userData.exploded) {
+                const type = e.deathState;
                 const wasExploded = e.mesh.userData.exploded;
 
                 if (!wasExploded) {
-                    if (e.isBoss || e.type === 'BOMBER') {
-                        const upForce = new THREE.Vector3(0, 5, 0);
-                        EnemyManager.explodeEnemy(e, upForce, callbacks);
-                    } else if (e.deathState === 'dying_ash') {
-                        // Burning death: immediately spawn ash pile if not already growing
-                        if (!e.ashPile) {
+                    switch (type) {
+                        case 'exploded':
+                        case 'gibbed':
+                            EnemyManager.explodeEnemy(e, _up, callbacks);
+                            break;
+                        case 'burning':
                             scene.remove(e.mesh);
-                            const ash = EnemyManager.createAshPile(e);
-                            scene.add(ash);
-                            e.ashPile = ash;
-                            callbacks.spawnPart(pos.x, 0.5, pos.z, 'campfire_spark', 15);
-                        } else {
-                            // Ensure it's fully grown and visible
+                            if (e.ashPile) e.ashPile.scale.setScalar(e.originalScale || 1.0);
+                            break;
+                        case 'shot':
+                        case 'electrified':
+                        default:
                             scene.remove(e.mesh);
-                            e.ashPile.scale.setScalar(e.originalScale || 1.0);
-                            callbacks.spawnPart(pos.x, 0.5, pos.z, 'campfire_spark', 5);
-                            callbacks.spawnPart(pos.x, 0.2, pos.z, 'smoke', 8); // Final smoke burst
-                        }
-                    } else if (age > 2000) {
-                        scene.remove(e.mesh);
-                        if (!e.isBoss) {
-                            EnemyManager.createCorpse(e);
-                        }
-                        if (!e.bloodSpawned) {
-                            const poolSize = (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0);
-                            callbacks.spawnDecal(pos.x, pos.z, poolSize, MATERIALS.bloodDecal);
-                            e.bloodSpawned = true;
-                        }
-                    } else {
-                        continue; // Keep waiting
+                            if (!e.isBoss) EnemyManager.createCorpse(e);
+                            if (!e.bloodSpawned) {
+                                callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0), MATERIALS.bloodDecal);
+                                e.bloodSpawned = true;
+                            }
+                            break;
                     }
                 }
 
-                // Finalize Rewards
+                // Stats & Recycling
                 const kType = e.type || 'Unknown';
                 state.killsByType[kType] = (state.killsByType[kType] || 0) + 1;
                 state.killsInRun++;
                 callbacks.gainXp(e.score || 10);
 
-                if (state.sectorState && state.sectorState.hordeTarget) {
-                    state.sectorState.hordeKilled = (state.sectorState.hordeKilled || 0) + 1;
-                }
+                if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
-                if (e.isBoss && e.bossId !== undefined && callbacks.onBossKilled) {
-                    state.bossDefeatedTime = now;
-                    callbacks.onBossKilled(e.bossId);
-
-                    // Restore Boss Scrap drop
-                    callbacks.spawnScrap(pos.x, pos.z, 50);
-
-                    // Specific boss debris on removal if it didn't explode earlier
-                    if (!wasExploded) {
-                        callbacks.spawnPart(pos.x, 2, pos.z, 'blood', 40);
-                        EnemyManager.generateBossDebris(e, 15, callbacks.spawnPart);
-                    }
-                }
-
-                // Cleanup Bomber Ring if any
-                if (e.indicatorRing) {
-                    const scene = e.indicatorRing.parent;
-                    if (scene) scene.remove(e.indicatorRing);
-                    e.indicatorRing = undefined;
-                }
-
-                enemies.splice(i, 1);
+                // Släpp tillbaka till poolen
+                const recycled = enemies.splice(i, 1)[0];
+                recycled.dead = true;
+                if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }
     }

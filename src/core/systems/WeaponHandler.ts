@@ -1,57 +1,41 @@
-
 import * as THREE from 'three';
-import { WeaponType, WeaponCategory } from '../../types';
-import { WEAPONS } from '../../content/constants';
+import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../content/weapons';
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
 import { soundManager } from '../../utils/sound';
 
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _slotArray: WeaponType[] = [];
+
 export const WeaponHandler = {
-    // Handle specific key presses for slot switching (1-4)
-    handleSlotSwitch: (
-        state: any,
-        loadout: any,
-        key: string
-    ) => {
-        const slotMap: Record<string, WeaponType> = {
-            '1': loadout.primary,
-            '2': loadout.secondary,
-            '3': loadout.throwable,
-            '4': WeaponType.RADIO
-        };
+    // Handle switching weapons via 1-4 keys
+    handleSlotSwitch: (state: any, loadout: any, key: string) => {
+        let next: WeaponType | null = null;
+        if (key === '1') next = loadout.primary;
+        else if (key === '2') next = loadout.secondary;
+        else if (key === '3') next = loadout.throwable;
+        else if (key === '4') next = WeaponType.RADIO;
 
-        const nextWeapon = slotMap[key];
-        if (!nextWeapon) return;
+        if (!next || !WEAPONS[next]) return;
 
-        // Check if weapon exists in definitions
-        const wepDef = WEAPONS[nextWeapon];
-        if (!wepDef) return;
-
-        // Condition: Throwable ammo check
-        if (wepDef.category === WeaponCategory.THROWABLE) {
-            // Allow switch even if empty, just can't fire later (unless debug)
-            if ((state.weaponAmmo[nextWeapon] || 0) <= 0) {
-                // Optional: Allow switching to empty throwable? 
-                // Standard behavior usually allows equipping even if empty, but let's keep it restricted for "feel" unless debug.
-                // However, Slot Switch logic doesn't know about debugMode here easily without passing it.
-                // Let's assume standard behavior for switching: Block if empty.
-                if ((state.weaponAmmo[nextWeapon] || 0) <= 0) {
-                    soundManager.playUiClick();
-                    return;
-                }
-            }
+        // Restriction: Cannot switch to empty throwables
+        if (WEAPONS[next].category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
+            soundManager.playUiClick();
+            return;
         }
 
-        // Condition: Radio availability check
-        if (nextWeapon === WeaponType.RADIO) {
-            if (state.familyFound) {
-                soundManager.playUiClick();
-                return;
-            }
+        // Restriction: Radio is only for calling family
+        if (next === WeaponType.RADIO && state.familyFound) {
+            soundManager.playUiClick();
+            return;
         }
 
-        // Perform Switch
-        if (state.activeWeapon !== nextWeapon) {
-            state.activeWeapon = nextWeapon;
+        if (state.activeWeapon !== next) {
+            state.activeWeapon = next;
             state.isReloading = false;
             state.reloadEndTime = 0;
             state.throwChargeStart = 0;
@@ -59,59 +43,54 @@ export const WeaponHandler = {
         }
     },
 
-    // New function to handle input state changes (Switching/Reloading)
-    handleInput: (
-        input: any,
-        state: any,
-        loadout: any,
-        now: number,
-        disableInput: boolean
-    ) => {
+    // Handle weapon-related inputs (Scroll to switch, R to reload)
+    handleInput: (input: any, state: any, loadout: any, now: number, disableInput: boolean) => {
         if (disableInput) return;
 
-        // 1. Scrolling / Switching
+        // 1. Optimized Scroll Switching
         if (input.scrollDown || input.scrollUp) {
-            const getValidSlots = () => [loadout.primary, loadout.secondary, loadout.throwable, WeaponType.RADIO].filter(s => {
-                if (!s || !WEAPONS[s]) return false;
-                if (WEAPONS[s].category === WeaponCategory.THROWABLE && state.weaponAmmo[s] <= 0) return false;
-                if (s === WeaponType.RADIO && state.familyFound) return false;
-                return true;
-            });
+            _slotArray.length = 0;
+            const potential = [loadout.primary, loadout.secondary, loadout.throwable, WeaponType.RADIO];
 
-            const slots = getValidSlots();
-            const currentIdx = slots.indexOf(state.activeWeapon);
+            for (let i = 0; i < potential.length; i++) {
+                const s = potential[i];
+                if (!s || !WEAPONS[s]) continue;
+                if (WEAPONS[s].category === WeaponCategory.THROWABLE && state.weaponAmmo[s] <= 0) continue;
+                if (s === WeaponType.RADIO && state.familyFound) continue;
+                _slotArray.push(s);
+            }
+
+            const currentIdx = _slotArray.indexOf(state.activeWeapon);
             if (currentIdx !== -1) {
-                const nextIdx = input.scrollDown ? (currentIdx + 1) % slots.length : (currentIdx - 1 + slots.length) % slots.length;
-                const nextWep = slots[nextIdx];
+                const step = input.scrollDown ? 1 : -1;
+                const nextIdx = (currentIdx + step + _slotArray.length) % _slotArray.length;
+                const nextWep = _slotArray[nextIdx];
 
                 if (nextWep !== state.activeWeapon) {
                     state.activeWeapon = nextWep;
-                    // Reset actions
                     state.isReloading = false;
                     state.reloadEndTime = 0;
                     state.throwChargeStart = 0;
                     soundManager.playWeaponSwap();
                 }
-                input.scrollDown = false;
-                input.scrollUp = false;
+                input.scrollDown = input.scrollUp = false;
             }
         }
 
-        // 2. Fallback / Validation
+        // 2. Weapon Validation
         let wep = WEAPONS[state.activeWeapon];
         if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
 
+        // 3. Reload Logic
         const isThrowable = wep.category === WeaponCategory.THROWABLE;
         const isRadio = state.activeWeapon === WeaponType.RADIO;
 
-        // 3. Reloading
         if (input.r && !state.isReloading && !isThrowable && !isRadio && state.weaponAmmo[state.activeWeapon] < wep.magSize) {
             state.isReloading = true;
             state.reloadEndTime = now + wep.reloadTime;
             soundManager.playMagOut();
         }
 
-        // 4. Reload Completion
         if (state.isReloading && now > state.reloadEndTime) {
             state.isReloading = false;
             state.weaponAmmo[state.activeWeapon] = wep.magSize;
@@ -119,128 +98,140 @@ export const WeaponHandler = {
         }
     },
 
-    updateReloadBar: (
-        reloadBar: { bg: THREE.Mesh, fg: THREE.Mesh } | null,
-        state: any,
-        playerPos: THREE.Vector3,
-        cameraQuaternion: THREE.Quaternion,
-        now: number
-    ) => {
+    // Updates the reload progress bar above the player
+    updateReloadBar: (reloadBar: { bg: THREE.Mesh, fg: THREE.Mesh } | null, state: any, playerPos: THREE.Vector3, cameraQuaternion: THREE.Quaternion, now: number) => {
         if (!reloadBar) return;
 
         if (state.isReloading) {
             const wep = WEAPONS[state.activeWeapon];
-            const totalTime = wep.reloadTime;
-            const remaining = state.reloadEndTime - now;
-            const progress = Math.min(1, Math.max(0, 1 - (remaining / totalTime)));
+            const progress = Math.min(1, Math.max(0, 1 - ((state.reloadEndTime - now) / (wep.reloadTime || 1))));
 
-            const barPos = playerPos.clone();
-            barPos.y += 2.5; // Above head
+            _v1.copy(playerPos);
+            _v1.y += 2.5;
 
-            reloadBar.bg.visible = true;
-            reloadBar.fg.visible = true;
-
-            reloadBar.bg.position.copy(barPos);
-            reloadBar.fg.position.copy(barPos);
-
+            reloadBar.bg.visible = reloadBar.fg.visible = true;
+            reloadBar.bg.position.copy(_v1);
+            reloadBar.fg.position.copy(_v1);
             reloadBar.bg.quaternion.copy(cameraQuaternion);
             reloadBar.fg.quaternion.copy(cameraQuaternion);
 
             reloadBar.fg.scale.set(progress, 1, 1);
-
-            const offset = -0.75 + (progress * 1.5 / 2);
-            reloadBar.fg.position.add(new THREE.Vector3(offset, 0, 0.01).applyQuaternion(cameraQuaternion));
+            const offset = -0.75 + (progress * 0.75);
+            _v2.set(offset, 0, 0.01).applyQuaternion(cameraQuaternion);
+            reloadBar.fg.position.add(_v2);
         } else {
-            reloadBar.bg.visible = false;
-            reloadBar.fg.visible = false;
+            reloadBar.bg.visible = reloadBar.fg.visible = false;
         }
     },
 
-    handleFiring: (
-        scene: THREE.Scene,
-        playerGroup: THREE.Group,
-        input: any,
-        state: any,
-        now: number,
-        loadout: any,
-        aimCrossMesh: THREE.Group | null,
-        trajectoryLineMesh?: THREE.Line | null,
-        debugMode: boolean = false
-    ) => {
+    // --- CORE FIRING LOGIC ---
+    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Line | null, debugMode: boolean = false) => {
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];
-        // Fallback safety
-        if (!wep) {
-            state.activeWeapon = loadout.primary;
-            wep = WEAPONS[state.activeWeapon];
-        }
+        if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
 
-        const isThrowable = wep.category === WeaponCategory.THROWABLE;
-        const isRadio = state.activeWeapon === WeaponType.RADIO;
-
-        // --- RADIO LOGIC ---
-        if (isRadio) {
+        if (state.activeWeapon === WeaponType.RADIO) {
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             return;
         }
 
-        // --- GUN LOGIC ---
-        if (!isThrowable) {
-            state.throwChargeStart = 0;
+        // --- 1. CONTINUOUS FIRE (Flamethrower / Tesla) ---
+        if (wep.behavior === WeaponBehavior.CONTINUOUS) {
             if (aimCrossMesh) aimCrossMesh.visible = false;
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const currentAmmo = state.weaponAmmo[state.activeWeapon];
-                const hasAmmo = currentAmmo > 0 || debugMode;
-                const canFire = now > state.lastShotTime + wep.fireRate && hasAmmo;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
+                if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
+                    state.lastShotTime = now;
+                    if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
 
-                if (canFire) {
+                    // Calculate Muzzle/Origin Position
+                    _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
+                    _v2.copy(playerGroup.position).add(_v1);
+
+                    // Forward direction
+                    _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+
+                    // Sound and visual particles
+                    soundManager.playShot(wep.name);
+                    const effectType = wep.name === WeaponType.FLAMETHROWER ? 'campfire_flame' : 'spark';
+
+                    // Spawn stream particles
+                    for (let i = 0; i < 3; i++) {
+                        _v4.copy(_v3).multiplyScalar(wep.range * (0.3 + Math.random() * 0.7));
+                        _v4.x += (Math.random() - 0.5) * wep.spread * 5;
+                        _v4.z += (Math.random() - 0.5) * wep.spread * 5;
+                        state.callbacks.spawnPart(_v2.x, _v2.y, _v2.z, effectType, 1, undefined, _v4);
+                    }
+
+                    // Cone-based Hit Detection
+                    const nearby = state.collisionGrid.getNearbyEnemies(_v2, wep.range);
+                    for (const e of nearby) {
+                        if (e.deathState !== 'alive') continue;
+
+                        _v4.subVectors(e.mesh.position, _v2);
+                        const distSq = _v4.lengthSq();
+                        if (distSq > wep.range * wep.range) continue;
+
+                        _v5.copy(_v4).normalize();
+                        const dot = _v3.dot(_v5);
+
+                        // If enemy is within the weapon's firing cone (approx 30 degrees)
+                        if (dot > 0.86) {
+                            e.lastDamageType = wep.name;
+                            e.hp -= wep.damage;
+                            e.hitTime = now;
+                            e.lastHitWasHighImpact = true;
+
+                            // Apply Status Effects (Burning / Stun)
+                            if (wep.statusEffect.type === 'burning') {
+                                e.isBurning = true;
+                                e.afterburnTimer = wep.statusEffect.duration;
+                                e.burnTimer = 0.5;
+                            } else if (wep.statusEffect.type === 'electrified') {
+                                e.stunTimer = wep.statusEffect.duration;
+                            }
+
+                            state.callbacks.onDamageDealt(wep.damage);
+                            state.callbacks.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 1);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // --- 2. PROJECTILE FIRING (Guns) ---
+        if (wep.behavior === WeaponBehavior.PROJECTILE) {
+            if (aimCrossMesh) aimCrossMesh.visible = false;
+            if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
+
+            if (input.fire) {
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
+                if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
                     state.lastShotTime = now;
                     if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
                     state.shotsFired++;
 
-                    // Origin: Offset from player center to approx gun barrel position
-                    const origin = playerGroup.position.clone().add(
-                        new THREE.Vector3(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion)
-                    );
+                    _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
+                    _v2.copy(playerGroup.position).add(_v1);
 
-                    // Noise Emission (60m radius for guns)
-                    if (state.noiseEvents) {
-                        state.noiseEvents.push({ pos: origin.clone(), radius: 60, time: now });
-                    }
+                    if (state.noiseEvents) state.noiseEvents.push({ pos: _v2.clone(), radius: 60, time: now, active: true });
 
-                    // Play sound once
                     soundManager.playShot(wep.name);
 
-                    // Shotgun Logic: Multiple pellets
-                    const isShotgun = wep.name === WeaponType.SHOTGUN;
-                    const pellets = isShotgun ? 8 : 1;
-
-                    const level = state.weaponLevels[state.activeWeapon] || 1;
-                    const scaledDamage = wep.baseDamage * (1 + (level - 1) * 0.1);
-
+                    const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
                     for (let i = 0; i < pellets; i++) {
-                        // Direction with spread
-                        const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                        dir.x += (Math.random() - 0.5) * wep.spread;
-                        dir.z += (Math.random() - 0.5) * wep.spread;
-                        dir.normalize();
-
-                        ProjectileSystem.spawnBullet(scene, state.projectiles, origin, dir, wep.name, scaledDamage);
+                        _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                        ProjectileSystem.spawnBullet(scene, state.projectiles, _v2, _v3, wep.name);
                     }
-
-                } else if (input.fire && !state.isReloading && state.weaponAmmo[state.activeWeapon] <= 0) {
-                    // Empty Click feedback
-                    if (now > state.lastShotTime + 250) {
-                        state.lastShotTime = now;
-                        soundManager.playEmptyClick();
-                    }
-
-                    // Auto Reload (only if actually empty and just tried to fire)
+                } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + 250) {
+                    state.lastShotTime = now;
+                    soundManager.playEmptyClick();
                     state.isReloading = true;
                     state.reloadEndTime = now + wep.reloadTime;
                     soundManager.playMagOut();
@@ -249,80 +240,54 @@ export const WeaponHandler = {
             return;
         }
 
-        // --- THROWABLE LOGIC ---
-        if (isThrowable) {
+        // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
+        if (wep.behavior === WeaponBehavior.THROWABLE) {
             if (input.fire) {
                 if (state.weaponAmmo[state.activeWeapon] > 0 || debugMode) {
-                    // Charging
                     if (state.throwChargeStart === 0) state.throwChargeStart = now;
-
                     const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
-                    const aimDir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                    const origin = playerGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
-                    const maxDist = 25;
-                    const throwDist = Math.max(2, ratio * maxDist);
 
-                    // Update Aim Cross
+                    _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                    const dist = Math.max(2, ratio * 25);
+
                     if (aimCrossMesh) {
                         aimCrossMesh.visible = true;
-                        const targetPos = playerGroup.position.clone().add(aimDir.clone().multiplyScalar(throwDist));
-                        aimCrossMesh.position.set(targetPos.x, 0.2, targetPos.z);
+                        _v2.copy(_v1).multiplyScalar(dist);
+                        aimCrossMesh.position.copy(playerGroup.position).add(_v2);
+                        aimCrossMesh.position.y = 0.2;
                         aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
                     }
 
-                    // Update Trajectory Line
                     if (trajectoryLineMesh) {
                         trajectoryLineMesh.visible = true;
-                        const points: THREE.Vector3[] = [];
-                        const gravity = 30;
-                        const timeToTarget = 1.0; // Assume 1s fuse/time for arc viz
-                        const vx = (aimDir.x * throwDist) / timeToTarget;
-                        const vz = (aimDir.z * throwDist) / timeToTarget;
-                        const vy = (0 - origin.y + 0.5 * gravity * timeToTarget * timeToTarget) / timeToTarget;
+                        const g = 30, tMax = 1.0, startY = playerGroup.position.y + 1.5;
+                        const vx = (_v1.x * dist) / tMax, vz = (_v1.z * dist) / tMax;
+                        const vy = (0 - startY + 0.5 * g * tMax * tMax) / tMax;
 
-                        const segments = 20;
-                        for (let i = 0; i <= segments; i++) {
-                            const t = (i / segments) * timeToTarget;
-                            const px = origin.x + vx * t;
-                            const pz = origin.z + vz * t;
-                            const py = Math.max(0.1, origin.y + vy * t - 0.5 * gravity * t * t);
-                            points.push(new THREE.Vector3(px, py, pz));
+                        const attr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+                        for (let i = 0; i <= 20; i++) {
+                            const t = (i / 20) * tMax;
+                            attr.setXYZ(i, playerGroup.position.x + vx * t, Math.max(0.1, startY + vy * t - 0.5 * g * t * t), playerGroup.position.z + vz * t);
                         }
-                        // Dispose old geometry to prevent buffer size errors
-                        trajectoryLineMesh.geometry.dispose();
-                        trajectoryLineMesh.geometry = new THREE.BufferGeometry().setFromPoints(points);
+                        attr.needsUpdate = true;
                         (trajectoryLineMesh.material as THREE.LineBasicMaterial).opacity = 0.4 + ratio * 0.6;
                     }
                 }
-            } else {
-                // Release / Throw
-                if (state.throwChargeStart > 0 && (state.weaponAmmo[state.activeWeapon] > 0 || debugMode)) {
-                    if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
-                    state.throwablesThrown++;
+            } else if (state.throwChargeStart > 0) {
+                const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
+                if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
+                state.throwablesThrown++;
 
-                    const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
-                    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                    const origin = playerGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+                _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                _v2.copy(playerGroup.position).add(_v3.set(0, 1.5, 0));
 
-                    const level = state.weaponLevels[state.activeWeapon] || 1;
-                    const scaledDamage = wep.baseDamage * (1 + (level - 1) * 0.1);
+                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v1, state.activeWeapon, ratio);
 
-                    ProjectileSystem.spawnThrowable(scene, state.projectiles, origin, dir, state.activeWeapon, ratio, scaledDamage);
+                if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) state.activeWeapon = loadout.primary;
 
-                    // Auto switch back to primary if empty (Skip in debug mode)
-                    if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {
-                        state.activeWeapon = loadout.primary;
-                    }
-
-                    state.throwChargeStart = 0;
-                    if (aimCrossMesh) aimCrossMesh.visible = false;
-                    if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
-                } else {
-                    // Cancel/Reset
-                    state.throwChargeStart = 0;
-                    if (aimCrossMesh) aimCrossMesh.visible = false;
-                    if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
-                }
+                state.throwChargeStart = 0;
+                if (aimCrossMesh) aimCrossMesh.visible = false;
+                if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             }
         }
     }

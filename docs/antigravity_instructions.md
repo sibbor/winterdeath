@@ -10,7 +10,7 @@ You are assisting in the development of **Vinterdöd**, a top-down survival game
 ### Mandatory Knowledge Research
 Before performing any architectural changes, implementing new world features, or writing lore/dialogue, you **MUST** read the following local files:
 1.  `./docs/vinterdod_guidelines.md`: The technical "Source of Truth" for the project. 
-    - **Follow the 3-Tier World Gen system**: `ObjectGenerator` (Atoms/Area Fillers) -> `PathGenerator` (Linear paths/assemblies) -> `SectorBuilder` (Orchestrator).
+    - **Follow the 3-Tier World Gen system**: `ObjectGenerator` (Atoms/Area Fillers) -> `PathGenerator` (Linear paths/assemblies) -> `SectorGeneratorr` (Orchestrator).
     - **Respect the singleton patterns** for the Engine and Sound systems.
     - **Adhere to the clean game loop** and UI-3D hybrid architecture.
 2.  `./docs/STORY.md`: The narrative "Source of Truth".

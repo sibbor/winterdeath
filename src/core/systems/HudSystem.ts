@@ -1,7 +1,8 @@
 
 import * as THREE from 'three';
 import { WEAPONS, BOSSES } from '../../content/constants';
-import { WeaponType } from '../../types';
+import { WeaponType } from '../../content/weapons';
+
 
 export const HudSystem = {
     getHudData: (

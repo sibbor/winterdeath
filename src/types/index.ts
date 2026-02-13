@@ -1,3 +1,4 @@
+import { WeaponType } from '../content/weapons';
 
 export enum GameScreen {
   CAMP = 'CAMP',
@@ -8,51 +9,9 @@ export enum GameScreen {
   RECAP = 'RECAP',
   DEATH = 'DEATH',
   PROLOGUE = 'PROLOGUE',
-  EDITOR = 'EDITOR'
-}
-
-export enum WeaponCategory {
-  PRIMARY = 'PRIMARY',
-  SECONDARY = 'SECONDARY',
-  THROWABLE = 'THROWABLE',
-  SPECIAL = 'SPECIAL',
-  TOOL = 'TOOL'
-}
-
-export enum WeaponType {
-  // Primary
-  SMG = 'SMG',
-  SHOTGUN = 'Shotgun',
-  RIFLE = 'Assault Rifle',
-  // Secondary
-  PISTOL = 'Pistol',
-  REVOLVER = 'Revolver',
-  // Throwable
-  GRENADE = 'Grenade',
-  MOLOTOV = 'Molotov',
-  FLASHBANG = 'Flashbang',
-  // Special
-  MINIGUN = 'Minigun',
-  // Tool
-  RADIO = 'Radio'
 }
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'embers';
-
-export interface WeaponStats {
-  name: WeaponType;
-  displayName: string;
-  category: WeaponCategory;
-  damage: number;
-  fireRate: number; // ms between shots
-  magSize: number;
-  reloadTime: number; // ms
-  range: number;
-  spread: number;
-  color: string;
-  baseDamage: number;
-  icon: string; // SVG path data or full SVG string
-}
 
 export interface PlayerStats {
   level: number;

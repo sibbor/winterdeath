@@ -1,23 +1,29 @@
-
 import { SoundCore } from './SoundCore';
 
-// Define the signature for generator functions
+/**
+ * Generator function signature for procedural sound synthesis.
+ */
 type SoundGenerator = (ctx: AudioContext, ...args: any[]) => AudioBuffer;
 
+/**
+ * SoundBank manages the lifecycle of procedurally generated and preloaded audio buffers.
+ * Acts as a centralized cache to prevent redundant synthesis overhead.
+ */
 export class SoundBank {
     private static buffers: Map<string, AudioBuffer> = new Map();
     private static generators: Map<string, SoundGenerator> = new Map();
 
     /**
-     * Register a generator function for a specific sound key.
-     * The generator will be called once during preloading or on first demand.
+     * Registers a sound generator function.
+     * Use this to define how a sound (e.g., 'white_noise', 'sine_wave') is synthesized.
      */
     static register(key: string, generator: SoundGenerator) {
         this.generators.set(key, generator);
     }
 
     /**
-     * Preload a specific sound by running its generator immediately.
+     * Executes a generator and caches the resulting AudioBuffer.
+     * Prevents duplicate generation if the buffer already exists.
      */
     static preload(core: SoundCore, key: string) {
         if (this.buffers.has(key)) return;
@@ -28,35 +34,51 @@ export class SoundBank {
                 const buffer = generator(core.ctx);
                 this.buffers.set(key, buffer);
             } catch (e) {
-                console.warn(`Failed to generate sound: ${key}`, e);
+                console.error(`SoundBank: Failed to synthesize [${key}]:`, e);
             }
         }
     }
 
     /**
-     * Preload all registered sounds.
+     * Batch preloads all registered generators.
+     * Call this during the game's initial loading screen.
      */
     static preloadAll(core: SoundCore) {
         this.generators.forEach((_, key) => this.preload(core, key));
     }
 
     /**
-     * Get a cached buffer. If not cached, it tries to generate it on the fly and cache it.
+     * Retrieves a cached AudioBuffer. 
+     * If the buffer isn't found, it attempts lazy-generation on the spot.
      */
     static get(core: SoundCore, key: string): AudioBuffer | undefined {
-        if (!this.buffers.has(key)) {
-            // Lazy load if missed during preload
+        let buffer = this.buffers.get(key);
+        if (!buffer) {
             this.preload(core, key);
+            buffer = this.buffers.get(key);
         }
-        return this.buffers.get(key);
+        return buffer;
     }
+
     /**
-     * Play a sound from the bank.
-     * Use this as a replacement for ad-hoc synthesis.
+     * Plays a sound from the bank.
+     * High-performance execution: fetches cached buffer and connects to the audio graph.
+     * * @returns An object containing the nodes for further manipulation, or null on failure.
      */
-    static play(core: SoundCore, key: string, volume: number = 1.0, playbackRate: number = 1.0, loop: boolean = false, useReverb: boolean = false): { source: AudioBufferSourceNode; gain: GainNode } | null {
+    static play(
+        core: SoundCore,
+        key: string,
+        volume: number = 1.0,
+        playbackRate: number = 1.0,
+        loop: boolean = false,
+        useReverb: boolean = false
+    ): { source: AudioBufferSourceNode; gain: GainNode } | null {
+
         const buffer = this.get(core, key);
         if (!buffer) return null;
+
+        // Ensure the AudioContext is active (Browser security policy)
+        core.resume();
 
         const source = core.ctx.createBufferSource();
         source.buffer = buffer;
@@ -66,19 +88,22 @@ export class SoundBank {
         const gain = core.ctx.createGain();
         gain.gain.value = volume;
 
+        // Path: Source -> Local Gain -> Master Gain (Dry)
+        // Reverb connection is handled inside core.track()
         source.connect(gain);
         gain.connect(core.masterGain);
 
-        source.start();
+        source.start(0);
 
-        // Track for cleanup/pausing
+        // Register source in SoundCore for global management (e.g. stopAll)
         core.track(source, useReverb);
 
         return { source, gain };
     }
 
     /**
-     * Clear all buffers to free memory (e.g. on level unload if needed)
+     * Releases all cached buffers from memory.
+     * Useful during major scene transitions to clear up the heap.
      */
     static clear() {
         this.buffers.clear();

@@ -1,6 +1,7 @@
 ﻿import * as THREE from 'three';
-import { WeaponType, SectorTrigger, SectorState } from '../types';
-import { Obstacle } from '../utils/physics';
+import { SectorTrigger, SectorState } from '../types';
+import { WeaponType } from '../content/weapons';
+import { Obstacle } from './systems/WindSystem';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';

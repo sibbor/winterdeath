@@ -15,10 +15,10 @@ Maintain a strict 3-tier separation for all world-building logic:
 - **Assemblies**: Fences, hedges, stone walls, embankments.
 - **Rules**: Uses coordinates (`Vector3[]`) to create geometries that follow a spline. Can call `ObjectGenerator` to spawn repeating assets (like fence posts).
 
-### 3. SectorBuilder (SectorGenerator.ts - Orchestrator)
+### 3. SectorGenerator.ts (SectorGenerator.ts - Orchestrator)
 - **Glue Logic**: The high-level API used in `SectorN.ts` files.
 - **System Integration**: Responsible for adding objects to the scene AND connecting them to gameplay systems (adding colliders to `ctx.obstacles`, spawning triggers, etc.).
-- **Responsibility**: "ObjectGenerator knows how to build a tree; SectorBuilder knows that the tree belongs at (X, Z) and should have a collider."
+- **Responsibility**: "ObjectGenerator knows how to build a tree; SectorGenerator knows that the tree belongs at (X, Z) and should have a collider."
 
 ---
 
@@ -52,7 +52,7 @@ Maintain a strict 3-tier separation for all world-building logic:
 ## 🗺 Maps: Sectors
 - **Lifecycle**: individual levels (Sectors) handle their own initialization (`onInit`) and per-frame logic (`onUpdate`).
 - **State Persistence**: Sector-specific state should be kept in the `sectorState` object. Global state (xp, items) belongs in `gameState`.
-- **SectorBuilder**: Always use the 3-tier architecture defined in the World Generation section for building sectors.
+- **SectorGenerator**: Always use the 3-tier architecture defined in the World Generation section for building sectors.
 
 ## 🏕 Hub: Camp
 - **React-3D Hybrid**: The Camp (in `src/components/camp/Camp.tsx`) is a React component that mounts the 3D `Engine`.
@@ -75,7 +75,7 @@ Maintain a strict 3-tier separation for all world-building logic:
 
 ## 🍎 Physics & Collisions
 - **Resolver**: Use `resolveCollision` (in `src/utils/physics.ts`) for top-down sphere-vs-box or sphere-vs-sphere interactions.
-- **Obstacles**: All solid objects must be pushed to `ctx.obstacles` within the `SectorBuilder` logic to enable collision detection.
+- **Obstacles**: All solid objects must be pushed to `ctx.obstacles` within the `SectorGenerator` logic to enable collision detection.
 
 ## ⚡ Performance & Optimization
 - **AssetPreloader**: To prevent runtime stutters (jank) when spawning new objects or triggering effects:

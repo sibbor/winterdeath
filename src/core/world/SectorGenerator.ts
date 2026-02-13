@@ -10,8 +10,8 @@ import { PathGenerator } from './PathGenerator';
 import { EffectManager } from '../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 
-// Shared Utilities for Sector Building
-export const SectorBuilder = {
+// Shared Utilities for Sector Generation
+export const SectorGenerator = {
 
     addObstacle: (ctx: SectorContext, obstacle: any) => {
         if (!obstacle.mesh) return;
@@ -26,12 +26,12 @@ export const SectorBuilder = {
         obstacle.mesh.updateMatrixWorld(true);
 
         // Ensure it's in the spatial grid
-        ctx.collisionGrid.add(obstacle);
+        ctx.collisionGrid.addObstacle(obstacle);
     },
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
         if (def.groundType && def.groundType !== 'NONE') {
-            await SectorBuilder.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
+            await SectorGenerator.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
         }
 
         // Auto-Spawn Collectibles
@@ -40,7 +40,7 @@ export const SectorBuilder = {
                 const meta = getCollectibleById(c.id);
                 if (meta) {
                     // Auto-resolve ID and Type from metadata
-                    SectorBuilder.spawnCollectible(ctx, c.x, c.z, c.id, meta.modelType);
+                    SectorGenerator.spawnCollectible(ctx, c.x, c.z, c.id, meta.modelType);
                 }
                 if (ctx.yield) await ctx.yield();
             }
@@ -48,13 +48,13 @@ export const SectorBuilder = {
 
         if (ctx.yield) await ctx.yield();
         if (def.bounds) {
-            SectorBuilder.generateBoundaries(ctx, def.bounds);
+            SectorGenerator.generateBoundaries(ctx, def.bounds);
         }
 
         if (ctx.debugMode) {
-            SectorBuilder.visualizeTriggers(ctx);
+            SectorGenerator.visualizeTriggers(ctx);
             if (def.bounds) {
-                SectorBuilder.visualizeBounds(ctx, def.bounds);
+                SectorGenerator.visualizeBounds(ctx, def.bounds);
             }
         }
 
@@ -67,7 +67,7 @@ export const SectorBuilder = {
      */
     build: async (ctx: SectorContext, def: any) => {
         // 1. Automatic Content (Ground, Bounds, Collectibles)
-        await SectorBuilder.generateAutomaticContent(ctx, def);
+        await SectorGenerator.generateAutomaticContent(ctx, def);
 
         // 2. Setup Environment (Lights, Fog, etc.)
         if (def.setupEnvironment) {
@@ -158,7 +158,7 @@ export const SectorBuilder = {
             const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, h, sz), wallMat);
             mesh.position.set(x, h / 2, z);
             ctx.scene.add(mesh);
-            SectorBuilder.addObstacle(ctx, {
+            SectorGenerator.addObstacle(ctx, {
                 mesh,
                 collider: {
                     type: 'box' as const,
@@ -231,7 +231,7 @@ export const SectorBuilder = {
         ctx.scene.add(chest);
         const obs = { mesh: chest, type, scrap: isBig ? 100 : 25, radius: 2, opened: false };
         ctx.chests.push(obs);
-        SectorBuilder.addObstacle(ctx, { mesh: chest, collider: { type: 'sphere', radius: 2 } });
+        SectorGenerator.addObstacle(ctx, { mesh: chest, collider: { type: 'sphere', radius: 2 } });
 
         if (ctx.dynamicLights) ctx.dynamicLights.push(glow);
 
@@ -411,7 +411,7 @@ export const SectorBuilder = {
         bale.rotation.y = rotation;
         ctx.scene.add(bale);
         const obs = { mesh: bale, collider: { type: 'sphere' as const, radius: 1.2 * scale } };
-        SectorBuilder.addObstacle(ctx, obs);
+        SectorGenerator.addObstacle(ctx, obs);
     },
 
     spawnTimberPile: (ctx: SectorContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
@@ -421,7 +421,7 @@ export const SectorBuilder = {
         ctx.scene.add(timber);
         // Box obstacle for timber pile
         const obs = { mesh: timber, collider: { type: 'box' as const, size: new THREE.Vector3(6 * scale, 3 * scale, 6 * scale) } };
-        SectorBuilder.addObstacle(ctx, obs);
+        SectorGenerator.addObstacle(ctx, obs);
     },
 
     /**
@@ -455,7 +455,7 @@ export const SectorBuilder = {
         const sizeY = building.userData.size ? building.userData.size.y : (createRoof ? height * 1.5 : height);
 
         // 6. Collision
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: building,
             collider: {
                 type: 'box' as const,
@@ -479,7 +479,7 @@ export const SectorBuilder = {
         // Add Collision
         const box = new THREE.Box3().setFromObject(vehicle);
         const size = box.getSize(new THREE.Vector3());
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: vehicle,
             collider: { type: 'box', size: size }
         });
@@ -494,7 +494,7 @@ export const SectorBuilder = {
         ctx.scene.add(container);
 
         // Add Collision (6.0m L x 2.6m H x 2.4m W)
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: container,
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6, 2.4) }
         });
@@ -517,7 +517,7 @@ export const SectorBuilder = {
         ctx.scene.add(light);
 
         // Add collision (Street lamps are small but should block)
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: light,
             collider: { type: 'sphere', radius: 1.0 }
         });
@@ -542,7 +542,7 @@ export const SectorBuilder = {
         ctx.scene.add(building);
 
         const size = building.userData.size;
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: building,
             collider: { type: 'box', size: size.clone() }
         });
@@ -564,7 +564,7 @@ export const SectorBuilder = {
         stairs.rotation.y = rotation;
         ctx.scene.add(stairs);
 
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: stairs,
             collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
         });
@@ -577,7 +577,7 @@ export const SectorBuilder = {
         pole.position.set(x, 0, z);
         pole.rotation.y = rotation;
         ctx.scene.add(pole);
-        SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
+        SectorGenerator.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
         return pole;
     },
 
@@ -590,7 +590,7 @@ export const SectorBuilder = {
         // Add Collision
         const box = new THREE.Box3().setFromObject(car);
         const size = box.getSize(new THREE.Vector3());
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: car,
             collider: { type: 'box', size: size }
         });
@@ -611,7 +611,7 @@ export const SectorBuilder = {
         }
 
         // Add Collision for the whole stack
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: group,
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6 * stackHeight, 2.4) }
         });
@@ -653,7 +653,7 @@ export const SectorBuilder = {
         // Add Collision for the entire stack
         const box = new THREE.Box3().setFromObject(vehicleStack);
         const size = box.getSize(new THREE.Vector3());
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: vehicleStack,
             collider: { type: 'box' as const, size: size }
         });
@@ -667,7 +667,7 @@ export const SectorBuilder = {
 
         // Collision (Trunk)
         const colRadius = 0.5 * scaleMultiplier;
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: tree,
             collider: { type: 'sphere', radius: colRadius }
         });
@@ -679,7 +679,7 @@ export const SectorBuilder = {
         piece.rotation.y = rotY;
         ctx.scene.add(piece);
         if (type.includes('Wall') || type.includes('Frame')) {
-            SectorBuilder.addObstacle(ctx, {
+            SectorGenerator.addObstacle(ctx, {
                 mesh: piece,
                 collider: { type: 'box', size: new THREE.Vector3(4, 4, 1) }
             });
@@ -697,7 +697,7 @@ export const SectorBuilder = {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
         ctx.scene.add(barrel);
-        SectorBuilder.addObstacle(ctx, { mesh: barrel, collider: { type: 'sphere', radius: 0.6 } });
+        SectorGenerator.addObstacle(ctx, { mesh: barrel, collider: { type: 'sphere', radius: 0.6 } });
     },
 
     // Area Fillers
@@ -707,7 +707,7 @@ export const SectorBuilder = {
             if (typeof size === 'number') { w = size / 2; d = size / 2; }
             else { w = size.width / 2; d = size.height / 2; }
 
-            SectorBuilder.visualizePolygon(ctx, [
+            SectorGenerator.visualizePolygon(ctx, [
                 new THREE.Vector3(center.x - w, 0, center.z - d),
                 new THREE.Vector3(center.x + w, 0, center.z - d),
                 new THREE.Vector3(center.x + w, 0, center.z + d),
@@ -719,14 +719,14 @@ export const SectorBuilder = {
 
     fillWheatField: async (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
         if (ctx.debugMode) {
-            SectorBuilder.visualizePolygon(ctx, polygon, 0xffff00);
+            SectorGenerator.visualizePolygon(ctx, polygon, 0xffff00);
         }
         await EnvironmentGenerator.fillWheatField(ctx, polygon, density);
     },
 
     createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
         if (ctx.debugMode) {
-            SectorBuilder.visualizePath(ctx, polygon, 0xff0000);
+            SectorGenerator.visualizePath(ctx, polygon, 0xff0000);
         }
         PathGenerator.createBoundry(ctx, polygon, name);
     },
@@ -734,7 +734,7 @@ export const SectorBuilder = {
     createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
         if (!points || points.length < 2) return;
 
-        if (ctx.debugMode) SectorBuilder.visualizePath(ctx, points, 0xffffff);
+        if (ctx.debugMode) SectorGenerator.visualizePath(ctx, points, 0xffffff);
 
         const mountainWidth = 30;
         const mountainHeightPeak = 10;
@@ -892,7 +892,7 @@ export const SectorBuilder = {
 
     createForest: (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
         if (ctx.debugMode) {
-            SectorBuilder.visualizePolygon(ctx, polygon, 0x00ff00);
+            SectorGenerator.visualizePolygon(ctx, polygon, 0x00ff00);
         }
         EnvironmentGenerator.createForest(ctx, polygon, spacing, type);
     },
@@ -919,7 +919,7 @@ export const SectorBuilder = {
 
     visualizeTriggers: (ctx: SectorContext) => {
         ctx.triggers.forEach(trig => {
-            SectorBuilder.spawnDebugMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase());
+            SectorGenerator.spawnDebugMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase());
             const ringGeo = new THREE.RingGeometry(trig.radius - 0.2, trig.radius, 32);
             const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
             const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -930,10 +930,6 @@ export const SectorBuilder = {
     },
 
     generatePlaceholder: async (ctx: SectorContext) => {
-        for (let i = 0; i < 50; i++) {
-            const x = (Math.random() - 0.5) * 200;
-            const z = (Math.random() - 0.5) * 200;
-        }
     },
 
     attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: string, color?: number, intensity?: number, offset?: { x: number, y: number, z: number } }) => {

@@ -185,36 +185,6 @@ export const sv = {
         collected: "INSAMLADE",
         new: "NY",
         survivor_tip: "Överlevnadstips",
-        editor: {
-            title: "Sektor-redigerare",
-            desc: "Bygg och redigera sektorer i realtid",
-            open: "ÖPPNA",
-            save: "SPARA SEKTOR",
-            export: "EXPORTERA KOD",
-            play_mode: "PROVSPELA",
-            edit_mode: "REDIGERA",
-            assets: "TILLGÅNGAR",
-            properties: "EGENSKAPER",
-            selected: "Markerad",
-            position: "Position",
-            rotation: "Rotation",
-            scale: "Skala",
-            categories: {
-                props: "Rekvisita",
-                buildings: "Byggnader",
-                enemies: "Fiender",
-                triggers: "Triggers",
-                paths: "Vägar"
-            },
-            tools: {
-                select: "Markera",
-                place: "Placera",
-                path: "Vägverktyg",
-                delete: "Radera"
-            },
-            snapping: "Rutnätssnapping",
-            placed_objects: "Placerade objekt"
-        }
     },
     categories: {
         primary: "PRIMÄR",

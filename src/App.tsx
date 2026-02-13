@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameState, GameScreen, PlayerStats, SectorStats, SectorTrigger, MapItem, WeaponType } from './types';
+import { GameState, GameScreen, PlayerStats, SectorStats, SectorTrigger, MapItem } from './types';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './utils/gameLogic';
 import GameSession, { GameSessionHandle } from './components/GameSession';
@@ -23,7 +23,6 @@ import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/sound';
 import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
 import { isMobile } from './utils/device';
-import SectorEditor from './components/editor/SectorEditor';
 
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
@@ -35,7 +34,6 @@ const App: React.FC = () => {
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
     const [isLoadingSector, setIsLoadingSector] = useState(false);
     const [isLoadingCamp, setIsLoadingCamp] = useState(false);
-    const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
 
     useEffect(() => {
@@ -347,10 +345,6 @@ const App: React.FC = () => {
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
                 />
-            )}
-
-            {gameState.screen === GameScreen.EDITOR && (
-                <SectorEditor onClose={() => setGameState(prev => ({ ...prev, screen: GameScreen.CAMP }))} />
             )}
 
             {/* 

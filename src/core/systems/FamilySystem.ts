@@ -1,6 +1,10 @@
-
 import * as THREE from 'three';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
+
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+const _v1 = new THREE.Vector3(); // Target Position
+const _v2 = new THREE.Vector3(); // Offset / MoveVec
+const _v3 = new THREE.Vector3(); // Direction
 
 export const FamilySystem = {
     update: (
@@ -20,9 +24,8 @@ export const FamilySystem = {
 
         const fm = familyMember.mesh;
 
-        // Ring Pulse Visual
+        // --- 1. Ring Pulse Visual (Static logic) ---
         if (familyMember.ring) {
-            // Only show ring if NOT following (waiting to be found)
             familyMember.ring.visible = !familyMember.following;
 
             if (familyMember.ring.visible) {
@@ -32,49 +35,54 @@ export const FamilySystem = {
             }
         }
 
-        // Following Logic with Spacing
+        // --- 2. Following Logic with Zero-GC Spacing ---
         let fmIsMoving = false;
+
         if (familyMember.following && !isCinematicActive) {
-            // Calculate a target offset position relative to the player
-            // followerIndex 0 stays behind, 1 slightly left, 2 slightly right, etc.
-            const targetPos = playerGroup.position.clone();
+            // Start with player position without cloning
+            _v1.copy(playerGroup.position);
 
             if (followerIndex > 0) {
-                const angle = (followerIndex % 2 === 0 ? 1 : -1) * 0.5; // Alternating sides
+                const angle = (followerIndex % 2 === 0 ? 1 : -1) * 0.5;
                 const dist = 2.0 + followerIndex * 1.2;
 
-                // Get player "back" direction (based on current map movement or just generic Z if standing still)
-                // For simplicity, we'll just use a circular offset around the player's follow radius
-                const offset = new THREE.Vector3(
+                // Calculate circular offset using scratchpad _v2
+                _v2.set(
                     Math.sin(angle * Math.PI) * dist,
                     0,
                     Math.cos(angle * Math.PI) * dist
                 );
-                targetPos.add(offset);
+                _v1.add(_v2); // _v1 is now our final targetPos
             }
 
-            const distSq = fm.position.distanceToSquared(targetPos);
+            // Optimization: distanceToSquared is much faster than distanceTo
+            const distSq = fm.position.distanceToSquared(_v1);
 
-            if (distSq > 4.0) { // Tighter stop distance if we have an offset
+            if (distSq > 4.0) { // 2.0m threshold (2^2)
                 fmIsMoving = true;
-                const currentPos = fm.position.clone();
-                const dir = new THREE.Vector3().subVectors(targetPos, currentPos).normalize();
 
-                // Slightly slower than player to avoid clipping inside
+                // Calculate direction using _v3
+                _v3.subVectors(_v1, fm.position).normalize();
+
                 const speed = 14;
-                const moveVec = dir.multiplyScalar(speed * 0.95 * delta);
+                const moveDist = speed * 0.95 * delta;
 
-                fm.position.add(moveVec);
-                fm.lookAt(playerGroup.position); // Always look at the player
+                // Apply movement
+                fm.position.addScaledVector(_v3, moveDist);
+
+                // Rotation: Always face the player (using player position, not target offset)
+                fm.lookAt(playerGroup.position);
             }
         }
 
-        // Animation
-        let body = fm.userData.cachedBody;
-        if (!body) {
-            body = fm.children.find((c: any) => c.userData.isBody);
+        // --- 3. Optimized Animation Handling ---
+        // Ensure we only look for the body mesh once
+        if (!fm.userData.cachedBody) {
+            const body = fm.children.find((c: any) => c.userData.isBody);
             if (body) fm.userData.cachedBody = body;
         }
+
+        const body = fm.userData.cachedBody;
 
         if (body) {
             const timeSinceAction = now - state.lastActionTime;

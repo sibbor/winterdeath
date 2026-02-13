@@ -554,8 +554,6 @@ export const ObjectGenerator = {
         }
 
         vehicleBody.scale.set(scale, scale, scale);
-        // ctx.scene.add(vehicleBody); -- Handled by caller (SectorBuilder)
-        // ctx.obstacles.push({ mesh: vehicleBody }); -- Handled by caller
 
         vehicleBody.userData.material = 'METAL';
         return vehicleBody;

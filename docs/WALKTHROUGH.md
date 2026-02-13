@@ -9,11 +9,10 @@ The core foundations of the game were strengthened for better performance and sc
 - **Sector Management**: Improved the `SectorManager` to handle transitions, persistence, and complex state management across different areas.
 - **Audio Singleton**: Standardized sound triggering through a clean, singleton-based `SoundLib`.
 
-## 🛠️ World Generation & Editor Tools
+## 🛠️ World Generation
 The "3-Tier World Gen" system was refined to allow for rapid level design.
 - **ObjectGenerator**: Remapped to handle atomic assets (props, trees, crates) with better pooling and categorization.
 - **PathGenerator**: Enhanced to support complex linear structures like curved fences, stone walls, and embankments.
-- **Editor Support**: Laid the groundwork for a visual Sector Editor with basic placement, snapping, and export capabilities.
 - **Prop Library**: Added a massive range of new props (vehicles, buildings, flora, containers) with snowy variants.
 
 ## ⚔️ Gameplay & Combat Mechanics

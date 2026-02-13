@@ -2,10 +2,9 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SectorContext } from '../../types/sectors';
-import { MATERIALS, GEOMETRY } from '../../utils/assets';
-import { SectorBuilder } from '../../core/world/SectorGenerator';
+import { MATERIALS } from '../../utils/assets';
+import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
-import { t } from '../../utils/i18n';
 
 export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;
@@ -148,7 +147,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     // Lights
     const createRoomLight = (pos: THREE.Vector3) => {
-        SectorBuilder.spawnCaveLamp(ctx, pos.x, 4.5, pos.z);
+        SectorGenerator.spawnCaveLamp(ctx, pos.x, 4.5, pos.z);
     };
 
     const decorateRoom = (room: any) => {
@@ -180,7 +179,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             innerCave.add(prop);
 
             // Simple collider for props
-            SectorBuilder.addObstacle(ctx, {
+            SectorGenerator.addObstacle(ctx, {
                 mesh: prop.children[0] as THREE.Mesh,
                 collider: { type: 'box' as const, size: new THREE.Vector3(1, 2, 1) }
             });
@@ -222,7 +221,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         dummy.rotation.set(0, rotationY, 0);
         dummy.updateMatrixWorld(); // Essential as it's not in the scene graph
 
-        SectorBuilder.addObstacle(ctx, {
+        SectorGenerator.addObstacle(ctx, {
             mesh: dummy,
             collider: { type: 'box' as const, size: new THREE.Vector3(width, height, depth) }
         });
@@ -343,7 +342,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         // Chest spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
-                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
+                await SectorGenerator.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
             }
         }
     }

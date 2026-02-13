@@ -1,6 +1,7 @@
 
 import * as THREE from 'three';
-import { GameState, GameScreen, WeaponType } from '../types';
+import { GameState, GameScreen } from '../types';
+import { WeaponType } from '../content/weapons';
 import { INITIAL_STATS, DEFAULT_GRAPHICS } from '../content/constants';
 
 export const DEFAULT_STATE: GameState = {
@@ -9,8 +10,18 @@ export const DEFAULT_STATE: GameState = {
     currentSector: 0,
     loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV },
     weaponLevels: {
-        [WeaponType.PISTOL]: 1, [WeaponType.SMG]: 1, [WeaponType.SHOTGUN]: 1, [WeaponType.RIFLE]: 1,
-        [WeaponType.REVOLVER]: 1, [WeaponType.GRENADE]: 1, [WeaponType.MOLOTOV]: 1, [WeaponType.MINIGUN]: 1, [WeaponType.RADIO]: 1, [WeaponType.FLASHBANG]: 1
+        [WeaponType.PISTOL]: 1,
+        [WeaponType.SMG]: 1,
+        [WeaponType.SHOTGUN]: 1,
+        [WeaponType.RIFLE]: 1,
+        [WeaponType.REVOLVER]: 1,
+        [WeaponType.GRENADE]: 1,
+        [WeaponType.MOLOTOV]: 1,
+        [WeaponType.MINIGUN]: 1,
+        [WeaponType.RADIO]: 1,
+        [WeaponType.FLASHBANG]: 1,
+        [WeaponType.FLAMETHROWER]: 1,
+        [WeaponType.TESLA_CANNON]: 1
     },
     sectorBriefing: '',
     debugMode: false,
