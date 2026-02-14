@@ -454,7 +454,7 @@ export const SectorGenerator = {
         // Get dimensions from userData if available
         const sizeY = building.userData.size ? building.userData.size.y : (createRoof ? height * 1.5 : height);
 
-        // 6. Collision
+        // Collision
         SectorGenerator.addObstacle(ctx, {
             mesh: building,
             collider: {

@@ -142,10 +142,12 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(236, 0, 271),
             new THREE.Vector3(63, 0, 271),
         ], 16);
+
         // Street Lights along Main Road
         for (let x = 70; x <= 230; x += 40) {
-            SectorGenerator.spawnStreetLight(ctx, x, 280, 0);
+            SectorGenerator.spawnStreetLight(ctx, x, 280, Math.PI / 2);
         }
+
         // Street Lights along Vargstigen
         for (let z = -40; z <= 30; z += 35) {
             SectorGenerator.spawnStreetLight(ctx, -50, z, Math.PI / 2);
@@ -173,6 +175,7 @@ export const Sector1: SectorDef = {
 
         // Home: House:
         SectorGenerator.spawnBuilding(ctx, LOCATIONS.BUILDINGS.HOME.x - 2, LOCATIONS.BUILDINGS.HOME.z + 10, 20, 7, 25, 0, 0xffffff, true, true, 1.0);
+
         // Home: Police car and family's car
         SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
         const familyCar = SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
@@ -535,8 +538,121 @@ export const Sector1: SectorDef = {
         });
 
         // --- FOREST ---
-        SectorGenerator.createForest(ctx, [new THREE.Vector3(37, 0, 44), new THREE.Vector3(36, 0, 30), new THREE.Vector3(103, 0, 30), new THREE.Vector3(99, 0, 67), new THREE.Vector3(76, 0, 43)], 8, 'spruce');
-        SectorGenerator.createForest(ctx, [new THREE.Vector3(128, 0, 200), new THREE.Vector3(65, 0, 234), new THREE.Vector3(138, 0, 253)], 12, 'birch');
+        // FOREST
+        // Forst: Home 1
+        let forestPolygon = [
+            new THREE.Vector3(37, 0, 44),
+            new THREE.Vector3(36, 0, 30),
+            new THREE.Vector3(103, 0, 30),
+            new THREE.Vector3(99, 0, 67),
+            new THREE.Vector3(76, 0, 43),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+        // Forest: Home 2
+        forestPolygon = [
+            new THREE.Vector3(-27, 0, 45),
+            new THREE.Vector3(-27, 0, 80),
+            new THREE.Vector3(57, 0, 89),
+            new THREE.Vector3(82, 0, 110),
+            new THREE.Vector3(85, 0, 147),
+            new THREE.Vector3(55, 0, 177),
+            new THREE.Vector3(123, 0, 148),
+            new THREE.Vector3(123, 0, 85),
+            new THREE.Vector3(96, 0, 78),
+            new THREE.Vector3(70, 0, 55),
+            new THREE.Vector3(32, 0, 55),
+            new THREE.Vector3(24, 0, 37),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+        // Forest: SMU
+        forestPolygon = [
+            new THREE.Vector3(199, 0, 140),
+            new THREE.Vector3(174, 0, 137),
+            new THREE.Vector3(129, 0, 163),
+            new THREE.Vector3(142, 0, 173),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 12, 'pine');
+        // Forest: Town center (north west)
+        forestPolygon = [
+            new THREE.Vector3(128, 0, 200),
+            new THREE.Vector3(65, 0, 234),
+            new THREE.Vector3(68, 0, 253),
+            new THREE.Vector3(68, 0, 253),
+            new THREE.Vector3(100, 0, 253),
+            new THREE.Vector3(100, 0, 237),
+            new THREE.Vector3(122, 0, 237),
+            new THREE.Vector3(122, 0, 253),
+            new THREE.Vector3(138, 0, 253),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 12, 'birch');
+
+        // Forest: Town center (south west)
+        forestPolygon = [
+            new THREE.Vector3(20, 0, 230),
+            new THREE.Vector3(66, 0, 230),
+            new THREE.Vector3(66, 0, 285),
+            new THREE.Vector3(83, 0, 285),
+            new THREE.Vector3(83, 0, 340),
+            new THREE.Vector3(28, 0, 350),
+
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 10, 'birch');
+
+        // Forest: Town center (east)
+        forestPolygon = [
+            new THREE.Vector3(145, 0, 198),
+            new THREE.Vector3(147, 0, 218),
+            new THREE.Vector3(175, 0, 218),
+            new THREE.Vector3(175, 0, 239),
+            new THREE.Vector3(175, 0, 255),
+            new THREE.Vector3(192, 0, 255),
+            new THREE.Vector3(192, 0, 239),
+            new THREE.Vector3(210, 0, 239),
+            new THREE.Vector3(210, 0, 255),
+            new THREE.Vector3(240, 0, 255),
+            new THREE.Vector3(240, 0, 285),
+            new THREE.Vector3(180, 0, 285),
+            new THREE.Vector3(180, 0, 333),
+            new THREE.Vector3(250, 0, 333),
+            new THREE.Vector3(270, 0, 300),
+            new THREE.Vector3(276, 0, 252),
+            new THREE.Vector3(227, 0, 187),
+            new THREE.Vector3(203, 0, 172),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+
+        // Forest: Train Yard (north west)
+        forestPolygon = [
+            new THREE.Vector3(88, 0, 364),
+            new THREE.Vector3(88, 0, 392),
+            new THREE.Vector3(53, 0, 401),
+            new THREE.Vector3(33, 0, 409),
+            new THREE.Vector3(31, 0, 375),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+
+        // Forest: Train Yard (north east)
+        forestPolygon = [
+            new THREE.Vector3(212, 0, 359),
+            new THREE.Vector3(250, 0, 359),
+            new THREE.Vector3(250, 0, 408),
+            new THREE.Vector3(212, 0, 403),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+
+        // Forest: Train Yard (south of railroad)
+        forestPolygon = [
+            new THREE.Vector3(88, 0, 403),
+            new THREE.Vector3(88, 0, 441),
+            new THREE.Vector3(212, 0, 441),
+            new THREE.Vector3(212, 0, 412),
+            new THREE.Vector3(250, 0, 417),
+            new THREE.Vector3(250, 0, 470),
+            new THREE.Vector3(50, 0, 470),
+            new THREE.Vector3(36, 0, 418),
+            new THREE.Vector3(54, 0, 409),
+        ];
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
         // --- FENCES ---
         const ty2 = LOCATIONS.POIS.TRAIN_YARD;
