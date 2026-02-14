@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Enemy } from '../EnemyManager';
-import { Obstacle } from '../systems/WindSystem';
+import { Obstacle } from '../world/CollisionResolution';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
 import { WEAPONS, WeaponBehavior, WeaponType } from '../../content/weapons';

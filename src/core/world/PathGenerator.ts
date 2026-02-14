@@ -66,13 +66,9 @@ export const PathGenerator = {
             const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
             _v2.addVectors(curr, next).multiplyScalar(0.5);
 
-            const dummy = new THREE.Object3D();
-            dummy.position.copy(_v2).setY(height / 2);
-            dummy.rotation.y = angle;
-            dummy.updateMatrixWorld(true);
-
             SectorGenerator.addObstacle(ctx, {
-                mesh: dummy,
+                position: _v2.clone().setY(height / 2),
+                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, angle),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) }
             });
         }
@@ -325,11 +321,12 @@ export const PathGenerator = {
 
         for (let i = 0; i < segCount; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-            const dummy = new THREE.Object3D();
-            dummy.position.copy(mid);
-            dummy.rotation.y = Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
-            dummy.updateMatrixWorld(true);
-            SectorGenerator.addObstacle(ctx, { mesh: dummy, collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) } });
+            // Optimized: No dummy mesh
+            SectorGenerator.addObstacle(ctx, {
+                position: mid.clone(),
+                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)),
+                collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) }
+            });
         }
     },
 
@@ -356,11 +353,12 @@ export const PathGenerator = {
         });
 
         for (let i = 0; i < pts.length - 1; i++) {
-            const dummy = new THREE.Object3D();
-            dummy.position.copy(_v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5));
-            dummy.rotation.y = Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
-            dummy.updateMatrixWorld(true);
-            SectorGenerator.addObstacle(ctx, { mesh: dummy, collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) } });
+            const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
+            SectorGenerator.addObstacle(ctx, {
+                position: mid,
+                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)),
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) }
+            });
         }
     },
 
@@ -378,11 +376,11 @@ export const PathGenerator = {
             _matrix.compose(mid, _quat, _v3.set(1, 1, 1));
             im.setMatrixAt(i, _matrix);
 
-            const dummy = new THREE.Object3D();
-            dummy.position.copy(mid);
-            dummy.rotation.y = Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
-            dummy.updateMatrixWorld(true);
-            SectorGenerator.addObstacle(ctx, { mesh: dummy, collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) } });
+            SectorGenerator.addObstacle(ctx, {
+                position: mid.clone(),
+                quaternion: _quat.clone(),
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) }
+            });
         }
         im.instanceMatrix.needsUpdate = true;
         ctx.scene.add(im);
@@ -408,11 +406,11 @@ export const PathGenerator = {
             _matrix.compose(mid, _quat, _v3.set(1, 1, dist));
             railIM.setMatrixAt(i, _matrix);
 
-            const dummy = new THREE.Object3D();
-            dummy.position.copy(mid).setY(floating ? mid.y : mid.y / 2);
-            dummy.rotation.y = Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
-            dummy.updateMatrixWorld(true);
-            SectorGenerator.addObstacle(ctx, { mesh: dummy, collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) } });
+            SectorGenerator.addObstacle(ctx, {
+                position: mid.clone().setY(floating ? mid.y : mid.y / 2),
+                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)),
+                collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) }
+            });
         }
         postIM.instanceMatrix.needsUpdate = true;
         railIM.instanceMatrix.needsUpdate = true;
@@ -443,6 +441,20 @@ export const PathGenerator = {
             if (i > 0) {
                 const o = (i - 1) * 4, c = i * 4;
                 idx.push(o, c, o + 1, o + 1, c, c + 1, o + 1, c + 1, o + 2, o + 2, c + 1, c + 2, o + 2, c + 2, o + 3, o + 3, c + 2, c + 3);
+
+                // Add Collision for Embankment Segment
+                // We create a box between previous point and current point
+                const pPrev = pts[i - 1];
+                const pCurr = pts[i];
+                const mid = _v1.addVectors(pPrev, pCurr).multiplyScalar(0.5);
+                const angle = Math.atan2(pCurr.x - pPrev.x, pCurr.z - pPrev.z);
+                const dist = pPrev.distanceTo(pCurr);
+
+                SectorGenerator.addObstacle(ctx, {
+                    position: mid.clone().setY(height / 2),
+                    quaternion: new THREE.Quaternion().setFromAxisAngle(_up, angle),
+                    collider: { type: 'box', size: new THREE.Vector3(width, height, dist) }
+                });
             }
         }
         const geo = new THREE.BufferGeometry();

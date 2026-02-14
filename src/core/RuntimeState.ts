@@ -1,7 +1,7 @@
 ﻿import * as THREE from 'three';
 import { SectorTrigger, SectorState } from '../types';
 import { WeaponType } from '../content/weapons';
-import { Obstacle } from './systems/WindSystem';
+import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';

@@ -502,8 +502,9 @@ export const EnvironmentGenerator = {
             const stump = EnvironmentGenerator.createTreeStump(0.8 + Math.random() * 0.5);
             stump.position.set(rx, 0, rz);
             ctx.scene.add(stump);
-            ctx.obstacles.push({
+            SectorGenerator.addObstacle(ctx, {
                 mesh: stump,
+                position: stump.position,
                 collider: { type: 'cylinder', radius: 0.5, height: 1.0 }
             });
         }
@@ -633,14 +634,10 @@ export const EnvironmentGenerator = {
             }
 
             variantPoints.forEach(p => {
-                const c = new THREE.Object3D();
-                c.visible = false;
-                c.name = 'TreeCollision';
-                c.position.set(p.x, 2, p.z);
-                c.updateMatrixWorld();
-                ctx.scene.add(c);
-                const obstacle = { mesh: c, collider: { type: 'sphere' as const, radius: 0.4 * p.s, height: 4 } };
-
+                const obstacle = {
+                    position: new THREE.Vector3(p.x, 2, p.z),
+                    collider: { type: 'sphere' as const, radius: 0.4 * p.s, height: 4 }
+                };
                 SectorGenerator.addObstacle(ctx, obstacle);
             });
         }
@@ -715,7 +712,7 @@ export const EnvironmentGenerator = {
                 rock.position.set(px, 0, pz);
                 ctx.scene.add(rock);
 
-                SectorGenerator.addObstacle(ctx, { mesh: rock, collider: { type: 'sphere', radius: 0.8 } });
+                SectorGenerator.addObstacle(ctx, { mesh: rock, position: rock.position, collider: { type: 'sphere', radius: 0.8 } });
             } else if (type === 'debris') {
                 const debris = EnvironmentGenerator.createStone(0.3 + Math.random() * 0.4);
                 debris.position.set(px, 0, pz);

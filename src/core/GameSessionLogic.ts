@@ -8,7 +8,7 @@ import { WEAPONS } from '../content/constants';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
-import { Obstacle } from './systems/WindSystem';
+import { Obstacle } from './world/CollisionResolution';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Obstacle } from '../systems/WindSystem';
+import { Obstacle } from './CollisionResolution';
 import { Enemy } from '../../types/enemy';
 
 export class SpatialGrid {
@@ -25,8 +25,7 @@ export class SpatialGrid {
     // --- OBSTACLE MANAGEMENT ---
 
     addObstacle(obstacle: Obstacle) {
-        if (!obstacle.mesh) return;
-        const pos = obstacle.mesh.position;
+        const pos = obstacle.position;
         const radius = obstacle.radius || 2.0;
 
         this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {

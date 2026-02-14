@@ -14,16 +14,31 @@ import { getCollectibleById } from '../../content/collectibles';
 export const SectorGenerator = {
 
     addObstacle: (ctx: SectorContext, obstacle: any) => {
-        if (!obstacle.mesh) return;
-
         // Ensure it's in the legacy list
         if (!ctx.obstacles.includes(obstacle)) {
             ctx.obstacles.push(obstacle);
         }
 
-        // Always ensure matrixWorld is up to date before adding to spatial grid
-        // to prevent (0,0,0) index bug if added before first render
-        obstacle.mesh.updateMatrixWorld(true);
+        // Auto-calculate radius for Box colliders if missing (CRITICAL for SpatialGrid)
+        if (!obstacle.radius && obstacle.collider?.type === 'box' && obstacle.collider.size) {
+            // Radius needed to cover the box diagonal in XZ plane
+            const s = obstacle.collider.size;
+            obstacle.radius = Math.sqrt(s.x * s.x + s.z * s.z) / 2;
+        }
+
+        // Update matrixWorld if mesh exists (legacy/visual objects)
+        if (obstacle.mesh) {
+            obstacle.mesh.updateMatrixWorld(true);
+            // Ensure position is set if not provided explicitly
+            if (!obstacle.position) {
+                obstacle.position = obstacle.mesh.position;
+            }
+        }
+
+        if (!obstacle.position) {
+            console.warn('[SectorGenerator] Attempted to add obstacle without position or mesh:', obstacle);
+            return;
+        }
 
         // Ensure it's in the spatial grid
         ctx.collisionGrid.addObstacle(obstacle);
@@ -145,6 +160,16 @@ export const SectorGenerator = {
         if (ctx.yield) await ctx.yield();
     },
 
+    // NEW Helper for quick lightweight box obstacles
+    spawnCollisionBox: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number = 0) => {
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
+        SectorGenerator.addObstacle(ctx, {
+            position: new THREE.Vector3(x, height / 2, z),
+            quaternion: q,
+            collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
+        });
+    },
+
     generateBoundaries: (ctx: SectorContext, bounds: { width: number, depth: number }) => {
         const wallMat = new THREE.MeshBasicMaterial({ visible: false });
         const h = 50;
@@ -155,11 +180,9 @@ export const SectorGenerator = {
         if (w < 10 || d < 10) return;
 
         const createWall = (x: number, z: number, sx: number, sz: number) => {
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, h, sz), wallMat);
-            mesh.position.set(x, h / 2, z);
-            ctx.scene.add(mesh);
+            // Removed Dummy Mesh creation
             SectorGenerator.addObstacle(ctx, {
-                mesh,
+                position: new THREE.Vector3(x, h / 2, z),
                 collider: {
                     type: 'box' as const,
                     size: new THREE.Vector3(sx, h, sz)
@@ -229,9 +252,9 @@ export const SectorGenerator = {
         chest.add(glow);
 
         ctx.scene.add(chest);
-        const obs = { mesh: chest, type, scrap: isBig ? 100 : 25, radius: 2, opened: false };
+        const obs = { mesh: chest, position: chest.position, type, scrap: isBig ? 100 : 25, radius: 2, opened: false };
         ctx.chests.push(obs);
-        SectorGenerator.addObstacle(ctx, { mesh: chest, collider: { type: 'sphere', radius: 2 } });
+        SectorGenerator.addObstacle(ctx, { mesh: chest, position: chest.position, collider: { type: 'sphere', radius: 2 } });
 
         if (ctx.dynamicLights) ctx.dynamicLights.push(glow);
 
@@ -446,6 +469,8 @@ export const SectorGenerator = {
 
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
+        building.updateMatrixWorld(); // Ensure matrix is ready for position access
+
         building.castShadow = true;
         building.receiveShadow = true;
 
@@ -457,10 +482,29 @@ export const SectorGenerator = {
         // Collision
         SectorGenerator.addObstacle(ctx, {
             mesh: building,
+            position: building.position, // Explicitly pass position
+            quaternion: building.quaternion, // Explicitly pass quaternion
             collider: {
                 type: 'box' as const,
                 size: (building.userData.size as THREE.Vector3).clone(),
-                position: building.position.clone().add(new THREE.Vector3(0, (building.userData.size as THREE.Vector3).y / 2, 0))
+                // Position is logic relative to the object's origin (center bottom vs center center)
+                // The collider logic in WindSystem might need adjustment if it expects center-center
+                // but usually box colliders are center-relative.  
+                // Building origin is usually bottom-center. 
+                // WindSystem box collider logic uses local Y check: `if (_v1.y + height < -hY || _v1.y > hY)`
+                // which implies the collider definitions should be centered on the volume.
+                // WE DON'T PASS position inside collider usually, we pass the Obstacle.position.
+                // But for buildings, the mesh origin is at bottom, but box center is at h/2.
+                // We might need to offset the obstacle.position or handle it via a new offset property?
+                // WindSystem logic: `_m1.copy(obstacle.mesh.matrixWorld).invert()` -> Transforms entity into local space.
+                // If the mesh origin is at ground, local space (0,0,0) is at ground.
+                // If dimensions are (10, 10, 10), then Y extends from 0 to 10? No, BoxGeometry defaults to centered.
+                // ObjectGenerator.createBuilding uses BoxGeometry and TRIES to align it.
+                // Let's rely on the existing mesh for now as we didn't remove it for buildings.
+                // Just ensuring we pass what WindSystem expects if we used raw data.
+                // Since we pass 'mesh', WindSystem uses matrixWorld, which handles the offset automatically.
+                // So this change is just to satisfy the interface if we went meshless, but we have mesh here.
+                // For safety with new interface:
             }
         });
 
@@ -481,6 +525,7 @@ export const SectorGenerator = {
         const size = box.getSize(new THREE.Vector3());
         SectorGenerator.addObstacle(ctx, {
             mesh: vehicle,
+            position: vehicle.position,
             collider: { type: 'box', size: size }
         });
 
@@ -496,6 +541,7 @@ export const SectorGenerator = {
         // Add Collision (6.0m L x 2.6m H x 2.4m W)
         SectorGenerator.addObstacle(ctx, {
             mesh: container,
+            position: container.position,
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6, 2.4) }
         });
 
@@ -519,6 +565,7 @@ export const SectorGenerator = {
         // Add collision (Street lamps are small but should block)
         SectorGenerator.addObstacle(ctx, {
             mesh: light,
+            position: light.position,
             collider: { type: 'sphere', radius: 1.0 }
         });
 
@@ -544,6 +591,7 @@ export const SectorGenerator = {
         const size = building.userData.size;
         SectorGenerator.addObstacle(ctx, {
             mesh: building,
+            position: building.position,
             collider: { type: 'box', size: size.clone() }
         });
 
@@ -566,6 +614,7 @@ export const SectorGenerator = {
 
         SectorGenerator.addObstacle(ctx, {
             mesh: stairs,
+            position: stairs.position,
             collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
         });
 
@@ -592,6 +641,7 @@ export const SectorGenerator = {
         const size = box.getSize(new THREE.Vector3());
         SectorGenerator.addObstacle(ctx, {
             mesh: car,
+            position: car.position,
             collider: { type: 'box', size: size }
         });
 
@@ -613,6 +663,7 @@ export const SectorGenerator = {
         // Add Collision for the whole stack
         SectorGenerator.addObstacle(ctx, {
             mesh: group,
+            position: group.position,
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6 * stackHeight, 2.4) }
         });
 
@@ -655,6 +706,7 @@ export const SectorGenerator = {
         const size = box.getSize(new THREE.Vector3());
         SectorGenerator.addObstacle(ctx, {
             mesh: vehicleStack,
+            position: vehicleStack.position,
             collider: { type: 'box' as const, size: size }
         });
     },
@@ -669,6 +721,7 @@ export const SectorGenerator = {
         const colRadius = 0.5 * scaleMultiplier;
         SectorGenerator.addObstacle(ctx, {
             mesh: tree,
+            position: tree.position,
             collider: { type: 'sphere', radius: colRadius }
         });
     },
@@ -681,6 +734,7 @@ export const SectorGenerator = {
         if (type.includes('Wall') || type.includes('Frame')) {
             SectorGenerator.addObstacle(ctx, {
                 mesh: piece,
+                position: piece.position,
                 collider: { type: 'box', size: new THREE.Vector3(4, 4, 1) }
             });
         }
@@ -697,7 +751,7 @@ export const SectorGenerator = {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
         ctx.scene.add(barrel);
-        SectorGenerator.addObstacle(ctx, { mesh: barrel, collider: { type: 'sphere', radius: 0.6 } });
+        SectorGenerator.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: 'sphere', radius: 0.6 } });
     },
 
     // Area Fillers

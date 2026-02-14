@@ -192,7 +192,7 @@ export const Sector1: SectorDef = {
         scene.add(kindergarten);
         SectorGenerator.addObstacle(ctx, {
             mesh: kindergarten,
-            collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) }
+            collider: { type: 'box', size: new THREE.Vector3(60, 20, 50) }
         });
 
         // Fence between SMU/Kindergarten
@@ -284,6 +284,11 @@ export const Sector1: SectorDef = {
             mesh: churchGroup,
             collider: { type: 'box', size: new THREE.Vector3(15, 20, 25) }
         });
+        // Add separate collider for the Tower which is offset
+        SectorGenerator.addObstacle(ctx, {
+            position: new THREE.Vector3(LOCATIONS.POIS.CHURCH.x - 10, 0, LOCATIONS.POIS.CHURCH.z - 15),
+            collider: { type: 'box', size: new THREE.Vector3(6, 20, 6) }
+        });
         // Church burning on roof
         SectorGenerator.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 50, onRoof: true });
 
@@ -303,7 +308,8 @@ export const Sector1: SectorDef = {
         cafeGroup.add(cafeBody);
         cafeGroup.castShadow = true;
 
-        const obstacle_cafe = { mesh: cafeGroup, collider: { type: 'box' as const, size: new THREE.Vector3(15, 20, 12) } };
+        // Cafe mesh is approx 17m wide (5+5+12 - overlaps), 12m deep.
+        const obstacle_cafe = { mesh: cafeGroup, collider: { type: 'box' as const, size: new THREE.Vector3(18, 20, 12) } };
         SectorGenerator.addObstacle(ctx, obstacle_cafe);
 
         const cafeSign = createTextSprite(t('clues.s1_poi_cafe'));

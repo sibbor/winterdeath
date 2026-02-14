@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Enemy, AIState } from '../../types/enemy';
-import { Obstacle, applyCollisionResolution } from '../systems/WindSystem';
+import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { MATERIALS } from '../../utils/assets';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType } from '../../content/weapons';

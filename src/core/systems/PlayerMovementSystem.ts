@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { FXSystem } from './FXSystem';
-import { Obstacle, applyCollisionResolution } from '../systems/WindSystem';
+import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/sound';
 import { AIState } from '../../types/enemy';
 
