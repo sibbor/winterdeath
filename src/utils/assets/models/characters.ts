@@ -1,8 +1,49 @@
 import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
-import { TEXTURES } from '../../assets';
 import { PLAYER_CHARACTER } from '../../../content/constants';
+
+// --- SHARED RESOURCES (Skapas bara en gång) ---
+let cachedLaserAssets: { geometry: THREE.BufferGeometry, material: THREE.Material } | null = null;
+
+const getLaserAssets = () => {
+    if (cachedLaserAssets) return cachedLaserAssets;
+
+    // Skapa Texture (Canvas)
+    const canvas = document.createElement('canvas');
+    canvas.width = 2; // Räcker med 2px bredd för en vertikal gradient
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+
+    // Vi ritar gradienten så att 0 är basen och 256 är spetsen
+    grad.addColorStop(0, 'rgba(0, 170, 255, 1)');   // Bas (vid vapnet)
+    grad.addColorStop(0.5, 'rgba(0, 170, 255, 1)'); // Håll full styrka till hälften
+    grad.addColorStop(0.8, 'rgba(0, 170, 255, 0.3)'); // Börja tona ut
+    grad.addColorStop(1, 'rgba(0, 170, 255, 0)');   // Helt genomskinlig spets
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 2, 256);
+    const texture = new THREE.CanvasTexture(canvas);
+
+    // Skapa Geometry med ändrad pivot-punkt
+    // Vi translaterar geometrin 15 enheter framåt så att Mesh-origin (0,0,0) 
+    // hamnar i början av lasern istället för i mitten.
+    const geometry = new THREE.PlaneGeometry(0.15, 20);
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(0, 0, 15);
+
+    const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+
+    cachedLaserAssets = { geometry, material };
+    return cachedLaserAssets;
+};
 
 export const CharacterModels = {
     createPlayer: (): THREE.Group => {
@@ -15,46 +56,27 @@ export const CharacterModels = {
         );
         body.position.y = 1.0;
         body.castShadow = true;
-        // Add userData for animation system
         body.userData = { isBody: true, baseY: 1.0, baseScale: 1.0 };
         group.add(body);
 
-        // Gun
+        // Gun (Placerad lite till höger för att matcha hand)
         const gun = new THREE.Mesh(GEOMETRY.box, MATERIALS.gun);
-        gun.position.set(0, body.position.y, 1);
+        gun.position.set(0.3, 1.4, 0.5);
         gun.scale.set(0.1, 0.4, 1);
         group.add(gun);
 
-        // Laser sight (attached like flashlight - relative position, inherits rotation)
-        // Blue laser with fade at the tip (last ~10% = 3m of 30m)
-        const laserCanvas = document.createElement('canvas');
-        laserCanvas.width = 32; laserCanvas.height = 256;
-        const lCtx = laserCanvas.getContext('2d')!;
-        const lg = lCtx.createLinearGradient(0, 0, 0, 256);
-        lg.addColorStop(0, 'rgba(0, 170, 255, 0)'); // Tip (transparent)
-        lg.addColorStop(0.1, 'rgba(0, 170, 255, 0.3)'); // 3m fade zone
-        lg.addColorStop(0.15, 'rgba(0, 170, 255, 1)'); // Full brightness
-        lg.addColorStop(1, 'rgba(0, 170, 255, 1)'); // Base (full blue)
-        lCtx.fillStyle = lg;
-        lCtx.fillRect(0, 0, 32, 256);
-        const laserTex = new THREE.CanvasTexture(laserCanvas);
+        // Laser sight (Hämtar delade resurser)
+        const assets = getLaserAssets();
+        const laserSight = new THREE.Mesh(assets.geometry, assets.material);
 
-        const laserGeo = new THREE.PlaneGeometry(0.15, 30);
-        const laserMat = new THREE.MeshBasicMaterial({
-            map: laserTex,
-            color: 0xffffff, // Use map colors
-            transparent: true,
-            opacity: 0.8,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
-            side: THREE.DoubleSide
-        });
+        // Tack vare geometry.translate(0,0,15) kan vi nu sätta lasern
+        // direkt på vapnets mynning. Z: 0.5 gör att den börjar vid mynningen.
+        laserSight.position.set(0.3, 1.4, 0.5);
 
-        const laserSight = new THREE.Mesh(laserGeo, laserMat);
-        // Position relative to player - 30m long, so center at 15m forward
-        laserSight.position.set(0, 1.0, 16); // Gun height, centered at 16m forward
-        laserSight.rotation.x = -Math.PI / 2; // Horizontal plane
-        laserSight.visible = true; // Always visible when player is active
+        // Viktigt för långa objekt i Three.js:
+        // Förhindra att lasern försvinner om spelaren står precis utanför kameran
+        laserSight.frustumCulled = false;
+
         laserSight.userData.isLaserSight = true;
         laserSight.name = 'laserSight';
         group.add(laserSight);
@@ -76,8 +98,6 @@ export const CharacterModels = {
 
         body.position.y = baseY;
         body.castShadow = true;
-
-        // Store baseScale for animation system restoration
         body.userData = { isBody: true, baseY: body.position.y, geometryHeight, baseScale: scale };
 
         group.scale.setScalar(scale);
