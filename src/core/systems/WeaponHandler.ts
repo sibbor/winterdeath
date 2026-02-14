@@ -18,12 +18,13 @@ export const WeaponHandler = {
         if (key === '1') next = loadout.primary;
         else if (key === '2') next = loadout.secondary;
         else if (key === '3') next = loadout.throwable;
-        else if (key === '4') next = WeaponType.RADIO;
+        else if (key === '4') next = loadout.special;
+        else if (key === '5') next = WeaponType.RADIO;
 
-        if (!next || !WEAPONS[next]) return;
+        if (!next) return;
 
         // Restriction: Cannot switch to empty throwables
-        if (WEAPONS[next].category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
+        if (WEAPONS[next]?.category === WeaponCategory.THROWABLE && (state.weaponAmmo[next] || 0) <= 0) {
             soundManager.playUiClick();
             return;
         }
@@ -50,12 +51,12 @@ export const WeaponHandler = {
         // 1. Optimized Scroll Switching
         if (input.scrollDown || input.scrollUp) {
             _slotArray.length = 0;
-            const potential = [loadout.primary, loadout.secondary, loadout.throwable, WeaponType.RADIO];
+            const potential = [loadout.primary, loadout.secondary, loadout.throwable, loadout.special, WeaponType.RADIO];
 
             for (let i = 0; i < potential.length; i++) {
                 const s = potential[i];
-                if (!s || !WEAPONS[s]) continue;
-                if (WEAPONS[s].category === WeaponCategory.THROWABLE && state.weaponAmmo[s] <= 0) continue;
+                if (!s) continue; // Special might be undefined/null
+                if (WEAPONS[s] && WEAPONS[s].category === WeaponCategory.THROWABLE && state.weaponAmmo[s] <= 0) continue;
                 if (s === WeaponType.RADIO && state.familyFound) continue;
                 _slotArray.push(s);
             }
@@ -125,7 +126,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Line | null, debugMode: boolean = false) => {
+    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false) => {
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];
@@ -145,62 +146,52 @@ export const WeaponHandler = {
 
             if (input.fire) {
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
-                if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
-                    state.lastShotTime = now;
-                    if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
-
-                    // Calculate Muzzle/Origin Position
-                    _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
-                    _v2.copy(playerGroup.position).add(_v1);
-
-                    // Forward direction
-                    _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-
-                    // Sound and visual particles
-                    soundManager.playShot(wep.name);
-                    const effectType = wep.name === WeaponType.FLAMETHROWER ? 'campfire_flame' : 'spark';
-
-                    // Spawn stream particles
-                    for (let i = 0; i < 3; i++) {
-                        _v4.copy(_v3).multiplyScalar(wep.range * (0.3 + Math.random() * 0.7));
-                        _v4.x += (Math.random() - 0.5) * wep.spread * 5;
-                        _v4.z += (Math.random() - 0.5) * wep.spread * 5;
-                        state.callbacks.spawnPart(_v2.x, _v2.y, _v2.z, effectType, 1, undefined, _v4);
-                    }
-
-                    // Cone-based Hit Detection
-                    const nearby = state.collisionGrid.getNearbyEnemies(_v2, wep.range);
-                    for (const e of nearby) {
-                        if (e.deathState !== 'alive') continue;
-
-                        _v4.subVectors(e.mesh.position, _v2);
-                        const distSq = _v4.lengthSq();
-                        if (distSq > wep.range * wep.range) continue;
-
-                        _v5.copy(_v4).normalize();
-                        const dot = _v3.dot(_v5);
-
-                        // If enemy is within the weapon's firing cone (approx 30 degrees)
-                        if (dot > 0.86) {
-                            e.lastDamageType = wep.name;
-                            e.hp -= wep.damage;
-                            e.hitTime = now;
-                            e.lastHitWasHighImpact = true;
-
-                            // Apply Status Effects (Burning / Stun)
-                            if (wep.statusEffect.type === 'burning') {
-                                e.isBurning = true;
-                                e.afterburnTimer = wep.statusEffect.duration;
-                                e.burnTimer = 0.5;
-                            } else if (wep.statusEffect.type === 'electrified') {
-                                e.stunTimer = wep.statusEffect.duration;
-                            }
-
-                            state.callbacks.onDamageDealt(wep.damage);
-                            state.callbacks.spawnPart(e.mesh.position.x, 1.5, e.mesh.position.z, 'blood', 1);
+                if (hasAmmo) {
+                    if (!debugMode) {
+                        if (now > state.lastShotTime + wep.fireRate) {
+                            state.weaponAmmo[state.activeWeapon]--;
+                            state.lastShotTime = now;
                         }
                     }
+
+                    // Calculate Origin/Direction
+                    _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
+                    _v2.copy(playerGroup.position).add(_v1); // Origin
+                    _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize(); // Dir
+
+                    // Sound Loop Management
+                    if (state.activeWeapon === WeaponType.FLAMETHROWER) {
+                        soundManager.playFlamethrowerStart();
+                    }
+
+                    // Construct Context (Mapping GameState to GameContext)
+                    const ctx = {
+                        scene: scene,
+                        enemies: state.enemies || [],
+                        collisionGrid: state.collisionGrid,
+                        spawnPart: state.callbacks.spawnPart,
+                        spawnFloatingText: state.callbacks.spawnFloatingText || ((x: number, y: number, z: number, t: string, c?: string) => { }),
+                        spawnDecal: state.callbacks.spawnDecal,
+                        explodeEnemy: state.callbacks.explodeEnemy,
+                        trackStats: state.callbacks.trackStats,
+                        addScore: state.callbacks.addScore,
+                        addFireZone: state.callbacks.addFireZone,
+                        now: now,
+                        noiseEvents: state.noiseEvents
+                    } as any;
+
+                    // Hand off to ProjectileSystem
+                    ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, ctx);
+
+                } else {
+                    if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
+                    if (input.fire && now > state.lastShotTime + 500) {
+                        soundManager.playEmptyClick();
+                        state.lastShotTime = now;
+                    }
                 }
+            } else {
+                if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
             }
             return;
         }
@@ -264,13 +255,43 @@ export const WeaponHandler = {
                         const vx = (_v1.x * dist) / tMax, vz = (_v1.z * dist) / tMax;
                         const vy = (0 - startY + 0.5 * g * tMax * tMax) / tMax;
 
-                        const attr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+                        const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+                        const width = 0.15; // Half-width
+                        const up = new THREE.Vector3(0, 1, 0);
+                        const forward = new THREE.Vector3();
+                        const right = new THREE.Vector3();
+                        const pCurrent = new THREE.Vector3();
+                        const pNext = new THREE.Vector3();
+
                         for (let i = 0; i <= 20; i++) {
                             const t = (i / 20) * tMax;
-                            attr.setXYZ(i, playerGroup.position.x + vx * t, Math.max(0.1, startY + vy * t - 0.5 * g * t * t), playerGroup.position.z + vz * t);
+                            pCurrent.set(
+                                playerGroup.position.x + vx * t,
+                                Math.max(0.1, startY + vy * t - 0.5 * g * t * t),
+                                playerGroup.position.z + vz * t
+                            );
+
+                            // Calculate direction for ribbon expansion
+                            if (i < 20) {
+                                const tNext = ((i + 1) / 20) * tMax;
+                                pNext.set(
+                                    playerGroup.position.x + vx * tNext,
+                                    Math.max(0.1, startY + vy * tNext - 0.5 * g * tNext * tNext),
+                                    playerGroup.position.z + vz * tNext
+                                );
+                                forward.subVectors(pNext, pCurrent).normalize();
+                            }
+                            // Last point uses previous forward
+
+                            right.crossVectors(forward, up).normalize().multiplyScalar(width);
+
+                            // Set two vertices for this point (Triangle Strip)
+                            // 2 * i and 2 * i + 1
+                            posAttr.setXYZ(2 * i, pCurrent.x - right.x, pCurrent.y, pCurrent.z - right.z);
+                            posAttr.setXYZ(2 * i + 1, pCurrent.x + right.x, pCurrent.y, pCurrent.z + right.z);
                         }
-                        attr.needsUpdate = true;
-                        (trajectoryLineMesh.material as THREE.LineBasicMaterial).opacity = 0.4 + ratio * 0.6;
+                        posAttr.needsUpdate = true;
+                        (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
                     }
                 }
             } else if (state.throwChargeStart > 0) {

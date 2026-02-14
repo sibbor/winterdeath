@@ -15,7 +15,7 @@ interface MobileGameHUDProps {
     score: number;
     scrap: number;
     multiplier: number;
-    loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType };
+    loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
     boss: { active: boolean, name: string, hp: number, maxHp: number } | null;
     throwableReadyTime?: number;
     throwableAmmo?: number;
@@ -389,7 +389,8 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                             {renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}
                             {renderSlot('2', loadout.secondary, activeWeapon === loadout.secondary)}
                             {renderSlot('3', loadout.throwable, activeWeapon === loadout.throwable)}
-                            {renderSlot('4', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}
+                            {renderSlot('4', loadout.special, activeWeapon === loadout.special)}
+                            {renderSlot('5', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}
                         </div>
                     </div>
 

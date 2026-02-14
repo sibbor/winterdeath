@@ -5,6 +5,7 @@ import { ObjectGenerator } from '../world/ObjectGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
+import { createProceduralDiffuse } from '../../utils/assets/procedural';
 
 let warmedUp = false;
 let lastSectorIndex = -1;
@@ -17,7 +18,12 @@ export const AssetPreloader = {
     warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, yieldToMain?: () => Promise<void>) => {
         if (warmedUp) return;
 
-        // 0. AUDIO SYSTEM WARMUP
+        // 0. PROCEDURAL CACHE WARMUP
+        // Generate and cache all procedural textures once before shader compilation starts.
+        createProceduralDiffuse();
+        if (yieldToMain) await yieldToMain();
+
+        // 1. AUDIO SYSTEM WARMUP
         registerSoundGenerators();
         const soundCore = (window as any).gameEngine?.sound;
         if (soundCore) {
@@ -33,12 +39,10 @@ export const AssetPreloader = {
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
-        // 1. SHADER PERMUTATION SETUP
-        // Lights and Fog are critical for shader compilation. We must replicate game conditions.
+        // 2. SHADER PERMUTATION SETUP
         if (envConfig) {
             scene.fog = new THREE.FogExp2(envConfig.fogColor || envConfig.bgColor, envConfig.fogDensity);
             scene.background = new THREE.Color(envConfig.bgColor);
-
             scene.add(new THREE.AmbientLight(0x404040, envConfig.ambientIntensity));
 
             if (envConfig.moon?.visible) {
@@ -47,18 +51,17 @@ export const AssetPreloader = {
                 scene.add(dirLight);
             }
 
-            // Add dummy dynamic lights to ensure compiled shaders support them
             scene.add(new THREE.PointLight(0xffaa00, 1, 10));
             scene.add(new THREE.SpotLight(0xffffff, 1));
         }
 
-        // 2. GEOMETRY & MATERIAL BATCHING (Zero-GC approach)
+        // 3. GEOMETRY & MATERIAL BATCHING (Zero-GC approach)
         const dummyRoot = new THREE.Group();
         dummyRoot.position.set(0, 0, -10);
         scene.add(dummyRoot);
 
         const addToWarmup = (obj: THREE.Object3D) => {
-            obj.visible = false; // Stay hidden until batch compilation
+            obj.visible = false;
             dummyRoot.add(obj);
         };
 
@@ -66,15 +69,16 @@ export const AssetPreloader = {
         const matKeys = Object.keys(MATERIALS) as (keyof typeof MATERIALS)[];
         for (let i = 0; i < matKeys.length; i++) {
             const k = matKeys[i];
-            if (['road', 'asphalt', 'snow', 'concrete'].includes(k)) continue;
-            addToWarmup(new THREE.Mesh(GEOMETRY.box, MATERIALS[k]));
+            if (['road', 'asphalt', 'snow', 'concrete'].includes(k as string)) continue;
+            // Materials will now use the shared cached textures automatically
+            addToWarmup(new THREE.Mesh(GEOMETRY.box, (MATERIALS as any)[k]));
             if (i % 15 === 0 && yieldToMain) await yieldToMain();
         }
 
         // Batch 2: Characters & Projectiles
         addToWarmup(ModelFactory.createPlayer());
         Object.keys(ZOMBIE_TYPES).forEach(type => {
-            addToWarmup(ModelFactory.createZombie(type, ZOMBIE_TYPES[type as keyof typeof ZOMBIE_TYPES]));
+            addToWarmup(ModelFactory.createZombie(type, (ZOMBIE_TYPES as any)[type]));
         });
         addToWarmup(ModelFactory.createBoss('Boss', { color: 0xff0000, scale: 3 } as any));
 
@@ -89,8 +93,7 @@ export const AssetPreloader = {
         const prefillFX = (geo: THREE.BufferGeometry, mat: THREE.Material, count: number) => {
             for (let i = 0; i < count; i++) {
                 const p = new THREE.Mesh(geo, mat);
-                p.visible = false;
-                p.position.set(0, -1000, 0);
+                p.visible = false; p.position.set(0, -1000, 0);
                 scene.add(p);
                 FXSystem.MESH_POOL.push(p);
             }
@@ -100,23 +103,18 @@ export const AssetPreloader = {
 
         if (yieldToMain) await yieldToMain();
 
-        // 3. INCREMENTAL COMPILATION (The "Anti-Stutter" Pass)
-        // We compile assets in small visible batches to keep the GPU and Main Thread fluid.
+        // 4. INCREMENTAL COMPILATION
         try {
-            // First: Compile global environment
             renderer.compile(scene, camera);
             if (yieldToMain) await yieldToMain();
 
             const children = dummyRoot.children;
             const batchSize = 4;
-
             for (let i = 0; i < children.length; i += batchSize) {
-                // Hide all, then show only the current batch
                 children.forEach(c => c.visible = false);
                 for (let j = 0; j < batchSize && (i + j) < children.length; j++) {
                     children[i + j].visible = true;
                 }
-
                 renderer.compile(scene, camera);
                 if (yieldToMain) await yieldToMain();
             }
@@ -124,13 +122,12 @@ export const AssetPreloader = {
             console.warn("Shader warmup failed or interrupted", e);
         }
 
-        // 4. GENERATOR CACHE WARMUP
-        // Procedural generation of textures/prototypes is slow; do it here.
+        // 5. GENERATOR CACHE WARMUP
+        // These generators will now hit the procedural cache instantly.
         try {
             await EnvironmentGenerator.initPrototypes(yieldToMain);
             await ObjectGenerator.initBuildingPrototypes(yieldToMain);
 
-            // Dummy instances to trigger lazy-loaded logic
             ObjectGenerator.createVehicle('station wagon');
             ObjectGenerator.createBuilding(4, 4, 4, 0x888888);
             EnvironmentGenerator.createRock(2, 2);
@@ -140,9 +137,7 @@ export const AssetPreloader = {
             console.warn("Generator warmup failed", e);
         }
 
-        // 5. CLEANUP
-        // Dispose dummy geometries and clear scene to free memory, 
-        // while keeping the compiled shader programs in the GPU cache.
+        // 6. CLEANUP
         scene.clear();
         warmedUp = true;
     },

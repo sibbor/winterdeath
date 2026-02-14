@@ -26,10 +26,10 @@ import ScreenAdventureLog from './ScreenAdventureLog';
 
 interface CampProps {
     stats: PlayerStats;
-    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType };
+    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
     weaponLevels: Record<WeaponType, number>;
     onSaveStats: (newStats: PlayerStats) => void;
-    onSaveLoadout: (loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType }, levels: Record<WeaponType, number>) => void;
+    onSaveLoadout: (loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; }, levels: Record<WeaponType, number>) => void;
     onSelectSector: (sectorIndex: number) => void;
     onStartSector: () => void;
     currentSector: number;

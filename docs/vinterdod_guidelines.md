@@ -83,6 +83,14 @@ Maintain a strict 3-tier separation for all world-building logic:
   - **Shader Warmup**: The preloader forces the GPU to compile shaders before gameplay starts. This is critical for objects created or modified at runtime (e.g., transparent clones for pickup animations).
   - **Animations**: Skinned meshes must be "warmed up" in the preloader to ensure animation shaders are ready.
 
+  AssetLoader laddar statiska bump-kartor från disk (cachas).
+
+procedural ritar tunga texturer med kod (cachas efter första körningen).
+
+materials (denna fil) kombinerar dessa till färdiga material-instanser.
+
+AssetPreloader ser till att allt detta händer innan spelaren ser den första framen.
+
 ## 💾 Persistence
 - **GameState**: The `DEFAULT_STATE` in `src/utils/persistence.ts` defines the save file structure.
 - **LocalStorage**: Game state is saved to `localStorage` under `winterDeathSave_v1`.

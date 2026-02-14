@@ -50,9 +50,10 @@ export class GameSessionLogic {
             loadout: props.loadout,
             weaponLevels: props.weaponLevels,
             weaponAmmo: {
-                [props.loadout.primary]: WEAPONS[props.loadout.primary].magSize,
-                [props.loadout.secondary]: WEAPONS[props.loadout.secondary].magSize,
-                [props.loadout.throwable]: WEAPONS[props.loadout.throwable].magSize
+                [props.loadout.primary]: WEAPONS[props.loadout.primary]?.magSize || 0,
+                [props.loadout.secondary]: WEAPONS[props.loadout.secondary]?.magSize || 0,
+                [props.loadout.throwable]: WEAPONS[props.loadout.throwable]?.magSize || 0,
+                [props.loadout.special || 'NONE']: WEAPONS[props.loadout.special]?.magSize || 0
             } as Record<WeaponType, number>,
             isReloading: false, reloadEndTime: 0,
             rollStartTime: 0,

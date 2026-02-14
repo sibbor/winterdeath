@@ -22,6 +22,13 @@ export const ZombieModels = {
         body.userData = { isBody: true, baseY: body.position.y };
 
         group.scale.set(widthScale * scale, scale, widthScale * scale);
+        // Add Ash Pile (Hidden by default)
+        const ash = new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash);
+        ash.scale.setScalar(0.1);
+        ash.visible = false;
+        ash.name = 'AshPile';
+        group.add(ash);
+
         group.add(body);
         return group;
     },

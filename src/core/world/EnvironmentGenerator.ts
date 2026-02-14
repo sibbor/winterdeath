@@ -1,10 +1,17 @@
-
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
 import { SectorGenerator } from './SectorGenerator';
 
-// Lazy load textures (reuse from ObjectGenerator pattern)
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+// We reuse these for matrix math to avoid allocating thousands of objects during generation, 
+// which prevents Garbage Collector (GC) stutter spikes.
+const _matrix = new THREE.Matrix4();
+const _vector = new THREE.Vector3();
+const _vector2 = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _rotAxis = new THREE.Vector3(0, 1, 0);
+
 const NATURE_VARIANTS = 8;
 const uniqueMeshes: Record<string, THREE.Group[]> = {
     'spruce': [],
@@ -17,7 +24,8 @@ const uniqueMeshes: Record<string, THREE.Group[]> = {
 
 /**
  * Initialize all nature prototypes (trees, rocks, dead trees)
- * This is called once during asset preloading
+ * This is called once during asset preloading. These act as high-fidelity 
+ * blueprints for the hardware instancing system.
  */
 export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) => {
     // Check if already initialized
@@ -27,7 +35,7 @@ export const initNaturePrototypes = async (yieldToMain?: () => Promise<void>) =>
     const trunkMat = MATERIALS.treeTrunk;
     const birchTrunkMat = MATERIALS.treeTrunkBirch;
 
-    // Foliage materials
+    // Foliage materials (cloned to keep original logic)
     const spruceMat = MATERIALS.treeLeaves.clone();
     spruceMat.color.set(0xffffff);
 
@@ -587,7 +595,7 @@ export const EnvironmentGenerator = {
      * Add instanced trees to scene (Zero-GC optimized)
      */
     addInstancedTrees: (ctx: SectorContext, treeType: string, points: { x: number, z: number, r: number, s: number }[]) => {
-        initNaturePrototypes();
+        initNaturePrototypes(); // Ensure prototypes exist
         const protoList = (uniqueMeshes as any)[treeType];
         if (!protoList || protoList.length === 0) return;
 
@@ -614,15 +622,11 @@ export const EnvironmentGenerator = {
                 instancedMesh.castShadow = true;
                 instancedMesh.receiveShadow = true;
 
-                const rotAxis = new THREE.Vector3(0, 1, 0);
-                const matrix = new THREE.Matrix4();
-                const quat = new THREE.Quaternion();
-
                 for (let i = 0; i < variantPoints.length; i++) {
                     const p = variantPoints[i];
-                    quat.setFromAxisAngle(rotAxis, p.r);
-                    matrix.compose(new THREE.Vector3(p.x, 0, p.z), quat, new THREE.Vector3(p.s, p.s, p.s));
-                    instancedMesh.setMatrixAt(i, matrix);
+                    _quat.setFromAxisAngle(_rotAxis, p.r);
+                    _matrix.compose(_vector.set(p.x, 0, p.z), _quat, _vector2.set(p.s, p.s, p.s));
+                    instancedMesh.setMatrixAt(i, _matrix);
                 }
                 instancedMesh.instanceMatrix.needsUpdate = true;
                 ctx.scene.add(instancedMesh);
@@ -926,15 +930,12 @@ export const EnvironmentGenerator = {
 
         for (const part of parts) {
             const instancedMesh = new THREE.InstancedMesh(part.geo, part.mat, positions.length);
-            const matrix = new THREE.Matrix4();
-            const quat = new THREE.Quaternion();
-            const rotAxis = new THREE.Vector3(0, 1, 0);
 
             for (let i = 0; i < positions.length; i++) {
                 const p = positions[i];
-                quat.setFromAxisAngle(rotAxis, p.r);
-                matrix.compose(new THREE.Vector3(p.x, 0, p.z), quat, new THREE.Vector3(p.s, p.s, p.s));
-                instancedMesh.setMatrixAt(i, matrix);
+                _quat.setFromAxisAngle(_rotAxis, p.r);
+                _matrix.compose(_vector.set(p.x, 0, p.z), _quat, _vector2.set(p.s, p.s, p.s));
+                instancedMesh.setMatrixAt(i, _matrix);
             }
             instancedMesh.instanceMatrix.needsUpdate = true;
             instancedMesh.castShadow = true;
@@ -1001,15 +1002,12 @@ export const EnvironmentGenerator = {
 
             for (const part of parts) {
                 const instancedMesh = new THREE.InstancedMesh(part.geo, part.mat, positions.length);
-                const matrix = new THREE.Matrix4();
-                const quat = new THREE.Quaternion();
-                const rotAxis = new THREE.Vector3(0, 1, 0);
 
                 for (let i = 0; i < positions.length; i++) {
                     const p = positions[i];
-                    quat.setFromAxisAngle(rotAxis, p.r);
-                    matrix.compose(new THREE.Vector3(p.x, 0, p.z), quat, new THREE.Vector3(p.s, p.s, p.s));
-                    instancedMesh.setMatrixAt(i, matrix);
+                    _quat.setFromAxisAngle(_rotAxis, p.r);
+                    _matrix.compose(_vector.set(p.x, 0, p.z), _quat, _vector2.set(p.s, p.s, p.s));
+                    instancedMesh.setMatrixAt(i, _matrix);
                 }
                 instancedMesh.instanceMatrix.needsUpdate = true;
                 instancedMesh.castShadow = true;
@@ -1032,7 +1030,7 @@ export const EnvironmentGenerator = {
         });
 
         const spacing = 1.0 / density;
-        const positions: THREE.Vector3[] = [];
+        const positions: { x: number, z: number, r: number, s: number }[] = [];
 
         for (let x = minX; x <= maxX; x += spacing) {
             for (let z = minZ; z <= maxZ; z += spacing) {
@@ -1048,7 +1046,7 @@ export const EnvironmentGenerator = {
                 }
 
                 if (inside) {
-                    positions.push(new THREE.Vector3(jx, 0, jz));
+                    positions.push({ x: jx, z: jz, r: Math.random() * Math.PI, s: 0.8 + Math.random() * 0.4 });
                 }
             }
             if (ctx.yield) await ctx.yield();
@@ -1057,23 +1055,14 @@ export const EnvironmentGenerator = {
         // Create wheat stalk geometry (simplified)
         const stalkGeo = new THREE.CylinderGeometry(0.02, 0.03, 0.8, 4);
         stalkGeo.translate(0, 0.4, 0);
-        const headGeo = new THREE.SphereGeometry(0.08, 4, 3);
-        headGeo.translate(0, 0.9, 0);
-
-        const mergedGeo = new THREE.BufferGeometry();
-        // Note: For simplicity, using just stalk. In production, merge geometries.
-        mergedGeo.copy(stalkGeo);
 
         const wheatMat = MATERIALS.grass || new THREE.MeshStandardMaterial({ color: 0xd4a574 });
-        const instanced = new THREE.InstancedMesh(mergedGeo, wheatMat, positions.length);
-        const dummy = new THREE.Object3D();
+        const instanced = new THREE.InstancedMesh(stalkGeo, wheatMat, positions.length);
 
         positions.forEach((p, i) => {
-            dummy.position.copy(p);
-            dummy.rotation.y = Math.random() * Math.PI;
-            dummy.scale.setScalar(0.8 + Math.random() * 0.4);
-            dummy.updateMatrix();
-            instanced.setMatrixAt(i, dummy.matrix);
+            _quat.setFromAxisAngle(_rotAxis, p.r);
+            _matrix.compose(_vector.set(p.x, 0, p.z), _quat, _vector2.set(p.s, p.s, p.s));
+            instanced.setMatrixAt(i, _matrix);
         });
         instanced.instanceMatrix.needsUpdate = true;
         instanced.castShadow = true;

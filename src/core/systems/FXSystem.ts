@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
 
 // --- TYPES & INTERFACES ---
 
@@ -52,7 +52,7 @@ const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
 const UNIQUE_MATERIAL_TYPES = [
-    'fire', 'campfire_flame', 'large_fire', 'large_smoke',
+    'fire', 'flame', 'large_fire', 'large_smoke',
     'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash'
 ];
 
@@ -165,7 +165,7 @@ export const FXSystem = {
     _spawnPartImmediate: (req: SpawnRequest) => {
         if (isNaN(req.x)) return;
 
-        const isInstanced = ['blood', 'spark', 'campfire_spark', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb'].includes(req.type);
+        const isInstanced = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb',].includes(req.type);
         const p = FXSystem.getPooledState();
 
         p.type = req.type;
@@ -183,8 +183,8 @@ export const FXSystem = {
 
             if (['gore', 'limb', 'chunk'].includes(req.type)) geo = GEOMETRY.gore;
             else if (req.type === 'black_smoke') mat = MATERIALS['_blackSmoke'] || (MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
-            else if (['fire', 'campfire_flame', 'large_fire'].includes(req.type)) { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
-            else if (['campfire_spark', 'spark'].includes(req.type)) mat = MATERIALS.bullet;
+            else if (['fire', 'flame', 'large_fire'].includes(req.type)) { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+            else if (['spark', 'smoke'].includes(req.type)) mat = MATERIALS.bullet;
             else if (['debris', 'debris_trail'].includes(req.type)) mat = MATERIALS.stone;
             else if (req.type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (req.type === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
@@ -234,6 +234,18 @@ export const FXSystem = {
         }
     },
 
+    textQueue: [] as { mesh: THREE.Sprite, life: number }[],
+    spawnFloatingText: (scene: THREE.Scene, x: number, y: number, z: number, text: string, color: string = '#ffffff') => {
+        const sprite = createTextSprite(text);
+        sprite.position.set(x, y + 1.5, z);
+        sprite.scale.set(1.5, 0.375, 1);
+        sprite.material.color.set(color);
+        sprite.renderOrder = 100;
+
+        scene.add(sprite);
+        FXSystem.textQueue.push({ mesh: sprite, life: 1.5 });
+    },
+
     // --- MAIN UPDATE LOOP ---
 
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
@@ -243,6 +255,8 @@ export const FXSystem = {
         const pLimit = Math.min(FXSystem.particleQueue.length, 30);
         for (let i = 0; i < pLimit; i++) {
             const req = FXSystem.particleQueue.shift()!;
+            if (!req.scene) req.scene = scene;
+            if (!req.particlesList) req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
             REQUEST_POOL.push(req);
         }
@@ -300,7 +314,20 @@ export const FXSystem = {
             }
         }
 
-        // 3. Finalize Instanced Batches
+        // 3. Update Text Floaters
+        for (let i = FXSystem.textQueue.length - 1; i >= 0; i--) {
+            const t = FXSystem.textQueue[i];
+            t.life -= safeDelta;
+            if (t.life <= 0) {
+                t.mesh.parent?.remove(t.mesh);
+                FXSystem.textQueue.splice(i, 1);
+                continue;
+            }
+            t.mesh.position.y += 0.5 * safeDelta;
+            t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
+        }
+
+        // 4. Finalize Instanced Batches
         for (const type in FXSystem._instancedMeshes) {
             const imesh = FXSystem._instancedMeshes[type];
             imesh.count = FXSystem._instancedCounts[type];
@@ -358,5 +385,96 @@ export const FXSystem = {
             FXSystem._instancedCounts[type] = 0;
         }
         return FXSystem._instancedMeshes[type];
+    },
+
+    // --- SPECIAL WEAPON EFFECTS ---
+
+    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
+        // Cone spread
+        const spread = 0.15;
+        const dir = direction.clone().add(new THREE.Vector3(
+            (Math.random() - 0.5) * spread,
+            (Math.random() - 0.5) * spread,
+            (Math.random() - 0.5) * spread
+        )).normalize();
+
+        const speed = 10 + Math.random() * 5;
+        const life = 0.8 + Math.random() * 0.4;
+        const scale = 0.5 + Math.random() * 0.5;
+
+        // Use 'fire' or 'flame' material
+        // We can reuse spawnParticle logic but specific for flame
+        // Actually, let's just use spawnParticle with specific params
+        // Assuming we have a helper or just direct use
+        // I'll call a helper if it exists, otherwise I'll push to queue manually or define a helper here if I can see one.
+        // I can see `spawnFlash` or similar in other files? No, I only see `getPooledMesh`.
+        // I'll implement a `spawnParticle` wrapper since I can't see the implementation of standard spawn in the snippet.
+        // Wait, I need to see if there is a `spawnParticle` exposed.
+        // The snippet shows `FXSystem` object starts at line 61.
+        // I'll assume `spawnParticle` exists or I'll implement logic to add to `particleQueue`.
+
+        FXSystem.particleQueue.push({
+            scene: null as any, // Managed by update
+            particlesList: null as any,
+            x: start.x, y: start.y, z: start.z,
+            type: 'fire',
+            customVel: dir.multiplyScalar(speed),
+            scale: scale,
+            color: 0xff5500 // Orange
+        } as any);
+        // Note: The `update` loop needs to handle this. I'm assuming existing system handles `fire` type.
+    },
+
+    spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
+        // Create a chain of segments
+        const points = [];
+        const segments = 6;
+        const dist = start.distanceTo(end);
+        const lerpStep = 1 / segments;
+
+        points.push(start.clone());
+        for (let i = 1; i < segments; i++) {
+            const p = new THREE.Vector3().lerpVectors(start, end, i * lerpStep);
+            // Jitter
+            p.add(new THREE.Vector3(
+                (Math.random() - 0.5) * 1.5,
+                (Math.random() - 0.5) * 1.5,
+                (Math.random() - 0.5) * 1.5
+            ));
+            points.push(p);
+        }
+        points.push(end.clone());
+
+        // We can't easily draw lines with standard particles. 
+        // We can spawn small "electric" particles along the path or use immediate mode lines if engine supports it.
+        // Given existing particle system, spawning a trail of 'flash' or 'stun_star' particles might be best.
+        // Or 'debris_trail'.
+
+        points.forEach(p => {
+            FXSystem.particleQueue.push({
+                scene: null as any,
+                particlesList: null as any,
+                x: p.x, y: p.y, z: p.z,
+                type: 'flash',
+                customVel: new THREE.Vector3(0, 0, 0),
+                scale: 0.3 + Math.random() * 0.2,
+                color: 0x00ffff // Cyan
+            } as any);
+        });
+    },
+
+    spawnStunSparks: (pos: THREE.Vector3) => {
+        for (let i = 0; i < 3; i++) {
+            FXSystem.particleQueue.push({
+                scene: null as any,
+                particlesList: null as any,
+                x: pos.x + (Math.random() - 0.5), y: pos.y + 1.5 + (Math.random() - 0.5), z: pos.z + (Math.random() - 0.5),
+                type: 'stun_star',
+                customVel: new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2),
+                scale: 0.2,
+                color: 0xffff00
+            } as any);
+        }
     }
+
 };

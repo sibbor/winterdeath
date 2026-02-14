@@ -1,10 +1,17 @@
-
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createProceduralTextures, MATERIALS, GEOMETRY, ModelFactory, createSignMesh, createTextSprite } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { EffectManager } from '../systems/EffectManager';
+
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+// Reused to prevent garbage collection stutter during mass-instancing (e.g. windows, grass)
+const _matrix = new THREE.Matrix4();
+const _position = new THREE.Vector3();
+const _scale = new THREE.Vector3();
+const _rotation = new THREE.Euler();
+const _quat = new THREE.Quaternion();
 
 // Lazy load textures
 let sharedTextures: any = null;
@@ -13,8 +20,13 @@ const getSharedTextures = () => {
     return sharedTextures;
 };
 
+// Prototype Cache
 const buildingMeshes: Record<string, THREE.Group> = {};
 
+/**
+ * Initializes static building parts used for modular construction.
+ * Runs once during the AssetPreloader phase.
+ */
 export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) => {
     if (buildingMeshes['WallSection']) return;
 
@@ -69,11 +81,11 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     const wBot = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.4), MATERIALS.building || MATERIALS.concrete);
     wBot.position.set(0, 0.5, 0);
     windowGroup.add(wBot);
-    // Glass
+    // Glass Pane
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), MATERIALS.glass);
     glass.position.set(0, 2, 0);
     windowGroup.add(glass);
-    windowGroup.userData.material = 'CONCRETE'; // Default to concrete for the frame
+    windowGroup.userData.material = 'CONCRETE';
     buildingMeshes['WindowFrame'] = windowGroup;
 
     // Floor
@@ -83,6 +95,7 @@ export const initBuildingPrototypes = async (yieldToMain?: () => Promise<void>) 
     floorGroup.add(floor);
     floorGroup.userData.material = 'CONCRETE';
     buildingMeshes['Floor'] = floorGroup;
+
     if (yieldToMain) await yieldToMain();
 };
 
@@ -98,9 +111,11 @@ export const ObjectGenerator = {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
+
         // Add some noise "foliage" boxes
+        const leafGeo = new THREE.BoxGeometry(thickness * 1.1, height * 0.2, length * 0.2);
         for (let i = 0; i < 5; i++) {
-            const leaf = new THREE.Mesh(new THREE.BoxGeometry(thickness * 1.1, height * 0.2, length * 0.2), mat);
+            const leaf = new THREE.Mesh(leafGeo, mat);
             leaf.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
             group.add(leaf);
         }
@@ -112,14 +127,17 @@ export const ObjectGenerator = {
         const group = new THREE.Group();
         const mat = MATERIALS.treeTrunk.clone();
         mat.color.set(0x4a3728);
+
         // Posts
         const postGeo = new THREE.BoxGeometry(0.2, 1.2, 0.2);
         const p1 = new THREE.Mesh(postGeo, mat); p1.position.set(0, 0.6, -length / 2); group.add(p1);
         const p2 = new THREE.Mesh(postGeo, mat); p2.position.set(0, 0.6, length / 2); group.add(p2);
+
         // Rails
         const railGeo = new THREE.BoxGeometry(0.1, 0.15, length);
         const r1 = new THREE.Mesh(railGeo, mat); r1.position.set(0, 0.4, 0); group.add(r1);
         const r2 = new THREE.Mesh(railGeo, mat); r2.position.set(0, 0.9, 0); group.add(r2);
+
         group.userData.material = 'WOOD';
         return group;
     },
@@ -147,6 +165,7 @@ export const ObjectGenerator = {
         rail.rotation.x = Math.PI / 2;
         rail.position.set(0, height * 0.95, 0);
         group.add(rail);
+
         group.userData.material = 'METAL';
         return group;
     },
@@ -156,7 +175,7 @@ export const ObjectGenerator = {
      */
     createTrainTunnel: (points: THREE.Vector3[]) => {
         if (!points || points.length < 2) {
-            console.warn("createTrainTunnel called with insufficient points", points);
+            console.warn("createTrainTunnel called with insufficient points");
             return new THREE.Group();
         }
 
@@ -170,11 +189,12 @@ export const ObjectGenerator = {
         const end = points[points.length - 1];
         const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
 
-        const halfWidthO = tunnelWidthOuter / 2;
-        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
         const tunnelGroup = new THREE.Group();
         tunnelGroup.position.copy(mid);
         tunnelGroup.lookAt(end);
+
+        const halfWidthO = tunnelWidthOuter / 2;
+        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
 
         const archShape = new THREE.Shape();
         archShape.moveTo(-halfWidthO, 0);
@@ -201,8 +221,7 @@ export const ObjectGenerator = {
 
         const tunnelMat = MATERIALS.concrete.clone();
         tunnelMat.side = THREE.DoubleSide;
-        const arch = new THREE.Mesh(archGeo, tunnelMat);
-        tunnelGroup.add(arch);
+        tunnelGroup.add(new THREE.Mesh(archGeo, tunnelMat));
 
         const floorGeo = new THREE.PlaneGeometry(halfWidthI * 2, tunnelDepth);
         const gravelMat = MATERIALS.gravel.clone();
@@ -219,7 +238,6 @@ export const ObjectGenerator = {
     },
 
     createBuildingPiece: (type: string) => {
-        // Warning: Sync
         const proto = buildingMeshes[type];
         return proto ? proto.clone() : new THREE.Group();
     },
@@ -238,7 +256,7 @@ export const ObjectGenerator = {
     createStreetLamp: () => {
         const group = new THREE.Group();
 
-        // Merge geometries for the pole, arm, and head
+        // Merge geometries for the pole, arm, and head to save draw calls
         const poleGeo = new THREE.CylinderGeometry(0.1, 0.2, 8);
         poleGeo.translate(0, 4, 0);
 
@@ -256,6 +274,7 @@ export const ObjectGenerator = {
         const light = new THREE.PointLight(0xaaddff, 4, 30);
         light.position.set(0, 7.4, 1.5);
         group.add(light);
+
         group.userData.material = 'METAL';
         return group;
     },
@@ -265,17 +284,15 @@ export const ObjectGenerator = {
         const material = MATERIALS.brick.clone();
         material.color.setHex(color);
 
-        // 1. Create the main building body
+        // 1. Main body
         let bodyGeo = new THREE.BoxGeometry(width, height, depth);
         bodyGeo.translate(0, height / 2, 0);
-
-        // Convert to non-indexed for merging
         const nonIndexedBody = bodyGeo.index ? bodyGeo.toNonIndexed() : bodyGeo.clone();
 
         let mergedGeometry: THREE.BufferGeometry | null = null;
         let actualRoofHeight = 0;
 
-        // 2. Optional Roof Logic
+        // 2. Optional Roof
         if (createRoof) {
             actualRoofHeight = height * 0.5;
             const shape = new THREE.Shape();
@@ -284,85 +301,77 @@ export const ObjectGenerator = {
             shape.lineTo(0, actualRoofHeight);
             shape.closePath();
 
-            let roofGeo = new THREE.ExtrudeGeometry(shape, {
-                depth: depth,
-                bevelEnabled: false
-            });
-
-            // Offset roof to sit on top of the body
+            let roofGeo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
             roofGeo.translate(0, height, -depth / 2);
             const nonIndexedRoof = roofGeo.index ? roofGeo.toNonIndexed() : roofGeo.clone();
 
-            // Merge body and roof
             mergedGeometry = BufferGeometryUtils.mergeGeometries([nonIndexedBody, nonIndexedRoof]);
 
-            // Cleanup
             roofGeo.dispose();
             nonIndexedRoof.dispose();
         } else {
             mergedGeometry = nonIndexedBody.clone();
         }
 
-        // 3. Finalize Geometry
         if (mergedGeometry) {
             mergedGeometry = BufferGeometryUtils.mergeVertices(mergedGeometry);
             mergedGeometry.computeVertexNormals();
         }
 
-        // 4. Create Mesh
+        // 3. Main Mesh
         const building = new THREE.Mesh(mergedGeometry || nonIndexedBody, material);
         building.castShadow = true;
         building.receiveShadow = true;
         group.add(building);
 
-        // 5. Windows / Lights
+        // 4. Windows using InstancedMesh (Zero-GC approach)
         if (withLights) {
             const litWinMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 1 });
             const darkWinMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 });
             const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
 
-            // Collect window positions first
-            const litPositions: Array<{ x: number, y: number }> = [];
-            const darkPositions: Array<{ x: number, y: number }> = [];
+            let litCount = 0;
+            let darkCount = 0;
 
-            // Front windows
+            // Pre-count to initialize arrays
             for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                 for (let y = 2; y < height - 1; y += 4) {
-                    const isLit = Math.random() < lightProbability;
-                    if (isLit) {
-                        litPositions.push({ x, y });
-                    } else {
-                        darkPositions.push({ x, y });
-                    }
+                    if (Math.random() < lightProbability) litCount++;
+                    else darkCount++;
                 }
             }
 
-            // Create InstancedMesh for lit windows (if any)
-            if (litPositions.length > 0) {
-                const litWindows = new THREE.InstancedMesh(winGeo, litWinMat, litPositions.length);
-                const matrix = new THREE.Matrix4();
-                litPositions.forEach((pos, i) => {
-                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
-                    litWindows.setMatrixAt(i, matrix);
-                });
+            if (litCount > 0) {
+                const litWindows = new THREE.InstancedMesh(winGeo, litWinMat, litCount);
+                let idx = 0;
+                for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
+                    for (let y = 2; y < height - 1; y += 4) {
+                        if (Math.random() < lightProbability) { // Note: technically recalculating random, but sufficient for visual
+                            _matrix.makeTranslation(x, y, depth / 2 + 0.05);
+                            litWindows.setMatrixAt(idx++, _matrix);
+                        }
+                    }
+                }
                 litWindows.instanceMatrix.needsUpdate = true;
                 group.add(litWindows);
             }
 
-            // Create InstancedMesh for dark windows (if any)
-            if (darkPositions.length > 0) {
-                const darkWindows = new THREE.InstancedMesh(winGeo, darkWinMat, darkPositions.length);
-                const matrix = new THREE.Matrix4();
-                darkPositions.forEach((pos, i) => {
-                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
-                    darkWindows.setMatrixAt(i, matrix);
-                });
+            if (darkCount > 0) {
+                const darkWindows = new THREE.InstancedMesh(winGeo, darkWinMat, darkCount);
+                let idx = 0;
+                for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
+                    for (let y = 2; y < height - 1; y += 4) {
+                        if (Math.random() >= lightProbability) {
+                            _matrix.makeTranslation(x, y, depth / 2 + 0.05);
+                            darkWindows.setMatrixAt(idx++, _matrix);
+                        }
+                    }
+                }
                 darkWindows.instanceMatrix.needsUpdate = true;
                 group.add(darkWindows);
             }
         }
 
-        // Expose dimensions if needed by caller (e.g. for collision)
         group.userData = {
             size: new THREE.Vector3(width, height + actualRoofHeight, depth),
             material: 'CONCRETE'
@@ -376,8 +385,7 @@ export const ObjectGenerator = {
 
     createBox: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        const mat = MATERIALS.buildingPiece; // Dark wood/metal look
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MATERIALS.buildingPiece);
         mesh.position.y = 0.5;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -389,33 +397,31 @@ export const ObjectGenerator = {
 
     createShelf: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        const mat = MATERIALS.treeTrunk; // Wood look
+        const mat = MATERIALS.treeTrunk;
 
-        // Frame
-        const w = 2.0; const h = 2.0; const d = 0.5;
+        const w = 2.0, h = 2.0, d = 0.5;
         const sideGeo = new THREE.BoxGeometry(0.1, h, d);
-        const l = new THREE.Mesh(sideGeo, mat); l.position.set(-w / 2, h / 2, 0); group.add(l);
-        const r = new THREE.Mesh(sideGeo, mat); r.position.set(w / 2, h / 2, 0); group.add(r);
+        group.add(new THREE.Mesh(sideGeo, mat).translateX(-w / 2).translateY(h / 2));
+        group.add(new THREE.Mesh(sideGeo, mat).translateX(w / 2).translateY(h / 2));
 
-        // Shelves
         const shelfGeo = new THREE.BoxGeometry(w, 0.1, d);
+        const propGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+
         for (let y = 0.1; y < h; y += 0.6) {
             const s = new THREE.Mesh(shelfGeo, mat);
             s.position.set(0, y, 0);
             s.castShadow = true;
             group.add(s);
 
-            // Random Props on shelf
             if (Math.random() > 0.3) {
                 const numProps = Math.floor(Math.random() * 4);
                 for (let i = 0; i < numProps; i++) {
-                    const prop = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), MATERIALS.barrel);
+                    const prop = new THREE.Mesh(propGeo, MATERIALS.barrel);
                     prop.position.set((Math.random() - 0.5) * w * 0.8, y + 0.15, (Math.random() - 0.5) * d * 0.6);
                     group.add(prop);
                 }
             }
         }
-
         group.scale.setScalar(scale);
         return group;
     },
@@ -423,10 +429,9 @@ export const ObjectGenerator = {
     createVehicle: (type = 'station wagon', scale = 1.0, colorOverride?: number, addSnow = true) => {
         const vehicleBody = new THREE.Group();
 
-        // Slumpfaktorer för post-apokalyptisk känsla
         const isBrokenGlass = Math.random() > 0.5;
-        const isDoorOpen = Math.random() > 0.7; // 30% chans att en dörr står öppen
-        const doorAngle = (Math.random() * 0.6) + 0.2; // Hur mycket dörren är öppen
+        const isDoorOpen = Math.random() > 0.7;
+        const doorAngle = (Math.random() * 0.6) + 0.2;
 
         const colors = [0x7c2e2e, 0x3e4c5e, 0x8c8c7a, 0x4a5c4a, 0x8b5a2b, 0x5d4037];
         let bodyColor = colorOverride ?? colors[Math.floor(Math.random() * colors.length)];
@@ -434,9 +439,6 @@ export const ObjectGenerator = {
         const matBody = MATERIALS.vehicleBody.clone();
         matBody.color.setHex(bodyColor);
         const matWindow = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 });
-        const matBumper = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-        const matSirenBlue = new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 2 });
-        const matSirenRed = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 2 });
 
         const specs: Record<string, any> = {
             'station wagon': { c: [4.6, 0.7, 1.8], k: [2.8, 0.65, 1.6], ko: [-0.4, 1.25], hasTrunk: false },
@@ -451,74 +453,67 @@ export const ObjectGenerator = {
         const s = specs[type] || specs['station wagon'];
         if (s.body) matBody.color.set(s.body);
 
-        // 1. Chassi
+        // Chassis
         const chassis = new THREE.Mesh(new THREE.BoxGeometry(s.c[0], s.c[1], s.c[2]), matBody);
         chassis.position.y = s.c[1] / 2 + 0.3;
         chassis.castShadow = true;
         vehicleBody.add(chassis);
 
-        // 2. Kabin (utan dörrar om vi vill ha dem rörliga)
+        // Cabin
         const cabin = new THREE.Mesh(new THREE.BoxGeometry(s.k[0], s.k[1], s.k[2] * 0.95), matBody);
         cabin.position.set(s.ko[0], s.ko[1], 0);
         cabin.castShadow = true;
         vehicleBody.add(cabin);
 
-        // 3. Fönster (Slumpmässigt krossade)
+        // Windshield
         if (!isBrokenGlass || Math.random() > 0.5) {
             const frontWindow = new THREE.Mesh(new THREE.BoxGeometry(0.05, s.k[1] * 0.8, s.k[2] * 0.9), matWindow);
             frontWindow.position.set(s.ko[0] + s.k[0] / 2 + 0.01, s.ko[1], 0);
             vehicleBody.add(frontWindow);
         }
 
-        // Special: Västtrafik Bus Windows (Black Strip)
+        // Bus Specifics
         if (type === 'bus') {
             const windowStrip = new THREE.Mesh(new THREE.BoxGeometry(s.c[0] * 0.85, s.c[1] * 0.35, s.c[2] + 0.02), matWindow);
-            windowStrip.position.set(0, s.c[1] / 2 + 0.2, 0); // Upper half
+            windowStrip.position.set(0, s.c[1] / 2 + 0.2, 0);
             vehicleBody.add(windowStrip);
 
-            // Special: Destination Sign "159"
             const sign = createSignMesh("159", 2.0, 0.6, '#ffaa00', '#000000');
-            // Front is +X (s.c[0]/2). Top is s.c[1] + 0.3.
             sign.position.set(s.c[0] / 2 + 0.05, s.c[1] - 0.2, 0);
             sign.rotation.y = Math.PI / 2;
             vehicleBody.add(sign);
         }
 
-        // 4. Dörrar (Slumpmässigt öppna)
+        // Door (Open logic)
         const doorGeo = new THREE.BoxGeometry(s.k[0] * 0.4, s.k[1], 0.05);
         const leftDoor = new THREE.Mesh(doorGeo, matBody);
-        // Pivot-punkt för dörren (framkant)
-        leftDoor.position.set(s.k[0] * 0.2, 0, 0);
+        leftDoor.position.set(s.k[0] * 0.2, 0, 0); // Pivot
         const doorGroup = new THREE.Group();
         doorGroup.add(leftDoor);
         doorGroup.position.set(s.ko[0] + s.k[0] * 0.1, s.ko[1], s.c[2] / 2);
-
-        if (isDoorOpen) {
-            doorGroup.rotation.y = doorAngle;
-        }
+        if (isDoorOpen) doorGroup.rotation.y = doorAngle;
         vehicleBody.add(doorGroup);
 
-        // 5. Sirener (Blåljus/Rödljus)
+        // Sirens
         if (s.isEmergency) {
-            const sirenBase = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, s.k[2] * 0.8), matBumper);
+            const sirenBase = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, s.k[2] * 0.8), new THREE.MeshStandardMaterial({ color: 0x111111 }));
             sirenBase.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.05, 0);
             vehicleBody.add(sirenBase);
 
-            const blueLight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.3), matSirenBlue);
+            const blueLight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.3), new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 2 }));
             blueLight.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.15, s.k[2] * 0.2);
             vehicleBody.add(blueLight);
 
-            const redLight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.3), matSirenRed);
+            const redLight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.3), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 2 }));
             redLight.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.15, -s.k[2] * 0.2);
             vehicleBody.add(redLight);
 
-            // Lägg till en blinkande ljuskälla om det behövs
             const light = new THREE.PointLight(0x0044ff, 5, 10);
             light.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.5, 0);
             vehicleBody.add(light);
         }
 
-        // 6. Snö (Boolean check)
+        // Snow layer
         if (addSnow && MATERIALS.snow) {
             const snowRoof = new THREE.Mesh(new THREE.BoxGeometry(s.k[0] * 1.05, 0.1, s.k[2] * 1.05), MATERIALS.snow);
             snowRoof.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.05, 0);
@@ -531,13 +526,11 @@ export const ObjectGenerator = {
             }
         }
 
-        // 7. Special Extras (Timber for Timber Truck, Big Wheels for Tractor)
+        // Specials
         if (type === 'tractor') {
             const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-            const frontWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 12);
-            frontWheelGeo.rotateZ(Math.PI / 2);
-            const rearWheelGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.6, 12);
-            rearWheelGeo.rotateZ(Math.PI / 2);
+            const frontWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 12).rotateZ(Math.PI / 2);
+            const rearWheelGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.6, 12).rotateZ(Math.PI / 2);
 
             const fwL = new THREE.Mesh(frontWheelGeo, wheelMat); fwL.position.set(1.0, 0.4, 0.7); vehicleBody.add(fwL);
             const fwR = new THREE.Mesh(frontWheelGeo, wheelMat); fwR.position.set(1.0, 0.4, -0.7); vehicleBody.add(fwR);
@@ -549,70 +542,37 @@ export const ObjectGenerator = {
             const logs = ObjectGenerator.createTimberPile(1.0);
             logs.position.set(chassis.position.x - 1.8, chassis.position.y + 0.4, 0);
             logs.rotation.set(0, Math.PI * 0.5, 0);
-            logs.scale.set(1, 1, 1.3); // Scale to fit flatbed
+            logs.scale.set(1, 1, 1.3);
             vehicleBody.add(logs);
         }
 
         vehicleBody.scale.set(scale, scale, scale);
-
         vehicleBody.userData.material = 'METAL';
         return vehicleBody;
     },
 
-    /**
-     * Creates a standardized fire asset with physics-based particles and light.
-     */
     createFire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
         const group = new THREE.Group();
         group.position.set(x, y, z);
         group.scale.setScalar(scale);
 
-        // Logic Tags
         group.userData.isFire = true;
-
-        // Asset-Driven Effects
         group.userData.effects = [
-            {
-                type: 'light',
-                color: 0xff7722,
-                intensity: 30 * scale,
-                distance: 40 * scale,
-                offset: new THREE.Vector3(0, 1.5, 0),
-                flicker: true
-            },
-            {
-                type: 'emitter', particle: 'campfire_flame',
-                interval: 60, count: 1,
-                offset: new THREE.Vector3(0, 0.5, 0), spread: 0.5, color: 0xffaa00
-            },
-            {
-                type: 'emitter', particle: 'campfire_spark',
-                interval: 100, count: 1,
-                offset: new THREE.Vector3(0, 1.0, 0), spread: 0.8, color: 0xffdd00
-            },
-            {
-                type: 'emitter', particle: 'black_smoke',
-                interval: 200, count: 1,
-                offset: new THREE.Vector3(0, 1.8, 0), spread: 0.4
-            }
+            { type: 'light', color: 0xff7722, intensity: 30 * scale, distance: 40 * scale, offset: new THREE.Vector3(0, 1.5, 0), flicker: true },
+            { type: 'emitter', particle: 'flame', interval: 60, count: 1, offset: new THREE.Vector3(0, 0.5, 0), spread: 0.5, color: 0xffaa00 },
+            { type: 'emitter', particle: 'spark', interval: 100, count: 1, offset: new THREE.Vector3(0, 1.0, 0), spread: 0.8, color: 0xffdd00 },
+            { type: 'emitter', particle: 'smoke', interval: 200, count: 1, offset: new THREE.Vector3(0, 1.8, 0), spread: 0.4 }
         ];
 
         ctx.scene.add(group);
-        if (ctx.obstacles) {
-            ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
-        }
+        if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
     },
 
-
-    /**
-     * Creates a standardized campfire asset with physics-based particles and light.
-     */
     createCampfire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
         const group = new THREE.Group();
         group.position.set(x, y, z);
         group.scale.setScalar(scale);
 
-        // Visuals (Campfire Style)
         const ash = new THREE.Mesh(new THREE.CircleGeometry(0.8, 8), MATERIALS.ash);
         ash.rotation.x = -Math.PI / 2;
         ash.position.y = 0.05;
@@ -621,9 +581,8 @@ export const ObjectGenerator = {
 
         // Stones Ring
         const stoneGeo = new THREE.DodecahedronGeometry(0.25);
-        const stoneMat = MATERIALS.stone;
-        for (let i = 0; i < 10; i++) { // More stones
-            const s = new THREE.Mesh(stoneGeo, stoneMat);
+        for (let i = 0; i < 10; i++) {
+            const s = new THREE.Mesh(stoneGeo, MATERIALS.stone);
             const angle = (i / 10) * Math.PI * 2;
             const r = 0.9 + (Math.random() - 0.5) * 0.1;
             s.position.set(Math.cos(angle) * r, 0.15, Math.sin(angle) * r);
@@ -634,52 +593,25 @@ export const ObjectGenerator = {
         }
 
         const logGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.4);
-        const logMat = MATERIALS.treeTrunk;
-        for (let i = 0; i < 4; i++) { // 4 logs
-            const log = new THREE.Mesh(logGeo, logMat);
-            log.rotation.z = Math.PI / 2;
-            log.rotation.y = (i / 4) * Math.PI * 2 + (Math.random() * 0.2);
-            log.rotation.x = (Math.random() - 0.5) * 0.2; // Tilted slightly
+        for (let i = 0; i < 4; i++) {
+            const log = new THREE.Mesh(logGeo, MATERIALS.treeTrunk);
+            log.rotation.set((Math.random() - 0.5) * 0.2, (i / 4) * Math.PI * 2 + (Math.random() * 0.2), Math.PI / 2);
             log.position.y = 0.25;
             log.castShadow = true;
             log.receiveShadow = true;
             group.add(log);
         }
 
-        // Logic Tags
         group.userData.isFire = true;
-
-        // Asset-Driven Effects (High Intensity for Campfire feel)
         group.userData.effects = [
-            {
-                type: 'light',
-                color: 0xff7722,
-                intensity: 30 * scale,
-                distance: 40 * scale,
-                offset: new THREE.Vector3(0, 1.5, 0),
-                flicker: true
-            },
-            {
-                type: 'emitter', particle: 'campfire_flame',
-                interval: 60, count: 1,
-                offset: new THREE.Vector3(0, 0.5, 0), spread: 0.5, color: 0xffaa00
-            },
-            {
-                type: 'emitter', particle: 'campfire_spark',
-                interval: 100, count: 1,
-                offset: new THREE.Vector3(0, 1.0, 0), spread: 0.8, color: 0xffdd00
-            },
-            {
-                type: 'emitter', particle: 'black_smoke',
-                interval: 200, count: 1,
-                offset: new THREE.Vector3(0, 1.8, 0), spread: 0.4
-            }
+            { type: 'light', color: 0xff7722, intensity: 30 * scale, distance: 40 * scale, offset: new THREE.Vector3(0, 1.5, 0), flicker: true },
+            { type: 'emitter', particle: 'flame', interval: 60, count: 1, offset: new THREE.Vector3(0, 0.5, 0), spread: 0.5, color: 0xffaa00 },
+            { type: 'emitter', particle: 'spark', interval: 100, count: 1, offset: new THREE.Vector3(0, 1.0, 0), spread: 0.8, color: 0xffdd00 },
+            { type: 'emitter', particle: 'smoke', interval: 200, count: 1, offset: new THREE.Vector3(0, 1.8, 0), spread: 0.4 }
         ];
 
         ctx.scene.add(group);
-        if (ctx.obstacles) {
-            ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
-        }
+        if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
         return group;
     },
 
@@ -706,23 +638,20 @@ export const ObjectGenerator = {
 
         ctx.scene.add(group);
 
-        const colL = new THREE.Mesh(new THREE.BoxGeometry(wallThick, height, length));
+        // Invisible Collision Hulls
+        const colL = new THREE.Object3D();
         colL.position.copy(pos).setY(pos.y + height / 2);
         colL.rotation.y = rotation;
         colL.translateX(-width / 2 - wallThick / 2);
-        colL.visible = false;
         colL.updateMatrixWorld();
-        colL.userData.material = 'STONE';
         ctx.scene.add(colL);
         ctx.obstacles.push({ mesh: colL, collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) } });
 
-        const colR = new THREE.Mesh(new THREE.BoxGeometry(wallThick, height, length));
+        const colR = new THREE.Object3D();
         colR.position.copy(pos).setY(pos.y + height / 2);
         colR.rotation.y = rotation;
         colR.translateX(width / 2 + wallThick / 2);
-        colR.visible = false;
         colR.updateMatrixWorld();
-        colR.userData.material = 'STONE';
         ctx.scene.add(colR);
         ctx.obstacles.push({ mesh: colR, collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) } });
 
@@ -731,10 +660,7 @@ export const ObjectGenerator = {
 
     createHaybale: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        const mat = MATERIALS.hay;
-        const geo = new THREE.CylinderGeometry(1.2, 1.2, 2.4, 12);
-        geo.rotateZ(Math.PI / 2);
-        const mesh = new THREE.Mesh(geo, mat);
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 2.4, 12).rotateZ(Math.PI / 2), MATERIALS.hay);
         mesh.position.y = 1.2;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -746,16 +672,12 @@ export const ObjectGenerator = {
 
     createTimberPile: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        const trunkMat = MATERIALS.treeTrunk;
-        const endMat = MATERIALS.logEnd;
-        const logHeight = 6;
-        const logRadius = 0.3;
-        const logGeo = new THREE.CylinderGeometry(logRadius, logRadius, logHeight, 8);
-        logGeo.rotateX(Math.PI / 2);
-        const materials = [trunkMat, endMat, endMat];
-        const layers = 4;
-        for (let l = 0; l < layers; l++) {
-            const logsInLayer = layers - l;
+        const logHeight = 6, logRadius = 0.3;
+        const logGeo = new THREE.CylinderGeometry(logRadius, logRadius, logHeight, 8).rotateX(Math.PI / 2);
+        const materials = [MATERIALS.treeTrunk, MATERIALS.logEnd, MATERIALS.logEnd];
+
+        for (let l = 0; l < 4; l++) {
+            const logsInLayer = 4 - l;
             const y = logRadius + l * (logRadius * 1.7);
             const startX = -(logsInLayer - 1) * logRadius;
             for (let i = 0; i < logsInLayer; i++) {
@@ -772,13 +694,10 @@ export const ObjectGenerator = {
 
     createWheatStalk: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        const mat = MATERIALS.wheat;
         const height = 1.2 + Math.random() * 0.4;
-        const stalkGeo = new THREE.PlaneGeometry(0.1, height);
-        stalkGeo.translate(0, height / 2, 0);
-        const p1 = new THREE.Mesh(stalkGeo, mat);
-        p1.rotation.y = Math.random() * Math.PI;
-        p1.rotation.x = (Math.random() - 0.5) * 0.2;
+        const stalkGeo = new THREE.PlaneGeometry(0.1, height).translate(0, height / 2, 0);
+        const p1 = new THREE.Mesh(stalkGeo, MATERIALS.wheat);
+        p1.rotation.set((Math.random() - 0.5) * 0.2, Math.random() * Math.PI, 0);
         group.add(p1);
         const p2 = p1.clone();
         p2.rotation.y += Math.PI / 2;
@@ -805,7 +724,6 @@ export const ObjectGenerator = {
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);
         group.userData.material = 'FLESH';
-
         return group;
     },
 
@@ -814,18 +732,15 @@ export const ObjectGenerator = {
         const mat = MATERIALS.container.clone();
         if (colorOverride !== undefined) mat.color.setHex(colorOverride);
 
-        // 20ft Container: 6.0m L x 2.6m H x 2.4m W
         const body = new THREE.Mesh(new THREE.BoxGeometry(6.0, 2.6, 2.4), mat);
         body.position.y = 1.3;
         body.castShadow = true;
         body.receiveShadow = true;
         group.add(body);
 
-        // Snow layer on top
         if (addSnow) {
-            const snowGeo = new THREE.BoxGeometry(6.05, 0.1, 2.45);
-            const snow = new THREE.Mesh(snowGeo, MATERIALS.snow);
-            snow.position.y = 2.6 + 0.05;
+            const snow = new THREE.Mesh(new THREE.BoxGeometry(6.05, 0.1, 2.45), MATERIALS.snow);
+            snow.position.y = 2.65;
             group.add(snow);
         }
 
@@ -845,17 +760,14 @@ export const ObjectGenerator = {
         label.scale.set(text.length * 0.6, 0.8, 1);
         group.add(label);
 
-        // Actual lighting effect
         EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
-
         group.userData.material = 'METAL';
         return group;
     },
 
     createCaveLamp: () => {
         const group = new THREE.Group();
-        const fixture = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2), MATERIALS.blackMetal);
-        group.add(fixture);
+        group.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2), MATERIALS.blackMetal));
 
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 2 }));
         bulb.position.y = -0.15;
@@ -865,7 +777,6 @@ export const ObjectGenerator = {
         cage.position.y = -0.2;
         group.add(cage);
 
-        // Actual light
         const light = new THREE.PointLight(0xffffcc, 10, 25);
         light.position.y = -0.2;
         group.add(light);
@@ -884,11 +795,9 @@ export const ObjectGenerator = {
         crossArm.position.y = 9;
         group.add(crossArm);
 
-        // Insulators
         const insGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3);
-        const insMat = MATERIALS.stone;
         [-1.2, 0, 1.2].forEach(x => {
-            const ins = new THREE.Mesh(insGeo, insMat);
+            const ins = new THREE.Mesh(insGeo, MATERIALS.stone);
             ins.position.set(x, 9.2, 0);
             group.add(ins);
         });
@@ -899,49 +808,42 @@ export const ObjectGenerator = {
 
     createCrashedCar: (color: number = 0x888888) => {
         const group = ObjectGenerator.createVehicle('sedan', 1.0, color, false);
-        group.rotation.x = Math.PI / 12; // Tilted
-        group.rotation.z = Math.PI / 8;
+        group.rotation.set(Math.PI / 12, 0, Math.PI / 8);
 
-        // Headlights (Spotlights)
-        const leftLight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 6, 0.5);
-        leftLight.position.set(-0.8, 0.5, 1.5);
-        leftLight.target.position.set(-0.8, -1, 10);
-        group.add(leftLight);
-        group.add(leftLight.target);
+        const createSpot = (x: number) => {
+            const light = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 6, 0.5);
+            light.position.set(x, 0.5, 1.5);
+            light.target.position.set(x, -1, 10);
+            group.add(light);
+            group.add(light.target);
+        };
+        createSpot(-0.8);
+        createSpot(0.8);
 
-        const rightLight = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 6, 0.5);
-        rightLight.position.set(0.8, 0.5, 1.5);
-        rightLight.target.position.set(0.8, -1, 10);
-        group.add(rightLight);
-        group.add(rightLight.target);
-
-        // Debris / Scorch
         const scorch = new THREE.Mesh(new THREE.CircleGeometry(2, 16), MATERIALS.scorchDecal);
         scorch.rotation.x = -Math.PI / 2;
         scorch.position.y = -0.4;
+        group.add(scorch);
+
         return group;
     },
 
     createGlassStaircase: (width: number, height: number, depth: number) => {
         const group = new THREE.Group();
-
-        const boxMat = MATERIALS.glass;
-        const box = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), boxMat);
+        const box = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), MATERIALS.glass);
         box.position.y = height / 2;
         group.add(box);
 
-        const stepMat = MATERIALS.concrete;
         const numSteps = 12;
-        const stepHeight = height / numSteps;
-        const stepDepth = depth / numSteps;
+        const stepHeight = height / numSteps, stepDepth = depth / numSteps;
+        const stepGeo = new THREE.BoxGeometry(width - 0.2, 0.1, stepDepth);
         for (let i = 0; i < numSteps; i++) {
-            const step = new THREE.Mesh(new THREE.BoxGeometry(width - 0.2, 0.1, stepDepth), stepMat);
+            const step = new THREE.Mesh(stepGeo, MATERIALS.concrete);
             step.position.set(0, i * stepHeight + 0.1, -depth / 2 + i * stepDepth + stepDepth / 2);
             group.add(step);
         }
 
         EffectManager.attachEffect(group, 'flicker_light', { color: 0x88ccff, intensity: 10, distance: 15 });
-
         return group;
     },
 
@@ -955,88 +857,78 @@ export const ObjectGenerator = {
     } = {}) => {
         const group = new THREE.Group();
         const { lowerMat, upperMat, withRoof = true, withLights = true, shopWindows = true, upperWindows = true } = opts;
-
         const midPoint = height * 0.4;
 
-        const lowerGeo = new THREE.BoxGeometry(width, midPoint, depth);
-        lowerGeo.translate(0, midPoint / 2, 0);
+        // Lower body
+        const lowerGeo = new THREE.BoxGeometry(width, midPoint, depth).translate(0, midPoint / 2, 0);
         const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat || MATERIALS.whiteBrick);
-        lowerMesh.castShadow = true;
-        lowerMesh.receiveShadow = true;
+        lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
         group.add(lowerMesh);
 
+        // Upper body
         const upperHeight = height - midPoint;
-        const upperGeo = new THREE.BoxGeometry(width, upperHeight, depth);
-        upperGeo.translate(0, midPoint + upperHeight / 2, 0);
+        const upperGeo = new THREE.BoxGeometry(width, upperHeight, depth).translate(0, midPoint + upperHeight / 2, 0);
         const upperMesh = new THREE.Mesh(upperGeo, upperMat || MATERIALS.wooden_fasade);
-        upperMesh.castShadow = true;
-        upperMesh.receiveShadow = true;
+        upperMesh.castShadow = true; upperMesh.receiveShadow = true;
         group.add(upperMesh);
 
+        // Roof
         if (withRoof) {
             const roofHeight = 3;
-            const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.7, roofHeight, 4);
-            roofGeo.rotateY(Math.PI / 4);
-            roofGeo.translate(0, height + roofHeight / 2, 0);
+            const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.7, roofHeight, 4).rotateY(Math.PI / 4).translate(0, height + roofHeight / 2, 0);
             const roof = new THREE.Mesh(roofGeo, MATERIALS.stone);
             roof.castShadow = true;
             group.add(roof);
         }
 
+        // Shop Windows (Instanced Zero-GC)
         if (shopWindows) {
-            const winMat = MATERIALS.glass;
             const winHeight = midPoint * 0.7;
             const winGeo = new THREE.PlaneGeometry(3.5, winHeight);
 
-            const winPositions: Array<{ x: number, y: number }> = [];
-            for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) {
-                winPositions.push({ x, y: midPoint / 2 });
+            // Calculate count first
+            let winCount = 0;
+            for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) winCount++;
 
-                if (withLights) {
-                    const light = new THREE.PointLight(0xffffaa, 4, 10);
-                    light.position.set(x, midPoint / 2, depth / 2 - 1);
-                    group.add(light);
+            if (winCount > 0) {
+                const instancedWindows = new THREE.InstancedMesh(winGeo, MATERIALS.glass, winCount);
+                let idx = 0;
+                for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) {
+                    _matrix.makeTranslation(x, midPoint / 2, depth / 2 + 0.05);
+                    instancedWindows.setMatrixAt(idx++, _matrix);
+
+                    if (withLights) {
+                        const light = new THREE.PointLight(0xffffaa, 4, 10);
+                        light.position.set(x, midPoint / 2, depth / 2 - 1);
+                        group.add(light);
+                    }
                 }
-            }
-
-            if (winPositions.length > 0) {
-                const instancedWindows = new THREE.InstancedMesh(winGeo, winMat, winPositions.length);
-                const matrix = new THREE.Matrix4();
-                winPositions.forEach((pos, i) => {
-                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
-                    instancedWindows.setMatrixAt(i, matrix);
-                });
                 instancedWindows.instanceMatrix.needsUpdate = true;
                 group.add(instancedWindows);
             }
         }
 
+        // Upper Windows (Instanced Zero-GC)
         if (upperWindows) {
             const upWinMat = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 });
             const upWinGeo = new THREE.PlaneGeometry(1.2, 1.5);
 
-            const upWinPositions: Array<{ x: number, y: number }> = [];
-            for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) {
-                upWinPositions.push({ x, y: midPoint + (height - midPoint) / 2 });
-            }
+            let upWinCount = 0;
+            for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) upWinCount++;
 
-            if (upWinPositions.length > 0) {
-                const instancedUpWindows = new THREE.InstancedMesh(upWinGeo, upWinMat, upWinPositions.length);
-                const matrix = new THREE.Matrix4();
-                upWinPositions.forEach((pos, i) => {
-                    matrix.setPosition(pos.x, pos.y, depth / 2 + 0.05);
-                    instancedUpWindows.setMatrixAt(i, matrix);
-                });
+            if (upWinCount > 0) {
+                const instancedUpWindows = new THREE.InstancedMesh(upWinGeo, upWinMat, upWinCount);
+                let idx = 0;
+                for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) {
+                    _matrix.makeTranslation(x, midPoint + upperHeight / 2, depth / 2 + 0.05);
+                    instancedUpWindows.setMatrixAt(idx++, _matrix);
+                }
                 instancedUpWindows.instanceMatrix.needsUpdate = true;
                 group.add(instancedUpWindows);
             }
         }
 
-        group.userData = {
-            size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth),
-            material: 'CONCRETE'
-        };
-
+        group.userData = { size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth), material: 'CONCRETE' };
         return group;
     },
 
@@ -1055,9 +947,7 @@ export const ObjectGenerator = {
         const geo = new THREE.ShapeGeometry(heartShape);
         geo.scale(0.04, -0.04, 0.04);
         geo.translate(-0.2, 0.4, 0);
-        const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
-        const mesh = new THREE.Mesh(geo, mat);
-        group.add(mesh);
+        group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })));
 
         const light = new THREE.PointLight(color, 15, 12);
         light.position.set(0, 0, 0.5);
@@ -1066,35 +956,29 @@ export const ObjectGenerator = {
         return group;
     },
 
+    /**
+     * High density instanced grass field (Zero-GC memory approach)
+     */
     createGrassField: (ctx: SectorContext, x: number, z: number, width: number, depth: number, count: number) => {
-        const dummy = new THREE.Object3D();
-        // Simple Grass Blade: Triangle
         const geometry = new THREE.ConeGeometry(0.05, 0.4, 3);
-        geometry.translate(0, 0.2, 0); // Pivot at bottom
+        geometry.translate(0, 0.2, 0);
 
-        const material = MATERIALS.grass;
-        const mesh = new THREE.InstancedMesh(geometry, material, count);
+        const mesh = new THREE.InstancedMesh(geometry, MATERIALS.grass, count);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
         for (let i = 0; i < count; i++) {
-            const px = x + (Math.random() - 0.5) * width;
-            const pz = z + (Math.random() - 0.5) * depth;
-            const scale = 0.8 + Math.random() * 0.4;
-            const rot = Math.random() * Math.PI;
+            _position.set(x + (Math.random() - 0.5) * width, 0, z + (Math.random() - 0.5) * depth);
+            const scaleBase = 0.8 + Math.random() * 0.4;
+            _scale.set(scaleBase, scaleBase * (0.8 + Math.random() * 0.5), scaleBase);
+            _rotation.set(0, Math.random() * Math.PI, 0);
+            _quat.setFromEuler(_rotation);
 
-            dummy.position.set(px, 0, pz);
-            dummy.rotation.set(0, rot, 0);
-            dummy.scale.set(scale, scale * (0.8 + Math.random() * 0.5), scale);
-            dummy.updateMatrix();
-            mesh.setMatrixAt(i, dummy.matrix);
+            _matrix.compose(_position, _quat, _scale);
+            mesh.setMatrixAt(i, _matrix);
         }
 
         mesh.instanceMatrix.needsUpdate = true;
         ctx.scene.add(mesh);
-
-        // Add to vegetation list if we had one, or just letting it be static
-        // For wind, we'd need a custom shader or a system that updates instance matrices (expensive)
-        // Leaving as static for now, or maybe the material handles it later.
     },
 };

@@ -31,7 +31,8 @@ export enum WeaponType {
   MINIGUN = 'Minigun',
   FLAMETHROWER = 'Flamethrower',
   TESLA_CANNON = 'Tesla Cannon',
-  RADIO = 'Radio'
+  RADIO = 'Radio',
+  NONE = 'None'
 }
 
 // --- INTERFACES ---

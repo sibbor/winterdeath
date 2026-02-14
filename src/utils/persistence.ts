@@ -8,7 +8,7 @@ export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
     stats: INITIAL_STATS,
     currentSector: 0,
-    loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV },
+    loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV, special: WeaponType.NONE },
     weaponLevels: {
         [WeaponType.PISTOL]: 1,
         [WeaponType.SMG]: 1,
@@ -21,7 +21,8 @@ export const DEFAULT_STATE: GameState = {
         [WeaponType.RADIO]: 1,
         [WeaponType.FLASHBANG]: 1,
         [WeaponType.FLAMETHROWER]: 1,
-        [WeaponType.TESLA_CANNON]: 1
+        [WeaponType.TESLA_CANNON]: 1,
+        [WeaponType.NONE]: 0
     },
     sectorBriefing: '',
     debugMode: false,
@@ -82,6 +83,11 @@ export const loadGameState = (): GameState => {
             }
             if (loaded.bossesDefeated && mergedState.deadBossIndices.length === 0) {
                 mergedState.deadBossIndices = loaded.bossesDefeated;
+            }
+
+            // Ensure special slot exists
+            if (!mergedState.loadout.special) {
+                mergedState.loadout.special = WeaponType.NONE;
             }
 
             return mergedState;

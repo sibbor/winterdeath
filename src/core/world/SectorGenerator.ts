@@ -955,8 +955,8 @@ export const SectorGenerator = {
             if (parent.userData.effects === undefined) parent.userData.effects = [];
 
             const isLarge = (eff as any).onRoof || (eff.intensity && eff.intensity > 100);
-            const firePart = isLarge ? 'large_fire' : 'campfire_flame';
-            const smokePart = isLarge ? 'large_smoke' : 'campfire_spark';
+            const firePart = isLarge ? 'large_fire' : 'flame';
+            const smokePart = isLarge ? 'large_smoke' : 'smoke';
 
             parent.userData.effects.push(
                 { type: 'emitter', particle: firePart, interval: isLarge ? 40 : 50, count: 1, offset: new THREE.Vector3(offset.x, offset.y + (isLarge ? 1.0 : 0.5), offset.z), spread: isLarge ? 1.5 : 0.3, color: 0xffaa00 },

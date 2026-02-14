@@ -98,6 +98,8 @@ export const EnemySpawner = {
         const g = ModelFactory.createZombie(typeKey, typeData);
         g.position.set(x, 0, z);
         g.visible = true;
+
+        const ashPile = g.getObjectByName('AshPile'); // New linkage
         scene.add(g);
 
         // 5. ENTITY CONSTRUCTION
@@ -114,6 +116,8 @@ export const EnemySpawner = {
 
             originalScale: typeData.scale || 1.0,
             widthScale: typeData.widthScale || 1.0,
+
+            ashPile: ashPile as THREE.Object3D,
 
             state: AIState.IDLE,
             idleTimer: 1.0 + Math.random() * 2.0,

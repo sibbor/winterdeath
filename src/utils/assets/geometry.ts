@@ -113,7 +113,7 @@ export const GEOMETRY = {
     plane: new THREE.PlaneGeometry(1, 1),
     crossBar: new THREE.PlaneGeometry(0.8, 0.15),
     aimRing: new THREE.RingGeometry(0.2, 0.25, 32),
-    landingMarker: new THREE.RingGeometry(0.95, 1.0, 64),
+    landingMarker: new THREE.RingGeometry(0.85, 1.0, 64),
     ashPile: new THREE.ConeGeometry(0.6, 0.4, 8),
     shard: new THREE.TetrahedronGeometry(0.1, 0),
     shockwave: new THREE.RingGeometry(0.5, 1.5, 32),

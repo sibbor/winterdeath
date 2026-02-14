@@ -97,6 +97,7 @@ export interface GameState {
     primary: WeaponType;
     secondary: WeaponType;
     throwable: WeaponType;
+    special: WeaponType;
   };
   weaponLevels: Record<WeaponType, number>;
   sectorBriefing: string;
@@ -204,7 +205,7 @@ export interface Obstacle {
 export interface GameCanvasProps {
   onOpenMap: () => void;
   stats: PlayerStats;
-  loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType };
+  loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType };
   weaponLevels: Record<WeaponType, number>;
   onDie: (stats: SectorStats, killer: string) => void;
   onUpdateHUD: (data: any) => void;

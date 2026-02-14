@@ -237,11 +237,9 @@ export const sv = {
         molotov: "Molotov",
         flashbang: "Blixtgranat",
         minigun: "Minigun",
+        flamethrower: "Eldkastare",
+        tesla_cannon: "Teslakanon",
         radio: "Radio",
-        wall_section: "Väggsektion",
-        wall_corner: "Hörnsektion",
-        door_frame: "Dörrkarm",
-        window_frame: "Fönsterkarm"
     },
     tips: [
         "Skjut bara! Obegränsad ammunition till pistoler.",

@@ -2,16 +2,13 @@ import * as THREE from 'three';
 import { Obstacle } from '../systems/WindSystem';
 import { Enemy } from '../../types/enemy';
 
-/**
- * A 2D Spatial Hash Grid.
- * Optimized for O(1) lookups of nearby entities and obstacles.
- */
 export class SpatialGrid {
     private obstacleCells: Map<number, Obstacle[]> = new Map();
     private enemyCells: Map<number, Enemy[]> = new Map();
     private cellSize: number;
 
-    // Reusable result array to prevent GC pressure (Zero-GC)
+    // --- ZERO-GC SCRATCHPADS ---
+    // We use a shared result array for all queries to prevent memory pressure
     private queryResults: any[] = [];
     private seenIds = new Set<any>();
 
@@ -19,25 +16,19 @@ export class SpatialGrid {
         this.cellSize = cellSize;
     }
 
-    /**
-     * Converts coordinates to a unique integer key.
-     * Faster than string keys like "x,z".
-     */
     private getHash(x: number, z: number): number {
         const cx = Math.floor(x / this.cellSize);
         const cz = Math.floor(z / this.cellSize);
-        // Using a large prime multiplier to avoid collisions in a reasonable world size
         return (cx * 73856093) ^ (cz * 19349663);
     }
 
-    // --- OBSTACLE MANAGEMENT (Static) ---
+    // --- OBSTACLE MANAGEMENT ---
 
     addObstacle(obstacle: Obstacle) {
         if (!obstacle.mesh) return;
         const pos = obstacle.mesh.position;
         const radius = obstacle.radius || 2.0;
 
-        // Cover all cells the obstacle might overlap
         this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
             if (!this.obstacleCells.has(hash)) this.obstacleCells.set(hash, []);
             this.obstacleCells.get(hash)!.push(obstacle);
@@ -63,36 +54,46 @@ export class SpatialGrid {
         return this.queryResults as Obstacle[];
     }
 
-    // --- ENEMY MANAGEMENT (Dynamic) ---
+    // --- ENEMY MANAGEMENT ---
 
-    /**
-     * Clears and rebuilds the enemy grid. 
-     * Call this once at the start of your frame logic.
-     */
     updateEnemyGrid(enemies: Enemy[]) {
         this.enemyCells.clear();
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
-            if (e.dead) continue;
+            // Only index enemies that are actually in the game logic
+            if (e.dead || e.deathState !== 'alive') continue;
 
             const hash = this.getHash(e.mesh.position.x, e.mesh.position.z);
-            if (!this.enemyCells.has(hash)) this.enemyCells.set(hash, []);
-            this.enemyCells.get(hash)!.push(e);
+            let cell = this.enemyCells.get(hash);
+            if (!cell) {
+                cell = [];
+                this.enemyCells.set(hash, cell);
+            }
+            cell.push(e);
         }
     }
 
+    /**
+     * Optimized Enemy Lookup (Zero-GC)
+     */
     getNearbyEnemies(pos: THREE.Vector3, radius: number): Enemy[] {
-        const results: Enemy[] = []; // Using local array for enemies to avoid conflict with obstacle queries
+        // Reuse the scratchpad
+        this.queryResults.length = 0;
+        this.seenIds.clear();
 
         this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
             const cell = this.enemyCells.get(hash);
             if (cell) {
                 for (let i = 0; i < cell.length; i++) {
-                    results.push(cell[i]);
+                    const e = cell[i];
+                    if (!this.seenIds.has(e.id)) { // Check ID to prevent duplicates if an enemy covers multiple cells
+                        this.seenIds.add(e.id);
+                        this.queryResults.push(e);
+                    }
                 }
             }
         });
-        return results;
+        return this.queryResults as Enemy[];
     }
 
     // --- HELPERS ---
@@ -105,7 +106,6 @@ export class SpatialGrid {
 
         for (let ix = sX; ix <= eX; ix++) {
             for (let iz = sZ; iz <= eZ; iz++) {
-                // Manually compute hash in loop for maximum speed
                 callback((ix * 73856093) ^ (iz * 19349663));
             }
         }

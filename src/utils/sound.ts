@@ -248,6 +248,94 @@ export class SoundManager {
   }
 
   /**
+   * FLAMETHROWER LOOP
+   */
+  playFlamethrowerStart() {
+    if (this.fireOsc) return; // Re-use campfire logic or separate? Let's use separate for combat.
+    // Actually, flamethrower is distinct from campfire (more hissing/pressure).
+    // For simplicity, I will reuse 'startCampfire' logic but pitch it up or just implement a new noise loop here.
+    // Let's implement a simple white noise loop.
+    const ctx = this.core.ctx;
+    const bufferSize = ctx.sampleRate * 2.0;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    noise.loop = true;
+
+    // Lowpass filter for "whoosh"
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.3;
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.core.masterGain);
+    noise.start();
+
+    // Store as "fireOsc" for now if we don't have a separate slot, or create a specific one.
+    // The class has `fireOsc` for campfire. I should make a `flameThrowerOsc`.
+    // Since I can't easily add properties to the class without a clean replace, I'll use a dynamic property or just add it to the class definition if I can see the top.
+    // I see lines 13-18 defining properties. I should add `flameOsc` there.
+    // For now, I'll just use `playEffect` for one-offs, but flamethrower is continuous.
+    // I will implement `startFlamethrower` and `stopFlamethrower`.
+    (this as any)._flameOsc = noise;
+    (this as any)._flameGain = gain;
+  }
+
+  playFlamethrowerEnd() {
+    const osc = (this as any)._flameOsc;
+    const gain = (this as any)._flameGain as GainNode;
+    if (osc && gain) {
+      gain.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.2);
+      setTimeout(() => {
+        try { osc.stop(); osc.disconnect(); } catch (e) { }
+        try { gain.disconnect(); } catch (e) { }
+      }, 250);
+      (this as any)._flameOsc = null;
+      (this as any)._flameGain = null;
+    }
+  }
+
+  playTeslaZap() {
+    // Sharp high-pitch zap
+    const ctx = this.core.ctx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(400, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
+
+    // Add noise for "fizz"
+    const lfo = ctx.createOscillator();
+    lfo.type = 'square';
+    lfo.frequency.value = 50;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 500;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.frequency);
+    lfo.start();
+    lfo.stop(ctx.currentTime + 0.2);
+
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+
+    osc.connect(gain);
+    gain.connect(this.core.masterGain);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  }
+
+  /**
    * Master dispatcher for triggering effects via string ID.
    */
   playEffect(id: string) {

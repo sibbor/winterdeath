@@ -201,9 +201,16 @@ export const EnemyManager = {
             });
 
             // --- SYNC RENDERER ---
+            // --- SYNC RENDERER ---
             const s = e.deathState;
-            // Rendera alla som inte är poolade ('dead') eller borttagna ('exploded')
-            if (!e.isBoss && !e.mesh.userData.exploded && (s === 'alive' || s === 'shot' || s === 'burning' || s === 'electrified')) {
+
+            // Special Case: Burning enemies need individual rendering for complex scaling/ash animation
+            if (s === 'burning') {
+                e.mesh.visible = true;
+            }
+            // Standard Rendering: Use InstancedMesh for performance
+            else if (!e.isBoss && !e.mesh.userData.exploded && (s === 'alive' || s === 'shot' || s === 'electrified')) {
+                e.mesh.visible = false;
                 _syncList.push(e);
             }
         }
@@ -228,27 +235,43 @@ export const EnemyManager = {
 
             const age = now - e.deathTimer;
 
-            // Vänta 2 sekunder på animationer innan slutgiltig borttagning
-            if (age > 2000 && e.deathState !== 'dead') {
-                e.deathState = 'dead';
-            }
+            // Cleanup Logic
+            const isElectrified = e.deathState === 'electrified';
+            const cleanupDelay = isElectrified ? 1000 : 2000;
+            const shouldCleanup = (age > cleanupDelay) || (e.deathState === 'dead') || e.mesh.userData.exploded;
 
-            if (e.deathState === 'dead' || e.mesh.userData.exploded) {
-                const type = e.deathState;
+            if (shouldCleanup) {
+                // Determine the true cause/type of death before recycling
+                let cleanupType = e.deathState;
+                if (cleanupType === 'dead') {
+                    if (e.mesh.userData.exploded) cleanupType = 'exploded';
+                    else if (e.mesh.userData.ashSpawned) cleanupType = 'burning';
+                    else cleanupType = 'shot'; // Default fallback
+                }
+
                 const wasExploded = e.mesh.userData.exploded;
 
                 if (!wasExploded) {
-                    switch (type) {
+                    switch (cleanupType) {
                         case 'exploded':
                         case 'gibbed':
                             EnemyManager.explodeEnemy(e, _up, callbacks);
                             break;
                         case 'burning':
+                            // Ash transition and detachment handled by EnemyAI.
+                            // Ensure mesh is removed if not already done.
+                            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
+                            break;
+                        case 'electrified':
                             scene.remove(e.mesh);
-                            if (e.ashPile) e.ashPile.scale.setScalar(e.originalScale || 1.0);
+                            if (!e.isBoss) EnemyManager.createCorpse(e);
+                            if (!e.bloodSpawned) {
+                                // Cooked from inside - no blood, just a scorch mark
+                                callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.2 + Math.random() * 0.5) * (e.originalScale || 1.0), MATERIALS.scorchDecal);
+                                e.bloodSpawned = true;
+                            }
                             break;
                         case 'shot':
-                        case 'electrified':
                         default:
                             scene.remove(e.mesh);
                             if (!e.isBoss) EnemyManager.createCorpse(e);
@@ -271,6 +294,7 @@ export const EnemyManager = {
                 // Släpp tillbaka till poolen
                 const recycled = enemies.splice(i, 1)[0];
                 recycled.dead = true;
+                recycled.deathState = 'dead'; // Ensure reset
                 if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }

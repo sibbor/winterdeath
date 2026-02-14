@@ -733,8 +733,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
         };
 
-        const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number) => {
-            FXSystem.spawnPart(scene, stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color);
+        const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => {
+            FXSystem.spawnPart(scene, stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+        };
+
+        const spawnFloatingText = (x: number, y: number, z: number, text: string, color?: string) => {
+            FXSystem.spawnFloatingText(scene, x, y, z, text, color);
         };
 
         const spawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
@@ -770,6 +774,31 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 state.level++;
                 state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
                 soundManager.playUiConfirm();
+            }
+        };
+
+        // --- INJECT CALLBACKS INTO STATE ---
+        // This allows non-React systems (WeaponHandler, ProjectileSystem) to trigger pure effects/logic
+        (stateRef.current as any).callbacks = {
+            spawnPart,
+            spawnDecal,
+            spawnFloatingText,
+            spawnZombie,
+            gainXp,
+            playSound: (id: string) => soundManager.playEffect(id),
+            trackStats: (type: 'damage' | 'hit', amt: number, isBoss: boolean = false) => {
+                if (type === 'damage') {
+                    stateRef.current.damageDealt += amt;
+                    if (isBoss) stateRef.current.bossDamageDealt += amt;
+                } else if (type === 'hit') {
+                    stateRef.current.shotsHit += amt;
+                }
+            },
+            addScore: gainXp,
+            addFireZone: (z: any) => stateRef.current.fireZones.push(z),
+            onDamageDealt: (amt: number, isBoss: boolean) => {
+                stateRef.current.damageDealt += amt;
+                if (isBoss) stateRef.current.bossDamageDealt += amt;
             }
         };
 
@@ -1469,7 +1498,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                         p.z += (Math.random() - 0.5) * (eff.spread || 0.4);
                                     }
 
-                                    let count = eff.particle === 'campfire_flame' ? 2 : (eff.count || 1);
+                                    let count = eff.particle === 'flame' ? 2 : (eff.count || 1);
 
                                     // Scale count if it's a large area
                                     if (eff.area && (eff.area.x * eff.area.z > 50)) {
@@ -1708,7 +1737,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             const gameContext = {
-                scene, enemies: state.enemies, obstacles: state.obstacles, collisionGrid: state.collisionGrid, spawnPart, spawnDecal,
+                scene, enemies: state.enemies, obstacles: state.obstacles, collisionGrid: state.collisionGrid, spawnPart, spawnDecal, spawnFloatingText,
                 explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, { spawnPart, spawnDecal }),
                 addScore: (amt: number) => gainXp(amt),
                 trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
@@ -1838,10 +1867,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (frame % 3 === 0) {
                     const rx = (Math.random() - 0.5) * 3;
                     const rz = (Math.random() - 0.5) * 2;
-                    spawnPart(b.position.x + rx, b.position.y, b.position.z + rz, 'campfire_flame', 1, undefined, undefined, 0xff7700);
+                    spawnPart(b.position.x + rx, b.position.y, b.position.z + rz, 'flame', 1, undefined, undefined, 0xff7700);
                 }
                 if (frame % 8 === 0) {
-                    spawnPart(b.position.x + (Math.random() - 0.5) * 2, b.position.y + 0.5, b.position.z + (Math.random() - 0.5) * 2, 'campfire_spark', 1);
+                    spawnPart(b.position.x + (Math.random() - 0.5) * 2, b.position.y + 0.5, b.position.z + (Math.random() - 0.5) * 2, 'spark', 1);
                 }
             });
 

@@ -244,11 +244,9 @@ export const en = {
         molotov: "Molotov",
         flashbang: "Flashbang",
         minigun: "Minigun",
+        flamethrower: "Flamethrower",
+        tesla_cannon: "Tesla Cannon",
         radio: "Radio",
-        wall_section: "Wall Section",
-        wall_corner: "Wall Corner",
-        door_frame: "Door Frame",
-        window_frame: "Window Frame"
     },
     tips: [
         "Just shoot! Unlimited gun ammo.",

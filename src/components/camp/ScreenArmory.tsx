@@ -8,11 +8,11 @@ import CampModalLayout from './CampModalLayout';
 
 interface ScreenArmoryProps {
     stats: PlayerStats;
-    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType };
+    currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
     weaponLevels: Record<WeaponType, number>;
     onSave: (
         newStats: PlayerStats,
-        newLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType },
+        newLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; },
         newLevels: Record<WeaponType, number>
     ) => void;
     onClose: () => void;
@@ -45,8 +45,8 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
     };
 
     const handleEquip = (weapon: WeaponType, category: WeaponCategory) => {
-        // Only allow equipping for the main 3 slots
-        if (category === WeaponCategory.SPECIAL || category === WeaponCategory.TOOL) {
+        // Only allow equipping for the main slots and special
+        if (category === WeaponCategory.TOOL) {
             return;
         }
 
@@ -54,6 +54,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
         if (category === WeaponCategory.PRIMARY) setTempLoadout({ ...tempLoadout, primary: weapon });
         else if (category === WeaponCategory.SECONDARY) setTempLoadout({ ...tempLoadout, secondary: weapon });
         else if (category === WeaponCategory.THROWABLE) setTempLoadout({ ...tempLoadout, throwable: weapon });
+        else if (category === WeaponCategory.SPECIAL) setTempLoadout({ ...tempLoadout, special: weapon });
     };
 
     const hasChanges = useMemo(() => {
@@ -61,6 +62,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
         if (tempLoadout.primary !== currentLoadout.primary) return true;
         if (tempLoadout.secondary !== currentLoadout.secondary) return true;
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
+        if (tempLoadout.special !== currentLoadout.special) return true;
 
         // Deep compare weapon levels if any upgrade happened
         const keys = Object.keys(WEAPONS) as WeaponType[];
@@ -127,10 +129,10 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                     {Object.values(WEAPONS).filter(w => w.category === activeTab).map((weapon) => {
                         const level = tempWeaponLevels[weapon.name] || 1;
                         const cost = SCRAP_COST_BASE * level;
-                        const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name;
+                        const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
                         const canAfford = tempStats.scrap >= cost;
                         const categoryColor = CATEGORY_COLORS[weapon.category];
-                        const isEquippable = weapon.category !== WeaponCategory.SPECIAL && weapon.category !== WeaponCategory.TOOL;
+                        const isEquippable = weapon.category !== WeaponCategory.TOOL;
                         const isUpgradeable = isEquippable;
 
                         return (

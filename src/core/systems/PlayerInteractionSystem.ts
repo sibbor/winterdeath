@@ -130,7 +130,7 @@ export class PlayerInteractionSystem implements System {
                     WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
                     const light = c.mesh.getObjectByName('chestLight');
-                    if (light) c.mesh.remove(light);
+                    if (light) light.visible = false; // Optimize: Hide instead of remove to avoid shader recompilation lag
 
                     // Lid animation
                     if (c.mesh.children[1]) {
@@ -218,6 +218,18 @@ export class PlayerInteractionSystem implements System {
                 requestAnimationFrame(() => animatePickup(0.016));
             } else {
                 session.engine.scene.remove(obj);
+
+                // Dispose cloned materials to prevent memory leaks
+                obj.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => m.dispose());
+                        } else if (child.material) {
+                            child.material.dispose();
+                        }
+                    }
+                });
+
                 const idx = this.collectibles.indexOf(obj);
                 if (idx > -1) this.collectibles.splice(idx, 1);
             }

@@ -10,7 +10,7 @@ export class PlayerCombatSystem implements System {
     private reloadBar: { bg: THREE.Mesh; fg: THREE.Mesh } | null = null;
     private prevInput: Record<string, boolean> = {};
     private aimCross: THREE.Group | null = null;
-    private trajectoryLine: THREE.Line | null = null;
+    private trajectoryLine: THREE.Mesh | null = null;
     private laserSight: THREE.Mesh | null = null; // Cached reference to avoid .find()
     private initialized = false;
 
@@ -49,19 +49,33 @@ export class PlayerCombatSystem implements System {
         this.aimCross = crossGroup;
 
         // --- Create Trajectory Line (Pre-allocated buffer for WeaponHandler) ---
-        // Initialize with 21 points (20 segments) to avoid mid-game allocations
-        const points = [];
-        for (let i = 0; i <= 20; i++) points.push(new THREE.Vector3());
+        // Initialize with 42 vertices (21 points * 2) for ribbon geometry
+        const vertexCount = 42;
+        const positions = new Float32Array(vertexCount * 3);
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-        const lineMat = new THREE.LineBasicMaterial({
-            color: 0xffaa00,
+        // Setup indices for high quality ribbon (optional, but strip is easier if we handle it right)
+        // Actually BufferGeometry with setDrawMode(TriangleStrip) is deprecated/removed in modern Three.js?
+        // We really need indexed triangles for a ribbon.
+        // 20 segments -> 20 quads -> 40 triangles -> 120 indices
+        const indices = [];
+        for (let i = 0; i < 20; i++) {
+            const base = i * 2;
+            indices.push(base, base + 1, base + 2);
+            indices.push(base + 1, base + 3, base + 2);
+        }
+        lineGeo.setIndex(indices);
+
+        const lineMat = new THREE.MeshBasicMaterial({
+            color: 0x10b981,
             transparent: true,
             opacity: 0.8,
-            depthWrite: false
+            depthWrite: false,
+            side: THREE.DoubleSide
         });
 
-        this.trajectoryLine = new THREE.Line(lineGeo, lineMat);
+        this.trajectoryLine = new THREE.Mesh(lineGeo, lineMat);
         this.trajectoryLine.visible = false;
         this.trajectoryLine.frustumCulled = false; // Always render if active
         scene.add(this.trajectoryLine);
@@ -88,6 +102,7 @@ export class PlayerCombatSystem implements System {
             if (input['2'] && !this.prevInput['2']) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
             if (input['3'] && !this.prevInput['3']) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
             if (input['4'] && !this.prevInput['4']) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
+            if (input['5'] && !this.prevInput['5']) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
         }
 
         // Store inputs for next frame's edge detection
@@ -95,6 +110,7 @@ export class PlayerCombatSystem implements System {
         this.prevInput['2'] = input['2'];
         this.prevInput['3'] = input['3'];
         this.prevInput['4'] = input['4'];
+        this.prevInput['5'] = input['5'];
 
         if (!disableInput) {
             // Process general weapon state (Reloading/Validation)
@@ -117,6 +133,7 @@ export class PlayerCombatSystem implements System {
                 this.playerGroup,
                 input,
                 state,
+                dt,
                 now,
                 state.loadout,
                 this.aimCross,

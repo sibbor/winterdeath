@@ -28,6 +28,10 @@ class AssetLoader {
         }
 
         const texture = this.textureLoader.load(path);
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(repeat.x, repeat.y);
+        texture.anisotropy = 8;
+        texture.matrixAutoUpdate = false;
 
         // Standard environment settings
         texture.wrapS = texture.wrapT = THREE.RepeatWrapping;

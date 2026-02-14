@@ -20,8 +20,8 @@ export class EffectManager {
                 object.userData.isFire = true;
                 effects.push(
                     { type: 'light', color: 0xff7722, intensity: opts?.intensity || 40, distance: opts?.distance || 50, offset: opts?.offset || VEC_UP_1, flicker: true },
-                    { type: 'emitter', particle: 'campfire_flame', interval: 50, count: 1, offset: opts?.offset ? opts.offset.clone().add(VEC_UP_05) : VEC_UP_05, spread: 0.3, color: 0xffaa00, area: opts?.area },
-                    { type: 'emitter', particle: 'campfire_spark', interval: 150, count: 1, offset: opts?.offset ? opts.offset.clone().add(VEC_UP_05) : VEC_UP_1, spread: 0.4, color: 0xffdd00, area: opts?.area }
+                    { type: 'emitter', particle: 'flame', interval: 50, count: 1, offset: opts?.offset ? opts.offset.clone().add(VEC_UP_05) : VEC_UP_05, spread: 0.3, color: 0xffaa00, area: opts?.area },
+                    { type: 'emitter', particle: 'spark', interval: 150, count: 1, offset: opts?.offset ? opts.offset.clone().add(VEC_UP_05) : VEC_UP_1, spread: 0.4, color: 0xffdd00, area: opts?.area }
                 );
                 if (opts?.smoke) {
                     effects.push({ type: 'emitter', particle: 'black_smoke', interval: 200, count: 1, offset: VEC_UP_15, spread: 0.3, area: opts?.area });

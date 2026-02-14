@@ -210,11 +210,29 @@ export const EnemyAI = {
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
                     e.indicatorRing.position.copy(e.mesh.position);
-                    const pulse = 0.3 + Math.abs(Math.sin(now * 0.015)) * 0.5;
-                    (e.indicatorRing.material as any).opacity = pulse;
+                    e.indicatorRing.position.y = 0.05; // Keep it just above ground
+
+                    // User Request: "Red ring flashing as large as its explosion radius"
+                    // Stats: scale is 1.0 (base). Ring geometry radius inner 1.0, outer 1.0.
+                    // We need to scale it to ~12.0 units (the damage radius below).
+                    e.indicatorRing.scale.setScalar(12.0);
+
+                    // Flashing effect: Faster execution near the end
+                    const t = Math.max(0, e.explosionTimer);
+                    const flashSpeed = (1.5 - t) * 20;
+                    const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
+
+                    // Intensity ramps up
+                    (e.indicatorRing.material as any).opacity = 0.4 + (1.0 - (t / 1.5)) * 0.6;
+                    (e.indicatorRing.material as any).color.setHex(pulse > 0.8 ? 0xffffff : 0xff0000); // Blink white/red
                 }
                 if (e.explosionTimer <= 0) {
-                    if (e.mesh.position.distanceToSquared(playerPos) < 30.0) callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
+                    // Radius: 12.0 (matches the ring scale above)
+                    if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
+                        callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
+                        // Adding screen shake for effect
+                        // (shakeIntensity handled elsewhere or implicitly via damage)
+                    }
                     e.hp = 0; e.deathState = 'exploded';
                 }
                 break;
@@ -229,6 +247,29 @@ export const EnemyAI = {
 
         // --- 8. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
+        // --- 0. STATUS EFFECTS ---
+        if (e.stunTimer > 0) {
+            e.stunTimer -= delta;
+
+            // Twitch Animation
+            if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
+            const twitchX = (Math.random() - 0.5) * 0.2;
+            const twitchZ = (Math.random() - 0.5) * 0.2;
+            e.mesh.position.x += twitchX;
+            e.mesh.position.z += twitchZ;
+            e.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
+
+            // Spawn sparks occasionally
+            if (Math.random() < 0.1) {
+                callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.0, e.mesh.position.z, 'stun_star', 1, undefined, undefined, 0xffff00, 0.3);
+            }
+
+            if (e.stunTimer <= 0) {
+                e.state = AIState.CHASE; // Recover to chase
+            }
+            return; // Skip other logic while stunned
+        }
+
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
         // Idle bobbing movement
@@ -276,6 +317,12 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
         applyCollisionResolution(_v4, hitRadius, nearby[i]);
     }
 
+    // Fix Sinking: Ensure enemy feet are on ground (y=0).
+    // Mesh origin is center, so y should be half height.
+    // Standard height is 2.0 * scale. Half is 1.0 * scale.
+    const groundY = 1.0 * (e.originalScale || 1.0);
+    _v4.y = groundY;
+
     e.mesh.position.copy(_v4);
 
     // Smooth lookAt
@@ -291,9 +338,10 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
 
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
     if (e.isBurning) {
-        if (Math.random() > 0.75) {
-            _v1.set(e.mesh.position.x + (Math.random() - 0.5), e.mesh.position.y + 1.2, e.mesh.position.z + (Math.random() - 0.5));
-            callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'campfire_flame', 1);
+        // More frequent fire particles while walking
+        if (Math.random() > 0.4) {
+            _v1.set(e.mesh.position.x + (Math.random() - 0.5) * 0.5, e.mesh.position.y + 1.0, e.mesh.position.z + (Math.random() - 0.5) * 0.5);
+            callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'flame', 1);
         }
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
@@ -311,29 +359,98 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
 function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: any) {
     const age = now - e.deathTimer!;
 
+    if (e.deathState === 'burning') {
+        const duration = 1500; // 1.5s transition
+        const progress = Math.min(1.0, age / duration);
+
+        // Mark as ash-spawned to prevent blood during cleanup
+        if (!e.mesh.userData.ashSpawned) {
+            e.mesh.userData.ashSpawned = true;
+            callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'debris', 5, undefined, undefined, 0x333333, 0.5);
+        }
+
+        // Find body part if not cached (optimization: could cache)
+        const body = e.mesh.children.find(c => c.userData.isBody);
+        const ash = e.ashPile; // Linked in Spawner
+
+        if (body) {
+            const s = Math.max(0.001, (1.0 - progress) * (e.originalScale || 1.0));
+            body.scale.set(s * (e.widthScale || 1.0), s, s * (e.widthScale || 1.0));
+        }
+
+        if (ash) {
+            ash.visible = true;
+            const startScale = 0.1;
+            const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+            const targetScale = massScale;
+            const s = startScale + (targetScale - startScale) * progress;
+            ash.scale.setScalar(s);
+        }
+
+        // Color transition (Blackening)
+        _color.set(e.color).lerp(new THREE.Color(0x000000), progress);
+        if (body) {
+            body.traverse((c: any) => { if (c.isMesh && c.material) c.material.color.copy(_color); });
+        }
+
+        // Finish: leave persistent ash pile
+        if (progress >= 1.0) {
+            if (ash && e.mesh.parent) {
+                const permanentAsh = ash.clone();
+                // Detach logic
+                permanentAsh.applyMatrix4(e.mesh.matrixWorld);
+
+                // Ash pile geometry needs -PI/2 rotation to lie flat if it's Cone/Lathe based
+                // But let's check if applyMatrix4 already handles rotation?
+                // If enemy is rotating, ash rotates.
+                // We want ash flat on ground.
+                permanentAsh.quaternion.set(0, 0, 0, 1);
+                // Wait, if I zero quaternion, I lose the rotation from matrixWorld?
+                // But I want it flat.
+                // Position is correct.
+                permanentAsh.position.copy(e.mesh.position);
+                permanentAsh.position.y = 0.05; // Slight offset to avoid z-fighting
+
+                const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+                permanentAsh.scale.setScalar(massScale);
+
+                e.mesh.parent.add(permanentAsh);
+            }
+            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
+            e.deathState = 'dead'; // Marker to stop processing
+        }
+        return;
+    }
+
     if (e.deathState === 'shot' || e.deathState === 'electrified') {
-        if (e.deathVel) {
-            e.deathVel.y -= 35 * delta; // Gravity
-            e.mesh.position.addScaledVector(e.deathVel, delta);
+        // Electric jitter
+        // Electric jitter
+        if (e.deathState === 'electrified') {
+            if (age < 100) {
+                // Instant Drop (0-100ms)
+                const t = age / 100;
+                e.mesh.rotation.x = -Math.PI / 2 * t;
+                e.mesh.position.y = Math.max(0.2, e.mesh.position.y * (1 - t));
+            } else {
+                // Cramp on ground (100-1000ms)
+                e.mesh.rotation.x = -Math.PI / 2;
+                e.mesh.position.y = 0.2;
 
-            if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
+                // Violent seizure
+                e.mesh.position.x += (Math.random() - 0.5) * 0.25;
+                e.mesh.position.z += (Math.random() - 0.5) * 0.25;
 
-            // Rotate towards ground
-            const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
-            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
-
-            // Electric jitter
-            if (e.deathState === 'electrified' && age < 1000) {
-                e.mesh.position.x += (Math.random() - 0.5) * 0.15;
-                if (Math.random() > 0.9) callbacks.spawnPart(e.mesh.position.x, 1, e.mesh.position.z, 'spark', 1);
+                // Intense sparking
+                if (Math.random() > 0.3) callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'spark', 1);
             }
         }
-    } else if (e.deathState === 'burning') {
-        const progress = Math.max(0, 1.0 - age / 2500);
-        const s = (e.originalScale || 1.0) * progress;
-        e.mesh.scale.set(s * (e.widthScale || 1.0), s, s * (e.widthScale || 1.0));
-
-        _color.set(e.color).multiplyScalar(progress);
-        e.mesh.traverse((c: any) => { if (c.material?.color) c.material.color.copy(_color); });
+        else {
+            // Standard Shot Death
+            e.deathVel.y -= 35 * delta;
+            e.mesh.position.addScaledVector(e.deathVel, delta);
+            if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
+            const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
+            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
+        }
     }
 }

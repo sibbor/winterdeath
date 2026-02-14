@@ -109,20 +109,8 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
             isRunning = false;
             cancelAnimationFrame(animeId);
 
-            // Cleanup SCENE but NOT Renderer
-            scene.traverse((object) => {
-                if (object instanceof THREE.Mesh) {
-                    object.geometry.dispose();
-                    // Don't dispose cached materials from assets (ModelFactory returns cached assets?)
-                    // ModelFactory.createCollectible creates clones? Let's check.
-                    // Assuming cloned materials for safety in UI
-                    if (Array.isArray(object.material)) {
-                        object.material.forEach(m => m.dispose());
-                    } else {
-                        object.material.dispose();
-                    }
-                }
-            });
+            // Cleanup SCENE
+            // NOTE: Do NOT dispose geometry/materials here as they are shared/cached by ModelFactory/Assets.
             scene.clear();
 
             // Remove canvas from DOM but keep the instance alive
