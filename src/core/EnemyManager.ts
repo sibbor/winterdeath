@@ -20,6 +20,25 @@ const enemyPool: Enemy[] = [];
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 
+// --- REUSABLE UPDATE CALLBACKS ---
+const _aiCallbacks = {
+    onPlayerHit: null as any,
+    spawnPart: null as any,
+    spawnDecal: null as any,
+    spawnBubble: null as any,
+    onDamageDealt: null as any,
+    playSound: (id: string) => soundManager.playEffect(id),
+    onAshStart: (enemy: Enemy) => {
+        const scene = enemy.mesh.parent as THREE.Scene;
+        if (scene && !enemy.ashPile) {
+            const ash = EnemyManager.createAshPile(enemy);
+            ash.scale.setScalar(0.001);
+            scene.add(ash);
+            enemy.ashPile = ash;
+        }
+    }
+};
+
 export const EnemyManager = {
     /**
      * Initierar renderare och rensar poolen.
@@ -80,7 +99,8 @@ export const EnemyManager = {
 
         // 2. Positionering
         if (forcedPos) {
-            e.mesh.position.copy(forcedPos).add({ x: (Math.random() - 0.5) * 4, y: 0, z: (Math.random() - 0.5) * 4 } as any);
+            _v1.set((Math.random() - 0.5) * 4, 0, (Math.random() - 0.5) * 4);
+            e.mesh.position.copy(forcedPos).add(_v1);
         } else {
             const angle = Math.random() * Math.PI * 2;
             const dist = 45 + Math.random() * 30;
@@ -181,26 +201,19 @@ export const EnemyManager = {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
-        for (let i = 0; i < enemies.length; i++) {
+        // Assign flexible callbacks once per frame
+        _aiCallbacks.onPlayerHit = onPlayerHit;
+        _aiCallbacks.spawnPart = spawnPart;
+        _aiCallbacks.spawnDecal = spawnDecal;
+        _aiCallbacks.spawnBubble = spawnBubble;
+        _aiCallbacks.onDamageDealt = onDamageDealt;
+
+        const len = enemies.length;
+        for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
-            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, false, {
-                onPlayerHit, spawnPart, spawnDecal, spawnBubble,
-                onDamageDealt: (amt: number) => onDamageDealt?.(amt, !!e.isBoss),
-                playSound: (id: string) => soundManager.playEffect(id),
-                onAshStart: (enemy: Enemy) => {
-                    const scene = enemy.mesh.parent as THREE.Scene;
-                    if (scene && !enemy.ashPile) {
-                        const ash = EnemyManager.createAshPile(enemy);
-                        ash.scale.setScalar(0.001);
-                        scene.add(ash);
-                        enemy.ashPile = ash;
-                    }
-                },
-                getLastDamageType: () => e.lastDamageType || 'standard'
-            });
+            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, false, _aiCallbacks);
 
-            // --- SYNC RENDERER ---
             // --- SYNC RENDERER ---
             const s = e.deathState;
 
@@ -245,6 +258,8 @@ export const EnemyManager = {
                 let cleanupType = e.deathState;
                 if (cleanupType === 'dead') {
                     if (e.mesh.userData.exploded) cleanupType = 'exploded';
+                    else if (e.mesh.userData.electrocuted) cleanupType = 'electrified';
+                    else if (e.mesh.userData.gibbed) cleanupType = 'gibbed';
                     else if (e.mesh.userData.ashSpawned) cleanupType = 'burning';
                     else cleanupType = 'shot'; // Default fallback
                 }
@@ -254,8 +269,14 @@ export const EnemyManager = {
                 if (!wasExploded) {
                     switch (cleanupType) {
                         case 'exploded':
-                        case 'gibbed':
                             EnemyManager.explodeEnemy(e, _up, callbacks);
+                            break;
+                        case 'gibbed':
+                            // Already exploded via EnemyAI transition, just ensure no corpse
+                            // If we want a delayed explosion effect here, we could add it, 
+                            // but usually 'gibbed' state implies immediate visual destruction.
+                            // Ensure mesh is removed.
+                            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                             break;
                         case 'burning':
                             // Ash transition and detachment handled by EnemyAI.

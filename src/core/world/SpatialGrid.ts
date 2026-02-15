@@ -8,9 +8,11 @@ export class SpatialGrid {
     private cellSize: number;
 
     // --- ZERO-GC SCRATCHPADS ---
-    // We use a shared result array for all queries to prevent memory pressure
-    private queryResults: any[] = [];
-    private seenIds = new Set<any>();
+    private obstacleQueryResults: Obstacle[] = [];
+    private enemyQueryResults: Enemy[] = [];
+
+    private seenObstacles = new Set<Obstacle>();
+    private seenEnemyIds = new Set<string>();
 
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
@@ -35,22 +37,22 @@ export class SpatialGrid {
     }
 
     getNearbyObstacles(pos: THREE.Vector3, radius: number): Obstacle[] {
-        this.queryResults.length = 0;
-        this.seenIds.clear();
+        this.obstacleQueryResults.length = 0;
+        this.seenObstacles.clear();
 
         this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
             const cell = this.obstacleCells.get(hash);
             if (cell) {
                 for (let i = 0; i < cell.length; i++) {
                     const obs = cell[i];
-                    if (!this.seenIds.has(obs)) {
-                        this.seenIds.add(obs);
-                        this.queryResults.push(obs);
+                    if (!this.seenObstacles.has(obs)) {
+                        this.seenObstacles.add(obs);
+                        this.obstacleQueryResults.push(obs);
                     }
                 }
             }
         });
-        return this.queryResults as Obstacle[];
+        return this.obstacleQueryResults;
     }
 
     // --- ENEMY MANAGEMENT ---
@@ -77,22 +79,22 @@ export class SpatialGrid {
      */
     getNearbyEnemies(pos: THREE.Vector3, radius: number): Enemy[] {
         // Reuse the scratchpad
-        this.queryResults.length = 0;
-        this.seenIds.clear();
+        this.enemyQueryResults.length = 0;
+        this.seenEnemyIds.clear();
 
         this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
             const cell = this.enemyCells.get(hash);
             if (cell) {
                 for (let i = 0; i < cell.length; i++) {
                     const e = cell[i];
-                    if (!this.seenIds.has(e.id)) { // Check ID to prevent duplicates if an enemy covers multiple cells
-                        this.seenIds.add(e.id);
-                        this.queryResults.push(e);
+                    if (!this.seenEnemyIds.has(e.id)) { // Check ID to prevent duplicates if an enemy covers multiple cells
+                        this.seenEnemyIds.add(e.id);
+                        this.enemyQueryResults.push(e);
                     }
                 }
             }
         });
-        return this.queryResults as Enemy[];
+        return this.enemyQueryResults;
     }
 
     // --- HELPERS ---

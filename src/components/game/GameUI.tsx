@@ -13,7 +13,7 @@ interface GameUIProps {
     // Legacy Dialogue Props (Can be ignored or cleaned up later)
     dialogueOpen: boolean;
     dialogueLine: any;
-    foundMemberName: string;
+    // foundMemberName: string; // REMOVED
     isLastLine: boolean;
     onNextDialogue: () => void;
     onPrevDialogue: () => void;

@@ -77,22 +77,22 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                     const displayUpgrade = skill.id === 'speed' ? upgradeVal.toFixed(2) : upgradeVal;
 
                     return (
-                        <div key={skill.id} className={`${isMobileDevice ? 'p-4' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
-                            <h3 className={`${isMobileDevice ? 'text-xl mb-2' : 'text-3xl mb-4'} font-black text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
+                        <div key={skill.id} className={`${isMobileDevice ? 'p-2' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
+                            <h3 className={`${isMobileDevice ? 'text-lg mb-1' : 'text-3xl mb-4'} font-black text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
                             {/* Reduced mb-6 to mb-2 */}
-                            <p className={`${isMobileDevice ? 'text-xs h-12' : 'text-lg h-16'} text-gray-400 leading-snug mb-2`}>{t(skill.descKey)}</p>
+                            <p className={`${isMobileDevice ? 'text-[10px] h-8 mb-1 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
-                            <div className="flex items-baseline justify-center gap-2 mb-8">
-                                <span className="text-5xl font-mono text-white font-bold">{displayBase}</span>
-                                <span className="text-3xl font-mono text-purple-400 font-bold">+ {displayUpgrade}</span>
+                            <div className={`flex items-baseline justify-center gap-2 ${isMobileDevice ? 'mb-2' : 'mb-8'}`}>
+                                <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-white font-bold`}>{displayBase}</span>
+                                <span className={`${isMobileDevice ? 'text-base' : 'text-3xl'} font-mono text-purple-400 font-bold`}>+ {displayUpgrade}</span>
                             </div>
 
                             <button
                                 onClick={() => handleUpgradeSkill(skill.id, cost, skill.value)}
                                 disabled={!canAfford}
-                                className={`w-full py-4 font-black uppercase tracking-wider border-2 transition-all ${canAfford ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' : 'bg-transparent border-gray-800 text-gray-700 cursor-not-allowed'}`}
+                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-black uppercase tracking-wider border-2 transition-all ${canAfford ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' : 'bg-transparent border-gray-800 text-gray-700 cursor-not-allowed'}`}
                             >
-                                {t('ui.upgrade')} ({cost} SP)
+                                <span className={`${isMobileDevice ? 'text-xs' : 'text-base'}`}>{t('ui.upgrade')} ({cost} SP)</span>
                             </button>
                         </div>
                     );

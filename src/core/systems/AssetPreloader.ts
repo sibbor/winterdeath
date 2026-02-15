@@ -125,7 +125,8 @@ export const AssetPreloader = {
         // 5. GENERATOR CACHE WARMUP
         // These generators will now hit the procedural cache instantly.
         try {
-            await EnvironmentGenerator.initPrototypes(yieldToMain);
+            // Initialize procedural assets
+            await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
             await ObjectGenerator.initBuildingPrototypes(yieldToMain);
 
             ObjectGenerator.createVehicle('station wagon');

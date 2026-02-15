@@ -545,7 +545,7 @@ export const Sector1: SectorDef = {
 
         // --- FOREST ---
         // FOREST
-        // Forst: Home 1
+        // Forest: Home 1
         let forestPolygon = [
             new THREE.Vector3(37, 0, 44),
             new THREE.Vector3(36, 0, 30),
@@ -554,6 +554,7 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(76, 0, 43),
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+
         // Forest: Home 2
         forestPolygon = [
             new THREE.Vector3(-27, 0, 45),
@@ -755,13 +756,13 @@ export const Sector1: SectorDef = {
         EnvironmentGenerator.fillAreaWithFlowers(ctx, homeFlowers, 1.0);
 
         // Grass patches along forest path (Home -> SMU)
-        const forestPathGrass = [
+        const grassPatch = [
             new THREE.Vector3(30, 0, 30),
             new THREE.Vector3(50, 0, 35),
             new THREE.Vector3(50, 0, 50),
             new THREE.Vector3(30, 0, 45)
         ];
-        EnvironmentGenerator.fillAreaWithGrass(ctx, forestPathGrass, 2.0);
+        EnvironmentGenerator.fillAreaWithGrass(ctx, grassPatch, 2.0);
         */
         // Wildflowers near church area
         const churchFlowers = [
@@ -774,21 +775,6 @@ export const Sector1: SectorDef = {
 
         // Dead trees in logging/deforested area (near train yard)
         EnvironmentGenerator.createDeforestation(ctx, 130, 380, 30, 25, 12);
-
-        // Scattered dead trees along approach to village
-        for (let i = 0; i < 5; i++) {
-            const deadTree = EnvironmentGenerator.createDeadTree(Math.random() > 0.5 ? 'standing' : 'fallen', 0.8 + Math.random() * 0.6);
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 15 + Math.random() * 25;
-            deadTree.position.set(
-                LOCATIONS.SPAWN.PLAYER.x + Math.cos(angle) * dist,
-                0,
-                LOCATIONS.SPAWN.PLAYER.z + Math.sin(angle) * dist
-            );
-            ctx.scene.add(deadTree);
-        }
-
-        // ===== END ENVIRONMENTAL FEATURES =====
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
@@ -881,7 +867,6 @@ export const Sector1: SectorDef = {
         if (sectorState.hordeTarget !== undefined && sectorState.hordeKilled >= sectorState.hordeTarget
             && !sectorState.busCanBeInteractedWith
             && playerPos.distanceTo(new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z)) < 25) {
-            console.log("Bus event: zombies killed and player near bus, activating interaction");
             sectorState.busCanBeInteractedWith = true;
             sectorState.waveActive = false; // Progress bar finished
             events.setNotification({ visible: true, text: events.t('clues.s1_event_tunnel_plant_explosives'), timestamp: now });
@@ -948,7 +933,6 @@ export const Sector1: SectorDef = {
                     });
 
                     // Explosion FX
-                    console.log("Bus event: BOOM");
                     events.playSound('explosion');
                     events.cameraShake(5);
 

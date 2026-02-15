@@ -54,29 +54,34 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         >
             <div className={`flex flex-col h-full ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
                 {/* Tabs Bar */}
-                <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[60px] md:min-h-[80px] items-end shrink-0">
-                    {tabs.map(tab => {
-                        const isActive = activeTab === tab.id;
-                        return (
-                            <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                                className={`px-4 md:px-6 py-2 md:py-4 text-xs md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
-                                style={{
-                                    borderColor: isActive ? themeColor : 'transparent',
-                                    backgroundColor: isActive ? themeColor : 'transparent',
-                                    color: isActive ? 'black' : '#6b7280'
-                                }}
-                            >
-                                <span className="block skew-x-[10deg]">{tab.label}</span>
-                            </button>
-                        );
-                    })}
+                {/* Tabs Bar */}
+                <div className="relative shrink-0">
+                    <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                    <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                    <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end">
+                        {tabs.map(tab => {
+                            const isActive = activeTab === tab.id;
+                            return (
+                                <button key={tab.id} onClick={() => handleTabChange(tab.id)}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
+                                    style={{
+                                        borderColor: isActive ? themeColor : 'transparent',
+                                        backgroundColor: isActive ? themeColor : 'transparent',
+                                        color: isActive ? 'black' : '#6b7280'
+                                    }}
+                                >
+                                    <span className="block skew-x-[10deg]">{tab.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} />}
                     {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} />}
-                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} />}
+                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobile={isMobileDevice} />}
                     {activeTab === 'clues' && <CluesTab stats={stats} color={themeColor} />}
                     {activeTab === 'poi' && <PoiTab stats={stats} />}
                 </div>
@@ -167,7 +172,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
     );
 };
 
-const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
+const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({ stats, isMobile }) => {
     const foundIds = stats.collectiblesFound || [];
     const viewedIds = stats.viewedCollectibles || [];
 
@@ -193,13 +198,13 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => {
                             </span>
                         </div>
 
-                        <div className={`grid ${stats.isMobileDevice ? 'grid-cols-2 gap-2' : 'grid-cols-1 md:grid-cols-2 gap-6'}`}>
+                        <div className={`grid ${isMobile ? 'grid-cols-2 gap-2' : 'grid-cols-1 md:grid-cols-2 gap-6'}`}>
                             {sectorCollectibles.map(item => {
                                 const isFound = foundIds.includes(item.id);
                                 const isNew = isFound && !viewedIds.includes(item.id);
                                 return (
                                     <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'}`}>
-                                        <DescriptionExpansion item={item} isFound={isFound} isMobile={stats.isMobileDevice} />
+                                        <DescriptionExpansion item={item} isFound={isFound} isMobile={isMobile} />
                                     </div>
                                 );
                             })}
@@ -281,7 +286,7 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobile?: b
     return (
         <div className="flex flex-col h-full cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
             {/* 3D Preview Area */}
-            <div className={`aspect-square w-full bg-black/40 relative border-b border-zinc-800/50 ${isMobile ? 'max-h-[140px]' : ''}`}>
+            <div className={`w-full bg-black/40 relative border-b border-zinc-800/50 ${isMobile ? 'h-24' : 'aspect-square'}`}>
                 <CollectiblePreview type={item.modelType} isLocked={!isFound} />
             </div>
 

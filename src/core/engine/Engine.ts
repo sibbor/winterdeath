@@ -6,7 +6,7 @@ import { InputManager } from './InputManager';
 
 /**
  * The Engine class acts as the central hub for the 3D environment.
- * Optimized for high performance and clean resource management.
+ * Heavily optimized for high performance, GPU fill-rate protection, and Zero-GC.
  */
 export class Engine {
     private static instance: Engine | null = null;
@@ -19,7 +19,7 @@ export class Engine {
     // Core Systems
     public scene: THREE.Scene;
     public camera: THREE.PerspectiveCamera;
-    public renderer!: THREE.WebGLRenderer; // Assigned via initRenderer
+    public renderer!: THREE.WebGLRenderer;
     public input: InputManager;
 
     private sceneStack: THREE.Scene[] = [];
@@ -54,25 +54,34 @@ export class Engine {
     }
 
     /**
-     * Initializes or re-initializes the WebGLRenderer.
-     * Note: Antialiasing is a context parameter and requires renderer recreation.
+     * Initializes the WebGLRenderer with high-performance parameters.
+     * Hard-caps pixel ratio to prevent GPU burnout on Retina/4K mobile screens.
      */
     private initRenderer() {
         const params: THREE.WebGLRendererParameters = {
             antialias: this.settings.antialias,
             powerPreference: 'high-performance',
-            precision: 'highp'
+            precision: 'highp',
+            alpha: false,       // Optimization: Canvas is opaque
+            stencil: false,     // Optimization: No stencil buffer needed
+            depth: true,
+            preserveDrawingBuffer: false
         };
 
         this.renderer = new THREE.WebGLRenderer(params);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.settings.pixelRatio));
+
+        // --- RESOLUTION MULTIPLIER LOGIC ---
+        // devicePixelRatio can be 2.0 or 3.0 on modern devices.
+        // We cap the base ratio at 1.5 to prevent absurd 4K+ internal resolutions.
+        const maxRatio = Math.min(window.devicePixelRatio, 1.5);
+        this.renderer.setPixelRatio(Math.min(maxRatio, this.settings.pixelRatio || 1));
         this.renderer.setSize(window.innerWidth, window.innerHeight);
 
         // Shadow mapping setup
         this.renderer.shadowMap.enabled = this.settings.shadows;
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
 
-        // Color space management for modern displays
+        // Color space management
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     }
 
@@ -91,7 +100,6 @@ export class Engine {
         const oldDom = this.renderer.domElement;
         const parent = oldDom.parentNode;
 
-        // Deep dispose to free GPU memory
         this.renderer.dispose();
         if (parent) parent.removeChild(oldDom);
 
@@ -102,7 +110,9 @@ export class Engine {
     }
 
     private applySettings() {
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.settings.pixelRatio));
+        // Re-apply the resolution logic when settings change
+        const maxRatio = Math.min(window.devicePixelRatio, 1.5);
+        this.renderer.setPixelRatio(Math.min(maxRatio, this.settings.pixelRatio || 1));
 
         const shadowsEnabled = this.settings.shadows;
         const shadowType = this.settings.shadowMapType as THREE.ShadowMapType;
@@ -111,7 +121,7 @@ export class Engine {
             this.renderer.shadowMap.enabled = shadowsEnabled;
             this.renderer.shadowMap.type = shadowType;
 
-            // Force material recompilation to sync with new shadow state
+            // Force material recompilation for shadows
             this.scene.traverse((obj) => {
                 if ((obj as THREE.Mesh).isMesh) {
                     const mesh = obj as THREE.Mesh;
@@ -179,8 +189,6 @@ export class Engine {
         }
     }
 
-    // --- Core Loop ---
-
     private handleResize = () => {
         if (!this.container) return;
         const width = this.container.clientWidth || window.innerWidth;
@@ -192,13 +200,13 @@ export class Engine {
     };
 
     /**
-     * Main animation loop. Optimized for Zero-GC and consistent frame timing.
+     * Main animation loop
      */
     private animate = () => {
         if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
 
-        // Delta time clamping (dt) prevents "teleporting" during lag spikes
+        // Delta time clamping prevents physics-warp during frame drops
         const dt = Math.min(this.clock.getDelta(), 0.05);
 
         // 1. Logic Update

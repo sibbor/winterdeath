@@ -82,7 +82,6 @@ export const HudSystem = {
         const totalSP = (props.stats?.skillPoints || 0) + spEarned;
         const lastTotal = (state as any)._lastLoggedSP || 0;
         if (totalSP !== lastTotal && spEarned > 0) {
-            console.log(`[HudSystem] SP Change: Global(${props.stats?.skillPoints || 0}) + SessionNew(${spEarned}) = Total(${totalSP})`);
             (state as any)._lastLoggedSP = totalSP;
         }
 

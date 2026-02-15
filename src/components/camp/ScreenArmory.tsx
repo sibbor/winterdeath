@@ -94,25 +94,30 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
         >
             <div className={`flex flex-col h-full ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
                 {/* Tabs bar - Ensure horizontal scroll on mobile */}
-                <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end shrink-0 scroll-smooth">
-                    {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
-                        const isActive = activeTab === cat;
-                        const catColor = CATEGORY_COLORS[cat] || '#ffffff';
-                        const catKey = 'categories.' + cat.toLowerCase();
+                {/* Tabs bar - Ensure horizontal scroll on mobile */}
+                <div className="relative shrink-0">
+                    <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                    <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                    <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth">
+                        {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
+                            const isActive = activeTab === cat;
+                            const catColor = CATEGORY_COLORS[cat] || '#ffffff';
+                            const catKey = 'categories.' + cat.toLowerCase();
 
-                        return (
-                            <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
-                                className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap inline-block`}
-                                style={{
-                                    borderColor: isActive ? catColor : 'transparent',
-                                    backgroundColor: isActive ? catColor : 'transparent',
-                                    color: isActive ? 'black' : '#6b7280'
-                                }}
-                            >
-                                <span className="block skew-x-[10deg]">{t(catKey)}</span>
-                            </button>
-                        );
-                    })}
+                            return (
+                                <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap inline-block`}
+                                    style={{
+                                        borderColor: isActive ? catColor : 'transparent',
+                                        backgroundColor: isActive ? catColor : 'transparent',
+                                        color: isActive ? 'black' : '#6b7280'
+                                    }}
+                                >
+                                    <span className="block skew-x-[10deg]">{t(catKey)}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {isMobileDevice && (

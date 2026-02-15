@@ -15,7 +15,7 @@ export enum WeaponCategory {
  */
 export enum WeaponBehavior {
   PROJECTILE = 'PROJECTILE', // Standard bullet physics
-  CONTINUOUS = 'CONTINUOUS', // Beam/Spray logic (Flamethrower/Tesla)
+  CONTINUOUS = 'CONTINUOUS', // Beam/Spray logic (Flamethrower/Arc-Cannon)
   THROWABLE = 'THROWABLE'    // Physics-based arc (Grenade/Molotov)
 }
 
@@ -30,7 +30,7 @@ export enum WeaponType {
   FLASHBANG = 'Flashbang',
   MINIGUN = 'Minigun',
   FLAMETHROWER = 'Flamethrower',
-  TESLA_CANNON = 'Tesla Cannon',
+  ARC_CANNON = 'Arc-Cannon',
   RADIO = 'Radio',
   NONE = 'None'
 }
@@ -88,7 +88,7 @@ const ICONS = {
   FLASHBANG: `<svg viewBox="0 0 100 100" fill="white"><rect x="35" y="30" width="30" height="50" rx="2"/><rect x="40" y="15" width="20" height="15"/><path d="M40 30 L60 80" stroke="black" stroke-width="2"/><circle cx="65" cy="25" r="5" fill="none" stroke="white" stroke-width="3"/></svg>`,
   MINIGUN: `<svg viewBox="0 0 100 100" fill="white"><rect x="10" y="30" width="40" height="40"/><rect x="50" y="35" width="45" height="5"/><rect x="50" y="45" width="45" height="5"/><rect x="50" y="55" width="45" height="5"/><rect x="20" y="70" width="10" height="20"/></svg>`,
   FLAMETHROWER: `<svg viewBox="0 0 100 100" fill="white"><rect x="10" y="40" width="30" height="20"/><rect x="40" y="45" width="45" height="10"/><path d="M85 40l10 10-10 10z" fill="#ff4400"/></svg>`,
-  TESLA_CANNON: `<svg viewBox="0 0 100 100" fill="white"><rect x="15" y="35" width="35" height="30"/><circle cx="60" cy="50" r="10"/><path d="M70 50h25" stroke="cyan" stroke-width="3" stroke-dasharray="4"/></svg>`,
+  ARC_CANNON: `<svg viewBox="0 0 100 100" fill="white"><rect x="15" y="35" width="35" height="30"/><circle cx="60" cy="50" r="10"/><path d="M70 50h25" stroke="cyan" stroke-width="3" stroke-dasharray="4"/></svg>`,
   RADIO: `<svg viewBox="0 0 100 100" fill="white"><rect x="20" y="30" width="60" height="50" rx="5"/><line x1="30" y1="30" x2="30" y2="10" stroke="white" stroke-width="4"/><circle cx="30" cy="10" r="4"/><circle cx="60" cy="55" r="15" fill="none" stroke="white" stroke-width="3"/><rect x="30" y="40" width="40" height="5"/></svg>`
 };
 
@@ -154,9 +154,9 @@ export const WEAPONS: Record<string, WeaponStats> = {
     damage: 6, baseDamage: 6, fireRate: 35, bulletSpeed: 30, magSize: 100, reloadTime: 4000, range: 10, spread: 0.25, color: '#ff4400', icon: ICONS.FLAMETHROWER,
     piercing: true, pierceDecay: 1.0, impactType: 'burning', statusEffect: { type: 'burning', duration: 4.5, damagePerTick: 10 }
   },
-  [WeaponType.TESLA_CANNON]: {
-    name: WeaponType.TESLA_CANNON, displayName: 'weapons.tesla', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
-    damage: 14, baseDamage: 14, fireRate: 90, bulletSpeed: 100, magSize: 60, reloadTime: 3500, range: 15, spread: 0.05, color: '#00ffff', icon: ICONS.TESLA_CANNON,
+  [WeaponType.ARC_CANNON]: {
+    name: WeaponType.ARC_CANNON, displayName: 'weapons.arc_cannon', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
+    damage: 14, baseDamage: 14, fireRate: 90, bulletSpeed: 100, magSize: 60, reloadTime: 3500, range: 15, spread: 0.05, color: '#00ffff', icon: ICONS.ARC_CANNON,
     piercing: true, pierceDecay: 0.5, impactType: 'electrified', statusEffect: { type: 'electrified', duration: 2.5 }
   },
 

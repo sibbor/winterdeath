@@ -3,8 +3,20 @@ import { PlayerAnimation } from '../animation/PlayerAnimation';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Target Position
-const _v2 = new THREE.Vector3(); // Offset / MoveVec
 const _v3 = new THREE.Vector3(); // Direction
+
+// 1. Create a single, reusable animation state object outside the render loop
+const _animState = {
+    isMoving: false,
+    isRushing: false,
+    isRolling: false,
+    rollStartTime: 0,
+    staminaRatio: 1.0,
+    isSpeaking: false,
+    isThinking: false,
+    isIdleLong: false,
+    seed: 0
+};
 
 export const FamilySystem = {
     update: (
@@ -24,7 +36,7 @@ export const FamilySystem = {
 
         const fm = familyMember.mesh;
 
-        // --- 1. Ring Pulse Visual (Static logic) ---
+        // --- 1. Ring Pulse Visual ---
         if (familyMember.ring) {
             familyMember.ring.visible = !familyMember.following;
 
@@ -35,48 +47,40 @@ export const FamilySystem = {
             }
         }
 
-        // --- 2. Following Logic with Zero-GC Spacing ---
+        // --- 2. Following Logic ---
         let fmIsMoving = false;
 
         if (familyMember.following && !isCinematicActive) {
-            // Start with player position without cloning
             _v1.copy(playerGroup.position);
 
             if (followerIndex > 0) {
-                const angle = (followerIndex % 2 === 0 ? 1 : -1) * 0.5;
+                // OPTIMIZATION: Replaced heavy trigonometry with simple math.
+                // Since angle was always ±0.5 * PI, sin is ±1 and cos is 0.
+                const sign = followerIndex % 2 === 0 ? 1 : -1;
                 const dist = 2.0 + followerIndex * 1.2;
 
-                // Calculate circular offset using scratchpad _v2
-                _v2.set(
-                    Math.sin(angle * Math.PI) * dist,
-                    0,
-                    Math.cos(angle * Math.PI) * dist
-                );
-                _v1.add(_v2); // _v1 is now our final targetPos
+                // Directly apply offset to the X axis (Z remains unchanged)
+                _v1.x += sign * dist;
             }
 
-            // Optimization: distanceToSquared is much faster than distanceTo
             const distSq = fm.position.distanceToSquared(_v1);
 
-            if (distSq > 4.0) { // 2.0m threshold (2^2)
+            if (distSq > 4.0) { // 2.0m threshold
                 fmIsMoving = true;
 
-                // Calculate direction using _v3
                 _v3.subVectors(_v1, fm.position).normalize();
 
                 const speed = 14;
                 const moveDist = speed * 0.95 * delta;
 
-                // Apply movement
                 fm.position.addScaledVector(_v3, moveDist);
-
-                // Rotation: Always face the player (using player position, not target offset)
                 fm.lookAt(playerGroup.position);
+
+                fm.userData.lastMoveTime = now;
             }
         }
 
         // --- 3. Optimized Animation Handling ---
-        // Ensure we only look for the body mesh once
         if (!fm.userData.cachedBody) {
             const body = fm.children.find((c: any) => c.userData.isBody);
             if (body) fm.userData.cachedBody = body;
@@ -85,21 +89,19 @@ export const FamilySystem = {
         const body = fm.userData.cachedBody;
 
         if (body) {
-            const timeSinceAction = now - state.lastActionTime;
-            const isIdleLong = timeSinceAction > 20000;
-            const fmIdleLong = familyMember.following ? isIdleLong : (now - state.startTime > 20000);
+            if (fm.userData.lastMoveTime === undefined) fm.userData.lastMoveTime = state.startTime;
 
-            PlayerAnimation.update(body, {
-                isMoving: fmIsMoving || familyMember.isMoving,
-                isRushing: false,
-                isRolling: false,
-                rollStartTime: 0,
-                staminaRatio: 1.0,
-                isSpeaking: (familyMember.isSpeaking !== undefined) ? familyMember.isSpeaking : (now < state.speakingUntil),
-                isThinking: (familyMember.isThinking !== undefined) ? familyMember.isThinking : (now < state.thinkingUntil),
-                isIdleLong: fmIdleLong && !fmIsMoving,
-                seed: familyMember.seed
-            }, now, delta);
+            const timeSinceMove = now - fm.userData.lastMoveTime;
+            const isIdleLong = timeSinceMove > 10000;
+
+            // OPTIMIZATION: Update the reusable scratchpad object instead of creating a new one
+            _animState.isMoving = fmIsMoving || familyMember.isMoving;
+            _animState.isSpeaking = (familyMember.isSpeaking !== undefined) ? familyMember.isSpeaking : (now < state.speakingUntil);
+            _animState.isThinking = (familyMember.isThinking !== undefined) ? familyMember.isThinking : (now < state.thinkingUntil);
+            _animState.isIdleLong = isIdleLong && !fmIsMoving;
+            _animState.seed = familyMember.seed;
+
+            PlayerAnimation.update(body, _animState, now, delta);
         }
     }
 };

@@ -6,9 +6,12 @@ export const createTextSprite = (text: string) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
     canvas.width = 256; canvas.height = 64;
-    ctx.font = '24px Arial';
+    ctx.font = 'bold 32px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({
         map: tex,

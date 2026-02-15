@@ -12,6 +12,7 @@ import { createProceduralTextures } from '../../utils/assets';
 import { Engine, GraphicsSettings } from '../../core/engine/Engine';
 import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
+import { WindUniforms } from '../../utils/assets/materials';
 import { WeatherType } from '../../types';
 
 // Import UI Components
@@ -23,6 +24,7 @@ import ScreenSectorOverview from './ScreenSectorOverview';
 import ScreenSettings from './ScreenSettings';
 import ScreenResetConfirm from './ScreenResetConfirm';
 import ScreenAdventureLog from './ScreenAdventureLog';
+import DebugSystemPanel from '../game/DebugSystemPanel';
 
 interface CampProps {
     stats: PlayerStats;
@@ -66,6 +68,20 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || Engine.getInstance().getSettings());
 
+    // Debug System Flags (Local to Camp)
+    const [debugSystemFlags, setDebugSystemFlags] = useState({
+        wind: true,
+        weather: true,
+        footprints: true,
+        enemies: true,
+        fx: true,
+        lighting: true
+    });
+    const debugSystemFlagsRef = useRef(debugSystemFlags);
+    useEffect(() => { debugSystemFlagsRef.current = debugSystemFlags; }, [debugSystemFlags]);
+
+    const [showDebugPanel, setShowDebugPanel] = useState(false);
+
     // Renderer Ref for live updates
     const engineRef = useRef<Engine | null>(null);
 
@@ -73,8 +89,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const [isIdle, setIsIdle] = useState(false);
     const isIdleRef = useRef(false);
     const lastInputRef = useRef(Date.now());
-
-
 
     const hoveredRef = useRef<string | null>(null);
     const activeRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
@@ -132,7 +146,19 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             }
         };
         window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc);
+        window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc);
     }, [activeModal]);
+
+    // Debug Panel Toggle (P)
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'p') {
+                setShowDebugPanel(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, []);
 
     // --- THREE.JS SCENE SETUP ---
     useEffect(() => {
@@ -214,7 +240,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 angle = -(humans.length - 1) * 0.25 / 2 + idx * 0.25;
             }
 
-            member.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+            member.position.set(Math.sin(angle) * radius, -0.1, Math.cos(angle) * radius);
             member.lookAt(0, 0, 0);
 
             const bodyMesh = member.children.find(c => c.userData.isBody);
@@ -315,7 +341,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             // Update Environment (Wind, Stars, Fire, Particles)
             if (envStateRef.current) {
-                CampEnvironment.updateEffects(scene, envStateRef.current, 0.016, now, frame);
+                // Update Wind
+                CampEnvironment.updateEffects(scene, envStateRef.current, 0.016, now, frame, debugSystemFlagsRef.current);
             }
 
             perfTime = performance.now();
@@ -339,7 +366,20 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 if (fm.bounce > 0) { fm.bounce -= 0.02; if (fm.bounce < 0) fm.bounce = 0; }
                 const body = fm.mesh.children.find((c: any) => c.userData.isBody) as THREE.Mesh;
                 if (body) {
-                    PlayerAnimation.update(body, { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking, isThinking: false, isIdleLong: isIdleRef.current, seed: fm.seed }, now, 0.016);
+                    // In Camp, they are always 'idle' in terms of movement. 
+                    // We allow 'isIdleLong' to trigger fidgeting animations regardless of UI state (isIdleRef).
+                    // We just check if they've been instantiated for > 5 seconds to avoid sync glitches.
+                    PlayerAnimation.update(body, {
+                        isMoving: false,
+                        isRushing: false,
+                        isRolling: false,
+                        rollStartTime: 0,
+                        staminaRatio: 1.0,
+                        isSpeaking,
+                        isThinking: false,
+                        isIdleLong: now > 5000,
+                        seed: fm.seed
+                    }, now, 0.016);
                 }
             });
 
@@ -529,6 +569,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 />
             )}
 
+            {showDebugPanel && (
+                <DebugSystemPanel
+                    flags={debugSystemFlags}
+                    onToggle={(sys) => setDebugSystemFlags(prev => ({ ...prev, [sys]: !prev[sys] }))}
+                    onClose={() => setShowDebugPanel(false)}
+                />
+            )}
         </div>
     );
 };

@@ -29,7 +29,7 @@ export class ZombieRenderer {
     private getMat(color: number) {
         // Material cloning is fine during init/constructor
         const m = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
-        m.color.set(color);
+        m.color.setHex(0xffffff); // Use white base so instance color (tint) works correctly
         return m;
     }
 

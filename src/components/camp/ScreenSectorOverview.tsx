@@ -109,30 +109,38 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         >
             <div className={`flex h-full gap-4 md:gap-8 ${isMobileDevice ? 'flex-col overflow-y-auto touch-auto' : ''}`}>
                 {/* LEFT: Sector List */}
-                <div className={`${isMobileDevice ? 'w-full shrink-0 flex gap-2 overflow-x-auto pb-4 px-2 snap-x snap-mandatory' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar shadow-inner`} style={isMobileDevice ? { WebkitOverflowScrolling: 'touch' } : {}}>
-                    {SECTOR_THEMES.map((map, i) => {
-                        const isSel = selectedSectorIndex === i;
-                        // re-eval locked for list
-                        const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
+                <div className={`${isMobileDevice ? 'w-full shrink-0 relative' : 'w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 pl-6'} custom-scrollbar shadow-inner`}>
+                    {isMobileDevice && (
+                        <>
+                            <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                        </>
+                    )}
+                    <div className={`${isMobileDevice ? 'flex gap-2 overflow-x-auto pb-4 px-2 snap-x snap-mandatory' : 'flex flex-col gap-4'}`} style={isMobileDevice ? { WebkitOverflowScrolling: 'touch' } : {}}>
+                        {SECTOR_THEMES.map((map, i) => {
+                            const isSel = selectedSectorIndex === i;
+                            // re-eval locked for list
+                            const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
 
-                        return (
-                            <button
-                                key={i}
-                                onClick={() => handleSelect(i)}
-                                disabled={locked}
-                                className={`text-left p-4 md:p-6 border-l-4 transition-all group relative overflow-hidden shrink-0 whitespace-nowrap md:whitespace-normal snap-center
-                                    ${locked ? 'opacity-50 cursor-not-allowed bg-black border-gray-800' : 'cursor-pointer hover:bg-red-900/10'}
-                                    ${isSel ? 'bg-red-900/20 border-red-500' : 'border-gray-800'}
-                                    ${isMobileDevice ? 'border-l-0 border-b-4 min-w-[150px]' : ''}
-                                `}
-                            >
-                                <h3 className={`text-base md:text-xl font-black uppercase tracking-wider ${isSel ? 'text-white' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
-                                    {locked ? `${t('ui.sector')} ${i + 1} - ${t('ui.locked')}` : t(map.name)}
-                                </h3>
-                                {isMobileDevice && isSel && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-500 animate-pulse" />}
-                            </button>
-                        );
-                    })}
+                            return (
+                                <button
+                                    key={i}
+                                    onClick={() => handleSelect(i)}
+                                    disabled={locked}
+                                    className={`text-left p-4 md:p-6 border-l-4 transition-all group relative overflow-hidden shrink-0 whitespace-nowrap md:whitespace-normal snap-center
+                                        ${locked ? 'opacity-50 cursor-not-allowed bg-black border-gray-800' : 'cursor-pointer hover:bg-red-900/10'}
+                                        ${isSel ? 'bg-red-900/20 border-red-500' : 'border-gray-800'}
+                                        ${isMobileDevice ? 'border-l-0 border-b-4 min-w-[120px] py-3 px-4' : ''}
+                                    `}
+                                >
+                                    <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-black uppercase tracking-wider ${isSel ? 'text-white' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
+                                        {locked ? `${t('ui.sector')} ${i + 1} - ${t('ui.locked')}` : t(map.name)}
+                                    </h3>
+                                    {isMobileDevice && isSel && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-500 animate-pulse" />}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Mobile Paging Indicators */}

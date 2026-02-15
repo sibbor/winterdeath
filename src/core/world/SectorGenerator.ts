@@ -442,8 +442,22 @@ export const SectorGenerator = {
         timber.position.set(x, 0, z);
         timber.rotation.y = rotation;
         ctx.scene.add(timber);
-        // Box obstacle for timber pile
-        const obs = { mesh: timber, collider: { type: 'box' as const, size: new THREE.Vector3(6 * scale, 3 * scale, 6 * scale) } };
+
+        // FIX: Use UNSCALED local dimensions + Center Offset
+        // The mesh.matrixWorld handles the scale/rotation.
+        // Base size: ~2.5m wide, ~1.5m high, ~6.0m long
+        const baseSize = new THREE.Vector3(2.5, 1.5, 6.0);
+        const baseCenter = new THREE.Vector3(0, 0.75, 0);
+
+        const obs = {
+            mesh: timber,
+            collider: {
+                type: 'box' as const,
+                size: baseSize,
+                center: baseCenter
+            },
+            type: 'TimberPile'
+        };
         SectorGenerator.addObstacle(ctx, obs);
     },
 
@@ -516,17 +530,21 @@ export const SectorGenerator = {
         colorOverride?: number, addSnow?: boolean) => {
 
         const vehicle = ObjectGenerator.createVehicle(type, 1.0, colorOverride, addSnow);
+
+        // Measure unrotated local bounds
+        const box = new THREE.Box3().setFromObject(vehicle);
+        const size = box.getSize(new THREE.Vector3());
+
         vehicle.position.set(x, 0, z);
         vehicle.rotation.y = rotation;
         ctx.scene.add(vehicle);
 
         // Add Collision
-        const box = new THREE.Box3().setFromObject(vehicle);
-        const size = box.getSize(new THREE.Vector3());
         SectorGenerator.addObstacle(ctx, {
             mesh: vehicle,
             position: vehicle.position,
-            collider: { type: 'box', size: size }
+            collider: { type: 'box', size: size },
+            type: `Vehicle_${type}` // Debug Label
         });
 
         return vehicle;
@@ -712,7 +730,12 @@ export const SectorGenerator = {
     },
 
     spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
-        const tree = EnvironmentGenerator.createTree(type, scaleMultiplier);
+        // Map legacy types to new procedural types
+        let genType: 'PINE' | 'OAK' | 'DEAD' | 'BIRCH' = 'PINE';
+        if (type === 'birch') genType = 'BIRCH';
+        // 'spruce' and 'pine' map to 'PINE'
+
+        const tree = EnvironmentGenerator.createTree(genType, scaleMultiplier);
         tree.position.set(x, 0, z);
         tree.rotation.y = Math.random() * Math.PI * 2;
         ctx.scene.add(tree);
@@ -948,7 +971,18 @@ export const SectorGenerator = {
         if (ctx.debugMode) {
             SectorGenerator.visualizePolygon(ctx, polygon, 0x00ff00);
         }
-        EnvironmentGenerator.createForest(ctx, polygon, spacing, type);
+
+        let genType = type;
+        if (typeof type === 'string') {
+            const lower = type.toLowerCase();
+            if (lower === 'spruce') genType = 'SPRUCE';
+            else if (lower === 'pine') genType = 'PINE';
+            else if (lower === 'birch') genType = 'BIRCH';
+            else if (lower === 'oak') genType = 'OAK';
+            else if (lower === 'dead') genType = 'DEAD';
+        }
+
+        EnvironmentGenerator.createForest(ctx, polygon, spacing, genType as any);
     },
 
     createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {

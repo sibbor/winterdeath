@@ -48,15 +48,17 @@ export const PathGenerator = {
      */
     createBoundry: (ctx: SectorContext, points: THREE.Vector3[], name: string = 'BoundryWall') => {
         const height = 50;
-        const thickness = 2.0;
+        const thickness = 4.0; // Increased from 2.0 to prevent clipping
 
-        const consolidated: THREE.Vector3[] = [points[0]];
-        for (let i = 1; i < points.length - 1; i++) {
-            _v1.subVectors(points[i], points[i - 1]).normalize();
-            _v2.subVectors(points[i + 1], points[i]).normalize();
-            if (_v1.dot(_v2) < 0.9999) consolidated.push(points[i]);
-        }
-        consolidated.push(points[points.length - 1]);
+        // Simplification DISABLED to ensure collision matches visual line exactly
+        // const consolidated: THREE.Vector3[] = [points[0]];
+        // for (let i = 1; i < points.length - 1; i++) {
+        //     _v1.subVectors(points[i], points[i - 1]).normalize();
+        //     _v2.subVectors(points[i + 1], points[i]).normalize();
+        //     if (_v1.dot(_v2) < 0.999) consolidated.push(points[i]);
+        // }
+        // consolidated.push(points[points.length - 1]);
+        const consolidated = points;
 
         for (let i = 0; i < consolidated.length - 1; i++) {
             const curr = consolidated[i];
@@ -69,7 +71,9 @@ export const PathGenerator = {
             SectorGenerator.addObstacle(ctx, {
                 position: _v2.clone().setY(height / 2),
                 quaternion: new THREE.Quaternion().setFromAxisAngle(_up, angle),
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) }
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) },
+                type: 'Boundary', // Debug Identifier
+                id: `${name}_${i}` // Specific Segment ID
             });
         }
     },

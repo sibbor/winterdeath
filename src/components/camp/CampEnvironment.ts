@@ -51,23 +51,33 @@ export const CampEnvironment = {
         const moon = new THREE.Mesh(moonGeo, moonMat);
         moon.position.set(-120, 80, -350);
 
-        // Moon/Env Light - Ambient ONLY
+        // Moon/Env Light - Ambient ONLY -> Now with SHADOWS
         const moonLight = new THREE.DirectionalLight(0xaaccff, 0.4);
-        moonLight.castShadow = false;
+        moonLight.position.set(-120, 80, -350); // Matches moon mesh position
+        moonLight.castShadow = true;
+        moonLight.shadow.mapSize.width = 1024;
+        moonLight.shadow.mapSize.height = 1024;
+        moonLight.shadow.camera.near = 0.5;
+        moonLight.shadow.camera.far = 1000;
+        moonLight.shadow.camera.left = -100;
+        moonLight.shadow.camera.right = 100;
+        moonLight.shadow.camera.top = 100;
+        moonLight.shadow.camera.bottom = -100;
+        moonLight.shadow.bias = -0.001;
         scene.add(moonLight);
         scene.add(moon);
 
-        // Halo (Enhanced visibility)
+        // Halo
         const haloSprite = new THREE.Sprite(new THREE.SpriteMaterial({
             map: textures.halo,
             color: 0xffffee,
             transparent: true,
-            opacity: 0.25, // Increased from 0.1 for better visibility
+            opacity: 0.4,
             blending: THREE.AdditiveBlending,
             fog: false,
             depthWrite: false
         }));
-        haloSprite.scale.set(150, 150, 1); // Increased from 120 for prominence
+        haloSprite.scale.set(120, 120, 1);
         haloSprite.position.copy(moon.position);
         scene.add(haloSprite);
 
@@ -154,21 +164,41 @@ export const CampEnvironment = {
         return fireLight;
     },
 
-    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {
-        const wind = state.wind.update(now);
+    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number, flags?: { wind: boolean, weather: boolean, fx: boolean, lighting: boolean }) => {
+        // Wind
+        const wind = (flags && !flags.wind) ? { x: 0, y: 0 } : state.wind.update(now);
 
         // Update Stars
         if (state.starSystem) {
-            (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = frame * 0.05;
-            state.starSystem.rotateY(-0.00008);
+            state.starSystem.visible = !flags || flags.lighting !== false;
+            if (state.starSystem.visible) {
+                (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = frame * 0.05;
+                state.starSystem.rotateY(-0.00008);
+            }
         }
 
         // Update Fire Light
         if (state.fireLight) {
-            state.fireLight.intensity = 35 + Math.sin(frame * 0.1) * 12 + Math.random() * 5;
+            state.fireLight.visible = !flags || flags.lighting !== false;
+            if (state.fireLight.visible) {
+                state.fireLight.intensity = 35 + Math.sin(frame * 0.1) * 12 + Math.random() * 5;
+            }
         }
 
         const { flames, sparkles, smokes } = state.particles;
+
+        // SKIP FX IF DISABLED
+        if (flags && flags.fx === false) {
+            // Hide existing or just stop spawning? Let's hide/remove to be instant.
+            flames.forEach(f => f.mesh.visible = false);
+            sparkles.forEach(s => s.mesh.visible = false);
+            smokes.forEach(s => s.mesh.visible = false);
+            return;
+        } else {
+            flames.forEach(f => f.mesh.visible = true);
+            sparkles.forEach(s => s.mesh.visible = true);
+            smokes.forEach(s => s.mesh.visible = true);
+        }
 
         // Flames
         if (frame % 4 === 0 && flames.length < 20) {
@@ -206,6 +236,8 @@ export const CampEnvironment = {
         }
 
         // Weather
-        state.weatherSystem.update(delta, now);
+        if (!flags || flags.weather !== false) {
+            state.weatherSystem.update(delta, now);
+        }
     }
 };

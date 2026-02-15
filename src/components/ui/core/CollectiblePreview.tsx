@@ -8,23 +8,6 @@ interface CollectiblePreviewProps {
     isLocked?: boolean;
 }
 
-// Shared Renderer Singleton
-let sharedRenderer: THREE.WebGLRenderer | null = null;
-
-const getSharedRenderer = (width: number, height: number) => {
-    if (!sharedRenderer) {
-        sharedRenderer = new THREE.WebGLRenderer({
-            antialias: true,
-            alpha: true,
-            powerPreference: 'low-power',
-            precision: 'mediump' // Optimization for UI
-        });
-        sharedRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    }
-    // Always resize to ensure it fits the current container
-    sharedRenderer.setSize(width, height);
-    return sharedRenderer;
-};
 
 const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -66,14 +49,16 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         camera.position.set(0, 0.8, 1.8);
         camera.lookAt(0, 0, 0);
 
-        // Get Shared Renderer
-        const renderer = getSharedRenderer(width, height);
-
-        // Append CAN be tricky if we move the DOM node. 
-        // Since we are re-using the renderer, we ensure it's appended here.
-        if (renderer.domElement.parentElement !== container) {
-            container.appendChild(renderer.domElement);
-        }
+        // Instance Low-Power Renderer
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: true,
+            powerPreference: 'low-power',
+            precision: 'mediump'
+        });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(width, height);
+        container.appendChild(renderer.domElement);
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -109,11 +94,11 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
             isRunning = false;
             cancelAnimationFrame(animeId);
 
-            // Cleanup SCENE
-            // NOTE: Do NOT dispose geometry/materials here as they are shared/cached by ModelFactory/Assets.
+            // Cleanup SCENE and RENDERER
             scene.clear();
+            renderer.dispose();
+            renderer.forceContextLoss();
 
-            // Remove canvas from DOM but keep the instance alive
             if (container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);
             }

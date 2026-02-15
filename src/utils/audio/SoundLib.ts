@@ -605,14 +605,21 @@ export const WeaponSounds = {
         else if (weaponId === 'Revolver') key = 'shot_revolver';
         else if (weaponId === 'Shotgun') key = 'shot_shotgun';
         else if (weaponId === 'Minigun') key = 'shot_minigun';
+        else if (weaponId === 'Arc-Cannon') key = 'shot_arc_cannon';
+        else if (weaponId === 'Flamethrower') key = 'shot_flamethrower';
+
 
         // Random pitch map
         const pitch = 0.95 + Math.random() * 0.1;
         SoundBank.play(core, key, 1.0, pitch, false, true);
     },
     playThrowable: (core: SoundCore, weaponId: string) => {
-        if (weaponId === 'Molotov') SoundBank.play(core, 'ignite', 0.5);
-        else SoundBank.play(core, 'pin_pull', 0.3);
+        let key = 'pin_pull';
+        if (weaponId === 'Molotov') key = 'ignite';
+        else if (weaponId === 'Grenade' || weaponId === 'Flashbang') key = 'pin_pull'; // Assuming Grenade/Flashbang also use pin_pull for now
+
+        const pitch = 0.95 + Math.random() * 0.1;
+        SoundBank.play(core, key, 0.4, pitch, false, true);
     },
     playExplosion: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.7, 1.0, false, true),
 
@@ -620,6 +627,11 @@ export const WeaponSounds = {
     playMagIn: (core: SoundCore) => SoundBank.play(core, 'mech_mag_in', 0.2),
     playEmptyClick: (core: SoundCore) => SoundBank.play(core, 'mech_empty_click', 0.3),
     playWeaponSwap: (core: SoundCore) => SoundBank.play(core, 'mech_holster', 0.15),
+
+    // Continuous (Burst sounds or noise starts)
+    playFlamethrowerStart: (core: SoundCore) => SoundBank.play(core, 'ignite', 0.5),
+    playFlamethrowerEnd: (core: SoundCore) => SoundBank.play(core, 'mech_mag_in', 0.1, 0.5), // Click turn off
+    playArcCannonStart: (core: SoundCore) => UiSounds.playTone(core, 800, 'sawtooth', 0.1, 0.2),
 };
 
 export const EnemySounds = {

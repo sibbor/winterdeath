@@ -70,6 +70,10 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
                     </button>
                     <button
                         onClick={handleJump}
+                        onTouchEnd={(e) => {
+                            e.preventDefault(); // Prevent ghost clicks
+                            if (coords.x !== "" && coords.z !== "") handleJump();
+                        }}
                         disabled={coords.x === "" || coords.z === ""}
                         className={`${buttonStyle} ${coords.x !== "" && coords.z !== "" ? 'bg-blue-700 border-blue-500 text-white hover:bg-blue-600 shadow-[0_0_20px_rgba(37,99,235,0.5)]' : 'bg-gray-900 border-gray-800 text-gray-700 cursor-not-allowed'}`}
                     >

@@ -8,6 +8,8 @@ export interface ColliderData {
     type: ColliderType;
     radius?: number;
     size?: THREE.Vector3; // Full dimensions
+    height?: number; // Explicit height for cylinders (optional)
+    center?: THREE.Vector3; // Local offset from pivot (for non-centered meshes)
 }
 
 export interface Obstacle {
@@ -75,6 +77,11 @@ export const applyCollisionResolution = (
         }
         _v1.copy(entityPos).applyMatrix4(_m1);
 
+        // Apply optional local offset (center of the box relative to pivot)
+        if (obstacle.collider.center) {
+            _v1.sub(obstacle.collider.center);
+        }
+
         const hX = size.x * 0.5;
         const hY = size.y * 0.5;
         const hZ = size.z * 0.5;
@@ -126,8 +133,22 @@ export const applyCollisionResolution = (
     else {
         const obsRadius = obstacle.collider?.radius || obstacle.radius || 1.0;
         const totalRadius = entityRadius + obsRadius;
+        const obsHeight = obstacle.collider?.height || 0;
 
-        if (entityMaxY < obsY - obsRadius || entityMinY > obsY + obsRadius) return false;
+        let yMin, yMax;
+        if (obsHeight > 0) {
+            // If height is provided, treat as a Vertical Cylinder centered at obsY
+            // Range: [obsY - height/2, obsY + height/2]
+            const halfH = obsHeight / 2;
+            yMin = obsY - halfH;
+            yMax = obsY + halfH;
+        } else {
+            // Default to Sphere behavior
+            yMin = obsY - obsRadius;
+            yMax = obsY + obsRadius;
+        }
+
+        if (entityMaxY < yMin || entityMinY > yMax) return false;
 
         if (distSq_XZ < totalRadius * totalRadius) {
             const dist = Math.sqrt(distSq_XZ);
@@ -139,6 +160,7 @@ export const applyCollisionResolution = (
                 entityPos.x += (dx_bp / dist) * overlap;
                 entityPos.z += (dz_bp / dist) * overlap;
             }
+            //console.log(`[Collision] Hit ${obstacle.type || 'Unknown'} (ID: ${obstacle.id || 'N/A'})`, obstacle);
             return true;
         }
     }

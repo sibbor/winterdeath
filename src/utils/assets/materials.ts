@@ -5,6 +5,53 @@ import { createProceduralDiffuse } from './procedural';
 
 const DIFFUSE = createProceduralDiffuse();
 
+// --- WIND SYSTEM INTEGRATION ---
+export const WindUniforms = {
+    time: 0,
+    wind: new THREE.Vector2(0, 0),
+    update: (mat: THREE.Material) => {
+        if (mat.userData.shader) {
+            mat.userData.shader.uniforms.uTime.value = WindUniforms.time;
+            mat.userData.shader.uniforms.uWind.value.copy(WindUniforms.wind);
+        }
+    }
+};
+
+const createWindMaterial = (baseMaterial: THREE.MeshStandardMaterial) => {
+    const mat = baseMaterial.clone();
+    mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = { value: 0 };
+        shader.uniforms.uWind = { value: new THREE.Vector2(0, 0) };
+
+        mat.userData.shader = shader;
+
+        shader.vertexShader = `
+            uniform float uTime;
+            uniform vec2 uWind;
+            ${shader.vertexShader}
+        `;
+
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            `
+            #include <begin_vertex>
+            
+            // Simple wind bending logic
+            float height = max(0.0, transformed.y);
+            float bend = height * height * 0.1; 
+            
+            // Noise-like variation based on position
+            float noise = sin(uTime * 2.0 + transformed.x * 0.5 + transformed.z * 0.5);
+            
+            // Apply wind force + noise
+            transformed.x += (uWind.x + noise * 0.2) * bend;
+            transformed.z += (uWind.y + noise * 0.2) * bend;
+            `
+        );
+    };
+    return mat;
+};
+
 export const MATERIALS = {
     bullet: new THREE.MeshBasicMaterial({ color: 0xffffaa }),
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
@@ -24,32 +71,27 @@ export const MATERIALS = {
         bumpScale: 0.2
     }),
     treeTrunk: new THREE.MeshStandardMaterial({
-        color: 0x3d342b,
+        color: 0x4a3c31, // Flat dark brown
         roughness: 1.0,
-        bumpMap: TEXTURES.bark_rough_bump,
-        bumpScale: 0.08
+        flatShading: true
     }),
     treeTrunkBirch: new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        roughness: 0.8,
-        bumpMap: TEXTURES.bark_birch_bump,
-        bumpScale: 0.04
+        roughness: 0.9,
+        flatShading: true
     }),
-    grass: new THREE.MeshStandardMaterial({
+    grass: createWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a6e4a,
         roughness: 1.0,
         flatShading: true,
         side: THREE.DoubleSide
-    }),
-    treeLeaves: new THREE.MeshStandardMaterial({
-        color: 0xf0f8f0,
-        map: DIFFUSE.pineBranch,
+    })),
+    treeLeaves: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x2d4c1e, // Deep green base
         roughness: 0.9,
         flatShading: true,
-        transparent: true,
-        alphaTest: 0.2,
         side: THREE.DoubleSide
-    }), // Snowy foliage
+    })), // Standard pine green
     family: new THREE.MeshStandardMaterial({ color: 0x00aaff, roughness: 0.5 }),
     familyRing: new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
     familyArrow: new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, depthWrite: false }),
@@ -155,7 +197,7 @@ export const MATERIALS = {
     }),
     glass: new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.6 }),
     glassBroken: new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.4, metalness: 0.5 }),
-    snow: new THREE.MeshStandardMaterial({
+    snow: createWindMaterial(new THREE.MeshStandardMaterial({
         color: 0xffffff, // Brighter white snow
         roughness: 1.0, // Fully diffuse
         metalness: 0.0,
@@ -163,7 +205,7 @@ export const MATERIALS = {
         bumpScale: 0.4,
         emissive: 0xffffff, // Subtle glow to maintain whiteness in shadows
         emissiveIntensity: 0.15
-    }),
+    })),
     asphalt: new THREE.MeshStandardMaterial({
         color: 0x222222,
         map: DIFFUSE.asphalt,
@@ -255,18 +297,36 @@ export const MATERIALS = {
         map: DIFFUSE.treeRings,
         roughness: 0.8
     }),
-    treeLeavesOak: new THREE.MeshStandardMaterial({
-        color: 0x2d4c1e,
-        map: DIFFUSE.pineBranch, // Reuse for noise
+    treeLeavesOak: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x4a6b30, // Green for Oak
         roughness: 0.9,
         flatShading: true,
         side: THREE.DoubleSide
-    }),
+    })),
+    treeLeavesBirch: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x8DA331, // Yellowish-Green for Birch
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
     treeTrunkOak: new THREE.MeshStandardMaterial({
         color: 0x5a504a,
         roughness: 1.0,
         bumpMap: TEXTURES.bark_rough_bump,
-        bumpScale: 0.1
+        bumpScale: 0.1,
+        flatShading: true
+    }),
+    flower: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.8,
+        vertexColors: true,
+        side: THREE.DoubleSide
+    })),
+    deadWood: new THREE.MeshStandardMaterial({
+        color: 0x5c5046,
+        roughness: 1.0,
+        map: DIFFUSE.bark, // Reuse bark, maybe tint it in usage
+        flatShading: true
     }),
     skidMark: new THREE.MeshBasicMaterial({
         color: 0x050505,

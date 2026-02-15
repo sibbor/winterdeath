@@ -37,10 +37,19 @@ import ScreenCollectibleFound from './game/ScreenCollectibleFound';
 import { COLLECTIBLES } from '../content/collectibles';
 import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
+import DebugSystemPanel from './game/DebugSystemPanel';
+import DebugDisplay from './ui/core/DebugDisplay';
 import { WEATHER } from '../content/constants';
 import { WeatherSystem } from '../core/systems/WeatherSystem';
 import { WindSystem } from '../core/systems/WindSystem';
 import { WeatherType } from '../types';
+import { requestWakeLock, releaseWakeLock } from '../utils/device';
+
+// --- ZERO-GC Scratchpads ---
+const _vCamera = new THREE.Vector3();
+const _vInteraction = new THREE.Vector3();
+const _fxCallbacks: any = { spawnPart: null, spawnDecal: null };
+const _animStateScratch: any = { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 };
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -50,7 +59,6 @@ const seededRandom = (seed: number) => {
     };
 };
 
-// Define handle for parent access
 export interface GameSessionHandle {
     requestPointerLock: () => void;
     getSectorStats: (isExtraction?: boolean, aborted?: boolean) => SectorStats;
@@ -60,44 +68,36 @@ export interface GameSessionHandle {
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
     const propsRef = useRef(props);
-    // Engine Ref instead of individual Three refs
     const engineRef = useRef<Engine | null>(null);
     const gameSessionRef = useRef<GameSessionLogic | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    // Remove chatOverlayRef unused here? Or keep if needed.
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const sectorContextRef = useRef<SectorContext | null>(null);
 
-    // Keep GameState Refs (Rules, Stats)
     const stateRef = useRef<ReturnType<typeof GameSessionLogic.createInitialState>>(null!);
     if (!stateRef.current) {
         stateRef.current = GameSessionLogic.createInitialState(props);
     }
 
-    // Clear HUD on mount to prevent ghost icons from previous session
     useEffect(() => {
         if (props.onUpdateHUD) props.onUpdateHUD({});
+
+        // Request wake lock to keep screen on (important for mobile)
+        requestWakeLock();
+
+        return () => {
+            releaseWakeLock();
+        };
     }, []);
 
     useEffect(() => { propsRef.current = props; }, [props]);
 
-    // Determine if we can do an "Instant Load" (Respawn on same sector + Assets warm)
-    // Use persistent store from AssetPreloader to survive heavy reloads/unmounts
     const lastSectorIndex = AssetPreloader.getLastSectorIndex();
     const isSameSector = lastSectorIndex === props.currentSector;
     const isWarmedUp = AssetPreloader.isWarmedUp();
-
-    // Debug logic for mobile performance tuning
-    // If we expect instant load but don't get it, we need to know why.
-    if (!isSameSector && isWarmedUp && props.currentSector === 0 && lastSectorIndex === -1) {
-        // First load logic - expected
-    }
-
     const useInstantLoad = isSameSector && isWarmedUp;
 
-    // Start with loading screen ONLY if not instant loading
     const [isSectorLoading, setIsSectorLoading] = useState(!useInstantLoad);
-
     const [deathPhase, setDeathPhase] = useState<DeathPhase>('NONE');
     const deathPhaseRef = useRef<DeathPhase>('NONE');
     useEffect(() => { deathPhaseRef.current = deathPhase; }, [deathPhase]);
@@ -110,68 +110,58 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const lastDrawCallsRef = useRef(0);
     const windSystemRef = useRef(new WindSystem());
     const weatherSystemRef = useRef<WeatherSystem | null>(null);
-    const lastWeatherTypeRef = useRef<WeatherType>('none');
     const cameraAngleRef = useRef(0);
     const cameraAngleTargetRef = useRef(0);
-    const cameraHeightModifierRef = useRef(0); // For Arrow Up/Down pitch/height adjustment
-
-    // Refs for callbacks to avoid closure issues if defined outside
-    // Actually, passing them to systems requires them to be stable or updated.
-    // Let's define them inside the useEffect before onUpdate, BUT before system instantiation.
-    // The issue is system instantiation happens ONCE.
-    // So `concludeSector` must capture `propsRef` and `gameSessionRef.current.state`.
-
+    const cameraHeightModifierRef = useRef(0);
     const prevPosRef = useRef<THREE.Vector3 | null>(null);
 
-    // -- RESTORED HOOKS --
     const [cinematicActive, setCinematicActive] = useState(false);
-    const [currentLine, setCurrentLine] = useState(0);
+    const [currentLine, setCurrentLine] = useState<any>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [bossIntroActive, setBossIntroActive] = useState(false);
     useEffect(() => {
         if (props.onBossIntroStateChange) props.onBossIntroStateChange(bossIntroActive);
     }, [bossIntroActive]);
 
-    // PC Camera Controls (Arrow Keys)
     useEffect(() => {
         if (props.isMobileDevice) return;
-
         const handleKeyDown = (e: KeyboardEvent) => {
             if (propsRef.current.isPaused) return;
-            // Prevent default scrolling
             if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-                // ONLY ALLOW IN DEBUG MODE
                 if (!propsRef.current.debugMode) return;
                 e.preventDefault();
             }
-
             switch (e.key) {
-                case 'ArrowLeft':
-                    cameraAngleTargetRef.current += Math.PI / 4;
-                    break;
-                case 'ArrowRight':
-                    cameraAngleTargetRef.current -= Math.PI / 4;
-                    break;
-                case 'ArrowUp':
-                    // Increase height (Steeper angle)
-                    cameraHeightModifierRef.current = Math.min(20, cameraHeightModifierRef.current + 2.5);
-                    break;
-                case 'ArrowDown':
-                    // Decrease height (Lower angle)
-                    cameraHeightModifierRef.current = Math.max(-5, cameraHeightModifierRef.current - 2.5);
-                    break;
+                case 'ArrowLeft': cameraAngleTargetRef.current += Math.PI / 4; break;
+                case 'ArrowRight': cameraAngleTargetRef.current -= Math.PI / 4; break;
+                case 'ArrowUp': cameraHeightModifierRef.current = Math.min(20, cameraHeightModifierRef.current + 2.5); break;
+                case 'ArrowDown': cameraHeightModifierRef.current = Math.max(-5, cameraHeightModifierRef.current - 2.5); break;
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [props.isMobileDevice]);
 
+    const [showDebugPanel, setShowDebugPanel] = useState(false);
+    const lastHeartbeatRef = useRef<number>(0);
+    useEffect(() => {
+        const handleDebugKey = (e: KeyboardEvent) => {
+            if (e.key.toLowerCase() === 'p') setShowDebugPanel(prev => !prev);
+        };
+        window.addEventListener('keydown', handleDebugKey);
+        return () => window.removeEventListener('keydown', handleDebugKey);
+    }, []);
+
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const setupTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const gameContextRef = useRef<any>(null);
+    const setupIdRef = useRef(0);
     const [foundMemberName, setFoundMemberName] = useState('');
     const [interactionType, setInteractionType] = useState<'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null>(null);
+
+    // UI Render Spam Protection
     const [interactionScreenPos, setInteractionScreenPos] = useState<{ x: number, y: number } | null>(null);
+    const lastInteractionPosRef = useRef<{ x: number, y: number } | null>(null);
+
     const [forceHideHUD, setForceHideHUD] = useState(false);
 
     useEffect(() => {
@@ -179,34 +169,24 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const s = () => setForceHideHUD(false);
         window.addEventListener('hide_hud', h);
         window.addEventListener('show_hud', s);
-        return () => {
-            window.removeEventListener('hide_hud', h);
-            window.removeEventListener('show_hud', s);
-        };
+        return () => { window.removeEventListener('hide_hud', h); window.removeEventListener('show_hud', s); };
     }, []);
-    const interactionTypeRef = useRef<string>('NONE');
-    // Sync interaction type
+
+    const interactionTypeRef = useRef<string | null>('NONE');
     useEffect(() => { interactionTypeRef.current = interactionType; }, [interactionType]);
 
-    const cinematicRef = useRef({ active: false, startCamPos: new THREE.Vector3(), endCamPos: new THREE.Vector3(), startTime: 0, duration: 0, script: [] as any[], lineIndex: 0, speakers: [] as any[], cameraBasePos: new THREE.Vector3(), cameraLookAt: new THREE.Vector3(), lineStartTime: 0, lineDuration: 0, typingDuration: 0 });
+    const cinematicRef = useRef({ active: false, startCamPos: new THREE.Vector3(), endCamPos: new THREE.Vector3(), startTime: 0, duration: 0, script: [] as any[], lineIndex: 0, speakers: [] as any[], cameraBasePos: new THREE.Vector3(), cameraLookAt: new THREE.Vector3(), lineStartTime: 0, lineDuration: 0, typingDuration: 0, fadingOut: false, rotationSpeed: 0, zoom: 0, midPoint: new THREE.Vector3(), relativeOffset: new THREE.Vector3(), customCameraOverride: false, tailPosition: { x: 0, y: 0 } });
     const prevInputRef = useRef(false);
     const bossIntroRef = useRef({ active: false, startTime: 0, bossMesh: null as THREE.Group | null });
     const cameraOverrideRef = useRef<{ active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null>(null);
-    const requestRef = useRef<number>();
     const isMounted = useRef(true);
-    const setupIdRef = useRef(0);
     useEffect(() => { isMounted.current = true; return () => { isMounted.current = false; }; }, []);
 
     const playerGroupRef = useRef<THREE.Group>(new THREE.Group());
     const playerMeshRef = useRef<THREE.Group>(new THREE.Group());
     const familyMemberRef = useRef<any>(null);
-    const reloadBarRef = useRef<HTMLDivElement>(null);
-    const aimCrossRef = useRef<HTMLDivElement>(null);
     const flashlightRef = useRef<THREE.SpotLight>(null);
     const lockRequestTime = useRef(0);
-
-    // ... Keep hooks for Cinematic/Intro
-
 
     const triggerContinue = useCallback(() => {
         if (!hasEndedSector.current) {
@@ -228,7 +208,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, []);
 
-    // ... (EventListeners for death phase continue)
     useEffect(() => {
         if (deathPhase === 'NONE' || deathPhase === 'ANIMATION') return;
         const handleContinue = (e: Event) => {
@@ -245,36 +224,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         };
     }, [deathPhase]);
 
-    // Notify parent of death screen state
     useEffect(() => {
         const isDeathScreenActive = deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE';
-        if (propsRef.current.onDeathStateChange) {
-            propsRef.current.onDeathStateChange(isDeathScreenActive);
-        }
+        if (propsRef.current.onDeathStateChange) propsRef.current.onDeathStateChange(isDeathScreenActive);
     }, [deathPhase]);
 
-    // Ensure cursor is visible on death, pause, dialogue or boss intro
     useEffect(() => {
         const shouldRelease = deathPhase !== 'NONE' || props.isPaused || props.isClueOpen || cinematicActive || bossIntroActive;
         if (shouldRelease) {
-            if (document.pointerLockElement) {
-                document.exitPointerLock();
-            }
+            if (document.pointerLockElement) document.exitPointerLock();
         }
     }, [deathPhase, props.isPaused, props.isClueOpen, cinematicActive, bossIntroActive]);
-    // Auto-pause on pointer unlock (e.g. user hits ESC, or Alt-Tab)
+
     useEffect(() => {
         const handleLockChange = () => {
-            // Ignore unlock if we just requested a lock (grace period for async lock)
-            if (performance.now() - lockRequestTime.current < 1500) {
-                return;
-            }
-
-            // Use refs to check current state reliably inside the listener (avoids stale closures)
+            if (performance.now() - lockRequestTime.current < 1500) return;
             const isExpectedUnlock = stateRef.current.isDead || cinematicRef.current.active || bossIntroRef.current.active || propsRef.current.isPaused || propsRef.current.isClueOpen;
-
             if (!document.pointerLockElement && props.isRunning && !props.isPaused && !isExpectedUnlock) {
-                // Only pause if we expected to be running AND it's not an expected UI unlock
                 propsRef.current.onPauseToggle(true);
             }
         };
@@ -286,10 +252,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (props.onDialogueStateChange) props.onDialogueStateChange(cinematicActive);
     }, [cinematicActive]);
 
-    // Update Graphics Settings dynamically
     useEffect(() => {
         if (engineRef.current && props.initialGraphics) {
-            // "initialGraphics" name is a bit misleading if updated dynamically, but it works as the conduit.
             engineRef.current.updateSettings(props.initialGraphics);
         }
     }, [props.initialGraphics]);
@@ -303,33 +267,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     const isInputEnabled = !props.isPaused && props.isRunning && !cinematicActive && !props.isClueOpen && !props.disableInput && !stateRef.current.isDead && !bossIntroActive && (!cameraOverrideRef.current?.active);
 
-    // --- INPUT EVENT LISTENERS (Replaces useGameInput callbacks) ---
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Priority Checks (ESC handling)
             if (e.key === 'Escape') {
                 if (bossIntroActive) {
-                    setBossIntroActive(false);
-                    bossIntroRef.current.active = false;
-                    e.stopPropagation();
-                    return;
+                    setBossIntroActive(false); bossIntroRef.current.active = false; e.stopPropagation(); return;
                 }
-                if (cinematicActive) {
-                    // endCinematic(); // DISABLED: ESC no longer skips dialogues
-                    e.stopPropagation();
-                    return;
-                }
-                // Fix: Close Clue on ESC
+                if (cinematicActive) { e.stopPropagation(); return; }
                 if (propsRef.current.isClueOpen && propsRef.current.onClueClose) {
-                    propsRef.current.onClueClose();
-                    e.stopPropagation();
-                    return;
+                    propsRef.current.onClueClose(); e.stopPropagation(); return;
                 }
 
                 if (isInputEnabled) {
                     propsRef.current.onPauseToggle(true);
                 } else if (propsRef.current.isPaused) {
-                    // Fix: Unpause if already paused (and input was disabled due to pause)
                     propsRef.current.onPauseToggle(false);
                 }
                 return;
@@ -338,16 +289,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (!isInputEnabled) return;
             const key = e.key;
 
-            // 'M' Map toggle is handled by useGlobalInput hook to support Opening/Closing during pause.
-            // GameSession only handles gameplay inputs.
-
-            // Flashlight Toggle (F)
             if (key.toLowerCase() === 'f') {
                 if (flashlightRef.current) {
-                    // Toggle intensity between 0 and 2.5
                     const isOn = flashlightRef.current.intensity > 0;
                     flashlightRef.current.intensity = isOn ? 0 : 400;
-                    soundManager.playUiClick(); // Or a specific click/switch sound if available
+                    soundManager.playUiClick();
                 }
             }
 
@@ -379,8 +325,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [isInputEnabled]);
 
     const textures = useMemo(() => createProceduralTextures(), []);
-    const { groundTex, laserTex } = textures;
-
     const currentSector = useMemo(() => SectorSystem.getSector(props.currentSector), [props.currentSector]);
     const currentScript = useMemo(() => STORY_SCRIPTS[props.currentSector] || [], [props.currentSector]);
 
@@ -390,13 +334,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         el.className = 'absolute bg-red-500 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none transition-opacity duration-300 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
         el.innerText = text;
         chatOverlayRef.current.appendChild(el);
-
-        activeBubbles.current.push({
-            element: el,
-            startTime: performance.now(),
-            duration: duration,
-            text: text
-        });
+        activeBubbles.current.push({ element: el, startTime: performance.now(), duration: duration, text: text });
     };
 
     const spawnBubble = (text: string, duration: number = 3000) => {
@@ -405,41 +343,27 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         el.className = 'absolute bg-black/80 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none transition-opacity duration-300 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
         el.innerText = text;
         chatOverlayRef.current.appendChild(el);
-
-        activeBubbles.current.push({
-            element: el,
-            startTime: performance.now(),
-            duration: duration,
-            text: text
-        });
+        activeBubbles.current.push({ element: el, startTime: performance.now(), duration: duration, text: text });
     };
 
-    let fmMesh: THREE.Group | undefined;
     const activeFamilyMembers = useRef<any[]>([]);
 
     const startCinematic = (familyMesh: THREE.Group, scriptId?: number, customParams?: { targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3 }) => {
         if (cinematicRef.current.active) return;
-
-        // IMPORTANT: Set ref state BEFORE releasing lock so the lock change listener knows it's intentional
         cinematicRef.current.active = true;
 
-        // Release pointer lock so user can use mouse for dialogue buttons
-        if (document.pointerLockElement) {
-            document.exitPointerLock();
-        }
-
+        if (document.pointerLockElement) document.exitPointerLock();
         if (familyMemberRef.current) setFoundMemberName(familyMemberRef.current.name);
+
         setCinematicActive(true);
         stateRef.current.isInteractionOpen = true;
         stateRef.current.familyFound = true;
 
         const pPos = new THREE.Vector3();
         playerGroupRef.current!.getWorldPosition(pPos);
-
         const fPos = new THREE.Vector3();
         familyMesh.getWorldPosition(fPos);
 
-        // Zoom on player/door: Focal point biased towards player (0.15 weight towards Jordan = approx Door Frame)
         const midPoint = new THREE.Vector3().lerpVectors(pPos, fPos, 0.15);
 
         let camOffset = new THREE.Vector3(0, 20, 15);
@@ -457,7 +381,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         const targetLookAt = customParams?.lookAtPos || midPoint.clone().add(camLookAtOffset);
         const targetPos = customParams?.targetPos || midPoint.clone().add(camOffset);
-
         const selectedScript = scriptId !== undefined ? (STORY_SCRIPTS[scriptId] || []) : currentScript;
 
         cinematicRef.current = {
@@ -474,9 +397,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             fadingOut: false,
             rotationSpeed,
             zoom,
-            midPoint: midPoint,
+            midPoint,
             relativeOffset: camOffset,
-            customCameraOverride: !!(customParams?.targetPos || customParams?.lookAtPos)
+            customCameraOverride: !!(customParams?.targetPos || customParams?.lookAtPos),
+            startCamPos: new THREE.Vector3(), endCamPos: new THREE.Vector3(),
+            tailPosition: { x: 0, y: 0 }
         };
         playCinematicLine(0);
     };
@@ -503,20 +428,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stateRef.current.familyFound = true;
         cinematicRef.current.active = false;
 
-        // Re-request lock for gameplay (will only work if called from a user gesture)
         if (containerRef.current) {
             engineRef.current?.input.requestPointerLock(containerRef.current);
         }
 
-        // Triggers are handled mid-script in CinematicSystem.update, 
-        // but we also check the last line here just in case or for cleanup.
         const finishedScript = cinematicRef.current.script;
         const lastLine = finishedScript[finishedScript.length - 1];
 
         if (lastLine && lastLine.trigger) {
             const triggers = lastLine.trigger.split(',');
-            triggers.forEach(t => {
-                const trimmed = t.trim();
+            // ZERO-GC: use for loop
+            for (let i = 0; i < triggers.length; i++) {
+                const trimmed = triggers[i].trim();
                 if (trimmed === 'boss_start') {
                     setTimeout(() => window.dispatchEvent(new CustomEvent('boss-spawn-trigger')), 1000);
                 } else if (trimmed === 'family_follow' || trimmed === 'family-follow') {
@@ -524,14 +447,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 } else {
                     window.dispatchEvent(new CustomEvent(trimmed));
                 }
-            });
+            }
         }
     };
 
     const gainXp = (amount: number) => {
         const state = stateRef.current;
         state.currentXp += amount; state.score += amount;
-        while (state.currentXp >= state.nextLevelXp && state.level < 20) { // LEVEL_CAP is 20
+        while (state.currentXp >= state.nextLevelXp && state.level < 20) {
             state.currentXp -= state.nextLevelXp;
             state.level++;
             state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
@@ -541,13 +464,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     const handleTriggerAction = (action: TriggerAction, scene: THREE.Scene) => {
         const { type, payload, delay } = action;
-
         const execute = () => {
             switch (type) {
                 case 'SHOW_TEXT':
-                    if (payload && payload.text) {
-                        spawnBubble(t(payload.text), payload.duration || 3000);
-                    }
+                    if (payload && payload.text) spawnBubble(t(payload.text), payload.duration || 3000);
                     break;
                 case 'PLAY_SOUND':
                     if (payload && payload.id) {
@@ -556,6 +476,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                     break;
                 case 'SPAWN_ENEMY':
+                    if (gameSessionRef.current && !gameSessionRef.current.debugSystemFlags.enemies) break;
                     if (payload) {
                         const count = payload.count || 1;
                         for (let i = 0; i < count; i++) {
@@ -586,9 +507,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                     break;
                 case 'CAMERA_SHAKE':
-                    if (payload && payload.amount) {
-                        stateRef.current.cameraShake = payload.amount;
-                    }
+                    if (payload && payload.amount) stateRef.current.cameraShake = payload.amount;
                     break;
                 case 'CAMERA_PAN':
                     if (payload && payload.target && payload.duration) {
@@ -609,9 +528,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                     break;
                 case 'START_CINEMATIC':
-                    if (familyMemberRef.current?.mesh) {
-                        startCinematic(familyMemberRef.current.mesh);
-                    }
+                    if (familyMemberRef.current?.mesh) startCinematic(familyMemberRef.current.mesh);
                     break;
                 case 'TRIGGER_FAMILY_FOLLOW':
                     window.dispatchEvent(new Event('family-follow'));
@@ -619,14 +536,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-        if (delay && delay > 0) {
-            setTimeout(execute, delay);
-        } else {
-            execute();
-        }
+        if (delay && delay > 0) setTimeout(execute, delay);
+        else execute();
     };
 
-    // Expose methods to parent
     useImperativeHandle(ref, () => ({
         requestPointerLock: () => {
             if (containerRef.current) {
@@ -665,17 +578,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             };
         },
         triggerInput: (key: string) => {
-            // Dispatch key events to be picked up by InputManager
             window.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
             setTimeout(() => {
                 window.dispatchEvent(new KeyboardEvent('keyup', { key: key, bubbles: true }));
             }, 50);
         },
         rotateCamera: (dir: number) => {
-            cameraAngleTargetRef.current += dir * (Math.PI / 4); // 45 degrees
+            cameraAngleTargetRef.current += dir * (Math.PI / 4);
         },
         adjustPitch: (dir: number) => {
-            // 5 unit increments, clamped between -10 (low) and 20 (high)
             cameraHeightModifierRef.current = Math.max(-10, Math.min(20, cameraHeightModifierRef.current + (dir * 5)));
         }
     }));
@@ -683,29 +594,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     useEffect(() => {
         if (!containerRef.current) return;
 
-
-
-        // --- ENGINE INIT ---
-        // Use shared Engine instance
-
         const engine = Engine.getInstance();
-
-        // Increment setup ID for this run to invalidate previous async operations
         const currentSetupId = ++setupIdRef.current;
 
-        // Cleanup pre-existing state immediately on effect run
         if (playerGroupRef.current) {
             engine.scene.remove(playerGroupRef.current);
-            playerGroupRef.current = null;
+            playerGroupRef.current = null as any;
         }
 
-        // Comprehensive scene scrub (Remove everything except camera/static)
-        // This ensures no duplicate trees/enemies on respawn.
-        engine.scene.children.slice().forEach(child => {
+        // Zero-GC loop
+        for (let i = engine.scene.children.length - 1; i >= 0; i--) {
+            const child = engine.scene.children[i];
             if (child.name !== 'MainCamera' && !child.userData.isEngineStatic) {
                 engine.scene.remove(child);
             }
-        });
+        }
 
         if (propsRef.current.initialGraphics) {
             engine.updateSettings(propsRef.current.initialGraphics);
@@ -714,29 +617,22 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         engineRef.current = engine;
         engine.input.enable();
 
-        // Init GameSession
         const session = new GameSessionLogic(engine);
-        if (stateRef.current) {
-            session.init(stateRef.current);
-        }
+        if (stateRef.current) session.init(stateRef.current);
         gameSessionRef.current = session;
         weatherSystemRef.current = new WeatherSystem(engine.scene, windSystemRef.current);
 
-        // Extract Engine Components for local usage
         const scene = engine.scene;
         const camera = engine.camera;
         FootprintSystem.init(scene);
         EnemyManager.init(scene);
 
-        // --- HELPER WRAPPERS (Defined early for TDZ safety) ---
         const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
             FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
         };
-
         const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => {
             FXSystem.spawnPart(scene, stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
         };
-
         const spawnFloatingText = (x: number, y: number, z: number, text: string, color?: string) => {
             FXSystem.spawnFloatingText(scene, x, y, z, text, color);
         };
@@ -765,7 +661,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-        const gainXp = (amount: number) => {
+        const _gainXpInternal = (amount: number) => {
             const state = stateRef.current;
             state.score += amount;
             state.currentXp += amount;
@@ -777,47 +673,46 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-        // --- INJECT CALLBACKS INTO STATE ---
-        // This allows non-React systems (WeaponHandler, ProjectileSystem) to trigger pure effects/logic
+        _fxCallbacks.spawnPart = spawnPart;
+        _fxCallbacks.spawnDecal = spawnDecal;
+
         (stateRef.current as any).callbacks = {
-            spawnPart,
-            spawnDecal,
-            spawnFloatingText,
-            spawnZombie,
-            gainXp,
+            spawnPart, spawnDecal, spawnFloatingText, spawnZombie, gainXp: _gainXpInternal,
             playSound: (id: string) => soundManager.playEffect(id),
             trackStats: (type: 'damage' | 'hit', amt: number, isBoss: boolean = false) => {
+                const s = stateRef.current;
                 if (type === 'damage') {
-                    stateRef.current.damageDealt += amt;
-                    if (isBoss) stateRef.current.bossDamageDealt += amt;
+                    s.damageDealt += amt;
+                    if (isBoss) s.bossDamageDealt += amt;
                 } else if (type === 'hit') {
-                    stateRef.current.shotsHit += amt;
+                    s.shotsHit += amt;
                 }
             },
-            addScore: gainXp,
+            addScore: _gainXpInternal,
             addFireZone: (z: any) => stateRef.current.fireZones.push(z),
             onDamageDealt: (amt: number, isBoss: boolean) => {
                 stateRef.current.damageDealt += amt;
                 if (isBoss) stateRef.current.bossDamageDealt += amt;
+            },
+            makeNoise: (pos: THREE.Vector3, radius: number, type: string) => {
+                session.makeNoise(pos, radius, type as any);
             }
         };
 
         soundManager.resume();
-
         isMounted.current = true;
         hasEndedSector.current = false;
 
-        // Fully Clear Scene of Game Objects
-        scene.children.slice().forEach(child => {
-            // Keep critical engine objects if any, but usually we clear all game-spawned ones
+        // Zero-GC clear
+        for (let i = scene.children.length - 1; i >= 0; i--) {
+            const child = scene.children[i];
             if (child.type === 'Group' || child.type === 'Mesh' || child.type === 'Sprite' || child.type === 'PointLight' || child.type === 'SpotLight' || child.type === 'DirectionalLight') {
                 if (child.name !== 'MainCamera' && !child.userData.isEngineStatic) {
                     scene.remove(child);
                 }
             }
-        });
+        }
 
-        // Reset State
         setDeathPhase('NONE');
         deathPhaseRef.current = 'NONE';
         setBossIntroActive(false);
@@ -825,7 +720,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         cameraOverrideRef.current = null;
         if (bossIntroTimerRef.current) { clearTimeout(bossIntroTimerRef.current); bossIntroTimerRef.current = null; }
 
-        // Reset Runtime State to Fresh Defaults
         stateRef.current.startTime = performance.now();
         stateRef.current.isDead = false;
         stateRef.current.bossDefeatedTime = 0;
@@ -845,38 +739,34 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         stateRef.current.familyFound = !!propsRef.current.familyAlreadyRescued;
         stateRef.current.familyExtracted = false;
         stateRef.current.sectorState = {};
-        stateRef.current.enemies = [];
-        stateRef.current.particles = [];
-        stateRef.current.bloodDecals = [];
-        stateRef.current.scrapItems = [];
-        stateRef.current.chests = [];
-        stateRef.current.obstacles = [];
-        stateRef.current.triggers = [];
-        stateRef.current.bossesDefeated = [];
+        stateRef.current.enemies.length = 0;
+        stateRef.current.particles.length = 0;
+        stateRef.current.bloodDecals.length = 0;
+        stateRef.current.scrapItems.length = 0;
+        stateRef.current.chests.length = 0;
+        stateRef.current.obstacles.length = 0;
+        stateRef.current.triggers.length = 0;
+        stateRef.current.bossesDefeated.length = 0;
         stateRef.current.bossSpawned = false;
-        stateRef.current.bossDefeatedTime = 0;
         stateRef.current.thinkingUntil = 0;
         stateRef.current.speakingUntil = 0;
         stateRef.current.lastActionTime = performance.now();
         stateRef.current.framesSinceHudUpdate = 0;
-        stateRef.current.sessionCollectiblesFound = [];
+        stateRef.current.sessionCollectiblesFound.length = 0;
 
         collectedCluesRef.current = [];
         distanceTraveledRef.current = 0;
         prevPosRef.current = null;
-        activeBubbles.current.forEach(b => { if (b.element.parentNode) b.element.parentNode.removeChild(b.element); });
-        activeBubbles.current = [];
+        for (let i = 0; i < activeBubbles.current.length; i++) {
+            const b = activeBubbles.current[i];
+            if (b.element.parentNode) b.element.parentNode.removeChild(b.element);
+        }
+        activeBubbles.current.length = 0;
 
-        // --- PRE-INIT VARIABLES (Moved out of setTimeout for scope access) ---
         const flickeringLights: any[] = [];
         const burningObjects: any[] = [];
-        stateRef.current.chests = [];
-        const chests = stateRef.current.chests;
         const mapItems: MapItem[] = [];
-
-        // Constants/Setup (Moved out of setTimeout)
         const fSpawn = currentSector.familySpawn;
-
 
         const concludeSector = (isExtraction: boolean) => {
             const state = session.state;
@@ -921,18 +811,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         let lastYieldTime = performance.now();
         const yieldToMain = async () => {
             const now = performance.now();
-            // Yield if we've spent more than 12ms in this frame
             if (now - lastYieldTime > 12) {
                 await new Promise<void>(resolve => {
-                    requestAnimationFrame(() => {
-                        setTimeout(resolve, 0);
-                    });
+                    requestAnimationFrame(() => setTimeout(resolve, 0));
                 });
                 lastYieldTime = performance.now();
             }
         };
 
-        // --- ENVIRONMENT SETUP (Async) ---
         const runSetup = async () => {
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
@@ -941,10 +827,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const rng = seededRandom(propsRef.current.currentSector + 4242);
             const env = currentSector.environment;
 
-            // 1. Asynchronous Warmup (Internal flag ensures it only runs once per session)
-            // If instant load, we pass undefined to yieldToMain to force synchronous execution
             const yielder = useInstantLoad ? undefined : yieldToMain;
-
             await AssetPreloader.warmupAsync(engine.renderer, env, yielder);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
@@ -952,7 +835,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             scene.background = new THREE.Color(env.bgColor);
             scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
 
-            // Update Camera
             camera.fov = env.fov;
             camera.updateProjectionMatrix();
             camera.position.set(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ);
@@ -988,123 +870,80 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 scene.add(sun);
             }
 
-            // Generate Sector Content
             const ctx: SectorContext = {
-                scene,
-                obstacles: stateRef.current.obstacles,
-                collisionGrid: stateRef.current.collisionGrid,
-                chests,
-                flickeringLights,
-                burningObjects,
-                rng,
-                triggers: stateRef.current.triggers,
-                mapItems,
-                debugMode: propsRef.current.debugMode,
-                textures: textures,
-                spawnZombie,
+                scene, obstacles: stateRef.current.obstacles, collisionGrid: stateRef.current.collisionGrid, chests: stateRef.current.chests,
+                flickeringLights, burningObjects, rng, triggers: stateRef.current.triggers, mapItems, debugMode: propsRef.current.debugMode,
+                textures: textures, spawnZombie,
                 spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => {
                     const startPos = pos || (playerGroupRef.current ? playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
-                    // If no pos provided, spawn near player (dangerous?) or rely on EnemySpawner default logic?
-                    // EnemySpawner.spawnHorde takes startPos.
-                    // We should probably ensure pos is provided or default to something safe.
-                    // But for now, just pass it.
                     const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, stateRef.current.bossSpawned, stateRef.current.enemies.length);
                     if (newEnemies) {
-                        newEnemies.forEach(e => {
-                            stateRef.current.enemies.push(e);
-                            if (!stateRef.current.seenEnemies.includes(e.type)) {
-                                stateRef.current.seenEnemies.push(e.type);
+                        for (let i = 0; i < newEnemies.length; i++) {
+                            stateRef.current.enemies.push(newEnemies[i]);
+                            if (!stateRef.current.seenEnemies.includes(newEnemies[i].type)) {
+                                stateRef.current.seenEnemies.push(newEnemies[i].type);
                             }
-                        });
+                        }
                     }
                 },
-                cluesFound: propsRef.current.stats.cluesFound || [],
-                collectiblesFound: propsRef.current.stats.collectiblesFound || [],
-                collectibles: [],
-                dynamicLights: [],
-                sectorId: propsRef.current.currentSector,
-                smokeEmitters: [],
-                sectorState: stateRef.current.sectorState,
-                state: stateRef.current, // RuntimeState reference for systems (waterSystem, windSystem)
-                yield: yielder
+                cluesFound: propsRef.current.stats.cluesFound || [], collectiblesFound: propsRef.current.stats.collectiblesFound || [],
+                collectibles: [], dynamicLights: [], sectorId: propsRef.current.currentSector, smokeEmitters: [],
+                sectorState: stateRef.current.sectorState, state: stateRef.current, yield: yielder
             };
             sectorContextRef.current = ctx;
 
-            // 2. Structured Sector Generation
             PathGenerator.resetPathLayer();
             await SectorGenerator.build(ctx, currentSector);
 
-            // Update global tracker for next time
             AssetPreloader.setLastSectorIndex(propsRef.current.currentSector);
 
-            // If we weren't instant loading (and thus showed loading screen), hide it now.
-            if (!useInstantLoad) {
-                setIsSectorLoading(false);
-            }
-
-            // Notify parent that level is loaded (Clean up global loading screen if any)
-            if (propsRef.current.onSectorLoaded) {
-                propsRef.current.onSectorLoaded();
-            }
+            if (!useInstantLoad) setIsSectorLoading(false);
+            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
-            // NEW: Automated Intro Message
             if (currentSector.intro) {
                 setTimeout(() => {
                     if (isMounted.current && setupIdRef.current === currentSetupId) {
                         spawnBubble(`🧠 ${t(currentSector.intro!.text)}`);
-                        if (currentSector.intro!.sound) {
-                            soundManager.playEffect(currentSector.intro!.sound);
-                        }
+                        if (currentSector.intro!.sound) soundManager.playEffect(currentSector.intro!.sound);
                     }
                 }, currentSector.intro.delay || 1500);
             }
 
-            // NEW: Automated Ambient Loop
             if (currentSector.ambientLoop) {
                 soundManager.playMusic(currentSector.ambientLoop);
             }
 
-            // --- ASSET-DRIVEN EFFECT DISCOVERY ---
-            // Scan scene for objects with `userData.effects`
             const activeEffects: any[] = [];
             scene.traverse((child) => {
                 if (child.userData && child.userData.effects) {
                     const effects = child.userData.effects as any[];
-
-                    // Initialize Lights immediately
-                    effects.forEach(eff => {
+                    for (let i = 0; i < effects.length; i++) {
+                        const eff = effects[i];
                         if (eff.type === 'light') {
                             const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
                             if (eff.offset) light.position.copy(eff.offset);
                             child.add(light);
-                            if (eff.flicker) {
-                                flickeringLights.push({ light, baseIntensity: eff.intensity });
-                            }
+                            if (eff.flicker) flickeringLights.push({ light, baseIntensity: eff.intensity });
                         }
-                    });
-
-                    // Store for periodic updates (Particles)
+                    }
                     activeEffects.push(child);
                 }
             });
             stateRef.current.activeEffects = activeEffects;
 
-            // --- PLAYER GROUP SETUP ---
             const playerGroup = ModelFactory.createPlayer();
             playerGroupRef.current = playerGroup;
 
             const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
-            playerMeshRef.current = bodyMesh as THREE.Mesh;
+            playerMeshRef.current = bodyMesh as THREE.Group;
 
             const pSpawn = { ...currentSector.playerSpawn };
-            const fSpawn = { ...currentSector.familySpawn };
-
-            playerGroup.position.set(pSpawn.x, 0, pSpawn.z); if (pSpawn.y) playerGroup.position.y = pSpawn.y;
+            playerGroup.position.set(pSpawn.x, 0, pSpawn.z);
+            if (pSpawn.y) playerGroup.position.y = pSpawn.y;
             if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot;
 
-            // Flashlight
             const flashlight = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
             flashlight.name = 'flashlight';
             flashlight.position.set(0, 3.5, 0.5);
@@ -1120,24 +959,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             scene.add(playerGroup);
             prevPosRef.current = playerGroup.position.clone();
 
-            // --- FAMILY MEMBERS SPAWNING ---
-            activeFamilyMembers.current = [];
+            activeFamilyMembers.current.length = 0;
 
-            // 1. Spawn already rescued family members (from persistent indices)
             if (propsRef.current.rescuedFamilyIndices) {
-                propsRef.current.rescuedFamilyIndices.forEach(sectorIdx => {
+                for (let i = 0; i < propsRef.current.rescuedFamilyIndices.length; i++) {
+                    const sectorIdx = propsRef.current.rescuedFamilyIndices[i];
                     const theme = SECTOR_THEMES[sectorIdx];
                     if (theme && theme.familyMemberId !== undefined) {
                         const fmData = FAMILY_MEMBERS[theme.familyMemberId];
                         if (fmData) {
                             const mesh = ModelFactory.createFamilyMember(fmData);
-                            // Spawn them slightly behind the player
                             mesh.position.set(pSpawn.x + (Math.random() - 0.5) * 5, 0, pSpawn.z + 5 + Math.random() * 5);
-
-                            const nameParams = createTextSprite(fmData.name);
-                            nameParams.scale.set(12, 3, 1);
-                            nameParams.position.y = 3.5;
-                            mesh.add(nameParams);
 
                             const markerGroup = new THREE.Group();
                             markerGroup.position.y = 0.2;
@@ -1153,37 +985,22 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                             scene.add(mesh);
                             activeFamilyMembers.current.push({
-                                mesh,
-                                ring: markerGroup,
-                                found: true,
-                                following: true,
-                                name: fmData.name,
-                                id: fmData.id,
-                                scale: fmData.scale,
-                                seed: Math.random() * 100
+                                mesh, ring: markerGroup, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100
                             });
                         }
                     }
-                });
+                }
             }
 
-            // 2. Spawn the current sector's target family member
             if (!propsRef.current.familyAlreadyRescued) {
                 const theme = SECTOR_THEMES[propsRef.current.currentSector];
                 const fmId = theme ? theme.familyMemberId : 0;
-
-                // Only spawn if not already in the party
                 if (!propsRef.current.rescuedFamilyIndices.includes(propsRef.current.currentSector)) {
                     const fmData = FAMILY_MEMBERS[fmId];
                     if (fmData) {
                         const mesh = ModelFactory.createFamilyMember(fmData);
                         mesh.position.set(fSpawn.x, 0, fSpawn.z);
                         if (fSpawn.y) mesh.position.y = fSpawn.y;
-
-                        const nameParams = createTextSprite(fmData.name);
-                        nameParams.scale.set(12, 3, 1);
-                        nameParams.position.y = 3.5;
-                        mesh.add(nameParams);
 
                         const markerGroup = new THREE.Group();
                         markerGroup.position.y = 0.2;
@@ -1198,98 +1015,48 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
 
                         scene.add(mesh);
-                        const currentFM = {
-                            mesh,
-                            ring: markerGroup,
-                            found: false,
-                            following: false,
-                            name: fmData.name,
-                            id: fmData.id,
-                            scale: fmData.scale,
-                            seed: Math.random() * 100
-                        };
+                        const currentFM = { mesh, ring: markerGroup, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100 };
                         activeFamilyMembers.current.push(currentFM);
                         familyMemberRef.current = currentFM;
                     }
                 }
             }
 
-            // --- SYSTEMS INITIALIZATION ---
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new WorldLootSystem(playerGroup, scene));
-
             const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, ctx.collectibles, onCollectibleFoundInternal);
             session.addSystem(interactionSystem);
-
             session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
-                setNotification: (n: any) => {
-                    if (n && n.visible && n.text) {
-                        spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000);
-                    }
-                },
+                setNotification: (n: any) => { if (n && n.visible && n.text) spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
                 t: (key: string) => t(key),
-                spawnPart,
-                startCinematic,
+                spawnPart, startCinematic,
                 setInteraction: (interaction: any) => {
-                    if (interaction) {
-                        setInteractionType('plant_explosive');
-                        stateRef.current.currentInteraction = interaction;
-                    } else {
-                        setInteractionType(null);
-                        stateRef.current.currentInteraction = null;
-                    }
+                    if (interaction) { setInteractionType('plant_explosive'); stateRef.current.currentInteraction = interaction; }
+                    else { setInteractionType(null); stateRef.current.currentInteraction = null; }
                 },
-                playSound: (id: string) => {
-                    if (id === 'explosion') soundManager.playExplosion();
-                    else soundManager.playUiConfirm();
-                },
-                playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => {
-                    soundManager.playTone(freq, type, duration, vol || 0.1);
-                },
-                cameraShake: (amount: number) => {
-                    stateRef.current.cameraShake = amount;
-                },
+                playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
+                playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
+                cameraShake: (amount: number) => stateRef.current.cameraShake = amount,
                 scene: engine.scene,
-                setCameraOverride: (params: any) => {
-                    cameraOverrideRef.current = params;
-                },
-                emitNoise: (pos: THREE.Vector3, radius: number, type: string) => {
-                    // Använd den poolade metoden istället för manuell push
-                    session.makeNoise(pos, radius, type as any);
-                }
+                setCameraOverride: (params: any) => cameraOverrideRef.current = params,
+                emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any)
             }));
-
             session.addSystem(new EnemySystem(playerGroup, {
-                spawnBubble,
-                gainXp,
-                t,
-                onClueFound: propsRef.current.onClueFound,
-                onBossKilled: (id: number) => {
-                    if (!stateRef.current.bossesDefeated.includes(id)) {
-                        stateRef.current.bossesDefeated.push(id);
-                    }
-                }
+                spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound,
+                onBossKilled: (id: number) => { if (!stateRef.current.bossesDefeated.includes(id)) stateRef.current.bossesDefeated.push(id); }
             }));
 
-            // Set initial aim direction if specified in sector
             if (currentSector.initialAim) {
                 engine.input.state.aimVector = new THREE.Vector2(currentSector.initialAim.x, currentSector.initialAim.y);
             }
 
             prevInputRef.current = false;
-
-            // SNAP CAMERA (Prevent lerp jump on load)
             camera.position.set(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ);
             camera.lookAt(playerGroup.position);
 
-            // Call Loaded Callbacks
             if (isMounted.current) setIsSectorLoading(false);
-
-            // Store Map Items in State for Runtime Access
             stateRef.current.mapItems = mapItems;
-
-            // --- CRITICAL: Initialize Renderers and Enemy Logic ---
             EnemyManager.init(engine.scene);
 
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
@@ -1297,13 +1064,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         };
 
         runSetup();
-
-
-
-
-
-
-
 
         const spawnBoss = () => {
             if (stateRef.current.bossSpawned) return;
@@ -1313,26 +1073,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             newBoss.bossId = bossData.id;
             stateRef.current.enemies.push(newBoss);
             stateRef.current.bossSpawned = true;
-            if (!stateRef.current.seenBosses.includes(bossData.id)) {
-                stateRef.current.seenBosses.push(bossData.id);
-            }
+            if (!stateRef.current.seenBosses.includes(bossData.id)) stateRef.current.seenBosses.push(bossData.id);
 
-            // BOSS INTRO SEQUENCE
             bossIntroRef.current = { active: true, startTime: performance.now(), bossMesh: newBoss.mesh };
             setBossIntroActive(true);
 
-            // Clear any previous timer
             if (bossIntroTimerRef.current) clearTimeout(bossIntroTimerRef.current);
-
-            // Trigger Boss Spawn Sound
             soundManager.playBossSpawn(bossData.id);
 
-            // Hide HUD during intro
             bossIntroTimerRef.current = window.setTimeout(() => {
-                if (isMounted.current) {
-                    setBossIntroActive(false);
-                    bossIntroRef.current.active = false;
-                }
+                if (isMounted.current) { setBossIntroActive(false); bossIntroRef.current.active = false; }
             }, 4000);
         };
 
@@ -1357,14 +1107,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     active: true,
                     targetPos: (cinematicRef.current.cameraBasePos || new THREE.Vector3()).clone(),
                     lookAtPos: (cinematicRef.current.cameraLookAt || new THREE.Vector3()).clone(),
-                    endTime: performance.now() + 30000 // Long timeout, cleared by next cinematic or interaction
+                    endTime: performance.now() + 30000
                 };
             }
         });
 
-        (window as any).clearCameraOverride = () => {
-            cameraOverrideRef.current = null;
-        };
+        (window as any).clearCameraOverride = () => cameraOverrideRef.current = null;
 
         let lastTime = performance.now();
         let frame = 0;
@@ -1373,43 +1121,68 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (!isMounted.current || propsRef.current.isPaused) return;
 
             const now = performance.now();
+            const input = engine.input.state;
+            const delta = dt;
+
+            // --- 1. INPUT PRIORITY PHASE ---
+            // Handle interactions immediately to prevent "freeze" feeling
+            // This runs BEFORE the "isInteractionOpen" check blocks the rest of the loop
+            if (input.e && !prevInputRef.current) {
+                if (stateRef.current.currentInteraction && stateRef.current.currentInteraction.action) {
+                    stateRef.current.currentInteraction.action();
+                }
+            }
+            prevInputRef.current = input.e;
+
+            // --- 2. SYSTEM SYNC PHASE ---
             windSystemRef.current.update(now);
 
             if (weatherSystemRef.current) {
                 const currentWeather = propsRef.current.weather || 'none';
                 weatherSystemRef.current.sync(currentWeather, engine.getSettings().weatherCount, 200);
                 weatherSystemRef.current.update(dt, now);
-
-                // Audio: Update Ambient Wind based on weather system
                 const windIntensity = weatherSystemRef.current.intensity || 0.1;
                 const windSpeed = windSystemRef.current.speed || 1.0;
                 soundManager.updateWind(windIntensity, windSpeed);
             }
 
-            // Wait for Init
+            // --- 3. PAUSE/FREEZE CHECK PHASE ---
+            const state = stateRef.current;
+            const isCinematic = cinematicRef.current.active;
+            const isBossIntro = bossIntroRef.current.active;
+
+            // If an interaction UI is open (like reading a note), we freeze the GAME LOGIC
+            // but we do NOT return yet, because we still need to render the UI/HUD.
+            const isInteractionPaused = state.isInteractionOpen && !isCinematic;
+
+            if (isInteractionPaused) {
+                // Ensure we still update audio/rendering context if needed, but skip physics/AI
+                lastDrawCallsRef.current = engine.renderer.info.render.calls;
+                engine.isRenderingPaused = true;
+                // UI still needs to update
+                // Fallthrough to Render/UI phase? No, existing logic returns. 
+                // We must ensure that we don't skip essential updates if we return here.
+                // For now, mirroring existing behavior but checking it AFTER input.
+                lastTime = now;
+                return;
+            } else {
+                engine.isRenderingPaused = false;
+            }
+
             const playerGroup = playerGroupRef.current;
             if (!playerGroup || playerGroup.children.length === 0) return;
 
-            const state = stateRef.current;
+            // --- 4. GAME LOGIC PHASE ---
+
+            // HUD Updates
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
-            const input = engine.input.state;
-
-            const delta = dt;
-
-            // ... (rest of animation loop)
             state.framesSinceHudUpdate++;
             if (now - state.lastHudUpdate > 100) {
                 const frames = state.framesSinceHudUpdate;
                 const timeDiff = now - state.lastHudUpdate;
                 const fps = Math.round((frames * 1000) / timeDiff);
-
                 state.framesSinceHudUpdate = 0;
                 state.lastHudUpdate = now;
-
-
-
-
-
 
                 if (now - state.lastFpsUpdate > 500) {
                     if (propsRef.current.onFPSUpdate) propsRef.current.onFPSUpdate(fps);
@@ -1419,20 +1192,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const hudMesh = familyMemberRef.current?.mesh || null;
 
                 if (!bossIntroActive) {
-                    const hudData = HudSystem.getHudData(
-                        state,
-                        playerGroupRef.current.position,
-                        hudMesh,
-                        input,
-                        now,
-                        propsRef.current,
-                        distanceTraveledRef.current,
-                        camera
-                    );
+                    const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, input, now, propsRef.current, distanceTraveledRef.current, camera);
                     hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                     propsRef.current.onUpdateHUD({ ...hudData, fps, debugMode: propsRef.current.debugMode });
                 } else {
-                    if (propsRef.current.onUpdateHUD && now % 5 === 0) { // Throttled HUD update
+                    if (propsRef.current.onUpdateHUD && now % 5 === 0) {
                         const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, input, now, propsRef.current, distanceTraveledRef.current, camera);
                         hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                         propsRef.current.onUpdateHUD({ ...hudData, fps: Math.round(1000 / delta) });
@@ -1440,29 +1204,30 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
 
-            if (bossIntroRef.current.active && bossIntroRef.current.bossMesh) {
+            if (isBossIntro && bossIntroRef.current.bossMesh) {
                 const bossMesh = bossIntroRef.current.bossMesh;
                 const bossPos = bossMesh.position;
                 const introTime = now - bossIntroRef.current.startTime;
-                const targetPos = new THREE.Vector3(bossPos.x, 12, bossPos.z + 20);
-                camera.position.lerp(targetPos, 0.05);
+
+                _vCamera.set(bossPos.x, 12, bossPos.z + 20);
+                camera.position.lerp(_vCamera, 0.05);
                 camera.lookAt(bossPos.x, bossPos.y + 3, bossPos.z);
+
                 if (frame % 5 === 0 && introTime < 3000) {
                     bossMesh.rotation.y += (Math.random() - 0.5) * 0.2;
                     bossMesh.scale.setScalar(3.0 + Math.sin(now * 0.02) * 0.1);
                 }
                 if (playerMeshRef.current) {
-                    PlayerAnimation.update(playerMeshRef.current, { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 }, now, delta);
+                    _animStateScratch.isMoving = false; _animStateScratch.isRushing = false; _animStateScratch.isRolling = false; _animStateScratch.rollStartTime = 0; _animStateScratch.staminaRatio = 1.0; _animStateScratch.isSpeaking = false; _animStateScratch.isThinking = false; _animStateScratch.isIdleLong = false;
+                    PlayerAnimation.update(playerMeshRef.current, _animStateScratch, now, delta);
                 }
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
 
-            // --- RESTORED: Effect Updates (Fire, Smoke on objects) ---
-            // Run every 5 frames to save CPU, but ensure fire spawns
+            // Effects
             if (frame % 5 === 0) {
-                // Audio: Low Health Heartbeat
                 if (state.health < state.maxHealth * 0.3 && !state.isDead) {
                     if (now - (state.lastHeartbeat || 0) > 800) {
                         state.lastHeartbeat = now;
@@ -1470,43 +1235,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // Use the dedicated tracking list instead of iterating all obstacles
                 for (let i = 0; i < burningObjects.length; i++) {
                     const mesh = burningObjects[i];
-                    if (mesh.userData.effects) {
-                        const effs = mesh.userData.effects;
-                        for (let j = 0; j < effs.length; j++) {
-                            const eff = effs[j];
-                            if (eff.type === 'emitter') {
-                                // Simple probability based on interval
-                                if (Math.random() < 0.8) {
-                                    const p = mesh.position.clone();
-                                    if (eff.offset) {
-                                        p.add(eff.offset);
-                                    }
-
-                                    // AREA DISTRIBUTION LOGIC
-                                    if (eff.area) {
-                                        // Distribute over a rectangle (assume x and z are half-extents or full size)
-                                        // ObjectGenerator.createBuilding uses BoxGeometry(width, height, depth)
-                                        // so area.x is width, area.z is depth.
-                                        p.x += (Math.random() - 0.5) * eff.area.x;
-                                        p.z += (Math.random() - 0.5) * eff.area.z;
-                                    } else {
-                                        // Add some randomness to position (Legacy / Point-based)
-                                        p.x += (Math.random() - 0.5) * (eff.spread || 0.4);
-                                        p.z += (Math.random() - 0.5) * (eff.spread || 0.4);
-                                    }
-
-                                    let count = eff.particle === 'flame' ? 2 : (eff.count || 1);
-
-                                    // Scale count if it's a large area
-                                    if (eff.area && (eff.area.x * eff.area.z > 50)) {
-                                        count = Math.max(count, 3);
-                                    }
-
-                                    spawnPart(p.x, p.y, p.z, eff.particle, count, undefined, undefined, eff.color);
+                    if (!mesh.userData.effects) continue;
+                    const effs = mesh.userData.effects;
+                    for (let j = 0; j < effs.length; j++) {
+                        const eff = effs[j];
+                        if (eff.type === 'emitter') {
+                            if (Math.random() < 0.8) {
+                                _vInteraction.copy(mesh.position);
+                                if (eff.offset) _vInteraction.add(eff.offset);
+                                if (eff.area) {
+                                    _vInteraction.x += (Math.random() - 0.5) * eff.area.x;
+                                    _vInteraction.z += (Math.random() - 0.5) * eff.area.z;
+                                } else {
+                                    _vInteraction.x += (Math.random() - 0.5) * (eff.spread || 0.4);
+                                    _vInteraction.z += (Math.random() - 0.5) * (eff.spread || 0.4);
                                 }
+                                let count = eff.particle === 'flame' ? 2 : (eff.count || 1);
+                                if (eff.area && (eff.area.x * eff.area.z > 50)) count = Math.max(count, 3);
+                                spawnPart(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, count, undefined, undefined, eff.color);
                             }
                         }
                     }
@@ -1514,18 +1262,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (state.isDead) {
-                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, { spawnDecal, spawnPart });
-                if (playerGroupRef.current) {
-                    FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
-                }
+                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, _fxCallbacks);
+                if (playerGroupRef.current) FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
             }
 
             if (state.bossDefeatedTime > 0) {
-                // Fix: Only apply invulnerability if the boss was defeated RECENTLY (within last 10s)
-                // This prevents permanent invulnerability if bossDefeatedTime persists from previous runs.
                 if (now - state.bossDefeatedTime < 10000) {
                     state.invulnerableUntil = now + 10000;
                     if (now - state.bossDefeatedTime > 4000) {
@@ -1533,7 +1277,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         return;
                     }
                 } else {
-                    // Timer is old/stale, clear it to prevent issues
                     state.bossDefeatedTime = 0;
                 }
             }
@@ -1547,128 +1290,91 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             frame++;
 
-            // --- OPTIMIZATION: Light Culling ---
-            // Only keep the closest lights active to save GPU performance (relaxing to 32)
-            if (frame % 15 === 0 && playerGroupRef.current) {
+            if (frame % 15 === 0 && playerGroupRef.current && sectorContextRef.current?.dynamicLights) {
+                const lightsOn = gameSessionRef.current?.debugSystemFlags.lighting ?? true;
+                const dynamicLights = sectorContextRef.current.dynamicLights;
                 const pPos = playerGroupRef.current.position;
-                const lights: { light: THREE.Light, distSq: number }[] = [];
-                const context = sectorContextRef.current;
 
-                if (context && context.dynamicLights) {
-                    context.dynamicLights.forEach((obj) => {
-                        const distSq = obj.position.distanceToSquared(pPos);
-                        lights.push({ light: obj, distSq });
-                    });
-                }
-
-                lights.sort((a, b) => a.distSq - b.distSq);
-                for (let i = 0; i < lights.length; i++) {
-                    const l = lights[i];
-                    // Always show the flashlight and lights within 60m
-                    if (l.light.name === 'flashlight' || l.distSq < 3600) { // 60m
-                        l.light.visible = true;
-                        continue;
-                    } else {
-                        // Max 32 dynamic lights total
-                        if (i < 32) {
-                            l.light.visible = true;
-                        } else {
-                            l.light.visible = false;
-                        }
+                if (!lightsOn) {
+                    for (let i = 0; i < dynamicLights.length; i++) {
+                        dynamicLights[i].visible = (dynamicLights[i].name === 'flashlight');
+                    }
+                } else {
+                    const sortableLights = [];
+                    for (let i = 0; i < dynamicLights.length; i++) {
+                        const light = dynamicLights[i];
+                        if (light.name === 'flashlight') { light.visible = true; continue; }
+                        sortableLights.push({ light, distSq: light.position.distanceToSquared(pPos) });
+                    }
+                    sortableLights.sort((a, b) => a.distSq - b.distSq);
+                    for (let i = 0; i < sortableLights.length; i++) {
+                        sortableLights[i].light.visible = (i < 32 || sortableLights[i].distSq < 3600);
                     }
                 }
             }
 
-            if (state.isInteractionOpen && !cinematicRef.current.active) {
-                lastDrawCallsRef.current = engine.renderer.info.render.calls;
-                engine.isRenderingPaused = true;
-                lastTime = now;
-                return;
-            } else {
-                engine.isRenderingPaused = false;
-            }
-
-            const currentInput = engine.input.state;
-            let speed = 15 * propsRef.current.stats.speed;
-
-            const isCinematic = cinematicRef.current.active;
-            const isBossIntro = bossIntroRef.current.active;
-
-            // --- GAMEPLAY UPDATES (Gated) ---
             if (!isCinematic && !isBossIntro) {
+                // Ensure input state is available here
+                const currentInput = engine.input.state;
+
                 if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
                     const tgt = propsRef.current.teleportTarget;
                     playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
                     spawnPart(tgt.x, 1, tgt.z, 'smoke', 20); soundManager.playTone(800, 'sine', 0.2, 0.1);
 
-                    // Teleport Family Members
-                    if (activeFamilyMembers.current) {
-                        activeFamilyMembers.current.forEach(fm => {
-                            if (fm.mesh && fm.following) {
-                                const offX = (Math.random() - 0.5) * 3;
-                                const offZ = (Math.random() - 0.5) * 3;
-                                fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
-                                spawnPart(tgt.x + offX, 1, tgt.z + offZ, 'smoke', 10);
-                            }
-                        });
+                    for (let i = 0; i < activeFamilyMembers.current.length; i++) {
+                        const fm = activeFamilyMembers.current[i];
+                        if (fm.mesh && fm.following) {
+                            const offX = (Math.random() - 0.5) * 3;
+                            const offZ = (Math.random() - 0.5) * 3;
+                            fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
+                            spawnPart(tgt.x + offX, 1, tgt.z + offZ, 'smoke', 10);
+                        }
                     }
 
                     lastTeleportRef.current = tgt.timestamp; camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ); camera.lookAt(playerGroupRef.current.position);
                     prevPosRef.current = playerGroupRef.current.position.clone();
                 }
 
-                // Sync input state
                 gameSessionRef.current!.inputDisabled = !!propsRef.current.disableInput || (!!cameraOverrideRef.current?.active);
                 gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
                 gameSessionRef.current!.debugMode = propsRef.current.debugMode;
-
-                // Update Game Session (Systems)
                 gameSessionRef.current!.cameraAngle = cameraAngleRef.current;
                 gameSessionRef.current!.update(delta);
-                const isMoving = state.isMoving;
 
-                if (prevPosRef.current && playerGroupRef.current) { const d = playerGroupRef.current.position.distanceTo(prevPosRef.current); distanceTraveledRef.current += d; }
+                if (state.hp / state.maxHp <= 0.1 && !state.isDead) {
+                    if (now > (lastHeartbeatRef.current || 0) + 800) {
+                        soundManager.playHeartbeat();
+                        lastHeartbeatRef.current = now;
+                    }
+                }
+
+                const isMoving = state.isMoving;
+                if (prevPosRef.current && playerGroupRef.current) { distanceTraveledRef.current += playerGroupRef.current.position.distanceTo(prevPosRef.current); }
                 if (playerGroupRef.current) prevPosRef.current = playerGroupRef.current.position.clone();
 
                 if (playerMeshRef.current) {
-                    PlayerAnimation.update(playerMeshRef.current, { isMoving, isRushing: state.isRushing, isRolling: state.isRolling, rollStartTime: state.rollStartTime, staminaRatio: state.stamina / state.maxStamina, isSpeaking: state.speakBounce > 0 || now < state.speakingUntil, isThinking: now < state.thinkingUntil, isIdleLong: (now - state.lastActionTime > 20000), seed: 0 }, now, delta);
+                    _animStateScratch.isMoving = isMoving; _animStateScratch.isRushing = state.isRushing; _animStateScratch.isRolling = state.isRolling; _animStateScratch.rollStartTime = state.rollStartTime; _animStateScratch.staminaRatio = state.stamina / state.maxStamina; _animStateScratch.isSpeaking = state.speakBounce > 0 || now < state.speakingUntil; _animStateScratch.isThinking = now < state.thinkingUntil; _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
+                    PlayerAnimation.update(playerMeshRef.current, _animStateScratch, now, delta);
                 }
             }
 
-            // --- ANIMATION UPDATES (Global) ---
-
-            // Update all active family members (Always runs, movement restricted internally during cinematic)
-            activeFamilyMembers.current.forEach((fm, index) => {
+            for (let i = 0; i < activeFamilyMembers.current.length; i++) {
+                const fm = activeFamilyMembers.current[i];
                 if (fm.mesh) {
-                    FamilySystem.update(fm, playerGroupRef.current, state, cinematicRef.current.active, now, delta, {
-                        setFoundMemberName,
-                        startCinematic
-                    }, index);
+                    FamilySystem.update(fm, playerGroupRef.current, state, cinematicRef.current.active, now, delta, { setFoundMemberName, startCinematic }, i);
                 }
-            });
-
-            // Update Wind System
-            if (state.windSystem) {
-                state.windSystem.update(delta);
             }
 
-            // Update Water System
-            if (state.waterSystem) {
-                state.waterSystem.update(delta);
-            }
-
-            // Update Footprints
+            if (state.windSystem) state.windSystem.update(delta);
+            if (state.waterSystem) state.waterSystem.update(delta);
             FootprintSystem.update(delta);
 
-            // Update FX (Particles, Debris, Blood)
-            if (playerGroupRef.current) {
-                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
+            if (playerGroupRef.current && gameSessionRef.current?.debugSystemFlags.fx !== false) {
+                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
             }
 
-            // Cinematic Update (Overrides)
             if (isCinematic) {
-                // Pass familyMembers as undefined since we handle them globally now, or keep it if needed for specific logic?
-                // We removed the ring pulse hack, so the arg is unused in CinematicSystem.
                 CinematicSystem.update(cinematicRef.current, camera, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine }, activeFamilyMembers.current);
             }
 
@@ -1678,99 +1384,87 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (now > override.endTime) {
                         cameraOverrideRef.current = null;
                     } else {
-                        const currentPos = camera.position.clone();
-                        currentPos.lerp(override.targetPos, 0.05);
-                        camera.position.copy(currentPos);
+                        _vCamera.copy(camera.position).lerp(override.targetPos, 0.05);
+                        camera.position.copy(_vCamera);
                         camera.lookAt(override.lookAtPos);
                     }
                 } else {
-                    // Camera Rotation Lerp
                     cameraAngleRef.current += (cameraAngleTargetRef.current - cameraAngleRef.current) * 0.1;
                     CameraSystem.update(camera, playerGroupRef.current.position, currentSector.environment.cameraOffsetZ, state, false, delta, cameraAngleRef.current, cameraHeightModifierRef.current);
                 }
             }
 
-            // Render
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
             lastTime = now;
 
-
-            // WeaponHandler Inputs removed (Moved to PlayerCombatSystem)
-
-            // InteractionSystem moved to PlayerInteractionSystem
-            // Interaction logic: Sync Type & Project position to HUD
             const currentInter = state.interactionType;
             if (currentInter !== interactionTypeRef.current) {
                 interactionTypeRef.current = currentInter;
                 setInteractionType(currentInter);
             }
 
-            // Fixed Input Handling for Interactions
-            if (currentInput.e && !prevInputRef.current) {
-                if (state.currentInteraction && state.currentInteraction.action) {
-                    state.currentInteraction.action();
-                    // Clear after action? Depends on the action. 
-                    // Usually the action will update state that disables the interaction condition next frame.
-                }
-            }
-            prevInputRef.current = currentInput.e;
+            const currentInput = engine.input.state;
 
+            // --- ZERO-GC: React Render Spam Protection ---
             if (currentInter && state.currentInteraction) {
-                // Use specific interaction position if available, otherwise default to Player
-                let projectPos: THREE.Vector3;
-
                 if (state.currentInteraction.position) {
-                    projectPos = state.currentInteraction.position.clone();
-                    // Add fixed offset for visual clearance above the object
-                    projectPos.y += 1.5;
+                    _vInteraction.copy(state.currentInteraction.position);
+                    _vInteraction.y += 1.5;
                 } else {
-                    projectPos = playerGroupRef.current.position.clone();
-                    projectPos.y += 2.5; // Same height as reload bar
+                    _vInteraction.copy(playerGroupRef.current.position);
+                    _vInteraction.y += 2.5;
                 }
 
-                const vector = projectPos.project(camera);
-                const screenX = (vector.x + 1) / 2 * 100;
-                const screenY = (1 - vector.y) / 2 * 100;
-                setInteractionScreenPos({ x: screenX, y: screenY });
+                const vector = _vInteraction.project(camera);
+                const screenX = Math.round((vector.x + 1) / 2 * 100);
+                const screenY = Math.round((1 - vector.y) / 2 * 100);
+
+                const lastPos = lastInteractionPosRef.current;
+                if (!lastPos || Math.abs(lastPos.x - screenX) > 0.5 || Math.abs(lastPos.y - screenY) > 0.5) {
+                    const newPos = { x: screenX, y: screenY };
+                    lastInteractionPosRef.current = newPos;
+                    setInteractionScreenPos(newPos);
+                }
             } else {
-                setInteractionScreenPos(null);
+                if (lastInteractionPosRef.current !== null) {
+                    lastInteractionPosRef.current = null;
+                    setInteractionScreenPos(null);
+                }
             }
 
-            const gameContext = {
-                scene, enemies: state.enemies, obstacles: state.obstacles, collisionGrid: state.collisionGrid, spawnPart, spawnDecal, spawnFloatingText,
-                explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, { spawnPart, spawnDecal }),
-                addScore: (amt: number) => gainXp(amt),
-                trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
-                    if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; gainXp(Math.ceil(amt)); }
-                    if (type === 'hit') state.shotsHit += amt;
-                },
-                now
-            };
+            if (!gameContextRef.current) {
+                gameContextRef.current = {
+                    scene, enemies: state.enemies, obstacles: state.obstacles, collisionGrid: state.collisionGrid,
+                    spawnPart, spawnDecal, spawnFloatingText,
+                    explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, _fxCallbacks),
+                    addScore: (amt: number) => _gainXpInternal(amt),
+                    trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
+                        const s = stateRef.current;
+                        if (type === 'damage') { s.damageDealt += amt; if (isBoss) s.bossDamageDealt += amt; _gainXpInternal(Math.ceil(amt)); }
+                        if (type === 'hit') s.shotsHit += amt;
+                    },
+                    addFireZone: (z: any) => stateRef.current.fireZones.push(z),
+                    now: now
+                };
+            } else {
+                const ctx = gameContextRef.current;
+                ctx.now = now; ctx.enemies = state.enemies; ctx.obstacles = state.obstacles; ctx.collisionGrid = state.collisionGrid;
+            }
 
-            // Noise System (Player)
             if (state.isMoving && playerGroupRef.current) {
                 const noiseRadius = (state.isRushing || state.isRolling) ? 20 : 15;
-
-                // makeNoise hanterar kopiering av position internt via poolen (Zero-GC)
                 session.makeNoise(playerGroupRef.current.position, noiseRadius, 'footstep');
             }
 
-            ProjectileSystem.update(delta, now, gameContext, state.projectiles, state.fireZones);
+            ProjectileSystem.update(delta, now, gameContextRef.current, state.projectiles, state.fireZones);
 
-            // EnemyManager.update moved to EnemySystem
-            // TriggerHandler moved to TriggerSystem (Future) or kept here if needed
             TriggerHandler.checkTriggers(playerGroupRef.current.position, state, now, {
                 spawnBubble,
                 removeVisual: (id: string) => {
                     const visual = scene.getObjectByName(`clue_visual_${id}`) || scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual');
                     if (visual) scene.remove(visual);
                 },
-                onClueFound: (clue) => {
-                    // Only narrative clues here
-                    if (clue.id) {
-                        propsRef.current.onClueFound(clue);
-                    }
-                },
+                onClueFound: (clue) => { if (clue.id) propsRef.current.onClueFound(clue); },
                 onTrigger: (type: string, duration: number) => {
                     if (type === 'THOUGHTS') state.thinkingUntil = now + duration;
                     else if (type === 'SPEECH') state.speakingUntil = now + duration;
@@ -1782,41 +1476,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             for (let i = activeBubbles.current.length - 1; i >= 0; i--) {
                 const b = activeBubbles.current[i];
                 const age = now - b.startTime;
-                if (age > b.duration) { if (b.element.parentNode) b.element.parentNode.removeChild(b.element); activeBubbles.current.splice(i, 1); continue; }
+                if (age > b.duration) {
+                    if (b.element.parentNode) b.element.parentNode.removeChild(b.element);
+                    activeBubbles.current[i] = activeBubbles.current[activeBubbles.current.length - 1];
+                    activeBubbles.current.pop();
+                    continue;
+                }
 
-                // Stack Logic: Oldest on Top
-                // i=0 is oldest. i=length-1 is newest.
-                // We want oldest at the top of the stack.
-                // Base Y is the bottom-most position for the NEWEST bubble.
-                // If we iterate 0..N, 0 should be highest.
-
-                const stackIndex = (activeBubbles.current.length - 1) - i; // 0 for newest, increasing for older
-                // Wait, user said "Oldest (first message) on top". 
-                // So the queue grows DOWNWARDS? Or it grows UPWARDS?
-                // Standard chat: Newest at bottom. Oldest scrolls up.
-                // Let's position Newest at Base Y. Oldest at Base Y - (Index * Height).
-
+                const stackIndex = (activeBubbles.current.length - 1) - i;
                 const baseX = window.innerWidth * 0.5;
                 const baseY = window.innerHeight * 0.45;
-                const bubbleHeight = 45; // Approx height + gap
-
+                const bubbleHeight = 45;
                 const x = baseX;
                 const y = baseY - (stackIndex * bubbleHeight);
 
                 b.element.style.left = `${x}px`;
                 b.element.style.top = `${y}px`;
 
-                // Animation
-                // Fade In (0-200ms) | Sustain | Fade Out (End)
                 let opacity = '1';
                 if (age < 200) opacity = `${age / 200}`;
                 else if (age > b.duration - 500) opacity = `${(b.duration - age) / 500}`;
 
-                // Update tail position for active dialogue bubbles if they belong to a family member
-                // (Logic could be added here if needed to sync bubbles to world positions)
-
-                // Slide In Effect for Newest
-                let transform = `translate(-50%, -100%)`; // Centered and above the point
+                let transform = `translate(-50%, -100%)`;
                 if (age < 200) {
                     const slide = (1 - (age / 200)) * 20;
                     transform += ` translateY(${slide}px)`;
@@ -1824,58 +1505,40 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 b.element.style.transform = transform;
                 b.element.style.opacity = opacity;
-                b.element.style.zIndex = `${1000 - stackIndex}`; // Newest on top if overlapping? No, preventing overlap.
-                b.element.style.transition = 'top 0.3s ease-out'; // Smooth sorting
+                b.element.style.zIndex = `${1000 - stackIndex}`;
+                b.element.style.transition = 'top 0.3s ease-out';
             }
 
             EnvironmentSystem.update(flickeringLights);
 
-            // --- ACTIVE EFFECTS (ASSET DRIVEN) ---
             if (state.activeEffects) {
-                state.activeEffects.forEach((obj: any) => {
-                    if (!obj.userData.effects) return;
+                for (let i = 0; i < state.activeEffects.length; i++) {
+                    const obj = state.activeEffects[i];
+                    if (!obj.userData.effects) continue;
                     const effects = obj.userData.effects;
-
-                    effects.forEach((eff: any) => {
+                    for (let j = 0; j < effects.length; j++) {
+                        const eff = effects[j];
                         if (eff.type === 'emitter') {
                             if (!eff.lastEmit) eff.lastEmit = 0;
                             if (now - eff.lastEmit > eff.interval) {
                                 eff.lastEmit = now;
-
-                                const pos = new THREE.Vector3();
                                 if (eff.offset) {
-                                    pos.copy(eff.offset);
-                                    obj.localToWorld(pos);
+                                    _vInteraction.copy(eff.offset);
+                                    obj.localToWorld(_vInteraction);
                                 } else {
-                                    obj.getWorldPosition(pos);
+                                    obj.getWorldPosition(_vInteraction);
                                 }
 
                                 if (eff.spread) {
-                                    pos.x += (Math.random() - 0.5) * eff.spread;
-                                    pos.z += (Math.random() - 0.5) * eff.spread;
+                                    _vInteraction.x += (Math.random() - 0.5) * eff.spread;
+                                    _vInteraction.z += (Math.random() - 0.5) * eff.spread;
                                 }
 
-                                spawnPart(pos.x, pos.y, pos.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
+                                spawnPart(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, eff.count || 1, undefined, undefined, eff.color);
                             }
                         }
-                    });
-                });
-            }
-
-            // --- BURNING OBJECTS FX (LEGACY) ---
-            burningObjects.forEach(b => {
-                if (frame % 3 === 0) {
-                    const rx = (Math.random() - 0.5) * 3;
-                    const rz = (Math.random() - 0.5) * 2;
-                    spawnPart(b.position.x + rx, b.position.y, b.position.z + rz, 'flame', 1, undefined, undefined, 0xff7700);
+                    }
                 }
-                if (frame % 8 === 0) {
-                    spawnPart(b.position.x + (Math.random() - 0.5) * 2, b.position.y + 0.5, b.position.z + (Math.random() - 0.5) * 2, 'spark', 1);
-                }
-            });
-
-            if (playerGroupRef.current) {
-                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, { spawnPart, spawnDecal });
             }
         };
 
@@ -1885,26 +1548,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             window.removeEventListener('family-follow', onFamilyFollow);
             window.removeEventListener('family_follow', onFamilyFollow);
 
-            if (setupTimerRef.current) clearTimeout(setupTimerRef.current);
             if (bossIntroTimerRef.current) clearTimeout(bossIntroTimerRef.current);
 
-            // Stop loop and disable input, but DO NOT dispose the singleton engine
             engine.stop();
             engine.input.disable();
             engineRef.current = null;
 
-            // Aggressive scene scrub for players
-            scene.children.slice().forEach(child => {
+            for (let i = scene.children.length - 1; i >= 0; i--) {
+                const child = scene.children[i];
                 if (child.userData?.isPlayer || child.userData?.isLaserSight) {
                     scene.remove(child);
                 }
-            });
+            }
 
             if (playerGroupRef.current) {
                 scene.remove(playerGroupRef.current);
             }
 
-            // Reset sound parameters
             soundManager.setReverb(0);
             soundManager.stopRadioStatic();
 
@@ -1914,42 +1574,31 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         };
     }, [props.currentSector, props.startAtCheckpoint, textures]);
 
-    // Helper to get Boss Name or Killer Name
     const getKillerName = () => {
         if (stateRef.current.killerName) return stateRef.current.killerName.toUpperCase();
         if (!stateRef.current.killerType) return "UNKNOWN";
 
         const type = stateRef.current.killerType;
-
-        // 1. Boss Special Case
         if (type === 'Boss') {
             return t(BOSSES[props.currentSector]?.name || "ui.boss").toUpperCase();
         }
 
-        // 2. Standard Enemy Mapping (e.g. TANK_SMASH -> TANK -> "Tank")
         const baseType = type.split('_')[0];
         const key = `enemies.${baseType}.name`;
         const localized = t(key);
-
-        // If translation exists (doesn't return key), use it
-        if (localized && localized !== key) {
-            return localized.toUpperCase();
-        }
-
-        // 3. Fallback: Prettify the raw string (e.g. "EXPLOSION_DAMAGE" -> "EXPLOSION DAMAGE")
+        if (localized && localized !== key) return localized.toUpperCase();
         return type.replace(/_/g, ' ').toUpperCase();
     };
 
     return (
         <div className="absolute inset-0 w-full h-full">
-
             <div
                 ref={containerRef}
                 className={`absolute inset-0`}
-                onClick={() => {
+                onClick={(e) => {
                     if (cinematicActive && currentLine) {
-                        // Skip bubble
                         playCinematicLine(cinematicRef.current.lineIndex + 1);
+                        e.stopPropagation();
                         return;
                     }
                     if (props.isRunning && containerRef.current && deathPhase === 'NONE') {
@@ -1957,7 +1606,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }}
             />
-
 
             {props.isMobileDevice && props.isRunning && !props.isPaused && !cinematicActive && !bossIntroActive && engineRef.current && (
                 <TouchController
@@ -1968,6 +1616,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             )}
 
             <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
+
             <CinematicBubble
                 text={currentLine ? t(currentLine.text) : ""}
                 speakerName={currentLine ? currentLine.speaker : ""}
@@ -1976,50 +1625,57 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 tailPosition={cinematicRef.current.tailPosition}
                 isMobileDevice={props.isMobileDevice}
             />
-            {
-                cinematicActive && (
-                    <div className={`absolute ${props.isMobileDevice ? 'bottom-8' : 'bottom-40'} left-1/2 -translate-x-1/2 pointer-events-auto z-50`}>
-                        <button
-                            onClick={() => { soundManager.playUiClick(); endCinematic(); }}
-                            className="bg-black/80 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg]"
-                        >
-                            <span className="block skew-x-[10deg]">{t('ui.end_dialogue')}</span>
-                        </button>
-                    </div>
-                )
-            }
 
-            {
-                (deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE') && (
-                    <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} isMobileDevice={props.isMobileDevice} />
-                )
-            }
+            {cinematicActive && (
+                <div className={`absolute ${props.isMobileDevice ? 'bottom-8' : 'bottom-40'} left-1/2 -translate-x-1/2 pointer-events-auto z-50`}>
+                    <button
+                        onClick={(e) => { soundManager.playUiClick(); endCinematic(); e.stopPropagation(); }}
+                        className="bg-black/80 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg]"
+                    >
+                        <span className="block skew-x-[10deg]">{t('ui.end_dialogue')}</span>
+                    </button>
+                </div>
+            )}
 
-            {
-                !isSectorLoading && !bossIntroActive && !cinematicActive && !forceHideHUD && (
-                    <GameUI
-                        onCloseClue={() => { }}
-                        interactionType={interactionType}
-                        interactionScreenPos={interactionScreenPos}
-                        isMobileDevice={props.isMobileDevice}
-                        onInteract={() => {
-                            if (engineRef.current) {
-                                engineRef.current.input.state.e = true;
-                                setTimeout(() => {
-                                    if (engineRef.current) engineRef.current.input.state.e = false;
-                                }, 100);
-                            }
-                        }}
-                        dialogueOpen={false}
-                        dialogueLine={null}
-                        foundMemberName={foundMemberName}
-                        isLastLine={false}
-                        onNextDialogue={() => { }}
-                        onPrevDialogue={() => { }}
-                        onCloseDialogue={() => { }}
-                    />
-                )
-            }
+            {(deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE') && (
+                <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} isMobileDevice={props.isMobileDevice} />
+            )}
+
+            {!isSectorLoading && !bossIntroActive && !cinematicActive && !forceHideHUD && (
+                <GameUI
+                    onCloseClue={() => { }}
+                    interactionType={interactionType}
+                    interactionScreenPos={interactionScreenPos}
+                    isMobileDevice={props.isMobileDevice}
+                    onInteract={() => {
+                        if (engineRef.current) {
+                            engineRef.current.input.state.e = true;
+                            setTimeout(() => {
+                                if (engineRef.current) engineRef.current.input.state.e = false;
+                            }, 100);
+                        }
+                    }}
+                    dialogueOpen={false}
+                    dialogueLine={null}
+                    foundMemberName={foundMemberName}
+                    isLastLine={false}
+                    onNextDialogue={() => { }}
+                    onPrevDialogue={() => { }}
+                    onCloseDialogue={() => { }}
+                />
+            )}
+
+            {showDebugPanel && gameSessionRef.current && (
+                <DebugSystemPanel
+                    flags={gameSessionRef.current.debugSystemFlags}
+                    onToggle={(sys) => {
+                        if (gameSessionRef.current) {
+                            gameSessionRef.current.debugSystemFlags[sys] = !gameSessionRef.current.debugSystemFlags[sys];
+                        }
+                    }}
+                    onClose={() => setShowDebugPanel(false)}
+                />
+            )}
 
             <style>{`
             @keyframes slam {
@@ -2047,7 +1703,5 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         </div>
     );
 });
-
-
 
 export default GameSession;

@@ -111,8 +111,18 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps, debugInfo }) => {
             </div>
 
             <div className="mt-2 text-[10px] text-gray-600 text-center font-sans tracking-widest uppercase">
-                Winterdöd Engine v0.9
+                Vinterdöd Engine
             </div>
+
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
+                }}
+                className="w-full mt-2 bg-green-900/50 hover:bg-green-800 text-green-200 text-xs py-1 rounded border border-green-700/50"
+            >
+                TOGGLE SYSTEMS
+            </button>
         </div>
     );
 };

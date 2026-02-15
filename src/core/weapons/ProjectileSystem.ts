@@ -52,7 +52,13 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 
+// Dedicated scratchpads for Arc-Cannon continuous fire
+const _arcCannonHitList: Enemy[] = [];
+const _arcCannonHitIds = new Set<string>();
+
+// ZERO-GC Pools
 const PROJECTILE_POOL: Projectile[] = [];
+const FIREZONE_POOL: FireZone[] = [];
 
 // --- REGISTRIES ---
 
@@ -100,11 +106,28 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 0, pos.z, 'glass', 15);
             soundManager.playExplosion();
-            const fz: FireZone = { mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), radius, life: 6.0 };
+
+            // ZERO-GC: Pool FireZones
+            let fz: FireZone | null = null;
+            for (let i = 0; i < FIREZONE_POOL.length; i++) {
+                if (FIREZONE_POOL[i].life <= 0) {
+                    fz = FIREZONE_POOL[i];
+                    break;
+                }
+            }
+            if (!fz) {
+                fz = { mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), radius, life: 6.0 };
+                FIREZONE_POOL.push(fz);
+            }
+
+            fz.radius = radius;
+            fz.life = 6.0;
+            fz._lastDamageTime = 0;
             fz.mesh.rotation.x = -Math.PI / 2;
             fz.mesh.position.set(pos.x, 0.24, pos.z);
             fz.mesh.scale.setScalar(fz.radius / 3.5);
-            ctx.scene.add(fz.mesh);
+
+            if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
             ctx.addFireZone(fz);
 
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
@@ -133,16 +156,29 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 // --- SYSTEM ---
 
 export const ProjectileSystem = {
-    _getProjectile: (type: 'bullet' | 'throwable', weapon: string, mesh: THREE.Mesh): Projectile => {
+    // ZERO-GC: Reuses both the data object AND the underlying THREE.Mesh
+    _getProjectile: (): Projectile => {
         for (let i = 0; i < PROJECTILE_POOL.length; i++) {
             const p = PROJECTILE_POOL[i];
             if (!p.active) {
-                p.type = type; p.weapon = weapon; p.mesh = mesh;
-                p.hitEntities.clear(); p.active = true;
+                p.hitEntities.clear();
+                p.active = true;
                 return p;
             }
         }
-        const p: Projectile = { mesh, type, weapon, vel: new THREE.Vector3(), origin: new THREE.Vector3(), damage: 0, life: 0, hitEntities: new Set(), active: true };
+
+        // Pre-allocate new projectile if pool is empty
+        const p: Projectile = {
+            mesh: new THREE.Mesh(),
+            type: 'bullet',
+            weapon: '',
+            vel: new THREE.Vector3(),
+            origin: new THREE.Vector3(),
+            damage: 0,
+            life: 0,
+            hitEntities: new Set(),
+            active: true
+        };
         PROJECTILE_POOL.push(p);
         return p;
     },
@@ -151,18 +187,34 @@ export const ProjectileSystem = {
         const data = WEAPONS[weapon];
         if (!data) return;
 
-        const mesh = new THREE.Mesh(GEOMETRY.bullet, MATERIALS.bullet);
-        mesh.position.copy(origin);
+        const p = ProjectileSystem._getProjectile();
+        p.type = 'bullet';
+        p.weapon = weapon;
 
-        _v2.copy(origin).add(dir);
-        _v2.x += (Math.random() - 0.5) * data.spread;
-        _v2.z += (Math.random() - 0.5) * data.spread;
-        mesh.lookAt(_v2);
-        mesh.rotateX(Math.PI / 2);
-        scene.add(mesh);
+        // Configure pooled mesh
+        p.mesh.geometry = GEOMETRY.bullet;
+        p.mesh.material = MATERIALS.bullet;
+        p.mesh.position.copy(origin);
 
-        const p = ProjectileSystem._getProjectile('bullet', weapon, mesh);
-        p.vel.copy(dir).multiplyScalar(data.bulletSpeed || 70);
+        // FIXED: Apply spread in World Space to the actual physics vector first!
+        _v1.copy(dir);
+        if (data.spread && data.spread > 0) {
+            _v1.x += (Math.random() - 0.5) * data.spread;
+            _v1.z += (Math.random() - 0.5) * data.spread;
+            _v1.normalize();
+        }
+
+        // Align mesh to physics vector
+        _v2.copy(origin).add(_v1);
+        p.mesh.lookAt(_v2);
+        p.mesh.rotateX(Math.PI / 2); // Bullet mesh orientation fix
+
+        if (p.mesh.parent !== scene) scene.add(p.mesh);
+
+        // Cleanup marker if object was previously a throwable
+        if (p.marker && p.marker.parent === scene) scene.remove(p.marker);
+
+        p.vel.copy(_v1).multiplyScalar(data.bulletSpeed || 70);
         p.origin.copy(origin);
         p.damage = data.damage;
         p.life = 1.5;
@@ -173,13 +225,19 @@ export const ProjectileSystem = {
         const data = WEAPONS[weapon];
         if (!data) return;
 
-        const throwDist = 5 + charge * 30;
-        const mesh = new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade);
-        if (weapon === WeaponType.MOLOTOV) mesh.material = MATERIALS.molotov;
-        mesh.position.copy(origin);
-        scene.add(mesh);
+        const p = ProjectileSystem._getProjectile();
+        p.type = 'throwable';
+        p.weapon = weapon;
 
-        const p = ProjectileSystem._getProjectile('throwable', weapon, mesh);
+        // Configure pooled mesh
+        p.mesh.geometry = GEOMETRY.grenade;
+        p.mesh.material = weapon === WeaponType.MOLOTOV ? MATERIALS.molotov : MATERIALS.grenade;
+        p.mesh.position.copy(origin);
+        p.mesh.rotation.set(0, 0, 0); // Reset rotation for arc spinning
+
+        if (p.mesh.parent !== scene) scene.add(p.mesh);
+
+        const throwDist = 5 + charge * 30;
         const time = 1.0;
         p.vel.set((dir.x * throwDist) / time, (0 - origin.y + 0.5 * 30 * time * time) / time, (dir.z * throwDist) / time);
         p.origin.copy(origin);
@@ -187,16 +245,20 @@ export const ProjectileSystem = {
         p.life = time + 0.5;
         p.maxRadius = data.range;
 
-        const marker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
+        // Pool Marker mesh
+        if (!p.marker) {
+            p.marker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
+            p.marker.rotation.x = -Math.PI / 2;
+        }
+
         _v3.copy(dir).normalize().multiplyScalar(throwDist);
-        marker.position.copy(origin).add(_v3).setY(0.1);
-        marker.rotation.x = -Math.PI / 2;
-        marker.scale.setScalar(data.range);
-        scene.add(marker);
-        p.marker = marker;
+        p.marker.position.copy(origin).add(_v3).setY(0.1);
+        p.marker.scale.setScalar(data.range);
+
+        if (p.marker.parent !== scene) scene.add(p.marker);
+
         projectiles.push(p);
     },
-
 
     // --- CONTINUOUS WEAPON HANDLING ---
 
@@ -206,14 +268,12 @@ export const ProjectileSystem = {
 
         // FLAMETHROWER
         if (weapon === WeaponType.FLAMETHROWER) {
-            // Visuals
             const count = Math.ceil(delta * 0.06);
             for (let i = 0; i < count; i++) {
                 _v1.copy(origin).addScaledVector(direction, 0.5);
                 FXSystem.spawnFlame(_v1, direction);
             }
 
-            // Logic: Cone
             const coneAngle = Math.cos(25 * Math.PI / 180);
             const range = data.range;
 
@@ -231,18 +291,23 @@ export const ProjectileSystem = {
                 if (dot > coneAngle) {
                     e.isBurning = true;
                     e.lastDamageType = WeaponType.FLAMETHROWER;
+                    e.burnTimer = 0.5;
+                    e.afterburnTimer = 5.0;
 
                     const chance = delta / data.fireRate;
                     if (Math.random() < chance) {
                         e.hp -= data.damage;
                         ctx.trackStats('damage', data.damage, !!e.isBoss);
+                        if (ctx.spawnFloatingText) {
+                            ctx.spawnFloatingText(e.mesh.position.x, 2.0 + Math.random(), e.mesh.position.z, Math.round(data.damage).toString(), '#ffaa00');
+                        }
                     }
                 }
             }
         }
 
-        // TESLA CANNON
-        else if (weapon === WeaponType.TESLA_CANNON) {
+        // ARC-CANNON
+        else if (weapon === WeaponType.ARC_CANNON) {
             const range = data.range;
             const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
             let target = null;
@@ -269,18 +334,21 @@ export const ProjectileSystem = {
                 const chainMax = 5;
                 const chainRange = 8.0;
 
-                const hitList: Enemy[] = [target];
-                const hitIds = new Set<string>();
-                hitIds.add(target.id);
+                // ZERO-GC: Clear and reuse global scratchpad arrays/sets
+                _arcCannonHitList.length = 0;
+                _arcCannonHitIds.clear();
+
+                _arcCannonHitList.push(target);
+                _arcCannonHitIds.add(target.id);
 
                 let curr = target;
-                while (hitList.length < chainMax) {
+                while (_arcCannonHitList.length < chainMax) {
                     const potential = ctx.collisionGrid.getNearbyEnemies(curr.mesh.position, chainRange);
                     let next = null;
                     let nextDist = Infinity;
 
                     for (const p of potential) {
-                        if (p.deathState !== 'alive' || hitIds.has(p.id)) continue;
+                        if (p.deathState !== 'alive' || _arcCannonHitIds.has(p.id)) continue;
                         const d = p.mesh.position.distanceToSquared(curr.mesh.position);
                         if (d < nextDist) {
                             nextDist = d;
@@ -289,112 +357,131 @@ export const ProjectileSystem = {
                     }
 
                     if (next) {
-                        hitList.push(next);
-                        hitIds.add(next.id);
+                        _arcCannonHitList.push(next);
+                        _arcCannonHitIds.add(next.id);
                         curr = next;
                     } else {
                         break;
                     }
                 }
 
-                const finalDamage = damage / hitList.length;
-                const stunDur = (data.statusEffect?.duration || 2.5) / hitList.length;
+                const finalDamage = damage / _arcCannonHitList.length;
+                const stunDur = (data.statusEffect?.duration || 2.5) / _arcCannonHitList.length;
 
-                let prevPos = origin;
-                hitList.forEach((e) => {
-                    FXSystem.spawnLightning(prevPos, e.mesh.position.clone().add(new THREE.Vector3(0, 1, 0)));
+                _v3.copy(origin);
+
+                for (let i = 0; i < _arcCannonHitList.length; i++) {
+                    const e = _arcCannonHitList[i];
+                    _v1.copy(e.mesh.position).y += 1.0;
+
+                    FXSystem.spawnLightning(_v3, _v1);
 
                     e.hp -= finalDamage;
-                    e.lastDamageType = WeaponType.TESLA_CANNON;
+                    e.lastDamageType = WeaponType.ARC_CANNON;
                     e.stunTimer = stunDur;
                     ctx.trackStats('damage', finalDamage, !!e.isBoss);
 
-                    prevPos = e.mesh.position.clone().add(new THREE.Vector3(0, 1, 0));
+                    _v3.copy(_v1);
 
                     ctx.spawnFloatingText(e.mesh.position.x, 2.5, e.mesh.position.z, Math.round(finalDamage).toString(), '#00ffff');
-                });
+                }
 
-                soundManager.playTeslaZap();
+                soundManager.playArcCannonZap();
             } else {
-                const end = origin.clone().add(direction.multiplyScalar(range));
-                FXSystem.spawnLightning(origin, end);
-                soundManager.playTeslaZap();
+                _v1.copy(origin).addScaledVector(direction, range);
+                FXSystem.spawnLightning(origin, _v1);
+                soundManager.playArcCannonZap();
             }
         }
     },
 
-    update: (delta: number, now: number, ctx: Omit<GameContext, 'addFireZone'>, projectiles: Projectile[], fireZones: FireZone[]) => {
-        const fullCtx: GameContext = { ...ctx, addFireZone: (z) => fireZones.push(z), now: now };
+    update: (delta: number, now: number, ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[]) => {
+        ctx.now = now;
+
+        // ZERO-GC: Ensure function is only allocated once if missing, avoiding frame-by-frame allocation
+        if (!ctx.addFireZone) {
+            ctx.addFireZone = (z: FireZone) => fireZones.push(z);
+        }
+
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
-            if (p.type === 'bullet') updateBullet(p, i, delta, fullCtx, projectiles);
-            else updateThrowable(p, i, delta, fullCtx, now, projectiles);
+            if (p.type === 'bullet') updateBullet(p, i, delta, ctx, projectiles);
+            else updateThrowable(p, i, delta, ctx, now, projectiles);
         }
-        // FireZone logic remains logically identical...
+
         for (let i = fireZones.length - 1; i >= 0; i--) {
-            const fz = fireZones[i]; fz.life -= delta;
+            const fz = fireZones[i];
+            fz.life -= delta;
+
             if (!fz._lastDamageTime || now - fz._lastDamageTime > 500) {
                 fz._lastDamageTime = now;
-                const nearby = fullCtx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
+                const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
                 for (const e of nearby) {
                     if (e.deathState !== 'alive') continue;
                     e.lastDamageType = WeaponType.MOLOTOV;
                     e.hp -= 15; e.isBurning = true; e.afterburnTimer = 5.0; e.burnTimer = 0.5;
-                    fullCtx.trackStats('damage', 15, !!e.isBoss);
+                    ctx.trackStats('damage', 15, !!e.isBoss);
                 }
             }
-            // Dense Fire Visuals
+
             const flameCount = 4;
             for (let j = 0; j < flameCount; j++) {
                 const r = Math.sqrt(Math.random()) * fz.radius;
                 const theta = Math.random() * Math.PI * 2;
-                fullCtx.spawnPart(fz.mesh.position.x + r * Math.cos(theta), 0.2, fz.mesh.position.z + r * Math.sin(theta), 'flame', 1);
+                ctx.spawnPart(fz.mesh.position.x + r * Math.cos(theta), 0.2, fz.mesh.position.z + r * Math.sin(theta), 'flame', 1);
             }
-            if (fz.life <= 0) { fullCtx.scene.remove(fz.mesh); fireZones.splice(i, 1); }
+
+            if (fz.life <= 0) {
+                ctx.scene.remove(fz.mesh);
+                // ZERO-GC: Swap-and-Pop instead of .splice
+                fireZones[i] = fireZones[fireZones.length - 1];
+                fireZones.pop();
+            }
         }
     },
 
     clear: (scene: THREE.Scene, projectiles: Projectile[], fireZones: FireZone[]) => {
         for (const p of projectiles) {
-            scene.remove(p.mesh); if (p.marker) scene.remove(p.marker); p.active = false;
+            if (p.mesh.parent) scene.remove(p.mesh);
+            if (p.marker && p.marker.parent) scene.remove(p.marker);
+            p.active = false;
         }
-        for (const f of fireZones) scene.remove(f.mesh);
+        for (const f of fireZones) {
+            if (f.mesh.parent) scene.remove(f.mesh);
+            f.life = 0; // Mark for reuse
+        }
         projectiles.length = 0; fireZones.length = 0;
     }
 };
 
 // --- INTERNAL HELPERS ---
 function updateBullet(p: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
-    // 1. SPARA POSITIONER FÖR BANA (XZ-PROJEKTION)
-    _v3.set(p.mesh.position.x, 0, p.mesh.position.z); // Start XZ
+    _v3.set(p.mesh.position.x, 0, p.mesh.position.z);
     p.mesh.position.addScaledVector(p.vel, delta);
-    _v4.set(p.mesh.position.x, 0, p.mesh.position.z); // Slut XZ
+    _v4.set(p.mesh.position.x, 0, p.mesh.position.z);
     p.life -= delta;
 
     let destroyBullet = false;
     const data = WEAPONS[p.weapon];
     if (!data) return;
 
-    // A. Miljökollision (Hinder)
     const nearbyObs = ctx.collisionGrid.getNearbyObstacles(p.mesh.position, 2.0);
     for (const obs of nearbyObs) {
-        if (p.mesh.position.distanceToSquared(obs.mesh.position) < (obs.radius || 2) ** 2) {
+        const obsPos = obs.position;
+        if (p.mesh.position.distanceToSquared(obsPos) < (obs.radius || 2) ** 2) {
             destroyBullet = true;
             ctx.spawnPart(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, 'smoke', 3);
-            soundManager.playImpact(obs.mesh.userData?.material || 'concrete');
+            soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
             break;
         }
     }
 
-    // B. Fiende-kollision (Garanterad träff i Top-Down)
     if (!destroyBullet) {
-        // Beräkna mittpunkten på rörelsen för att söka i gridden
         _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
         const bulletTravelDist = p.vel.length() * delta;
-        const searchRad = 5.0 + bulletTravelDist; // Extra stor sökradie pga låg FPS
+        const searchRad = 5.0 + bulletTravelDist;
         const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, searchRad);
 
-        // Sortera så vi träffar den närmaste fienden först längs kulans bana
         if (nearbyEnemies.length > 1) {
             nearbyEnemies.sort((a, b) => _v3.distanceToSquared(a.mesh.position) - _v3.distanceToSquared(b.mesh.position));
         }
@@ -402,30 +489,24 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
         for (const e of nearbyEnemies) {
             if (e.deathState !== 'alive' || p.hitEntities.has(e.id)) continue;
 
-            // --- AVANCERAD XZ-LINJE-KOLLISION ---
-            // Vi projicerar zombien som en cirkel på marken
             const enemyXZ = _v1.set(e.mesh.position.x, 0, e.mesh.position.z);
-            const lineVec = _v2.subVectors(_v4, _v3); // Kulans väg denna frame
+            const lineVec = _v2.subVectors(_v4, _v3);
             const startToEnemy = _v5.subVectors(enemyXZ, _v3);
 
             const lineLenSq = lineVec.lengthSq();
             let t = lineLenSq > 0 ? Math.max(0, Math.min(1, startToEnemy.dot(lineVec) / lineLenSq)) : 0;
 
-            // Närmaste punkten på kulans bana till zombiens mittpunkt (allt i 2D/XZ)
             const closestPointXZ = _v2.copy(_v3).addScaledVector(lineVec, t);
             const distSq = closestPointXZ.distanceToSquared(enemyXZ);
 
-            // HITBOX: Vi använder en fast radie på 1.2 enheter för Walkers/Runners.
-            // Detta kompenserar för Muzzle Offset (30cm) och ger en skön arkad-känsla.
             const hitRad = 1.2 * (e.widthScale || 1.0) * (e.originalScale || 1.0);
 
             if (distSq < hitRad * hitRad) {
-                // TRÄFF REGISTRERAD!
                 let isHighImpact = false;
                 if (p.weapon === WeaponType.SHOTGUN) {
-                    if (closestPointXZ.distanceTo(p.origin) < 8.0) isHighImpact = true;
+                    if (closestPointXZ.distanceToSquared(p.origin) < 144.0) isHighImpact = true;
                 } else if (p.weapon === WeaponType.REVOLVER) {
-                    if (p.damage >= data.baseDamage * 0.75) isHighImpact = true;
+                    if (p.damage >= data.baseDamage * 0.5) isHighImpact = true;
                 }
 
                 e.lastHitWasHighImpact = isHighImpact;
@@ -436,7 +517,6 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                 e.slowTimer = 0.5;
                 p.hitEntities.add(e.id);
 
-                // Knockback (Mass-baserad)
                 const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
                 const force = (p.damage / 3) / Math.max(0.3, mass);
                 _v1.copy(p.vel).setY(0).normalize().multiplyScalar(force);
@@ -449,7 +529,6 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
                 ctx.trackStats('hit', 1);
                 ctx.trackStats('damage', actualDmg, !!e.isBoss);
 
-                // Visuellt blod (använd kulans höjd för partiklarna)
                 ctx.spawnPart(closestPointXZ.x, p.mesh.position.y, closestPointXZ.z, 'blood', 40);
                 soundManager.playImpact('flesh');
 
@@ -467,7 +546,10 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
     if (destroyBullet || p.life <= 0) {
         ctx.scene.remove(p.mesh);
         p.active = false;
-        projectiles.splice(index, 1);
+
+        // ZERO-GC: Swap-and-Pop
+        projectiles[index] = projectiles[projectiles.length - 1];
+        projectiles.pop();
     }
 }
 
@@ -482,6 +564,12 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
         _v1.copy(p.mesh.position).setY(0);
         const behavior = THROWABLE_BEHAVIORS[p.weapon];
         if (behavior) behavior.onImpact(_v1, p.maxRadius || 10, ctx, p.damage);
-        p.active = false; projectiles.splice(index, 1);
-    } else p.life -= delta;
+        p.active = false;
+
+        // ZERO-GC: Swap-and-Pop
+        projectiles[index] = projectiles[projectiles.length - 1];
+        projectiles.pop();
+    } else {
+        p.life -= delta;
+    }
 }

@@ -9,7 +9,24 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
 const _slotArray: WeaponType[] = [];
+
+// Reusable context object to prevent GC allocation during continuous fire
+const _continuousCtx: any = {
+    scene: null,
+    enemies: null,
+    collisionGrid: null,
+    spawnPart: null,
+    spawnFloatingText: null,
+    spawnDecal: null,
+    explodeEnemy: null,
+    trackStats: null,
+    addScore: null,
+    addFireZone: null,
+    now: 0,
+    noiseEvents: null
+};
 
 export const WeaponHandler = {
     // Handle switching weapons via 1-4 keys
@@ -126,7 +143,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false) => {
+    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false, cameraAngle: number = 0, camera: THREE.Camera | null = null) => {
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];
@@ -139,7 +156,7 @@ export const WeaponHandler = {
             return;
         }
 
-        // --- 1. CONTINUOUS FIRE (Flamethrower / Tesla) ---
+        // --- 1. CONTINUOUS FIRE (Flamethrower / Arc-Cannon) ---
         if (wep.behavior === WeaponBehavior.CONTINUOUS) {
             if (aimCrossMesh) aimCrossMesh.visible = false;
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
@@ -164,24 +181,22 @@ export const WeaponHandler = {
                         soundManager.playFlamethrowerStart();
                     }
 
-                    // Construct Context (Mapping GameState to GameContext)
-                    const ctx = {
-                        scene: scene,
-                        enemies: state.enemies || [],
-                        collisionGrid: state.collisionGrid,
-                        spawnPart: state.callbacks.spawnPart,
-                        spawnFloatingText: state.callbacks.spawnFloatingText || ((x: number, y: number, z: number, t: string, c?: string) => { }),
-                        spawnDecal: state.callbacks.spawnDecal,
-                        explodeEnemy: state.callbacks.explodeEnemy,
-                        trackStats: state.callbacks.trackStats,
-                        addScore: state.callbacks.addScore,
-                        addFireZone: state.callbacks.addFireZone,
-                        now: now,
-                        noiseEvents: state.noiseEvents
-                    } as any;
+                    // ZERO-GC: Update pre-allocated context instead of creating a new object literal
+                    _continuousCtx.scene = scene;
+                    _continuousCtx.enemies = state.enemies || [];
+                    _continuousCtx.collisionGrid = state.collisionGrid;
+                    _continuousCtx.spawnPart = state.callbacks.spawnPart;
+                    _continuousCtx.spawnFloatingText = state.callbacks.spawnFloatingText || ((x: number, y: number, z: number, t: string, c?: string) => { });
+                    _continuousCtx.spawnDecal = state.callbacks.spawnDecal;
+                    _continuousCtx.explodeEnemy = state.callbacks.explodeEnemy;
+                    _continuousCtx.trackStats = state.callbacks.trackStats;
+                    _continuousCtx.addScore = state.callbacks.addScore;
+                    _continuousCtx.addFireZone = state.callbacks.addFireZone;
+                    _continuousCtx.now = now;
+                    _continuousCtx.noiseEvents = state.noiseEvents;
 
                     // Hand off to ProjectileSystem
-                    ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, ctx);
+                    ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, _continuousCtx);
 
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
@@ -211,13 +226,29 @@ export const WeaponHandler = {
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
                     _v2.copy(playerGroup.position).add(_v1);
 
-                    if (state.noiseEvents) state.noiseEvents.push({ pos: _v2.clone(), radius: 60, time: now, active: true });
+                    // ZERO-GC: Route noise through callback to utilize GameSessionLogic noisePool
+                    if (state.callbacks && state.callbacks.makeNoise) {
+                        state.callbacks.makeNoise(_v2, 60, 'gunshot');
+                    }
 
                     soundManager.playShot(wep.name);
 
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
+                    const spread = wep.name === WeaponType.SHOTGUN ? 0.15 : 0;
+
                     for (let i = 0; i < pellets; i++) {
-                        _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                        _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
+
+                        // Apply spread if it's a shotgun
+                        if (spread > 0) {
+                            _v3.x += (Math.random() - 0.5) * spread;
+                            _v3.y += (Math.random() - 0.5) * spread;
+                            _v3.z += (Math.random() - 0.5) * spread;
+                            _v3.normalize();
+                        } else {
+                            _v3.normalize();
+                        }
+
                         ProjectileSystem.spawnBullet(scene, state.projectiles, _v2, _v3, wep.name);
                     }
                 } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + 250) {
@@ -238,9 +269,13 @@ export const WeaponHandler = {
                     if (state.throwChargeStart === 0) state.throwChargeStart = now;
                     const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
 
+                    // ONE SOURCE OF TRUTH: Always aim exactly where the player model is facing.
+                    // This relies on the MovementSystem properly rotating the player towards the aim vector.
                     _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+
                     const dist = Math.max(2, ratio * 25);
 
+                    // Update UI Crosshair
                     if (aimCrossMesh) {
                         aimCrossMesh.visible = true;
                         _v2.copy(_v1).multiplyScalar(dist);
@@ -249,6 +284,7 @@ export const WeaponHandler = {
                         aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
                     }
 
+                    // Update Trajectory Line
                     if (trajectoryLineMesh) {
                         trajectoryLineMesh.visible = true;
                         const g = 30, tMax = 1.0, startY = playerGroup.position.y + 1.5;
@@ -256,39 +292,30 @@ export const WeaponHandler = {
                         const vy = (0 - startY + 0.5 * g * tMax * tMax) / tMax;
 
                         const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
-                        const width = 0.15; // Half-width
-                        const up = new THREE.Vector3(0, 1, 0);
-                        const forward = new THREE.Vector3();
-                        const right = new THREE.Vector3();
-                        const pCurrent = new THREE.Vector3();
-                        const pNext = new THREE.Vector3();
+                        const width = 0.15;
 
                         for (let i = 0; i <= 20; i++) {
                             const t = (i / 20) * tMax;
-                            pCurrent.set(
+                            _v4.set(
                                 playerGroup.position.x + vx * t,
                                 Math.max(0.1, startY + vy * t - 0.5 * g * t * t),
                                 playerGroup.position.z + vz * t
                             );
 
-                            // Calculate direction for ribbon expansion
                             if (i < 20) {
                                 const tNext = ((i + 1) / 20) * tMax;
-                                pNext.set(
+                                _v5.set(
                                     playerGroup.position.x + vx * tNext,
                                     Math.max(0.1, startY + vy * tNext - 0.5 * g * tNext * tNext),
                                     playerGroup.position.z + vz * tNext
                                 );
-                                forward.subVectors(pNext, pCurrent).normalize();
+                                _v3.subVectors(_v5, _v4).normalize(); // Reuse _v3 for forward dir
                             }
-                            // Last point uses previous forward
 
-                            right.crossVectors(forward, up).normalize().multiplyScalar(width);
+                            _v2.crossVectors(_v3, _UP).normalize().multiplyScalar(width);
 
-                            // Set two vertices for this point (Triangle Strip)
-                            // 2 * i and 2 * i + 1
-                            posAttr.setXYZ(2 * i, pCurrent.x - right.x, pCurrent.y, pCurrent.z - right.z);
-                            posAttr.setXYZ(2 * i + 1, pCurrent.x + right.x, pCurrent.y, pCurrent.z + right.z);
+                            posAttr.setXYZ(2 * i, _v4.x - _v2.x, _v4.y, _v4.z - _v2.z);
+                            posAttr.setXYZ(2 * i + 1, _v4.x + _v2.x, _v4.y, _v4.z + _v2.z);
                         }
                         posAttr.needsUpdate = true;
                         (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
@@ -299,8 +326,10 @@ export const WeaponHandler = {
                 if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
                 state.throwablesThrown++;
 
+                // FIRE! Use the exact same direction logic as aiming.
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                _v2.copy(playerGroup.position).add(_v3.set(0, 1.5, 0));
+
+                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Use _v4 to avoid overwriting _v1
 
                 ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v1, state.activeWeapon, ratio);
 

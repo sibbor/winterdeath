@@ -23,7 +23,6 @@ export interface InputState {
     locked: boolean;
 }
 
-// Map for quick keyboard status updates
 const KEY_MAP: Record<string, keyof InputState> = {
     'w': 'w', 'a': 'a', 's': 's', 'd': 'd',
     ' ': 'space', 'r': 'r', 'e': 'e',
@@ -35,7 +34,10 @@ export class InputManager {
     private isEnabled: boolean = false;
     private virtualAimPos: THREE.Vector2 = new THREE.Vector2(0, -200);
 
-    // Callbacks for discrete actions
+    // Cached window dimensions to prevent layout thrashing on mousemove
+    private screenWidth: number = window.innerWidth;
+    private screenHeight: number = window.innerHeight;
+
     public onKeyDown?: (key: string) => void;
     public onKeyUp?: (key: string) => void;
 
@@ -47,7 +49,7 @@ export class InputManager {
             scrollUp: false, scrollDown: false,
             mouse: new THREE.Vector2(),
             aimVector: new THREE.Vector2(1, 0),
-            cursorPos: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+            cursorPos: { x: this.screenWidth / 2, y: this.screenHeight / 2 },
             joystickMove: new THREE.Vector2(0, 0),
             joystickAim: new THREE.Vector2(0, 0),
             locked: false
@@ -66,12 +68,14 @@ export class InputManager {
     }
 
     private resetState() {
-        // Full reset of all boolean states to prevent "stuck" keys on disable
         const keys: (keyof InputState)[] = ['w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', '1', '2', '3', '4'];
-        keys.forEach(k => (this.state[k] as boolean) = false);
-
+        for (let i = 0; i < keys.length; i++) {
+            (this.state[keys[i]] as boolean) = false;
+        }
         this.state.joystickMove.set(0, 0);
         this.state.joystickAim.set(0, 0);
+        this.state.scrollUp = false;
+        this.state.scrollDown = false;
     }
 
     private bindEvents() {
@@ -81,6 +85,7 @@ export class InputManager {
         window.addEventListener('mousedown', this.handleMouseDown);
         window.addEventListener('mouseup', this.handleMouseUp);
         window.addEventListener('wheel', this.handleWheel, { passive: true });
+        window.addEventListener('resize', this.handleResize);
         document.addEventListener('pointerlockchange', this.handleLockChange);
     }
 
@@ -91,8 +96,14 @@ export class InputManager {
         window.removeEventListener('mousedown', this.handleMouseDown);
         window.removeEventListener('mouseup', this.handleMouseUp);
         window.removeEventListener('wheel', this.handleWheel);
+        window.removeEventListener('resize', this.handleResize);
         document.removeEventListener('pointerlockchange', this.handleLockChange);
     }
+
+    private handleResize = () => {
+        this.screenWidth = window.innerWidth;
+        this.screenHeight = window.innerHeight;
+    };
 
     private handleKeyDown = (e: KeyboardEvent) => {
         if (!this.isEnabled) return;
@@ -120,14 +131,12 @@ export class InputManager {
 
     private handleMouseMove = (e: MouseEvent) => {
         if (!this.isEnabled) {
-            // Still track cursor for UI even if game input is disabled
             this.state.cursorPos.x = e.clientX;
             this.state.cursorPos.y = e.clientY;
             return;
         }
 
         if (document.pointerLockElement) {
-            // --- Pointer Locked: Virtual "Tether" Cursor ---
             this.virtualAimPos.x += e.movementX;
             this.virtualAimPos.y += e.movementY;
 
@@ -135,7 +144,6 @@ export class InputManager {
             const minRadius = 50;
             const distSq = this.virtualAimPos.lengthSq();
 
-            // Clamping using squared distance (Math.sqrt only when needed)
             if (distSq > maxRadius * maxRadius) {
                 this.virtualAimPos.setLength(maxRadius);
             } else if (distSq < minRadius * minRadius && distSq > 0) {
@@ -143,19 +151,17 @@ export class InputManager {
             }
 
             this.state.aimVector.copy(this.virtualAimPos);
-            // Normalize to -1 -> 1 range for consistency
             this.state.mouse.x = this.virtualAimPos.x / maxRadius;
             this.state.mouse.y = this.virtualAimPos.y / maxRadius;
         } else {
-            // --- Standard Mouse: Center-relative ---
             this.state.cursorPos.x = e.clientX;
             this.state.cursorPos.y = e.clientY;
 
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
+            const centerX = this.screenWidth / 2;
+            const centerY = this.screenHeight / 2;
 
-            this.state.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            this.state.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            this.state.mouse.x = (e.clientX / this.screenWidth) * 2 - 1;
+            this.state.mouse.y = -(e.clientY / this.screenHeight) * 2 + 1;
 
             this.state.aimVector.set(e.clientX - centerX, e.clientY - centerY);
         }
@@ -172,12 +178,12 @@ export class InputManager {
     private handleWheel = (e: WheelEvent) => {
         if (!this.isEnabled) return;
 
+        // Zero-GC: Handled purely as flags. The game loop (WeaponHandler) 
+        // will consume these and set them back to false immediately.
         if (e.deltaY < 0) {
             this.state.scrollUp = true;
-            setTimeout(() => this.state.scrollUp = false, 50);
         } else if (e.deltaY > 0) {
             this.state.scrollDown = true;
-            setTimeout(() => this.state.scrollDown = false, 50);
         }
     };
 

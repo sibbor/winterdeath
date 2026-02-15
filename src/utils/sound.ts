@@ -1,5 +1,5 @@
 import { SoundCore } from './audio/SoundCore';
-import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds } from './audio/SoundLib';
+import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators } from './audio/SoundLib';
 import { PLAYER_CHARACTER } from '../content/constants';
 
 /**
@@ -17,12 +17,17 @@ export class SoundManager {
   private windSource: AudioBufferSourceNode | null = null;
   private windGain: GainNode | null = null;
 
+  // Flamethrower
+  private flameOsc: AudioBufferSourceNode | null = null;
+  private flameGain: GainNode | null = null;
+
   // Cached procedural buffers
   private campfireBuffer: AudioBuffer | null = null;
   private radioStaticBuffer: AudioBuffer | null = null;
 
   constructor() {
     this.core = new SoundCore();
+    registerSoundGenerators();
   }
 
   resume() { this.core.resume(); }
@@ -34,6 +39,7 @@ export class SoundManager {
     this.core.stopAll();
     this.stopCampfire();
     this.stopRadioStatic();
+    this.playFlamethrowerEnd();
   }
 
   setReverb(amount: number) {
@@ -251,10 +257,9 @@ export class SoundManager {
    * FLAMETHROWER LOOP
    */
   playFlamethrowerStart() {
-    if (this.fireOsc) return; // Re-use campfire logic or separate? Let's use separate for combat.
-    // Actually, flamethrower is distinct from campfire (more hissing/pressure).
-    // For simplicity, I will reuse 'startCampfire' logic but pitch it up or just implement a new noise loop here.
-    // Let's implement a simple white noise loop.
+    if (this.flameOsc) return;
+
+    // Simple white noise loop for flamethrower
     const ctx = this.core.ctx;
     const bufferSize = ctx.sampleRate * 2.0;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
@@ -280,31 +285,26 @@ export class SoundManager {
     gain.connect(this.core.masterGain);
     noise.start();
 
-    // Store as "fireOsc" for now if we don't have a separate slot, or create a specific one.
-    // The class has `fireOsc` for campfire. I should make a `flameThrowerOsc`.
-    // Since I can't easily add properties to the class without a clean replace, I'll use a dynamic property or just add it to the class definition if I can see the top.
-    // I see lines 13-18 defining properties. I should add `flameOsc` there.
-    // For now, I'll just use `playEffect` for one-offs, but flamethrower is continuous.
-    // I will implement `startFlamethrower` and `stopFlamethrower`.
-    (this as any)._flameOsc = noise;
-    (this as any)._flameGain = gain;
+    this.flameOsc = noise;
+    this.flameGain = gain;
   }
 
   playFlamethrowerEnd() {
-    const osc = (this as any)._flameOsc;
-    const gain = (this as any)._flameGain as GainNode;
+    const osc = this.flameOsc;
+    const gain = this.flameGain;
+
     if (osc && gain) {
       gain.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.2);
       setTimeout(() => {
         try { osc.stop(); osc.disconnect(); } catch (e) { }
         try { gain.disconnect(); } catch (e) { }
       }, 250);
-      (this as any)._flameOsc = null;
-      (this as any)._flameGain = null;
+      this.flameOsc = null;
+      this.flameGain = null;
     }
   }
 
-  playTeslaZap() {
+  playArcCannonZap() {
     // Sharp high-pitch zap
     const ctx = this.core.ctx;
     const osc = ctx.createOscillator();
@@ -342,6 +342,19 @@ export class SoundManager {
     switch (id) {
       case 'ambient_rustle': GamePlaySounds.playAmbientRustle(this.core); break;
       case 'ambient_metal': GamePlaySounds.playAmbientMetal(this.core); break;
+
+      // Footsteps
+      case 'step_snow': this.playFootstep('snow'); break;
+      case 'step_metal': this.playFootstep('metal'); break;
+      case 'step_wood': this.playFootstep('wood'); break;
+
+      // Impacts
+      case 'impact_flesh': this.playImpact('flesh'); break;
+      case 'impact_metal': this.playImpact('metal'); break;
+      case 'impact_concrete': this.playImpact('concrete'); break;
+      case 'impact_stone': this.playImpact('stone'); break;
+      case 'impact_wood': this.playImpact('wood'); break;
+
       case 'zombie_bite':
       case 'walker_attack': this.playWalkerAttack(); break;
       case 'walker_groan': this.playWalkerGroan(); break;
@@ -372,7 +385,7 @@ export class SoundManager {
 
   playMusic(id: string) {
     // Implementation for looped background music if needed
-    console.log(`BGM Triggered: ${id}`);
+    //console.log(`playMusic: ${id}`);
   }
 }
 

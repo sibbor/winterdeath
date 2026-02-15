@@ -245,7 +245,7 @@ export const en = {
         flashbang: "Flashbang",
         minigun: "Minigun",
         flamethrower: "Flamethrower",
-        tesla_cannon: "Tesla Cannon",
+        arc_cannon: "Arc-Cannon",
         radio: "Radio",
     },
     tips: [

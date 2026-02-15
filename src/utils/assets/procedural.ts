@@ -82,19 +82,109 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    const pineBranch = draw(64, 64, (ctx, s) => {
+    const pineBranch = draw(512, 512, (ctx, s) => { // Increased resolution for new detail
         const w = ctx.canvas.width; const h = ctx.canvas.height;
-        ctx.clearRect(0, 0, w, h);
-        ctx.strokeStyle = '#1a331a'; ctx.lineWidth = 4 * s;
-        ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
-        const count = Math.floor(400 * s * s);
-        for (let i = 0; i < count; i++) {
-            const x = Math.random() * w; const y = Math.random() * h;
-            const dist = Math.abs(x - w / 2);
-            if (Math.random() * (w / 2) > dist - 5 * s) {
-                ctx.fillStyle = Math.random() > 0.4 ? '#ffffff' : '#2d4c1e';
-                ctx.fillRect(x, y, (2 + Math.random() * 3) * s, (2 + Math.random() * 3) * s);
+        // 1. Needles (Dense, dark green, painterly strokes)
+        const needleColors = ['#1a261a', '#263326', '#0d1a0d', '#1f2e1f'];
+        const center = w / 2;
+        const needleCount = 2000 * s * s;
+
+        for (let i = 0; i < needleCount; i++) {
+            const y = Math.random() * (h - 12 * s) + 12 * s; // Position along stem
+            const progress = y / h;
+            const maxW = (220 * s) * Math.pow(progress, 0.6);
+
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const len = (10 * s) + Math.random() * maxW;
+
+            const startX = center + (side * 4 * s);
+            const endX = center + (side * len);
+            const droop = (len / (200 * s)) * (40 * s);
+            const endY = y + (10 * s) + Math.random() * (10 * s) + droop;
+
+            ctx.strokeStyle = needleColors[Math.floor(Math.random() * needleColors.length)];
+            ctx.lineWidth = (2 * s) + Math.random() * (2 * s);
+            ctx.lineCap = 'round';
+            ctx.globalAlpha = 0.9;
+
+            ctx.beginPath();
+            ctx.moveTo(startX, y);
+            ctx.quadraticCurveTo(startX + (side * len * 0.4), y - (5 * s), endX, endY);
+            ctx.stroke();
+        }
+
+        // 2. Stem (Dark wood)
+        ctx.strokeStyle = '#3e2723';
+        ctx.lineWidth = 12 * s;
+        ctx.beginPath();
+        ctx.moveTo(center, h);
+        ctx.lineTo(center, 10 * s);
+        ctx.stroke();
+
+        // 3. Snow Clumps (Painterly white blobs on top)
+        ctx.fillStyle = '#f0f8ff';
+        ctx.globalAlpha = 1.0;
+
+        // Large clumps
+        for (let i = 0; i < 40; i++) {
+            const y = Math.random() * (h * 0.9);
+            const widthAtY = (200 * s) * Math.pow(y / h, 0.6);
+            const x = center + (Math.random() - 0.5) * 2 * widthAtY;
+
+            if (Math.abs(x - center) < widthAtY) {
+                const size = (15 * s) + Math.random() * (25 * s);
+                ctx.beginPath();
+                ctx.ellipse(x, y, size, size * 0.6, Math.random() * 0.5, 0, Math.PI * 2);
+                ctx.fill();
             }
+        }
+        // Fine snow dust
+        const dustCount = 300 * s * s;
+        for (let i = 0; i < dustCount; i++) {
+            const x = Math.random() * w;
+            const y = Math.random() * h;
+            if (Math.abs(x - center) < (200 * s) * (y / h)) {
+                ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+                ctx.beginPath();
+                ctx.arc(x, y, (2 * s) + Math.random() * (3 * s), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    });
+
+    const bark = draw(512, 1024, (ctx, s) => { // BARK_W, BARK_H
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+
+        // 1. Base
+        ctx.fillStyle = '#2b2622';
+        ctx.fillRect(0, 0, w, h);
+
+        // 2. Ridges
+        const ridgeCount = 200 * s * s;
+        for (let i = 0; i < ridgeCount; i++) {
+            ctx.fillStyle = Math.random() > 0.5 ? '#1a1512' : '#3e3630';
+            const x = Math.random() * w;
+            const rw = (4 * s) + Math.random() * (8 * s);
+            const rh = (50 * s) + Math.random() * (200 * s);
+            const y = Math.random() * h;
+            ctx.fillRect(x, y, rw, rh);
+        }
+
+        // 3. Moss Gradient
+        const mossGrad = ctx.createLinearGradient(0, h, 0, h * 0.4);
+        mossGrad.addColorStop(0, 'rgba(60, 100, 40, 0.9)');
+        mossGrad.addColorStop(0.6, 'rgba(80, 120, 50, 0.4)');
+        mossGrad.addColorStop(1, 'rgba(80, 120, 50, 0)');
+        ctx.fillStyle = mossGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // 4. Snow in crevices
+        const snowCreviceCount = 300 * s * s;
+        for (let i = 0; i < snowCreviceCount; i++) {
+            const x = Math.random() * w;
+            const y = Math.random() * h;
+            ctx.fillStyle = 'rgba(240, 248, 255, 0.7)';
+            ctx.fillRect(x, y, (1 * s) + Math.random() * (2 * s), (5 * s) + Math.random() * (10 * s));
         }
     });
 
@@ -205,7 +295,7 @@ export const createProceduralDiffuse = () => {
     });
 
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint };
 
     return cachedTextures;
 };

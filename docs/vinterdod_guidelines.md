@@ -76,20 +76,35 @@ Maintain a strict 3-tier separation for all world-building logic:
 ## 🍎 Physics & Collisions
 - **Resolver**: Use `resolveCollision` (in `src/utils/physics.ts`) for top-down sphere-vs-box or sphere-vs-sphere interactions.
 - **Obstacles**: All solid objects must be pushed to `ctx.obstacles` within the `SectorGenerator` logic to enable collision detection.
+- **Spatial Queries (Zero-GC)**: NEVER iterate over the global `state.enemies` or global obstacle arrays to find distances. ALWAYS use `ctx.collisionGrid.getNearbyEnemies(pos, radius)` and `ctx.collisionGrid.getNearbyObstacles(pos, radius)`. Beware of shared internal buffers in SpatialGrid; do not nest queries.
 
 ## ⚡ Performance & Optimization
 - **AssetPreloader**: To prevent runtime stutters (jank) when spawning new objects or triggering effects:
   - **Register New Assets**: Every new geometry, material, or unique model must be added to `src/core/systems/AssetPreloader.ts`.
   - **Shader Warmup**: The preloader forces the GPU to compile shaders before gameplay starts. This is critical for objects created or modified at runtime (e.g., transparent clones for pickup animations).
   - **Animations**: Skinned meshes must be "warmed up" in the preloader to ensure animation shaders are ready.
+  - AssetLoader loads static bump maps from disk (cached).
+  - procedural draws heavy textures with code (cached after first run).
+  - materials combines these into ready material instances.
+  - AssetPreloader ensures all this happens before the player sees the first frame.
 
-  AssetLoader laddar statiska bump-kartor från disk (cachas).
+- **Zero-GC & Memory Management (Update Loops)**:
+  - **No Allocation in Hot Paths**: NEVER use `new THREE.Vector3()`, `new THREE.Color()`, `new THREE.Quaternion()`, or `.clone()` inside `update()`, `useFrame()`, or any function called frequently.
+  - **Module-Level Scratchpads**: Always declare reusable vectors globally at the top of the file (e.g., `const _v1 = new THREE.Vector3();`). Use `.set()`, `.copy()`, or `.setHex()` to mutate them instead of creating new ones.
+  - **No Object/Array Literals**: Do not create inline arrays `[]` or objects `{}` inside update loops.
+  - **Arrow Functions**: Do not define inline arrow functions inside hot paths or loops, as they allocate memory every frame.
+  - **Array Iteration**: NEVER use `.forEach()`, `.map()`, or `.filter()` inside hot paths. Always use a standard `for` loop (`for (let i = 0; i < arr.length; i++)`).
+  - **Array Removal**: NEVER use `.splice()` inside an update loop. Always use the **Swap-and-Pop** method: 
+    ```typescript
+    array[index] = array[array.length - 1]; 
+    array.pop();
+    ```
 
-procedural ritar tunga texturer med kod (cachas efter första körningen).
-
-materials (denna fil) kombinerar dessa till färdiga material-instanser.
-
-AssetPreloader ser till att allt detta händer innan spelaren ser den första framen.
+- **Graphical Optimization & Math**:
+  - **Object Pooling**: Mandatory for particles, projectiles, enemies, and decals. Always explicitly reset an object's state (position, rotation, life) when popping it from a pool.
+  - **Instancing**: For large quantities of identical geometry (blood, debris, grass), ALWAYS use `THREE.InstancedMesh`.
+  - **Math Shortcuts**: ALWAYS use `.distanceToSquared()` instead of `.distanceTo()`. Compare against the squared threshold (e.g., `distSq < 144.0` instead of `dist < 12.0`) to avoid CPU-heavy square-root calculations.
+  - **Hoist Trigonometry**: Calculate constant or predictable math (`Math.sin`, `Math.cos`) outside loops where possible.
 
 ## 💾 Persistence
 - **GameState**: The `DEFAULT_STATE` in `src/utils/persistence.ts` defines the save file structure.
@@ -114,3 +129,8 @@ AssetPreloader ser till att allt detta händer innan spelaren ser den första fr
 
 ## 🌍 Narrative Context
 - Always refer to `docs/STORY.md` for lore, sector descriptions, and dialogue tone to ensure consistency with the game's atmosphere.
+
+---
+
+## 💬 Code Style
+- **Comments**: Write all source code comments in English.

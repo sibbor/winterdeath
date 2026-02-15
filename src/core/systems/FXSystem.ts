@@ -48,6 +48,10 @@ interface SpawnRequest {
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _tempColor = new THREE.Color();
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3(); // Extra scratchpad for logic
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
@@ -208,9 +212,17 @@ export const FXSystem = {
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
         if (req.customVel) p.vel.copy(req.customVel);
-        else p.vel.set((Math.random() - 0.5) * 0.4, Math.random() * 0.5, (Math.random() - 0.5) * 0.4);
+        else {
+            // High-impact gore/limb/chunk particles should fly further
+            const speedScale = ['chunk', 'gore', 'limb'].includes(req.type) ? 8.0 : 1.0;
+            p.vel.set(
+                (Math.random() - 0.5) * speedScale,
+                Math.random() * speedScale * 0.8,
+                (Math.random() - 0.5) * speedScale
+            );
+        }
 
-        p.life = (req.type === 'blood' ? 60 : (req.type === 'debris' ? 200 : 30)) + Math.random() * 20;
+        p.life = (req.type === 'blood' ? 120 : (req.type === 'debris' ? 200 : 30)) + Math.random() * 20;
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
@@ -238,7 +250,7 @@ export const FXSystem = {
     spawnFloatingText: (scene: THREE.Scene, x: number, y: number, z: number, text: string, color: string = '#ffffff') => {
         const sprite = createTextSprite(text);
         sprite.position.set(x, y + 1.5, z);
-        sprite.scale.set(1.5, 0.375, 1);
+        sprite.scale.set(1.5, 1.5, 1.5); // Fixed aspect ratio
         sprite.material.color.set(color);
         sprite.renderOrder = 100;
 
@@ -392,88 +404,82 @@ export const FXSystem = {
     spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
         // Cone spread
         const spread = 0.15;
-        const dir = direction.clone().add(new THREE.Vector3(
+        // ZERO-GC: use scratchpad _v1 for direction calculation
+        _v1.copy(direction).add(_v2.set(
             (Math.random() - 0.5) * spread,
             (Math.random() - 0.5) * spread,
             (Math.random() - 0.5) * spread
         )).normalize();
 
         const speed = 10 + Math.random() * 5;
-        const life = 0.8 + Math.random() * 0.4;
         const scale = 0.5 + Math.random() * 0.5;
 
-        // Use 'fire' or 'flame' material
-        // We can reuse spawnParticle logic but specific for flame
-        // Actually, let's just use spawnParticle with specific params
-        // Assuming we have a helper or just direct use
-        // I'll call a helper if it exists, otherwise I'll push to queue manually or define a helper here if I can see one.
-        // I can see `spawnFlash` or similar in other files? No, I only see `getPooledMesh`.
-        // I'll implement a `spawnParticle` wrapper since I can't see the implementation of standard spawn in the snippet.
-        // Wait, I need to see if there is a `spawnParticle` exposed.
-        // The snippet shows `FXSystem` object starts at line 61.
-        // I'll assume `spawnParticle` exists or I'll implement logic to add to `particleQueue`.
+        const req = REQUEST_POOL.pop() || {} as SpawnRequest;
+        req.scene = null as any;
+        req.particlesList = null as any;
+        req.x = start.x; req.y = start.y; req.z = start.z;
+        req.type = 'fire';
 
-        FXSystem.particleQueue.push({
-            scene: null as any, // Managed by update
-            particlesList: null as any,
-            x: start.x, y: start.y, z: start.z,
-            type: 'fire',
-            customVel: dir.multiplyScalar(speed),
-            scale: scale,
-            color: 0xff5500 // Orange
-        } as any);
-        // Note: The `update` loop needs to handle this. I'm assuming existing system handles `fire` type.
+        // ZERO-GC: Reuse vector or init once
+        if (!req.customVel) req.customVel = new THREE.Vector3();
+        req.customVel.copy(_v1).multiplyScalar(speed);
+
+        req.scale = scale;
+        req.color = 0xff5500; // Orange
+        FXSystem.particleQueue.push(req);
     },
 
     spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
         // Create a chain of segments
-        const points = [];
         const segments = 6;
-        const dist = start.distanceTo(end);
         const lerpStep = 1 / segments;
 
-        points.push(start.clone());
-        for (let i = 1; i < segments; i++) {
-            const p = new THREE.Vector3().lerpVectors(start, end, i * lerpStep);
-            // Jitter
-            p.add(new THREE.Vector3(
-                (Math.random() - 0.5) * 1.5,
-                (Math.random() - 0.5) * 1.5,
-                (Math.random() - 0.5) * 1.5
-            ));
-            points.push(p);
+        for (let i = 1; i <= segments; i++) {
+            if (i === segments) {
+                _v1.copy(end);
+            } else {
+                _v1.lerpVectors(start, end, i * lerpStep);
+                // Jitter
+                _v1.x += (Math.random() - 0.5) * 1.5;
+                _v1.y += (Math.random() - 0.5) * 1.5;
+                _v1.z += (Math.random() - 0.5) * 1.5;
+            }
+
+            const req = REQUEST_POOL.pop() || {} as SpawnRequest;
+            req.scene = null as any;
+            req.particlesList = null as any;
+            req.x = _v1.x; req.y = _v1.y; req.z = _v1.z;
+            req.type = 'flash';
+
+            if (!req.customVel) req.customVel = new THREE.Vector3();
+            req.customVel.set(0, 0, 0);
+
+            req.scale = 0.3 + Math.random() * 0.2;
+            req.color = 0x00ffff; // Cyan
+            FXSystem.particleQueue.push(req);
         }
-        points.push(end.clone());
-
-        // We can't easily draw lines with standard particles. 
-        // We can spawn small "electric" particles along the path or use immediate mode lines if engine supports it.
-        // Given existing particle system, spawning a trail of 'flash' or 'stun_star' particles might be best.
-        // Or 'debris_trail'.
-
-        points.forEach(p => {
-            FXSystem.particleQueue.push({
-                scene: null as any,
-                particlesList: null as any,
-                x: p.x, y: p.y, z: p.z,
-                type: 'flash',
-                customVel: new THREE.Vector3(0, 0, 0),
-                scale: 0.3 + Math.random() * 0.2,
-                color: 0x00ffff // Cyan
-            } as any);
-        });
     },
 
     spawnStunSparks: (pos: THREE.Vector3) => {
         for (let i = 0; i < 3; i++) {
-            FXSystem.particleQueue.push({
-                scene: null as any,
-                particlesList: null as any,
-                x: pos.x + (Math.random() - 0.5), y: pos.y + 1.5 + (Math.random() - 0.5), z: pos.z + (Math.random() - 0.5),
-                type: 'stun_star',
-                customVel: new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2),
-                scale: 0.2,
-                color: 0xffff00
-            } as any);
+            const req = REQUEST_POOL.pop() || {} as SpawnRequest;
+            req.scene = null as any;
+            req.particlesList = null as any;
+            req.x = pos.x + (Math.random() - 0.5);
+            req.y = pos.y + 1.5 + (Math.random() - 0.5);
+            req.z = pos.z + (Math.random() - 0.5);
+            req.type = 'stun_star';
+
+            if (!req.customVel) req.customVel = new THREE.Vector3();
+            req.customVel.set(
+                (Math.random() - 0.5) * 2,
+                Math.random() * 2,
+                (Math.random() - 0.5) * 2
+            );
+
+            req.scale = 0.2;
+            req.color = 0xffff00;
+            FXSystem.particleQueue.push(req);
         }
     }
 

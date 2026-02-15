@@ -37,11 +37,10 @@ export const EnemyAI = {
             onPlayerHit: (damage: number, attacker: any, type: string) => void;
             spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number, scale?: number) => void;
             spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
-            onDamageDealt: (amount: number) => void;
+            onDamageDealt: (amount: number, enemy: Enemy) => void;
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void;
             onAshStart: (e: Enemy) => void;
-            getLastDamageType: () => string;
         }
     ) => {
         // Guard: If entity is fully processed or missing mesh, abort
@@ -54,34 +53,33 @@ export const EnemyAI = {
             const isHighImpact = e.lastHitWasHighImpact; // Provided by ProjectileSystem
 
             // Death Branching Logic
-            // Priority 1: Fire (Ash)
-            if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER) {
-                e.deathState = 'burning';
-                callbacks.onAshStart(e);
-            }
-            // Priority 2: Explosions (Instant Gib)
-            else if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER') {
+            // Priority 1: Explosions (Instant Gib) / Self-Destruct
+            if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER') {
                 e.deathState = 'exploded';
             }
-            // Priority 3: Heavy Ballistics (Conditional Gibbing)
+            // Priority 2: Heavy Ballistics (Conditional Gibbing - even if on fire)
             else if (dmgType === WeaponType.REVOLVER || dmgType === WeaponType.SHOTGUN) {
                 if (isHighImpact) {
                     e.deathState = 'gibbed'; // Meat explosion
                 } else {
                     e.deathState = 'shot'; // Physical fall
-                    e.fallForward = false; // Heavy impact usually pushes them back
+                    e.fallForward = false;
                     if (e.deathVel) e.deathVel.copy(e.velocity).multiplyScalar(-0.5).setY(2.5);
                 }
             }
+            // Priority 3: Fire (Ash) - Only if not gibbed/exploded
+            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER) {
+                e.deathState = 'burning';
+                callbacks.onAshStart(e);
+            }
             // Priority 4: Electricity
-            else if (dmgType === WeaponType.TESLA_CANNON) {
+            else if (dmgType === WeaponType.ARC_CANNON) {
                 e.deathState = 'electrified';
             }
             // Priority 5: Standard (SMG, Pistol, Rifle)
             else {
                 e.deathState = 'shot';
                 if (e.deathVel) {
-                    // Slight upward and backward force on death
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
                     e.deathVel.copy(_v1).multiplyScalar(5.0).setY(2.0);
                 }
@@ -167,6 +165,9 @@ export const EnemyAI = {
                     e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
+
+                // Random Groan
+                if (Math.random() < 0.005) callbacks.playSound(e.type === 'RUNNER' ? 'runner_scream' : (e.type === 'TANK' ? 'tank_roar' : 'walker_groan'));
                 break;
 
             case AIState.WANDER:
@@ -175,6 +176,14 @@ export const EnemyAI = {
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid);
                 if (canSeePlayer) e.state = AIState.CHASE;
                 else if (e.searchTimer <= 0) { e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0; }
+
+                // Footstep
+                const wanderStepInterval = 600;
+                if (now > (e.lastStepTime || 0) + wanderStepInterval) {
+                    if (e.type === 'TANK') callbacks.playSound('tank_smash'); // Heavy step
+                    else callbacks.playSound('step_snow');
+                    e.lastStepTime = now;
+                }
                 break;
 
             case AIState.CHASE:
@@ -186,12 +195,24 @@ export const EnemyAI = {
 
                     moveEntity(e, target, delta, e.speed, collisionGrid);
 
+                    // Footstep
+                    const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
+                    if (now > (e.lastStepTime || 0) + chaseStepInterval) {
+                        if (e.type === 'TANK') callbacks.playSound('tank_smash');
+                        else callbacks.playSound('step_snow');
+                        e.lastStepTime = now;
+                    }
+
+                    // Random Aggressive sound
+                    if (Math.random() < 0.01) callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : (e.type === 'TANK' ? 'tank_roar' : 'walker_attack'));
+
                     const attackRange = e.type === 'TANK' ? 7.0 : 3.8;
                     if (distSq < attackRange && e.attackCooldown <= 0) {
                         if (e.type === 'TANK') {
                             e.attackCooldown = 3000; callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH'); callbacks.playSound('tank_smash');
                         } else {
                             e.state = AIState.BITING; e.grappleTimer = 2.0; e.attackCooldown = 2000;
+                            callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : 'walker_attack');
                         }
                     }
                 }
@@ -201,20 +222,20 @@ export const EnemyAI = {
                 e.grappleTimer -= delta * (shakeIntensity > 1.0 ? 6.0 : 1.0);
                 _v1.set(0, 0, 0.4).applyQuaternion(e.mesh.quaternion);
                 e.mesh.position.copy(playerPos).add(_v1);
-                if (now % 500 < 30) callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
+                if (now % 500 < 30) {
+                    callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
+                    callbacks.playSound('impact_flesh');
+                }
                 if (e.grappleTimer <= 0) e.state = AIState.CHASE;
                 break;
 
             case AIState.EXPLODING:
                 e.explosionTimer -= delta;
+                if (now % 400 < 30) callbacks.playSound('bomber_beep');
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
                     e.indicatorRing.position.copy(e.mesh.position);
                     e.indicatorRing.position.y = 0.05; // Keep it just above ground
-
-                    // User Request: "Red ring flashing as large as its explosion radius"
-                    // Stats: scale is 1.0 (base). Ring geometry radius inner 1.0, outer 1.0.
-                    // We need to scale it to ~12.0 units (the damage radius below).
                     e.indicatorRing.scale.setScalar(12.0);
 
                     // Flashing effect: Faster execution near the end
@@ -345,7 +366,7 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
         }
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
-            if (e.burnTimer <= 0) { e.hp -= 6; callbacks.onDamageDealt(6); e.burnTimer = 0.5; }
+            if (e.burnTimer <= 0) { e.hp -= 6; callbacks.onDamageDealt(6, e); e.burnTimer = 0.5; }
         }
         if (e.afterburnTimer > 0) {
             e.afterburnTimer -= delta;
@@ -422,27 +443,55 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
         return;
     }
 
+    if (e.deathState === 'gibbed') {
+        if (!e.mesh.userData.gibbed) {
+            e.mesh.userData.gibbed = true;
+            e.mesh.visible = false; // Hide body immediately
+
+            // Spawn chunks
+            const count = (e.type === 'TANK' || e.type === 'BOSS') ? 12 : 6;
+            const scale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+
+            callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'blood', 20, undefined, undefined, undefined, scale);
+            callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'gore', count, undefined, undefined, undefined, scale);
+            callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'limb', 2, undefined, undefined, undefined, scale);
+
+            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0 * scale, MATERIALS.bloodDecal);
+        }
+        if (now - e.deathTimer! > 100) e.deathState = 'dead';
+        return;
+    }
+
     if (e.deathState === 'shot' || e.deathState === 'electrified') {
         // Electric jitter
-        // Electric jitter
         if (e.deathState === 'electrified') {
-            if (age < 100) {
-                // Instant Drop (0-100ms)
-                const t = age / 100;
-                e.mesh.rotation.x = -Math.PI / 2 * t;
-                e.mesh.position.y = Math.max(0.2, e.mesh.position.y * (1 - t));
-            } else {
-                // Cramp on ground (100-1000ms)
-                e.mesh.rotation.x = -Math.PI / 2;
-                e.mesh.position.y = 0.2;
+            if (!e.mesh.userData.electrocuted) {
+                e.mesh.userData.electrocuted = true;
+                e.mesh.userData.deathPosX = e.mesh.position.x;
+                e.mesh.userData.deathPosZ = e.mesh.position.z;
+            }
 
-                // Violent seizure
-                e.mesh.position.x += (Math.random() - 0.5) * 0.25;
-                e.mesh.position.z += (Math.random() - 0.5) * 0.25;
+            if (age < 120) {
+                // Instant Drop (0-120ms)
+                const t = age / 120;
+                e.mesh.rotation.x = -Math.PI / 2 * t;
+                e.mesh.position.y = Math.max(0.2, (e.mesh.position.y || 1.0) * (1 - t));
+            } else {
+                // Cramp on ground (120-1000ms)
+                const baseHeight = 0.2;
+                e.mesh.rotation.x = -Math.PI / 2;
+                e.mesh.position.y = baseHeight;
+
+                // Violent seizure jitter (Relative to death position to avoid drift)
+                const jitter = 0.15;
+                e.mesh.position.x = e.mesh.userData.deathPosX + (Math.random() - 0.5) * jitter;
+                e.mesh.position.z = e.mesh.userData.deathPosZ + (Math.random() - 0.5) * jitter;
 
                 // Intense sparking
-                if (Math.random() > 0.3) callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'spark', 1);
+                if (Math.random() > 0.4) callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'spark', 1);
             }
+            // Ensure quaternion is synced for InstancedMesh (ZombieRenderer)
+            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
         }
         else {
             // Standard Shot Death
@@ -451,6 +500,7 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
             const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
             e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
+            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
         }
     }
 }

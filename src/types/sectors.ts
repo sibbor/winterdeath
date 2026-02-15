@@ -57,6 +57,7 @@ export interface SectorContext {
     sectorId: number;
     sectorState: SectorState;
     state: any; // RuntimeState (for systems like waterSystem, windSystem)
+    uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
 }
 

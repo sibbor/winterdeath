@@ -19,10 +19,21 @@ export interface NoiseEvent {
 }
 
 export class GameSessionLogic {
-    public inputDisabled: boolean = false;
+    public inputDisabled: boolean = false; // Cutscenes/Menu
     public isMobile: boolean = false;
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
+
+    // Performance Debug Flags
+    public debugSystemFlags = {
+        wind: true,
+        weather: true,
+        footprints: true,
+        enemies: true,
+        fx: true,
+        lighting: true
+    };
+
     public state!: RuntimeState;
     private systems: System[] = [];
 
@@ -134,8 +145,21 @@ export class GameSessionLogic {
         // High-performance system iteration
         const systems = this.systems;
         const len = systems.length;
+        const flags = this.debugSystemFlags;
+
         for (let i = 0; i < len; i++) {
-            systems[i].update(this, dt, now);
+            const sys = systems[i];
+
+            // Performance Debug Toggles
+            if (sys.id === 'WindSystem' && !flags.wind) continue;
+            if (sys.id === 'WeatherSystem' && !flags.weather) continue;
+            if (sys.id === 'FootprintSystem' && !flags.footprints) continue;
+            if ((sys.id === 'EnemySystem' || sys.id === 'EnemyManager') && !flags.enemies) continue;
+            if (sys.id === 'FXSystem' && !flags.fx) continue;
+            // specific check for lighting system if it exists as a System
+            if (sys.id === 'LightingSystem' && !flags.lighting) continue;
+
+            sys.update(this, dt, now);
         }
     }
 
@@ -181,15 +205,40 @@ export class GameSessionLogic {
     }
 
     /**
-     * Tears down the session and cleans up all sub-systems.
-     */
+         * Tears down the session, cleans up all sub-systems, 
+         * and aggressively clears state references to prevent memory leaks 
+         * between game sessions.
+         */
     dispose() {
+        // 1. Cleanup systems (removes meshes from scene, etc.)
         const systems = this.systems;
         for (let i = 0; i < systems.length; i++) {
             if (systems[i].cleanup) systems[i].cleanup(this);
         }
         this.systems = [];
-        this.noiseEvents = [];
-        this.noisePool = [];
+
+        // 2. Clear noise pools
+        this.noiseEvents.length = 0;
+        this.noisePool.length = 0;
+
+        // 3. Clear all state arrays to release Three.js object references to the Garbage Collector
+        if (this.state) {
+            this.state.enemies.length = 0;
+            this.state.particles.length = 0;
+            this.state.activeEffects.length = 0;
+            this.state.projectiles.length = 0;
+            this.state.fireZones.length = 0;
+            this.state.scrapItems.length = 0;
+            this.state.chests.length = 0;
+            this.state.bloodDecals.length = 0;
+            this.state.obstacles.length = 0;
+            this.state.triggers.length = 0;
+            this.state.mapItems.length = 0;
+
+            // Clear the spatial grid to release all stored entity references
+            if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
+                this.state.collisionGrid.clear();
+            }
+        }
     }
 }

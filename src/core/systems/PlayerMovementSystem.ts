@@ -147,8 +147,21 @@ export class PlayerMovementSystem implements System {
             if (_v6.lengthSq() > 0) {
                 isMoving = true;
                 const camAngle = session.cameraAngle || 0;
-                _v1.copy(_v6).normalize().applyAxisAngle(_UP, camAngle).multiplyScalar(speed * delta);
+
+                _v1.copy(_v6).normalize();
+                if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
+                _v1.multiplyScalar(speed * delta);
+
                 this.performMove(playerGroup, _v1, state, session, now, delta);
+
+                // --- AUDIO: Footsteps ---
+                const stepInterval = state.isRushing ? 250 : 400;
+                if (now > (state.lastStepTime || 0) + stepInterval) {
+                    // Determine surface type (snow, metal, wood)
+                    // For now, default to snow or check sector/position logic
+                    soundManager.playFootstep('snow');
+                    state.lastStepTime = now;
+                }
             }
         }
 
@@ -178,13 +191,17 @@ export class PlayerMovementSystem implements System {
                 for (let j = 0; j < nearby.length; j++) {
                     const obs = nearby[j];
 
-                    // FIXED: Using applyCollisionResolution which modifies _v3 in-place (Zero-GC)
+                    // Using applyCollisionResolution which modifies _v3 in-place (Zero-GC)
                     if (applyCollisionResolution(_v3, 0.5, obs)) {
 
                         // --- Enemy Knockback Logic ---
                         if ((state.isRushing || state.isRolling) && obs.mesh?.userData.entity) {
                             const enemy = obs.mesh.userData.entity;
-                            if (!enemy.dead) {
+
+                            // Prevent spamming audio/particles during sub-stepping
+                            const canTackle = !enemy.dead && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
+
+                            if (canTackle) {
                                 const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
                                 const massInverse = 1.0 / Math.max(0.5, mass);
                                 const pushMultiplier = (enemy.isBoss ? 0.2 : 1.0) * massInverse;
@@ -197,6 +214,7 @@ export class PlayerMovementSystem implements System {
                                 enemy.stunTimer = state.isRushing ? 1.5 : 0.8;
                                 enemy.isBlinded = true;
                                 enemy.blindUntil = now + (state.isRushing ? 1500 : 800);
+                                enemy.lastTackleTime = now;
 
                                 FXSystem.spawnPart(session.engine.scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
                                 soundManager.playImpact('flesh');
@@ -231,21 +249,28 @@ export class PlayerMovementSystem implements System {
         const angle = session.cameraAngle || 0;
 
         if (isMobile) {
-            const stick = (input.joystickAim && input.joystickAim.lengthSq() > 0.25) ? input.joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
+            const stick = (input.joystickAim?.lengthSq() > 0.25) ? input.joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
             if (stick) {
-                _v1.set(stick.x, 0, stick.y).applyAxisAngle(_UP, angle);
+                _v1.set(stick.x, 0, stick.y);
+                if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
+
                 _v5.copy(playerGroup.position).addScaledVector(_v1, 10);
                 playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
             }
         } else {
             if (input.aimVector && input.aimVector.lengthSq() > 1) {
-                _v1.set(input.aimVector.x, 0, input.aimVector.y).applyAxisAngle(_UP, angle);
+                _v1.set(input.aimVector.x, 0, input.aimVector.y);
+                if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
+
                 _v5.copy(playerGroup.position).add(_v1);
                 playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
             } else if (isMoving) {
                 _v6.set(0, 0, 0);
                 if (input.w) _v6.z -= 1; if (input.s) _v6.z += 1; if (input.a) _v6.x -= 1; if (input.d) _v6.x += 1;
-                _v1.copy(_v6).normalize().applyAxisAngle(_UP, angle);
+
+                _v1.copy(_v6).normalize();
+                if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
+
                 _v5.copy(playerGroup.position).addScaledVector(_v1, 10);
                 playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
             }

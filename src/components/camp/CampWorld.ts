@@ -27,10 +27,7 @@ const setupTrees = async (scene: THREE.Scene) => {
     for (let i = 0; i < 10; i++) {
         const x = (srandom() - 0.5) * 100;
         const z = -45 - srandom() * 60;
-
-        // Moon Window for silhouettes too
-        let scale = + srandom() * 2;
-
+        let scale = 1.0 + srandom() * 2;
         treeInstances.push({ x, z, scale, darken: 0.12 });
     }
 
@@ -42,10 +39,8 @@ const setupTrees = async (scene: THREE.Scene) => {
         const x = (srandom() - 0.5) * 2 * maxX;
         if (Math.abs(x) < 2) continue;
 
-        // Moon Window: Reduce scale for trees in the moon's quadrant (-30 < X < -5)
         let scale = 1.1 + srandom() * 0.9;
         if (x < -15 && x > -20) scale *= 0.6;
-
         treeInstances.push({ x, z, scale, darken: 1.0 });
     }
 
@@ -55,32 +50,31 @@ const setupTrees = async (scene: THREE.Scene) => {
     treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
 
     // --- TREE INSTANTIATION ---
-    // Ensure prototypes are ready
-    await EnvironmentGenerator.initPrototypes();
-    const prototypes = EnvironmentGenerator.getPrototypes(); // Returns flat array: Spruce, Pine, Birch
+    // Make sure prototypes are initialized (it's idempotent)
+    EnvironmentGenerator.initNaturePrototypes();
 
-    if (!prototypes || prototypes.length === 0) return;
+    // Generate Trees
+    const treeTypes: ('PINE')[] = ['PINE'];
 
-    // First 5 are Spruce (NATURE_VARIANTS = 5)
-    // We'll use Spruces for the forest wall.
+    for (let i = 0; i < treeInstances.length; i++) {
+        const inst = treeInstances[i];
+        const type = treeTypes[i % treeTypes.length];
 
-    for (const inst of treeInstances) {
-        // Pick a random Spruce variant (indices 0-4)
-        // Use srandom logic? Or just simple mod.
-        const variantIdx = Math.floor((inst.x + inst.z) % 5 + 5) % 5;
-        const tree = prototypes[variantIdx].clone();
+        // Pick a random variant (0-2) based on position for stability
+        const variantIdx = Math.floor(Math.abs(inst.x + inst.z)) % 3;
 
-        tree.position.set(inst.x, 0, inst.z);
-        tree.scale.setScalar(inst.scale);
+        // Use new createTree API which returns a Group with multiple meshes
+        const treeGroup = EnvironmentGenerator.createTree(type, inst.scale, variantIdx);
+        treeGroup.position.set(inst.x, 0, inst.z);
+        treeGroup.rotation.y = srandom() * Math.PI * 2; // Add random Y rotation
 
         // Apply "Darken" (Silhouettes)
-        // We must clone materials to avoid affecting shared instances
         if (inst.darken < 0.9) {
-            tree.traverse((child: any) => {
+            treeGroup.traverse((child: any) => {
                 if (child.isMesh) {
                     child.material = child.material.clone();
                     child.material.color.multiplyScalar(inst.darken);
-                    // Disable shadows for distant silhouettes to save perf?
+                    // Disable shadows for distant silhouettes
                     if (inst.darken < 0.5) {
                         child.castShadow = false;
                         child.receiveShadow = false;
@@ -88,8 +82,7 @@ const setupTrees = async (scene: THREE.Scene) => {
                 }
             });
         }
-
-        scene.add(tree);
+        scene.add(treeGroup);
     }
 };
 

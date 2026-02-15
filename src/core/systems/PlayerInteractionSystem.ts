@@ -12,6 +12,7 @@ const _v2 = new THREE.Vector3();
 export class PlayerInteractionSystem implements System {
     id = 'player_interaction';
     public onCollectibleFound?: (collectibleId: string) => void;
+    private lastDetectionTime: number = 0;
 
     constructor(
         private playerGroup: THREE.Group,
@@ -22,35 +23,87 @@ export class PlayerInteractionSystem implements System {
         this.onCollectibleFound = onCollectibleFound;
     }
 
+    // Animation state tracking (Zero-GC approach via object recycling could be added if heavy)
+    private activeAnimations: {
+        obj: THREE.Group,
+        startY: number,
+        progress: number,
+        duration: number
+    }[] = [];
+
     update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const input = session.engine.input.state;
 
-        // 1. Detect nearby interactive objects (Optimized distance checks)
-        const detection = this.detectInteraction(
-            this.playerGroup.position,
-            state.chests,
-            state.triggers,
-            state.sectorState
-        );
+        // 1. Detect nearby interactive objects (Optimized: Throttle to 10hz)
+        if (now - this.lastDetectionTime > 100) {
+            this.lastDetectionTime = now;
+            const detection = this.detectInteraction(
+                this.playerGroup.position,
+                state.chests,
+                state.triggers,
+                state.sectorState
+            );
 
-        state.interactionType = detection.type;
-        state.interactionTargetPos = detection.position;
+            state.interactionType = detection.type;
+            state.interactionTargetPos = detection.position;
+        }
 
         // 2. Handle Interaction Press (Edge Triggered)
         if (input.e && !state.eDepressed) {
             state.eDepressed = true;
 
-            this.handleInteraction(
-                detection.type,
-                this.playerGroup.position,
-                state.chests,
-                state,
-                session
-            );
+            // Re-validate if we have a target
+            if (state.interactionType) {
+                this.handleInteraction(
+                    state.interactionType,
+                    this.playerGroup.position,
+                    state.chests,
+                    state,
+                    session
+                );
+            }
         }
 
         if (!input.e) state.eDepressed = false;
+
+        // 3. Update Active Animations (Synced with Game Loop)
+        for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
+            const anim = this.activeAnimations[i];
+            anim.progress += dt / anim.duration;
+
+            if (anim.progress > 1) anim.progress = 1;
+
+            anim.obj.position.y = anim.startY + anim.progress * 2.0;
+            anim.obj.rotation.y += 3.0 * dt;
+
+            anim.obj.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.material) {
+                    child.material.opacity = 1.0 - anim.progress;
+                }
+            });
+
+            if (anim.progress >= 1) {
+                session.engine.scene.remove(anim.obj);
+                // Dispose cloned materials to prevent memory leaks
+                anim.obj.traverse((child) => {
+                    if (child instanceof THREE.Mesh) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((m: any) => m.dispose());
+                        } else if (child.material) {
+                            child.material.dispose();
+                        }
+                    }
+                });
+
+                const idx = this.collectibles.indexOf(anim.obj);
+                if (idx > -1) this.collectibles.splice(idx, 1);
+
+                // Swap-and-Pop animation removal
+                this.activeAnimations[i] = this.activeAnimations[this.activeAnimations.length - 1];
+                this.activeAnimations.pop();
+            }
+        }
     }
 
     /**
@@ -185,11 +238,8 @@ export class PlayerInteractionSystem implements System {
             setTimeout(() => cb(collectibleId), 500);
         }
 
-        // --- Optimized Pickup Animation ---
+        // --- Optimized Pickup Animation (Managed by System Update) ---
         const obj = collectible;
-        const startY = obj.position.y;
-        let progress = 0;
-        const duration = 0.8; // seconds
 
         // Clone materials only once to avoid affecting global assets
         obj.traverse((child) => {
@@ -199,42 +249,12 @@ export class PlayerInteractionSystem implements System {
             }
         });
 
-        const animatePickup = (timeDelta: number) => {
-            progress += timeDelta / duration;
-            if (progress > 1) progress = 1;
-
-            obj.position.y = startY + progress * 2.0;
-            obj.rotation.y += 3.0 * timeDelta;
-
-            obj.traverse((child) => {
-                if (child instanceof THREE.Mesh && child.material) {
-                    child.material.opacity = 1.0 - progress;
-                }
-            });
-
-            if (progress < 1) {
-                // Request next frame from engine delta if possible, 
-                // but RAF is a safe fallback for UI-like animations
-                requestAnimationFrame(() => animatePickup(0.016));
-            } else {
-                session.engine.scene.remove(obj);
-
-                // Dispose cloned materials to prevent memory leaks
-                obj.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        if (Array.isArray(child.material)) {
-                            child.material.forEach(m => m.dispose());
-                        } else if (child.material) {
-                            child.material.dispose();
-                        }
-                    }
-                });
-
-                const idx = this.collectibles.indexOf(obj);
-                if (idx > -1) this.collectibles.splice(idx, 1);
-            }
-        };
-
-        animatePickup(0.016);
+        // Register animation to be handled in update()
+        this.activeAnimations.push({
+            obj,
+            startY: obj.position.y,
+            progress: 0,
+            duration: 0.8
+        });
     }
 }

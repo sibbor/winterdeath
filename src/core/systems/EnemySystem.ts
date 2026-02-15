@@ -41,9 +41,9 @@ export class EnemySystem implements System {
             spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number) => this.spawnPart(session, x, y, z, t, c, m, v, col),
             spawnDecal: (x: number, z: number, s: number, mat: any) => this.spawnDecal(session, x, z, s, mat),
             spawnBubble: (text: string, dur: number) => this.callbacks.spawnBubble(text, dur),
-            onDamageDealt: (dotDamage: number, isBoss: boolean) => {
+            onDamageDealt: (dotDamage: number, e: any) => {
                 state.damageDealt += dotDamage;
-                if (isBoss) state.bossDamageDealt += dotDamage;
+                if (e.isBoss) state.bossDamageDealt += dotDamage;
                 this.callbacks.gainXp(Math.ceil(dotDamage));
             },
             onAshStart: (e: any) => EnemyManager.createAshPile(e)

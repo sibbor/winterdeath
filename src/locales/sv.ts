@@ -238,7 +238,7 @@ export const sv = {
         flashbang: "Blixtgranat",
         minigun: "Minigun",
         flamethrower: "Eldkastare",
-        tesla_cannon: "Teslakanon",
+        arc_cannon: "Arc-Kanon",
         radio: "Radio",
     },
     tips: [

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { MATERIALS, WindUniforms } from '../../utils/assets/materials';
 
 /**
  * WindSystem manages global environment forces.
@@ -59,7 +60,19 @@ export class WindSystem {
     this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 
-    // Batch update all registered materials
+    // 1. Update Global Wind Uniforms
+    WindUniforms.time = now * 0.001;
+    WindUniforms.wind.copy(this.current);
+
+    // 2. Update Shared Materials (Vegetation)
+    WindUniforms.update(MATERIALS.grass);
+    WindUniforms.update(MATERIALS.treeLeaves);
+    WindUniforms.update(MATERIALS.treeLeavesOak);
+    WindUniforms.update(MATERIALS.treeLeavesBirch);
+    WindUniforms.update(MATERIALS.flower);
+    WindUniforms.update(MATERIALS.snow);
+
+    // 3. Batch update manually registered materials (Legacy/Custom)
     const timeSec = now / 1000.0;
     const windStrScaled = this.strength * 10;
 

@@ -41,6 +41,7 @@ export interface Enemy {
 
     // Identity & Stats
     type: string;
+    isBoss?: boolean;
     hp: number;
     maxHp: number;
     speed: number;
@@ -66,10 +67,10 @@ export interface Enemy {
     hearingThreshold: number;          // Range multiplier for sound detection (0.0 to 1.0+)
 
     // Interaction & Boss States
-    isBoss: boolean;
     bossId?: number;         // Link to the BOSSES content data
     dead: boolean;           // Logic-level removal flag
     hitTime: number;         // Timestamp of the most recent damage event
+    lastStepTime?: number;   // Timestamp of the last footstep sound
     fleeing: boolean;        // Flag for retreat behavior
 
     // Status Effects (Timers are delta-based for consistency)

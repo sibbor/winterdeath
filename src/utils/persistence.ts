@@ -8,7 +8,7 @@ export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
     stats: INITIAL_STATS,
     currentSector: 0,
-    loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV, special: WeaponType.NONE },
+    loadout: { primary: WeaponType.RIFLE, secondary: WeaponType.REVOLVER, throwable: WeaponType.MOLOTOV, special: WeaponType.ARC_CANNON },
     weaponLevels: {
         [WeaponType.PISTOL]: 1,
         [WeaponType.SMG]: 1,
@@ -21,7 +21,7 @@ export const DEFAULT_STATE: GameState = {
         [WeaponType.RADIO]: 1,
         [WeaponType.FLASHBANG]: 1,
         [WeaponType.FLAMETHROWER]: 1,
-        [WeaponType.TESLA_CANNON]: 1,
+        [WeaponType.ARC_CANNON]: 1,
         [WeaponType.NONE]: 0
     },
     sectorBriefing: '',
