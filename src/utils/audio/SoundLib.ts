@@ -61,18 +61,9 @@ const Generators = {
     shot_minigun: (ctx: AudioContext) => createGunshot(ctx, 0.05, 0.2, 'sawtooth', 400, 200, 0.15, 0.06),
 
     // MECHANICAL
-    mech_mag_out: (ctx: AudioContext) => {
-        return createTone(ctx, 'square', 150, 0.1, 0.1); // Low mechanical "click/slide"
-    },
-    mech_mag_in: (ctx: AudioContext) => {
-        return createTone(ctx, 'square', 300, 0.1, 0.15); // Higher "lock" click
-    },
-    mech_empty_click: (ctx: AudioContext) => {
-        return createTone(ctx, 'triangle', 1200, 0.05, 0.2); // Sharp pin hit
-    },
-    mech_holster: (ctx: AudioContext) => {
-        return createNoise(ctx, 0.15, 0.1); // Fabric rustle
-    },
+    mech_mag_out: (ctx: AudioContext) => createTone(ctx, 'square', 150, 0.1, 0.5),
+    mech_mag_in: (ctx: AudioContext) => createTone(ctx, 'square', 300, 0.1, 0.6),
+    mech_empty_click: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.8),
 
     // THROWABLES
     pin_pull: (ctx: AudioContext) => createTone(ctx, 'square', 1200, 0.05, 0.1),
@@ -81,6 +72,23 @@ const Generators = {
 
     // CASING
     casing_standard: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.1),
+
+    // ZOMBIES (Shared)
+    step_zombie: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.15;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Generic grit/dirt
+            const noise = (Math.random() * 2 - 1) * 0.1 * Math.exp(-30 * t);
+            // Solid thud
+            const thud = Math.sin(2 * Math.PI * 120 * t) * 0.2 * Math.exp(-20 * t);
+            data[i] = noise + thud;
+        }
+        return buffer;
+    },
+
 
     // ZOMBIES (Walker)
     walker_groan: (ctx: AudioContext) => createMoan(ctx, 'sawtooth', 60, 40, 1.5),
@@ -147,17 +155,33 @@ const Generators = {
     },
 
     // FOOTSTEPS
-    step_snow: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.2;
+    step: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.15;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // High frequency crunch noise
-            const noise = (Math.random() * 2 - 1) * 0.15 * Math.exp(-25 * t);
-            // Lower thud
-            const thud = Math.sin(2 * Math.PI * 100 * t) * 0.1 * Math.exp(-15 * t);
+            // Generic grit/dirt
+            const noise = (Math.random() * 2 - 1) * 0.1 * Math.exp(-30 * t);
+            // Solid thud
+            const thud = Math.sin(2 * Math.PI * 120 * t) * 0.2 * Math.exp(-20 * t);
             data[i] = noise + thud;
+        }
+        return buffer;
+    },
+    step_snow: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // High frequency crunch noise (More power for crunch)
+            const noise = (Math.random() * 2 - 1) * 0.2 * Math.exp(-15 * t);
+            // Squeak component for snow
+            const squeak = Math.sin(2 * Math.PI * 400 * t) * 0.05 * Math.exp(-10 * t);
+            // Lower thud (Reduced)
+            const thud = Math.sin(2 * Math.PI * 80 * t) * 0.05 * Math.exp(-20 * t);
+            data[i] = noise + squeak + thud;
         }
         return buffer;
     },
@@ -182,6 +206,20 @@ const Generators = {
             const hollow = Math.sin(2 * Math.PI * 250 * t) * 0.12 * Math.exp(-20 * t);
             const knock = (Math.random() * 2 - 1) * 0.03 * Math.exp(-40 * t);
             data[i] = hollow + knock;
+        }
+        return buffer;
+    },
+    step_water: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.3;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Splash noise
+            const splash = (Math.random() * 2 - 1) * 0.2 * Math.exp(-15 * t);
+            // Low liquid thud
+            const thud = Math.sin(2 * Math.PI * 80 * t) * 0.15 * Math.exp(-10 * t);
+            data[i] = splash + thud;
         }
         return buffer;
     },
@@ -498,22 +536,25 @@ export function registerSoundGenerators() {
     SoundBank.register('tank_smash', Generators.tank_smash);
     SoundBank.register('tank_death', Generators.tank_death);
 
+    SoundBank.register('step_zombie', Generators.step_zombie);
+
     SoundBank.register('bomber_beep', Generators.bomber_beep);
-    SoundBank.register('bomber_explode', Generators.explosion); // Re-use explosion
+    SoundBank.register('bomber_explode', Generators.explosion);
 
     SoundBank.register('ambient_rustle', Generators.ambient_rustle);
     SoundBank.register('ambient_metal', Generators.ambient_metal);
 
     // Footsteps
+    SoundBank.register('step', Generators.step);
     SoundBank.register('step_snow', Generators.step_snow);
     SoundBank.register('step_metal', Generators.step_metal);
     SoundBank.register('step_wood', Generators.step_wood);
+    SoundBank.register('step_water', Generators.step_water);
 
     // Mechanical
     SoundBank.register('mech_mag_out', Generators.mech_mag_out);
     SoundBank.register('mech_mag_in', Generators.mech_mag_in);
     SoundBank.register('mech_empty_click', Generators.mech_empty_click);
-    SoundBank.register('mech_holster', Generators.mech_holster);
 
     // Wind
     SoundBank.register('ambient_wind', Generators.ambient_wind);
@@ -582,7 +623,7 @@ export const GamePlaySounds = {
     },
     playHeartbeat: (core: SoundCore) => SoundBank.play(core, 'fx_heartbeat', 0.3),
 
-    playFootstep: (core: SoundCore, type: 'snow' | 'metal' | 'wood' = 'snow') => {
+    playFootstep: (core: SoundCore, type: 'step' | 'snow' | 'metal' | 'wood' | 'water' = 'step') => {
         const key = `step_${type}`;
         // Random pitch and volume variance for natural feel
         const pitch = 0.9 + Math.random() * 0.3;
@@ -635,6 +676,8 @@ export const WeaponSounds = {
 };
 
 export const EnemySounds = {
+    playZombieStep: (core: SoundCore) => SoundBank.play(core, 'step_zombie', 0.8, 1.0, false, true),
+
     playWalkerGroan: (core: SoundCore) => SoundBank.play(core, 'walker_groan', 0.2, 0.9 + Math.random() * 0.2, false, true),
     playWalkerAttack: (core: SoundCore) => SoundBank.play(core, 'walker_attack', 0.4, 0.9 + Math.random() * 0.2, false, true),
     playWalkerDeath: (core: SoundCore) => SoundBank.play(core, 'walker_death', 0.3, 0.9 + Math.random() * 0.2, false, true),

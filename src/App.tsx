@@ -49,6 +49,7 @@ const App: React.FC = () => {
     const [hudState, setHudState] = useState<any>({});
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
     const [isDialogueOpen, setIsDialogueOpen] = useState(false);
+    const [isInteractionOpen, setIsInteractionOpen] = useState(false);
     const [isAdventureLogOpen, setIsAdventureLogOpen] = useState(false);
     const [isBossIntroActive, setIsBossIntroActive] = useState(false);
     const [currentMapItems, setCurrentSectorMapItems] = useState<MapItem[]>([]);
@@ -72,7 +73,7 @@ const App: React.FC = () => {
 
     // Global Input Hook (ESC, M)
     useGlobalInput(gameState.screen, {
-        isPaused, isMapOpen, showTeleportMenu, activeCollectible, isDialogueOpen, isBossIntroActive, hp: hudState.hp || 100, isSettingsOpen, isAdventureLogOpen
+        isPaused, isMapOpen, showTeleportMenu, activeCollectible, isDialogueOpen, isInteractionOpen, isBossIntroActive, hp: hudState.hp || 100, isSettingsOpen, isAdventureLogOpen
     }, {
         setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen,
         setIsAdventureLogOpen,
@@ -255,10 +256,10 @@ const App: React.FC = () => {
         window.location.reload();
     };
 
-    const cursorHidden = isMobileDevice || (gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen);
+    const cursorHidden = isMobileDevice || (gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !isInteractionOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen);
 
     const handleCollectibleClose = useCallback(() => {
-        gameCanvasRef.current?.requestPointerLock();
+        gameCanvasRef.current?.requestPointerLock().catch(() => { });
         if (activeCollectible) {
             setGameState(prev => {
                 const collId = activeCollectible as string;
@@ -317,9 +318,6 @@ const App: React.FC = () => {
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
-            <CustomCursor hidden={cursorHidden} />
-
-
             {gameState.debugMode && !isLoadingSector && !isLoadingCamp && <DebugDisplay fps={fps} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
 
             {gameState.screen === GameScreen.CAMP && (
@@ -336,7 +334,6 @@ const App: React.FC = () => {
                     onSelectSector={handleSelectSector}
                     onStartSector={handleStartSector}
                     onToggleDebug={(val) => setGameState(prev => ({ ...prev, debugMode: val }))}
-                    aaaaaaaaaaLoaded={true}
                     onUpdateHUD={handleUpdateHUD}
                     onResetGame={handleResetGame}
                     onSaveGraphics={handleSaveGraphics}
@@ -388,10 +385,14 @@ const App: React.FC = () => {
                         isCollectibleOpen={!!activeCollectible}
                         onCollectibleClose={handleCollectibleClose}
                         onDialogueStateChange={setIsDialogueOpen}
+                        onInteractionStateChange={setIsInteractionOpen}
                         onDeathStateChange={setIsDeathScreenActive}
                         onBossIntroStateChange={setIsBossIntroActive}
                         onMapInit={setCurrentSectorMapItems}
                         onFPSUpdate={handleFPSUpdate}
+                        onUpdateLoadout={(loadout, levels) => {
+                            setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
+                        }}
                         initialGraphics={gameState.graphics}
                         isMobileDevice={isMobileDevice}
                         weather={gameState.weather}
@@ -430,7 +431,7 @@ const App: React.FC = () => {
                         )
                     )}
 
-                    {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && !isAdventureLogOpen && (
+                    {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && !isAdventureLogOpen && !activeCollectible && (
                         <ScreenPause
                             onResume={() => { setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
                             onAbort={handleAbortSector}
@@ -557,6 +558,8 @@ const App: React.FC = () => {
             {gameState.screen === GameScreen.PROLOGUE && (
                 <Prologue onComplete={handlePrologueComplete} isMobileDevice={isMobileDevice} />
             )}
+
+            <CustomCursor hidden={cursorHidden} />
         </div>
     );
 };

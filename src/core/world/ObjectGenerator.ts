@@ -981,4 +981,38 @@ export const ObjectGenerator = {
         mesh.instanceMatrix.needsUpdate = true;
         ctx.scene.add(mesh);
     },
+
+    createTerminal: (type: 'ARMORY' | 'SPAWNER' | 'ENV') => {
+        const group = new THREE.Group();
+
+        // Base
+        const baseGeo = new THREE.BoxGeometry(1.2, 1.0, 0.8);
+        const baseMat = MATERIALS.gun; // Dark metal
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.y = 0.5;
+        base.castShadow = true;
+        group.add(base);
+
+        // Screen/Console angled top
+        const screenGeo = new THREE.BoxGeometry(1.0, 0.6, 0.1);
+        const screenMat = type === 'ARMORY' ? MATERIALS.chestBig : // Gold
+            type === 'SPAWNER' ? MATERIALS.barrelExplosive : MATERIALS.steel;
+
+        const consoleTop = new THREE.Mesh(screenGeo, screenMat);
+        consoleTop.position.set(0, 1.3, -0.2);
+        consoleTop.rotation.x = -Math.PI / 6; // Angled up
+        group.add(consoleTop);
+
+        // Screen Glow
+        const glowGeo = new THREE.PlaneGeometry(0.9, 0.5);
+        const color = type === 'ARMORY' ? 0xffaa00 : type === 'SPAWNER' ? 0xff0000 : 0x00ffff;
+        const glowMat = new THREE.MeshBasicMaterial({ color: color });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        glow.position.set(0, 1.3, -0.14);
+        glow.rotation.x = -Math.PI / 6;
+        group.add(glow);
+
+        return group;
+    }
+
 };

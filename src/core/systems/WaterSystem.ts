@@ -84,15 +84,25 @@ export class WaterSurface {
     style: WaterStyle;
     time: number = 0;
 
-    constructor(x: number, z: number, width: number, depth: number, style: WaterStyle = 'crystal') {
+    constructor(x: number, z: number, width: number, depth: number, style: WaterStyle = 'crystal', shape: 'rect' | 'circle' = 'rect') {
         this.bounds = { x, z, width, depth };
         this.style = style;
         const config = WATER_STYLES[style];
 
-        const segments = Math.max(32, Math.floor(Math.min(width, depth) / 2));
-        const geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
-        geometry.rotateX(-Math.PI / 2);
-        geometry.translate(x, 0, z);
+        let geometry: THREE.BufferGeometry;
+
+        if (shape === 'circle') {
+            // Use Circle for natural lakes
+            const radius = Math.max(width, depth) / 2;
+            geometry = new THREE.CircleGeometry(radius, 64);
+            geometry.rotateX(-Math.PI / 2);
+            geometry.translate(x, 0, z);
+        } else {
+            const segments = Math.max(32, Math.floor(Math.min(width, depth) / 2));
+            geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
+            geometry.rotateX(-Math.PI / 2);
+            geometry.translate(x, 0, z);
+        }
 
         this.material = new THREE.ShaderMaterial({
             uniforms: {
@@ -101,17 +111,43 @@ export class WaterSurface {
                 uOpacity: { value: config.opacity },
                 uFresnelStrength: { value: config.fresnelStrength || 0.5 },
                 uEmissive: { value: new THREE.Color(config.emissive || 0x000000) },
-                uEmissiveIntensity: { value: config.emissiveIntensity || 0.0 }
+                uEmissiveIntensity: { value: config.emissiveIntensity || 0.0 },
+                uSunPosition: { value: new THREE.Vector3(100, 200, 50) } // Fake Sun Pos
             },
             vertexShader: `
                 varying vec3 vNormal;
                 varying vec3 vViewPosition;
+                varying vec2 vUv;
+                varying vec3 vWorldPosition;
                 uniform float uTime;
+
+                // Simple Pseudo-Noise
+                float hash(vec2 p) { return fract(1e4 * sin(17.0 * p.x + p.y * 0.1) * (0.1 + abs(sin(p.y * 13.0 + p.x)))); }
+                float noise(vec2 x) {
+                    vec2 i = floor(x);
+                    vec2 f = fract(x);
+                    float a = hash(i);
+                    float b = hash(i + vec2(1.0, 0.0));
+                    float c = hash(i + vec2(0.0, 1.0));
+                    float d = hash(i + vec2(1.0, 1.0));
+                    vec2 u = f * f * (3.0 - 2.0 * f);
+                    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+                }
+
                 void main() {
+                    vUv = uv;
                     vec3 pos = position;
-                    float wave = sin(pos.x * 0.5 + uTime * 2.0) * 0.05 + sin(pos.z * 0.3 + uTime * 1.5) * 0.03;
-                    pos.y += wave;
+                    
+                    // Vertex Waves (Large Scale)
+                    float wave = sin(pos.x * 0.2 + uTime * 1.5) * 0.1 + sin(pos.z * 0.15 + uTime * 1.2) * 0.1;
+                    
+                    // Detail Noise
+                    float n = noise(pos.xz * 0.5 + uTime * 0.5) * 0.15;
+                    pos.y += wave + n;
+
                     vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                    vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
+                    vWorldPosition = worldPosition.xyz;
                     vViewPosition = -mvPosition.xyz;
                     vNormal = normalMatrix * normal;
                     gl_Position = projectionMatrix * mvPosition;
@@ -123,12 +159,28 @@ export class WaterSurface {
                 uniform float uFresnelStrength;
                 uniform vec3 uEmissive;
                 uniform float uEmissiveIntensity;
+                uniform vec3 uSunPosition; // Pass this in
+                
                 varying vec3 vNormal;
                 varying vec3 vViewPosition;
+                varying vec3 vWorldPosition;
+
                 void main() {
                     vec3 viewDir = normalize(vViewPosition);
-                    float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5) * uFresnelStrength;
-                    vec3 color = uColor + vec3(fresnel) + (uEmissive * uEmissiveIntensity);
+                    vec3 normal = normalize(vNormal);
+
+                    // Fresnel
+                    float fresnel = pow(1.0 - abs(dot(viewDir, normal)), 3.0) * uFresnelStrength;
+
+                    // Specular (Sun Reflection)
+                    vec3 lightDir = normalize(uSunPosition - vWorldPosition); 
+                    // Fixed light dir for now to avoid uniform update spam, or pass it
+                    vec3 sunDir = normalize(vec3(0.5, 0.8, 0.2)); 
+                    vec3 halfVector = normalize(sunDir + viewDir);
+                    float NdotH = max(0.0, dot(normal, halfVector));
+                    float specular = pow(NdotH, 100.0) * 0.5; // Sharp highlight
+
+                    vec3 color = uColor + vec3(fresnel) + vec3(specular) + (uEmissive * uEmissiveIntensity);
                     gl_FragColor = vec4(color, uOpacity);
                 }
             `,
@@ -221,8 +273,8 @@ export class WaterSystem {
         this.scene.add(this.foamParticles);
     }
 
-    addSurface(x: number, z: number, width: number, depth: number, style: WaterStyle = 'crystal'): WaterSurface {
-        const surface = new WaterSurface(x, z, width, depth, style);
+    addSurface(x: number, z: number, width: number, depth: number, style: WaterStyle = 'crystal', shape: 'rect' | 'circle' = 'rect'): WaterSurface {
+        const surface = new WaterSurface(x, z, width, depth, style, shape);
         this.surfaces.push(surface);
         this.scene.add(surface.mesh);
         return surface;

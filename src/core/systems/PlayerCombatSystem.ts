@@ -138,7 +138,6 @@ export class PlayerCombatSystem implements System {
                 state.loadout,
                 this.aimCross,
                 this.trajectoryLine,
-                session.debugMode,
             );
         }
 

@@ -31,7 +31,7 @@ const getLaserAssets = () => {
     // hamnar i början av lasern istället för i mitten.
     const geometry = new THREE.PlaneGeometry(0.15, 20);
     geometry.rotateX(-Math.PI / 2);
-    geometry.translate(0, 0, 15);
+    geometry.translate(0, 0, 10);
 
     const material = new THREE.MeshBasicMaterial({
         map: texture,

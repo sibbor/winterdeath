@@ -113,11 +113,41 @@ export const EnemyAI = {
         }
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
-        // --- 5. SENSORS ---
+        // --- 5. SENSORS & SEPARATION ---
         const dx = playerPos.x - e.mesh.position.x;
         const dz = playerPos.z - e.mesh.position.z;
         const distSq = dx * dx + dz * dz;
         const canSeePlayer = distSq < 900; // 30m detection
+
+        // Simple Separation: Check a few neighbors or use SpatialGrid if registered
+        // Since we don't have the full enemy list easily accessible in O(1) here without passing it,
+        // and passing O(N) list to every enemy is O(N^2), 
+        // we'll rely on the caller passing `allEnemies`.
+        if (allEnemies) {
+            if (!e.separationForce) e.separationForce = new THREE.Vector3();
+            let sepCount = 0;
+            const separationRadiusSq = 1.0; // 1 meter personal space
+
+            // Optimization: Only check a subset or nearby in array? Use spatial grid?
+            // For < 100 enemies, N^2 is fine-ish (10k checks).
+            // Let's check only 10 neighbors for performance?
+            for (let i = 0; i < allEnemies.length; i++) {
+                const other = allEnemies[i];
+                if (other === e || other.deathState === 'dead') continue;
+
+                const dx = e.mesh.position.x - other.mesh.position.x;
+                const dz = e.mesh.position.z - other.mesh.position.z;
+                const dSq = dx * dx + dz * dz;
+
+                if (dSq < separationRadiusSq && dSq > 0.001) {
+                    const d = Math.sqrt(dSq);
+                    // Force vector pointing away from neighbor
+                    e.separationForce.x += (dx / d) / d; // Weight by distance (closer = stronger)
+                    e.separationForce.z += (dz / d) / d;
+                    sepCount++;
+                }
+            }
+        }
 
         let heardNoise = false;
         let noisePos: THREE.Vector3 | null = null;
@@ -178,10 +208,9 @@ export const EnemyAI = {
                 else if (e.searchTimer <= 0) { e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0; }
 
                 // Footstep
-                const wanderStepInterval = 600;
+                const wanderStepInterval = 1200; // Slower steps for zombies
                 if (now > (e.lastStepTime || 0) + wanderStepInterval) {
-                    if (e.type === 'TANK') callbacks.playSound('tank_smash'); // Heavy step
-                    else callbacks.playSound('step_snow');
+                    callbacks.playSound('step_zombie');
                     e.lastStepTime = now;
                 }
                 break;
@@ -231,30 +260,60 @@ export const EnemyAI = {
 
             case AIState.EXPLODING:
                 e.explosionTimer -= delta;
+
+                // Frenetic Bounce & Breathe Animation (Ramping Up)
+                const progress = Math.max(0, 1.5 - e.explosionTimer); // 0 -> 1.5
+                const speed = 10.0 + progress * 20.0; // 10 -> 40 speed
+                const bounceHeight = 0.3 + progress * 0.2;
+
+                const sineVal = Math.abs(Math.sin(now * 0.001 * speed));
+
+                // Bounce (World Y)
+                e.mesh.position.y = (e.mesh.userData.baseY || 0) + sineVal * bounceHeight;
+
+                // Breathe (Pulse Scale)
+                const breatheScale = 1.0 + sineVal * 0.4; // 1.0 -> 1.4
+                e.mesh.scale.setScalar(breatheScale);
+
+                // Ensure visibility
+                e.mesh.visible = true;
+
+                // Beep Sound
                 if (now % 400 < 30) callbacks.playSound('bomber_beep');
+
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
-                    e.indicatorRing.position.copy(e.mesh.position);
-                    e.indicatorRing.position.y = 0.05; // Keep it just above ground
-                    e.indicatorRing.scale.setScalar(12.0);
+                    // Fix: Set LOCAL position to counteract bounce, keeping ring on ground
+                    // Parent is mesh, so local Y = (GroundY - MeshY) + 0.1 offset
+                    e.indicatorRing.position.set(0, 0.1 - (sineVal * bounceHeight), 0);
+                    // Note: We assume mesh pivot is near bottom? 
+                    // Actually, if mesh moves up, ring moves up. To stay on ground, ring.y must be -dist.
+                    // Correct: 0.1 - (e.mesh.position.y - baseY)
 
-                    // Flashing effect: Faster execution near the end
-                    const t = Math.max(0, e.explosionTimer);
-                    const flashSpeed = (1.5 - t) * 20;
+                    // Flash Logic
+                    e.indicatorRing.scale.setScalar(12.0 + Math.sin(now * 0.01) * 1.0);
+                    const flashSpeed = (1.6 - e.explosionTimer) * 30;
                     const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
 
-                    // Intensity ramps up
-                    (e.indicatorRing.material as any).opacity = 0.4 + (1.0 - (t / 1.5)) * 0.6;
-                    (e.indicatorRing.material as any).color.setHex(pulse > 0.8 ? 0xffffff : 0xff0000); // Blink white/red
+                    if (e.indicatorRing.material) {
+                        const mat = e.indicatorRing.material as any;
+                        mat.opacity = 0.4 + (1.0 - (e.explosionTimer / 1.5)) * 0.6;
+                        mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
+                    }
                 }
+
                 if (e.explosionTimer <= 0) {
                     // Radius: 12.0 (matches the ring scale above)
+                    // Trigger explosion
                     if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
                         callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
-                        // Adding screen shake for effect
-                        // (shakeIntensity handled elsewhere or implicitly via damage)
+                        // Adding screen shake for effect (handled by damage or explicitly?)
                     }
-                    e.hp = 0; e.deathState = 'exploded';
+
+                    // NOW we kill the entity
+                    e.hp = 0;
+                    e.deathState = 'exploded';
+                    // Ensure visual removal happens in cleanup
                 }
                 break;
 
@@ -326,7 +385,38 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     let curSpeed = speed * 10;
     if (e.slowTimer > 0) curSpeed *= 0.55;
 
+    // --- SEPARATION LOGIC ---
+    // Push away from other enemies to prevent stacking
+    // Using a simple spatial check or iterating all enemies (O(N^2) locally but N is small in viewport)
+    // For performance, we can assume 'nearby' from collisionGrid contains enemies too if they are registered as obstacles?
+    // Currently obstacles are static. Let's do a simple check against a few random enemies or passed in list?
+    // Passed in list 'allEnemies' is not available here in helper. 
+    // We'll rely on SpatialGrid if enemies are added there, OR simple random offset jitter when moving to avoid perfect stacking.
+
+    // Better: Add a "separation" vector calculated in the main update loop and passed here? 
+    // Or just check collisionGrid for other enemies if we add them to grid.
+    // For now, let's just add a small jitter if very close to target to avoid Z-fighting/stacking exact pos.
+
+    // Actually, we can check the collisionGrid for dynamic entities if we register them.
+    // Assuming we don't, let's just use the `collisionGrid` which might have static props.
+    // To fix "zombies inside each other", we need true separate. 
+    // Let's rely on the `nearby` check below which currently checks static obstacles.
+    // We should probably add enemies to the spatial grid? 
+    // For this quick fix, I will add a "personal space" force based on the `target` relative vector? No.
+    // I need access to other enemies.
+
+    // FIX: I will add a simple random repulsion if density is high? No, consistent.
+    // I will add a `separationVector` to the `Enemy` type and calculate it in `updateEnemy`! 
+    // Then just add it here.
+
+    // For now, in this helper, I will add a "soft collision" with static obstacles.
+
     _v3.copy(_v2).multiplyScalar(curSpeed * delta);
+    if (e.separationForce) {
+        _v3.addScaledVector(e.separationForce, delta * 5.0); // Apply separation
+        e.separationForce.set(0, 0, 0); // Reset for next frame
+    }
+
     e.velocity.copy(_v2).multiplyScalar(curSpeed);
     _v4.copy(e.mesh.position).add(_v3);
 

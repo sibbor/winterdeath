@@ -108,8 +108,56 @@ export class SectorSystem implements System {
                 spawnPart: this.callbacks.spawnPart,
                 startCinematic: this.callbacks.startCinematic,
                 setCameraOverride: this.callbacks.setCameraOverride,
+                // Environment Controls
+                setWind: (direction: number, strength: number) => {
+                    if (state.sectorState.weatherSystem) {
+                        state.sectorState.weatherSystem.wind.setOverride(direction, strength);
+                    }
+                },
+                resetWind: () => {
+                    if (state.sectorState.weatherSystem) {
+                        state.sectorState.weatherSystem.wind.clearOverride();
+                    }
+                },
+                setWeather: (type: any, count?: number) => {
+                    if (state.sectorState.weatherSystem) {
+                        state.sectorState.weatherSystem.sync(type, count || 100);
+                    }
+                },
+                setLight: (params: any) => {
+                    if (params.sunPos) {
+                        const sun = scene.getObjectByName('SUN_LIGHT') as THREE.DirectionalLight;
+                        if (sun) sun.position.copy(params.sunPos);
+                    }
+                    if (params.sunColor) {
+                        const sun = scene.getObjectByName('SUN_LIGHT') as THREE.DirectionalLight;
+                        if (sun) sun.color.copy(params.sunColor);
+                    }
+                    if (params.moonColor) {
+                        const moon = scene.getObjectByName('MOON_LIGHT') as THREE.DirectionalLight;
+                        if (moon) moon.color.copy(params.moonColor);
+                    }
+                    if (params.ambientIntensity !== undefined) {
+                        const amb = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
+                        if (amb) amb.intensity = params.ambientIntensity;
+                    }
+                },
+                setFog: (color: THREE.Color, density: number) => {
+                    if (scene.fog && (scene.fog as THREE.FogExp2).density !== undefined) {
+                        const fog = scene.fog as THREE.FogExp2;
+                        fog.color.copy(color);
+                        fog.density = density;
+                    }
+                },
+                setWater: (level?: number, waveHeight?: number) => {
+                    if (state.sectorState.waterSystem) {
+                        // WaterSystem doesn't have a public setter for these yet, but we can access public props if strict mode allows or use any
+                        const ws = state.sectorState.waterSystem as any;
+                        if (level !== undefined) ws.waterLevel = level; // Assuming prop exists or added
+                        // waveHeight might be shader uniform
+                    }
+                },
                 emitNoise: (pos: THREE.Vector3, radius: number, type: string) => {
-                    // FIXED: Use the pooled noise system instead of pushing new objects
                     session.makeNoise(pos, radius, type as any);
                 }
             }

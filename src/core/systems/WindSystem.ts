@@ -15,7 +15,27 @@ export class WindSystem {
   // Cache materials directly to avoid frame-by-frame traversal
   private activeMaterials = new Set<THREE.ShaderMaterial>();
 
+  private overrideActive: boolean = false;
+
   constructor() { }
+
+  /**
+   * Sets a manual wind override.
+   * @param direction Angle in radians (0-2PI)
+   * @param strength Wind strength (0-5.0)
+   */
+  setOverride(direction: number, strength: number) {
+    this.overrideActive = true;
+    this.target.set(Math.cos(direction), Math.sin(direction)).multiplyScalar(strength);
+    this.strength = strength;
+    // Snap to target for immediate feedback
+    this.current.copy(this.target);
+    this.direction.set(this.current.x, 0, this.current.y).normalize();
+  }
+
+  clearOverride() {
+    this.overrideActive = false;
+  }
 
   /**
    * Registers an object's materials for wind animation.
@@ -44,10 +64,11 @@ export class WindSystem {
    * Updates wind state and pushes data to GPU uniforms.
    */
   update(now: number, deltaTime: number = 0.016): THREE.Vector2 {
-    if (now > this.nextChange) {
+    if (!this.overrideActive && now > this.nextChange) {
       if (Math.random() > 0.4) {
         const angle = Math.random() * Math.PI * 2;
-        const strength = 0.003 + Math.random() * 0.015;
+        // Increased Strength: 0.1 to 0.8 (was 0.003 to 0.015)
+        const strength = 0.1 + Math.random() * 0.7;
         this.target.set(Math.cos(angle) * strength, Math.sin(angle) * strength);
       } else {
         this.target.set(0, 0);

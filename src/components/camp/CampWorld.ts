@@ -24,16 +24,16 @@ const setupTrees = async (scene: THREE.Scene) => {
     const treeInstances: { x: number, z: number, scale: number, darken: number }[] = [];
 
     // 1. HIGH DARK SILHOUETTES (Denser & Wider)
-    for (let i = 0; i < 10; i++) {
-        const x = (srandom() - 0.5) * 100;
-        const z = -45 - srandom() * 60;
-        let scale = 1.0 + srandom() * 2;
+    for (let i = 0; i < 60; i++) { // Increased count for better background fill since it's cheap now
+        const x = (srandom() - 0.5) * 120;
+        const z = -45 - srandom() * 80;
+        let scale = 1.0 + srandom() * 2.5;
         treeInstances.push({ x, z, scale, darken: 0.12 });
     }
 
     // 2. THE FOREST WALL (Deterministic V-Shape - Denser)
-    for (let i = 0; i < 30; i++) {
-        const z = -15 - srandom() * 20;
+    for (let i = 0; i < 40; i++) {
+        const z = -15 - srandom() * 25;
         const zFactor = (z + 15) / -45;
         const maxX = 35 - (zFactor * 20);
         const x = (srandom() - 0.5) * 2 * maxX;
@@ -50,39 +50,52 @@ const setupTrees = async (scene: THREE.Scene) => {
     treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
 
     // --- TREE INSTANTIATION ---
-    // Make sure prototypes are initialized (it's idempotent)
-    EnvironmentGenerator.initNaturePrototypes();
+    // Make sure prototypes are initialized
+    await EnvironmentGenerator.initNaturePrototypes();
 
-    // Generate Trees
-    const treeTypes: ('PINE')[] = ['PINE'];
+    const normalMatrices: Record<string, THREE.Matrix4[]> = {};
+    const darkMatrices: Record<string, THREE.Matrix4[]> = {};
+
+    const dummy = new THREE.Object3D();
 
     for (let i = 0; i < treeInstances.length; i++) {
         const inst = treeInstances[i];
-        const type = treeTypes[i % treeTypes.length];
 
-        // Pick a random variant (0-2) based on position for stability
+        // Setup Matrix
+        dummy.position.set(inst.x, -0.5, inst.z);
+        dummy.rotation.set(0, srandom() * Math.PI * 2, 0); // Random Y
+        dummy.scale.setScalar(inst.scale);
+        dummy.updateMatrix();
+
+        // Bucket by Variant
+        // Variant logic: consistent based on position
         const variantIdx = Math.floor(Math.abs(inst.x + inst.z)) % 3;
+        const key = `PINE_${variantIdx}`;
 
-        // Use new createTree API which returns a Group with multiple meshes
-        const treeGroup = EnvironmentGenerator.createTree(type, inst.scale, variantIdx);
-        treeGroup.position.set(inst.x, 0, inst.z);
-        treeGroup.rotation.y = srandom() * Math.PI * 2; // Add random Y rotation
-
-        // Apply "Darken" (Silhouettes)
-        if (inst.darken < 0.9) {
-            treeGroup.traverse((child: any) => {
-                if (child.isMesh) {
-                    child.material = child.material.clone();
-                    child.material.color.multiplyScalar(inst.darken);
-                    // Disable shadows for distant silhouettes
-                    if (inst.darken < 0.5) {
-                        child.castShadow = false;
-                        child.receiveShadow = false;
-                    }
-                }
-            });
+        if (inst.darken < 0.5) {
+            if (!darkMatrices[key]) darkMatrices[key] = [];
+            darkMatrices[key].push(dummy.matrix.clone());
+        } else {
+            if (!normalMatrices[key]) normalMatrices[key] = [];
+            normalMatrices[key].push(dummy.matrix.clone());
         }
-        scene.add(treeGroup);
+    }
+
+    // Create Silhouette Material (Shared)
+    const silhouetteMat = MATERIALS.treeLeaves.clone(); // Clone generic to keep properties, or standard
+    silhouetteMat.color.setHex(0x000000); // Pure black
+    silhouetteMat.color.addScalar(0.12); // Lift slightly
+    silhouetteMat.roughness = 1.0;
+    silhouetteMat.metalness = 0.0;
+
+    // Render Normal Trees
+    for (const key in normalMatrices) {
+        EnvironmentGenerator.addInstancedTrees({ scene } as any, key, normalMatrices[key]);
+    }
+
+    // Render Silhouette Trees
+    for (const key in darkMatrices) {
+        EnvironmentGenerator.addInstancedTrees({ scene } as any, key, darkMatrices[key], silhouetteMat);
     }
 };
 
@@ -137,19 +150,22 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     // 1. STATION: ARMORY
     // =========================================
     const rackGroup = new THREE.Group();
-    const rackPostGeo = new THREE.BoxGeometry(0.2, 4.0, 0.2);
-    const p1 = new THREE.Mesh(rackPostGeo, darkerWoodMat); p1.position.set(-1.8, 2, -0.4); rackGroup.add(p1);
-    const p2 = new THREE.Mesh(rackPostGeo, darkerWoodMat); p2.position.set(1.8, 2, -0.4); rackGroup.add(p2);
+    const p1 = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); p1.scale.set(0.2, 4.0, 0.2); p1.position.set(-1.8, 2, -0.4); rackGroup.add(p1);
+    const p2 = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); p2.scale.set(0.2, 4.0, 0.2); p2.position.set(1.8, 2, -0.4); rackGroup.add(p2);
     for (let i = 0; i < 5; i++) {
-        const slat = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.3, 0.1), warmWoodMat);
+        const slat = new THREE.Mesh(GEOMETRY.box, warmWoodMat);
+        slat.scale.set(3.6, 0.3, 0.1);
         slat.position.set(0, 0.8 + i * 0.7, -0.4); rackGroup.add(slat);
     }
 
     // Weapons
     for (let i = 0; i < 4; i++) {
         const gun = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.4, 0.15), metalMat); gun.add(body);
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2), metalMat);
+        const body = new THREE.Mesh(GEOMETRY.box, metalMat);
+        body.scale.set(0.2, 1.4, 0.15);
+        gun.add(body);
+
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2), metalMat); // Keep cylinder for now or use GEOMETRY.cylinder if exists
         barrel.position.y = 1.3;
         gun.add(barrel);
         gun.position.set(-1.2 + i * 0.8, 0.7, 0.2);
@@ -158,30 +174,31 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     }
 
     // Ammo crates
-    const crateGeo = new THREE.BoxGeometry(0.8, 0.5, 0.6);
-    const c1 = new THREE.Mesh(crateGeo, ammoGreenMat); c1.position.set(-2.0, 0.25, 0.6); c1.rotation.y = 0.3; rackGroup.add(c1);
-    const c2 = new THREE.Mesh(crateGeo, ammoGreenMat); c2.position.set(-0.9, 0.25, 0.4); c2.rotation.y = 1.4; rackGroup.add(c2);
-    const c3 = new THREE.Mesh(crateGeo, ammoGreenMat); c3.position.set(-1.8, 0.75, 0.65); c3.rotation.y = 0.6; rackGroup.add(c3);
+    const c1 = new THREE.Mesh(GEOMETRY.box, ammoGreenMat); c1.scale.set(0.8, 0.5, 0.6); c1.position.set(-2.0, 0.25, 0.6); c1.rotation.y = 0.3; rackGroup.add(c1);
+    const c2 = new THREE.Mesh(GEOMETRY.box, ammoGreenMat); c2.scale.set(0.8, 0.5, 0.6); c2.position.set(-0.9, 0.25, 0.4); c2.rotation.y = 1.4; rackGroup.add(c2);
+    const c3 = new THREE.Mesh(GEOMETRY.box, ammoGreenMat); c3.scale.set(0.8, 0.5, 0.6); c3.position.set(-1.8, 0.75, 0.65); c3.rotation.y = 0.6; rackGroup.add(c3);
 
     // =========================================
     // 2. STATION: ADVENTURE LOG
     // =========================================
     const deskGroup = new THREE.Group();
     const dW = 2.4, dD = 1.4, dH = 1.1;
-    const dTop = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.1, dD), warmWoodMat);
+    const dTop = new THREE.Mesh(GEOMETRY.box, warmWoodMat);
+    dTop.scale.set(dW, 0.1, dD);
     dTop.position.y = dH; deskGroup.add(dTop);
 
     // Legs
-    const dLegGeo = new THREE.BoxGeometry(0.15, dH, 0.15);
     [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(p => {
-        const l = new THREE.Mesh(dLegGeo, darkerWoodMat);
+        const l = new THREE.Mesh(GEOMETRY.box, darkerWoodMat);
+        l.scale.set(0.15, dH, 0.15);
         l.position.set(p[0] * (dW / 2 - 0.2), dH / 2, p[1] * (dD / 2 - 0.2));
         deskGroup.add(l);
     });
 
     // Staples books
     for (let i = 0; i < 3; i++) {
-        const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.9), new THREE.MeshStandardMaterial({ color: 0x442211 + i * 0x111111 }));
+        const b = new THREE.Mesh(GEOMETRY.box, new THREE.MeshStandardMaterial({ color: 0x442211 + i * 0x111111 }));
+        b.scale.set(0.7, 0.12, 0.9);
         b.position.set(-0.6, dH + 0.06 + (i * 0.13), -0.1);
         b.rotation.y = (Math.random() - 0.5) * 0.4;
         deskGroup.add(b);
@@ -192,15 +209,18 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const paperMat = new THREE.MeshStandardMaterial({ color: 0xffffee, roughness: 0.9 });
     const coverMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8 });
 
-    const cover = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.7), coverMat);
+    const cover = new THREE.Mesh(GEOMETRY.box, coverMat);
+    cover.scale.set(0.9, 0.04, 0.7);
     openBook.add(cover);
 
-    const pageL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.65), paperMat);
+    const pageL = new THREE.Mesh(GEOMETRY.box, paperMat);
+    pageL.scale.set(0.42, 0.03, 0.65);
     pageL.position.set(-0.2, 0.15, 0);
     pageL.rotation.z = 0.15;
     openBook.add(pageL);
 
-    const pageR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.65), paperMat);
+    const pageR = new THREE.Mesh(GEOMETRY.box, paperMat);
+    pageR.scale.set(0.42, 0.03, 0.65);
     pageR.position.set(0.2, 0.15, 0);
     pageR.rotation.z = -0.15;
     openBook.add(pageR);
@@ -215,11 +235,11 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const bW = 3.5, bH = 2.2;
 
     // Poles
-    const mLegGeo = new THREE.BoxGeometry(0.2, 4.0, 0.2);
-    const mL = new THREE.Mesh(mLegGeo, darkerWoodMat); mL.position.set(-bW / 2, 2, 0); mapGroup.add(mL);
-    const mR = new THREE.Mesh(mLegGeo, darkerWoodMat); mR.position.set(bW / 2, 2, 0); mapGroup.add(mR);
+    const mL = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); mL.scale.set(0.2, 4.0, 0.2); mL.position.set(-bW / 2, 2, 0); mapGroup.add(mL);
+    const mR = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); mR.scale.set(0.2, 4.0, 0.2); mR.position.set(bW / 2, 2, 0); mapGroup.add(mR);
 
-    const board = new THREE.Mesh(new THREE.BoxGeometry(bW, bH, 0.1), warmWoodMat);
+    const board = new THREE.Mesh(GEOMETRY.box, warmWoodMat);
+    board.scale.set(bW, bH, 0.1);
     board.position.y = 2.8; mapGroup.add(board);
 
     // Map
@@ -243,23 +263,24 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const cH = 5.0, cW = 2.0, cD = 0.8, th = 0.1;
 
     // Back
-    const back = new THREE.Mesh(new THREE.BoxGeometry(cW, cH, th), warmWoodMat);
+    const back = new THREE.Mesh(GEOMETRY.box, warmWoodMat);
+    back.scale.set(cW, cH, th);
     back.position.set(0, cH / 2, -cD / 2 + th / 2); medGroup.add(back);
     // Sides
-    const sGeo = new THREE.BoxGeometry(th, cH, cD);
-    const sL = new THREE.Mesh(sGeo, warmWoodMat); sL.position.set(-cW / 2 + th / 2, cH / 2, 0); medGroup.add(sL);
-    const sR = new THREE.Mesh(sGeo, warmWoodMat); sR.position.set(cW / 2 - th / 2, cH / 2, 0); medGroup.add(sR);
+    const sL = new THREE.Mesh(GEOMETRY.box, warmWoodMat); sL.scale.set(th, cH, cD); sL.position.set(-cW / 2 + th / 2, cH / 2, 0); medGroup.add(sL);
+    const sR = new THREE.Mesh(GEOMETRY.box, warmWoodMat); sR.scale.set(th, cH, cD); sR.position.set(cW / 2 - th / 2, cH / 2, 0); medGroup.add(sR);
     // Top/Bottom
-    const tbGeo = new THREE.BoxGeometry(cW, th, cD);
-    const top = new THREE.Mesh(tbGeo, warmWoodMat); top.position.set(0, cH - th / 2, 0); medGroup.add(top);
-    const bot = new THREE.Mesh(tbGeo, warmWoodMat); bot.position.set(0, th / 2, 0); medGroup.add(bot);
+    const top = new THREE.Mesh(GEOMETRY.box, warmWoodMat); top.scale.set(cW, th, cD); top.position.set(0, cH - th / 2, 0); medGroup.add(top);
+    const bot = new THREE.Mesh(GEOMETRY.box, warmWoodMat); bot.scale.set(cW, th, cD); bot.position.set(0, th / 2, 0); medGroup.add(bot);
     // Doors
-    const cDoor = new THREE.Mesh(new THREE.BoxGeometry(cW - 0.1, cH * 0.3, th), darkerWoodMat);
+    const cDoor = new THREE.Mesh(GEOMETRY.box, darkerWoodMat);
+    cDoor.scale.set(cW - 0.1, cH * 0.3, th);
     cDoor.position.set(0, cH * 0.15, cD / 2); medGroup.add(cDoor);
     // Shelves and bottles
     for (let h = 0; h < 3; h++) {
         const yBase = cH * 0.4 + (h * 1.0);
-        const shelf = new THREE.Mesh(new THREE.BoxGeometry(cW - th * 2, th / 2, cD - th), darkerWoodMat);
+        const shelf = new THREE.Mesh(GEOMETRY.box, darkerWoodMat);
+        shelf.scale.set(cW - th * 2, th / 2, cD - th);
         shelf.position.set(0, yBase, 0); medGroup.add(shelf);
 
         for (let f = 0; f < 3; f++) {
@@ -277,15 +298,18 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
 
     // Medicine box
     const medkit = new THREE.Group();
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: 0xcc0000 }));
+    const box = new THREE.Mesh(GEOMETRY.box, new THREE.MeshStandardMaterial({ color: 0xcc0000 }));
+    box.scale.set(0.7, 0.4, 0.4);
     medkit.add(box);
 
     const crossMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.35, 0.42), crossMat);
+    const crossV = new THREE.Mesh(GEOMETRY.box, crossMat);
+    crossV.scale.set(0.15, 0.35, 0.42);
     crossV.position.set(0, 0, 0.01);
     medkit.add(crossV);
 
-    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.15, 0.42), crossMat);
+    const crossH = new THREE.Mesh(GEOMETRY.box, crossMat);
+    crossH.scale.set(0.35, 0.15, 0.42);
     crossH.position.set(0, 0, 0.01);
     medkit.add(crossH);
 
@@ -365,12 +389,12 @@ export const CampWorld = {
         // Visible ground area is approximately 60x60 units
         const groundMat = MATERIALS.dirt.clone();
         if (groundMat.map) {
-            groundMat.map.repeat.set(30, 30); // Reduced from 100
+            groundMat.map.repeat.set(60, 60); // Increased for larger plane
         }
         if (groundMat.bumpMap) {
-            groundMat.bumpMap.repeat.set(30, 30); // Reduced from 100
+            groundMat.bumpMap.repeat.set(60, 60); // Increased for larger plane
         }
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), groundMat); // Reduced from 1000
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat); // Increased from 60 to 120
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);

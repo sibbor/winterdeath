@@ -113,6 +113,13 @@ export interface SectorDef {
             scene?: THREE.Scene;
             spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
             startCinematic?: (target: THREE.Object3D, id: number) => void;
+            // Environment Controls
+            setWind: (direction: number, strength: number) => void;
+            resetWind: () => void;
+            setWeather: (type: WeatherType, count?: number) => void;
+            setLight: (params: { sunPos?: THREE.Vector3, sunColor?: THREE.Color, moonColor?: THREE.Color, ambientIntensity?: number }) => void;
+            setFog: (color: THREE.Color, density: number) => void;
+            setWater: (level?: number, waveHeight?: number) => void;
             setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
             emitNoise: (pos: THREE.Vector3, radius: number, type: string) => void;
         }

@@ -5,6 +5,7 @@ import { FXSystem } from './FXSystem';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/sound';
 import { AIState } from '../../types/enemy';
+import { WaterSystem } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Direction / MoveVec
@@ -157,9 +158,24 @@ export class PlayerMovementSystem implements System {
                 // --- AUDIO: Footsteps ---
                 const stepInterval = state.isRushing ? 250 : 400;
                 if (now > (state.lastStepTime || 0) + stepInterval) {
-                    // Determine surface type (snow, metal, wood)
-                    // For now, default to snow or check sector/position logic
-                    soundManager.playFootstep('snow');
+                    // Normalize spawn checks
+                    let inWater = false;
+                    if (state.sectorState && state.sectorState.waterSystem) {
+                        const ws = state.sectorState.waterSystem as WaterSystem;
+                        const buoyancy = ws.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
+                        if (buoyancy.inWater) {
+                            inWater = true;
+                            soundManager.playFootstep('water'); // Ensure 'water' type exists in soundManager or fallback
+                            // Spawn splash/ripple
+                            ws.spawnRipple(playerGroup.position.x, playerGroup.position.z, 2, 0.3);
+                        }
+                    }
+
+                    if (!inWater) {
+                        // Determine surface type (snow, metal, wood)
+                        // For now, default to snow or check sector/position logic
+                        soundManager.playFootstep('step');
+                    }
                     state.lastStepTime = now;
                 }
             }

@@ -61,7 +61,7 @@ export class SoundManager {
   playMetalKnocking() { GamePlaySounds.playMetalKnocking(this.core); }
   playCollectibleChime() { UiSounds.playCollectibleChime(this.core); }
   playLevelUp() { UiSounds.playLevelUp(this.core); }
-  playFootstep(type: 'snow' | 'metal' | 'wood' = 'snow') { GamePlaySounds.playFootstep(this.core, type); }
+  playFootstep(type: 'step' | 'snow' | 'metal' | 'wood' | 'water' = 'step') { GamePlaySounds.playFootstep(this.core, type); }
   playImpact(type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') {
     GamePlaySounds.playImpact(this.core, type);
   }
@@ -95,6 +95,7 @@ export class SoundManager {
   playTankDeath() { EnemySounds.playTankDeath(this.core); }
   playBomberBeep() { EnemySounds.playBomberBeep(this.core); }
   playBomberExplode() { EnemySounds.playBomberExplode(this.core); }
+  playZombieStep() { EnemySounds.playZombieStep(this.core); }
 
   playZombieGrowl(type: string = 'WALKER') {
     if (type === 'RUNNER') this.playRunnerScream();
@@ -344,9 +345,11 @@ export class SoundManager {
       case 'ambient_metal': GamePlaySounds.playAmbientMetal(this.core); break;
 
       // Footsteps
+      case 'step': this.playFootstep('step'); break;
       case 'step_snow': this.playFootstep('snow'); break;
       case 'step_metal': this.playFootstep('metal'); break;
       case 'step_wood': this.playFootstep('wood'); break;
+      case 'step_water': this.playFootstep('water'); break;
 
       // Impacts
       case 'impact_flesh': this.playImpact('flesh'); break;

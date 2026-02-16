@@ -481,6 +481,32 @@ export const FXSystem = {
             req.color = 0xffff00;
             FXSystem.particleQueue.push(req);
         }
+    },
+
+    // --- VISIBILITY TOGGLE ---
+
+    setVisible: (visible: boolean, particlesList: ParticleState[]) => {
+        // 1. Instanced Meshes
+        for (const type in FXSystem._instancedMeshes) {
+            const imesh = FXSystem._instancedMeshes[type];
+            imesh.visible = visible;
+        }
+
+        // 2. Standard Particles
+        for (let i = 0; i < particlesList.length; i++) {
+            const p = particlesList[i];
+            if (p.mesh) p.mesh.visible = visible;
+        }
+
+        // 3. Floating Text
+        for (let i = 0; i < FXSystem.textQueue.length; i++) {
+            const t = FXSystem.textQueue[i];
+            if (t.mesh) t.mesh.visible = visible;
+        }
+
+        // 4. Decals? Decals are usually static meshes in scene, handled separately.
+        // We could iterate DECAL_POOL but user passed decalList usually.
+        // For now, this covers dynamic FX.
     }
 
 };

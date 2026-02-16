@@ -143,7 +143,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false, cameraAngle: number = 0, camera: THREE.Camera | null = null) => {
+    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];
@@ -162,13 +162,11 @@ export const WeaponHandler = {
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0;
                 if (hasAmmo) {
-                    if (!debugMode) {
-                        if (now > state.lastShotTime + wep.fireRate) {
-                            state.weaponAmmo[state.activeWeapon]--;
-                            state.lastShotTime = now;
-                        }
+                    if (now > state.lastShotTime + wep.fireRate) {
+                        state.weaponAmmo[state.activeWeapon]--;
+                        state.lastShotTime = now;
                     }
 
                     // Calculate Origin/Direction
@@ -217,10 +215,10 @@ export const WeaponHandler = {
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0;
                 if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
                     state.lastShotTime = now;
-                    if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
+                    state.weaponAmmo[state.activeWeapon]--;
                     state.shotsFired++;
 
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
@@ -251,7 +249,7 @@ export const WeaponHandler = {
 
                         ProjectileSystem.spawnBullet(scene, state.projectiles, _v2, _v3, wep.name);
                     }
-                } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + 250) {
+                } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + wep.fireRate) {
                     state.lastShotTime = now;
                     soundManager.playEmptyClick();
                     state.isReloading = true;
@@ -265,7 +263,7 @@ export const WeaponHandler = {
         // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
         if (wep.behavior === WeaponBehavior.THROWABLE) {
             if (input.fire) {
-                if (state.weaponAmmo[state.activeWeapon] > 0 || debugMode) {
+                if (state.weaponAmmo[state.activeWeapon] > 0) {
                     if (state.throwChargeStart === 0) state.throwChargeStart = now;
                     const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
 
@@ -323,7 +321,7 @@ export const WeaponHandler = {
                 }
             } else if (state.throwChargeStart > 0) {
                 const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
-                if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
+                state.weaponAmmo[state.activeWeapon]--;
                 state.throwablesThrown++;
 
                 // FIRE! Use the exact same direction logic as aiming.
@@ -333,7 +331,7 @@ export const WeaponHandler = {
 
                 ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v1, state.activeWeapon, ratio);
 
-                if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) state.activeWeapon = loadout.primary;
+                if (state.weaponAmmo[state.activeWeapon] <= 0) state.activeWeapon = loadout.primary;
 
                 state.throwChargeStart = 0;
                 if (aimCrossMesh) aimCrossMesh.visible = false;

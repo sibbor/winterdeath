@@ -27,6 +27,7 @@ export interface CampEffectsState {
 export const CampEnvironment = {
     initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType): CampEffectsState => {
         const wind = new WindSystem();
+        wind.setOverride(1.0, 0.2); // Force subtle breeze for Camp (Strength 0.2)
         const weatherSystem = new WeatherSystem(scene, wind);
         // Constrain weather to visible terrain area (60x60)
         weatherSystem.sync(weatherType, WEATHER.PARTICLE_COUNT, 60); // Reduced from 100

@@ -11,7 +11,7 @@ export enum GameScreen {
   PROLOGUE = 'PROLOGUE',
 }
 
-export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'embers';
+export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
 
 export interface PlayerStats {
   level: number;
@@ -128,7 +128,8 @@ export type TriggerActionType =
   | 'CAMERA_PAN'
   | 'START_WAVE'
   | 'START_CINEMATIC'
-  | 'TRIGGER_FAMILY_FOLLOW'; // New
+  | 'TRIGGER_FAMILY_FOLLOW'
+  | 'OPEN_UI'; // New
 
 export interface TriggerAction {
   type: TriggerActionType;
@@ -151,6 +152,7 @@ export interface SectorTrigger {
   actions?: TriggerAction[]; // List of actions to execute
   repeatInterval?: number; // If > 0, trigger resets after X ms (for recurring events/spawners)
   lastTriggerTime?: number; // Timestamp for repeat logic
+  resetOnExit?: boolean; // If true, trigger resets when player leaves the zone
 
   // Box Shape Support
   size?: { width: number, depth: number }; // For rectangular triggers
@@ -191,8 +193,21 @@ export interface CinematicLine {
   duration?: number;
 }
 
+export interface EnvironmentOverride {
+  fogColor?: number;
+  fogDensity?: number;
+  sunPosition?: { x: number, y: number, z: number };
+  sunColor?: number;
+  sunIntensity?: number;
+  moonColor?: number;
+  moonIntensity?: number;
+  windStrength?: number;
+  windDirection?: number;
+}
+
 export interface SectorState {
   [key: string]: any;
+  envOverride?: EnvironmentOverride;
 }
 
 export interface Obstacle {
@@ -230,8 +245,12 @@ export interface GameCanvasProps {
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
   onFPSUpdate?: (fps: number) => void;
-  initialGraphics?: any;
+  initialGraphics?: GraphicsSettings;
   weather?: WeatherType;
+  onSpawnEnemies?: (enemies: any[]) => void;
+  onUpdateLoadout?: (loadout: any, levels: any) => void;
+  onInteractionStateChange?: (isOpen: boolean) => void;
+  isMobileDevice?: boolean;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

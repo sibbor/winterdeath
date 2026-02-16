@@ -15,11 +15,8 @@ interface ScreenPauseProps {
 
 const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap, onOpenSettings, onOpenAdventureLog, isMobileDevice }) => {
     const buttonStyle = `w-full ${isMobileDevice ? 'py-3 text-sm' : 'py-4'} font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 skew-x-[-10deg]`;
-
-    // Unified ESC handling is managed via useGlobalInput in App.tsx
-
     return (
-        <GameModalLayout title={t('ui.paused')} isMobile={isMobileDevice}>
+        <GameModalLayout title={t('ui.paused')} isMobile={isMobileDevice} onClose={onResume}>
             <div className="space-y-6">
                 <button onClick={onResume} className={`${buttonStyle} bg-white text-black border-white hover:bg-slate-300`}>
                     <span className="block skew-x-[10deg]">{t('ui.continue')}</span>

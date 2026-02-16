@@ -38,7 +38,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
     };
 
     return (
-        <GameModalLayout title={t('ui.teleport_title')} titleColorClass="text-white" maxWidthClass="max-w-2xl" isMobile={isMobileDevice}>
+        <GameModalLayout title={t('ui.teleport_title')} titleColorClass="text-white" maxWidthClass="max-w-2xl" isMobile={isMobileDevice} onClose={onCancel}>
             <div className="space-y-8" onKeyDown={handleKeyDown}>
                 <div className={`flex ${isMobileDevice ? 'flex-col sm:flex-row' : ''} gap-4 justify-center items-center`}>
                     <div className="flex flex-col items-start gap-2">

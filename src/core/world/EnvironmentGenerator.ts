@@ -346,9 +346,41 @@ export const EnvironmentGenerator = {
         return EnvironmentGenerator.initNaturePrototypes(yieldToMain);
     },
 
-    createRock: (width: number, height: number) => {
-        // Placeholder rock creation logic to satisfy interface
-        return new THREE.Mesh(new THREE.DodecahedronGeometry(width / 2), MATERIALS.stone);
+    createRock: (width: number, height: number, sharpness: number = 0.5) => {
+        const group = new THREE.Group();
+        const mat = MATERIALS.stone;
+
+        // Main bulk
+        const r = width * 0.4;
+        const geo = new THREE.DodecahedronGeometry(r, 0); // Low poly
+
+        // Randomize shape via scale
+        const sx = 1.0 + (Math.random() - 0.5) * 0.4;
+        const sz = 1.0 + (Math.random() - 0.5) * 0.4;
+        const sy = (height / width) * (1.0 + (Math.random() - 0.5) * 0.4);
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.scale.set(sx, sy, sz);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        // Random rotation
+        mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        group.add(mesh);
+
+        // Add 1-2 smaller chunks for detail
+        if (Math.random() > 0.3) {
+            const sub = new THREE.Mesh(geo, mat);
+            sub.scale.set(sx * 0.5, sy * 0.5, sz * 0.5);
+            sub.position.set((Math.random() - 0.5) * r, -r * 0.2, (Math.random() - 0.5) * r);
+            sub.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            sub.castShadow = true;
+            sub.receiveShadow = true;
+            group.add(sub);
+        }
+
+        group.userData.material = 'STONE';
+        return group;
     },
 
     createTree: (type: 'PINE' | 'SPRUCE' | 'OAK' | 'DEAD' | 'BIRCH' = 'PINE', scale: number = 1.0, variant: number = 0): THREE.Group => {
@@ -392,38 +424,43 @@ export const EnvironmentGenerator = {
         return group;
     },
 
-    addInstancedTrees: (ctx: SectorContext, typeKey: string, matrices: THREE.Matrix4[]) => {
+    addInstancedTrees: (ctx: SectorContext | { scene: THREE.Scene, uniqueMeshes?: any[] }, typeKey: string, matrices: THREE.Matrix4[], materialOverride?: THREE.Material) => {
         if (matrices.length === 0) return;
 
         const proto = prototypes[typeKey];
         if (!proto) return;
 
         const baseType = typeKey.split('_')[0];
-        let trunkMat = MATERIALS.treeTrunk;
-        if (baseType === 'OAK') trunkMat = MATERIALS.treeTrunkOak;
-        else if (baseType === 'BIRCH') trunkMat = MATERIALS.treeTrunkBirch;
-        else if (baseType === 'DEAD') trunkMat = MATERIALS.deadWood;
+        let trunkMat = materialOverride || MATERIALS.treeTrunk;
+        let leavesMat = materialOverride || MATERIALS.treeLeaves;
+
+        if (!materialOverride) {
+            if (baseType === 'OAK') { trunkMat = MATERIALS.treeTrunkOak; leavesMat = MATERIALS.treeLeavesOak; }
+            else if (baseType === 'BIRCH') { trunkMat = MATERIALS.treeTrunkBirch; leavesMat = MATERIALS.treeLeavesBirch; }
+            else if (baseType === 'DEAD') { trunkMat = MATERIALS.deadWood; }
+        }
 
         const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, matrices.length);
-        trunkMesh.castShadow = true; trunkMesh.receiveShadow = true;
+        trunkMesh.castShadow = !materialOverride; // Disable shadows for silhouettes (assimilated from CampWorld logic)
+        trunkMesh.receiveShadow = !materialOverride;
 
         let leavesMesh: THREE.InstancedMesh | undefined;
         if (proto.leavesGeo) {
-            let leavesMat = MATERIALS.treeLeaves;
-            if (baseType === 'OAK') leavesMat = MATERIALS.treeLeavesOak;
-            else if (baseType === 'BIRCH') leavesMat = MATERIALS.treeLeavesBirch;
-
             leavesMesh = new THREE.InstancedMesh(proto.leavesGeo, leavesMat, matrices.length);
-            leavesMesh.castShadow = true; leavesMesh.receiveShadow = true;
-            leavesMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
-                depthPacking: THREE.RGBADepthPacking,
-                map: (leavesMat as any).map,
-                alphaTest: (leavesMat as any).alphaTest
-            });
+            leavesMesh.castShadow = !materialOverride;
+            leavesMesh.receiveShadow = !materialOverride;
+
+            if (!materialOverride) {
+                leavesMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
+                    depthPacking: THREE.RGBADepthPacking,
+                    map: (leavesMat as any).map,
+                    alphaTest: (leavesMat as any).alphaTest
+                });
+            }
         }
 
         let snowMesh: THREE.InstancedMesh | undefined;
-        if (proto.snowGeo) {
+        if (proto.snowGeo && !materialOverride) { // No snow on silhouettes
             snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
             snowMesh.castShadow = true;
         }
@@ -438,7 +475,7 @@ export const EnvironmentGenerator = {
         if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
         if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
 
-        if (!ctx.uniqueMeshes) ctx.uniqueMeshes = [];
+        if (!ctx.uniqueMeshes) (ctx as any).uniqueMeshes = [];
         ctx.scene.add(trunkMesh);
         if (leavesMesh) ctx.scene.add(leavesMesh);
         if (snowMesh) ctx.scene.add(snowMesh);

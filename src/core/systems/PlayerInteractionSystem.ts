@@ -42,7 +42,8 @@ export class PlayerInteractionSystem implements System {
                 this.playerGroup.position,
                 state.chests,
                 state.triggers,
-                state.sectorState
+                state.sectorState,
+                session.mapId
             );
 
             state.interactionType = detection.type;
@@ -114,7 +115,8 @@ export class PlayerInteractionSystem implements System {
         playerPos: THREE.Vector3,
         chests: any[],
         triggers: any[],
-        sectorState: any
+        sectorState: any,
+        mapId: number
     ): { type: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null, position: THREE.Vector3 | null } {
 
         // --- 1. Check Collectibles (3.5m radius) ---
@@ -126,13 +128,14 @@ export class PlayerInteractionSystem implements System {
             }
         }
 
-        // --- 2. Check Specific Mission Triggers ---
+        // --- 2. Check Area Triggers (Portals/Events) ---
         for (let i = 0; i < triggers.length; i++) {
             const t = triggers[i];
-            if (t.id === 's2_cave_knock_shelter_port' && !t.triggered) {
-                _v1.set(t.position.x, 0.5, t.position.z);
-                if (playerPos.distanceToSquared(_v1) < (t.radius * t.radius)) {
-                    return { type: 'knock_on_port', position: _v1.clone() };
+            // Only 'event' usage type or 'portal' with interaction?
+            // Current trigger logic is mostly auto, but for Key Interactions:
+            if (t.usage === 'knock_on_port') {
+                if (playerPos.distanceToSquared(t.position) < t.radius * t.radius) {
+                    return { type: 'knock_on_port', position: t.position.clone() };
                 }
             }
         }
@@ -147,7 +150,8 @@ export class PlayerInteractionSystem implements System {
         }
 
         // --- 4. Check Mission Extraction (Bus/Explosive) ---
-        if (sectorState && !sectorState.busExploded && sectorState.ctx?.busObject) {
+        // ONLY SECTOR 1 (Map ID 0)
+        if (mapId === 0 && sectorState && !sectorState.busExploded && sectorState.ctx?.busObject) {
             if (sectorState.busCanBeInteractedWith) {
                 const bus = sectorState.ctx.busObject;
                 if (playerPos.distanceToSquared(bus.position) < 64) { // 8.0 * 8.0

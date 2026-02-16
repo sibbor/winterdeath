@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import TouchController from './ui/TouchController';
 import { Engine } from '../core/engine/Engine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
-import { PlayerStats, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase } from '../types';
+import { PlayerStats, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase, GraphicsSettings } from '../types';
 import { WeaponType } from '../content/weapons';
 import { SectorContext } from '../types/sectors';
 import { WEAPONS, BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP, CAMERA_HEIGHT } from '../content/constants';
@@ -22,6 +22,7 @@ import { CinematicSystem } from '../core/systems/CinematicSystem';
 import { FamilySystem } from '../core/systems/FamilySystem';
 import { CameraSystem } from '../core/systems/CameraSystem';
 import { TriggerHandler } from '../core/systems/TriggerHandler';
+import { WeaponHandler } from '../core/systems/WeaponHandler';
 import { EnvironmentSystem } from '../core/systems/EnvironmentSystem';
 import { DeathSystem } from '../core/systems/DeathSystem';
 import { AssetPreloader } from '../core/systems/AssetPreloader';
@@ -34,6 +35,10 @@ import { SectorSystem } from '../core/systems/SectorSystem';
 import { FootprintSystem } from '../core/systems/FootprintSystem';
 import ScreenPlayerDied from './game/ScreenPlayerDied';
 import ScreenCollectibleFound from './game/ScreenCollectibleFound';
+import { ScreenPlaygroundEnemyStation } from './game/ScreenPlaygroundEnemyStation'; // New
+import { ScreenPlaygroundEnvironmentStation } from './game/ScreenPlaygroundEnvironmentStation'; // New
+import ScreenArmory from './camp/ScreenArmory'; // Re-use
+import ScreenPlaygroundArmoryStation from './game/ScreenPlaygroundArmoryStation';
 import { COLLECTIBLES } from '../content/collectibles';
 import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
@@ -65,7 +70,6 @@ export interface GameSessionHandle {
     triggerInput: (key: string) => void;
     rotateCamera: (dir: number) => void;
 }
-
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
     const propsRef = useRef(props);
     const engineRef = useRef<Engine | null>(null);
@@ -157,6 +161,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const setupIdRef = useRef(0);
     const [foundMemberName, setFoundMemberName] = useState('');
     const [interactionType, setInteractionType] = useState<'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null>(null);
+    const [activeModal, setActiveModal] = useState<'armory' | 'spawner' | 'environment' | null>(null); // New state
 
     // UI Render Spam Protection
     const [interactionScreenPos, setInteractionScreenPos] = useState<{ x: number, y: number } | null>(null);
@@ -236,17 +241,40 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [deathPhase, props.isPaused, props.isClueOpen, cinematicActive, bossIntroActive]);
 
+    const activeModalRef = useRef<'armory' | 'spawner' | 'environment' | null>(null);
+
+    // Sync ref
+    useEffect(() => {
+        activeModalRef.current = activeModal;
+        if (props.onInteractionStateChange) {
+            props.onInteractionStateChange(!!activeModal);
+        }
+        if (activeModal) {
+            document.exitPointerLock();
+            document.body.style.cursor = 'default';
+        } else {
+            // cleanup if needed, but requestPointerLock usually handles it
+            document.body.style.cursor = '';
+        }
+    }, [activeModal]);
+
     useEffect(() => {
         const handleLockChange = () => {
             if (performance.now() - lockRequestTime.current < 1500) return;
-            const isExpectedUnlock = stateRef.current.isDead || cinematicRef.current.active || bossIntroRef.current.active || propsRef.current.isPaused || propsRef.current.isClueOpen;
+            const isExpectedUnlock = stateRef.current.isDead ||
+                cinematicRef.current.active ||
+                bossIntroRef.current.active ||
+                propsRef.current.isPaused ||
+                propsRef.current.isClueOpen ||
+                activeModalRef.current; // Use Ref here!
+
             if (!document.pointerLockElement && props.isRunning && !props.isPaused && !isExpectedUnlock) {
                 propsRef.current.onPauseToggle(true);
             }
         };
         document.addEventListener('pointerlockchange', handleLockChange);
         return () => document.removeEventListener('pointerlockchange', handleLockChange);
-    }, [props.isRunning, props.isPaused]);
+    }, [props.isRunning, props.isPaused]); // Removed activeModal from dependency as we use ref
 
     useEffect(() => {
         if (props.onDialogueStateChange) props.onDialogueStateChange(cinematicActive);
@@ -265,11 +293,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [props.isClueOpen]);
 
-    const isInputEnabled = !props.isPaused && props.isRunning && !cinematicActive && !props.isClueOpen && !props.disableInput && !stateRef.current.isDead && !bossIntroActive && (!cameraOverrideRef.current?.active);
+    const isInputEnabled = !props.isPaused && props.isRunning && !cinematicActive && !props.isClueOpen && !props.disableInput && !stateRef.current.isDead && !bossIntroActive && (!cameraOverrideRef.current?.active) && !activeModal;
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                // Modal handling moved to CampModalLayout
+                if (activeModal) return;
+
                 if (bossIntroActive) {
                     setBossIntroActive(false); bossIntroRef.current.active = false; e.stopPropagation(); return;
                 }
@@ -468,6 +499,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             switch (type) {
                 case 'SHOW_TEXT':
                     if (payload && payload.text) spawnBubble(t(payload.text), payload.duration || 3000);
+                    break;
+                case 'OPEN_UI':
+                    if (payload && payload.ui) {
+                        let newModal: 'armory' | 'spawner' | 'environment' | null = null;
+                        if (payload.ui === 'armory') newModal = 'armory';
+                        if (payload.ui === 'spawner') newModal = 'spawner';
+                        if (payload.ui === 'environment') newModal = 'environment';
+
+                        setActiveModal(newModal);
+                        activeModalRef.current = newModal; // Sync Ref IMMEDIATELY before unlocking
+
+                        stateRef.current.isInteractionOpen = false; // Close interaction prompt
+                        // Release pointer lock
+                        if (document.pointerLockElement) document.exitPointerLock();
+                    }
                     break;
                 case 'PLAY_SOUND':
                     if (payload && payload.id) {
@@ -1134,18 +1180,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
             prevInputRef.current = input.e;
 
-            // --- 2. SYSTEM SYNC PHASE ---
-            windSystemRef.current.update(now);
-
-            if (weatherSystemRef.current) {
-                const currentWeather = propsRef.current.weather || 'none';
-                weatherSystemRef.current.sync(currentWeather, engine.getSettings().weatherCount, 200);
-                weatherSystemRef.current.update(dt, now);
-                const windIntensity = weatherSystemRef.current.intensity || 0.1;
-                const windSpeed = windSystemRef.current.speed || 1.0;
-                soundManager.updateWind(windIntensity, windSpeed);
-            }
-
             // --- 3. PAUSE/FREEZE CHECK PHASE ---
             const state = stateRef.current;
             const isCinematic = cinematicRef.current.active;
@@ -1191,13 +1225,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 const hudMesh = familyMemberRef.current?.mesh || null;
 
-                if (!bossIntroActive) {
-                    const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, input, now, propsRef.current, distanceTraveledRef.current, camera);
+                if (!isBossIntro) {
+                    const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera);
                     hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                     propsRef.current.onUpdateHUD({ ...hudData, fps, debugMode: propsRef.current.debugMode });
                 } else {
+                    // Force HUD Refresh
+                    if (propsRef.current.onUpdateHUD && engineRef.current) {
+                        const now = performance.now();
+                        // Use safe fallbacks for camera if captured in closure, or ref
+                        const cam = engineRef.current.camera;
+                        const hudData = HudSystem.getHudData(stateRef.current, playerGroupRef.current!.position, familyMemberRef.current?.mesh || null, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, cam);
+                        propsRef.current.onUpdateHUD({ ...hudData, fps: 60, debugMode: propsRef.current.debugMode });
+                    }
                     if (propsRef.current.onUpdateHUD && now % 5 === 0) {
-                        const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, input, now, propsRef.current, distanceTraveledRef.current, camera);
+                        const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera);
                         hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                         propsRef.current.onUpdateHUD({ ...hudData, fps: Math.round(1000 / delta) });
                     }
@@ -1262,6 +1304,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (state.isDead) {
+                // Death Screen Logic
                 DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, _fxCallbacks);
                 if (playerGroupRef.current) FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -1287,6 +1330,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (!propsRef.current.isRunning || propsRef.current.isPaused) { soundManager.stopRadioStatic(); lastTime = now; return; }
+
+            // --- WEATHER & ENV UPDATE ---
+            if (weatherSystemRef.current) {
+                weatherSystemRef.current.update(delta);
+            }
+
+            // --- DAY/NIGHT & LIGHTING ---
+            // Simple approach: access the directional light if it exists and rotate it based on time
+            // For now, we just ensure the scene environment updates
+            // (A proper TimeSystem would be better, but we'll hack it for Playground compatibility)
 
             frame++;
 
@@ -1340,7 +1393,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
                 gameSessionRef.current!.debugMode = propsRef.current.debugMode;
                 gameSessionRef.current!.cameraAngle = cameraAngleRef.current;
-                gameSessionRef.current!.update(delta);
+                gameSessionRef.current!.update(delta, propsRef.current.mapId || 0);
 
                 if (state.hp / state.maxHp <= 0.1 && !state.isDead) {
                     if (now > (lastHeartbeatRef.current || 0) + 800) {
@@ -1370,8 +1423,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (state.waterSystem) state.waterSystem.update(delta);
             FootprintSystem.update(delta);
 
-            if (playerGroupRef.current && gameSessionRef.current?.debugSystemFlags.fx !== false) {
-                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
+            if (playerGroupRef.current) {
+                if (gameSessionRef.current?.debugSystemFlags.fx !== false) {
+                    FXSystem.setVisible(true, state.particles);
+                    FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
+                } else {
+                    FXSystem.setVisible(false, state.particles);
+                }
             }
 
             if (isCinematic) {
@@ -1639,6 +1697,72 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             {(deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE') && (
                 <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} isMobileDevice={props.isMobileDevice} />
+            )}
+
+            {/* New Interaction Screens */}
+            {activeModal === 'armory' && (
+                <ScreenPlaygroundArmoryStation
+                    stats={stateRef.current}
+                    currentLoadout={stateRef.current.loadout}
+                    weaponLevels={stateRef.current.weaponLevels || {}}
+                    onClose={() => {
+                        setActiveModal(null);
+                        activeModalRef.current = null;
+                        if (containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
+                    }}
+                    onSave={(newStats, newLoadout, newLevels) => {
+                        stateRef.current.stats = newStats;
+                        stateRef.current.loadout = newLoadout;
+                        stateRef.current.weaponLevels = newLevels;
+                        if (props.onUpdateLoadout) props.onUpdateLoadout(newLoadout, newLevels);
+                        setActiveModal(null);
+                        activeModalRef.current = null;
+                        if (containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
+                        soundManager.playUiConfirm();
+                    }}
+                    isMobileDevice={props.isMobileDevice}
+                />
+            )}
+            {activeModal === 'spawner' && (
+                <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
+                    <ScreenPlaygroundEnemyStation
+                        onClose={() => setActiveModal(null)}
+                        playerPos={{
+                            x: playerGroupRef.current?.position.x || 0,
+                            z: playerGroupRef.current?.position.z || 0
+                        }}
+                        onSpawnEnemies={(newEnemies) => {
+                            // Register new enemies into the game state
+                            newEnemies.forEach(e => {
+                                stateRef.current.enemies.push(e);
+                                if (e.type && !stateRef.current.seenEnemies.includes(e.type)) {
+                                    stateRef.current.seenEnemies.push(e.type);
+                                }
+                            });
+                        }}
+                    />
+                </div>
+            )}
+
+            {activeModal === 'environment' && (
+                <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
+                    <ScreenPlaygroundEnvironmentStation
+                        onClose={() => setActiveModal(null)}
+                        currentWeather={stateRef.current.weather}
+                        onWeatherChange={(w) => {
+                            stateRef.current.weather = w;
+                            if (weatherSystemRef.current) {
+                                weatherSystemRef.current.sync(w, 1000);
+                            }
+                        }}
+                        currentOverride={stateRef.current.sectorState.envOverride}
+                        onOverrideChange={(overrides) => {
+                            stateRef.current.sectorState.envOverride = overrides;
+                            // TODO: Force update? Usually update loop handles it.
+                        }}
+                        transparent={true}
+                    />
+                </div>
             )}
 
             {!isSectorLoading && !bossIntroActive && !cinematicActive && !forceHideHUD && (

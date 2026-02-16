@@ -97,6 +97,7 @@ export interface Enemy {
     velocity: THREE.Vector3;     // Primary movement vector
     knockbackVel: THREE.Vector3; // Force applied from hits/explosions
     deathVel: THREE.Vector3;     // Trajectory used during the falling animation
+    separationForce?: THREE.Vector3; // Separation steering vector
 
     // Death, Animation & Cleanup
     lastDamageType?: string;       // Type of damage

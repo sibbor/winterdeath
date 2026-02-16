@@ -55,6 +55,12 @@ export class WeatherSystem {
         if (type === 'rain') {
             color = 0xaaaaff;
             opacity = 0.4;
+        } else if (type === 'ash') {
+            color = 0x222222; // Dark Gray
+            opacity = 0.9;
+        } else if (type === 'ember') {
+            color = 0xff4400; // Glowing Orange/Red
+            opacity = 1.0;
         }
 
         // (Re)create mesh only if material properties changed significantly
@@ -85,7 +91,15 @@ export class WeatherSystem {
                 this.velocities[i3 + 0] = (Math.random() - 0.5) * 1.5; // Sway
                 this.velocities[i3 + 1] = -(8 + Math.random() * 7);   // Fall speed
                 this.velocities[i3 + 2] = (Math.random() - 0.5) * 1.5; // Sway
-            } else {
+            } else if (type === 'ash') {
+                this.velocities[i3 + 0] = (Math.random() - 0.5) * 2;
+                this.velocities[i3 + 1] = -(2 + Math.random() * 3); // Slow fall
+                this.velocities[i3 + 2] = (Math.random() - 0.5) * 2;
+            } else if (type === 'ember') {
+                this.velocities[i3 + 0] = (Math.random() - 0.5) * 3;
+                this.velocities[i3 + 1] = (1 + Math.random() * 4); // Rise up? Or float. Let's make them float up slowly or chaotic.
+                this.velocities[i3 + 2] = (Math.random() - 0.5) * 3;
+            } else { // rain
                 this.velocities[i3 + 0] = 0;
                 this.velocities[i3 + 1] = -(50 + Math.random() * 30); // Fast rain
                 this.velocities[i3 + 2] = 0;
@@ -96,33 +110,27 @@ export class WeatherSystem {
         this.instancedMesh.instanceMatrix.needsUpdate = true;
     }
 
-    /**
-     * Main update loop. 
-     * Runs at Zero-GC using Float32Array indexing.
-     */
-    public update(delta: number, now: number) {
-        if (this.type === 'none' || !this.instancedMesh) return;
+    public update(dt: number, time: number) {
+        if (!this.instancedMesh || !this.instancedMesh.visible) return;
 
         const windVec = this.wind.current;
-        const windSwayMult = this.type === 'snow' ? 150.0 : 80.0;
-        const isRain = this.type === 'rain';
+        const windSwayMult = this.type === 'snow' ? 20.0 : 10.0;
 
         for (let i = 0; i < this.count; i++) {
             const i3 = i * 3;
 
             // Apply movement logic directly to buffer values
-            this.positions[i3 + 1] += this.velocities[i3 + 1] * delta; // Vertical
-            this.positions[i3 + 0] += (this.velocities[i3 + 0] + windVec.x * windSwayMult) * delta; // Horizontal X
-            this.positions[i3 + 2] += (this.velocities[i3 + 2] + windVec.y * windSwayMult) * delta; // Horizontal Z
+            this.positions[i3 + 1] += this.velocities[i3 + 1] * dt; // Vertical
+            this.positions[i3 + 0] += (this.velocities[i3 + 0] + windVec.x * windSwayMult) * dt; // Horizontal X
+            this.positions[i3 + 2] += (this.velocities[i3 + 2] + windVec.y * windSwayMult) * dt; // Horizontal Z
 
             // Seamless Reset (Teleport back to top)
-            if (this.positions[i3 + 1] < -5) {
+            if (this.positions[i3 + 1] < 0) {
                 this.positions[i3 + 1] = 40;
                 this.positions[i3 + 0] = (Math.random() - 0.5) * this.areaSize;
                 this.positions[i3 + 2] = (Math.random() - 0.5) * this.areaSize;
             }
 
-            // Sync with GPU
             this.updateInstanceMatrix(i);
         }
         this.instancedMesh.instanceMatrix.needsUpdate = true;
@@ -157,5 +165,9 @@ export class WeatherSystem {
             this.instancedMesh = null;
         }
         // No need to clear Float32Arrays, just leave them allocated
+    }
+
+    public setVisible(visible: boolean) {
+        if (this.instancedMesh) this.instancedMesh.visible = visible;
     }
 }

@@ -13,6 +13,7 @@ interface UIState {
     hp: number;
     isSettingsOpen: boolean;
     isAdventureLogOpen: boolean;
+    isInteractionOpen?: boolean;
 }
 
 interface UIActions {
@@ -40,7 +41,7 @@ export const useGlobalInput = (
                 if (screen === GameScreen.CAMP) return;
 
                 // If a dialogue or boss intro is active, let GameCanvas handle the ESC key
-                if (ui.isDialogueOpen || ui.isBossIntroActive) return;
+                if (ui.isDialogueOpen || ui.isBossIntroActive || ui.isInteractionOpen) return;
 
                 e.preventDefault();
                 e.stopPropagation();
@@ -98,5 +99,5 @@ export const useGlobalInput = (
 
         window.addEventListener('keydown', handleInput, { capture: true });
         return () => window.removeEventListener('keydown', handleInput, { capture: true });
-    }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeCollectible, ui.isDialogueOpen, ui.isAdventureLogOpen, ui.hp, actions]);
+    }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeCollectible, ui.isDialogueOpen, ui.isAdventureLogOpen, ui.isInteractionOpen, ui.hp, actions]);
 };

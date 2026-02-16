@@ -39,8 +39,29 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     const maxWidth = isSmall ? 'max-w-2xl' : 'max-w-7xl';
     const height = isSmall ? 'h-auto max-h-[85vh]' : 'h-[85vh] md:h-[90vh]';
 
+    React.useEffect(() => {
+        // FORCE cursor capability
+        if (document.pointerLockElement) document.exitPointerLock();
+        // Fallback style injection in case CSS classes fail
+        document.body.style.cursor = 'default';
+
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                soundManager.playUiClick();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => {
+            window.removeEventListener('keydown', handleEsc);
+            // We do NOT re-lock here blindly, let the parent decide
+            document.body.style.cursor = '';
+        };
+    }, [onClose]);
+
     return (
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50 p-4 md:p-8 backdrop-blur-lg pointer-events-auto">
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50 p-4 md:p-8 backdrop-blur-lg pointer-events-auto cursor-default">
             <div className={`bg-black/95 border-4 border-gray-800 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)] relative`}>
                 {/* Reduced padding p-8 to p-6 */}
                 <div className="p-4 md:p-6 border-b-2 border-gray-800 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4">

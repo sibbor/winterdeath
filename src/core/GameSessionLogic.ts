@@ -23,6 +23,7 @@ export class GameSessionLogic {
     public isMobile: boolean = false;
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
+    public mapId: number = 0;
 
     // Performance Debug Flags
     public debugSystemFlags = {
@@ -130,7 +131,7 @@ export class GameSessionLogic {
      * Main simulation loop.
      * Clears frame-based events and iterates through all registered systems.
      */
-    update(dt: number) {
+    update(dt: number, mapId: number = 0) {
         // Return active noise events to the pool before starting the new frame
         if (this.noiseEvents.length > 0) {
             for (let i = 0; i < this.noiseEvents.length; i++) {
@@ -139,6 +140,7 @@ export class GameSessionLogic {
             this.noiseEvents.length = 0;
         }
 
+        this.mapId = mapId;
         if (!this.state) return;
         const now = performance.now();
 
@@ -151,13 +153,31 @@ export class GameSessionLogic {
             const sys = systems[i];
 
             // Performance Debug Toggles
-            if (sys.id === 'WindSystem' && !flags.wind) continue;
-            if (sys.id === 'WeatherSystem' && !flags.weather) continue;
-            if (sys.id === 'FootprintSystem' && !flags.footprints) continue;
-            if ((sys.id === 'EnemySystem' || sys.id === 'EnemyManager') && !flags.enemies) continue;
-            if (sys.id === 'FXSystem' && !flags.fx) continue;
+            if (sys.id === 'WindSystem') {
+                if (!flags.wind) { sys.setVisible?.(false); continue; }
+                else sys.setVisible?.(true);
+            }
+            if (sys.id === 'WeatherSystem') {
+                if (!flags.weather) { sys.setVisible?.(false); continue; }
+                else sys.setVisible?.(true);
+            }
+            if (sys.id === 'FootprintSystem') {
+                if (!flags.footprints) { sys.setVisible?.(false); continue; }
+                else sys.setVisible?.(true);
+            }
+            if ((sys.id === 'EnemySystem' || sys.id === 'EnemyManager')) {
+                if (!flags.enemies) { sys.setVisible?.(false); continue; }
+                else sys.setVisible?.(true);
+            }
+            if (sys.id === 'FXSystem') {
+                if (!flags.fx) { sys.setVisible?.(false); continue; }
+                else sys.setVisible?.(true);
+            }
             // specific check for lighting system if it exists as a System
-            if (sys.id === 'LightingSystem' && !flags.lighting) continue;
+            if (sys.id === 'LightingSystem') {
+                if (!flags.lighting) { sys.setVisible?.(false); continue; }
+                else sys.setVisible?.(true);
+            }
 
             sys.update(this, dt, now);
         }

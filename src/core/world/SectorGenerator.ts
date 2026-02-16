@@ -3,12 +3,12 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorContext } from '../../types/sectors';
-import { TriggerType, TriggerAction } from '../../types';
 import { ObjectGenerator } from './ObjectGenerator';
 import { EnvironmentGenerator } from './EnvironmentGenerator';
 import { PathGenerator } from './PathGenerator';
 import { EffectManager } from '../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
+import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
 
 // Shared Utilities for Sector Generation
 export const SectorGenerator = {
@@ -358,17 +358,23 @@ export const SectorGenerator = {
         });
     },
 
-    spawnBoxTrigger: (ctx: SectorContext, id: string, x: number, z: number, width: number, depth: number, type: TriggerType, content: string = '', actions?: TriggerAction[], rotation: number = 0) => {
-        ctx.triggers.push({
+    spawnBoxTrigger: (ctx: SectorContext, id: string, x: number, z: number, width: number, depth: number, type: TriggerType, content: string = '', actions?: TriggerAction[], resetOnExit: boolean = false, rotation: number = 0) => {
+        const trigger: SectorTrigger = {
             id,
             position: { x, z },
             size: { width, depth },
-            rotation,
-            type,
-            content,
-            actions,
-            triggered: false
-        });
+            type: type,
+            content: content,
+            triggered: false,
+            actions: actions || [],
+            resetOnExit: resetOnExit,
+            rotation: rotation
+        };
+        ctx.triggers.push(trigger);
+
+        if (ctx.debugMode) {
+            SectorGenerator.spawnDebugMarker(ctx, x, z, 2, id);
+        }
     },
 
     spawnDebugMarker: (ctx: SectorContext, x: number, z: number, height: number, label: string) => {
@@ -1051,5 +1057,52 @@ export const SectorGenerator = {
                 { type: 'emitter', particle: smokePart, interval: isLarge ? 80 : 150, count: 1, offset: new THREE.Vector3(offset.x, offset.y + (isLarge ? 2.0 : 1.0), offset.z), spread: isLarge ? 2.0 : 0.4, color: isLarge ? 0x333333 : 0xffdd00 }
             );
         }
+    },
+
+    spawnTerminal: (ctx: SectorContext, x: number, z: number, type: 'TERMINAL_ARMORY' | 'TERMINAL_SPAWNER' | 'TERMINAL_ENV') => {
+        const terminalType = type === 'TERMINAL_ARMORY' ? 'ARMORY' : type === 'TERMINAL_SPAWNER' ? 'SPAWNER' : 'ENV';
+        const terminal = ObjectGenerator.createTerminal(terminalType);
+        terminal.position.set(x, 0, z);
+        // Face center
+        terminal.lookAt(0, 0, 0);
+        ctx.scene.add(terminal);
+
+        SectorGenerator.addObstacle(ctx, {
+            mesh: terminal,
+            position: terminal.position,
+            collider: { type: 'box', size: new THREE.Vector3(1.2, 2, 1) }
+        });
+
+        // Add Interaction Trigger
+        let actionType: string = 'OPEN_UI';
+        let payload: any = {};
+        let label = 'ui.interact';
+
+        if (type === 'TERMINAL_ARMORY') {
+            payload = { ui: 'armory' };
+            label = 'ui.open_armory';
+        } else if (type === 'TERMINAL_SPAWNER') {
+            payload = { ui: 'spawner' };
+            label = 'ui.open_spawner';
+        } else if (type === 'TERMINAL_ENV') {
+            payload = { ui: 'environment' };
+            label = 'ui.open_env';
+        }
+
+        SectorGenerator.spawnBoxTrigger(ctx, `terminal_${type}_${x}_${z}`, x, z, 2, 2, 'EVENT', label, [
+            { type: actionType as any, payload: payload }
+        ], true);
+
+        // Visual Marker
+        const icon = type === 'TERMINAL_ARMORY' ? '🔫' : type === 'TERMINAL_SPAWNER' ? '🧟' : '⛈️';
+        ctx.mapItems.push({
+            id: `terminal_${type}`,
+            x, z,
+            type: 'POI',
+            label: label,
+            icon: icon,
+            color: '#ffffff'
+        });
     }
 };
+

@@ -36,17 +36,9 @@ export const TriggerHandler = {
         for (let i = 0; i < triggers.length; i++) {
             const trig = triggers[i];
 
-            // 1. QUICK DISCARD: Handle Cooling Down / One-shots
-            if (trig.triggered) {
-                if (trig.repeatInterval && trig.repeatInterval > 0) {
-                    if (trig.lastTriggerTime && now - trig.lastTriggerTime > trig.repeatInterval) {
-                        trig.triggered = false; // Reset for reuse
-                    } else {
-                        continue; // Still cooling down
-                    }
-                } else {
-                    continue; // One-shot already used
-                }
+            // 1. OPTIMIZATION: Skip if one-shot and finished (and not resetOnExit)
+            if (trig.triggered && !trig.resetOnExit && (!trig.repeatInterval || trig.repeatInterval <= 0)) {
+                continue;
             }
 
             let isInside = false;
@@ -79,22 +71,56 @@ export const TriggerHandler = {
                 }
             }
 
-            // 3. EXECUTION
+            // 3. STATE MANAGEMENT
+            if (trig.triggered) {
+                // RESET ON EXIT
+                if (trig.resetOnExit && !isInside) {
+                    trig.triggered = false;
+                    continue;
+                }
+
+                // REPEAT INTERVAL
+                if (trig.repeatInterval && trig.repeatInterval > 0) {
+                    if (trig.lastTriggerTime && now - trig.lastTriggerTime > trig.repeatInterval) {
+                        trig.triggered = false; // Ready to fire again
+                    } else {
+                        continue; // Cooldown
+                    }
+                }
+                // ONE-SHOT (but still inside and NO resetOnExit/repeat)
+                else if (!trig.resetOnExit) {
+                    continue;
+                }
+                // If resetOnExit=true AND isInside=true, we fall through to Execute actions (Continuous Mode)
+            }
+
+            // 4. EXECUTION
             if (isInside) {
-                trig.triggered = true;
-                trig.lastTriggerTime = now;
+                // Determine if we should set triggered (First entry)
+                const isFirstEntry = !trig.triggered;
+
+                // Update State
+                if (isFirstEntry) {
+                    trig.triggered = true;
+                    trig.lastTriggerTime = now;
+                }
 
                 // Fire Actions
                 if (trig.actions && trig.actions.length > 0) {
                     for (let j = 0; j < trig.actions.length; j++) {
-                        callbacks.onAction(trig.actions[j]);
+                        const action = trig.actions[j];
+
+                        // Execute if:
+                        // A) First Entry
+                        // B) It's a continuous trigger (resetOnExit) AND the action type implies UI/State (e.g. OPEN_UI interaction refresh)
+                        if (isFirstEntry || (trig.resetOnExit && action.type === 'OPEN_UI')) {
+                            callbacks.onAction(action);
+                        }
                     }
-                    // Prevent narrative fallback if only actions are intended
-                    if (!trig.content) continue;
                 }
 
-                // Fire Narrative / UI
-                if (trig.content) {
+                // Fire Narrative (Only on First Entry to avoid spam)
+                if (isFirstEntry && trig.content) {
                     const translatedText = callbacks.t(trig.content);
                     callbacks.spawnBubble(translatedText);
 
@@ -112,4 +138,4 @@ export const TriggerHandler = {
             }
         }
     }
-};
+}

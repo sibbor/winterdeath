@@ -240,7 +240,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 angle = -(humans.length - 1) * 0.25 / 2 + idx * 0.25;
             }
 
-            member.position.set(Math.sin(angle) * radius, -0.1, Math.cos(angle) * radius);
+            member.position.set(Math.sin(angle) * radius, -0.25, Math.cos(angle) * radius);
             member.lookAt(0, 0, 0);
 
             const bodyMesh = member.children.find(c => c.userData.isBody);

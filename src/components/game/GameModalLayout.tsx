@@ -7,9 +7,13 @@ interface GameModalLayoutProps {
     footer?: React.ReactNode;
     titleColorClass?: string; // e.g. text-red-600
     maxWidthClass?: string; // e.g. max-w-4xl
+    transparent?: boolean;
     blurClass?: string; // e.g. backdrop-blur-xl
     isMobile?: boolean;
+    onClose?: () => void; // Added for ESC handling
 }
+
+import { soundManager } from '../../utils/sound';
 
 const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     title,
@@ -18,11 +22,32 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     titleColorClass = "text-white",
     maxWidthClass = "max-w-xl",
     blurClass = "backdrop-blur-md",
-    isMobile = false
+    isMobile = false,
+    transparent,
+    onClose
 }) => {
+    const borderColorClass = titleColorClass.replace('text-', 'border-').replace('white', 'gray-800'); // Simple derivation
+
+    React.useEffect(() => {
+        // FORCE cursor capability
+        if (document.pointerLockElement) document.exitPointerLock();
+
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && onClose) {
+                e.stopPropagation();
+                soundManager.playUiClick();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => {
+            window.removeEventListener('keydown', handleEsc);
+        };
+    }, [onClose]);
+
     return (
-        <div className={`absolute inset-0 bg-black/20 z-[60] flex items-center justify-center ${blurClass} p-2 md:p-4`}>
-            <div className={`w-full ${maxWidthClass} max-h-[90vh] md:max-h-none text-center bg-black border-4 border-gray-800 shadow-[0_0_50px_rgba(220,38,38,0.2)] relative overflow-hidden flex flex-col`}>
+        <div className={`absolute inset-0 flex items-center justify-center z-[100] p-4 md:p-8 pointer-events-auto ${transparent ? '' : 'bg-black/30 backdrop-blur-lg'}`}>
+            <div className={`relative flex flex-col w-full ${maxWidthClass} max-h-[90vh] md:max-h-none bg-black shadow-2xl border-2 ${borderColorClass} shadow-[0_0_50px_rgba(220,38,38,0.2)] overflow-hidden`}>
 
                 {/* Background Decoration */}
                 <div className="absolute top-0 right-0 opacity-10 pointer-events-none">

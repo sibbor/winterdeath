@@ -13,12 +13,8 @@ interface ScreenCollectibleFoundProps {
 
 const ScreenCollectibleFound: React.FC<ScreenCollectibleFoundProps> = ({ collectible, onClose, isMobileDevice }) => {
 
-    useEffect(() => {
-        // soundManager.collectibleFound(); 
-    }, []);
-
     return (
-        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-8" onClick={(e) => e.stopPropagation()}>
+        <div className="absolute inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-8" onClick={(e) => e.stopPropagation()}>
             <div className={`max-w-2xl w-full border-4 border-yellow-500/30 bg-black ${isMobileDevice ? 'p-6' : 'p-12'} shadow-[0_0_80px_rgba(255,215,0,0.15)] flex flex-col items-center text-center relative skew-x-[-1deg] overflow-y-auto max-h-[90vh]`}>
 
                 {/* Title */}
