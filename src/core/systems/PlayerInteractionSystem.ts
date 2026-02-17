@@ -8,8 +8,8 @@ import { getCollectibleById } from '../../content/collectibles';
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 
-// [VINTERDÖD] Delat objekt för returvärden från detektion.
-// Eliminering av ständiga { type, pos } allokeringar.
+// [VINTERDÖD] Shared object for detection returns.
+// Eliminates constant { type, pos } garbage allocations.
 const _detectionResult = {
     type: null as 'chest' | 'collectible' | 'sector_specific' | null,
     position: new THREE.Vector3(),
@@ -17,13 +17,13 @@ const _detectionResult = {
     object: null as THREE.Object3D | null
 };
 
-// [VINTERDÖD] Typ för cachad material-array för Zero-GC animering
+// [VINTERDÖD] Type for ActiveAnimation. 
+// OPTIMIZATION: Removed material array caching entirely since we use Scale instead of Opacity.
 interface ActiveAnimation {
     obj: THREE.Group;
     startY: number;
     progress: number;
     duration: number;
-    materials: THREE.Material[]; // Pre-cachade material
 }
 
 export class PlayerInteractionSystem implements System {
@@ -66,7 +66,7 @@ export class PlayerInteractionSystem implements System {
             }
             state.interactionLabel = label;
 
-            if (_detectionResult.position) {
+            if (_detectionResult.position && _detectionResult.type) {
                 if (!state.interactionTargetPos) state.interactionTargetPos = new THREE.Vector3();
                 state.interactionTargetPos.copy(_detectionResult.position);
             } else {
@@ -84,7 +84,7 @@ export class PlayerInteractionSystem implements System {
                     state.interactionType,
                     this.playerGroup.position,
                     state.chests,
-                    state.triggers, // [VINTERDÖD] Lagt till triggers här för hanteringen
+                    state.triggers,
                     state,
                     session
                 );
@@ -104,32 +104,22 @@ export class PlayerInteractionSystem implements System {
             anim.obj.position.y = anim.startY + anim.progress * 2.0;
             anim.obj.rotation.y += 3.0 * dt;
 
-            // [VINTERDÖD] Platt iteration över cachade material istället för Object3D-traversering
-            const op = 1.0 - anim.progress;
-            const mats = anim.materials;
-            const mLen = mats.length;
-            for (let m = 0; m < mLen; m++) {
-                mats[m].opacity = op;
-            }
+            // --- OPTIMIZATION: ZERO-GC & NO SHADER RECOMPILATION ---
+            // Animate scale down to 0 instead of updating material opacity.
+            // Eliminates heavy CPU/GPU stuttering and prevents memory leaks.
+            const s = 1.0 - anim.progress;
+            anim.obj.scale.set(s, s, s);
 
             if (anim.progress >= 1) {
                 session.engine.scene.remove(anim.obj);
 
-                // [VINTERDÖD] Dispose itereras via den platta cachen också
-                for (let m = 0; m < mLen; m++) {
-                    mats[m].dispose();
-                }
-
-                // Radera mesh/geom från scene (bara ifall de ligger kvar)
-                anim.obj.traverse((child: any) => {
-                    if (child.isMesh && child.geometry) {
-                        child.geometry.dispose();
-                    }
-                });
+                // IMPORTANT FIX: Removed geometry and material dispose() here. 
+                // Since we never cloned the geometry, disposing it here would 
+                // permanently break any future spawned collectibles of the same type.
 
                 const idx = this.collectibles.indexOf(anim.obj);
                 if (idx > -1) {
-                    // Swap and Pop på collectibles array
+                    // Swap and Pop on collectibles array
                     this.collectibles[idx] = this.collectibles[this.collectibles.length - 1];
                     this.collectibles.pop();
                 }
@@ -144,7 +134,7 @@ export class PlayerInteractionSystem implements System {
     /**
      * Scans the environment for the closest interactable object.
      * Priority: Collectibles > Triggers > Chests > Mission Objects
-     * [VINTERDÖD] Modifierar den globala _detectionResult istället för att returnera ett nytt objekt.
+     * [VINTERDÖD] Modifies the global _detectionResult instead of returning a new object.
      */
     private detectInteraction(
         playerPos: THREE.Vector3,
@@ -183,12 +173,8 @@ export class PlayerInteractionSystem implements System {
         for (let i = 0; i < tLen; i++) {
             const t = triggers[i];
             if (t.userData?.isInteractable) {
-                // Check dist based on radius or box
                 let inRange = false;
                 if (t.size) { // Box
-                    // Simplified AABB check relative to rotation would be needed here, 
-                    // but for now we fallback to radius check on center for interaction prompts usually
-                    // or strict containment. Let's use simple distance for prompt visibility
                     const dist = Math.max(t.size.width, t.size.depth) * 0.7; // Approx
                     if (playerPos.distanceToSquared(t.position) < dist * dist) inRange = true;
                 } else {
@@ -200,26 +186,18 @@ export class PlayerInteractionSystem implements System {
                     _detectionResult.position.copy(t.position);
                     _detectionResult.type = 'sector_specific';
                     _detectionResult.id = t.userData.interactionId;
-                    _detectionResult.object = t; // Triggers are objects in our system? No, they are data. 
-                    // Wait, triggers in RuntimeState are just data. We might need the mesh if it exists.
-                    // The scan should probably look at sectorState.ctx.obstacles OR specific meshes if needed.
-                    // For triggers that are just zones, we pass null object? 
-                    // Actually, many "triggers" are meshes with userData.
+                    _detectionResult.object = t;
                     return;
                 }
             }
         }
 
         // Scan Physics/Obstacle Objects (Boats, Stations, etc)
-        // This relies on them being in a known list or checking nearby entities.
-        // For performance, we should ideally have a list of Key Interactables.
-        // For now, let's check sectorState.ctx.obstacles if available, or just fallback to known types
         if (sectorState.ctx && sectorState.ctx.interactables) {
             const len = sectorState.ctx.interactables.length;
             for (let i = 0; i < len; i++) {
                 const obj = sectorState.ctx.interactables[i];
                 if (obj.userData?.isInteractable) {
-                    // Use mesh radius or fixed 3m
                     const r = obj.userData.interactionRadius || 4.0;
                     if (playerPos.distanceToSquared(obj.position) < r * r) {
                         _detectionResult.position.copy(obj.position);
@@ -302,45 +280,25 @@ export class PlayerInteractionSystem implements System {
         if (!getCollectibleById(collectibleId)) return;
 
         collectible.userData.pickedUp = true;
+
+        // --- AUDIO SYNC FIX ---
+        // Play sound immediately before the React UI cycle starts.
         soundManager.playUiPickup();
 
         if (this.onCollectibleFound) {
             const cb = this.onCollectibleFound;
-            setTimeout(() => cb(collectibleId), 500);
+            // Lowered timeout from 500ms to 100ms for snappier UI transitions
+            setTimeout(() => cb(collectibleId), 100);
         }
 
-        // --- Optimized Pickup Animation (Managed by System Update) ---
-        const obj = collectible;
-        const cachedMaterials: THREE.Material[] = [];
-
-        // Clone materials only once, and cache them to avoid per-frame traversal
-        obj.traverse((child: any) => {
-            if (child.isMesh && child.material) {
-                // If it's an array of materials (multi-material mesh), we handle that too
-                if (Array.isArray(child.material)) {
-                    const clonedMats = [];
-                    for (let i = 0; i < child.material.length; i++) {
-                        const cm = child.material[i].clone();
-                        cm.transparent = true;
-                        clonedMats.push(cm);
-                        cachedMaterials.push(cm);
-                    }
-                    child.material = clonedMats;
-                } else {
-                    child.material = child.material.clone();
-                    child.material.transparent = true;
-                    cachedMaterials.push(child.material);
-                }
-            }
-        });
-
-        // Register animation to be handled in update()
+        // --- OPTIMIZATION FIX ---
+        // Removed massive material cloning loop. Object is just passed to the animation system.
+        // The animation system now scales it down instead of changing opacity, saving MS of frame time.
         this.activeAnimations.push({
-            obj,
-            startY: obj.position.y,
+            obj: collectible,
+            startY: collectible.position.y,
             progress: 0,
-            duration: 0.8,
-            materials: cachedMaterials
+            duration: 0.8
         });
     }
 }
