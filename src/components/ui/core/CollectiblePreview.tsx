@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { ModelFactory } from '../../../utils/assets';
@@ -7,7 +6,6 @@ interface CollectiblePreviewProps {
     type: string;
     isLocked?: boolean;
 }
-
 
 const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -70,7 +68,21 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
 
         // Model
         const group = new THREE.Group();
-        const mesh = ModelFactory.createCollectible(type);
+        const originalMesh = ModelFactory.createCollectible(type);
+
+        // [VINTERDÖD] CRITICAL FIX: Deep clone materials!
+        // Eftersom denna renderer är en SEPARAT WebGL Context, får vi inte använda 
+        // spelets globala material. Om vi gör det förstörs spelets shaders när denna UI stängs.
+        const mesh = originalMesh.clone();
+        mesh.traverse((child: any) => {
+            if (child.isMesh && child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material = child.material.map((m: any) => m.clone());
+                } else {
+                    child.material = child.material.clone();
+                }
+            }
+        });
 
         // Remove glow for UI
         const worldLight = mesh.getObjectByName('collectibleGlow');
@@ -94,9 +106,21 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
             isRunning = false;
             cancelAnimationFrame(animeId);
 
+            // [VINTERDÖD] Städa upp de nyskapade klonade materialen för UI:t
+            mesh.traverse((child: any) => {
+                if (child.isMesh && child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((m: any) => m.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            });
+
             // Cleanup SCENE and RENDERER
             scene.clear();
             renderer.dispose();
+            renderer.forceContextLoss(); // Tvingar webbläsaren att släppa GPU-minnet för denna kontext direkt
 
             if (container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);

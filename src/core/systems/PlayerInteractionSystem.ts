@@ -24,6 +24,7 @@ interface ActiveAnimation {
     startY: number;
     progress: number;
     duration: number;
+    collectibleId?: string; // [VINTERDÖD] Lades till för att veta vilket UI som ska öppnas när animationen är klar
 }
 
 export class PlayerInteractionSystem implements System {
@@ -122,6 +123,11 @@ export class PlayerInteractionSystem implements System {
                     // Swap and Pop on collectibles array
                     this.collectibles[idx] = this.collectibles[this.collectibles.length - 1];
                     this.collectibles.pop();
+                }
+
+                // [VINTERDÖD FIX] Öppna UI:t exakt när animationen är klar och objektet är borta!
+                if (this.onCollectibleFound && anim.collectibleId) {
+                    this.onCollectibleFound(anim.collectibleId);
                 }
 
                 // Swap-and-Pop animation removal
@@ -290,14 +296,15 @@ export class PlayerInteractionSystem implements System {
         collectible.userData.pickedUp = true;
 
         // --- AUDIO SYNC FIX ---
-        // Play sound immediately before the React UI cycle starts.
-        soundManager.playUiPickup();
-
-        if (this.onCollectibleFound) {
-            const cb = this.onCollectibleFound;
-            // Lowered timeout from 500ms to 100ms for snappier UI transitions
-            setTimeout(() => cb(collectibleId), 100);
+        // Spela det glada ljudet exakt när spelaren klickar och animationen börjar
+        if ((soundManager as any).collectibleFound) {
+            (soundManager as any).collectibleFound();
+        } else {
+            soundManager.playUiPickup(); // Fallback
         }
+
+        // [VINTERDÖD FIX] Tog bort setTimeout. UI:t triggas nu i uppdaterings-loopen
+        // när animationen (0.8s) nått sitt slut.
 
         // --- OPTIMIZATION FIX ---
         // Removed massive material cloning loop. Object is just passed to the animation system.
@@ -306,7 +313,8 @@ export class PlayerInteractionSystem implements System {
             obj: collectible,
             startY: collectible.position.y,
             progress: 0,
-            duration: 0.8
+            duration: 0.8,
+            collectibleId: collectibleId // Skickar med ID:t hit istället!
         });
     }
 }
