@@ -200,7 +200,7 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(104, 0, 19),
             new THREE.Vector3(104, 0, 67),
             new THREE.Vector3(203, 0, 73)
-        ], 'mesh', 2.5, false);
+        ], 'mesh', 1.5, false);
 
         // Random Buildings
         const randomBuildings = [
@@ -506,7 +506,7 @@ export const Sector1: SectorDef = {
 
         // Fences
         const ty = LOCATIONS.POIS.TRAIN_YARD;
-        SectorGenerator.createFence(ctx, [new THREE.Vector3(ty.x - 60, 0, ty.z + 40), new THREE.Vector3(ty.x + 60, 0, ty.z + 40)], 'mesh', 4, true);
+        SectorGenerator.createFence(ctx, [new THREE.Vector3(ty.x - 60, 0, ty.z + 40), new THREE.Vector3(ty.x + 60, 0, ty.z + 40)], 'mesh', 2.5, true);
         // Station Ground
         const stationGround = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), MATERIALS.asphalt);
         stationGround.rotation.x = -Math.PI / 2;
@@ -671,7 +671,7 @@ export const Sector1: SectorDef = {
 
         // --- FENCES ---
         const ty2 = LOCATIONS.POIS.TRAIN_YARD;
-        SectorGenerator.createFence(ctx, [new THREE.Vector3(ty2.x - 60, 0, ty2.z - 40), new THREE.Vector3(ty2.x + 60, 0, ty2.z - 40)], 'mesh', 4, true);
+        SectorGenerator.createFence(ctx, [new THREE.Vector3(ty2.x - 60, 0, ty2.z - 40), new THREE.Vector3(ty2.x + 60, 0, ty2.z - 40)], 'mesh', 2, true);
 
         // Dead Bodies & Extra Chests
         SectorGenerator.spawnDeadBody(ctx, 37, 44, 'WALKER', 0, true);
