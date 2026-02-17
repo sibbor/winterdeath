@@ -235,10 +235,18 @@ export class PlayerInteractionSystem implements System {
                 if (!c.opened && playerPos.distanceToSquared(c.mesh.position) < 12.25) {
                     c.opened = true;
                     soundManager.playOpenChest();
+
+                    // Om denna funktion instansierar Nya material/meshes kan den också lagga. 
+                    // Se till att WorldLootSystem använder Object Pooling (återanvänder instanser)!
                     WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
-                    const light = c.mesh.getObjectByName('chestLight');
-                    if (light) light.visible = false;
+                    const light = c.mesh.getObjectByName('chestLight') as THREE.PointLight | THREE.SpotLight;
+                    if (light) {
+                        // --- OPTIMIZATION: ZERO SHADER RECOMPILATION ---
+                        // Sätt intensity till 0 istället för visible = false.
+                        // Detta hindrar Three.js från att rekompilera ALLA shaders i scenen!
+                        light.intensity = 0;
+                    }
 
                     // Lid animation
                     if (c.mesh.children[1]) {

@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { SectorTrigger, TriggerAction } from '../../types';
 import { soundManager } from '../../utils/sound';
 import { PLAYER_CHARACTER } from '../../content/constants';
+import { RuntimeState } from '../RuntimeState';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-let _localX = 0;
-let _localZ = 0;
+let _dx = 0;
+let _dz = 0;
+let _distSq = 0;
 let _tx = 0;
 let _tz = 0;
 let _sin = 0;
@@ -18,7 +20,7 @@ export const TriggerHandler = {
      */
     checkTriggers: (
         playerPos: THREE.Vector3,
-        state: any,
+        state: RuntimeState,
         now: number,
         callbacks: {
             spawnBubble: (text: string) => void;
@@ -33,7 +35,8 @@ export const TriggerHandler = {
         const triggers = state.triggers;
         if (!triggers) return;
 
-        for (let i = 0; i < triggers.length; i++) {
+        const tLen = triggers.length;
+        for (let i = 0; i < tLen; i++) {
             const trig = triggers[i];
 
             // 1. OPTIMIZATION: Skip if one-shot and finished (and not resetOnExit)
@@ -43,30 +46,36 @@ export const TriggerHandler = {
 
             let isInside = false;
 
+            // Kalkylera avstånd tidigt (används av både cirklar och broadphase-boxar)
+            _dx = playerPos.x - trig.position.x;
+            _dz = playerPos.z - trig.position.z;
+            _distSq = _dx * _dx + _dz * _dz;
+
             // 2. COLLISION CHECK
             if (trig.size) {
-                // --- BOX TRIGGER (Rotated OBB) ---
-                _localX = playerPos.x - trig.position.x;
-                _localZ = playerPos.z - trig.position.z;
+                // --- BROADPHASE OPTIMIZATION ---
+                // Kör endast tung OBB-matematik om vi är tillräckligt nära centrum
+                const maxDim = Math.max(trig.size.width, trig.size.depth) * 0.8;
+                if (_distSq <= maxDim * maxDim) {
 
-                if (trig.rotation) {
-                    _sin = Math.sin(-trig.rotation);
-                    _cos = Math.cos(-trig.rotation);
-                    _tx = _localX * _cos - _localZ * _sin;
-                    _tz = _localX * _sin + _localZ * _cos;
-                } else {
-                    _tx = _localX;
-                    _tz = _localZ;
-                }
+                    // --- BOX TRIGGER (Rotated OBB) ---
+                    if (trig.rotation) {
+                        _sin = Math.sin(-trig.rotation);
+                        _cos = Math.cos(-trig.rotation);
+                        _tx = _dx * _cos - _dz * _sin;
+                        _tz = _dx * _sin + _dz * _cos;
+                    } else {
+                        _tx = _dx;
+                        _tz = _dz;
+                    }
 
-                if (Math.abs(_tx) <= trig.size.width * 0.5 && Math.abs(_tz) <= trig.size.depth * 0.5) {
-                    isInside = true;
+                    if (Math.abs(_tx) <= trig.size.width * 0.5 && Math.abs(_tz) <= trig.size.depth * 0.5) {
+                        isInside = true;
+                    }
                 }
             } else if (trig.radius) {
                 // --- CIRCLE TRIGGER (Fast Squared Distance) ---
-                const dx = playerPos.x - trig.position.x;
-                const dz = playerPos.z - trig.position.z;
-                if ((dx * dx + dz * dz) < (trig.radius * trig.radius)) {
+                if (_distSq < (trig.radius * trig.radius)) {
                     isInside = true;
                 }
             }
@@ -87,11 +96,6 @@ export const TriggerHandler = {
                         continue; // Cooldown
                     }
                 }
-                // ONE-SHOT (but still inside and NO resetOnExit/repeat)
-                else if (!trig.resetOnExit) {
-                    continue;
-                }
-                // If resetOnExit=true AND isInside=true, we fall through to Execute actions (Continuous Mode)
             }
 
             // 4. EXECUTION
@@ -107,12 +111,10 @@ export const TriggerHandler = {
 
                 // Fire Actions
                 if (trig.actions && trig.actions.length > 0) {
-                    for (let j = 0; j < trig.actions.length; j++) {
+                    const aLen = trig.actions.length;
+                    for (let j = 0; j < aLen; j++) {
                         const action = trig.actions[j];
 
-                        // Execute if:
-                        // A) First Entry
-                        // B) It's a continuous trigger (resetOnExit) AND the action type implies UI/State (e.g. OPEN_UI interaction refresh)
                         if (isFirstEntry || (trig.resetOnExit && action.type === 'OPEN_UI')) {
                             callbacks.onAction(action);
                         }
@@ -138,4 +140,4 @@ export const TriggerHandler = {
             }
         }
     }
-}
+};

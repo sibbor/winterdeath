@@ -728,16 +728,6 @@ export const Sector1: SectorDef = {
 
         // ===== ENVIRONMENTAL FEATURES =====
 
-        // Grass patch around player home
-        /*
-        const homeGrass = [
-            new THREE.Vector3(-15, 0, -10),
-            new THREE.Vector3(15, 0, -10),
-            new THREE.Vector3(15, 0, 15),
-            new THREE.Vector3(-15, 0, 15)
-        ];
-        EnvironmentGenerator.fillAreaWithGrass(ctx, homeGrass, 1.8);
-
         // Flower garden near home
         const homeFlowers = [
             new THREE.Vector3(8, 0, -8),
@@ -747,15 +737,6 @@ export const Sector1: SectorDef = {
         ];
         EnvironmentGenerator.fillAreaWithFlowers(ctx, homeFlowers, 1.0);
 
-        // Grass patches along forest path (Home -> SMU)
-        const grassPatch = [
-            new THREE.Vector3(30, 0, 30),
-            new THREE.Vector3(50, 0, 35),
-            new THREE.Vector3(50, 0, 50),
-            new THREE.Vector3(30, 0, 45)
-        ];
-        EnvironmentGenerator.fillAreaWithGrass(ctx, grassPatch, 2.0);
-        */
         // Wildflowers near church area
         const churchFlowers = [
             new THREE.Vector3(160, 0, 235),
@@ -764,9 +745,6 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(160, 0, 245)
         ];
         EnvironmentGenerator.fillAreaWithFlowers(ctx, churchFlowers, 0.7);
-
-        // Dead trees in logging/deforested area (near train yard)
-        EnvironmentGenerator.createDeforestation(ctx, 130, 380, 30, 25, 12);
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {

@@ -31,8 +31,9 @@ export const AssetPreloader = {
                 'ui_hover', 'ui_click', 'shot_pistol', 'walker_groan',
                 'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone', 'impact_wood',
                 'door_metal_shut', 'fx_heartbeat', 'ui_level_up',
-                'loot_scrap', 'chest_open'
+                'loot_scrap', 'chest_open', 'ui_chime'
             ];
+            // Ljud är små resurser att initiera, ingen yield krävs mitt i arrayen
             essentialSounds.forEach(k => SoundBank.get(soundCore, k));
         }
 
@@ -40,6 +41,7 @@ export const AssetPreloader = {
         const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
         // 2. SHADER PERMUTATION SETUP
+        // Detta tvingar Three.js att generera rätt shader-kod för belysning och dimma.
         if (envConfig) {
             scene.fog = new THREE.FogExp2(envConfig.fogColor || envConfig.bgColor, envConfig.fogDensity);
             scene.background = new THREE.Color(envConfig.bgColor);
@@ -61,17 +63,20 @@ export const AssetPreloader = {
         scene.add(dummyRoot);
 
         const addToWarmup = (obj: THREE.Object3D) => {
-            obj.visible = false;
+            obj.visible = false; // Viktigt! Allt är dolt som standard.
             dummyRoot.add(obj);
         };
 
         // Batch 1: Common Materials
         const matKeys = Object.keys(MATERIALS) as (keyof typeof MATERIALS)[];
-        for (let i = 0; i < matKeys.length; i++) {
+        const matLen = matKeys.length;
+        for (let i = 0; i < matLen; i++) {
             const k = matKeys[i];
             if (['road', 'asphalt', 'snow', 'concrete'].includes(k as string)) continue;
-            // Materials will now use the shared cached textures automatically
+
             addToWarmup(new THREE.Mesh(GEOMETRY.box, (MATERIALS as any)[k]));
+
+            // Yielda regelbundet för att inte blocka UI-tråden
             if (i % 15 === 0 && yieldToMain) await yieldToMain();
         }
 
@@ -81,6 +86,9 @@ export const AssetPreloader = {
             addToWarmup(ModelFactory.createZombie(type, (ZOMBIE_TYPES as any)[type]));
         });
         addToWarmup(ModelFactory.createBoss('Boss', { color: 0xff0000, scale: 3 } as any));
+
+        // [VINTERDÖD OPTIMERING] Yielda efter stora komplexa modeller
+        if (yieldToMain) await yieldToMain();
 
         // Batch 3: Environmental Props
         addToWarmup(new THREE.Mesh(GEOMETRY.treeTrunk, MATERIALS.treeTrunk));
@@ -93,7 +101,8 @@ export const AssetPreloader = {
         const prefillFX = (geo: THREE.BufferGeometry, mat: THREE.Material, count: number) => {
             for (let i = 0; i < count; i++) {
                 const p = new THREE.Mesh(geo, mat);
-                p.visible = false; p.position.set(0, -1000, 0);
+                p.visible = false;
+                p.position.set(0, -1000, 0);
                 scene.add(p);
                 FXSystem.MESH_POOL.push(p);
             }
@@ -105,28 +114,41 @@ export const AssetPreloader = {
 
         // 4. INCREMENTAL COMPILATION
         try {
+            // Kompilerar grundscenen först (dimma, bakgrund, ljus)
             renderer.compile(scene, camera);
             if (yieldToMain) await yieldToMain();
 
             const children = dummyRoot.children;
-            const batchSize = 4;
-            for (let i = 0; i < children.length; i += batchSize) {
-                children.forEach(c => c.visible = false);
-                for (let j = 0; j < batchSize && (i + j) < children.length; j++) {
+            const childLen = children.length;
+            const batchSize = 4; // Lämplig storlek, lagom mycket shader compile per frame
+
+            for (let i = 0; i < childLen; i += batchSize) {
+                // [VINTERDÖD OPTIMERING]
+                // Istället för att loopa ALLA children och sätta false, sätter vi bara
+                // PÅ vår lilla batch om 4...
+                for (let j = 0; j < batchSize && (i + j) < childLen; j++) {
                     children[i + j].visible = true;
                 }
+
+                // ...tvingar fram WebGL kompileringen av materialen...
                 renderer.compile(scene, camera);
                 if (yieldToMain) await yieldToMain();
+
+                // ...och stänger sedan AV samma lilla batch direkt. 
+                // Extremt mycket snabbare än en fullständig forEach!
+                for (let j = 0; j < batchSize && (i + j) < childLen; j++) {
+                    children[i + j].visible = false;
+                }
             }
         } catch (e) {
             console.warn("Shader warmup failed or interrupted", e);
         }
 
         // 5. GENERATOR CACHE WARMUP
-        // These generators will now hit the procedural cache instantly.
         try {
-            // Initialize procedural assets
             await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
+            if (yieldToMain) await yieldToMain();
+
             await ObjectGenerator.initBuildingPrototypes(yieldToMain);
 
             ObjectGenerator.createVehicle('station wagon');
@@ -139,6 +161,8 @@ export const AssetPreloader = {
         }
 
         // 6. CLEANUP
+        // Vi rensar scenen, men vi gör INGEN .dispose() på material/geometri, 
+        // eftersom syftet med warmup var just att lägga in dem i Three.js GPU-cache!
         scene.clear();
         warmedUp = true;
     },

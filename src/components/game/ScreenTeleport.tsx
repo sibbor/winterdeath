@@ -66,8 +66,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
                         <span className="block skew-x-[10deg]">{t('ui.cancel')}</span>
                     </button>
                     <button
-                        onClick={handleJump}
-                        onTouchEnd={(e) => {
+                        onClick={(e) => {
                             e.preventDefault(); // Prevent ghost clicks
                             if (coords.x !== "" && coords.z !== "") handleJump();
                         }}

@@ -6,8 +6,11 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
 const _tempQuat = new THREE.Quaternion(); // [VINTERDÖD] För blixtsnabb Euler -> Quaternion konvertering
+const _m4 = new THREE.Matrix4(); // [VINTERDÖD] Ren matris, bypassar all Object3D overhead
+
+// [VINTERDÖD] Förberäknad gömd matris. Sparar CPU-cykler när vi städar upp instanser.
+const _hiddenMatrix = new THREE.Matrix4().makeTranslation(0, -1000, 0);
 
 export interface ScrapItem {
     velocity: THREE.Vector3;
@@ -36,7 +39,6 @@ export class WorldLootSystem implements System {
 
     private static MAX_SCRAP = 300;
     private instancedMesh: THREE.InstancedMesh;
-    private dummy = new THREE.Object3D();
 
     private pool: ScrapItem[] = [];
     private freeIndices: number[] = [];
@@ -72,9 +74,10 @@ export class WorldLootSystem implements System {
             });
             this.freeIndices.push(i);
 
-            // Hide initially
-            this.updateInstanceMatrix(this.pool[i]);
+            // Hide initially with zero math
+            this.instancedMesh.setMatrixAt(i, _hiddenMatrix);
         }
+        this.instancedMesh.instanceMatrix.needsUpdate = true;
 
         // Pre-allocate some requests
         for (let i = 0; i < 50; i++) this.requestPool.push({ x: 0, z: 0 });
@@ -128,12 +131,15 @@ export class WorldLootSystem implements System {
             // --- 2. PHYSICS & MOVEMENT ---
             if (item.magnetized) {
                 _v1.subVectors(playerPos, item.position).normalize();
-                const pullStrength = 1.0 + (20.0 / (Math.sqrt(distSq) + 1.0));
-                item.position.addScaledVector(_v1, magnetSpeed * pullStrength * delta);
 
+                // [VINTERDÖD] Snabbare uträkning av pullStrength
+                const dist = Math.max(0.1, Math.sqrt(distSq));
+                const pullStrength = 1.0 + (20.0 / (dist + 1.0));
+
+                item.position.addScaledVector(_v1, magnetSpeed * pullStrength * delta);
                 item.rotation.y += 10.0 * delta;
 
-                // [VINTERDÖD] Snabb matematisk tilldelning (ingen setScalar-overhead)
+                // Snabb matematisk tilldelning (ingen setScalar-overhead)
                 const ns = Math.max(0.4, item.scale.x - 1.5 * delta);
                 item.scale.set(ns, ns, ns);
 
@@ -187,13 +193,11 @@ export class WorldLootSystem implements System {
     }
 
     private updateInstanceMatrix(item: ScrapItem) {
-        // [VINTERDÖD] Direkt Matrix Composition. 
-        // Slänger Object3D.updateMatrix() och bypassar smutsiga flaggor i Three.js
-        this.dummy.position.copy(item.position);
+        // [VINTERDÖD] Direkt Matrix Composition via _m4. 
+        // Inget Object3D-skräp, inga smutsiga flaggor i Three.js att checka. Blixtsnabbt.
         _tempQuat.setFromEuler(item.rotation);
-
-        this.dummy.matrix.compose(this.dummy.position, _tempQuat, item.scale);
-        this.instancedMesh.setMatrixAt(item.index, this.dummy.matrix);
+        _m4.compose(item.position, _tempQuat, item.scale);
+        this.instancedMesh.setMatrixAt(item.index, _m4);
     }
 
     private deactivateItem(item: ScrapItem) {
@@ -203,12 +207,8 @@ export class WorldLootSystem implements System {
         item.needsUpdate = false;
         this.freeIndices.push(item.index);
 
-        // Move out of sight immediately using Matrix Composition (Zero-GC)
-        this.dummy.position.set(0, -100, 0);
-        _tempQuat.setFromEuler(item.rotation);
-
-        this.dummy.matrix.compose(this.dummy.position, _tempQuat, item.scale);
-        this.instancedMesh.setMatrixAt(item.index, this.dummy.matrix);
+        // [VINTERDÖD] Omedelbar radering från vyn utan matematik via förkompilerad matris.
+        this.instancedMesh.setMatrixAt(item.index, _hiddenMatrix);
     }
 
     public static spawnScrapExplosion(scene: THREE.Scene, _legacy: any[], x: number, z: number, amount: number) {
@@ -242,7 +242,7 @@ export class WorldLootSystem implements System {
         item.value = 5 + Math.floor(Math.random() * 10);
 
         item.position.set(x, 1.5, z);
-        item.scale.set(1.0, 1.0, 1.0); // [VINTERDÖD] Snabb set() istället för setScalar()
+        item.scale.set(1.0, 1.0, 1.0); // Snabb set() istället för setScalar()
         item.velocity.set(
             Math.cos(angle) * horizontalForce,
             6 + Math.random() * 6, // Vertical pop

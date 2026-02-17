@@ -25,7 +25,6 @@ export class GameSessionLogic {
     public cameraAngle: number = 0;
     public mapId: number = 0;
 
-
     public state!: RuntimeState;
     private systems: System[] = [];
 
@@ -59,13 +58,18 @@ export class GameSessionLogic {
                 [props.loadout.special || 'NONE']: WEAPONS[props.loadout.special]?.magSize || 0
             } as Record<WeaponType, number>,
             isReloading: false, reloadEndTime: 0,
+
+            // --- ZERO-GC VECTORS ---
             rollStartTime: 0,
             rollDir: new THREE.Vector3(),
             isRolling: false,
+
             invulnerableUntil: 0,
             spacePressTime: 0, spaceDepressed: false, eDepressed: false, isRushing: false, rushCostPaid: false,
             wasFiring: false,
             throwChargeStart: 0,
+
+            // --- POOLS ---
             enemies: [] as Enemy[],
             particles: [] as any[],
             activeEffects: [] as any[],
@@ -73,6 +77,8 @@ export class GameSessionLogic {
             fireZones: [] as any[],
             scrapItems: [] as ScrapItem[],
             chests: [] as any[],
+            bloodDecals: [] as any[],
+
             cameraShake: 0, lastHudUpdate: 0, startTime: now, lastShotTime: 0,
             shotsFired: 0, shotsHit: 0, throwablesThrown: 0,
             damageDealt: 0, damageTaken: 0,
@@ -81,10 +87,12 @@ export class GameSessionLogic {
             seenEnemies: props.stats.seenEnemies || [],
             seenBosses: props.stats.seenBosses || [],
             visitedPOIs: props.stats.visitedPOIs || [],
+            bossesDefeated: [],
             familyFound: !!props.familyAlreadyRescued, familyExtracted: false,
             chestsOpened: 0, bigChestsOpened: 0, killsInRun: 0, isInteractionOpen: false, bossSpawned: false,
-            bloodDecals: [] as any[], lastDamageTime: 0, lastStaminaUseTime: 0,
+            lastDamageTime: 0, lastStaminaUseTime: 0,
             noiseLevel: 0, speakBounce: 0, hurtShake: 0, shakeIntensity: 0,
+
             sectorState: {
                 envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
             },
@@ -93,7 +101,6 @@ export class GameSessionLogic {
             collisionGrid: new SpatialGrid(),
             busUnlocked: false,
             clueActive: false,
-            bossesDefeated: [],
             bossDefeatedTime: 0,
             lastActionTime: now,
             thinkingUntil: 0,
@@ -102,14 +109,23 @@ export class GameSessionLogic {
             killerType: '',
             killerName: '',
             playerBloodSpawned: false,
+
             deathVel: new THREE.Vector3(),
-            lastTrailPos: null as THREE.Vector3 | null,
+
+            // [VINTERDÖD] Zero-GC: Pre-allocated vectors with boolean flags instead of null
+            hasLastTrailPos: false,
+            lastTrailPos: new THREE.Vector3(),
+
             framesSinceHudUpdate: 0,
             lastFpsUpdate: 0,
             isMoving: false,
             interactionType: null,
             interactionLabel: null,
-            interactionTargetPos: null,
+
+            // [VINTERDÖD] Zero-GC: Interaction target
+            hasInteractionTarget: false,
+            interactionTargetPos: new THREE.Vector3(),
+
             bossIntroActive: false,
             sessionCollectiblesFound: [],
             collectiblesFound: props.stats.collectiblesFound || [],
@@ -117,7 +133,9 @@ export class GameSessionLogic {
             activeVehicle: null,
             activeVehicleType: null,
             vehicleEngineState: 'OFF',
-            interactionRequest: null
+
+            // [VINTERDÖD] Zero-GC: Pre-allocated interaction request object
+            interactionRequest: { active: false, id: '', object: null, type: null }
         };
     }
 

@@ -1,7 +1,5 @@
-
-import React, { useEffect } from 'react';
+import React from 'react';
 import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
 import { CollectibleDefinition } from '../../content/collectibles';
 import CollectiblePreview from '../ui/core/CollectiblePreview';
 

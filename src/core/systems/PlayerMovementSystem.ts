@@ -11,7 +11,7 @@ import { WaterSystem } from './WaterSystem';
 const _v1 = new THREE.Vector3(); // Direction / MoveVec
 const _v2 = new THREE.Vector3(); // StepVec
 const _v3 = new THREE.Vector3(); // TestPos
-const _v5 = new THREE.Vector3(); // LookTarget
+const _v5 = new THREE.Vector3(); // LookTarget & Outward Vector
 const _v6 = new THREE.Vector3(); // Raw move input
 const _UP = new THREE.Vector3(0, 1, 0);
 
@@ -95,7 +95,7 @@ export class PlayerMovementSystem implements System {
             if (state.stamina > 0) {
                 state.stamina -= 30 * delta;
                 speed *= 1.75;
-                // [VINTERDÖD] Snabb modulo utan Math.floor för heltal
+
                 if ((now / 200 | 0) % 2 === 0) {
                     FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
                 }
@@ -114,9 +114,6 @@ export class PlayerMovementSystem implements System {
         }
 
         let isMoving = false;
-
-        // [VINTERDÖD] Den dyra globala array-loopen över alla fiender togs bort härifrån.
-        // Biting-stun hanteras nu direkt i collision-rutinen längre ner via SpatialGrid.
 
         // --- 3. MOVE PROCESSING ---
         if (state.isRolling) {
@@ -206,7 +203,6 @@ export class PlayerMovementSystem implements System {
                 for (let j = 0; j < nLen; j++) {
                     const obs = nearby[j];
 
-                    // Using applyCollisionResolution which modifies _v3 in-place (Zero-GC)
                     if (applyCollisionResolution(_v3, 0.5, obs)) {
 
                         const entityData = obs.mesh?.userData?.entity;
@@ -215,7 +211,7 @@ export class PlayerMovementSystem implements System {
                         if (entityData) {
                             const enemy = entityData;
 
-                            // [VINTERDÖD] Biting-break logic flyttad hit. Utplånar O(N) array-sökning.
+                            // [VINTERDÖD] Bryt Bite-attacken direkt om vi dashar in i dem!
                             if (isDashing && enemy.state === AIState.BITING && !enemy.dead) {
                                 enemy.state = AIState.IDLE;
                                 enemy.stunTimer = 1.0;
@@ -224,24 +220,45 @@ export class PlayerMovementSystem implements System {
                                 soundManager.playImpact('flesh');
                             }
 
-                            if (isDashing) {
-                                const canTackle = !enemy.dead && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
+                            // [VINTERDÖD] Alltid tillåt tackling (men kraften varierar)
+                            const canTackle = !enemy.dead && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
 
-                                if (canTackle) {
-                                    const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
-                                    const massInverse = 1.0 / Math.max(0.5, mass);
-                                    const pushMultiplier = (enemy.isBoss ? 0.2 : 1.0) * massInverse;
-                                    const force = (state.isRushing ? 10.0 : 4.0) * pushMultiplier;
-                                    const lift = (state.isRushing ? 4.0 : 1.5) * pushMultiplier;
+                            if (canTackle) {
+                                const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
+                                const massInverse = 1.0 / Math.max(0.5, mass);
+                                const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse; // Bossar rör sig knappt
 
-                                    _v1.copy(baseMoveVec).normalize();
-                                    enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
-                                    enemy.state = AIState.IDLE;
-                                    enemy.stunTimer = state.isRushing ? 1.5 : 0.8;
-                                    enemy.isBlinded = true;
-                                    enemy.blindUntil = now + (state.isRushing ? 1500 : 800);
-                                    enemy.lastTackleTime = now;
+                                // --- BOWLING-KÄGLOR FYSIK ---
+                                // Extremt mycket högre force och lift vid rush!
+                                const force = (isDashing ? 45.0 : 8.0) * pushMultiplier;
+                                const lift = (isDashing ? 12.0 : 2.0) * pushMultiplier;
 
+                                // 1. Beräkna rörelseriktning
+                                _v1.copy(baseMoveVec).normalize();
+
+                                // 2. Beräkna radiell riktning (utåt från spelaren) för att de ska sprida sig åt sidorna
+                                _v5.set(
+                                    enemy.mesh.position.x - playerGroup.position.x,
+                                    0,
+                                    enemy.mesh.position.z - playerGroup.position.z
+                                ).normalize();
+
+                                // 3. Mixa riktningarna. 2 delar framåt, 1 del utåt.
+                                _v1.multiplyScalar(2.0).add(_v5).normalize();
+
+                                // Applicera farten!
+                                enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
+
+                                // Tvinga ut dem ur deras nuvarande State så de inte fryser mitt i luften
+                                enemy.state = AIState.IDLE;
+
+                                // Ge dem tillräckligt mycket stun så att de hinner landa innan de jagar igen
+                                enemy.stunTimer = isDashing ? 2.5 : 0.8;
+                                enemy.isBlinded = true;
+                                enemy.blindUntil = now + (isDashing ? 2500 : 800);
+                                enemy.lastTackleTime = now;
+
+                                if (isDashing) {
                                     FXSystem.spawnPart(session.engine.scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
                                     soundManager.playImpact('flesh');
                                 }
@@ -260,7 +277,6 @@ export class PlayerMovementSystem implements System {
         if (!state.shakeIntensity) state.shakeIntensity = 0;
         let shakeInput = 0;
 
-        // [VINTERDÖD] Tvingande Booleans för att undvika skräp-värden och snabba upp V8
         const inSpace = !!input.space;
         const inFire = !!input.fire;
         const inA = !!input.a;
@@ -290,7 +306,6 @@ export class PlayerMovementSystem implements System {
                 _v1.set(stick.x, 0, stick.y);
                 if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
 
-                // [VINTERDÖD] Ersätter addScaledVector med direkt minnesmanipulation för LookTarget
                 _v5.set(
                     playerGroup.position.x + _v1.x * 10,
                     playerGroup.position.y,
@@ -311,7 +326,6 @@ export class PlayerMovementSystem implements System {
                 playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
 
             } else if (isMoving) {
-                // Använd _v6 från handleMovement (återanvänd data istället för att läsa input igen)
                 if (_v6.lengthSq() > 0) {
                     _v1.copy(_v6).normalize();
                     if (angle !== 0) _v1.applyAxisAngle(_UP, angle);

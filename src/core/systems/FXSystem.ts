@@ -3,19 +3,12 @@ import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
 
 // --- TYPES & INTERFACES ---
 
-/** * Extended material type to safely access transparency and color properties 
- * without triggering strict type mismatch errors.
- */
 type FXMaterial = THREE.Material & {
     opacity?: number;
     transparent?: boolean;
     color?: THREE.Color;
 };
 
-/**
- * High-performance Particle state.
- * Uses base classes (BufferGeometry/Material) to allow any 3D shape or shader type.
- */
 interface ParticleState {
     mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
     vel: THREE.Vector3;
@@ -31,16 +24,13 @@ interface ParticleState {
     _poolIdx: number;
 }
 
-/**
- * Reusable request object to avoid object literal allocation during spawning.
- */
 interface SpawnRequest {
     scene: THREE.Scene;
     particlesList: ParticleState[];
     x: number; y: number; z: number;
     type: string;
     customMesh?: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-    customVel: THREE.Vector3; // [VINTERDÖD] Alltid pre-allokerad nu
+    customVel: THREE.Vector3;
     color?: number;
     scale?: number;
     material?: THREE.Material;
@@ -50,8 +40,6 @@ interface SpawnRequest {
 const _tempColor = new THREE.Color();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
-const _v3 = new THREE.Vector3();
-const _v4 = new THREE.Vector3();
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
@@ -150,7 +138,6 @@ export const FXSystem = {
     _getSpawnRequest: (): SpawnRequest => {
         const req = REQUEST_POOL.pop();
         if (req) return req;
-        // [VINTERDÖD] Pre-allokerar alltid customVel för att stänga minnesläckor.
         return {
             scene: null as any, particlesList: [],
             x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3()
@@ -163,7 +150,12 @@ export const FXSystem = {
         const d = FXSystem.getPooledMesh(req.scene, GEOMETRY.decal, req.material || MATERIALS.bloodDecal, 'decal');
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
-        d.scale.setScalar(req.scale || 1.0);
+
+        // [VINTERDÖD] Sätt upp animationen!
+        // Lagra det tänkta målet, men börja på skala noll.
+        d.userData.targetScale = req.scale || 1.0;
+        d.scale.setScalar(0.01);
+
         d.renderOrder = 50;
 
         (req.particlesList as unknown as THREE.Mesh[]).push(d);
@@ -172,7 +164,6 @@ export const FXSystem = {
     _spawnPartImmediate: (req: SpawnRequest) => {
         if (isNaN(req.x)) return;
 
-        // Använder snabb platt jämförelse för hastighetens skull
         const t = req.type;
         const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
             t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' ||
@@ -217,10 +208,12 @@ export const FXSystem = {
         const s = req.scale || 1.0;
         if (t === 'large_fire') p.mesh.scale.setScalar(1.6 * Math.random() * s);
         else if (t === 'large_smoke') p.mesh.scale.setScalar(2.4 * Math.random() * s);
-        else if (t === 'blood') p.mesh.scale.setScalar((1.2 + Math.random() * 0.8) * s);
+
+        // [VINTERDÖD] Mycket större bloddroppar (från ~1.2 till ~2.0 bas)
+        else if (t === 'blood') p.mesh.scale.setScalar((2.0 + Math.random() * 1.5) * s);
+
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
-        // Om vi har en customVel som är modifierad lokalt används den (kopieras)
         if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
         else {
             const speedScale = (t === 'chunk' || t === 'gore' || t === 'limb') ? 8.0 : 1.0;
@@ -257,7 +250,7 @@ export const FXSystem = {
             req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale;
 
             if (customVel) req.customVel.copy(customVel);
-            else req.customVel.set(0, 0, 0); // Återställ ifall återanvänd
+            else req.customVel.set(0, 0, 0);
 
             FXSystem.particleQueue.push(req);
         }
@@ -280,10 +273,10 @@ export const FXSystem = {
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
 
-        // 1. Process Queues (Budgeted) - [VINTERDÖD] O(1) Pop istället för O(N) Shift. Ordningen kvittar.
+        // 1. Process Queues (Budgeted)
         const pLimit = Math.min(FXSystem.particleQueue.length, 30);
         for (let i = 0; i < pLimit; i++) {
-            const req = FXSystem.particleQueue.pop()!;
+            const req = FXSystem.particleQueue.shift()!;
             if (!req.scene) req.scene = scene;
             if (!req.particlesList) req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
@@ -292,9 +285,21 @@ export const FXSystem = {
 
         const dLimit = Math.min(FXSystem.decalQueue.length, 10);
         for (let i = 0; i < dLimit; i++) {
-            const req = FXSystem.decalQueue.pop()!;
+            const req = FXSystem.decalQueue.shift()!;
             FXSystem._spawnDecalImmediate(req);
             DECAL_REQUEST_POOL.push(req);
+        }
+
+        // --- [VINTERDÖD] Animerade dekaler ---
+        // Får blodet att "hälla ut" över marken istället för att poppa in direkt.
+        for (let i = 0; i < decalList.length; i++) {
+            const d = decalList[i] as any;
+            if (d.userData.targetScale && d.scale.x < d.userData.targetScale) {
+                // Skalan växer fram över ca en tredjedels sekund
+                const growthStep = d.userData.targetScale * 3.0 * safeDelta;
+                const newScale = Math.min(d.userData.targetScale, d.scale.x + growthStep);
+                d.scale.setScalar(newScale);
+            }
         }
 
         // 2. Update Particles
@@ -310,14 +315,9 @@ export const FXSystem = {
 
             if (!p.landed) {
                 p.mesh.position.addScaledVector(p.vel, safeDelta);
-
-                // [VINTERDÖD] Platt jämförelse. Inga arrayskipande .includes() i het loop!
-                const t = p.type;
-                const isHeavy = t === 'chunk' || t === 'debris' || t === 'glass' || t === 'limb' || t === 'blood' || t === 'gore';
-
-                if (isHeavy) {
+                if (['chunk', 'debris', 'glass', 'limb', 'blood', 'gore'].includes(p.type)) {
                     p.vel.y -= 25 * safeDelta;
-                    if (t !== 'blood') {
+                    if (p.type !== 'blood') {
                         p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
                         p.mesh.rotation.z += p.rotVel.z * 10 * safeDelta;
                     }
@@ -338,10 +338,8 @@ export const FXSystem = {
                 const imesh = FXSystem._getInstancedMesh(scene, p.type);
                 const idx = FXSystem._instancedCounts[p.type];
                 if (imesh && idx < FXSystem._MAX_INSTANCES) {
-                    // [VINTERDÖD] Direkt Matrix Composition istället för Object3D updateMatrix()
-                    p.mesh.matrix.compose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
+                    p.mesh.updateMatrix();
                     imesh.setMatrixAt(idx, p.mesh.matrix);
-
                     if (p.color !== undefined) {
                         imesh.setColorAt(idx, _tempColor.setHex(p.color));
                     }
@@ -351,17 +349,12 @@ export const FXSystem = {
         }
 
         // 3. Update Text Floaters
-        const tLen = FXSystem.textQueue.length;
-        for (let i = tLen - 1; i >= 0; i--) {
+        for (let i = FXSystem.textQueue.length - 1; i >= 0; i--) {
             const t = FXSystem.textQueue[i];
             t.life -= safeDelta;
             if (t.life <= 0) {
                 t.mesh.parent?.remove(t.mesh);
-                // [VINTERDÖD] Swap-and-pop istället för O(N) splice
-                const last = FXSystem.textQueue.pop()!;
-                if (i < FXSystem.textQueue.length) {
-                    FXSystem.textQueue[i] = last;
-                }
+                FXSystem.textQueue.splice(i, 1);
                 continue;
             }
             t.mesh.position.y += 0.5 * safeDelta;
@@ -376,6 +369,17 @@ export const FXSystem = {
             if (imesh.instanceColor) imesh.instanceColor.needsUpdate = true;
             if (imesh.count > 0) imesh.computeBoundingSphere();
             FXSystem._instancedCounts[type] = 0;
+        }
+
+        const MAX_DECALS = 150;
+        if (decalList.length > MAX_DECALS) {
+            const toRemove = decalList.length - MAX_DECALS;
+            for (let i = 0; i < toRemove; i++) {
+                const oldDecal = decalList.shift();
+                if (oldDecal) {
+                    FXSystem.recycleMesh(oldDecal as any, 'decal');
+                }
+            }
         }
     },
 
@@ -395,11 +399,14 @@ export const FXSystem = {
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
         p.mesh.position.y = 0.05;
         p.landed = true;
+
         if (p.type === 'blood') {
-            if (Math.random() < 0.2) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.3, MATERIALS.bloodDecal);
+            // [VINTERDÖD] 20% chans för små bloddroppar
+            if (Math.random() < 0.20) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.5 + Math.random() * 0.3, MATERIALS.bloodDecal);
             FXSystem._killParticle(index, list);
         } else if (p.type === 'chunk' || p.type === 'limb' || p.type === 'gore') {
-            callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8, MATERIALS.bloodDecal);
+            // [VINTERDÖD] 40% chans för chunks
+            if (Math.random() < 0.40) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
             p.vel.set(0, 0, 0);
         } else {
             FXSystem._killParticle(index, list);
@@ -432,7 +439,6 @@ export const FXSystem = {
 
     spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
         const spread = 0.15;
-        // ZERO-GC: use scratchpad _v1 for direction calculation
         _v1.copy(direction).add(_v2.set(
             (Math.random() - 0.5) * spread,
             (Math.random() - 0.5) * spread,

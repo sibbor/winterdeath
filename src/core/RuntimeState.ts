@@ -23,9 +23,12 @@ export interface RuntimeState {
     weaponAmmo: Record<WeaponType, number>;
     isReloading: boolean;
     reloadEndTime: number;
+
+    // --- ZERO-GC VECTORS ---
     rollStartTime: number;
     rollDir: THREE.Vector3;
     isRolling: boolean;
+
     invulnerableUntil: number;
     spacePressTime: number;
     spaceDepressed: boolean;
@@ -34,13 +37,17 @@ export interface RuntimeState {
     rushCostPaid: boolean;
     wasFiring: boolean;
     throwChargeStart: number;
+
+    // --- OBJECT POOLS ---
     enemies: Enemy[];
-    particles: any[];
-    activeEffects: any[]; // Objects with persistent effects (fire, smoke)
+    particles: any[]; // [VINTERDÖD TIPS] Framtida optimering: Gör till ParticleItem[] pool
+    activeEffects: any[];
     projectiles: any[];
     fireZones: any[];
     scrapItems: ScrapItem[];
     chests: any[];
+    bloodDecals: any[];
+
     cameraShake: number;
     lastHudUpdate: number;
     startTime: number;
@@ -53,10 +60,12 @@ export interface RuntimeState {
     bossDamageDealt: number;
     bossDamageTaken: number;
     killsByType: Record<string, number>;
-    seenEnemies: string[]; // New
-    seenBosses: string[]; // New
-    visitedPOIs: string[]; // New
-    bossesDefeated: number[]; // New: Map IDs of bosses killed this run
+
+    // --- PROGRESSION ---
+    seenEnemies: string[];
+    seenBosses: string[];
+    visitedPOIs: string[];
+    bossesDefeated: number[];
     familyFound: boolean;
     familyExtracted: boolean;
     chestsOpened: number;
@@ -64,13 +73,14 @@ export interface RuntimeState {
     killsInRun: number;
     isInteractionOpen: boolean;
     bossSpawned: boolean;
-    bloodDecals: any[];
     lastDamageTime: number;
     lastStaminaUseTime: number;
     noiseLevel: number;
     speakBounce: number;
     hurtShake: number;
     shakeIntensity: number;
+
+    // --- SECTOR & WORLD ---
     sectorState: SectorState;
     triggers: SectorTrigger[];
     obstacles: Obstacle[];
@@ -85,15 +95,23 @@ export interface RuntimeState {
     killerType: string;
     killerName: string;
     playerBloodSpawned: boolean;
+
+    // --- ZERO-GC VECTORS (Replaced nulls with flags) ---
     deathVel: THREE.Vector3;
-    lastTrailPos: THREE.Vector3 | null;
+    hasLastTrailPos: boolean; // Nyckel för att slippa null
+    lastTrailPos: THREE.Vector3;
+
     framesSinceHudUpdate: number;
     lastFpsUpdate: number;
     isMoving: boolean;
+
+    // --- INTERACTION ---
     interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
     interactionLabel: string | null;
-    interactionTargetPos: THREE.Vector3 | null;
-    nearestCollectible?: SectorTrigger | null;
+    hasInteractionTarget: boolean; // Nyckel för att slippa null
+    interactionTargetPos: THREE.Vector3;
+
+    nearestCollectible?: SectorTrigger | null; // Kan städas om till ID-sträng istället för referens
     onClueFound?: ((clue: SectorTrigger) => void) | null;
     onCollectibleFound?: ((id: string) => void) | null;
     gainXp?: ((amount: number) => void) | null;
@@ -101,9 +119,16 @@ export interface RuntimeState {
     sessionCollectiblesFound: string[];
     collectiblesFound: string[];
     mapItems: any[];
+
     activeVehicle: THREE.Object3D | null;
     activeVehicleType: 'CAR' | 'BOAT' | null;
     vehicleEngineState: 'OFF' | 'STARTING' | 'RUNNING';
-    interactionRequest: { id: string, object: THREE.Object3D, type: 'sector_specific' | 'global' } | null;
-}
 
+    // --- PRE-ALLOCATED REQUEST OBJECT (Zero-GC) ---
+    interactionRequest: {
+        active: boolean;
+        id: string;
+        object: THREE.Object3D | null;
+        type: 'sector_specific' | 'global' | null;
+    };
+}

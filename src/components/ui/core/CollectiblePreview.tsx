@@ -97,7 +97,6 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
             // Cleanup SCENE and RENDERER
             scene.clear();
             renderer.dispose();
-            renderer.forceContextLoss();
 
             if (container.contains(renderer.domElement)) {
                 container.removeChild(renderer.domElement);

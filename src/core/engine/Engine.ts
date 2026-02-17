@@ -134,14 +134,17 @@ export class Engine {
             this.renderer.shadowMap.enabled = shadowsEnabled;
             this.renderer.shadowMap.type = shadowType;
 
-            // Force material recompilation for shadows
-            this.scene.traverse((obj) => {
-                if ((obj as THREE.Mesh).isMesh) {
-                    const mesh = obj as THREE.Mesh;
-                    if (Array.isArray(mesh.material)) {
-                        mesh.material.forEach(m => m.needsUpdate = true);
+            // [VINTERDÖD] Force material recompilation for shadows
+            // Zero-GC loop, avoids allocating functions in a massive scene traversal
+            this.scene.traverse((obj: any) => {
+                if (obj.isMesh && obj.material) {
+                    if (Array.isArray(obj.material)) {
+                        const len = obj.material.length;
+                        for (let i = 0; i < len; i++) {
+                            obj.material[i].needsUpdate = true;
+                        }
                     } else {
-                        mesh.material.needsUpdate = true;
+                        obj.material.needsUpdate = true;
                     }
                 }
             });
@@ -184,6 +187,13 @@ export class Engine {
         }
 
         this.renderer.dispose();
+
+        // [VINTERDÖD] Aggressive Garbage Collection flagging
+        // Helps the browser instantly reclaim VRAM and RAM when switching main states
+        this.sceneStack.length = 0;
+        this.onUpdate = null;
+        this.onRender = null;
+
         Engine.instance = null;
     }
 
@@ -239,7 +249,7 @@ export class Engine {
         // 2. Logic Update
         if (this.onUpdate) this.onUpdate(dt);
 
-        // 2. Render Pass
+        // 3. Render Pass
         if (!this.isRenderingPaused) {
             if (this.onRender) {
                 this.onRender();
@@ -249,6 +259,9 @@ export class Engine {
         }
     };
 
+    /**
+     * Note: Returns a new object. Only call in UI/Menus, not in the game loop.
+     */
     public getSettings(): GraphicsSettings {
         return { ...this.settings };
     }

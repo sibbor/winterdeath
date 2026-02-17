@@ -40,9 +40,6 @@ const _aiCallbacks = {
 };
 
 export const EnemyManager = {
-    /**
-     * Initierar renderare och rensar poolen.
-     */
     init: (scene: THREE.Scene) => {
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
@@ -61,19 +58,12 @@ export const EnemyManager = {
         enemyPool.length = 0;
     },
 
-    /**
-     * Spawna fiende med Object Pooling. 
-     * Om en fiende återanvänds skrivs dess "DNA" över för att matcha den nya typen.
-     */
     spawn: (scene: THREE.Scene, playerPos: THREE.Vector3, forcedType?: string, forcedPos?: THREE.Vector3, bossSpawned: boolean = false, enemyCount: number = 0): Enemy | null => {
         let enemy: Enemy | null = null;
-
-        // Bestäm vilken typ som ska skapas (viktigt för pooling reset)
         const typeToSpawn = forcedType || EnemySpawner.determineType(enemyCount, bossSpawned);
 
         if (enemyPool.length > 0) {
             enemy = enemyPool.pop()!;
-            // VIKTIGT: Vi skickar med typen för att nollställa stats (DNA)
             EnemyManager.resetEnemy(enemy, typeToSpawn, playerPos, forcedPos);
             if (!enemy.mesh.parent) scene.add(enemy.mesh);
         } else {
@@ -81,7 +71,6 @@ export const EnemyManager = {
         }
 
         if (enemy) {
-            // InstancedMesh kräver att original-mesh är osynlig
             if (!enemy.isBoss) enemy.mesh.visible = false;
             else enemy.mesh.visible = true;
         }
@@ -89,15 +78,9 @@ export const EnemyManager = {
         return enemy;
     },
 
-    /**
-     * Nollställer en fiende för återanvändning.
-     * Återställer stats, skala, färg och tillstånd.
-     */
     resetEnemy: (e: Enemy, newType: string, playerPos: THREE.Vector3, forcedPos?: THREE.Vector3) => {
-        // 1. Applicera stats för den nya typen (Hastighet, HP, Skada, Färg)
         EnemySpawner.applyTypeStats(e, newType);
 
-        // 2. Positionering
         if (forcedPos) {
             _v1.set((Math.random() - 0.5) * 4, 0, (Math.random() - 0.5) * 4);
             e.mesh.position.copy(forcedPos).add(_v1);
@@ -107,7 +90,6 @@ export const EnemyManager = {
             e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
         }
 
-        // 3. Logisk Reset
         e.dead = false;
         e.hp = e.maxHp;
         e.deathState = 'alive';
@@ -117,7 +99,6 @@ export const EnemyManager = {
         e.bloodSpawned = false;
         e.lastDamageType = 'standard';
 
-        // 4. Visuell Reset (Fixar osynliga/svarta zombies)
         const s = e.originalScale || 1.0;
         const w = e.widthScale || 1.0;
         e.mesh.scale.set(s * w, s, s * w);
@@ -129,7 +110,6 @@ export const EnemyManager = {
             }
         });
 
-        // 5. Status Reset
         e.stunTimer = 0;
         e.blindTimer = 0;
         e.burnTimer = 0;
@@ -186,13 +166,20 @@ export const EnemyManager = {
         const pos = enemy.mesh.position;
         _v1.copy(forceVec).multiplyScalar(0.5).add(_up);
 
-        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 60);
-        callbacks.spawnDecal(pos.x, pos.z, 3.0, MATERIALS.bloodDecal);
+        // [VINTERDÖD] Bossar exploderar i mycket fler bitar
+        const isBoss = enemy.isBoss;
+        const mult = isBoss ? 3 : 1;
+
+        // [VINTERDÖD] Uppdaterad logik: 10 droppar, 1 stor pöl
+        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 10 * mult);
+        callbacks.spawnDecal(pos.x, pos.z, isBoss ? 6.0 : 3.0, MATERIALS.bloodDecal);
 
         const baseScale = enemy.originalScale || 1.0;
-        for (let i = 0; i < 8; i++) {
+
+        // [VINTERDÖD] 5 chunks
+        for (let i = 0; i < 5 * mult; i++) {
             _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
-            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, _v2.clone(), enemy.color, baseScale * 0.8);
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, _v2.clone(), enemy.color, baseScale * (isBoss ? 1.5 : 0.8));
         }
         soundManager.playExplosion();
     },
@@ -201,7 +188,6 @@ export const EnemyManager = {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
-        // Assign flexible callbacks once per frame
         _aiCallbacks.onPlayerHit = onPlayerHit;
         _aiCallbacks.spawnPart = spawnPart;
         _aiCallbacks.spawnDecal = spawnDecal;
@@ -214,14 +200,10 @@ export const EnemyManager = {
 
             EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, false, _aiCallbacks);
 
-            // --- SYNC RENDERER ---
             const s = e.deathState;
-
-            // Special Case: Burning enemies need individual rendering for complex scaling/ash animation
             if (s === 'burning') {
                 e.mesh.visible = true;
             }
-            // Standard Rendering: Use InstancedMesh for performance
             else if (!e.isBoss && !e.mesh.userData.exploded && (s === 'alive' || s === 'shot' || s === 'electrified')) {
                 e.mesh.visible = false;
                 _syncList.push(e);
@@ -248,20 +230,19 @@ export const EnemyManager = {
 
             const age = now - e.deathTimer;
 
-            // Cleanup Logic
             const isElectrified = e.deathState === 'electrified';
             const cleanupDelay = isElectrified ? 1000 : 2000;
             const shouldCleanup = (age > cleanupDelay) || (e.deathState === 'dead') || e.mesh.userData.exploded;
 
             if (shouldCleanup) {
-                // Determine the true cause/type of death before recycling
                 let cleanupType = e.deathState;
                 if (cleanupType === 'dead') {
-                    if (e.mesh.userData.exploded) cleanupType = 'exploded';
+                    // [VINTERDÖD FIX] Bossar har inget lik ("corpse"), tvinga dem att sprängas så de inte bara försvinner!
+                    if (e.isBoss || e.mesh.userData.exploded) cleanupType = 'exploded';
                     else if (e.mesh.userData.electrocuted) cleanupType = 'electrified';
                     else if (e.mesh.userData.gibbed) cleanupType = 'gibbed';
                     else if (e.mesh.userData.ashSpawned) cleanupType = 'burning';
-                    else cleanupType = 'shot'; // Default fallback
+                    else cleanupType = 'shot';
                 }
 
                 const wasExploded = e.mesh.userData.exploded;
@@ -272,22 +253,15 @@ export const EnemyManager = {
                             EnemyManager.explodeEnemy(e, _up, callbacks);
                             break;
                         case 'gibbed':
-                            // Already exploded via EnemyAI transition, just ensure no corpse
-                            // If we want a delayed explosion effect here, we could add it, 
-                            // but usually 'gibbed' state implies immediate visual destruction.
-                            // Ensure mesh is removed.
                             if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                             break;
                         case 'burning':
-                            // Ash transition and detachment handled by EnemyAI.
-                            // Ensure mesh is removed if not already done.
                             if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                             break;
                         case 'electrified':
                             scene.remove(e.mesh);
                             if (!e.isBoss) EnemyManager.createCorpse(e);
                             if (!e.bloodSpawned) {
-                                // Cooked from inside - no blood, just a scorch mark
                                 callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.2 + Math.random() * 0.5) * (e.originalScale || 1.0), MATERIALS.scorchDecal);
                                 e.bloodSpawned = true;
                             }
@@ -304,7 +278,6 @@ export const EnemyManager = {
                     }
                 }
 
-                // Stats & Recycling
                 const kType = e.type || 'Unknown';
                 state.killsByType[kType] = (state.killsByType[kType] || 0) + 1;
                 state.killsInRun++;
@@ -312,10 +285,9 @@ export const EnemyManager = {
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
-                // Släpp tillbaka till poolen
                 const recycled = enemies.splice(i, 1)[0];
                 recycled.dead = true;
-                recycled.deathState = 'dead'; // Ensure reset
+                recycled.deathState = 'dead';
                 if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }
