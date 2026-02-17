@@ -3,6 +3,9 @@ import { DEFAULT_GRAPHICS } from '../../content/constants';
 import { GraphicsSettings } from '../../types';
 export type { GraphicsSettings };
 import { InputManager } from './InputManager';
+import { WindSystem } from '../systems/WindSystem';
+import { WeatherSystem } from '../systems/WeatherSystem';
+import { WaterSystem } from '../systems/WaterSystem';
 
 /**
  * The Engine class acts as the central hub for the 3D environment.
@@ -21,6 +24,11 @@ export class Engine {
     public camera: THREE.PerspectiveCamera;
     public renderer!: THREE.WebGLRenderer;
     public input: InputManager;
+
+    // Environmental Systems (Persistent across scenes)
+    public wind: WindSystem;
+    public weather: WeatherSystem;
+    public water: WaterSystem;
 
     private sceneStack: THREE.Scene[] = [];
     private settings: GraphicsSettings = { ...DEFAULT_GRAPHICS };
@@ -49,6 +57,11 @@ export class Engine {
 
         this.input = new InputManager();
         this.input.enable();
+
+        // Initialize persistent environmental systems
+        this.wind = new WindSystem();
+        this.weather = new WeatherSystem(this.scene, this.wind);
+        this.water = new WaterSystem(this.scene);
 
         window.addEventListener('resize', this.handleResize);
     }
@@ -179,14 +192,22 @@ export class Engine {
     public pushScene(newScene: THREE.Scene) {
         this.sceneStack.push(this.scene);
         this.scene = newScene;
+        this.syncSystemsToScene();
         this.applySettings();
     }
 
     public popScene() {
         if (this.sceneStack.length > 0) {
             this.scene = this.sceneStack.pop()!;
+            this.syncSystemsToScene();
             this.applySettings();
         }
+    }
+
+    private syncSystemsToScene() {
+        // [VINTERDÖD] Move environmental meshes to the new active scene
+        if (this.weather && (this.weather as any).reAttach) (this.weather as any).reAttach(this.scene);
+        if (this.water && (this.water as any).reAttach) (this.water as any).reAttach(this.scene);
     }
 
     private handleResize = () => {
@@ -208,8 +229,14 @@ export class Engine {
 
         // Delta time clamping prevents physics-warp during frame drops
         const dt = Math.min(this.clock.getDelta(), 0.05);
+        const now = performance.now();
 
-        // 1. Logic Update
+        // 1. Environmental Systems Update
+        this.wind.update(now, dt);
+        this.weather.update(dt, now);
+        this.water.update(dt);
+
+        // 2. Logic Update
         if (this.onUpdate) this.onUpdate(dt);
 
         // 2. Render Pass

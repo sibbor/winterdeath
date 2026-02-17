@@ -12,8 +12,9 @@ export class WindSystem {
 
   private target = new THREE.Vector2(0, 0);
   private nextChange: number = 0;
-  // Cache materials directly to avoid frame-by-frame traversal
-  private activeMaterials = new Set<THREE.ShaderMaterial>();
+
+  // [VINTERDÖD] Platt array för brutal iterationshastighet. Inget slött Set.
+  private activeMaterials: THREE.ShaderMaterial[] = [];
 
   private overrideActive: boolean = false;
 
@@ -37,14 +38,25 @@ export class WindSystem {
     this.overrideActive = false;
   }
 
+  setRandomized(active: boolean) {
+    this.overrideActive = !active;
+  }
+
+  isRandomized(): boolean {
+    return !this.overrideActive;
+  }
+
   /**
    * Registers an object's materials for wind animation.
    * Scans the object once and stores shader references.
    */
   register(obj: THREE.Object3D) {
-    obj.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
-        this.activeMaterials.add(child.material);
+    obj.traverse((child: any) => {
+      // [VINTERDÖD] Snabba flaggor (.isMesh, .isShaderMaterial) istället för instanceof-prototypklättring
+      if (child.isMesh && child.material && child.material.isShaderMaterial) {
+        if (this.activeMaterials.indexOf(child.material) === -1) {
+          this.activeMaterials.push(child.material);
+        }
       }
     });
   }
@@ -53,9 +65,15 @@ export class WindSystem {
    * Unregisters an object to free up memory.
    */
   unregister(obj: THREE.Object3D) {
-    obj.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
-        this.activeMaterials.delete(child.material);
+    obj.traverse((child: any) => {
+      if (child.isMesh && child.material && child.material.isShaderMaterial) {
+        const idx = this.activeMaterials.indexOf(child.material);
+        if (idx !== -1) {
+          // [VINTERDÖD] Swap-and-Pop. O(1) borttagning utan minnesallokering eller array-skiftning (.splice).
+          const lastIdx = this.activeMaterials.length - 1;
+          this.activeMaterials[idx] = this.activeMaterials[lastIdx];
+          this.activeMaterials.pop();
+        }
       }
     });
   }
@@ -87,23 +105,35 @@ export class WindSystem {
 
     // 2. Update Shared Materials (Vegetation)
     WindUniforms.update(MATERIALS.grass);
-    WindUniforms.update(MATERIALS.treeLeaves);
+    WindUniforms.update(MATERIALS.treeFirNeedles);
     WindUniforms.update(MATERIALS.treeLeavesOak);
     WindUniforms.update(MATERIALS.treeLeavesBirch);
     WindUniforms.update(MATERIALS.flower);
+    WindUniforms.update(MATERIALS.wheat);
     WindUniforms.update(MATERIALS.snow);
 
     // 3. Batch update manually registered materials (Legacy/Custom)
     const timeSec = now / 1000.0;
     const windStrScaled = this.strength * 10;
 
-    this.activeMaterials.forEach(mat => {
-      if (mat.uniforms.time) mat.uniforms.time.value = timeSec;
-      if (mat.uniforms.windStrength) mat.uniforms.windStrength.value = windStrScaled;
-      if (mat.uniforms.windDirection) {
-        mat.uniforms.windDirection.value.set(this.direction.x, this.direction.z);
+    // Cache riktningsvärden för att undvika onödig uppslagning i loopen
+    const dirX = this.direction.x;
+    const dirZ = this.direction.z;
+
+    // [VINTERDÖD] Platt iteration. Inga callbacks, inga .forEach-kontexter.
+    const mats = this.activeMaterials;
+    const len = mats.length;
+    for (let i = 0; i < len; i++) {
+      const uniforms = mats[i].uniforms;
+
+      if (uniforms.time) uniforms.time.value = timeSec;
+      if (uniforms.windStrength) uniforms.windStrength.value = windStrScaled;
+      if (uniforms.windDirection) {
+        // [VINTERDÖD] Direkt mutation av värden (ingen funktions-overhead från .set())
+        uniforms.windDirection.value.x = dirX;
+        uniforms.windDirection.value.y = dirZ;
       }
-    });
+    }
 
     return this.current;
   }

@@ -12,7 +12,6 @@ import { createProceduralTextures } from '../../utils/assets';
 import { Engine, GraphicsSettings } from '../../core/engine/Engine';
 import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
-import { WindUniforms } from '../../utils/assets/materials';
 import { WeatherType } from '../../types';
 
 // Import UI Components
@@ -24,7 +23,6 @@ import ScreenSectorOverview from './ScreenSectorOverview';
 import ScreenSettings from './ScreenSettings';
 import ScreenResetConfirm from './ScreenResetConfirm';
 import ScreenAdventureLog from './ScreenAdventureLog';
-import DebugSystemPanel from '../game/DebugSystemPanel';
 
 interface CampProps {
     stats: PlayerStats;
@@ -68,19 +66,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || Engine.getInstance().getSettings());
 
-    // Debug System Flags (Local to Camp)
-    const [debugSystemFlags, setDebugSystemFlags] = useState({
-        wind: true,
-        weather: true,
-        footprints: true,
-        enemies: true,
-        fx: true,
-        lighting: true
-    });
-    const debugSystemFlagsRef = useRef(debugSystemFlags);
-    useEffect(() => { debugSystemFlagsRef.current = debugSystemFlags; }, [debugSystemFlags]);
-
-    const [showDebugPanel, setShowDebugPanel] = useState(false);
 
     // Renderer Ref for live updates
     const engineRef = useRef<Engine | null>(null);
@@ -149,16 +134,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc);
     }, [activeModal]);
 
-    // Debug Panel Toggle (P)
-    useEffect(() => {
-        const handleKey = (e: KeyboardEvent) => {
-            if (e.key.toLowerCase() === 'p') {
-                setShowDebugPanel(prev => !prev);
-            }
-        };
-        window.addEventListener('keydown', handleKey);
-        return () => window.removeEventListener('keydown', handleKey);
-    }, []);
 
     // --- THREE.JS SCENE SETUP ---
     useEffect(() => {
@@ -185,6 +160,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         scene.clear();
 
         camera.position.set(0, 10, 22);
+        camera.fov = 50;
         camera.far = 2500; // Increase draw distance for stars (r=1800)
         camera.updateProjectionMatrix();
 
@@ -203,7 +179,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         CampWorld.setupTerrain(scene, textures);
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, STATIONS);
 
-        // Initialize Environment (Sky, Campfire, Particles, Wind)
+        // Initialize Environment (Sky, Campfire, Particles, Wind, Weather, Water)
         envStateRef.current = CampEnvironment.initEffects(scene, textures, weather);
 
         // --- FAMILY MEMBERS ---
@@ -340,10 +316,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             lastTime = perfTime;
 
             // Update Environment (Wind, Stars, Fire, Particles)
-            if (envStateRef.current) {
-                // Update Wind
-                CampEnvironment.updateEffects(scene, envStateRef.current, 0.016, now, frame, debugSystemFlagsRef.current);
-            }
+            CampEnvironment.updateEffects(scene, envStateRef.current, 0.016, now, frame);
 
             perfTime = performance.now();
             timings.environment = perfTime - lastTime;
@@ -569,13 +542,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 />
             )}
 
-            {showDebugPanel && (
-                <DebugSystemPanel
-                    flags={debugSystemFlags}
-                    onToggle={(sys) => setDebugSystemFlags(prev => ({ ...prev, [sys]: !prev[sys] }))}
-                    onClose={() => setShowDebugPanel(false)}
-                />
-            )}
         </div>
     );
 };

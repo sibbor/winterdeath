@@ -45,8 +45,8 @@ export const AssetPreloader = {
             scene.background = new THREE.Color(envConfig.bgColor);
             scene.add(new THREE.AmbientLight(0x404040, envConfig.ambientIntensity));
 
-            if (envConfig.moon?.visible) {
-                const dirLight = new THREE.DirectionalLight(envConfig.moon.color, envConfig.moon.intensity);
+            if (envConfig.skyLight?.visible) {
+                const dirLight = new THREE.DirectionalLight(envConfig.skyLight.color, envConfig.skyLight.intensity);
                 dirLight.castShadow = true;
                 scene.add(dirLight);
             }
@@ -84,7 +84,7 @@ export const AssetPreloader = {
 
         // Batch 3: Environmental Props
         addToWarmup(new THREE.Mesh(GEOMETRY.treeTrunk, MATERIALS.treeTrunk));
-        addToWarmup(new THREE.Mesh(GEOMETRY.foliageCluster, MATERIALS.treeLeaves));
+        addToWarmup(new THREE.Mesh(GEOMETRY.foliageCluster, MATERIALS.treeFirNeedles));
         addToWarmup(new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrel));
         addToWarmup(new THREE.Mesh(GEOMETRY.scrap, MATERIALS.scrap));
 

@@ -1,7 +1,6 @@
 
-import { WeaponType, WeaponCategory } from '../content/weapons';
 import { PlayerStats, SectorStats } from '../types';
-import { LEVEL_CAP, WEAPONS } from '../content/constants';
+import { LEVEL_CAP } from '../content/constants';
 
 /**
  * Aggregates sector performance into overall player statistics.
@@ -53,7 +52,9 @@ export const aggregateStats = (
 
     // 5. Discovery & Unique Items (SP Rewards)
     if (sectorStats.cluesFound && sectorStats.cluesFound.length > 0) {
-        const newUniqueClues = sectorStats.cluesFound.filter(c => !s.cluesFound.includes(c));
+        // [VINTERDÖD] Fix: Map SectorTrigger objects to IDs to avoid circular references in save file
+        const clueIds = sectorStats.cluesFound.map((c: any) => c.id || c).filter((id: any) => typeof id === 'string');
+        const newUniqueClues = clueIds.filter((id: string) => !s.cluesFound.includes(id));
         s.cluesFound = [...s.cluesFound, ...newUniqueClues];
     }
 
@@ -92,16 +93,4 @@ export const aggregateStats = (
     }
 
     return s;
-};
-
-export const randomizeLoadout = () => {
-    const primaries = Object.values(WEAPONS).filter(w => w.category === WeaponCategory.PRIMARY).map(w => w.name);
-    const secondaries = Object.values(WEAPONS).filter(w => w.category === WeaponCategory.SECONDARY).map(w => w.name);
-    const throwables = Object.values(WEAPONS).filter(w => w.category === WeaponCategory.THROWABLE).map(w => w.name);
-
-    return {
-        primary: primaries[Math.floor(Math.random() * primaries.length)],
-        secondary: secondaries[Math.floor(Math.random() * secondaries.length)],
-        throwable: throwables[Math.floor(Math.random() * throwables.length)]
-    };
 };

@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { t } from '../../utils/i18n';
 import GameModalLayout from './GameModalLayout';
-import { soundManager } from '../../utils/sound';
 
 interface ScreenTeleportProps {
     onJump: (x: number, z: number) => void;
@@ -24,8 +23,6 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
         const z = parseFloat(coords.z);
         if (!isNaN(x) && !isNaN(z)) {
             onJump(x, z);
-        } else {
-            soundManager.playUiClick(); // Error sound in theory
         }
     };
 
@@ -38,7 +35,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
     };
 
     return (
-        <GameModalLayout title={t('ui.teleport_title')} titleColorClass="text-white" maxWidthClass="max-w-2xl" isMobile={isMobileDevice} onClose={onCancel}>
+        <GameModalLayout title={t('ui.teleport_title')} titleColorClass="text-white" maxWidthClass="max-w-2xl" isMobile={isMobileDevice} onClose={onCancel} showCloseButton={false}>
             <div className="space-y-8" onKeyDown={handleKeyDown}>
                 <div className={`flex ${isMobileDevice ? 'flex-col sm:flex-row' : ''} gap-4 justify-center items-center`}>
                     <div className="flex flex-col items-start gap-2">

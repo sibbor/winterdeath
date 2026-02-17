@@ -31,6 +31,7 @@ const _continuousCtx: any = {
 export const WeaponHandler = {
     // Handle switching weapons via 1-4 keys
     handleSlotSwitch: (state: any, loadout: any, key: string) => {
+        if (state.activeVehicle) return;
         let next: WeaponType | null = null;
         if (key === '1') next = loadout.primary;
         else if (key === '2') next = loadout.secondary;
@@ -63,7 +64,7 @@ export const WeaponHandler = {
 
     // Handle weapon-related inputs (Scroll to switch, R to reload)
     handleInput: (input: any, state: any, loadout: any, now: number, disableInput: boolean) => {
-        if (disableInput) return;
+        if (disableInput || state.activeVehicle) return;
 
         // 1. Optimized Scroll Switching
         if (input.scrollDown || input.scrollUp) {
@@ -144,6 +145,10 @@ export const WeaponHandler = {
 
     // --- CORE FIRING LOGIC ---
     handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
+        if (state.activeVehicle) {
+            return;
+        }
+
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];

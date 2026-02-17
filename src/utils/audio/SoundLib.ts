@@ -344,6 +344,51 @@ const Generators = {
         }
         return buffer;
     },
+
+    // VEHICLES
+    vehicle_engine_boat: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 1.0; // 1s loop
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Low rumbly boat motor (diesel-ish)
+            const low = Math.sin(2 * Math.PI * 40 * t) * 0.5;
+            const sub = Math.sin(2 * Math.PI * 20 * t) * 0.3;
+            const puff = (Math.random() * 2 - 1) * 0.1 * Math.sin(2 * Math.PI * 8 * t);
+            data[i] = (low + sub + puff) * 0.4;
+        }
+        return buffer;
+    },
+    vehicle_engine_car: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.5;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Buzzier car engine
+            const buzz = (t * 80 % 1) * 2 - 1; // Sawtooth
+            const smooth = Math.sin(2 * Math.PI * 80 * t);
+            data[i] = (buzz * 0.2 + smooth * 0.3) * 0.4;
+        }
+        return buffer;
+    },
+    vehicle_skid: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.4;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // High pitch friction noise
+            const noise = (Math.random() * 2 - 1) * 0.2 * Math.exp(-2 * t);
+            const squeal = Math.sin(2 * Math.PI * 800 * t) * 0.1 * Math.exp(-3 * t);
+            data[i] = noise + squeal;
+        }
+        return buffer;
+    },
+    vehicle_horn: (ctx: AudioContext) => {
+        return createTone(ctx, 'square', 440, 0.5, 0.3);
+    },
 };
 
 // --- HELPER GENERATORS ---
@@ -577,6 +622,12 @@ export function registerSoundGenerators() {
     // Loot
     SoundBank.register('loot_scrap', Generators.loot_scrap);
     SoundBank.register('chest_open', Generators.chest_open);
+
+    // Vehicles
+    SoundBank.register('vehicle_engine_boat', Generators.vehicle_engine_boat);
+    SoundBank.register('vehicle_engine_car', Generators.vehicle_engine_car);
+    SoundBank.register('vehicle_skid', Generators.vehicle_skid);
+    SoundBank.register('vehicle_horn', Generators.vehicle_horn);
 }
 
 

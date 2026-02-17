@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sectors';
+import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
@@ -13,7 +13,7 @@ export const Sector5: SectorDef = {
         ambientIntensity: 0.1, // Dark
         groundColor: 0x4a6e4a, // Grass color
         fov: 50,
-        moon: { visible: false, color: 0x445566, intensity: 0.2 },
+        skyLight: { visible: false, color: 0x445566, intensity: 0.2 },
         cameraOffsetZ: 40,
         weather: 'none',
     },

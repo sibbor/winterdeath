@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS, WindUniforms } from '../../utils/assets/materials';
-import { SectorContext } from '../../types/sectors';
+import { SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from './SectorGenerator';
 
 // --- CONFIGURATION ---
@@ -400,7 +400,7 @@ export const EnvironmentGenerator = {
         group.add(trunk);
 
         if (proto.leavesGeo) {
-            let mat = MATERIALS.treeLeaves;
+            let mat = MATERIALS.treeFirNeedles;
             if (type === 'OAK') mat = MATERIALS.treeLeavesOak;
             else if (type === 'BIRCH') mat = MATERIALS.treeLeavesBirch;
 
@@ -432,7 +432,7 @@ export const EnvironmentGenerator = {
 
         const baseType = typeKey.split('_')[0];
         let trunkMat = materialOverride || MATERIALS.treeTrunk;
-        let leavesMat = materialOverride || MATERIALS.treeLeaves;
+        let leavesMat = materialOverride || MATERIALS.treeFirNeedles;
 
         if (!materialOverride) {
             if (baseType === 'OAK') { trunkMat = MATERIALS.treeTrunkOak; leavesMat = MATERIALS.treeLeavesOak; }
@@ -456,29 +456,28 @@ export const EnvironmentGenerator = {
                     map: (leavesMat as any).map,
                     alphaTest: (leavesMat as any).alphaTest
                 });
+                let snowMesh: THREE.InstancedMesh | undefined;
+                if (proto.snowGeo && !materialOverride) { // No snow on silhouettes
+                    snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
+                    snowMesh.castShadow = true;
+                }
+
+                for (let i = 0; i < matrices.length; i++) {
+                    trunkMesh.setMatrixAt(i, matrices[i]);
+                    if (leavesMesh) leavesMesh.setMatrixAt(i, matrices[i]);
+                    if (snowMesh) snowMesh.setMatrixAt(i, matrices[i]);
+                }
+
+                trunkMesh.instanceMatrix.needsUpdate = true;
+                if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
+                if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
+
+                if (!ctx.uniqueMeshes) (ctx as any).uniqueMeshes = [];
+                ctx.scene.add(trunkMesh);
+                if (leavesMesh) ctx.scene.add(leavesMesh);
+                if (snowMesh) ctx.scene.add(snowMesh);
             }
         }
-
-        let snowMesh: THREE.InstancedMesh | undefined;
-        if (proto.snowGeo && !materialOverride) { // No snow on silhouettes
-            snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
-            snowMesh.castShadow = true;
-        }
-
-        for (let i = 0; i < matrices.length; i++) {
-            trunkMesh.setMatrixAt(i, matrices[i]);
-            if (leavesMesh) leavesMesh.setMatrixAt(i, matrices[i]);
-            if (snowMesh) snowMesh.setMatrixAt(i, matrices[i]);
-        }
-
-        trunkMesh.instanceMatrix.needsUpdate = true;
-        if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
-        if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
-
-        if (!ctx.uniqueMeshes) (ctx as any).uniqueMeshes = [];
-        ctx.scene.add(trunkMesh);
-        if (leavesMesh) ctx.scene.add(leavesMesh);
-        if (snowMesh) ctx.scene.add(snowMesh);
     },
 
     addInstancedGrass: (ctx: SectorContext, matrices: THREE.Matrix4[], isFlower: boolean = false, scaleY: number = 1.0) => {

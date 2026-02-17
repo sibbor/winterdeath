@@ -12,6 +12,7 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _color = new THREE.Color();
+const _blackColor = new THREE.Color(0x000000); // [VINTERDÖD] Statisk färg för bränn-lerp
 
 // --- DEBUG ASSETS ---
 const _debugRingGeo = new THREE.RingGeometry(0.95, 1.0, 16);
@@ -43,40 +44,33 @@ export const EnemyAI = {
             onAshStart: (e: Enemy) => void;
         }
     ) => {
-        // Guard: If entity is fully processed or missing mesh, abort
         if (e.deathState === 'dead' || !e.mesh) return;
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
         if (e.hp <= 0 && e.deathState === 'alive') {
             e.deathTimer = now;
-            const dmgType = e.lastDamageType; // Provided by ProjectileSystem
-            const isHighImpact = e.lastHitWasHighImpact; // Provided by ProjectileSystem
+            const dmgType = e.lastDamageType;
+            const isHighImpact = e.lastHitWasHighImpact;
 
-            // Death Branching Logic
-            // Priority 1: Explosions (Instant Gib) / Self-Destruct
             if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER') {
                 e.deathState = 'exploded';
             }
-            // Priority 2: Heavy Ballistics (Conditional Gibbing - even if on fire)
             else if (dmgType === WeaponType.REVOLVER || dmgType === WeaponType.SHOTGUN) {
                 if (isHighImpact) {
-                    e.deathState = 'gibbed'; // Meat explosion
+                    e.deathState = 'gibbed';
                 } else {
-                    e.deathState = 'shot'; // Physical fall
+                    e.deathState = 'shot';
                     e.fallForward = false;
                     if (e.deathVel) e.deathVel.copy(e.velocity).multiplyScalar(-0.5).setY(2.5);
                 }
             }
-            // Priority 3: Fire (Ash) - Only if not gibbed/exploded
             else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER) {
                 e.deathState = 'burning';
                 callbacks.onAshStart(e);
             }
-            // Priority 4: Electricity
             else if (dmgType === WeaponType.ARC_CANNON) {
                 e.deathState = 'electrified';
             }
-            // Priority 5: Standard (SMG, Pistol, Rifle)
             else {
                 e.deathState = 'shot';
                 if (e.deathVel) {
@@ -107,7 +101,6 @@ export const EnemyAI = {
         handleStatusEffects(e, delta, now, callbacks);
         if (e.stunTimer && e.stunTimer > 0) {
             e.stunTimer -= delta;
-            // Visual jitter for electrified/stunned enemies
             e.mesh.position.x += (Math.random() - 0.5) * 0.1;
             return;
         }
@@ -117,33 +110,28 @@ export const EnemyAI = {
         const dx = playerPos.x - e.mesh.position.x;
         const dz = playerPos.z - e.mesh.position.z;
         const distSq = dx * dx + dz * dz;
-        const canSeePlayer = distSq < 900; // 30m detection
+        const canSeePlayer = distSq < 900;
 
-        // Simple Separation: Check a few neighbors or use SpatialGrid if registered
-        // Since we don't have the full enemy list easily accessible in O(1) here without passing it,
-        // and passing O(N) list to every enemy is O(N^2), 
-        // we'll rely on the caller passing `allEnemies`.
         if (allEnemies) {
             if (!e.separationForce) e.separationForce = new THREE.Vector3();
             let sepCount = 0;
-            const separationRadiusSq = 1.0; // 1 meter personal space
+            const separationRadiusSq = 1.0;
 
-            // Optimization: Only check a subset or nearby in array? Use spatial grid?
-            // For < 100 enemies, N^2 is fine-ish (10k checks).
-            // Let's check only 10 neighbors for performance?
+            // [VINTERDÖD] Deklarerar variabler utanför loopen för absolut Zero-GC säkerhet
+            let other: Enemy, odx: number, odz: number, odSq: number, od: number;
+
             for (let i = 0; i < allEnemies.length; i++) {
-                const other = allEnemies[i];
+                other = allEnemies[i];
                 if (other === e || other.deathState === 'dead') continue;
 
-                const dx = e.mesh.position.x - other.mesh.position.x;
-                const dz = e.mesh.position.z - other.mesh.position.z;
-                const dSq = dx * dx + dz * dz;
+                odx = e.mesh.position.x - other.mesh.position.x;
+                odz = e.mesh.position.z - other.mesh.position.z;
+                odSq = odx * odx + odz * odz;
 
-                if (dSq < separationRadiusSq && dSq > 0.001) {
-                    const d = Math.sqrt(dSq);
-                    // Force vector pointing away from neighbor
-                    e.separationForce.x += (dx / d) / d; // Weight by distance (closer = stronger)
-                    e.separationForce.z += (dz / d) / d;
+                if (odSq < separationRadiusSq && odSq > 0.001) {
+                    od = Math.sqrt(odSq);
+                    e.separationForce.x += (odx / od) / od;
+                    e.separationForce.z += (odz / od) / od;
                     sepCount++;
                 }
             }
@@ -163,16 +151,12 @@ export const EnemyAI = {
 
         // --- 6. MASS-BASED KNOCKBACK PHYSICS ---
         if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
-            // Body Mass: Bigger enemies are harder to push
             const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
             const moveInertia = delta / Math.max(0.5, mass);
 
             e.mesh.position.addScaledVector(e.knockbackVel, moveInertia);
-
-            // Gravity effect on knockback
             e.knockbackVel.y -= 50 * delta;
 
-            // Friction/Drag: Heavier enemies stop sliding faster
             const friction = 1.0 + (mass * 2.0);
             e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
 
@@ -196,7 +180,6 @@ export const EnemyAI = {
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
 
-                // Random Groan
                 if (Math.random() < 0.005) callbacks.playSound(e.type === 'RUNNER' ? 'runner_scream' : (e.type === 'TANK' ? 'tank_roar' : 'walker_groan'));
                 break;
 
@@ -207,8 +190,7 @@ export const EnemyAI = {
                 if (canSeePlayer) e.state = AIState.CHASE;
                 else if (e.searchTimer <= 0) { e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0; }
 
-                // Footstep
-                const wanderStepInterval = 1200; // Slower steps for zombies
+                const wanderStepInterval = 1200;
                 if (now > (e.lastStepTime || 0) + wanderStepInterval) {
                     callbacks.playSound('step_zombie');
                     e.lastStepTime = now;
@@ -224,7 +206,6 @@ export const EnemyAI = {
 
                     moveEntity(e, target, delta, e.speed, collisionGrid);
 
-                    // Footstep
                     const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
                         if (e.type === 'TANK') callbacks.playSound('tank_smash');
@@ -232,7 +213,6 @@ export const EnemyAI = {
                         e.lastStepTime = now;
                     }
 
-                    // Random Aggressive sound
                     if (Math.random() < 0.01) callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : (e.type === 'TANK' ? 'tank_roar' : 'walker_attack'));
 
                     const attackRange = e.type === 'TANK' ? 7.0 : 3.8;
@@ -261,36 +241,25 @@ export const EnemyAI = {
             case AIState.EXPLODING:
                 e.explosionTimer -= delta;
 
-                // Frenetic Bounce & Breathe Animation (Ramping Up)
-                const progress = Math.max(0, 1.5 - e.explosionTimer); // 0 -> 1.5
-                const speed = 10.0 + progress * 20.0; // 10 -> 40 speed
+                const progress = Math.max(0, 1.5 - e.explosionTimer);
+                const speed = 10.0 + progress * 20.0;
                 const bounceHeight = 0.3 + progress * 0.2;
 
                 const sineVal = Math.abs(Math.sin(now * 0.001 * speed));
 
-                // Bounce (World Y)
                 e.mesh.position.y = (e.mesh.userData.baseY || 0) + sineVal * bounceHeight;
 
-                // Breathe (Pulse Scale)
-                const breatheScale = 1.0 + sineVal * 0.4; // 1.0 -> 1.4
+                const breatheScale = 1.0 + sineVal * 0.4;
                 e.mesh.scale.setScalar(breatheScale);
 
-                // Ensure visibility
                 e.mesh.visible = true;
 
-                // Beep Sound
                 if (now % 400 < 30) callbacks.playSound('bomber_beep');
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
-                    // Fix: Set LOCAL position to counteract bounce, keeping ring on ground
-                    // Parent is mesh, so local Y = (GroundY - MeshY) + 0.1 offset
                     e.indicatorRing.position.set(0, 0.1 - (sineVal * bounceHeight), 0);
-                    // Note: We assume mesh pivot is near bottom? 
-                    // Actually, if mesh moves up, ring moves up. To stay on ground, ring.y must be -dist.
-                    // Correct: 0.1 - (e.mesh.position.y - baseY)
 
-                    // Flash Logic
                     e.indicatorRing.scale.setScalar(12.0 + Math.sin(now * 0.01) * 1.0);
                     const flashSpeed = (1.6 - e.explosionTimer) * 30;
                     const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
@@ -303,17 +272,11 @@ export const EnemyAI = {
                 }
 
                 if (e.explosionTimer <= 0) {
-                    // Radius: 12.0 (matches the ring scale above)
-                    // Trigger explosion
                     if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
                         callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
-                        // Adding screen shake for effect (handled by damage or explicitly?)
                     }
-
-                    // NOW we kill the entity
                     e.hp = 0;
                     e.deathState = 'exploded';
-                    // Ensure visual removal happens in cleanup
                 }
                 break;
 
@@ -327,11 +290,10 @@ export const EnemyAI = {
 
         // --- 8. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
-        // --- 0. STATUS EFFECTS ---
+
         if (e.stunTimer > 0) {
             e.stunTimer -= delta;
 
-            // Twitch Animation
             if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
             const twitchX = (Math.random() - 0.5) * 0.2;
             const twitchZ = (Math.random() - 0.5) * 0.2;
@@ -339,24 +301,21 @@ export const EnemyAI = {
             e.mesh.position.z += twitchZ;
             e.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
 
-            // Spawn sparks occasionally
             if (Math.random() < 0.1) {
                 callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.0, e.mesh.position.z, 'stun_star', 1, undefined, undefined, 0xffff00, 0.3);
             }
 
             if (e.stunTimer <= 0) {
-                e.state = AIState.CHASE; // Recover to chase
+                e.state = AIState.CHASE;
             }
-            return; // Skip other logic while stunned
+            return;
         }
 
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
-        // Idle bobbing movement
         if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
         e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
 
-        // Debug Hitboxes
         if (debugMode) {
             if (!e.mesh.userData.debugRing) {
                 const ring = new THREE.Mesh(_debugRingGeo, _debugRingMat);
@@ -373,8 +332,6 @@ export const EnemyAI = {
 
 // --- HELPERS ---
 
-
-
 function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid) {
     _v1.set(target.x, e.mesh.position.y, target.z);
     _v2.subVectors(_v1, e.mesh.position);
@@ -385,36 +342,10 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     let curSpeed = speed * 10;
     if (e.slowTimer > 0) curSpeed *= 0.55;
 
-    // --- SEPARATION LOGIC ---
-    // Push away from other enemies to prevent stacking
-    // Using a simple spatial check or iterating all enemies (O(N^2) locally but N is small in viewport)
-    // For performance, we can assume 'nearby' from collisionGrid contains enemies too if they are registered as obstacles?
-    // Currently obstacles are static. Let's do a simple check against a few random enemies or passed in list?
-    // Passed in list 'allEnemies' is not available here in helper. 
-    // We'll rely on SpatialGrid if enemies are added there, OR simple random offset jitter when moving to avoid perfect stacking.
-
-    // Better: Add a "separation" vector calculated in the main update loop and passed here? 
-    // Or just check collisionGrid for other enemies if we add them to grid.
-    // For now, let's just add a small jitter if very close to target to avoid Z-fighting/stacking exact pos.
-
-    // Actually, we can check the collisionGrid for dynamic entities if we register them.
-    // Assuming we don't, let's just use the `collisionGrid` which might have static props.
-    // To fix "zombies inside each other", we need true separate. 
-    // Let's rely on the `nearby` check below which currently checks static obstacles.
-    // We should probably add enemies to the spatial grid? 
-    // For this quick fix, I will add a "personal space" force based on the `target` relative vector? No.
-    // I need access to other enemies.
-
-    // FIX: I will add a simple random repulsion if density is high? No, consistent.
-    // I will add a `separationVector` to the `Enemy` type and calculate it in `updateEnemy`! 
-    // Then just add it here.
-
-    // For now, in this helper, I will add a "soft collision" with static obstacles.
-
     _v3.copy(_v2).multiplyScalar(curSpeed * delta);
     if (e.separationForce) {
-        _v3.addScaledVector(e.separationForce, delta * 5.0); // Apply separation
-        e.separationForce.set(0, 0, 0); // Reset for next frame
+        _v3.addScaledVector(e.separationForce, delta * 5.0);
+        e.separationForce.set(0, 0, 0);
     }
 
     e.velocity.copy(_v2).multiplyScalar(curSpeed);
@@ -428,15 +359,11 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
         applyCollisionResolution(_v4, hitRadius, nearby[i]);
     }
 
-    // Fix Sinking: Ensure enemy feet are on ground (y=0).
-    // Mesh origin is center, so y should be half height.
-    // Standard height is 2.0 * scale. Half is 1.0 * scale.
     const groundY = 1.0 * (e.originalScale || 1.0);
     _v4.y = groundY;
 
     e.mesh.position.copy(_v4);
 
-    // Smooth lookAt
     _v5.set(_v1.x, e.mesh.position.y, _v1.z);
     e.mesh.lookAt(_v5);
 }
@@ -449,7 +376,6 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
 
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
     if (e.isBurning) {
-        // More frequent fire particles while walking
         if (Math.random() > 0.4) {
             _v1.set(e.mesh.position.x + (Math.random() - 0.5) * 0.5, e.mesh.position.y + 1.0, e.mesh.position.z + (Math.random() - 0.5) * 0.5);
             callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'flame', 1);
@@ -465,24 +391,36 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
     }
 }
 
-
-
 function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: any) {
     const age = now - e.deathTimer!;
 
     if (e.deathState === 'burning') {
-        const duration = 1500; // 1.5s transition
+        const duration = 1500;
         const progress = Math.min(1.0, age / duration);
 
-        // Mark as ash-spawned to prevent blood during cleanup
         if (!e.mesh.userData.ashSpawned) {
             e.mesh.userData.ashSpawned = true;
             callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'debris', 5, undefined, undefined, 0x333333, 0.5);
         }
 
-        // Find body part if not cached (optimization: could cache)
-        const body = e.mesh.children.find(c => c.userData.isBody);
-        const ash = e.ashPile; // Linked in Spawner
+        // [VINTERDÖD] Återinförd cache-logik för att undvika frame-by-frame traversering
+        let body = e.mesh.userData.bodyCache;
+        let colorMats: THREE.Material[] = e.mesh.userData.colorMats;
+
+        if (body === undefined) {
+            body = e.mesh.children.find(c => c.userData.isBody) || null;
+            e.mesh.userData.bodyCache = body;
+
+            colorMats = [];
+            if (body) {
+                body.traverse((c: any) => {
+                    if (c.isMesh && c.material) colorMats.push(c.material);
+                });
+            }
+            e.mesh.userData.colorMats = colorMats;
+        }
+
+        const ash = e.ashPile;
 
         if (body) {
             const s = Math.max(0.001, (1.0 - progress) * (e.originalScale || 1.0));
@@ -498,29 +436,22 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             ash.scale.setScalar(s);
         }
 
-        // Color transition (Blackening)
-        _color.set(e.color).lerp(new THREE.Color(0x000000), progress);
-        if (body) {
-            body.traverse((c: any) => { if (c.isMesh && c.material) c.material.color.copy(_color); });
+        // [VINTERDÖD] Platt iteration istället för onödig kloning och callback-funktioner
+        _color.set(e.color).lerp(_blackColor, progress);
+        if (colorMats) {
+            for (let i = 0; i < colorMats.length; i++) {
+                (colorMats[i] as any).color.copy(_color);
+            }
         }
 
-        // Finish: leave persistent ash pile
         if (progress >= 1.0) {
             if (ash && e.mesh.parent) {
                 const permanentAsh = ash.clone();
-                // Detach logic
                 permanentAsh.applyMatrix4(e.mesh.matrixWorld);
 
-                // Ash pile geometry needs -PI/2 rotation to lie flat if it's Cone/Lathe based
-                // But let's check if applyMatrix4 already handles rotation?
-                // If enemy is rotating, ash rotates.
-                // We want ash flat on ground.
                 permanentAsh.quaternion.set(0, 0, 0, 1);
-                // Wait, if I zero quaternion, I lose the rotation from matrixWorld?
-                // But I want it flat.
-                // Position is correct.
                 permanentAsh.position.copy(e.mesh.position);
-                permanentAsh.position.y = 0.05; // Slight offset to avoid z-fighting
+                permanentAsh.position.y = 0.05;
 
                 const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
                 permanentAsh.scale.setScalar(massScale);
@@ -528,7 +459,7 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
                 e.mesh.parent.add(permanentAsh);
             }
             if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-            e.deathState = 'dead'; // Marker to stop processing
+            e.deathState = 'dead';
         }
         return;
     }
@@ -536,9 +467,8 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
     if (e.deathState === 'gibbed') {
         if (!e.mesh.userData.gibbed) {
             e.mesh.userData.gibbed = true;
-            e.mesh.visible = false; // Hide body immediately
+            e.mesh.visible = false;
 
-            // Spawn chunks
             const count = (e.type === 'TANK' || e.type === 'BOSS') ? 12 : 6;
             const scale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
 
@@ -553,7 +483,6 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
     }
 
     if (e.deathState === 'shot' || e.deathState === 'electrified') {
-        // Electric jitter
         if (e.deathState === 'electrified') {
             if (!e.mesh.userData.electrocuted) {
                 e.mesh.userData.electrocuted = true;
@@ -562,29 +491,23 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             }
 
             if (age < 120) {
-                // Instant Drop (0-120ms)
                 const t = age / 120;
                 e.mesh.rotation.x = -Math.PI / 2 * t;
                 e.mesh.position.y = Math.max(0.2, (e.mesh.position.y || 1.0) * (1 - t));
             } else {
-                // Cramp on ground (120-1000ms)
                 const baseHeight = 0.2;
                 e.mesh.rotation.x = -Math.PI / 2;
                 e.mesh.position.y = baseHeight;
 
-                // Violent seizure jitter (Relative to death position to avoid drift)
                 const jitter = 0.15;
                 e.mesh.position.x = e.mesh.userData.deathPosX + (Math.random() - 0.5) * jitter;
                 e.mesh.position.z = e.mesh.userData.deathPosZ + (Math.random() - 0.5) * jitter;
 
-                // Intense sparking
                 if (Math.random() > 0.4) callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'spark', 1);
             }
-            // Ensure quaternion is synced for InstancedMesh (ZombieRenderer)
             e.mesh.quaternion.setFromEuler(e.mesh.rotation);
         }
         else {
-            // Standard Shot Death
             e.deathVel.y -= 35 * delta;
             e.mesh.position.addScaledVector(e.deathVel, delta);
             if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }

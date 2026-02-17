@@ -23,9 +23,16 @@ export interface InputState {
     locked: boolean;
 }
 
+// [VINTERDÖD] Utökad KEY_MAP som täcker versaler.
+// Eliminerar behovet av minnesallokerande .toLowerCase() i event-listeners.
 const KEY_MAP: Record<string, keyof InputState> = {
-    'w': 'w', 'a': 'a', 's': 's', 'd': 'd',
-    ' ': 'space', 'r': 'r', 'e': 'e',
+    'w': 'w', 'W': 'w',
+    'a': 'a', 'A': 'a',
+    's': 's', 'S': 's',
+    'd': 'd', 'D': 'd',
+    ' ': 'space',
+    'r': 'r', 'R': 'r',
+    'e': 'e', 'E': 'e',
     '1': '1', '2': '2', '3': '3', '4': '4'
 };
 
@@ -68,14 +75,24 @@ export class InputManager {
     }
 
     private resetState() {
-        const keys: (keyof InputState)[] = ['w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', '1', '2', '3', '4'];
-        for (let i = 0; i < keys.length; i++) {
-            (this.state[keys[i]] as boolean) = false;
-        }
-        this.state.joystickMove.set(0, 0);
-        this.state.joystickAim.set(0, 0);
+        // [VINTERDÖD] Platt nollställning. Ingen dynamisk array-allokering (keys = []) eller iteration.
+        this.state.w = false;
+        this.state.a = false;
+        this.state.s = false;
+        this.state.d = false;
+        this.state.space = false;
+        this.state.fire = false;
+        this.state.r = false;
+        this.state.e = false;
+        this.state['1'] = false;
+        this.state['2'] = false;
+        this.state['3'] = false;
+        this.state['4'] = false;
         this.state.scrollUp = false;
         this.state.scrollDown = false;
+
+        this.state.joystickMove.set(0, 0);
+        this.state.joystickAim.set(0, 0);
     }
 
     private bindEvents() {
@@ -107,8 +124,9 @@ export class InputManager {
 
     private handleKeyDown = (e: KeyboardEvent) => {
         if (!this.isEnabled) return;
-        const key = e.key.toLowerCase();
-        const stateKey = KEY_MAP[key];
+
+        // [VINTERDÖD] Blixtsnabb hash-map lookup utan toLowerCase()-skräpsamling.
+        const stateKey = KEY_MAP[e.key];
 
         if (stateKey) {
             (this.state[stateKey] as boolean) = true;
@@ -119,8 +137,8 @@ export class InputManager {
 
     private handleKeyUp = (e: KeyboardEvent) => {
         if (!this.isEnabled) return;
-        const key = e.key.toLowerCase();
-        const stateKey = KEY_MAP[key];
+
+        const stateKey = KEY_MAP[e.key];
 
         if (stateKey) {
             (this.state[stateKey] as boolean) = false;
@@ -192,8 +210,12 @@ export class InputManager {
     };
 
     public requestPointerLock(element: HTMLElement) {
-        if (this.state.locked) return;
-        element.requestPointerLock();
+        if (this.state.locked || !element.requestPointerLock) return;
+        try {
+            element.requestPointerLock();
+        } catch (e) {
+            console.warn("Pointer lock request failed", e);
+        }
     }
 
     public setJoystickMove(x: number, y: number) {

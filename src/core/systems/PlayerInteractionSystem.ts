@@ -7,7 +7,24 @@ import { getCollectibleById } from '../../content/collectibles';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
+
+// [VINTERDÖD] Delat objekt för returvärden från detektion.
+// Eliminering av ständiga { type, pos } allokeringar.
+const _detectionResult = {
+    type: null as 'chest' | 'collectible' | 'sector_specific' | null,
+    position: new THREE.Vector3(),
+    id: null as string | null,
+    object: null as THREE.Object3D | null
+};
+
+// [VINTERDÖD] Typ för cachad material-array för Zero-GC animering
+interface ActiveAnimation {
+    obj: THREE.Group;
+    startY: number;
+    progress: number;
+    duration: number;
+    materials: THREE.Material[]; // Pre-cachade material
+}
 
 export class PlayerInteractionSystem implements System {
     id = 'player_interaction';
@@ -23,13 +40,7 @@ export class PlayerInteractionSystem implements System {
         this.onCollectibleFound = onCollectibleFound;
     }
 
-    // Animation state tracking (Zero-GC approach via object recycling could be added if heavy)
-    private activeAnimations: {
-        obj: THREE.Group,
-        startY: number,
-        progress: number,
-        duration: number
-    }[] = [];
+    private activeAnimations: ActiveAnimation[] = [];
 
     update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
@@ -38,7 +49,7 @@ export class PlayerInteractionSystem implements System {
         // 1. Detect nearby interactive objects (Optimized: Throttle to 10hz)
         if (now - this.lastDetectionTime > 100) {
             this.lastDetectionTime = now;
-            const detection = this.detectInteraction(
+            this.detectInteraction(
                 this.playerGroup.position,
                 state.chests,
                 state.triggers,
@@ -46,8 +57,21 @@ export class PlayerInteractionSystem implements System {
                 session.mapId
             );
 
-            state.interactionType = detection.type;
-            state.interactionTargetPos = detection.position;
+            state.interactionType = _detectionResult.type;
+
+            let label = (_detectionResult.object?.userData?.interactionLabel as string) || null;
+            // [VINTERDÖD] Dynamic label for vehicles: Exit vs Enter
+            if (state.activeVehicle && _detectionResult.object === state.activeVehicle) {
+                label = 'ui.exit_vehicle';
+            }
+            state.interactionLabel = label;
+
+            if (_detectionResult.position) {
+                if (!state.interactionTargetPos) state.interactionTargetPos = new THREE.Vector3();
+                state.interactionTargetPos.copy(_detectionResult.position);
+            } else {
+                state.interactionTargetPos = null;
+            }
         }
 
         // 2. Handle Interaction Press (Edge Triggered)
@@ -60,6 +84,7 @@ export class PlayerInteractionSystem implements System {
                     state.interactionType,
                     this.playerGroup.position,
                     state.chests,
+                    state.triggers, // [VINTERDÖD] Lagt till triggers här för hanteringen
                     state,
                     session
                 );
@@ -69,7 +94,8 @@ export class PlayerInteractionSystem implements System {
         if (!input.e) state.eDepressed = false;
 
         // 3. Update Active Animations (Synced with Game Loop)
-        for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
+        const animLen = this.activeAnimations.length;
+        for (let i = animLen - 1; i >= 0; i--) {
             const anim = this.activeAnimations[i];
             anim.progress += dt / anim.duration;
 
@@ -78,27 +104,35 @@ export class PlayerInteractionSystem implements System {
             anim.obj.position.y = anim.startY + anim.progress * 2.0;
             anim.obj.rotation.y += 3.0 * dt;
 
-            anim.obj.traverse((child) => {
-                if (child instanceof THREE.Mesh && child.material) {
-                    child.material.opacity = 1.0 - anim.progress;
-                }
-            });
+            // [VINTERDÖD] Platt iteration över cachade material istället för Object3D-traversering
+            const op = 1.0 - anim.progress;
+            const mats = anim.materials;
+            const mLen = mats.length;
+            for (let m = 0; m < mLen; m++) {
+                mats[m].opacity = op;
+            }
 
             if (anim.progress >= 1) {
                 session.engine.scene.remove(anim.obj);
-                // Dispose cloned materials to prevent memory leaks
-                anim.obj.traverse((child) => {
-                    if (child instanceof THREE.Mesh) {
-                        if (Array.isArray(child.material)) {
-                            child.material.forEach((m: any) => m.dispose());
-                        } else if (child.material) {
-                            child.material.dispose();
-                        }
+
+                // [VINTERDÖD] Dispose itereras via den platta cachen också
+                for (let m = 0; m < mLen; m++) {
+                    mats[m].dispose();
+                }
+
+                // Radera mesh/geom från scene (bara ifall de ligger kvar)
+                anim.obj.traverse((child: any) => {
+                    if (child.isMesh && child.geometry) {
+                        child.geometry.dispose();
                     }
                 });
 
                 const idx = this.collectibles.indexOf(anim.obj);
-                if (idx > -1) this.collectibles.splice(idx, 1);
+                if (idx > -1) {
+                    // Swap and Pop på collectibles array
+                    this.collectibles[idx] = this.collectibles[this.collectibles.length - 1];
+                    this.collectibles.pop();
+                }
 
                 // Swap-and-Pop animation removal
                 this.activeAnimations[i] = this.activeAnimations[this.activeAnimations.length - 1];
@@ -110,6 +144,7 @@ export class PlayerInteractionSystem implements System {
     /**
      * Scans the environment for the closest interactable object.
      * Priority: Collectibles > Triggers > Chests > Mission Objects
+     * [VINTERDÖD] Modifierar den globala _detectionResult istället för att returnera ett nytt objekt.
      */
     private detectInteraction(
         playerPos: THREE.Vector3,
@@ -117,58 +152,96 @@ export class PlayerInteractionSystem implements System {
         triggers: any[],
         sectorState: any,
         mapId: number
-    ): { type: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null, position: THREE.Vector3 | null } {
+    ): void {
 
         // --- 1. Check Collectibles (3.5m radius) ---
-        for (let i = 0; i < this.collectibles.length; i++) {
+        const cLen = this.collectibles.length;
+        for (let i = 0; i < cLen; i++) {
             const c = this.collectibles[i];
             if (playerPos.distanceToSquared(c.position) < 12.25) { // 3.5 * 3.5
-                _v1.copy(c.position);
-                return { type: 'collectible', position: _v1.clone() };
+                _detectionResult.position.copy(c.position);
+                _detectionResult.type = 'collectible';
+                return;
             }
         }
 
-        // --- 2. Check Area Triggers (Portals/Events) ---
-        for (let i = 0; i < triggers.length; i++) {
+        // --- 2. Check Chests (3.5m radius) ---
+        const chLen = chests.length;
+        for (let i = 0; i < chLen; i++) {
+            const ch = chests[i];
+            if (!ch.opened && playerPos.distanceToSquared(ch.mesh.position) < 12.25) {
+                _detectionResult.position.copy(ch.mesh.position);
+                _detectionResult.type = 'chest';
+                _detectionResult.object = ch.mesh;
+                return;
+            }
+        }
+
+        // --- 4. Check Generic Sector Interactables (Triggers/Vehicles/Stations) ---
+        // Scan Trigger Volumes
+        const tLen = triggers.length;
+        for (let i = 0; i < tLen; i++) {
             const t = triggers[i];
-            // Only 'event' usage type or 'portal' with interaction?
-            // Current trigger logic is mostly auto, but for Key Interactions:
-            if (t.usage === 'knock_on_port') {
-                if (playerPos.distanceToSquared(t.position) < t.radius * t.radius) {
-                    return { type: 'knock_on_port', position: t.position.clone() };
+            if (t.userData?.isInteractable) {
+                // Check dist based on radius or box
+                let inRange = false;
+                if (t.size) { // Box
+                    // Simplified AABB check relative to rotation would be needed here, 
+                    // but for now we fallback to radius check on center for interaction prompts usually
+                    // or strict containment. Let's use simple distance for prompt visibility
+                    const dist = Math.max(t.size.width, t.size.depth) * 0.7; // Approx
+                    if (playerPos.distanceToSquared(t.position) < dist * dist) inRange = true;
+                } else {
+                    const r = t.radius || 2.0;
+                    if (playerPos.distanceToSquared(t.position) < r * r) inRange = true;
+                }
+
+                if (inRange) {
+                    _detectionResult.position.copy(t.position);
+                    _detectionResult.type = 'sector_specific';
+                    _detectionResult.id = t.userData.interactionId;
+                    _detectionResult.object = t; // Triggers are objects in our system? No, they are data. 
+                    // Wait, triggers in RuntimeState are just data. We might need the mesh if it exists.
+                    // The scan should probably look at sectorState.ctx.obstacles OR specific meshes if needed.
+                    // For triggers that are just zones, we pass null object? 
+                    // Actually, many "triggers" are meshes with userData.
+                    return;
                 }
             }
         }
 
-        // --- 3. Check Chests (3.5m radius) ---
-        for (let i = 0; i < chests.length; i++) {
-            const chest = chests[i];
-            if (!chest.opened && playerPos.distanceToSquared(chest.mesh.position) < 12.25) {
-                _v1.copy(chest.mesh.position);
-                return { type: 'chest', position: _v1.clone() };
-            }
-        }
-
-        // --- 4. Check Mission Extraction (Bus/Explosive) ---
-        // ONLY SECTOR 1 (Map ID 0)
-        if (mapId === 0 && sectorState && !sectorState.busExploded && sectorState.ctx?.busObject) {
-            if (sectorState.busCanBeInteractedWith) {
-                const bus = sectorState.ctx.busObject;
-                if (playerPos.distanceToSquared(bus.position) < 64) { // 8.0 * 8.0
-                    _v1.copy(bus.position);
-                    _v1.y = 2.5;
-                    return { type: 'plant_explosive', position: _v1.clone() };
+        // Scan Physics/Obstacle Objects (Boats, Stations, etc)
+        // This relies on them being in a known list or checking nearby entities.
+        // For performance, we should ideally have a list of Key Interactables.
+        // For now, let's check sectorState.ctx.obstacles if available, or just fallback to known types
+        if (sectorState.ctx && sectorState.ctx.interactables) {
+            const len = sectorState.ctx.interactables.length;
+            for (let i = 0; i < len; i++) {
+                const obj = sectorState.ctx.interactables[i];
+                if (obj.userData?.isInteractable) {
+                    // Use mesh radius or fixed 3m
+                    const r = obj.userData.interactionRadius || 4.0;
+                    if (playerPos.distanceToSquared(obj.position) < r * r) {
+                        _detectionResult.position.copy(obj.position);
+                        _detectionResult.type = 'sector_specific';
+                        _detectionResult.id = obj.userData.interactionId;
+                        _detectionResult.object = obj;
+                        return;
+                    }
                 }
             }
         }
 
-        return { type: null, position: null };
+        _detectionResult.type = null;
+        _detectionResult.id = null;
+        _detectionResult.object = null;
     }
 
     private handleInteraction(
         type: string | null,
         playerPos: THREE.Vector3,
         chests: any[],
+        triggers: any[],
         state: any,
         session: GameSessionLogic
     ) {
@@ -178,8 +251,8 @@ export class PlayerInteractionSystem implements System {
             this.handleCollectiblePickup(playerPos, session);
         }
         else if (type === 'chest') {
-            // Find the specific chest we are interacting with
-            for (let i = 0; i < chests.length; i++) {
+            const len = chests.length;
+            for (let i = 0; i < len; i++) {
                 const c = chests[i];
                 if (!c.opened && playerPos.distanceToSquared(c.mesh.position) < 12.25) {
                     c.opened = true;
@@ -187,7 +260,7 @@ export class PlayerInteractionSystem implements System {
                     WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
                     const light = c.mesh.getObjectByName('chestLight');
-                    if (light) light.visible = false; // Optimize: Hide instead of remove to avoid shader recompilation lag
+                    if (light) light.visible = false;
 
                     // Lid animation
                     if (c.mesh.children[1]) {
@@ -201,27 +274,21 @@ export class PlayerInteractionSystem implements System {
                 }
             }
         }
-        else if (type === 'plant_explosive') {
-            if (state.sectorState) {
-                state.sectorState.busInteractionTriggered = true;
-            } else {
-                this.onSectorEnded(true);
-            }
-        }
-        else if (type === 'knock_on_port') {
-            const knockTrigger = state.triggers.find((t: any) => t.id === 's2_cave_knock_shelter_port');
-            if (knockTrigger) {
-                knockTrigger.triggered = true;
-                soundManager.playUiConfirm();
-            }
+        else if (type === 'sector_specific') {
+            // Dispatch to RuntimeState for SectorSystem to consume
+            state.interactionRequest = {
+                id: _detectionResult.id!,
+                object: _detectionResult.object!,
+                type: 'sector_specific'
+            };
         }
     }
 
     private handleCollectiblePickup(playerPos: THREE.Vector3, session: GameSessionLogic) {
         let collectible: THREE.Group | null = null;
 
-        // Find the closest one
-        for (let i = 0; i < this.collectibles.length; i++) {
+        const len = this.collectibles.length;
+        for (let i = 0; i < len; i++) {
             const c = this.collectibles[i];
             if (playerPos.distanceToSquared(c.position) < 12.25) {
                 collectible = c;
@@ -244,12 +311,26 @@ export class PlayerInteractionSystem implements System {
 
         // --- Optimized Pickup Animation (Managed by System Update) ---
         const obj = collectible;
+        const cachedMaterials: THREE.Material[] = [];
 
-        // Clone materials only once to avoid affecting global assets
-        obj.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                child.material = child.material.clone();
-                child.material.transparent = true;
+        // Clone materials only once, and cache them to avoid per-frame traversal
+        obj.traverse((child: any) => {
+            if (child.isMesh && child.material) {
+                // If it's an array of materials (multi-material mesh), we handle that too
+                if (Array.isArray(child.material)) {
+                    const clonedMats = [];
+                    for (let i = 0; i < child.material.length; i++) {
+                        const cm = child.material[i].clone();
+                        cm.transparent = true;
+                        clonedMats.push(cm);
+                        cachedMaterials.push(cm);
+                    }
+                    child.material = clonedMats;
+                } else {
+                    child.material = child.material.clone();
+                    child.material.transparent = true;
+                    cachedMaterials.push(child.material);
+                }
             }
         });
 
@@ -258,7 +339,8 @@ export class PlayerInteractionSystem implements System {
             obj,
             startY: obj.position.y,
             progress: 0,
-            duration: 0.8
+            duration: 0.8,
+            materials: cachedMaterials
         });
     }
 }

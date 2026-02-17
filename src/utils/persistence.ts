@@ -30,7 +30,8 @@ export const DEFAULT_STATE: GameState = {
     rescuedFamilyIndices: [],
     deadBossIndices: [],
     graphics: DEFAULT_GRAPHICS,
-    weather: 'snow'
+    weather: 'snow',
+    environmentOverrides: {}
 };
 
 export const getPersistentState = (state: GameState) => {
@@ -44,7 +45,8 @@ export const getPersistentState = (state: GameState) => {
         rescuedFamilyIndices: state.rescuedFamilyIndices,
         deadBossIndices: state.deadBossIndices,
         graphics: state.graphics,
-        weather: state.weather
+        weather: state.weather,
+        environmentOverrides: state.environmentOverrides
     };
 };
 
@@ -65,7 +67,8 @@ export const loadGameState = (): GameState => {
                 debugMode: loaded.debugMode || false,
                 showFps: loaded.showFps || false,
                 graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) },
-                weather: loaded.weather || DEFAULT_STATE.weather
+                weather: loaded.weather || DEFAULT_STATE.weather,
+                environmentOverrides: loaded.environmentOverrides || {}
             };
             // Compatibility checks
             if (mergedState.stats.totalDistanceTraveled === undefined) mergedState.stats.totalDistanceTraveled = 0;

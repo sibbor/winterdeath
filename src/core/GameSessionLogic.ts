@@ -25,15 +25,6 @@ export class GameSessionLogic {
     public cameraAngle: number = 0;
     public mapId: number = 0;
 
-    // Performance Debug Flags
-    public debugSystemFlags = {
-        wind: true,
-        weather: true,
-        footprints: true,
-        enemies: true,
-        fx: true,
-        lighting: true
-    };
 
     public state!: RuntimeState;
     private systems: System[] = [];
@@ -94,7 +85,9 @@ export class GameSessionLogic {
             chestsOpened: 0, bigChestsOpened: 0, killsInRun: 0, isInteractionOpen: false, bossSpawned: false,
             bloodDecals: [] as any[], lastDamageTime: 0, lastStaminaUseTime: 0,
             noiseLevel: 0, speakBounce: 0, hurtShake: 0, shakeIntensity: 0,
-            sectorState: {} as SectorState,
+            sectorState: {
+                envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
+            },
             triggers: [] as SectorTrigger[],
             obstacles: [] as Obstacle[],
             collisionGrid: new SpatialGrid(),
@@ -115,11 +108,16 @@ export class GameSessionLogic {
             lastFpsUpdate: 0,
             isMoving: false,
             interactionType: null,
+            interactionLabel: null,
             interactionTargetPos: null,
             bossIntroActive: false,
             sessionCollectiblesFound: [],
             collectiblesFound: props.stats.collectiblesFound || [],
-            mapItems: []
+            mapItems: [],
+            activeVehicle: null,
+            activeVehicleType: null,
+            vehicleEngineState: 'OFF',
+            interactionRequest: null
         };
     }
 
@@ -132,9 +130,10 @@ export class GameSessionLogic {
      * Clears frame-based events and iterates through all registered systems.
      */
     update(dt: number, mapId: number = 0) {
-        // Return active noise events to the pool before starting the new frame
-        if (this.noiseEvents.length > 0) {
-            for (let i = 0; i < this.noiseEvents.length; i++) {
+        // [VINTERDÖD] Return active noise events to the pool (Zero-GC caching array len)
+        const noiseLen = this.noiseEvents.length;
+        if (noiseLen > 0) {
+            for (let i = 0; i < noiseLen; i++) {
                 this.noisePool.push(this.noiseEvents[i]);
             }
             this.noiseEvents.length = 0;
@@ -144,42 +143,12 @@ export class GameSessionLogic {
         if (!this.state) return;
         const now = performance.now();
 
-        // High-performance system iteration
         const systems = this.systems;
         const len = systems.length;
-        const flags = this.debugSystemFlags;
 
+        // High-performance system iteration
         for (let i = 0; i < len; i++) {
-            const sys = systems[i];
-
-            // Performance Debug Toggles
-            if (sys.id === 'WindSystem') {
-                if (!flags.wind) { sys.setVisible?.(false); continue; }
-                else sys.setVisible?.(true);
-            }
-            if (sys.id === 'WeatherSystem') {
-                if (!flags.weather) { sys.setVisible?.(false); continue; }
-                else sys.setVisible?.(true);
-            }
-            if (sys.id === 'FootprintSystem') {
-                if (!flags.footprints) { sys.setVisible?.(false); continue; }
-                else sys.setVisible?.(true);
-            }
-            if ((sys.id === 'EnemySystem' || sys.id === 'EnemyManager')) {
-                if (!flags.enemies) { sys.setVisible?.(false); continue; }
-                else sys.setVisible?.(true);
-            }
-            if (sys.id === 'FXSystem') {
-                if (!flags.fx) { sys.setVisible?.(false); continue; }
-                else sys.setVisible?.(true);
-            }
-            // specific check for lighting system if it exists as a System
-            if (sys.id === 'LightingSystem') {
-                if (!flags.lighting) { sys.setVisible?.(false); continue; }
-                else sys.setVisible?.(true);
-            }
-
-            sys.update(this, dt, now);
+            systems[i].update(this, dt, now);
         }
     }
 
@@ -188,7 +157,6 @@ export class GameSessionLogic {
      * Zero-GC: Uses object pooling for event data.
      */
     makeNoise(pos: THREE.Vector3, radius: number, type: 'footstep' | 'gunshot' | 'explosion' | 'other' = 'other') {
-        // Get an object from the pool or create a new one if empty
         let event = this.noisePool.pop();
 
         if (!event) {
@@ -206,6 +174,7 @@ export class GameSessionLogic {
         event.radius = radius;
         event.type = type;
         event.time = performance.now();
+        event.active = true; // [VINTERDÖD] FIX: Måste slås på när den återvinns från poolen.
 
         this.noiseEvents.push(event);
     }
@@ -216,19 +185,22 @@ export class GameSessionLogic {
     }
 
     removeSystem(id: string) {
-        const idx = this.systems.findIndex(s => s.id === id);
-        if (idx >= 0) {
-            const sys = this.systems[idx];
-            if (sys.cleanup) sys.cleanup(this); // Ensure proper GPU/Memory cleanup
-            this.systems.splice(idx, 1);
+        // [VINTERDÖD] Zero-GC sökning (inget findIndex med callback)
+        for (let i = 0; i < this.systems.length; i++) {
+            if (this.systems[i].id === id) {
+                const sys = this.systems[i];
+                if (sys.cleanup) sys.cleanup(this); // Ensure proper GPU/Memory cleanup
+                this.systems.splice(i, 1);
+                break;
+            }
         }
     }
 
     /**
-         * Tears down the session, cleans up all sub-systems, 
-         * and aggressively clears state references to prevent memory leaks 
-         * between game sessions.
-         */
+     * Tears down the session, cleans up all sub-systems, 
+     * and aggressively clears state references to prevent memory leaks 
+     * between game sessions.
+     */
     dispose() {
         // 1. Cleanup systems (removes meshes from scene, etc.)
         const systems = this.systems;

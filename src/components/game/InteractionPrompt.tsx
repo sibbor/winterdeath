@@ -2,13 +2,14 @@ import React from 'react';
 import { t } from '../../utils/i18n';
 
 interface InteractionPromptProps {
-    type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | null;
+    type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | 'sector_specific' | null;
+    label?: string;
     screenPos?: { x: number, y: number } | null;
     isMobileDevice?: boolean;
     onInteract?: () => void;
 }
 
-const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, screenPos, isMobileDevice, onInteract }) => {
+const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, screenPos, isMobileDevice, onInteract }) => {
     if (!type) return null;
 
     let key = (isMobileDevice ? "TAP" : "E");
@@ -27,8 +28,11 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, screenPos, 
     } else if (type === 'knock_on_port') {
         textKey = 'ui.interact_knock_on_port';
         colorClass = 'border-white-500 text-white-500';
+    } else if (type === 'sector_specific') {
+        textKey = label || 'ui.interact';
+        colorClass = 'border-blue-400 text-blue-200';
     } else {
-        textKey = 'ui.interact';
+        textKey = label || 'ui.interact';
         colorClass = 'border-white-500 text-white-500';
     }
 

@@ -153,13 +153,20 @@ export class EnemySystem implements System {
         if (input.d) _v1.x += 1;
 
         if (_v1.lengthSq() > 0) {
-            // Fly in movement direction if moving
-            state.deathVel = _v1.normalize().multiplyScalar(15).clone();
+            // [VINTERDÖD] Kopiera in i state.deathVel. Inga .clone() allokeringar.
+            state.deathVel.copy(_v1).normalize().multiplyScalar(15);
         } else {
-            // Otherwise fly away from the attacker
-            _v2.subVectors(this.playerGroup.position, attacker ? attacker.mesh.position : this.playerGroup.position).normalize().multiplyScalar(12);
-            state.deathVel = _v2.clone();
+            // Anders flyger vi bakåt från attacken
+            if (attacker && attacker.mesh) {
+                _v2.copy(attacker.mesh.position);
+            } else {
+                _v2.copy(this.playerGroup.position);
+                _v2.z -= 1; // Default fallback direction
+            }
+
+            state.deathVel.subVectors(this.playerGroup.position, _v2).normalize().multiplyScalar(12);
         }
+
         state.deathVel.y = 4;
     }
 

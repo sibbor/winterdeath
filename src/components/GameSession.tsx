@@ -4,13 +4,12 @@ import TouchController from './ui/TouchController';
 import { Engine } from '../core/engine/Engine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { PlayerStats, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase, GraphicsSettings } from '../types';
-import { WeaponType } from '../content/weapons';
-import { SectorContext } from '../types/sectors';
-import { WEAPONS, BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, LEVEL_CAP, CAMERA_HEIGHT } from '../content/constants';
+import { SectorContext } from '../types/SectorEnvironment';
+import { BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT } from '../content/constants';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { t } from '../utils/i18n';
-import { createProceduralTextures, createTextSprite, GEOMETRY, MATERIALS, ModelFactory } from '../utils/assets';
+import { createProceduralTextures, ModelFactory } from '../utils/assets';
 import { SectorGenerator } from '../core/world/SectorGenerator';
 import { PathGenerator } from '../core/world/PathGenerator';
 import { ProjectileSystem } from '../core/weapons/ProjectileSystem';
@@ -22,11 +21,11 @@ import { CinematicSystem } from '../core/systems/CinematicSystem';
 import { FamilySystem } from '../core/systems/FamilySystem';
 import { CameraSystem } from '../core/systems/CameraSystem';
 import { TriggerHandler } from '../core/systems/TriggerHandler';
-import { WeaponHandler } from '../core/systems/WeaponHandler';
 import { EnvironmentSystem } from '../core/systems/EnvironmentSystem';
 import { DeathSystem } from '../core/systems/DeathSystem';
 import { AssetPreloader } from '../core/systems/AssetPreloader';
 import { PlayerMovementSystem } from '../core/systems/PlayerMovementSystem';
+import { VehicleMovementSystem } from '../core/systems/VehicleMovementSystem';
 import { PlayerCombatSystem } from '../core/systems/PlayerCombatSystem';
 import { WorldLootSystem } from '../core/systems/WorldLootSystem';
 import { PlayerInteractionSystem } from '../core/systems/PlayerInteractionSystem';
@@ -34,20 +33,12 @@ import { EnemySystem } from '../core/systems/EnemySystem';
 import { SectorSystem } from '../core/systems/SectorSystem';
 import { FootprintSystem } from '../core/systems/FootprintSystem';
 import ScreenPlayerDied from './game/ScreenPlayerDied';
-import ScreenCollectibleFound from './game/ScreenCollectibleFound';
-import { ScreenPlaygroundEnemyStation } from './game/ScreenPlaygroundEnemyStation'; // New
-import { ScreenPlaygroundEnvironmentStation } from './game/ScreenPlaygroundEnvironmentStation'; // New
+import { ScreenPlaygroundEnemyStation } from './game/ScreenPlaygroundEnemyStation';
+import { ScreenPlaygroundEnvironmentStation } from './game/ScreenPlaygroundEnvironmentStation';
 import ScreenArmory from './camp/ScreenArmory'; // Re-use
 import ScreenPlaygroundArmoryStation from './game/ScreenPlaygroundArmoryStation';
-import { COLLECTIBLES } from '../content/collectibles';
 import CinematicBubble from './game/CinematicBubble';
 import GameUI from './game/GameUI';
-import DebugSystemPanel from './game/DebugSystemPanel';
-import DebugDisplay from './ui/core/DebugDisplay';
-import { WEATHER } from '../content/constants';
-import { WeatherSystem } from '../core/systems/WeatherSystem';
-import { WindSystem } from '../core/systems/WindSystem';
-import { WeatherType } from '../types';
 import { requestWakeLock, releaseWakeLock } from '../utils/device';
 
 // --- ZERO-GC Scratchpads ---
@@ -89,8 +80,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // Request wake lock to keep screen on (important for mobile)
         requestWakeLock();
 
+        // [VINTERDÖD] Interaction Modal Listener
+        const handleOpenStation = (e: any) => {
+            const type = e.detail?.type;
+            if (type) {
+                setActiveModal(type);
+                activeModalRef.current = type;
+                if (document.pointerLockElement) document.exitPointerLock();
+            }
+        };
+        window.addEventListener('open_station', handleOpenStation);
+
         return () => {
             releaseWakeLock();
+            window.removeEventListener('open_station', handleOpenStation);
         };
     }, []);
 
@@ -112,8 +115,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
-    const windSystemRef = useRef(new WindSystem());
-    const weatherSystemRef = useRef<WeatherSystem | null>(null);
     const cameraAngleRef = useRef(0);
     const cameraAngleTargetRef = useRef(0);
     const cameraHeightModifierRef = useRef(0);
@@ -146,15 +147,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [props.isMobileDevice]);
 
-    const [showDebugPanel, setShowDebugPanel] = useState(false);
     const lastHeartbeatRef = useRef<number>(0);
-    useEffect(() => {
-        const handleDebugKey = (e: KeyboardEvent) => {
-            if (e.key.toLowerCase() === 'p') setShowDebugPanel(prev => !prev);
-        };
-        window.addEventListener('keydown', handleDebugKey);
-        return () => window.removeEventListener('keydown', handleDebugKey);
-    }, []);
 
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
     const gameContextRef = useRef<any>(null);
@@ -205,6 +198,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 bossDamageDealt: state.bossDamageDealt, bossDamageTaken: state.bossDamageTaken,
                 distanceTraveled: distanceTraveledRef.current, cluesFound: collectedCluesRef.current,
                 collectiblesFound: state.sessionCollectiblesFound,
+                collectibles: [], // Added based on diff
+                dynamicLights: [], // Added based on diff
+                interactables: [],
                 chestsOpened: state.chestsOpened, bigChestsOpened: state.bigChestsOpened,
                 isExtraction: false,
                 spEarned: (state.level - propsRef.current.stats.level) + state.sessionCollectiblesFound.length + (state.bossesDefeated.length > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
@@ -522,7 +518,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                     break;
                 case 'SPAWN_ENEMY':
-                    if (gameSessionRef.current && !gameSessionRef.current.debugSystemFlags.enemies) break;
                     if (payload) {
                         const count = payload.count || 1;
                         for (let i = 0; i < count; i++) {
@@ -666,7 +661,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = new GameSessionLogic(engine);
         if (stateRef.current) session.init(stateRef.current);
         gameSessionRef.current = session;
-        weatherSystemRef.current = new WeatherSystem(engine.scene, windSystemRef.current);
 
         const scene = engine.scene;
         const camera = engine.camera;
@@ -889,54 +883,49 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
 
             const ambientLight = new THREE.AmbientLight(0x404050, env.ambientIntensity);
+            ambientLight.name = 'AMBIENT_LIGHT';
             scene.add(ambientLight);
 
-            if (env.moon && env.moon.visible) {
-                const lightPos = env.moon.position || { x: 80, y: 50, z: 50 };
-                const moonLight = new THREE.DirectionalLight(env.moon.color, env.moon.intensity);
-                moonLight.position.set(lightPos.x, lightPos.y, lightPos.z);
-                moonLight.castShadow = true;
-                moonLight.shadow.camera.left = -100;
-                moonLight.shadow.camera.right = 100;
-                moonLight.shadow.camera.top = 100;
-                moonLight.shadow.camera.bottom = -100;
+            if (env.skyLight && env.skyLight.visible) {
+                const lightPos = env.skyLight.position || { x: 80, y: 50, z: 50 };
+                const skyLight = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
+                skyLight.name = 'SKY_LIGHT';
+                skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
+                skyLight.castShadow = true;
+                skyLight.shadow.camera.left = -100;
+                skyLight.shadow.camera.right = 100;
+                skyLight.shadow.camera.top = 100;
+                skyLight.shadow.camera.bottom = -100;
                 const shadowRes = engine.getSettings().shadowResolution;
-                moonLight.shadow.mapSize.width = shadowRes;
-                moonLight.shadow.mapSize.height = shadowRes;
-                scene.add(moonLight);
+                skyLight.shadow.mapSize.width = shadowRes;
+                skyLight.shadow.mapSize.height = shadowRes;
+                scene.add(skyLight);
             }
 
-            if (env.sunPosition) {
-                const sun = new THREE.DirectionalLight(0xffffee, 0.5);
-                sun.position.set(env.sunPosition.x, env.sunPosition.y, env.sunPosition.z);
-                sun.castShadow = true;
-                const shadowRes = engine.getSettings().shadowResolution;
-                sun.shadow.mapSize.width = shadowRes;
-                sun.shadow.mapSize.height = shadowRes;
-                scene.add(sun);
-            }
+            const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
+                const startPos = pos || (playerGroupRef.current ? playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
+                const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, stateRef.current.bossSpawned, stateRef.current.enemies.length);
+                if (newEnemies) {
+                    for (let i = 0; i < newEnemies.length; i++) {
+                        stateRef.current.enemies.push(newEnemies[i]);
+                        if (!stateRef.current.seenEnemies.includes(newEnemies[i].type)) {
+                            stateRef.current.seenEnemies.push(newEnemies[i].type);
+                        }
+                    }
+                }
+            };
 
             const ctx: SectorContext = {
                 scene, obstacles: stateRef.current.obstacles, collisionGrid: stateRef.current.collisionGrid, chests: stateRef.current.chests,
                 flickeringLights, burningObjects, rng, triggers: stateRef.current.triggers, mapItems, debugMode: propsRef.current.debugMode,
                 textures: textures, spawnZombie,
-                spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => {
-                    const startPos = pos || (playerGroupRef.current ? playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
-                    const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, stateRef.current.bossSpawned, stateRef.current.enemies.length);
-                    if (newEnemies) {
-                        for (let i = 0; i < newEnemies.length; i++) {
-                            stateRef.current.enemies.push(newEnemies[i]);
-                            if (!stateRef.current.seenEnemies.includes(newEnemies[i].type)) {
-                                stateRef.current.seenEnemies.push(newEnemies[i].type);
-                            }
-                        }
-                    }
-                },
+                spawnHorde,
                 cluesFound: propsRef.current.stats.cluesFound || [], collectiblesFound: propsRef.current.stats.collectiblesFound || [],
-                collectibles: [], dynamicLights: [], sectorId: propsRef.current.currentSector, smokeEmitters: [],
+                collectibles: [], dynamicLights: [], interactables: [], sectorId: propsRef.current.currentSector, smokeEmitters: [],
                 sectorState: stateRef.current.sectorState, state: stateRef.current, yield: yielder
             };
             sectorContextRef.current = ctx;
+            stateRef.current.sectorState.ctx = ctx; // [VINTERDÖD] Link Context to State for access in Sectors
 
             PathGenerator.resetPathLayer();
             await SectorGenerator.build(ctx, currentSector);
@@ -1069,6 +1058,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             session.addSystem(new PlayerMovementSystem(playerGroup));
+            session.addSystem(new VehicleMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new WorldLootSystem(playerGroup, scene));
             const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, ctx.collectibles, onCollectibleFoundInternal);
@@ -1086,7 +1076,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 cameraShake: (amount: number) => stateRef.current.cameraShake = amount,
                 scene: engine.scene,
                 setCameraOverride: (params: any) => cameraOverrideRef.current = params,
-                emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any)
+                emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
+                spawnZombie, spawnHorde
             }));
             session.addSystem(new EnemySystem(playerGroup, {
                 spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound,
@@ -1329,40 +1320,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 return;
             }
 
-            if (!propsRef.current.isRunning || propsRef.current.isPaused) { soundManager.stopRadioStatic(); lastTime = now; return; }
-
-            // --- WEATHER & ENV UPDATE ---
-            if (weatherSystemRef.current) {
-                weatherSystemRef.current.update(delta);
+            if (!propsRef.current.isRunning || propsRef.current.isPaused) {
+                soundManager.stopRadioStatic(); lastTime = now;
+                return;
             }
-
-            // --- DAY/NIGHT & LIGHTING ---
-            // Simple approach: access the directional light if it exists and rotate it based on time
-            // For now, we just ensure the scene environment updates
-            // (A proper TimeSystem would be better, but we'll hack it for Playground compatibility)
 
             frame++;
 
             if (frame % 15 === 0 && playerGroupRef.current && sectorContextRef.current?.dynamicLights) {
-                const lightsOn = gameSessionRef.current?.debugSystemFlags.lighting ?? true;
                 const dynamicLights = sectorContextRef.current.dynamicLights;
                 const pPos = playerGroupRef.current.position;
 
-                if (!lightsOn) {
-                    for (let i = 0; i < dynamicLights.length; i++) {
-                        dynamicLights[i].visible = (dynamicLights[i].name === 'flashlight');
-                    }
-                } else {
-                    const sortableLights = [];
-                    for (let i = 0; i < dynamicLights.length; i++) {
-                        const light = dynamicLights[i];
-                        if (light.name === 'flashlight') { light.visible = true; continue; }
-                        sortableLights.push({ light, distSq: light.position.distanceToSquared(pPos) });
-                    }
-                    sortableLights.sort((a, b) => a.distSq - b.distSq);
-                    for (let i = 0; i < sortableLights.length; i++) {
-                        sortableLights[i].light.visible = (i < 32 || sortableLights[i].distSq < 3600);
-                    }
+                const sortableLights = [];
+                for (let i = 0; i < dynamicLights.length; i++) {
+                    const light = dynamicLights[i];
+                    if (light.name === 'flashlight') { light.visible = true; continue; }
+                    sortableLights.push({ light, distSq: light.position.distanceToSquared(pPos) });
+                }
+                sortableLights.sort((a, b) => a.distSq - b.distSq);
+                for (let i = 0; i < sortableLights.length; i++) {
+                    sortableLights[i].light.visible = (i < 32 || sortableLights[i].distSq < 3600);
                 }
             }
 
@@ -1402,6 +1379,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
+
+
                 const isMoving = state.isMoving;
                 if (prevPosRef.current && playerGroupRef.current) { distanceTraveledRef.current += playerGroupRef.current.position.distanceTo(prevPosRef.current); }
                 if (playerGroupRef.current) prevPosRef.current = playerGroupRef.current.position.clone();
@@ -1424,12 +1403,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             FootprintSystem.update(delta);
 
             if (playerGroupRef.current) {
-                if (gameSessionRef.current?.debugSystemFlags.fx !== false) {
-                    FXSystem.setVisible(true, state.particles);
-                    FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
-                } else {
-                    FXSystem.setVisible(false, state.particles);
-                }
+                FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
             }
 
             if (isCinematic) {
@@ -1751,14 +1725,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         currentWeather={stateRef.current.weather}
                         onWeatherChange={(w) => {
                             stateRef.current.weather = w;
-                            if (weatherSystemRef.current) {
-                                weatherSystemRef.current.sync(w, 1000);
+                            if (engineRef.current) {
+                                engineRef.current.weather.sync(w, 1000);
+                            }
+                            if (props.onEnvironmentOverrideChange) {
+                                props.onEnvironmentOverrideChange(stateRef.current.sectorState.envOverride || {}, w);
                             }
                         }}
                         currentOverride={stateRef.current.sectorState.envOverride}
                         onOverrideChange={(overrides) => {
                             stateRef.current.sectorState.envOverride = overrides;
-                            // TODO: Force update? Usually update loop handles it.
+                            if (props.onEnvironmentOverrideChange) {
+                                props.onEnvironmentOverrideChange(overrides, stateRef.current.weather);
+                            }
                         }}
                         transparent={true}
                     />
@@ -1769,6 +1748,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 <GameUI
                     onCloseClue={() => { }}
                     interactionType={interactionType}
+                    interactionLabel={stateRef.current.interactionLabel || undefined}
                     interactionScreenPos={interactionScreenPos}
                     isMobileDevice={props.isMobileDevice}
                     onInteract={() => {
@@ -1789,17 +1769,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 />
             )}
 
-            {showDebugPanel && gameSessionRef.current && (
-                <DebugSystemPanel
-                    flags={gameSessionRef.current.debugSystemFlags}
-                    onToggle={(sys) => {
-                        if (gameSessionRef.current) {
-                            gameSessionRef.current.debugSystemFlags[sys] = !gameSessionRef.current.debugSystemFlags[sys];
-                        }
-                    }}
-                    onClose={() => setShowDebugPanel(false)}
-                />
-            )}
 
             <style>{`
             @keyframes slam {

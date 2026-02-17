@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
-import { SectorContext } from '../../types/sectors';
+import { SectorContext } from '../../types/SectorEnvironment';
 import { ObjectGenerator } from './ObjectGenerator';
 import { EnvironmentGenerator } from './EnvironmentGenerator';
 import { PathGenerator } from './PathGenerator';
@@ -11,6 +11,10 @@ import { getCollectibleById } from '../../content/collectibles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
 
 // Shared Utilities for Sector Generation
+const _c1 = new THREE.Color();
+const _c2 = new THREE.Color();
+const _v1_sg = new THREE.Vector3();
+
 export const SectorGenerator = {
 
     addObstacle: (ctx: SectorContext, obstacle: any) => {
@@ -42,6 +46,22 @@ export const SectorGenerator = {
 
         // Ensure it's in the spatial grid
         ctx.collisionGrid.addObstacle(obstacle);
+    },
+
+    addInteractable: (ctx: SectorContext, object: THREE.Object3D, params?: { id?: string, label?: string, type?: string, radius?: number }) => {
+        if (!object) return;
+
+        // Apply interaction data to the mesh
+        object.userData.isInteractable = true;
+        if (params?.id) object.userData.interactionId = params.id;
+        if (params?.label) object.userData.interactionLabel = params.label;
+        if (params?.type) object.userData.interactionType = params.type;
+        if (params?.radius) object.userData.interactionRadius = params.radius;
+
+        // Register in the sector context list
+        if (ctx.interactables && !ctx.interactables.includes(object)) {
+            ctx.interactables.push(object);
+        }
     },
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
@@ -562,7 +582,7 @@ export const SectorGenerator = {
         container.rotation.y = rotation;
         ctx.scene.add(container);
 
-        // Add Collision (6.0m L x 2.6m H x 2.4m W)
+        // Add Collision (default: 6.0m L x 2.6m H x 2.4m W)
         SectorGenerator.addObstacle(ctx, {
             mesh: container,
             position: container.position,
@@ -781,6 +801,153 @@ export const SectorGenerator = {
         barrel.position.set(x, 0, z);
         ctx.scene.add(barrel);
         SectorGenerator.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: 'sphere', radius: 0.6 } });
+    },
+
+    /**
+     * Centralized Atmosphere Orchestrator.
+     * Handles biome blending, weather syncing, and manual overrides.
+     */
+    updateAtmosphere: (
+        dt: number,
+        now: number,
+        playerPos: THREE.Vector3,
+        gameState: any,
+        sectorState: any,
+        events: any,
+        sectorDef: any,
+        zones?: any[]
+    ) => {
+        const weatherSystem = gameState.weatherSystem;
+        const windSystem = gameState.windSystem;
+        const scene = events.scene;
+        if (!playerPos || !weatherSystem || !scene) return;
+
+        const px = playerPos.x;
+        const pz = playerPos.z;
+
+        // 1. Determine Default Target Values
+        const defEnv = sectorDef.environment;
+        const targetFogColor = _c1.setHex(defEnv.bgColor);
+        if (defEnv.fogColor !== undefined) targetFogColor.setHex(defEnv.fogColor);
+
+        let targetFogDensity = defEnv.fogDensity;
+        let targetAmbient = defEnv.ambientIntensity;
+        let activeWeather: any = 'none';
+        let maxWeight = 0;
+
+        // 2. Apply Zone Blending (if not overridden)
+        const override = sectorState.envOverride;
+        if (!override && zones && zones.length > 0) {
+            let totalWeight = 0;
+            let blendedR = 0;
+            let blendedG = 0;
+            let blendedB = 0;
+            let blendedDensity = 0;
+            let blendedAmbient = 0;
+
+            for (let i = 0; i < zones.length; i++) {
+                const z = zones[i];
+                const dx = px - z.x;
+                const dz = pz - z.z;
+                const distSq = dx * dx + dz * dz;
+
+                const inner = z.innerRadius || 250;
+                const outer = z.outerRadius || 450;
+                const outerSq = outer * outer;
+
+                if (distSq < outerSq) {
+                    const dist = Math.sqrt(distSq);
+                    let weight = 1.0;
+                    if (dist > inner) {
+                        weight = 1.0 - ((dist - inner) / (outer - inner));
+                    }
+                    weight = weight * weight; // Cubic falloff for smoother transitions
+
+                    _c2.setHex(z.bgColor);
+                    blendedR += _c2.r * weight;
+                    blendedG += _c2.g * weight;
+                    blendedB += _c2.b * weight;
+
+                    blendedDensity += z.fogDensity * weight;
+                    blendedAmbient += z.ambient * weight;
+                    totalWeight += weight;
+
+                    if (weight > maxWeight) {
+                        maxWeight = weight;
+                        activeWeather = z.weather;
+                    }
+                }
+            }
+
+            if (totalWeight > 0) {
+                const lerpFactor = Math.min(1.0, totalWeight);
+                const invWeight = 1 / totalWeight;
+                _c2.setRGB(blendedR * invWeight, blendedG * invWeight, blendedB * invWeight);
+
+                targetFogColor.lerp(_c2, lerpFactor);
+                targetFogDensity = THREE.MathUtils.lerp(targetFogDensity, blendedDensity * invWeight, lerpFactor);
+                targetAmbient = THREE.MathUtils.lerp(targetAmbient, blendedAmbient * invWeight, lerpFactor);
+            }
+        }
+
+        // 3. Apply Manual Overrides (Terminal Station)
+        if (override) {
+            if (override.bgColor !== undefined) targetFogColor.setHex(override.bgColor);
+            if (override.fogColor !== undefined) targetFogColor.setHex(override.fogColor);
+            if (override.fogDensity !== undefined) targetFogDensity = override.fogDensity;
+            if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
+
+            // Lights Override
+            events.setLight({
+                skyLightColor: override.skyLightColor !== undefined ? _c2.setHex(override.skyLightColor) : undefined,
+                skyLightIntensity: override.skyLightIntensity !== undefined ? override.skyLightIntensity : undefined,
+                skyLightPosition: override.skyLightPosition,
+                skyLightVisible: override.skyLightVisible
+            });
+
+            if (override.bgColor !== undefined) events.setBackgroundColor(override.bgColor);
+            if (override.groundColor !== undefined) events.setGroundColor(override.groundColor);
+            if (override.fov !== undefined) events.setFOV(override.fov);
+
+            // Wind Override
+            if (override.windRandomized) {
+                events.setWindRandomized(true);
+            } else if (override.windDirection !== undefined && override.windStrength !== undefined) {
+                const rad = override.windDirection * (Math.PI / 180);
+                if (windSystem) windSystem.setOverride(rad, override.windStrength);
+                events.setWindRandomized(false);
+            } else {
+                if (windSystem) windSystem.clearOverride();
+                events.setWindRandomized(false);
+            }
+
+            // Weather Override
+            if (override.weather !== undefined) {
+                events.setWeather(override.weather, (override.weatherDensity ?? 1.0) * 2000);
+            }
+        } else {
+            events.resetWind();
+        }
+
+        // 4. Apply Atmosphere to Scene (Lerped for smoothness)
+        if (scene.fog instanceof THREE.FogExp2) {
+            scene.fog.color.lerp(targetFogColor, 0.05);
+            scene.fog.density = THREE.MathUtils.lerp(scene.fog.density, targetFogDensity, 0.05);
+        }
+
+        const ambientLight = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
+        if (ambientLight) {
+            ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbient, 0.05);
+        }
+
+        // 5. Auto-Weather Sync
+        if (!override) {
+            if (maxWeight > 0.5) {
+                events.setWeather(activeWeather, 1600);
+            } else if (maxWeight < 0.2) {
+                events.setWeather('none', 0);
+            }
+        }
     },
 
     // Area Fillers
@@ -1063,35 +1230,30 @@ export const SectorGenerator = {
         const terminalType = type === 'TERMINAL_ARMORY' ? 'ARMORY' : type === 'TERMINAL_SPAWNER' ? 'SPAWNER' : 'ENV';
         const terminal = ObjectGenerator.createTerminal(terminalType);
         terminal.position.set(x, 0, z);
-        // Face center
         terminal.lookAt(0, 0, 0);
+        terminal.name = type; // Critical for lookup if needed, though we use obj reference now
+
+        let label = 'ui.interact';
+        if (type === 'TERMINAL_ARMORY') label = 'ui.station_armory';
+        else if (type === 'TERMINAL_SPAWNER') label = 'ui.station_spawner';
+        else if (type === 'TERMINAL_ENV') label = 'ui.station_environment';
+
+        // [VINTERDÖD] Standardized Interaction
+        SectorGenerator.addInteractable(ctx, terminal, {
+            id: type,
+            label: label,
+            type: 'sector_specific',
+            radius: 2.5
+        });
+
         ctx.scene.add(terminal);
+        if (ctx.interactables) ctx.interactables.push(terminal);
 
         SectorGenerator.addObstacle(ctx, {
             mesh: terminal,
             position: terminal.position,
             collider: { type: 'box', size: new THREE.Vector3(1.2, 2, 1) }
         });
-
-        // Add Interaction Trigger
-        let actionType: string = 'OPEN_UI';
-        let payload: any = {};
-        let label = 'ui.interact';
-
-        if (type === 'TERMINAL_ARMORY') {
-            payload = { ui: 'armory' };
-            label = 'ui.open_armory';
-        } else if (type === 'TERMINAL_SPAWNER') {
-            payload = { ui: 'spawner' };
-            label = 'ui.open_spawner';
-        } else if (type === 'TERMINAL_ENV') {
-            payload = { ui: 'environment' };
-            label = 'ui.open_env';
-        }
-
-        SectorGenerator.spawnBoxTrigger(ctx, `terminal_${type}_${x}_${z}`, x, z, 2, 2, 'EVENT', label, [
-            { type: actionType as any, payload: payload }
-        ], true);
 
         // Visual Marker
         const icon = type === 'TERMINAL_ARMORY' ? '🔫' : type === 'TERMINAL_SPAWNER' ? '🧟' : '⛈️';

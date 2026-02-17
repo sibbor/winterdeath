@@ -90,7 +90,8 @@ export interface RuntimeState {
     framesSinceHudUpdate: number;
     lastFpsUpdate: number;
     isMoving: boolean;
-    interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null;
+    interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
+    interactionLabel: string | null;
     interactionTargetPos: THREE.Vector3 | null;
     nearestCollectible?: SectorTrigger | null;
     onClueFound?: ((clue: SectorTrigger) => void) | null;
@@ -100,5 +101,9 @@ export interface RuntimeState {
     sessionCollectiblesFound: string[];
     collectiblesFound: string[];
     mapItems: any[];
+    activeVehicle: THREE.Object3D | null;
+    activeVehicleType: 'CAR' | 'BOAT' | null;
+    vehicleEngineState: 'OFF' | 'STARTING' | 'RUNNING';
+    interactionRequest: { id: string, object: THREE.Object3D, type: 'sector_specific' | 'global' } | null;
 }
 

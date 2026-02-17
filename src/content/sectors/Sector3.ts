@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sectors';
+import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
 import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
@@ -74,7 +74,7 @@ export const Sector3: SectorDef = {
         ambientIntensity: 0.3, // Increased for readability
         groundColor: 0x112211,
         fov: 50,
-        moon: { visible: true, color: 0x88ffaa, intensity: 0.8, position: { x: 50, y: 35, z: 50 } }, // Slightly brighter moon
+        skyLight: { visible: true, color: 0x88ffaa, intensity: 0.8, position: { x: 50, y: 35, z: 50 } }, // Slightly brighter moon
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'rain'

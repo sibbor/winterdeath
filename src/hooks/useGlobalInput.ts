@@ -1,4 +1,3 @@
-
 import { useEffect } from 'react';
 import { GameScreen } from '../types';
 import { soundManager } from '../utils/sound';
@@ -28,18 +27,20 @@ interface UIActions {
     requestPointerLock?: () => void;
 }
 
-
 export const useGlobalInput = (
     screen: GameScreen,
     ui: UIState,
     actions: UIActions
 ) => {
     useEffect(() => {
-        const handleInput = (e: KeyboardEvent) => {
-            // ESC Logic
-            if (e.key === 'Escape') {
-                if (screen === GameScreen.CAMP) return;
+        // [VINTERDÖD] Snabb-cull: Om vi är i lägret hanterar vi inte dessa globala inputs.
+        if (screen === GameScreen.CAMP) return;
 
+        const handleInput = (e: KeyboardEvent) => {
+            const key = e.key;
+
+            // --- ESC Logic ---
+            if (key === 'Escape') {
                 // If a dialogue or boss intro is active, let GameCanvas handle the ESC key
                 if (ui.isDialogueOpen || ui.isBossIntroActive || ui.isInteractionOpen) return;
 
@@ -57,11 +58,9 @@ export const useGlobalInput = (
                     actions.setIsPaused(false);
                     soundManager.playUiClick();
                 } else if (ui.showTeleportMenu) {
-                    // Return to Map Screen instead of unpausing
                     actions.setShowTeleportMenu(false);
                     actions.setTeleportInitialCoords(null);
                     actions.setIsMapOpen(true);
-                    // actions.setIsPaused(false); // Removed: Keep game paused on map
                     soundManager.playUiClick();
                 } else if (ui.isSettingsOpen) {
                     actions.setIsSettingsOpen(false);
@@ -70,16 +69,19 @@ export const useGlobalInput = (
                     actions.setIsAdventureLogOpen?.(false);
                     soundManager.playUiClick();
                 } else if (ui.isPaused) {
-                    // Try to lock FIRST before state changes (which might unmount UI)
                     actions.requestPointerLock?.();
                     actions.onResume();
-                } else if (screen === GameScreen.SECTOR && !ui.activeCollectible && !ui.isDialogueOpen && !ui.isBossIntroActive && ui.hp > 0 && !ui.isAdventureLogOpen) {
-                    actions.setIsPaused(true);
-                    if (document.pointerLockElement) document.exitPointerLock();
+                } else if (screen === GameScreen.SECTOR && ui.hp > 0) {
+                    // [VINTERDÖD] Rensat i villkorsträdet för snabbare exekvering
+                    if (!ui.activeCollectible && !ui.isDialogueOpen && !ui.isBossIntroActive && !ui.isAdventureLogOpen) {
+                        actions.setIsPaused(true);
+                        if (document.pointerLockElement) document.exitPointerLock();
+                    }
                 }
             }
-            // Map Logic (M)
-            else if (e.key.toLowerCase() === 'm') {
+            // --- Map Logic (M) ---
+            // [VINTERDÖD] Undvik .toLowerCase() allokering. Kolla båda fallen direkt.
+            else if (key === 'm' || key === 'M') {
                 if (screen === GameScreen.SECTOR && !ui.activeCollectible && !ui.isDialogueOpen && !ui.showTeleportMenu && ui.hp > 0) {
                     if (ui.isMapOpen) {
                         actions.requestPointerLock?.();
@@ -87,7 +89,6 @@ export const useGlobalInput = (
                         actions.setIsPaused(false);
                         soundManager.playUiClick();
                     } else if (!ui.isPaused) {
-                        // Only allow opening map if the game is not currently paused (e.g. Pause Menu)
                         actions.setIsMapOpen(true);
                         actions.setIsPaused(true);
                         if (document.pointerLockElement) document.exitPointerLock();
@@ -99,5 +100,7 @@ export const useGlobalInput = (
 
         window.addEventListener('keydown', handleInput, { capture: true });
         return () => window.removeEventListener('keydown', handleInput, { capture: true });
+
+        // [VINTERDÖD] Håll matrisen så stabil som möjligt för att undvika onödiga re-binds.
     }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeCollectible, ui.isDialogueOpen, ui.isAdventureLogOpen, ui.isInteractionOpen, ui.hp, actions]);
 };

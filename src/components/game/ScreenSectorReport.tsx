@@ -93,7 +93,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     }
 
     return (
-        <GameModalLayout title="SECTOR REPORT" maxWidthClass="max-w-7xl" footer={Footer} isMobile={isMobileDevice}>
+        <GameModalLayout title={t('ui.sector_report')} maxWidthClass="max-w-7xl" footer={Footer} isMobile={isMobileDevice}>
 
             {/* Aborted Banner */}
             {stats.aborted && !deathDetails && (

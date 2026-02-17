@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
 interface Textures {
@@ -62,7 +61,8 @@ const setupTrees = async (scene: THREE.Scene) => {
         const inst = treeInstances[i];
 
         // Setup Matrix
-        dummy.position.set(inst.x, -0.5, inst.z);
+        // Sink trees even deeper to ensure they touch the ground even on large scales
+        dummy.position.set(inst.x, -2.0, inst.z);
         dummy.rotation.set(0, srandom() * Math.PI * 2, 0); // Random Y
         dummy.scale.setScalar(inst.scale);
         dummy.updateMatrix();
@@ -82,7 +82,7 @@ const setupTrees = async (scene: THREE.Scene) => {
     }
 
     // Create Silhouette Material (Shared)
-    const silhouetteMat = MATERIALS.treeLeaves.clone(); // Clone generic to keep properties, or standard
+    const silhouetteMat = MATERIALS.treeFirNeedles.clone(); // Clone generic to keep properties, or standard
     silhouetteMat.color.setHex(0x000000); // Pure black
     silhouetteMat.color.addScalar(0.12); // Lift slightly
     silhouetteMat.roughness = 1.0;

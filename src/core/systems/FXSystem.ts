@@ -40,7 +40,7 @@ interface SpawnRequest {
     x: number; y: number; z: number;
     type: string;
     customMesh?: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-    customVel?: THREE.Vector3;
+    customVel: THREE.Vector3; // [VINTERDÖD] Alltid pre-allokerad nu
     color?: number;
     scale?: number;
     material?: THREE.Material;
@@ -51,7 +51,7 @@ const _tempColor = new THREE.Color();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _v4 = new THREE.Vector3(); // Extra scratchpad for logic
+const _v4 = new THREE.Vector3();
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
@@ -60,14 +60,9 @@ const UNIQUE_MATERIAL_TYPES = [
     'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash'
 ];
 
-
-
 export const FXSystem = {
-    // Queues for staggered spawning
     particleQueue: [] as SpawnRequest[],
-    _particleQueueIndex: 0,
     decalQueue: [] as SpawnRequest[],
-    _decalQueueIndex: 0,
 
     // Pools
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
@@ -105,7 +100,6 @@ export const FXSystem = {
             m.scale.setScalar(1);
             m.rotation.set(0, 0, 0);
         } else {
-            // Initialize with base classes to prevent type mismatch
             m = new THREE.Mesh(geo, finalMat);
             m.userData.poolIdx = FXSystem.MESH_POOL.length;
             FXSystem.MESH_POOL.push(m);
@@ -153,6 +147,16 @@ export const FXSystem = {
         return p;
     },
 
+    _getSpawnRequest: (): SpawnRequest => {
+        const req = REQUEST_POOL.pop();
+        if (req) return req;
+        // [VINTERDÖD] Pre-allokerar alltid customVel för att stänga minnesläckor.
+        return {
+            scene: null as any, particlesList: [],
+            x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3()
+        };
+    },
+
     // --- SPAWNING ---
 
     _spawnDecalImmediate: (req: SpawnRequest) => {
@@ -162,14 +166,19 @@ export const FXSystem = {
         d.scale.setScalar(req.scale || 1.0);
         d.renderOrder = 50;
 
-        // Note: Decals are stored in their own list provided byreq.particlesList
         (req.particlesList as unknown as THREE.Mesh[]).push(d);
     },
 
     _spawnPartImmediate: (req: SpawnRequest) => {
         if (isNaN(req.x)) return;
 
-        const isInstanced = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb',].includes(req.type);
+        // Använder snabb platt jämförelse för hastighetens skull
+        const t = req.type;
+        const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
+            t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' ||
+            t === 'debris_trail' || t === 'glass' || t === 'stun_star' ||
+            t === 'chunk' || t === 'gore' || t === 'limb';
+
         const p = FXSystem.getPooledState();
 
         p.type = req.type;
@@ -185,36 +194,36 @@ export const FXSystem = {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.blood;
 
-            if (['gore', 'limb', 'chunk'].includes(req.type)) geo = GEOMETRY.gore;
-            else if (req.type === 'black_smoke') mat = MATERIALS['_blackSmoke'] || (MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
-            else if (['fire', 'flame', 'large_fire'].includes(req.type)) { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
-            else if (['spark', 'smoke'].includes(req.type)) mat = MATERIALS.bullet;
-            else if (['debris', 'debris_trail'].includes(req.type)) mat = MATERIALS.stone;
-            else if (req.type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
-            else if (req.type === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
-            else if (req.type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
-            else if (req.type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
-            else if (req.type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
+            if (t === 'gore' || t === 'limb' || t === 'chunk') geo = GEOMETRY.gore;
+            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'] || (MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
+            else if (t === 'fire' || t === 'flame' || t === 'large_fire') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+            else if (t === 'spark' || t === 'smoke') mat = MATERIALS.bullet;
+            else if (t === 'debris' || t === 'debris_trail') mat = MATERIALS.stone;
+            else if (t === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
+            else if (t === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
+            else if (t === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
+            else if (t === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
+            else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
 
-            p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, req.type, isInstanced);
+            p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, t, isInstanced);
         }
 
         p.mesh.position.set(req.x, req.y, req.z);
         p.mesh.renderOrder = 11;
 
-        if (req.type === 'shockwave') p.mesh.rotation.x = -Math.PI / 2;
-        else if (UNIQUE_MATERIAL_TYPES.includes(req.type)) p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        if (t === 'shockwave') p.mesh.rotation.x = -Math.PI / 2;
+        else if (UNIQUE_MATERIAL_TYPES.includes(t)) p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
 
         const s = req.scale || 1.0;
-        if (req.type === 'large_fire') p.mesh.scale.setScalar(1.6 * Math.random() * s);
-        else if (req.type === 'large_smoke') p.mesh.scale.setScalar(2.4 * Math.random() * s);
-        else if (req.type === 'blood') p.mesh.scale.setScalar((1.2 + Math.random() * 0.8) * s);
+        if (t === 'large_fire') p.mesh.scale.setScalar(1.6 * Math.random() * s);
+        else if (t === 'large_smoke') p.mesh.scale.setScalar(2.4 * Math.random() * s);
+        else if (t === 'blood') p.mesh.scale.setScalar((1.2 + Math.random() * 0.8) * s);
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
-        if (req.customVel) p.vel.copy(req.customVel);
+        // Om vi har en customVel som är modifierad lokalt används den (kopieras)
+        if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
         else {
-            // High-impact gore/limb/chunk particles should fly further
-            const speedScale = ['chunk', 'gore', 'limb'].includes(req.type) ? 8.0 : 1.0;
+            const speedScale = (t === 'chunk' || t === 'gore' || t === 'limb') ? 8.0 : 1.0;
             p.vel.set(
                 (Math.random() - 0.5) * speedScale,
                 Math.random() * speedScale * 0.8,
@@ -222,7 +231,7 @@ export const FXSystem = {
             );
         }
 
-        p.life = (req.type === 'blood' ? 120 : (req.type === 'debris' ? 200 : 30)) + Math.random() * 20;
+        p.life = (t === 'blood' ? 120 : (t === 'debris' ? 200 : 30)) + Math.random() * 20;
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
@@ -232,16 +241,24 @@ export const FXSystem = {
     // --- INTERFACE ---
 
     spawnDecal: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material) => {
-        let req = DECAL_REQUEST_POOL.pop() || {} as SpawnRequest;
-        req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; req.scale = scale; req.material = material;
+        let req = DECAL_REQUEST_POOL.pop();
+        if (!req) req = { scene, particlesList: decalList, x, y: 0, z, type: 'decal', customVel: new THREE.Vector3() };
+        else { req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; }
+
+        req.scale = scale;
+        req.material = material;
         FXSystem.decalQueue.push(req);
     },
 
     spawnPart: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number) => {
         for (let i = 0; i < count; i++) {
-            let req = REQUEST_POOL.pop() || {} as SpawnRequest;
+            let req = FXSystem._getSpawnRequest();
             req.scene = scene; req.particlesList = particlesList; req.x = x; req.y = y; req.z = z;
-            req.type = type; req.customMesh = customMesh; req.customVel = customVel; req.color = color; req.scale = scale;
+            req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale;
+
+            if (customVel) req.customVel.copy(customVel);
+            else req.customVel.set(0, 0, 0); // Återställ ifall återanvänd
+
             FXSystem.particleQueue.push(req);
         }
     },
@@ -250,7 +267,7 @@ export const FXSystem = {
     spawnFloatingText: (scene: THREE.Scene, x: number, y: number, z: number, text: string, color: string = '#ffffff') => {
         const sprite = createTextSprite(text);
         sprite.position.set(x, y + 1.5, z);
-        sprite.scale.set(1.5, 1.5, 1.5); // Fixed aspect ratio
+        sprite.scale.set(1.5, 1.5, 1.5);
         sprite.material.color.set(color);
         sprite.renderOrder = 100;
 
@@ -263,10 +280,10 @@ export const FXSystem = {
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
 
-        // 1. Process Queues (Budgeted)
+        // 1. Process Queues (Budgeted) - [VINTERDÖD] O(1) Pop istället för O(N) Shift. Ordningen kvittar.
         const pLimit = Math.min(FXSystem.particleQueue.length, 30);
         for (let i = 0; i < pLimit; i++) {
-            const req = FXSystem.particleQueue.shift()!;
+            const req = FXSystem.particleQueue.pop()!;
             if (!req.scene) req.scene = scene;
             if (!req.particlesList) req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
@@ -275,7 +292,7 @@ export const FXSystem = {
 
         const dLimit = Math.min(FXSystem.decalQueue.length, 10);
         for (let i = 0; i < dLimit; i++) {
-            const req = FXSystem.decalQueue.shift()!;
+            const req = FXSystem.decalQueue.pop()!;
             FXSystem._spawnDecalImmediate(req);
             DECAL_REQUEST_POOL.push(req);
         }
@@ -293,9 +310,14 @@ export const FXSystem = {
 
             if (!p.landed) {
                 p.mesh.position.addScaledVector(p.vel, safeDelta);
-                if (['chunk', 'debris', 'glass', 'limb', 'blood', 'gore'].includes(p.type)) {
+
+                // [VINTERDÖD] Platt jämförelse. Inga arrayskipande .includes() i het loop!
+                const t = p.type;
+                const isHeavy = t === 'chunk' || t === 'debris' || t === 'glass' || t === 'limb' || t === 'blood' || t === 'gore';
+
+                if (isHeavy) {
                     p.vel.y -= 25 * safeDelta;
-                    if (p.type !== 'blood') {
+                    if (t !== 'blood') {
                         p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
                         p.mesh.rotation.z += p.rotVel.z * 10 * safeDelta;
                     }
@@ -316,8 +338,10 @@ export const FXSystem = {
                 const imesh = FXSystem._getInstancedMesh(scene, p.type);
                 const idx = FXSystem._instancedCounts[p.type];
                 if (imesh && idx < FXSystem._MAX_INSTANCES) {
-                    p.mesh.updateMatrix();
+                    // [VINTERDÖD] Direkt Matrix Composition istället för Object3D updateMatrix()
+                    p.mesh.matrix.compose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
                     imesh.setMatrixAt(idx, p.mesh.matrix);
+
                     if (p.color !== undefined) {
                         imesh.setColorAt(idx, _tempColor.setHex(p.color));
                     }
@@ -327,12 +351,17 @@ export const FXSystem = {
         }
 
         // 3. Update Text Floaters
-        for (let i = FXSystem.textQueue.length - 1; i >= 0; i--) {
+        const tLen = FXSystem.textQueue.length;
+        for (let i = tLen - 1; i >= 0; i--) {
             const t = FXSystem.textQueue[i];
             t.life -= safeDelta;
             if (t.life <= 0) {
                 t.mesh.parent?.remove(t.mesh);
-                FXSystem.textQueue.splice(i, 1);
+                // [VINTERDÖD] Swap-and-pop istället för O(N) splice
+                const last = FXSystem.textQueue.pop()!;
+                if (i < FXSystem.textQueue.length) {
+                    FXSystem.textQueue[i] = last;
+                }
                 continue;
             }
             t.mesh.position.y += 0.5 * safeDelta;
@@ -369,7 +398,7 @@ export const FXSystem = {
         if (p.type === 'blood') {
             if (Math.random() < 0.2) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.3, MATERIALS.bloodDecal);
             FXSystem._killParticle(index, list);
-        } else if (['chunk', 'limb', 'gore'].includes(p.type)) {
+        } else if (p.type === 'chunk' || p.type === 'limb' || p.type === 'gore') {
             callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8, MATERIALS.bloodDecal);
             p.vel.set(0, 0, 0);
         } else {
@@ -383,10 +412,10 @@ export const FXSystem = {
             let mat: THREE.Material = MATERIALS.blood;
             if (type === 'spark') mat = MATERIALS.bullet;
             if (type === 'debris') mat = MATERIALS.stone;
-            if (['gore', 'limb', 'chunk'].includes(type)) {
+            if (type === 'gore' || type === 'limb' || type === 'chunk') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();
-                (mat as any).color.set(0xffffff);
+                (mat as any).color.setHex(0xffffff);
             }
             if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
 
@@ -402,7 +431,6 @@ export const FXSystem = {
     // --- SPECIAL WEAPON EFFECTS ---
 
     spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
-        // Cone spread
         const spread = 0.15;
         // ZERO-GC: use scratchpad _v1 for direction calculation
         _v1.copy(direction).add(_v2.set(
@@ -414,23 +442,19 @@ export const FXSystem = {
         const speed = 10 + Math.random() * 5;
         const scale = 0.5 + Math.random() * 0.5;
 
-        const req = REQUEST_POOL.pop() || {} as SpawnRequest;
+        const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
         req.particlesList = null as any;
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'fire';
 
-        // ZERO-GC: Reuse vector or init once
-        if (!req.customVel) req.customVel = new THREE.Vector3();
         req.customVel.copy(_v1).multiplyScalar(speed);
-
         req.scale = scale;
-        req.color = 0xff5500; // Orange
+        req.color = 0xff5500;
         FXSystem.particleQueue.push(req);
     },
 
     spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
-        // Create a chain of segments
         const segments = 6;
         const lerpStep = 1 / segments;
 
@@ -439,30 +463,27 @@ export const FXSystem = {
                 _v1.copy(end);
             } else {
                 _v1.lerpVectors(start, end, i * lerpStep);
-                // Jitter
                 _v1.x += (Math.random() - 0.5) * 1.5;
                 _v1.y += (Math.random() - 0.5) * 1.5;
                 _v1.z += (Math.random() - 0.5) * 1.5;
             }
 
-            const req = REQUEST_POOL.pop() || {} as SpawnRequest;
+            const req = FXSystem._getSpawnRequest();
             req.scene = null as any;
             req.particlesList = null as any;
             req.x = _v1.x; req.y = _v1.y; req.z = _v1.z;
             req.type = 'flash';
 
-            if (!req.customVel) req.customVel = new THREE.Vector3();
             req.customVel.set(0, 0, 0);
-
             req.scale = 0.3 + Math.random() * 0.2;
-            req.color = 0x00ffff; // Cyan
+            req.color = 0x00ffff;
             FXSystem.particleQueue.push(req);
         }
     },
 
     spawnStunSparks: (pos: THREE.Vector3) => {
         for (let i = 0; i < 3; i++) {
-            const req = REQUEST_POOL.pop() || {} as SpawnRequest;
+            const req = FXSystem._getSpawnRequest();
             req.scene = null as any;
             req.particlesList = null as any;
             req.x = pos.x + (Math.random() - 0.5);
@@ -470,7 +491,6 @@ export const FXSystem = {
             req.z = pos.z + (Math.random() - 0.5);
             req.type = 'stun_star';
 
-            if (!req.customVel) req.customVel = new THREE.Vector3();
             req.customVel.set(
                 (Math.random() - 0.5) * 2,
                 Math.random() * 2,
@@ -481,32 +501,5 @@ export const FXSystem = {
             req.color = 0xffff00;
             FXSystem.particleQueue.push(req);
         }
-    },
-
-    // --- VISIBILITY TOGGLE ---
-
-    setVisible: (visible: boolean, particlesList: ParticleState[]) => {
-        // 1. Instanced Meshes
-        for (const type in FXSystem._instancedMeshes) {
-            const imesh = FXSystem._instancedMeshes[type];
-            imesh.visible = visible;
-        }
-
-        // 2. Standard Particles
-        for (let i = 0; i < particlesList.length; i++) {
-            const p = particlesList[i];
-            if (p.mesh) p.mesh.visible = visible;
-        }
-
-        // 3. Floating Text
-        for (let i = 0; i < FXSystem.textQueue.length; i++) {
-            const t = FXSystem.textQueue[i];
-            if (t.mesh) t.mesh.visible = visible;
-        }
-
-        // 4. Decals? Decals are usually static meshes in scene, handled separately.
-        // We could iterate DECAL_POOL but user passed decalList usually.
-        // For now, this covers dynamic FX.
     }
-
 };

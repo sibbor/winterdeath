@@ -5,21 +5,33 @@ import { SpatialGrid } from '../core/world/SpatialGrid';
 export interface SectorEnvironment {
     bgColor: number;
     fogDensity: number;
-    fogColor?: number; // Override bg color if needed
+    fogColor?: number;
     ambientIntensity: number;
     groundColor: number;
     fov: number;
-    sunPosition?: { x: number, y: number, z: number }; // Directional Light
-    moon: {
+    skyLight: {
         visible: boolean;
         color: number;
         intensity: number;
-        position?: { x: number, y: number, z: number };
+        position?: { x: number; y: number; z: number };
     };
     cameraOffsetZ: number;
-    cameraHeight?: number; // Optional override for CAMERA_HEIGHT (default 50)
+    cameraHeight?: number;
     weather: WeatherType;
-    weatherDensity?: number; // Particle count
+    weatherDensity?: number;
+}
+
+export interface AtmosphereZone {
+    label: string;
+    x: number;
+    z: number;
+    weather: WeatherType;
+    bgColor: number;
+    fogDensity: number;
+    ambient: number;
+    weatherDensity?: number;
+    innerRadius?: number;
+    outerRadius?: number;
 }
 
 export interface SpawnPoint {
@@ -44,6 +56,7 @@ export interface SectorContext {
     burningObjects: any[];
     triggers: SectorTrigger[];
     mapItems: MapItem[]; // For the Map Screen
+    interactables: THREE.Object3D[]; // Explicit list of interactive objects (Boats, Stations, etc)
     rng: () => number;
     debugMode: boolean; // Controls visualization of triggers/POIs
     textures: any; // Dynamic textures passed from App/Canvas
@@ -89,6 +102,9 @@ export interface SectorDef {
     // Cinematic
     cinematic?: CinematicConfig;
 
+    // Atmosphere Zones (Data-driven environmental changes)
+    atmosphereZones?: AtmosphereZone[];
+
     // Logic
     setupEnvironment?: (ctx: SectorContext) => void;
     setupProps?: (ctx: SectorContext) => void;
@@ -104,6 +120,7 @@ export interface SectorDef {
         sectorState: SectorState,
         events: {
             spawnZombie: (type?: string, pos?: THREE.Vector3) => void;
+            spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => void;
             setNotification: (n: any) => void;
             setInteraction: (interaction: { id: string, text: string, action: () => void, position?: THREE.Vector3 } | null) => void;
             playSound: (id: string) => void;
@@ -115,13 +132,18 @@ export interface SectorDef {
             startCinematic?: (target: THREE.Object3D, id: number) => void;
             // Environment Controls
             setWind: (direction: number, strength: number) => void;
+            setWindRandomized: (active: boolean) => void;
             resetWind: () => void;
             setWeather: (type: WeatherType, count?: number) => void;
-            setLight: (params: { sunPos?: THREE.Vector3, sunColor?: THREE.Color, moonColor?: THREE.Color, ambientIntensity?: number }) => void;
+            setLight: (params: { skyLightColor?: THREE.Color; skyLightIntensity?: number; ambientIntensity?: number; skyLightPosition?: { x: number, y: number, z: number }; skyLightVisible?: boolean }) => void;
+            setBackgroundColor: (color: number) => void;
+            setGroundColor: (color: number) => void;
+            setFOV: (fov: number) => void;
             setFog: (color: THREE.Color, density: number) => void;
             setWater: (level?: number, waveHeight?: number) => void;
             setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
             emitNoise: (pos: THREE.Vector3, radius: number, type: string) => void;
         }
     ) => void;
+    onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;
 }

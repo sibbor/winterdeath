@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameState, GameScreen, PlayerStats, SectorStats, SectorTrigger, MapItem } from './types';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
-import { aggregateStats } from './utils/gameLogic';
+import { aggregateStats } from './core/ProgressionManager';
 import GameSession, { GameSessionHandle } from './components/GameSession';
 import Camp from './components/camp/Camp';
 import GameHUD from './components/ui/hud/GameHUD';
@@ -259,7 +259,8 @@ const App: React.FC = () => {
     const cursorHidden = isMobileDevice || (gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !isInteractionOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen);
 
     const handleCollectibleClose = useCallback(() => {
-        gameCanvasRef.current?.requestPointerLock().catch(() => { });
+        if (gameCanvasRef.current) gameCanvasRef.current.requestPointerLock();
+        // Removed .catch() as requestPointerLock might be void or we don't care about the promise result here safely
         if (activeCollectible) {
             setGameState(prev => {
                 const collId = activeCollectible as string;
@@ -393,6 +394,17 @@ const App: React.FC = () => {
                         onUpdateLoadout={(loadout, levels) => {
                             setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
                         }}
+                        onEnvironmentOverrideChange={(overrides) => {
+                            setGameState(prev => {
+                                const newOverrides = { ...(prev.environmentOverrides || {}) };
+                                newOverrides[prev.currentSector] = overrides;
+                                return {
+                                    ...prev,
+                                    environmentOverrides: newOverrides
+                                };
+                            });
+                        }}
+                        environmentOverrides={gameState.environmentOverrides}
                         initialGraphics={gameState.graphics}
                         isMobileDevice={isMobileDevice}
                         weather={gameState.weather}
@@ -535,7 +547,7 @@ const App: React.FC = () => {
                             const isCleared = prev.deadBossIndices.includes(prev.currentSector);
                             // Advance to next sector if cleared and not already at the last one (Sector 4 / Epilogue is index 4, but benchmark is 5)
                             const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
-                            return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector };
+                            return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
                         });
                         soundManager.playUiConfirm();
                     }}

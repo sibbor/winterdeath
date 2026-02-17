@@ -4,9 +4,10 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/sound';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
-// --- PERFORMANCE SCRATCHPADS ---
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _tempQuat = new THREE.Quaternion(); // [VINTERDÖD] För blixtsnabb Euler -> Quaternion konvertering
 
 export interface ScrapItem {
     velocity: THREE.Vector3;
@@ -22,10 +23,9 @@ export interface ScrapItem {
     rotation: THREE.Euler;
     scale: THREE.Vector3;
     active: boolean;
-    needsUpdate: boolean; // Flag to skip GPU sync for static items
+    needsUpdate: boolean;
 }
 
-// Reusable object for the spawn queue to prevent GC spikes
 interface SpawnRequest {
     x: number;
     z: number;
@@ -34,7 +34,7 @@ interface SpawnRequest {
 export class WorldLootSystem implements System {
     id = 'world_loot';
 
-    private static MAX_SCRAP = 300; // Increased limit for heavy battles
+    private static MAX_SCRAP = 300;
     private instancedMesh: THREE.InstancedMesh;
     private dummy = new THREE.Object3D();
 
@@ -42,7 +42,7 @@ export class WorldLootSystem implements System {
     private freeIndices: number[] = [];
 
     private spawnQueue: SpawnRequest[] = [];
-    private requestPool: SpawnRequest[] = []; // Pool for the queue objects themselves
+    private requestPool: SpawnRequest[] = [];
 
     private lastSoundTime = 0;
     private static instance: WorldLootSystem | null = null;
@@ -83,13 +83,14 @@ export class WorldLootSystem implements System {
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
-        // 1. Process Spawn Queue (Staggered)
+        // 1. Process Spawn Queue (Staggered) 
+        // [VINTERDÖD] O(1) Pop istället för O(N) Shift.
         const batchSize = Math.min(this.spawnQueue.length, 10);
         for (let i = 0; i < batchSize; i++) {
-            const req = this.spawnQueue.shift();
+            const req = this.spawnQueue.pop();
             if (req) {
                 this.spawnSingle(req.x, req.z);
-                this.requestPool.push(req); // Return request object to pool
+                this.requestPool.push(req);
             }
         }
 
@@ -104,12 +105,13 @@ export class WorldLootSystem implements System {
         let collectedAmount = 0;
         let gpuNeedsUpdate = false;
 
-        const collectionRangeSq = 4.0; // 2.0m radius
-        const magnetRangeSq = 49.0;     // 7.0m radius (Increased for better feel)
+        const collectionRangeSq = 4.0;
+        const magnetRangeSq = 49.0;
         const magnetSpeed = 30.0;
         const magnetismDelay = 600;
 
-        for (let i = 0; i < this.pool.length; i++) {
+        const len = this.pool.length;
+        for (let i = 0; i < len; i++) {
             const item = this.pool[i];
             if (!item.active) continue;
 
@@ -125,27 +127,25 @@ export class WorldLootSystem implements System {
 
             // --- 2. PHYSICS & MOVEMENT ---
             if (item.magnetized) {
-                // Fly toward player with increasing speed
                 _v1.subVectors(playerPos, item.position).normalize();
                 const pullStrength = 1.0 + (20.0 / (Math.sqrt(distSq) + 1.0));
                 item.position.addScaledVector(_v1, magnetSpeed * pullStrength * delta);
 
-                // Spin faster when magnetized
                 item.rotation.y += 10.0 * delta;
 
-                // Shrink slightly as it gets closer
-                item.scale.setScalar(Math.max(0.4, item.scale.x - 1.5 * delta));
+                // [VINTERDÖD] Snabb matematisk tilldelning (ingen setScalar-overhead)
+                const ns = Math.max(0.4, item.scale.x - 1.5 * delta);
+                item.scale.set(ns, ns, ns);
+
                 item.needsUpdate = true;
             }
             else if (!item.grounded) {
-                // Apply Gravity
                 item.velocity.y -= 35 * delta;
                 item.position.addScaledVector(item.velocity, delta);
 
-                // Simple Ground Collision
                 if (item.position.y <= 0.3) {
                     item.position.y = 0.3;
-                    item.velocity.y *= -0.4; // Dampened bounce
+                    item.velocity.y *= -0.4;
                     item.velocity.x *= 0.7;
                     item.velocity.z *= 0.7;
 
@@ -154,7 +154,6 @@ export class WorldLootSystem implements System {
                         item.velocity.set(0, 0, 0);
                     }
                 }
-                // Idle spin
                 item.rotation.y += 2.0 * delta;
                 item.needsUpdate = true;
             }
@@ -175,7 +174,7 @@ export class WorldLootSystem implements System {
             // --- 4. GPU SYNC (Only if transform changed) ---
             if (item.needsUpdate) {
                 this.updateInstanceMatrix(item);
-                item.needsUpdate = !item.grounded; // Stop updating if grounded
+                item.needsUpdate = !item.grounded;
                 gpuNeedsUpdate = true;
             }
         }
@@ -188,10 +187,12 @@ export class WorldLootSystem implements System {
     }
 
     private updateInstanceMatrix(item: ScrapItem) {
+        // [VINTERDÖD] Direkt Matrix Composition. 
+        // Slänger Object3D.updateMatrix() och bypassar smutsiga flaggor i Three.js
         this.dummy.position.copy(item.position);
-        this.dummy.rotation.copy(item.rotation);
-        this.dummy.scale.copy(item.scale);
-        this.dummy.updateMatrix();
+        _tempQuat.setFromEuler(item.rotation);
+
+        this.dummy.matrix.compose(this.dummy.position, _tempQuat, item.scale);
         this.instancedMesh.setMatrixAt(item.index, this.dummy.matrix);
     }
 
@@ -202,9 +203,11 @@ export class WorldLootSystem implements System {
         item.needsUpdate = false;
         this.freeIndices.push(item.index);
 
-        // Move out of sight immediately
+        // Move out of sight immediately using Matrix Composition (Zero-GC)
         this.dummy.position.set(0, -100, 0);
-        this.dummy.updateMatrix();
+        _tempQuat.setFromEuler(item.rotation);
+
+        this.dummy.matrix.compose(this.dummy.position, _tempQuat, item.scale);
         this.instancedMesh.setMatrixAt(item.index, this.dummy.matrix);
     }
 
@@ -212,7 +215,6 @@ export class WorldLootSystem implements System {
         if (!WorldLootSystem.instance) return;
         const sys = WorldLootSystem.instance;
 
-        // Visual count is a fraction of the actual value
         const count = Math.min(Math.ceil(amount / 5), 15);
 
         for (let i = 0; i < count; i++) {
@@ -240,7 +242,7 @@ export class WorldLootSystem implements System {
         item.value = 5 + Math.floor(Math.random() * 10);
 
         item.position.set(x, 1.5, z);
-        item.scale.setScalar(1.0);
+        item.scale.set(1.0, 1.0, 1.0); // [VINTERDÖD] Snabb set() istället för setScalar()
         item.velocity.set(
             Math.cos(angle) * horizontalForce,
             6 + Math.random() * 6, // Vertical pop

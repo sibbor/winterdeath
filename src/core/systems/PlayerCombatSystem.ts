@@ -8,10 +8,20 @@ export class PlayerCombatSystem implements System {
     id = 'player_combat';
 
     private reloadBar: { bg: THREE.Mesh; fg: THREE.Mesh } | null = null;
-    private prevInput: Record<string, boolean> = {};
+
+    // [VINTERDÖD] Platta primitiver istället för Record<string, boolean>. Snabbare minnesåtkomst.
+    private _p1: boolean = false;
+    private _p2: boolean = false;
+    private _p3: boolean = false;
+    private _p4: boolean = false;
+    private _p5: boolean = false;
+
+    // [VINTERDÖD] State-diffing för död, hindrar per-frame uppdateringar till GPU
+    private _wasDead: boolean = false;
+
     private aimCross: THREE.Group | null = null;
     private trajectoryLine: THREE.Mesh | null = null;
-    private laserSight: THREE.Mesh | null = null; // Cached reference to avoid .find()
+    private laserSight: THREE.Mesh | null = null;
     private initialized = false;
 
     constructor(private playerGroup: THREE.Group) { }
@@ -31,7 +41,7 @@ export class PlayerCombatSystem implements System {
         const reloadFg = new THREE.Mesh(barGeo, fgMat);
 
         reloadBg.visible = reloadFg.visible = false;
-        reloadBg.renderOrder = 999; // Ensure it draws on top
+        reloadBg.renderOrder = 999;
         reloadFg.renderOrder = 1000;
 
         scene.add(reloadBg);
@@ -49,23 +59,26 @@ export class PlayerCombatSystem implements System {
         this.aimCross = crossGroup;
 
         // --- Create Trajectory Line (Pre-allocated buffer for WeaponHandler) ---
-        // Initialize with 42 vertices (21 points * 2) for ribbon geometry
         const vertexCount = 42;
         const positions = new Float32Array(vertexCount * 3);
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        // Setup indices for high quality ribbon (optional, but strip is easier if we handle it right)
-        // Actually BufferGeometry with setDrawMode(TriangleStrip) is deprecated/removed in modern Three.js?
-        // We really need indexed triangles for a ribbon.
-        // 20 segments -> 20 quads -> 40 triangles -> 120 indices
-        const indices = [];
+        // [VINTERDÖD] Direkt allokering av typad array istället för dynamisk push() 
+        const indicesCount = 20 * 6; // 20 quads * 6 indices
+        const indices = new Uint16Array(indicesCount);
+        let idx = 0;
         for (let i = 0; i < 20; i++) {
             const base = i * 2;
-            indices.push(base, base + 1, base + 2);
-            indices.push(base + 1, base + 3, base + 2);
+            indices[idx++] = base;
+            indices[idx++] = base + 1;
+            indices[idx++] = base + 2;
+
+            indices[idx++] = base + 1;
+            indices[idx++] = base + 3;
+            indices[idx++] = base + 2;
         }
-        lineGeo.setIndex(indices);
+        lineGeo.setIndex(new THREE.BufferAttribute(indices, 1));
 
         const lineMat = new THREE.MeshBasicMaterial({
             color: 0x10b981,
@@ -77,7 +90,7 @@ export class PlayerCombatSystem implements System {
 
         this.trajectoryLine = new THREE.Mesh(lineGeo, lineMat);
         this.trajectoryLine.visible = false;
-        this.trajectoryLine.frustumCulled = false; // Always render if active
+        this.trajectoryLine.frustumCulled = false;
         scene.add(this.trajectoryLine);
 
         // --- Cache Laser Sight Reference ---
@@ -90,33 +103,41 @@ export class PlayerCombatSystem implements System {
         const disableInput = session.inputDisabled;
 
         if (state.isDead) {
-            if (this.laserSight) this.laserSight.visible = false;
-            if (this.aimCross) this.aimCross.visible = false;
-            if (this.trajectoryLine) this.trajectoryLine.visible = false;
+            // [VINTERDÖD] Kör bara döljandet en enda gång när spelaren dör.
+            if (!this._wasDead) {
+                if (this.laserSight) this.laserSight.visible = false;
+                if (this.aimCross) this.aimCross.visible = false;
+                if (this.trajectoryLine) this.trajectoryLine.visible = false;
+                if (this.reloadBar) {
+                    this.reloadBar.bg.visible = false;
+                    this.reloadBar.fg.visible = false;
+                }
+                this._wasDead = true;
+            }
             return;
         }
+        this._wasDead = false;
 
         // --- Weapon Slot Switching (Edge Triggered) ---
         if (!disableInput) {
-            if (input['1'] && !this.prevInput['1']) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
-            if (input['2'] && !this.prevInput['2']) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
-            if (input['3'] && !this.prevInput['3']) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
-            if (input['4'] && !this.prevInput['4']) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
-            if (input['5'] && !this.prevInput['5']) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
+            // [VINTERDÖD] Platta utvärderingar
+            if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
+            if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
+            if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
+            if (input['4'] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
+            if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
         }
 
-        // Store inputs for next frame's edge detection
-        this.prevInput['1'] = input['1'];
-        this.prevInput['2'] = input['2'];
-        this.prevInput['3'] = input['3'];
-        this.prevInput['4'] = input['4'];
-        this.prevInput['5'] = input['5'];
+        // Uppdatera input-cache med strikt konvertering till boolean
+        this._p1 = !!input['1'];
+        this._p2 = !!input['2'];
+        this._p3 = !!input['3'];
+        this._p4 = !!input['4'];
+        this._p5 = !!input['5'];
 
         if (!disableInput) {
-            // Process general weapon state (Reloading/Validation)
             WeaponHandler.handleInput(input, state, state.loadout, now, disableInput);
 
-            // Update UI Bars
             if (this.reloadBar) {
                 WeaponHandler.updateReloadBar(
                     this.reloadBar,
@@ -127,7 +148,6 @@ export class PlayerCombatSystem implements System {
                 );
             }
 
-            // Handle Firing logic and visualization
             WeaponHandler.handleFiring(
                 session.engine.scene,
                 this.playerGroup,
@@ -143,7 +163,7 @@ export class PlayerCombatSystem implements System {
 
         // Sync Laser Sight visibility with state
         if (this.laserSight) {
-            this.laserSight.visible = !state.isDead;
+            this.laserSight.visible = true; // Eftersom return hanterar döden ovan
         }
     }
 
@@ -160,22 +180,26 @@ export class PlayerCombatSystem implements System {
             (this.reloadBar.fg.material as THREE.Material).dispose();
         }
 
-        // Dispose Reticle
+        // Dispose Reticle [VINTERDÖD] Borttagen stängning (closure) i traverse. 
         if (this.aimCross) {
             scene.remove(this.aimCross);
-            this.aimCross.traverse((child) => {
-                if (child instanceof THREE.Mesh) {
-                    child.geometry.dispose();
-                    if (child.material instanceof THREE.Material) child.material.dispose();
+            const children = this.aimCross.children;
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i] as THREE.Mesh;
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material && (child.material as THREE.Material).dispose) {
+                        (child.material as THREE.Material).dispose();
+                    }
                 }
-            });
+            }
         }
 
         // Dispose Trajectory Line
         if (this.trajectoryLine) {
             scene.remove(this.trajectoryLine);
-            this.trajectoryLine.geometry.dispose();
-            (this.trajectoryLine.material as THREE.Material).dispose();
+            if (this.trajectoryLine.geometry) this.trajectoryLine.geometry.dispose();
+            if (this.trajectoryLine.material) (this.trajectoryLine.material as THREE.Material).dispose();
         }
 
         this.initialized = false;

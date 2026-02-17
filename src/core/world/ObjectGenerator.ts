@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createProceduralTextures, MATERIALS, GEOMETRY, ModelFactory, createSignMesh, createTextSprite } from '../../utils/assets';
-import { SectorContext } from '../../types/sectors';
+import { SectorContext } from '../../types/SectorEnvironment';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { EffectManager } from '../systems/EffectManager';
 
@@ -22,6 +22,7 @@ const getSharedTextures = () => {
 
 // Prototype Cache
 const buildingMeshes: Record<string, THREE.Group> = {};
+let hedgeMaterial: THREE.MeshStandardMaterial | null = null;
 
 /**
  * Initializes static building parts used for modular construction.
@@ -104,9 +105,12 @@ export const ObjectGenerator = {
 
     createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
         const group = new THREE.Group();
-        const mat = MATERIALS.treeLeaves.clone();
-        mat.color.set(0x2d4c1e);
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, length), mat);
+        if (!hedgeMaterial) {
+            hedgeMaterial = MATERIALS.treeLeaves.clone();
+            hedgeMaterial.color.set(0x2d4c1e);
+            hedgeMaterial.name = 'HEDGE_MAT';
+        }
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, length), hedgeMaterial);
         mesh.position.y = height / 2;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -115,7 +119,7 @@ export const ObjectGenerator = {
         // Add some noise "foliage" boxes
         const leafGeo = new THREE.BoxGeometry(thickness * 1.1, height * 0.2, length * 0.2);
         for (let i = 0; i < 5; i++) {
-            const leaf = new THREE.Mesh(leafGeo, mat);
+            const leaf = new THREE.Mesh(leafGeo, hedgeMaterial);
             leaf.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
             group.add(leaf);
         }
@@ -426,6 +430,110 @@ export const ObjectGenerator = {
         return group;
     },
 
+    createBoat(): THREE.Mesh {
+        // 1. MATERIAL SETUP
+        // Using flatShading is crucial here. It makes the facets of our new
+        // multi-plank design catch light differently, looking like carved wood.
+        const boatMat = new THREE.MeshStandardMaterial({
+            map: MATERIALS.wooden_fasade.map, // Ensure globally available
+            color: 0x5a3d2b, // Slightly richer, darker wood tone
+            roughness: 0.85,
+            metalness: 0.0,
+            flatShading: true
+        });
+
+        const parts: THREE.BufferGeometry[] = [];
+
+        // 2. GEOMETRY HELPER (The "Shipwright")
+        // Applies rotation in YXZ order (critical for angled hull parts) 
+        // and positions the part before adding to the merge queue.
+        const addPart = (w: number, h: number, d: number, tx: number, ty: number, tz: number, rx = 0, ry = 0, rz = 0) => {
+            const geo = new THREE.BoxGeometry(w, h, d);
+            geo.rotateY(ry); // Angle inward/outward first
+            geo.rotateX(rx); // Tilt fore/aft
+            geo.rotateZ(rz); // Tilt sideways (deadrise/flare)
+            geo.translate(tx, ty, tz);
+            parts.push(geo);
+        };
+
+        // --- HULL CONSTRUCTION (Klinkbyggd / Lapstrake Style) ---
+
+        const hullLength = 6.5;
+
+        // A. Keel (The spine)
+        addPart(0.15, 0.3, hullLength + 0.5, 0, -0.2, 0);
+
+        // B. Bottom Planks (Garboards) - Creating a V-bottom
+        // Tilted slightly up from the keel (Z-rotation +/- 0.15)
+        addPart(0.9, 0.08, hullLength, 0.4, -0.05, 0, 0, 0, 0.15); // Port
+        addPart(0.9, 0.08, hullLength, -0.4, -0.05, 0, 0, 0, -0.15); // Starboard
+
+        // C. Lower Side Strakes
+        // Angled sharply upwards from the bottom planks (Z-rotation +/- 0.4)
+        addPart(0.1, 0.7, hullLength + 0.2, 0.85, 0.3, 0, 0, 0, -0.4); // Port
+        addPart(0.1, 0.7, hullLength + 0.2, -0.85, 0.3, 0, 0, 0, 0.4); // Starboard
+
+        // D. Upper Side Strakes
+        // Overlaps the lower strake slightly outward, angled less sharply (Z-rotation +/- 0.25)
+        addPart(0.1, 0.6, hullLength + 0.4, 1.1, 0.7, 0, 0, 0, -0.25); // Port
+        addPart(0.1, 0.6, hullLength + 0.4, -1.1, 0.7, 0, 0, 0, 0.25); // Starboard
+
+        // --- THE BOW ---
+        // We use the same multi-plank approach, angled sharply inward (Y-rotation) to meet at a point.
+
+        const bowZ = 1.0 + hullLength / 2; // Position Z-wise
+
+        // Bow Lower Strakes
+        addPart(0.1, 0.7, 2.5, 0.5, 0.35, bowZ, 0, -0.6, -0.3); // Port
+        addPart(0.1, 0.7, 2.5, -0.5, 0.35, bowZ, 0, 0.6, 0.3); // Starboard
+
+        // Bow Upper Strakes
+        addPart(0.1, 0.6, 2.8, 0.6, 0.75, bowZ - 0.1, 0, -0.55, -0.2); // Port
+        addPart(0.1, 0.6, 2.8, -0.6, 0.75, bowZ - 0.1, 0, 0.55, 0.2); // Starboard
+
+        // The Stem (Stäven) - The vertical post at the front tip to hide overlaps
+        addPart(0.2, 1.2, 0.25, 0, 0.4, bowZ, 0.1, 0, 0);
+
+        // --- THE STERN (Aktern) ---
+        // A simpler, angled transom plate closing the back.
+
+        addPart(2.4, 1.0, 0.15, 0, 0.5, hullLength / 2 + 0.1, -0.2, 0, 0);
+
+        // --- INTERIOR DETAILS ---
+
+        // Floorboards (Trall) - Flat planks resting inside the V-bottom
+        addPart(1.2, 0.05, 4.0, 0, 0.05, 0.5);
+
+        // Seats (Tofter)
+        addPart(2.2, 0.08, 0.6, 0, 0.6, 1.8); // Aft seat
+        addPart(2.3, 0.08, 0.7, 0, 0.6, -0.5); // Main thwart (middle)
+        addPart(1.5, 0.08, 0.5, 0, 0.65, -2.8); // Bow seat
+
+        // Gunwale Trim (Relingslist) - The finishing touch on top edge
+        addPart(0.15, 0.05, hullLength + 2.5, 1.25, 1.0, -0.5, 0, 0, -0.25); // Port
+        addPart(0.15, 0.05, hullLength + 2.5, -1.25, 1.0, -0.5, 0, 0, 0.25); // Starboard
+        addPart(2.5, 0.05, 0.15, 0, 0.95, hullLength / 2 + 0.15, -0.2, 0, 0); // Stern trim
+
+        // 3. MERGE (The crucial optimization step)
+        // Combines ~25 separate geometries into ONE single draw call.
+        // Ensure BufferGeometryUtils is imported.
+        const mergedGeometry = BufferGeometryUtils.mergeGeometries(parts, false);
+
+        // 4. CLEANUP (Zero-GC protocol)
+        // Dispose of all temporary parts immediately.
+        for (let i = 0; i < parts.length; i++) {
+            parts[i].dispose();
+        }
+
+        // 5. RETURN FINISHED ASSET
+        const boatMesh = new THREE.Mesh(mergedGeometry, boatMat);
+        boatMesh.castShadow = true;
+        boatMesh.receiveShadow = true;
+
+        // The mesh is centered at 0,0,0 locally. Position it in your scene after calling this.
+        return boatMesh;
+    },
+
     createVehicle: (type = 'station wagon', scale = 1.0, colorOverride?: number, addSnow = true) => {
         const vehicleBody = new THREE.Group();
 
@@ -529,8 +637,8 @@ export const ObjectGenerator = {
         // Specials
         if (type === 'tractor') {
             const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
-            const frontWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 12).rotateZ(Math.PI / 2);
-            const rearWheelGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.6, 12).rotateZ(Math.PI / 2);
+            const frontWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 12); //.rotateZ(Math.PI / 2);
+            const rearWheelGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.6, 12); //.rotateZ(Math.PI / 2);
 
             const fwL = new THREE.Mesh(frontWheelGeo, wheelMat); fwL.position.set(1.0, 0.4, 0.7); vehicleBody.add(fwL);
             const fwR = new THREE.Mesh(frontWheelGeo, wheelMat); fwR.position.set(1.0, 0.4, -0.7); vehicleBody.add(fwR);
@@ -548,6 +656,8 @@ export const ObjectGenerator = {
 
         vehicleBody.scale.set(scale, scale, scale);
         vehicleBody.userData.material = 'METAL';
+        vehicleBody.rotateY(Math.PI / 2);
+
         return vehicleBody;
     },
 
@@ -964,7 +1074,7 @@ export const ObjectGenerator = {
         geometry.translate(0, 0.2, 0);
 
         const mesh = new THREE.InstancedMesh(geometry, MATERIALS.grass, count);
-        mesh.castShadow = true;
+        mesh.castShadow = false;
         mesh.receiveShadow = true;
 
         for (let i = 0; i < count; i++) {

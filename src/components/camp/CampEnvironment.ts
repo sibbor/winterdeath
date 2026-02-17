@@ -1,9 +1,6 @@
-
 import * as THREE from 'three';
-import { WindSystem } from '../../core/systems/WindSystem';
+import { Engine } from '../../core/engine/Engine';
 import { WEATHER } from '../../content/constants';
-import { GEOMETRY } from '../../utils/assets';
-import { WeatherSystem } from '../../core/systems/WeatherSystem';
 import { WeatherType } from '../../types';
 
 interface Textures {
@@ -13,7 +10,6 @@ interface Textures {
 }
 
 export interface CampEffectsState {
-    wind: WindSystem;
     particles: {
         flames: any[];
         sparkles: any[];
@@ -21,52 +17,59 @@ export interface CampEffectsState {
     };
     starSystem: THREE.Points;
     fireLight: THREE.PointLight;
-    weatherSystem: WeatherSystem;
 }
 
 export const CampEnvironment = {
     initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType): CampEffectsState => {
-        const wind = new WindSystem();
-        wind.setOverride(1.0, 0.2); // Force subtle breeze for Camp (Strength 0.2)
-        const weatherSystem = new WeatherSystem(scene, wind);
+        const engine = Engine.getInstance();
+
+        // [VINTERDÖD] Sync persistent systems to the new Camp scene
+        engine.weather.reAttach(scene);
+        engine.water.reAttach(scene);
+        engine.wind.setOverride(1.0, 0.002);
+
+        // Global Reset (Prevent leaks from Sectors)
+        scene.fog = new THREE.FogExp2(0x0a0a0f, 0.015);
+        scene.background = new THREE.Color(0x0a0a0f);
+
         // Constrain weather to visible terrain area (60x60)
-        weatherSystem.sync(weatherType, WEATHER.PARTICLE_COUNT, 60); // Reduced from 100
+        engine.weather.sync(weatherType, WEATHER.PARTICLE_COUNT, 60);
 
         const starSystem = CampEnvironment.setupSky(scene, textures);
         const fireLight = CampEnvironment.setupCampfire(scene, textures);
 
         return {
-            wind,
             particles: { flames: [], sparkles: [], smokes: [] },
             starSystem,
-            fireLight,
-            weatherSystem
+            fireLight
         };
     },
 
-
     setupSky: (scene: THREE.Scene, textures: Textures) => {
-        // Moon
-        const moonGeo = new THREE.SphereGeometry(15, 32, 32);
-        const moonMat = new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false });
-        const moon = new THREE.Mesh(moonGeo, moonMat);
-        moon.position.set(-120, 80, -350);
+        // Celestial Body
+        const skyGeo = new THREE.SphereGeometry(15, 32, 32);
+        const skyMat = new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false });
+        const skyBody = new THREE.Mesh(skyGeo, skyMat);
+        skyBody.position.set(-120, 80, -350);
+        scene.add(skyBody);
 
-        // Moon/Env Light - Ambient ONLY -> Now with SHADOWS
-        const moonLight = new THREE.DirectionalLight(0xaaccff, 0.4);
-        moonLight.position.set(-120, 80, -350); // Matches moon mesh position
-        moonLight.castShadow = true;
-        moonLight.shadow.mapSize.width = 1024;
-        moonLight.shadow.mapSize.height = 1024;
-        moonLight.shadow.camera.near = 0.5;
-        moonLight.shadow.camera.far = 1000;
-        moonLight.shadow.camera.left = -100;
-        moonLight.shadow.camera.right = 100;
-        moonLight.shadow.camera.top = 100;
-        moonLight.shadow.camera.bottom = -100;
-        moonLight.shadow.bias = -0.001;
-        scene.add(moonLight);
-        scene.add(moon);
+        // Sky Light - With SHADOWS
+        const skyLight = new THREE.DirectionalLight(0xaaccff, 0.4);
+        skyLight.name = 'SKY_LIGHT';
+        // More vertical position to reduce shadow gaps and long silhouettes
+        skyLight.position.set(-80, 150, -100);
+        skyLight.castShadow = true;
+        skyLight.shadow.mapSize.width = 1024;
+        skyLight.shadow.mapSize.height = 1024;
+        skyLight.shadow.camera.near = 0.5;
+        skyLight.shadow.camera.far = 1000;
+        skyLight.shadow.camera.left = -100;
+        skyLight.shadow.camera.right = 100;
+        skyLight.shadow.camera.top = 100;
+        skyLight.shadow.camera.bottom = -100;
+        // Reduced negative bias to help shadow touch the base
+        skyLight.shadow.bias = -0.0002;
+        scene.add(skyLight);
 
         // Halo
         const haloSprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -79,11 +82,11 @@ export const CampEnvironment = {
             depthWrite: false
         }));
         haloSprite.scale.set(120, 120, 1);
-        haloSprite.position.copy(moon.position);
+        haloSprite.position.copy(skyBody.position);
         scene.add(haloSprite);
 
         // Stars (Reduced for performance - only visible area)
-        const starCount = 1200; // Reduced from 3600
+        const starCount = 1200;
         const starGeo = new THREE.BufferGeometry();
         const positions = new Float32Array(starCount * 3);
         const sizes = new Float32Array(starCount);
@@ -120,6 +123,7 @@ export const CampEnvironment = {
             fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
             transparent: true, depthWrite: false,
         });
+
         const starSystem = new THREE.Points(starGeo, starMat);
         starSystem.rotation.z = 0.1;
         scene.add(starSystem);
@@ -133,8 +137,8 @@ export const CampEnvironment = {
         fireLight.castShadow = true;
         fireLight.shadow.mapSize.width = 512;
         fireLight.shadow.mapSize.height = 512;
-        fireLight.shadow.bias = -0.0005; // Reduced from -0.005 to fix the gap
-        fireLight.shadow.normalBias = 0.02; // Added to help contact shadows
+        fireLight.shadow.bias = -0.0005;
+        fireLight.shadow.normalBias = 0.02;
         scene.add(fireLight);
 
         // Static Geometry
@@ -165,41 +169,26 @@ export const CampEnvironment = {
         return fireLight;
     },
 
-    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number, flags?: { wind: boolean, weather: boolean, fx: boolean, lighting: boolean }) => {
-        // Wind
-        const wind = (flags && !flags.wind) ? { x: 0, y: 0 } : state.wind.update(now);
+    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {
+        // [VINTERDÖD] Wind and Weather are now updated globally by the Engine.
+        // We fetch the current wind force directly for camp particles.
+        const wind = Engine.getInstance().wind.current;
 
         // Update Stars
         if (state.starSystem) {
-            state.starSystem.visible = !flags || flags.lighting !== false;
-            if (state.starSystem.visible) {
-                (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = frame * 0.05;
-                state.starSystem.rotateY(-0.00008);
-            }
+            (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = frame * 0.05;
+            state.starSystem.rotateY(-0.00008);
         }
 
         // Update Fire Light
         if (state.fireLight) {
-            state.fireLight.visible = !flags || flags.lighting !== false;
-            if (state.fireLight.visible) {
-                state.fireLight.intensity = 35 + Math.sin(frame * 0.1) * 12 + Math.random() * 5;
-            }
+            state.fireLight.intensity = 35 + Math.sin(frame * 0.1) * 12 + Math.random() * 5;
         }
 
         const { flames, sparkles, smokes } = state.particles;
-
-        // SKIP FX IF DISABLED
-        if (flags && flags.fx === false) {
-            // Hide existing or just stop spawning? Let's hide/remove to be instant.
-            flames.forEach(f => f.mesh.visible = false);
-            sparkles.forEach(s => s.mesh.visible = false);
-            smokes.forEach(s => s.mesh.visible = false);
-            return;
-        } else {
-            flames.forEach(f => f.mesh.visible = true);
-            sparkles.forEach(s => s.mesh.visible = true);
-            smokes.forEach(s => s.mesh.visible = true);
-        }
+        flames.forEach(f => f.mesh.visible = true);
+        sparkles.forEach(s => s.mesh.visible = true);
+        smokes.forEach(s => s.mesh.visible = true);
 
         // Flames
         if (frame % 4 === 0 && flames.length < 20) {
@@ -236,9 +225,5 @@ export const CampEnvironment = {
             if (sm.life <= 0) { scene.remove(sm.mesh); smokes.splice(i, 1); }
         }
 
-        // Weather
-        if (!flags || flags.weather !== false) {
-            state.weatherSystem.update(delta, now);
-        }
     }
 };

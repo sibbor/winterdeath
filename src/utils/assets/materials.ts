@@ -40,12 +40,13 @@ const createWindMaterial = (baseMaterial: THREE.MeshStandardMaterial) => {
             float height = max(0.0, transformed.y);
             float bend = height * height * 0.1; 
             
-            // Noise-like variation based on position
-            float noise = sin(uTime * 2.0 + transformed.x * 0.5 + transformed.z * 0.5);
+            // Noise-like variation based on position, scaled by wind strength
+            float windStrength = length(uWind);
+            float noise = sin(uTime * 2.0 + transformed.x * 0.5 + transformed.z * 0.5) * (0.05 + windStrength * 0.5);
             
             // Apply wind force + noise
-            transformed.x += (uWind.x + noise * 0.2) * bend;
-            transformed.z += (uWind.y + noise * 0.2) * bend;
+            transformed.x += (uWind.x + noise) * bend;
+            transformed.z += (uWind.y + noise) * bend;
             `
         );
     };
@@ -63,35 +64,6 @@ export const MATERIALS = {
     smoke: new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.6, depthWrite: false }),
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
     scrap: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
-    stone: new THREE.MeshStandardMaterial({
-        color: 0x888888,
-        map: DIFFUSE.stone,
-        roughness: 0.9,
-        bumpMap: TEXTURES.stone_bump,
-        bumpScale: 0.2
-    }),
-    treeTrunk: new THREE.MeshStandardMaterial({
-        color: 0x4a3c31, // Flat dark brown
-        roughness: 1.0,
-        flatShading: true
-    }),
-    treeTrunkBirch: new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.9,
-        flatShading: true
-    }),
-    grass: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x4a6e4a,
-        roughness: 1.0,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })),
-    treeLeaves: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x2d4c1e, // Deep green base
-        roughness: 0.9,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })), // Standard pine green
     family: new THREE.MeshStandardMaterial({ color: 0x00aaff, roughness: 0.5 }),
     familyRing: new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
     familyArrow: new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, depthWrite: false }),
@@ -278,9 +250,6 @@ export const MATERIALS = {
     flashWhite: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }),
     glassShard: new THREE.MeshBasicMaterial({ color: 0xccffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
     shockwave: new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }),
-    hay: new THREE.MeshStandardMaterial({ color: 0xedc05d, roughness: 1.0, bumpMap: DIFFUSE.gravel, bumpScale: 0.2 }),
-    wheat: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 1.0, flatShading: true, side: THREE.DoubleSide }),
-    logEnd: new THREE.MeshStandardMaterial({ color: 0xbc8f8f, roughness: 0.8, bumpMap: DIFFUSE.stone, bumpScale: 0.1 }),
     container: new THREE.MeshStandardMaterial({
         color: 0x888888,
         map: DIFFUSE.containerMetal,
@@ -292,6 +261,48 @@ export const MATERIALS = {
         roughness: 0.4,
         metalness: 0.8
     }),
+
+    // Environmental
+    hay: new THREE.MeshStandardMaterial({ color: 0xedc05d, roughness: 1.0, bumpMap: DIFFUSE.gravel, bumpScale: 0.2 }),
+    logEnd: new THREE.MeshStandardMaterial({ color: 0xbc8f8f, roughness: 0.8, bumpMap: DIFFUSE.stone, bumpScale: 0.1 }),
+
+    stone: new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        map: DIFFUSE.stone,
+        roughness: 0.9,
+        bumpMap: TEXTURES.stone_bump,
+        bumpScale: 0.2
+    }),
+    grass: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x4a6e4a,
+        roughness: 1.0,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    flower: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.8,
+        vertexColors: true,
+        side: THREE.DoubleSide
+    })),
+    wheat: createWindMaterial(new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 1.0, flatShading: true, side: THREE.DoubleSide })),
+    treeTrunk: new THREE.MeshStandardMaterial({
+        color: 0x4a3c31, // Flat dark brown
+        roughness: 1.0,
+        flatShading: true
+    }),
+    treeTrunkBirch: new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.9,
+        flatShading: true
+    }),
+
+    treeFirNeedles: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x2d4c1e, // Deep green base
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
     treeStumpTop: new THREE.MeshStandardMaterial({
         color: 0xbc8f8f,
         map: DIFFUSE.treeRings,
@@ -309,6 +320,12 @@ export const MATERIALS = {
         flatShading: true,
         side: THREE.DoubleSide
     })),
+    treeLeaves: createWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x8DA331, // Yellowish-Green for Birch
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
     treeTrunkOak: new THREE.MeshStandardMaterial({
         color: 0x5a504a,
         roughness: 1.0,
@@ -316,12 +333,6 @@ export const MATERIALS = {
         bumpScale: 0.1,
         flatShading: true
     }),
-    flower: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.8,
-        vertexColors: true,
-        side: THREE.DoubleSide
-    })),
     deadWood: new THREE.MeshStandardMaterial({
         color: 0x5c5046,
         roughness: 1.0,

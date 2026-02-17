@@ -6,10 +6,22 @@ import { HudSystem } from './HudSystem';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3(); // Used for LookAt target
-const _v2 = new THREE.Vector3(); // Used for temporary math
-const _v3 = new THREE.Vector3(); // Used for distance checks
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
 const _zeroV = new THREE.Vector3(0, 0, 0);
+
+// [VINTERDÖD] Återanvändbara states för att undvika objekt-literaler i loopen
+const _deathAnimState = {
+    isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
+    staminaRatio: 0, isSpeaking: false, isThinking: false, isIdleLong: false,
+    seed: 0, isDead: true, deathStartTime: 0
+};
+
+const _griefAnimState = {
+    isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
+    staminaRatio: 1.0, isSpeaking: false, isThinking: true, isIdleLong: false,
+    seed: 0
+};
 
 export const DeathSystem = {
     update: (
@@ -40,22 +52,21 @@ export const DeathSystem = {
 
             soundManager.playPlayerDeath(PLAYER_CHARACTER.name);
 
-            // Force HUD Update (0 HP) - Using fallback vector if playerGroup is null
+            // [VINTERDÖD] Undvik spread-operator ({...data}) då det skapar ett nytt objekt.
+            // Vi skickar datan direkt från HudSystem.
             const pos = refs.playerGroup ? refs.playerGroup.position : _zeroV;
-            props.onUpdateHUD({
-                ...HudSystem.getHudData(state, pos, refs.fmMesh, refs.input, now, props, distanceTraveled, refs.camera),
-                hp: 0,
-                isDead: true
-            });
+            const hudData = HudSystem.getHudData(state, pos, refs.fmMesh, refs.input, now, props, distanceTraveled, refs.camera) as any;
+
+            hudData.hp = 0;
+            hudData.isDead = true;
+            props.onUpdateHUD(hudData);
 
         } else if (refs.deathPhase.current === 'ANIMATION') {
-            // Transition to Message after 800ms
             if (now - state.deathStartTime > 800) {
                 refs.deathPhase.current = 'MESSAGE';
                 setDeathPhase('MESSAGE');
             }
         } else if (refs.deathPhase.current === 'MESSAGE') {
-            // Allow Continue after 1500ms
             if (now - state.deathStartTime > 1500) {
                 refs.deathPhase.current = 'CONTINUE';
                 setDeathPhase('CONTINUE');
@@ -64,81 +75,80 @@ export const DeathSystem = {
 
         // 2. Physics & Falling Movement
         if (refs.playerGroup && state.deathVel) {
-            // Apply Gravity (30 units/s^2)
-            state.deathVel.y -= 30 * delta;
+            const pgPos = refs.playerGroup.position;
 
-            // Move playerGroup using pre-calculated delta
-            refs.playerGroup.position.addScaledVector(state.deathVel, delta);
+            // Apply Gravity
+            state.deathVel.y -= 30 * delta;
+            pgPos.addScaledVector(state.deathVel, delta);
 
             // Ground Collision (Y=0)
-            if (refs.playerGroup.position.y <= 0.0) {
-                refs.playerGroup.position.y = 0.0;
+            if (pgPos.y <= 0.0) {
+                pgPos.y = 0.0;
                 state.deathVel.y = 0;
-                state.deathVel.x *= 0.9; // Friction X
-                state.deathVel.z *= 0.9; // Friction Z
+                state.deathVel.x *= 0.9;
+                state.deathVel.z *= 0.9;
 
-                // Player Blood Trail (Optimized distance check)
+                // [VINTERDÖD] Använd .copy() istället för .clone() för trail position
                 if (!state.lastTrailPos) {
-                    state.lastTrailPos = refs.playerGroup.position.clone();
+                    // Vi antar att lastTrailPos är initierad som en Vector3 i RuntimeState
+                    state.lastTrailPos = pgPos.clone(); // Endast första gången
                 }
 
-                // Check distance squared (2.25 = 1.5m squared) to avoid Math.sqrt()
-                if (refs.playerGroup.position.distanceToSquared(state.lastTrailPos) > 2.25) {
+                // Check distance squared (1.5m squared)
+                if (pgPos.distanceToSquared(state.lastTrailPos) > 2.25) {
                     const baseScale = refs.playerMesh?.userData.baseScale || 1.0;
                     callbacks.spawnDecal(
-                        refs.playerGroup.position.x,
-                        refs.playerGroup.position.z,
+                        pgPos.x,
+                        pgPos.z,
                         (0.8 + Math.random() * 0.4) * baseScale,
                         MATERIALS.bloodDecal
                     );
-                    state.lastTrailPos.copy(refs.playerGroup.position);
+                    state.lastTrailPos.copy(pgPos);
                 }
             }
 
-            // Orientation: Face the direction of the fall
+            // Orientation
             const speedSq = state.deathVel.x * state.deathVel.x + state.deathVel.z * state.deathVel.z;
             if (speedSq > 0.1) {
-                // Zero-GC LookAt calculation
                 _v2.set(state.deathVel.x, 0, state.deathVel.z);
-                _v1.copy(refs.playerGroup.position).sub(_v2);
+                _v1.copy(pgPos).sub(_v2);
                 refs.playerGroup.lookAt(_v1);
             } else if (!state.playerBloodSpawned && now - state.deathStartTime > 350) {
-                // Execute final blood pool spawn when movement stops
                 state.playerBloodSpawned = true;
                 const baseScale = refs.playerMesh?.userData.baseScale || 1.0;
-                callbacks.spawnDecal(refs.playerGroup.position.x, refs.playerGroup.position.z, 2.5 * baseScale, MATERIALS.bloodDecal);
-                callbacks.spawnPart(refs.playerGroup.position.x, 0.5, refs.playerGroup.position.z, 'blood', 20);
+                callbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
+                callbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'blood', 20);
             }
         }
 
         // 3. Player Animation Update
         if (refs.playerMesh) {
-            PlayerAnimation.update(refs.playerMesh, {
-                isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
-                staminaRatio: 0, isSpeaking: false, isThinking: false, isIdleLong: false,
-                seed: 0, isDead: true, deathStartTime: state.deathStartTime
-            }, now, 0.016); // Maintain fixed timestep for animation consistency
+            // [VINTERDÖD] Använd förallokerad state-scratchpad
+            _deathAnimState.deathStartTime = state.deathStartTime;
+            PlayerAnimation.update(refs.playerMesh, _deathAnimState, now, 0.016);
         }
 
         // 4. Family Reaction (Optimized Loop)
         if (refs.familyMembers) {
-            for (let i = 0; i < refs.familyMembers.length; i++) {
-                const fm = refs.familyMembers[i];
+            const fmList = refs.familyMembers;
+            const fmCount = fmList.length;
+            const playerPos = refs.playerGroup ? refs.playerGroup.position : _zeroV;
+
+            for (let i = 0; i < fmCount; i++) {
+                const fm = fmList[i];
                 if (!fm.mesh) continue;
 
-                // Freeze movement and look at the fallen player
                 fm.following = false;
                 fm.isMoving = false;
 
-                if (refs.playerGroup) {
-                    fm.mesh.lookAt(refs.playerGroup.position);
-                }
+                // Look at fallen player
+                fm.mesh.lookAt(playerPos);
 
-                // Find the body mesh for grief animation (Thinking state as proxy)
-                // Use children array directly to minimize traversal
+                // Find body mesh via platt loop istället för traverse
                 const children = fm.mesh.children;
+                const childCount = children.length;
                 let body: THREE.Mesh | null = null;
-                for (let j = 0; j < children.length; j++) {
+                for (let j = 0; j < childCount; j++) {
                     if (children[j].userData.isBody) {
                         body = children[j] as THREE.Mesh;
                         break;
@@ -146,17 +156,9 @@ export const DeathSystem = {
                 }
 
                 if (body) {
-                    PlayerAnimation.update(body, {
-                        isMoving: false,
-                        isRushing: false,
-                        isRolling: false,
-                        rollStartTime: 0,
-                        staminaRatio: 1.0,
-                        isSpeaking: false,
-                        isThinking: true, // Used for Grief animation
-                        isIdleLong: false,
-                        seed: fm.seed || 0
-                    }, now, delta);
+                    // [VINTERDÖD] Använd förallokerad grief-state
+                    _griefAnimState.seed = fm.seed || 0;
+                    PlayerAnimation.update(body, _griefAnimState, now, delta);
                 }
             }
         }

@@ -29,7 +29,8 @@ export class ZombieRenderer {
     private getMat(color: number) {
         // Material cloning is fine during init/constructor
         const m = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
-        m.color.setHex(0xffffff); // Use white base so instance color (tint) works correctly
+        // [VINTERDÖD] Låter basfärgen förbli här. Instansfärger multipliceras sedan med denna.
+        m.color.set(color);
         return m;
     }
 
@@ -95,14 +96,20 @@ export class ZombieRenderer {
             this._dummy.quaternion.copy(e.mesh.quaternion);
             this._dummy.scale.set(wScale, scale, wScale);
 
-            // Handle special color overrides (Bosses/Damaged)
+            // [VINTERDÖD] Direkt matriskomposition minskar overhead radikalt.
+            this._dummy.matrix.compose(this._dummy.position, this._dummy.quaternion, this._dummy.scale);
+            instMesh.setMatrixAt(idx, this._dummy.matrix);
+
+            // [VINTERDÖD] Handle special color overrides (Bosses/Damaged) & Buffer Bleed Fix
             if (e.isBoss || e.color !== undefined) {
                 this._tempColor.set(e.color || 0xffffff);
                 instMesh.setColorAt(idx, this._tempColor);
+            } else if (instMesh.instanceColor) {
+                // Skriv över med vit färg (0xffffff) för att nollställa till materialets grundfärg
+                this._tempColor.setHex(0xffffff);
+                instMesh.setColorAt(idx, this._tempColor);
             }
 
-            this._dummy.updateMatrix();
-            instMesh.setMatrixAt(idx, this._dummy.matrix);
             instMesh.count++;
         }
 

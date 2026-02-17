@@ -3,6 +3,8 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempColor = new THREE.Color();
+const _tempQuat = new THREE.Quaternion(); // [VINTERDÖD] Repellerar GC vid Euler-omvandlingar
+const _defaultDeadColor = new THREE.Color(0x808080); // [VINTERDÖD] 0xffffff * 0.5 (Standardfärgen för kalla lik)
 
 /**
  * CorpseRenderer manages dead enemy visuals using Hardware Instancing.
@@ -12,7 +14,7 @@ export class CorpseRenderer {
     private mesh: THREE.InstancedMesh;
     private scene: THREE.Scene;
     private maxInstances: number;
-    private currentCount: number = 0;
+    private insertIndex: number = 0; // [VINTERDÖD] Egen pekare för ren O(1) cirkulär loop
     private dummy = new THREE.Object3D();
 
     constructor(scene: THREE.Scene, maxInstances: number = 2000) {
@@ -22,7 +24,7 @@ export class CorpseRenderer {
         // Corpses use a unique material clone to allow global darkening 
         // without affecting living enemies or other systems.
         const material = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
-        material.color.set(0xffffff); // Set to white to act as a multiplier for instance colors
+        material.color.setHex(0xffffff); // Set to white to act as a multiplier for instance colors
 
         this.mesh = new THREE.InstancedMesh(GEOMETRY.zombie, material, this.maxInstances);
         this.mesh.castShadow = true;
@@ -57,57 +59,55 @@ export class CorpseRenderer {
         widthScale: number = 1.0,
         colorHex?: number
     ) {
-        // Circular buffer logic: Overwrite the oldest instance if full
-        if (this.currentCount >= this.maxInstances) {
-            this.currentCount = 0;
-        }
+        const idx = this.insertIndex;
 
-        const idx = this.currentCount;
-
-        // 1. Sync Transform via reusable dummy object
+        // 1. Sync Transform via direct composition (Zero-GC, bypasses Object3D overhead)
         this.dummy.position.copy(position);
-
-        if (rotation instanceof THREE.Euler) {
-            this.dummy.rotation.copy(rotation);
-        } else {
-            this.dummy.quaternion.copy(rotation);
-        }
 
         const wScale = widthScale * scale;
         this.dummy.scale.set(wScale, scale, wScale);
-        this.dummy.updateMatrix();
+
+        // [VINTERDÖD] Snabb type-check istället för instanceof (vilket är långsammare) och direkt matriskomposition.
+        if ((rotation as THREE.Euler).isEuler) {
+            _tempQuat.setFromEuler(rotation as THREE.Euler);
+            this.dummy.matrix.compose(this.dummy.position, _tempQuat, this.dummy.scale);
+        } else {
+            this.dummy.matrix.compose(this.dummy.position, rotation as THREE.Quaternion, this.dummy.scale);
+        }
 
         // Write transformation matrix to the instanced buffer
         this.mesh.setMatrixAt(idx, this.dummy.matrix);
 
-        // 2. Sync Color (Zero-GC)
+        // 2. Sync Color (Zero-GC & Anti-Bleed)
         if (colorHex !== undefined) {
             // Apply a 0.5 multiplier to the original hex to make the corpse look "cold" or darkened
             _tempColor.setHex(colorHex).multiplyScalar(0.5);
             this.mesh.setColorAt(idx, _tempColor);
-
-            if (this.mesh.instanceColor) {
-                this.mesh.instanceColor.needsUpdate = true;
-            }
+        } else {
+            // [VINTERDÖD] Återställ materialets grundfärg så vi inte blöder färg från ett överskrivet lik
+            this.mesh.setColorAt(idx, _defaultDeadColor);
         }
 
-        // 3. Increment internal counter and notify GPU
-        this.currentCount++;
+        // 3. Increment internal counter & Wrap around for circular logic
+        this.insertIndex = (this.insertIndex + 1) % this.maxInstances;
 
-        // Ensure the draw count covers all instances created so far
-        if (this.mesh.count < this.maxInstances && this.mesh.count < this.currentCount) {
-            this.mesh.count = this.currentCount;
+        // Increase render count up to max limits
+        if (this.mesh.count < this.maxInstances) {
+            this.mesh.count++;
         }
 
-        // Set the dirty flag for the next render pass
+        // Set the dirty flags for the next render pass
         this.mesh.instanceMatrix.needsUpdate = true;
+        if (this.mesh.instanceColor) {
+            this.mesh.instanceColor.needsUpdate = true;
+        }
     }
 
     /**
      * Resets all corpses. Useful for game restarts or level clears.
      */
     public clear() {
-        this.currentCount = 0;
+        this.insertIndex = 0;
         this.mesh.count = 0;
         this.mesh.instanceMatrix.needsUpdate = true;
     }

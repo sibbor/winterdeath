@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sectors';
+import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
 import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
@@ -67,7 +67,7 @@ export const Sector1: SectorDef = {
         ambientIntensity: 0.4, // Increased from 0.2 for better general visibility
         groundColor: 0xddddff,
         fov: 50,
-        moon: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } }, // Brighter moon
+        skyLight: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'snow'
@@ -469,6 +469,14 @@ export const Sector1: SectorDef = {
         // Bus Orientation: Lying on side (X-rotation), Front pointing East (+X)
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, 1.8, LOCATIONS.TRIGGERS.BUS.z);
         bus.rotation.set(Math.PI / 2, 0, 0); // Lying on side
+
+        // Interaction Data
+        SectorGenerator.addInteractable(ctx, bus, {
+            id: 'tunnel_bus',
+            label: 'ui.interact_plant_explosive',
+            type: 'sector_specific'
+        });
+
         bus.updateMatrixWorld();
 
         const busBox = new THREE.Box3().setFromObject(bus);
@@ -693,6 +701,8 @@ export const Sector1: SectorDef = {
             { id: 's1_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: 'POI', content: "clues.s1_poi_train_yard", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
 
             // --- THE BUS EVENT ---
+            // --- THE BUS EVENT (Handled via Interaction now) ---
+            /*
             {
                 id: 's1_bus_event',
                 position: LOCATIONS.TRIGGERS.BUS,
@@ -700,27 +710,9 @@ export const Sector1: SectorDef = {
                 type: 'EVENT',
                 content: null,
                 triggered: false,
-                actions: [
-                    { type: 'SHOW_TEXT', payload: { text: t('clues.s1_event_tunnel_blocked'), duration: 1500 } },
-
-                    { type: 'PLAY_SOUND', payload: { id: 'explosion' }, delay: 1500 },
-                    { type: 'CAMERA_SHAKE', payload: { amount: 5.0 }, delay: 1650 },
-                    { type: 'CAMERA_PAN', payload: { target: LOCATIONS.POIS.TRAIN_YARD, duration: 3000 }, delay: 1500 },
-                    { type: 'PLAY_SOUND', payload: { id: 'explosion' }, delay: 2500 },
-                    { type: 'CAMERA_SHAKE', payload: { amount: 5.0 }, delay: 2650 },
-                    { type: 'SHOW_TEXT', payload: { text: t('clues.s1_event_tunnel_whats_happening') }, delay: 3500 },
-
-                    // Start the kill objective
-                    { type: 'START_WAVE', payload: { count: 30 }, delay: 6500 },
-
-                    // Spawn Zombies from different directions (Total 30)
-                    { type: 'SPAWN_ENEMY', payload: { type: 'RUNNER', count: 6, pos: LOCATIONS.POIS.CHURCH, spread: 20 }, delay: 7000 },
-                    { type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 6, pos: LOCATIONS.POIS.CAFE, spread: 20 }, delay: 8500 },
-                    { type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 6, pos: LOCATIONS.POIS.PIZZERIA, spread: 20 }, delay: 10000 },
-                    { type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 6, pos: LOCATIONS.POIS.GYM, spread: 20 }, delay: 11500 },
-                    { type: 'SPAWN_ENEMY', payload: { type: 'WALKER', count: 6, pos: LOCATIONS.POIS.GROCERY, spread: 20 }, delay: 7000 },
-                ]
+                actions: [ ...moved to onInteract/onUpdate... ]
             },
+            */
 
             // --- FIND LOKE EVENT ---
             {
@@ -777,9 +769,71 @@ export const Sector1: SectorDef = {
         EnvironmentGenerator.createDeforestation(ctx, 130, 380, 30, 25, 12);
     },
 
+    onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
+        if (id === 'tunnel_bus') {
+            object.userData.isInteractable = false;
+            state.sectorState.busSequence = { startTime: state.time || Date.now(), step: 0 };
+
+            // Immediate feedback
+            events.setNotification({ text: events.t('clues.s1_event_tunnel_blocked'), duration: 1500 });
+        }
+    },
+
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
         const state = gameState;
         if (!sectorState.spawns) sectorState.spawns = {};
+
+        // --- BUS SEQUENCE ---
+        if (sectorState.busSequence) {
+            const seq = sectorState.busSequence;
+            const elapsed = now - seq.startTime;
+
+            if (seq.step === 0 && elapsed > 1500) {
+                events.playSound('explosion');
+                events.cameraShake(5.0);
+                // Pan Camera manually or via event? generic setCameraOverride is robust
+                events.setCameraOverride({
+                    active: true,
+                    targetPos: new THREE.Vector3(150, 0, 400), // Train Yard
+                    lookAtPos: new THREE.Vector3(150, 2, 400),
+                    endTime: now + 4000
+                });
+                seq.step++;
+            }
+            if (seq.step === 1 && elapsed > 2500) {
+                events.playSound('explosion');
+                events.cameraShake(5.0);
+                seq.step++;
+            }
+            if (seq.step === 2 && elapsed > 3500) {
+                events.setNotification({ text: events.t('clues.s1_event_tunnel_whats_happening'), duration: 3000 });
+                seq.step++;
+            }
+            if (seq.step === 3 && elapsed > 6500) {
+                // START WAVE
+                // events.spawnHorde(30); // Not directly available in events interface?
+                // events was: spawnZombie, spawnHorde... Yes!
+                events.spawnHorde(30, 'WALKER', new THREE.Vector3(150, 0, 400)); // Train yard focus
+
+                // Specific spawns
+                const LOCS = {
+                    CHURCH: new THREE.Vector3(165, 0, 240),
+                    CAFE: new THREE.Vector3(110, 0, 250),
+                    PIZZERIA: new THREE.Vector3(200, 0, 250),
+                    GYM: new THREE.Vector3(105, 0, 295),
+                    GROCERY: new THREE.Vector3(170, 0, 300)
+                };
+
+                for (let i = 0; i < 6; i++) events.spawnZombie('RUNNER', LOCS.CHURCH);
+                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.CAFE);
+                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.PIZZERIA);
+                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.GYM);
+                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.GROCERY);
+
+                seq.step++;
+                sectorState.busSequence = null; // Done
+            }
+        }
 
         // 1. Initial Group (3 walkers, 1.5s after start)
         if (!sectorState.spawns.initial && now - state.startTime > 0) {

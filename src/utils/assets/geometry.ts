@@ -90,7 +90,7 @@ export const GEOMETRY = {
     scrap: new THREE.OctahedronGeometry(0.3),
     stone: new THREE.DodecahedronGeometry(1),
     treeTrunk: new THREE.CylinderGeometry(0.3, 0.5, 3.5, 7),
-    treeLeaves: new THREE.ConeGeometry(3, 18, 7),
+    treeFirNeedles: new THREE.ConeGeometry(3, 18, 7),
     foliageCluster: new THREE.DodecahedronGeometry(1.0, 0),
     human: createHumanBodyGeo(),
     zombie: createZombieBodyGeo(),

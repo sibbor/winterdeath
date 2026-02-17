@@ -1,4 +1,5 @@
 import { SoundCore } from './audio/SoundCore';
+import { SoundBank } from './audio/SoundBank';
 import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators } from './audio/SoundLib';
 import { PLAYER_CHARACTER } from '../content/constants';
 
@@ -20,6 +21,12 @@ export class SoundManager {
   // Flamethrower
   private flameOsc: AudioBufferSourceNode | null = null;
   private flameGain: GainNode | null = null;
+
+  // Vehicles
+  private vehicleOsc: AudioBufferSourceNode | null = null;
+  private vehicleGain: GainNode | null = null;
+  private vehicleSkidOsc: AudioBufferSourceNode | null = null;
+  private vehicleSkidGain: GainNode | null = null;
 
   // Cached procedural buffers
   private campfireBuffer: AudioBuffer | null = null;
@@ -305,6 +312,95 @@ export class SoundManager {
     }
   }
 
+  // --- VEHICLE AUDIO ---
+
+  startVehicleEngine(type: 'BOAT' | 'CAR') {
+    if (this.vehicleOsc) return;
+    const key = type === 'BOAT' ? 'vehicle_engine_boat' : 'vehicle_engine_car';
+    const sound = SoundBank.play(this.core, key, 0, 1.0, true);
+    if (sound) {
+      this.vehicleOsc = sound.source;
+      this.vehicleGain = sound.gain;
+      // Fade in
+      this.vehicleGain.gain.setTargetAtTime(0.2, this.core.ctx.currentTime, 0.2);
+    }
+  }
+
+  updateVehicleEngine(rpm: number) {
+    if (!this.vehicleOsc || !this.vehicleGain) return;
+    const now = this.core.ctx.currentTime;
+    // rpm is 0..1 (normalized speed/throttle)
+    const targetPitch = 0.8 + rpm * 1.5;
+    this.vehicleOsc.playbackRate.setTargetAtTime(targetPitch, now, 0.1);
+    const targetVol = 0.1 + rpm * 0.3;
+    this.vehicleGain.gain.setTargetAtTime(targetVol, now, 0.1);
+  }
+
+  stopVehicleEngine() {
+    if (this.vehicleOsc && this.vehicleGain) {
+      const now = this.core.ctx.currentTime;
+      this.vehicleGain.gain.setTargetAtTime(0, now, 0.1);
+      const osc = this.vehicleOsc;
+      const gain = this.vehicleGain;
+      this.core.safeTimeout(() => {
+        try { osc.stop(); osc.disconnect(); } catch (e) { }
+        try { gain.disconnect(); } catch (e) { }
+      }, 200);
+      this.vehicleOsc = null;
+      this.vehicleGain = null;
+    }
+  }
+
+  playVehicleSkid(intensity: number) {
+    if (intensity < 0.1) {
+      if (this.vehicleSkidOsc) {
+        this.vehicleSkidGain?.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.1);
+        const osc = this.vehicleSkidOsc;
+        const gain = this.vehicleSkidGain;
+        this.core.safeTimeout(() => {
+          try { osc.stop(); osc.disconnect(); } catch (e) { }
+          try { gain.disconnect(); } catch (e) { }
+        }, 200);
+        this.vehicleSkidOsc = null;
+        this.vehicleSkidGain = null;
+      }
+      return;
+    }
+
+    if (!this.vehicleSkidOsc) {
+      const sound = SoundBank.play(this.core, 'vehicle_skid', 0, 1.0, true);
+      if (sound) {
+        this.vehicleSkidOsc = sound.source;
+        this.vehicleSkidGain = sound.gain;
+      }
+    }
+
+    if (this.vehicleSkidGain) {
+      this.vehicleSkidGain.gain.setTargetAtTime(intensity * 0.4, this.core.ctx.currentTime, 0.1);
+    }
+  }
+
+  playVehicleEnter(type: 'BOAT' | 'CAR') {
+    if (type === 'BOAT') {
+      SoundBank.play(this.core, 'step_water', 0.4, 0.8);
+      this.core.safeTimeout(() => SoundBank.play(this.core, 'step_wood', 0.3, 0.9), 100);
+    } else {
+      SoundBank.play(this.core, 'door_metal_shut', 0.5);
+    }
+  }
+
+  playVehicleExit(type: 'BOAT' | 'CAR') {
+    if (type === 'BOAT') {
+      SoundBank.play(this.core, 'step_water', 0.4, 1.1);
+    } else {
+      SoundBank.play(this.core, 'door_metal_open', 0.3);
+    }
+  }
+
+  playVehicleHorn() {
+    SoundBank.play(this.core, 'vehicle_horn', 0.5);
+  }
+
   playArcCannonZap() {
     // Sharp high-pitch zap
     const ctx = this.core.ctx;
@@ -350,6 +446,7 @@ export class SoundManager {
       case 'step_metal': this.playFootstep('metal'); break;
       case 'step_wood': this.playFootstep('wood'); break;
       case 'step_water': this.playFootstep('water'); break;
+      case 'step_zombie': this.playZombieStep(); break; // [VINTERDÖD] Added missing mapping
 
       // Impacts
       case 'impact_flesh': this.playImpact('flesh'); break;

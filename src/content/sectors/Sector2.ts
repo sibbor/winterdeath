@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sectors';
+import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
 import { MATERIALS } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
@@ -148,7 +148,7 @@ export const Sector2: SectorDef = {
         ambientIntensity: 0.3, // Increased for better visibility
         groundColor: 0x111111,
         fov: 50,
-        moon: { visible: true, color: 0x8899aa, intensity: 1.0, position: { x: -40, y: 30, z: -20 } },
+        skyLight: { visible: true, color: 0x8899aa, intensity: 1.0, position: { x: -40, y: 30, z: -20 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'snow'
@@ -283,7 +283,7 @@ export const Sector2: SectorDef = {
             { id: 's2_cave_watch_out', position: { x: LOCATIONS.POIS.CAVE_ENTRANCE.x, z: -80 }, radius: 10, type: 'SPEECH', content: "clues.s2_cave_watch_out", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot_more", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's2_cave_knock_shelter_port', position: { x: 35, z: -193 }, radius: 10, type: 'EVENT', content: '', triggered: false, actions: [] },
+            // { id: 's2_cave_knock_shelter_port', position: { x: 35, z: -193 }, radius: 10, type: 'EVENT', content: '', triggered: false, actions: [] },
             { id: 's2_cave_shelter_port_room', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'SPEECH', content: "clues.s2_cave_shelter_port_room", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
         );
 
@@ -292,6 +292,24 @@ export const Sector2: SectorDef = {
         innerCave.name = "Sector2_InnerCave";
         scene.add(innerCave);
         await generateCaveSystem(ctx, innerCave);
+
+        // Make Door Interactable
+        const doorFrame = scene.getObjectByName('s2_shelter_port_frame');
+        if (doorFrame) {
+            SectorGenerator.addInteractable(ctx, doorFrame, {
+                id: 'cave_door',
+                label: 'ui.interact_knock_on_port',
+                type: 'sector_specific'
+            });
+        }
+    },
+
+    onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
+        if (id === 'cave_door') {
+            state.sectorState.doorKnocked = true;
+            object.userData.isInteractable = false;
+            events.setNotification({ text: events.t('ui.knocking'), duration: 2000 });
+        }
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
@@ -349,8 +367,8 @@ export const Sector2: SectorDef = {
             const fixedCamTarget = new THREE.Vector3(60, 12, -193);
             const fixedCamLookAt = new THREE.Vector3(45, 1, -193);
 
-            const knockingTrigger = gameState.triggers.find(t => t.id === 's2_cave_knock_shelter_port');
-            if (knockingTrigger && knockingTrigger.triggered && !sectorState.introCinematicPlayed) {
+            // const knockingTrigger = gameState.triggers.find(t => t.id === 's2_cave_knock_shelter_port');
+            if (sectorState.doorKnocked && !sectorState.introCinematicPlayed) {
                 const doorFrame = scene.getObjectByName('s2_shelter_port_frame');
                 if (doorFrame && (events as any).startCinematic) {
                     (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
@@ -450,7 +468,7 @@ export const Sector2: SectorDef = {
                 }
             } else if (jc.phase === 'START_DIALOGUE_2') {
                 jc.phase = 'WAITING_FOR_CONCLUSION';
-                const jordanObj = (events as any).familyMesh || scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Jordan');
+                const jordanObj = (events as any).familyMesh || scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && (c.userData.name === 'Jordan' || c.userData.id === 'Jordan'));
                 if (jordanObj && (events as any).startCinematic) {
                     (events as any).startCinematic(jordanObj, 102, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                 }
@@ -498,4 +516,3 @@ export const Sector2: SectorDef = {
         });
     }
 };
-

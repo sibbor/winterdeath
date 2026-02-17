@@ -3,10 +3,6 @@ import { WindSystem } from './WindSystem';
 import { GEOMETRY } from '../../utils/assets';
 import { WeatherType } from '../../types';
 
-// --- PERFORMANCE SCRATCHPADS ---
-const _dummy = new THREE.Object3D();
-const _v1 = new THREE.Vector3();
-
 export class WeatherSystem {
     private instancedMesh: THREE.InstancedMesh | null = null;
 
@@ -36,7 +32,16 @@ export class WeatherSystem {
      * Reuses existing mesh and buffers where possible.
      */
     public sync(type: WeatherType, count: number, areaSize: number = 100) {
-        if (this.type === type && this.count === count) return;
+        const needsResync = this.type !== type || this.count !== count || this.areaSize !== areaSize;
+
+        // [VINTERDÖD] If we already have the mesh and types/count match, just ensure it's in the scene and visible.
+        if (!needsResync) {
+            if (this.instancedMesh) {
+                if (!this.instancedMesh.parent) this.scene.add(this.instancedMesh);
+                this.instancedMesh.visible = type !== 'none' && count > 0;
+            }
+            return;
+        }
 
         const actualCount = Math.min(count, this.maxCount);
         this.type = type;
@@ -65,47 +70,97 @@ export class WeatherSystem {
 
         // (Re)create mesh only if material properties changed significantly
         if (!this.instancedMesh) {
-            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity });
+            const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
             this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, mat, this.maxCount);
             this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.instancedMesh.frustumCulled = false;
+            this.instancedMesh.renderOrder = 999;
             this.scene.add(this.instancedMesh);
         } else {
             const mat = this.instancedMesh.material as THREE.MeshBasicMaterial;
-            mat.color.set(color);
+            mat.color.setHex(color); // [VINTERDÖD] Undvik extra allokering genom setHex
             mat.opacity = opacity;
             this.instancedMesh.visible = true;
+
+            // [VINTERDÖD] Ensure mesh is in the scene graph (in case scene.clear() was called)
+            if (!this.instancedMesh.parent) {
+                this.scene.add(this.instancedMesh);
+            }
+
+            // Re-apply material safety
+            (this.instancedMesh.material as THREE.MeshBasicMaterial).depthWrite = false;
         }
 
         this.instancedMesh.count = actualCount;
 
+        // [VINTERDÖD] Cacha variabler innan loopen för maximerad L1-cache access
+        const pos = this.positions;
+        const vel = this.velocities;
+        const matrixArray = this.instancedMesh.instanceMatrix.array;
+
+        // Fastställ statisk skala per vädertyp
+        const sX = type === 'rain' ? 0.5 : 1.0;
+        const sY = type === 'rain' ? 4.0 : 1.0;
+        const sZ = 1.0;
+
         // Initialize particle buffers
         for (let i = 0; i < actualCount; i++) {
             const i3 = i * 3;
+
             // X, Y, Z positions
-            this.positions[i3 + 0] = (Math.random() - 0.5) * areaSize;
-            this.positions[i3 + 1] = Math.random() * 40;
-            this.positions[i3 + 2] = (Math.random() - 0.5) * areaSize;
+            const x = (Math.random() - 0.5) * areaSize;
+            const y = Math.random() * 40;
+            const z = (Math.random() - 0.5) * areaSize;
+
+            pos[i3 + 0] = x;
+            pos[i3 + 1] = y;
+            pos[i3 + 2] = z;
 
             // X, Y, Z velocities
             if (type === 'snow') {
-                this.velocities[i3 + 0] = (Math.random() - 0.5) * 1.5; // Sway
-                this.velocities[i3 + 1] = -(8 + Math.random() * 7);   // Fall speed
-                this.velocities[i3 + 2] = (Math.random() - 0.5) * 1.5; // Sway
+                vel[i3 + 0] = (Math.random() - 0.5) * 1.5;
+                vel[i3 + 1] = -(8 + Math.random() * 7);
+                vel[i3 + 2] = (Math.random() - 0.5) * 1.5;
             } else if (type === 'ash') {
-                this.velocities[i3 + 0] = (Math.random() - 0.5) * 2;
-                this.velocities[i3 + 1] = -(2 + Math.random() * 3); // Slow fall
-                this.velocities[i3 + 2] = (Math.random() - 0.5) * 2;
+                vel[i3 + 0] = (Math.random() - 0.5) * 2;
+                vel[i3 + 1] = -(2 + Math.random() * 3);
+                vel[i3 + 2] = (Math.random() - 0.5) * 2;
             } else if (type === 'ember') {
-                this.velocities[i3 + 0] = (Math.random() - 0.5) * 3;
-                this.velocities[i3 + 1] = (1 + Math.random() * 4); // Rise up? Or float. Let's make them float up slowly or chaotic.
-                this.velocities[i3 + 2] = (Math.random() - 0.5) * 3;
+                vel[i3 + 0] = (Math.random() - 0.5) * 3;
+                vel[i3 + 1] = (1 + Math.random() * 4);
+                vel[i3 + 2] = (Math.random() - 0.5) * 3;
             } else { // rain
-                this.velocities[i3 + 0] = 0;
-                this.velocities[i3 + 1] = -(50 + Math.random() * 30); // Fast rain
-                this.velocities[i3 + 2] = 0;
+                vel[i3 + 0] = 0;
+                vel[i3 + 1] = -(50 + Math.random() * 30);
+                vel[i3 + 2] = 0;
             }
 
-            this.updateInstanceMatrix(i);
+            // [VINTERDÖD] Direkt Matrix Array Mutation. Inget Object3D overhead. Inga .setMatrixAt-anrop.
+            const matIdx = i * 16;
+
+            // Column 1
+            matrixArray[matIdx + 0] = sX;
+            matrixArray[matIdx + 1] = 0;
+            matrixArray[matIdx + 2] = 0;
+            matrixArray[matIdx + 3] = 0;
+
+            // Column 2
+            matrixArray[matIdx + 4] = 0;
+            matrixArray[matIdx + 5] = sY;
+            matrixArray[matIdx + 6] = 0;
+            matrixArray[matIdx + 7] = 0;
+
+            // Column 3
+            matrixArray[matIdx + 8] = 0;
+            matrixArray[matIdx + 9] = 0;
+            matrixArray[matIdx + 10] = sZ;
+            matrixArray[matIdx + 11] = 0;
+
+            // Column 4 (Translation)
+            matrixArray[matIdx + 12] = x;
+            matrixArray[matIdx + 13] = y;
+            matrixArray[matIdx + 14] = z;
+            matrixArray[matIdx + 15] = 1;
         }
         this.instancedMesh.instanceMatrix.needsUpdate = true;
     }
@@ -114,60 +169,67 @@ export class WeatherSystem {
         if (!this.instancedMesh || !this.instancedMesh.visible) return;
 
         const windVec = this.wind.current;
+        // TODO: add support for ash and ember as well
         const windSwayMult = this.type === 'snow' ? 20.0 : 10.0;
 
-        for (let i = 0; i < this.count; i++) {
+        const wx = windVec.x * windSwayMult;
+        const wy = windVec.y * windSwayMult;
+
+        const count = this.count;
+        const pos = this.positions;
+        const vel = this.velocities;
+        const areaSize = this.areaSize;
+        const matrixArray = this.instancedMesh.instanceMatrix.array;
+
+        for (let i = 0; i < count; i++) {
             const i3 = i * 3;
 
             // Apply movement logic directly to buffer values
-            this.positions[i3 + 1] += this.velocities[i3 + 1] * dt; // Vertical
-            this.positions[i3 + 0] += (this.velocities[i3 + 0] + windVec.x * windSwayMult) * dt; // Horizontal X
-            this.positions[i3 + 2] += (this.velocities[i3 + 2] + windVec.y * windSwayMult) * dt; // Horizontal Z
+            let x = pos[i3 + 0] + (vel[i3 + 0] + wx) * dt;
+            let y = pos[i3 + 1] + vel[i3 + 1] * dt;
+            let z = pos[i3 + 2] + (vel[i3 + 2] + wy) * dt;
 
             // Seamless Reset (Teleport back to top)
-            if (this.positions[i3 + 1] < 0) {
-                this.positions[i3 + 1] = 40;
-                this.positions[i3 + 0] = (Math.random() - 0.5) * this.areaSize;
-                this.positions[i3 + 2] = (Math.random() - 0.5) * this.areaSize;
+            if (y < 0) {
+                y = 40;
+                x = (Math.random() - 0.5) * areaSize;
+                z = (Math.random() - 0.5) * areaSize;
             }
 
-            this.updateInstanceMatrix(i);
+            pos[i3 + 0] = x;
+            pos[i3 + 1] = y;
+            pos[i3 + 2] = z;
+
+            // [VINTERDÖD] Uppdatera endast x, y, z i 4x4-matrisen (Index 12, 13, 14)
+            // Detta skalar bort all beräkningsoverhead för rot/skala.
+            const matIdx = i * 16;
+            matrixArray[matIdx + 12] = x;
+            matrixArray[matIdx + 13] = y;
+            matrixArray[matIdx + 14] = z;
         }
+
         this.instancedMesh.instanceMatrix.needsUpdate = true;
-    }
-
-    /**
-     * Internal helper to set matrix values from buffer data
-     */
-    private updateInstanceMatrix(index: number) {
-        if (!this.instancedMesh) return;
-        const i3 = index * 3;
-
-        _dummy.position.set(this.positions[i3], this.positions[i3 + 1], this.positions[i3 + 2]);
-
-        if (this.type === 'rain') {
-            _dummy.scale.set(0.5, 4.0, 1.0);
-        } else {
-            _dummy.scale.set(1, 1, 1);
-        }
-
-        _dummy.updateMatrix();
-        this.instancedMesh.setMatrixAt(index, _dummy.matrix);
     }
 
     public clear() {
         if (this.instancedMesh) {
             this.scene.remove(this.instancedMesh);
-            if (this.instancedMesh.material instanceof THREE.Material) {
-                this.instancedMesh.material.dispose();
+            if (this.instancedMesh.material) {
+                (this.instancedMesh.material as THREE.Material).dispose();
             }
             this.instancedMesh.dispose();
             this.instancedMesh = null;
         }
-        // No need to clear Float32Arrays, just leave them allocated
     }
 
-    public setVisible(visible: boolean) {
-        if (this.instancedMesh) this.instancedMesh.visible = visible;
+    /**
+     * [VINTERDÖD] Moves the weather mesh to a new scene.
+     * Crucial for the Engine-owned model.
+     */
+    public reAttach(newScene: THREE.Scene) {
+        if (this.instancedMesh) {
+            newScene.add(this.instancedMesh);
+        }
+        this.scene = newScene;
     }
 }

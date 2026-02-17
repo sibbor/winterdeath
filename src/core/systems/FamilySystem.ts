@@ -35,15 +35,20 @@ export const FamilySystem = {
         if (!familyMember.mesh) return;
 
         const fm = familyMember.mesh;
+        // [VINTERDÖD] Cachea referensen för att undvika onödiga hash-map uppslagningar i JS-motorn
+        const userData = fm.userData;
 
         // --- 1. Ring Pulse Visual ---
-        if (familyMember.ring) {
-            familyMember.ring.visible = !familyMember.following;
+        const ring = familyMember.ring;
+        if (ring) {
+            const isFollowing = familyMember.following;
+            ring.visible = !isFollowing;
 
-            if (familyMember.ring.visible) {
+            if (!isFollowing) {
                 const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
-                familyMember.ring.scale.setScalar(pulse);
-                familyMember.ring.rotation.y = now * 0.0005;
+                // [VINTERDÖD] set(x,y,z) kringgår det extra anropet i setScalar
+                ring.scale.set(pulse, pulse, pulse);
+                ring.rotation.y = now * 0.0005;
             }
         }
 
@@ -55,7 +60,6 @@ export const FamilySystem = {
 
             if (followerIndex > 0) {
                 // OPTIMIZATION: Replaced heavy trigonometry with simple math.
-                // Since angle was always ±0.5 * PI, sin is ±1 and cos is 0.
                 const sign = followerIndex % 2 === 0 ? 1 : -1;
                 const dist = 2.0 + followerIndex * 1.2;
 
@@ -70,32 +74,43 @@ export const FamilySystem = {
 
                 _v3.subVectors(_v1, fm.position).normalize();
 
-                const speed = 14;
-                const moveDist = speed * 0.95 * delta;
+                // [VINTERDÖD] Pre-kalkylerad hastighet (14 * 0.95 = 13.3)
+                const moveDist = 13.3 * delta;
 
                 fm.position.addScaledVector(_v3, moveDist);
                 fm.lookAt(playerGroup.position);
 
-                fm.userData.lastMoveTime = now;
+                userData.lastMoveTime = now;
             }
         }
 
         // --- 3. Optimized Animation Handling ---
-        if (!fm.userData.cachedBody) {
-            const body = fm.children.find((c: any) => c.userData.isBody);
-            if (body) fm.userData.cachedBody = body;
+        let body = userData.cachedBody;
+        if (!body) {
+            // [VINTERDÖD] Utplånade .find(). Rå, platt loop istället för callbacks och array-allokering.
+            const children = fm.children;
+            const len = children.length;
+            for (let i = 0; i < len; i++) {
+                if (children[i].userData.isBody) {
+                    body = children[i];
+                    userData.cachedBody = body;
+                    break;
+                }
+            }
         }
 
-        const body = fm.userData.cachedBody;
-
         if (body) {
-            if (fm.userData.lastMoveTime === undefined) fm.userData.lastMoveTime = state.startTime;
+            let lastMove = userData.lastMoveTime;
+            if (lastMove === undefined) {
+                lastMove = state.startTime;
+                userData.lastMoveTime = lastMove;
+            }
 
-            const timeSinceMove = now - fm.userData.lastMoveTime;
+            const timeSinceMove = now - lastMove;
             const isIdleLong = timeSinceMove > 10000;
 
-            // OPTIMIZATION: Update the reusable scratchpad object instead of creating a new one
-            _animState.isMoving = fmIsMoving || familyMember.isMoving;
+            // [VINTERDÖD] Direkt uppdatering av scratchpad. Tvingar även till booleans med dubbla negationer (!!) vid behov.
+            _animState.isMoving = fmIsMoving || !!familyMember.isMoving;
             _animState.isSpeaking = (familyMember.isSpeaking !== undefined) ? familyMember.isSpeaking : (now < state.speakingUntil);
             _animState.isThinking = (familyMember.isThinking !== undefined) ? familyMember.isThinking : (now < state.thinkingUntil);
             _animState.isIdleLong = isIdleLong && !fmIsMoving;

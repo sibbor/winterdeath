@@ -13,6 +13,19 @@ export enum GameScreen {
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
 
+export interface VehicleDef {
+  type: 'BOAT' | 'CAR';
+  speed: number;
+  turnSpeed: number;
+  acceleration: number;
+  friction: number;
+  mass: number;
+  drag: number;
+  seats: number;
+  gearRatios?: number[];
+  forward?: { x: number; y: number; z: number };
+}
+
 export interface PlayerStats {
   level: number;
   currentXp: number;
@@ -108,6 +121,7 @@ export interface GameState {
   deadBossIndices: number[];
   graphics?: GraphicsSettings;
   weather: WeatherType;
+  environmentOverrides?: Record<number, EnvironmentOverride>;
 }
 
 export interface Vector2 {
@@ -194,15 +208,21 @@ export interface CinematicLine {
 }
 
 export interface EnvironmentOverride {
+  bgColor?: number;
   fogColor?: number;
   fogDensity?: number;
-  sunPosition?: { x: number, y: number, z: number };
-  sunColor?: number;
-  sunIntensity?: number;
-  moonColor?: number;
-  moonIntensity?: number;
+  ambientIntensity?: number;
+  groundColor?: number;
+  fov?: number;
+  skyLightVisible?: boolean;
+  skyLightColor?: number;
+  skyLightIntensity?: number;
+  skyLightPosition?: { x: number; y: number; z: number };
   windStrength?: number;
   windDirection?: number;
+  windRandomized?: boolean;
+  weather?: WeatherType;
+  weatherDensity?: number;
 }
 
 export interface SectorState {
@@ -249,6 +269,8 @@ export interface GameCanvasProps {
   weather?: WeatherType;
   onSpawnEnemies?: (enemies: any[]) => void;
   onUpdateLoadout?: (loadout: any, levels: any) => void;
+  onEnvironmentOverrideChange?: (overrides: EnvironmentOverride, weather: WeatherType) => void;
+  environmentOverrides?: Record<number, EnvironmentOverride>;
   onInteractionStateChange?: (isOpen: boolean) => void;
   isMobileDevice?: boolean;
 }
