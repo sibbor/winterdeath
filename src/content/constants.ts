@@ -30,7 +30,7 @@ export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMap
 export const DEFAULT_GRAPHICS: GraphicsSettings = {
     pixelRatio: 0.75,
     antialias: false,
-    shadows: false,
+    shadows: true,
     shadowMapType: 1,
     shadowResolution: 256,
     weatherCount: 250,

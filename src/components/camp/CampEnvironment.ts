@@ -29,8 +29,8 @@ export const CampEnvironment = {
         engine.wind.setOverride(1.0, 0.002);
 
         // Global Reset (Prevent leaks from Sectors)
-        scene.fog = new THREE.FogExp2(0x0a0a0f, 0.015);
-        scene.background = new THREE.Color(0x0a0a0f);
+        scene.fog = new THREE.FogExp2(0x161629, 0.01);
+        scene.background = new THREE.Color(0x161629);
 
         // Constrain weather to visible terrain area (60x60)
         engine.weather.sync(weatherType, WEATHER.PARTICLE_COUNT, 60);

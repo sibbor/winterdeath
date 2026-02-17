@@ -222,7 +222,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const bodyMesh = member.children.find(c => c.userData.isBody);
             if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
 
-            member.traverse(c => { if (c instanceof THREE.Mesh) { c.userData.id = member.userData.id; c.userData.name = member.userData.name; c.userData.type = 'family'; } });
+            member.traverse(c => {
+                if (c instanceof THREE.Mesh) {
+                    c.castShadow = true;
+                    c.userData.id = member.userData.id;
+                    c.userData.name = member.userData.name;
+                    c.userData.type = 'family';
+                }
+            });
             familyGroup.add(member);
 
             let baseY = bodyMesh ? bodyMesh.userData.baseY : 0;

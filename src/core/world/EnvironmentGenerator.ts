@@ -53,7 +53,7 @@ const isPointInPolygon = (p: THREE.Vector3, polygon: THREE.Vector3[]) => {
 
 // --- PROTOTYPE GENERATORS ---
 
-const generatePinePrototype = (seed: number, hasSnow: boolean = true): TreePrototype => {
+const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreePrototype => {
     const trunkGeos: THREE.BufferGeometry[] = [];
     const leafGeos: THREE.BufferGeometry[] = [];
     const snowGeos: THREE.BufferGeometry[] = [];
@@ -115,7 +115,7 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = true): TreeProto
     };
 };
 
-const generateSprucePrototype = (seed: number, hasSnow: boolean = true): TreePrototype => {
+const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePrototype => {
     const trunkGeos: THREE.BufferGeometry[] = [];
     const leafGeos: THREE.BufferGeometry[] = [];
     const snowGeos: THREE.BufferGeometry[] = [];

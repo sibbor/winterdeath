@@ -104,6 +104,7 @@ export const CharacterModels = {
 
         if (isAnimal) {
             const tail = new THREE.Mesh(GEOMETRY.petTail, mat);
+            tail.castShadow = true;
             body.add(tail);
         }
 
