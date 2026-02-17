@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { MATERIALS, WindUniforms } from '../../utils/assets/materials';
+import { MATERIALS } from '../../utils/assets/materials';
 
-/**
- * WindSystem manages global environment forces.
- * Optimized to update shader uniforms without expensive scene traversal.
- */
+interface WindBind {
+  uTime: { value: number };
+  uWind: { value: THREE.Vector2 };
+}
+
 export class WindSystem {
   public current = new THREE.Vector2(0, 0);
   public direction = new THREE.Vector3(0, 0, 0);
@@ -12,81 +13,71 @@ export class WindSystem {
 
   private target = new THREE.Vector2(0, 0);
   private nextChange: number = 0;
+  private minStrength: number = 0.02;
+  private maxStrength: number = 0.1;
+  private baseAngle: number = 0.0;
+  private angleVariance: number = Math.PI;
 
-  // [VINTERDÖD] Platt array för brutal iterationshastighet. Inget slött Set.
-  private activeMaterials: THREE.ShaderMaterial[] = [];
-
+  private boundUniforms: WindBind[] = [];
   private overrideActive: boolean = false;
 
   constructor() { }
 
   /**
-   * Sets a manual wind override.
-   * @param direction Angle in radians (0-2PI)
-   * @param strength Wind strength (0-5.0)
+   * [VINTERDÖD] Safe binding. Checks if material and shader exist before pushing.
    */
+  public bindMaterial(mat: THREE.Material | undefined) {
+    // [VINTERDÖD] Safety check for undefined materials
+    if (!mat) return;
+
+    const shader = mat.userData.shader;
+    if (shader && shader.uniforms.uTime && shader.uniforms.uWind) {
+      // Check if already bound to avoid duplicates in the array
+      for (let i = 0; i < this.boundUniforms.length; i++) {
+        if (this.boundUniforms[i].uTime === shader.uniforms.uTime) return;
+      }
+
+      this.boundUniforms.push({
+        uTime: shader.uniforms.uTime,
+        uWind: shader.uniforms.uWind
+      });
+    }
+  }
+
   setOverride(direction: number, strength: number) {
     this.overrideActive = true;
     this.target.set(Math.cos(direction), Math.sin(direction)).multiplyScalar(strength);
     this.strength = strength;
-    // Snap to target for immediate feedback
     this.current.copy(this.target);
     this.direction.set(this.current.x, 0, this.current.y).normalize();
   }
 
-  clearOverride() {
+  setRandomBounds(minStrength: number, maxStrength: number, baseAngle: number = 0.0, angleVariance: number = Math.PI) {
+    this.minStrength = minStrength;
+    this.maxStrength = maxStrength;
+    this.baseAngle = baseAngle;
+    this.angleVariance = angleVariance;
     this.overrideActive = false;
   }
 
-  setRandomized(active: boolean) {
-    this.overrideActive = !active;
-  }
-
-  isRandomized(): boolean {
-    return !this.overrideActive;
-  }
-
-  /**
-   * Registers an object's materials for wind animation.
-   * Scans the object once and stores shader references.
-   */
-  register(obj: THREE.Object3D) {
-    obj.traverse((child: any) => {
-      // [VINTERDÖD] Snabba flaggor (.isMesh, .isShaderMaterial) istället för instanceof-prototypklättring
-      if (child.isMesh && child.material && child.material.isShaderMaterial) {
-        if (this.activeMaterials.indexOf(child.material) === -1) {
-          this.activeMaterials.push(child.material);
-        }
-      }
-    });
-  }
-
-  /**
-   * Unregisters an object to free up memory.
-   */
-  unregister(obj: THREE.Object3D) {
-    obj.traverse((child: any) => {
-      if (child.isMesh && child.material && child.material.isShaderMaterial) {
-        const idx = this.activeMaterials.indexOf(child.material);
-        if (idx !== -1) {
-          // [VINTERDÖD] Swap-and-Pop. O(1) borttagning utan minnesallokering eller array-skiftning (.splice).
-          const lastIdx = this.activeMaterials.length - 1;
-          this.activeMaterials[idx] = this.activeMaterials[lastIdx];
-          this.activeMaterials.pop();
-        }
-      }
-    });
-  }
-
-  /**
-   * Updates wind state and pushes data to GPU uniforms.
-   */
   update(now: number, deltaTime: number = 0.016): THREE.Vector2 {
+    // [VINTERDÖD] Attempt to bind core materials if they aren't tracked yet.
+    // We only do this check if the list is incomplete to save CPU cycles.
+    if (this.boundUniforms.length < 6) {
+      this.bindMaterial(MATERIALS.grass);
+      this.bindMaterial(MATERIALS.treeFirNeedles);
+      this.bindMaterial(MATERIALS.treeLeavesOak);
+      this.bindMaterial(MATERIALS.treeLeavesBirch);
+      this.bindMaterial(MATERIALS.flower);
+      this.bindMaterial(MATERIALS.wheat);
+    }
+
     if (!this.overrideActive && now > this.nextChange) {
       if (Math.random() > 0.4) {
-        const angle = Math.random() * Math.PI * 2;
-        // Increased Strength: 0.1 to 0.8 (was 0.003 to 0.015)
-        const strength = 0.1 + Math.random() * 0.7;
+        const angleOffset = (Math.random() * 2.0 - 1.0) * this.angleVariance;
+        const angle = this.baseAngle + angleOffset;
+        const range = this.maxStrength - this.minStrength;
+        const strength = this.minStrength + Math.random() * range;
         this.target.set(Math.cos(angle) * strength, Math.sin(angle) * strength);
       } else {
         this.target.set(0, 0);
@@ -94,45 +85,22 @@ export class WindSystem {
       this.nextChange = now + 3000 + Math.random() * 5000;
     }
 
-    // Smooth interpolation
     this.current.lerp(this.target, 0.01);
     this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 
-    // 1. Update Global Wind Uniforms
-    WindUniforms.time = now * 0.001;
-    WindUniforms.wind.copy(this.current);
+    // [VINTERDÖD] Zero-overhead uniform push.
+    const timeSec = now * 0.001;
+    const windX = this.current.x;
+    const windY = this.current.y;
 
-    // 2. Update Shared Materials (Vegetation)
-    WindUniforms.update(MATERIALS.grass);
-    WindUniforms.update(MATERIALS.treeFirNeedles);
-    WindUniforms.update(MATERIALS.treeLeavesOak);
-    WindUniforms.update(MATERIALS.treeLeavesBirch);
-    WindUniforms.update(MATERIALS.flower);
-    WindUniforms.update(MATERIALS.wheat);
-    WindUniforms.update(MATERIALS.snow);
-
-    // 3. Batch update manually registered materials (Legacy/Custom)
-    const timeSec = now / 1000.0;
-    const windStrScaled = this.strength * 10;
-
-    // Cache riktningsvärden för att undvika onödig uppslagning i loopen
-    const dirX = this.direction.x;
-    const dirZ = this.direction.z;
-
-    // [VINTERDÖD] Platt iteration. Inga callbacks, inga .forEach-kontexter.
-    const mats = this.activeMaterials;
-    const len = mats.length;
+    const binds = this.boundUniforms;
+    const len = binds.length;
     for (let i = 0; i < len; i++) {
-      const uniforms = mats[i].uniforms;
-
-      if (uniforms.time) uniforms.time.value = timeSec;
-      if (uniforms.windStrength) uniforms.windStrength.value = windStrScaled;
-      if (uniforms.windDirection) {
-        // [VINTERDÖD] Direkt mutation av värden (ingen funktions-overhead från .set())
-        uniforms.windDirection.value.x = dirX;
-        uniforms.windDirection.value.y = dirZ;
-      }
+      const b = binds[i];
+      b.uTime.value = timeSec;
+      b.uWind.value.x = windX;
+      b.uWind.value.y = windY;
     }
 
     return this.current;

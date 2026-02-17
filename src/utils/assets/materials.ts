@@ -5,53 +5,133 @@ import { createProceduralDiffuse } from './procedural';
 
 const DIFFUSE = createProceduralDiffuse();
 
-// --- WIND SYSTEM INTEGRATION ---
-export const WindUniforms = {
-    time: 0,
-    wind: new THREE.Vector2(0, 0),
-    update: (mat: THREE.Material) => {
-        if (mat.userData.shader) {
-            mat.userData.shader.uniforms.uTime.value = WindUniforms.time;
-            mat.userData.shader.uniforms.uWind.value.copy(WindUniforms.wind);
-        }
-    }
-};
-
-const createWindMaterial = (baseMaterial: THREE.MeshStandardMaterial) => {
-    const mat = baseMaterial.clone();
-    mat.onBeforeCompile = (shader) => {
+/**
+ * [VINTERDÖD] Patches a material to support global wind.
+ * No cloning here - patch the original or handle cloning outside.
+ */
+export const patchWindMaterial = (material: THREE.MeshStandardMaterial) => {
+    material.onBeforeCompile = (shader) => {
         shader.uniforms.uTime = { value: 0 };
         shader.uniforms.uWind = { value: new THREE.Vector2(0, 0) };
 
-        mat.userData.shader = shader;
+        material.userData.shader = shader;
 
         shader.vertexShader = `
             uniform float uTime;
             uniform vec2 uWind;
             ${shader.vertexShader}
-        `;
-
-        shader.vertexShader = shader.vertexShader.replace(
+        `.replace(
             '#include <begin_vertex>',
             `
             #include <begin_vertex>
             
-            // Simple wind bending logic
+            // 1. World Space för brus/shiver
+            vec4 worldPos = modelMatrix * vec4(position, 1.0);
+            
+            // 2. Beräkna höjd-faktor. 
+            // OBS: Vi använder 'position.y' (lokal) för att veta hur mycket det ska böjas.
+            // Om löven är högt upp i modellen kommer de böjas mer.
+            float h = max(0.0, position.y);
+            float strength = h * h * 0.05; // Sänkt styrkan något för stabilitet
+
+            // 3. Shiver (högfrekvent darr)
+            // Vi använder worldPos så att alla träd inte darrar i otakt
+            float noise = sin(uTime * 2.0 + worldPos.x * 0.5 + worldPos.z * 0.5) * 0.03;
+            
+            // 4. Vind-vektor (Världskoordinater)
+            vec2 windVec = uWind + noise;
+            
+            // 5. Rotations-kompensation (Vinterdöd-Special)
+            // Transformera vind-vektorn till lokal rymd så att böjningen stämmer med rotationen
+            mat3 invRot = transpose(mat3(modelMatrix));
+            vec3 localWind = invRot * vec3(windVec.x, 0.0, windVec.y);
+
+            // 6. Applicera
+            transformed.x += localWind.x * strength;
+            transformed.z += localWind.z * strength;
+            
+            // Sänk Y något för att simulera att grenen böjs neråt, inte bara sträcks ut
+            transformed.y -= length(localWind.xz) * strength * 0.2;
+            `
+        );
+    };
+    return material;
+};
+/*
+// TYP BRA! Hanterar ej rotationer i World Space
+export const patchWindMaterial = (material: THREE.MeshStandardMaterial) => {
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = { value: 0 };
+        shader.uniforms.uWind = { value: new THREE.Vector2(0, 0) };
+
+        material.userData.shader = shader;
+
+        shader.vertexShader = `
+            uniform float uTime;
+            uniform vec2 uWind;
+            ${shader.vertexShader}
+        `.replace(
+            '#include <begin_vertex>',
+            `
+            #include <begin_vertex>
+            
+            // 1. Bestäm höjdkoefficient (0 vid marken, högre upptill)
+            // Vi använder kvadratisk ökning för en naturlig böjning av stammen/strået
+            float h = max(0.0, transformed.y);
+            float strength = h * h * 0.08; 
+
+            // 2. Skapa ett högfrekvent "darr" (jitter/shiver)
+            // Detta simulerar löv och grenar som skakar i vinden
+            float shiver = sin(uTime * 2.0 + transformed.x * 2.0 + transformed.z * 2.0) * 0.02;
+            
+            // 3. Beräkna den totala förskjutningen
+            // Vi tar vindens riktning (uWind) och lägger på darret
+            // Vi multiplicerar med strength så att roten står still
+            vec2 windEffect = (uWind + shiver * normalize(uWind + 0.001)) * strength;
+
+            // 4. Applicera på vertex positionerna
+            transformed.x += windEffect.x;
+            transformed.z += windEffect.y;
+            
+            // Valfritt: Sänk toppen lite när det blåser hårt (bevarar längden på trädet)
+            transformed.y -= length(windEffect) * 0.1;
+            `
+        );
+    };
+    return material;
+};
+
+// GAMLA VERSIONEN
+export const patchWindMaterial = (material: THREE.MeshStandardMaterial) => {
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = { value: 0 };
+        shader.uniforms.uWind = { value: new THREE.Vector2(0, 0) };
+
+        // [VINTERDÖD] Critical: Store reference so WindSystem can find it
+        material.userData.shader = shader;
+
+        shader.vertexShader = `
+            uniform float uTime;
+            uniform vec2 uWind;
+            ${shader.vertexShader}
+        `.replace(
+            '#include <begin_vertex>',
+            `
+            #include <begin_vertex>
             float height = max(0.0, transformed.y);
             float bend = height * height * 0.1; 
-            
-            // Noise-like variation based on position, scaled by wind strength
             float windStrength = length(uWind);
             float noise = sin(uTime * 2.0 + transformed.x * 0.5 + transformed.z * 0.5) * (0.05 + windStrength * 0.5);
-            
-            // Apply wind force + noise
             transformed.x += (uWind.x + noise) * bend;
             transformed.z += (uWind.y + noise) * bend;
             `
         );
     };
-    return mat;
+
+    return material;
 };
+*/
+
 
 export const MATERIALS = {
     bullet: new THREE.MeshBasicMaterial({ color: 0xffffaa }),
@@ -169,15 +249,34 @@ export const MATERIALS = {
     }),
     glass: new THREE.MeshStandardMaterial({ color: 0x88ccff, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.6 }),
     glassBroken: new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.4, metalness: 0.5 }),
-    snow: createWindMaterial(new THREE.MeshStandardMaterial({
+    snow: patchWindMaterial(new THREE.MeshStandardMaterial({
         color: 0xffffff, // Brighter white snow
         roughness: 1.0, // Fully diffuse
         metalness: 0.0,
         bumpMap: TEXTURES.snow_bump,
         bumpScale: 0.4,
-        emissive: 0xffffff, // Subtle glow to maintain whiteness in shadows
+        emissive: 0xffffff,
         emissiveIntensity: 0.15
     })),
+    rain: new THREE.MeshBasicMaterial({
+        color: 0xaaaaff,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    }),
+    ash: new THREE.MeshBasicMaterial({
+        color: 0x222222,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    }),
+    ember: new THREE.MeshBasicMaterial({
+        color: 0xff4400,
+        transparent: false,
+        side: THREE.DoubleSide
+    }),
     asphalt: new THREE.MeshStandardMaterial({
         color: 0x222222,
         map: DIFFUSE.asphalt,
@@ -246,7 +345,6 @@ export const MATERIALS = {
     aimCross: new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
     aimReticle: new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),
     landingMarker: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
-    ash: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1.0 }),
     flashWhite: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }),
     glassShard: new THREE.MeshBasicMaterial({ color: 0xccffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
     shockwave: new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }),
@@ -273,19 +371,48 @@ export const MATERIALS = {
         bumpMap: TEXTURES.stone_bump,
         bumpScale: 0.2
     }),
-    grass: createWindMaterial(new THREE.MeshStandardMaterial({
+    grass: patchWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a6e4a,
         roughness: 1.0,
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    flower: createWindMaterial(new THREE.MeshStandardMaterial({
+    flower: patchWindMaterial(new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.8,
         vertexColors: true,
         side: THREE.DoubleSide
     })),
-    wheat: createWindMaterial(new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 1.0, flatShading: true, side: THREE.DoubleSide })),
+    wheat: patchWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0xd4af37,
+        roughness: 1.0,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    treeFirNeedles: patchWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x2d4c1e, // Deep green base
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    treeLeavesOak: patchWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x4a6b30, // Green for Oak
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    treeLeavesBirch: patchWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x8DA331, // Yellowish-Green for Birch
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    treeLeaves: patchWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x8DA331, // Yellowish-Green for Birch
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
     treeTrunk: new THREE.MeshStandardMaterial({
         color: 0x4a3c31, // Flat dark brown
         roughness: 1.0,
@@ -296,36 +423,11 @@ export const MATERIALS = {
         roughness: 0.9,
         flatShading: true
     }),
-
-    treeFirNeedles: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x2d4c1e, // Deep green base
-        roughness: 0.9,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })),
     treeStumpTop: new THREE.MeshStandardMaterial({
         color: 0xbc8f8f,
         map: DIFFUSE.treeRings,
         roughness: 0.8
     }),
-    treeLeavesOak: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x4a6b30, // Green for Oak
-        roughness: 0.9,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })),
-    treeLeavesBirch: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x8DA331, // Yellowish-Green for Birch
-        roughness: 0.9,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })),
-    treeLeaves: createWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x8DA331, // Yellowish-Green for Birch
-        roughness: 0.9,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })),
     treeTrunkOak: new THREE.MeshStandardMaterial({
         color: 0x5a504a,
         roughness: 1.0,

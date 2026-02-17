@@ -3,6 +3,8 @@ import { Engine } from '../../core/engine/Engine';
 import { WEATHER } from '../../content/constants';
 import { WeatherType } from '../../types';
 
+const fogColor = 0x161629;
+
 interface Textures {
     stone: THREE.Texture;
     wood: THREE.Texture;
@@ -24,13 +26,13 @@ export const CampEnvironment = {
         const engine = Engine.getInstance();
 
         // [VINTERDÖD] Sync persistent systems to the new Camp scene
+        engine.wind.setRandomBounds(0.02, 0.4, Math.PI); //Math.PI * 0.25, 0.0);
         engine.weather.reAttach(scene);
         engine.water.reAttach(scene);
-        engine.wind.setOverride(1.0, 0.002);
 
         // Global Reset (Prevent leaks from Sectors)
-        scene.fog = new THREE.FogExp2(0x161629, 0.01);
-        scene.background = new THREE.Color(0x161629);
+        scene.fog = new THREE.FogExp2(fogColor, 0.01);
+        scene.background = new THREE.Color(fogColor);
 
         // Constrain weather to visible terrain area (60x60)
         engine.weather.sync(weatherType, WEATHER.PARTICLE_COUNT, 60);
