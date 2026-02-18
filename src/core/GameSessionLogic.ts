@@ -9,6 +9,7 @@ import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { Obstacle } from './world/CollisionResolution';
+import { soundManager } from '../utils/sound';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -229,30 +230,37 @@ export class GameSessionLogic {
      * between game sessions.
      */
     dispose() {
-        // 1. Cleanup systems (removes meshes from scene, etc.)
+        // 1. Cleanup systems (removes meshes from scene, calls their cleanup)
         const systems = this.systems;
         for (let i = 0; i < systems.length; i++) {
             if (systems[i].cleanup) systems[i].cleanup(this);
         }
         this.systems = [];
 
+        // 1.5 Döda alla aktiva ljud i Web Audio API
+        soundManager.stopAll();
+
         // 2. Clear noise pools
         this.noiseEvents.length = 0;
         this.noisePool.length = 0;
 
-        // 3. Clear all state arrays to release Three.js object references to the Garbage Collector
+        // 3. Smart, Zero-GC rensning av hela state-objektet
         if (this.state) {
-            this.state.enemies.length = 0;
-            this.state.particles.length = 0;
-            this.state.activeEffects.length = 0;
-            this.state.projectiles.length = 0;
-            this.state.fireZones.length = 0;
-            this.state.scrapItems.length = 0;
-            this.state.chests.length = 0;
-            this.state.bloodDecals.length = 0;
-            this.state.obstacles.length = 0;
-            this.state.triggers.length = 0;
-            this.state.mapItems.length = 0;
+            // Dynamic loop to empty lists, but keep references (Zero-GC)
+            for (const key in this.state) {
+                if (Object.prototype.hasOwnProperty.call(this.state, key)) {
+                    const property = (this.state as any)[key];
+                    if (Array.isArray(property)) {
+                        property.length = 0;
+                    }
+                }
+            }
+
+            // Reset specific vehicle props to prevent HMR bugs:
+            this.state.activeVehicle = null;
+            this.state.activeVehicleType = null;
+            this.state.vehicleSpeed = 0;
+            this.state.vehicleEngineState = 'OFF';
 
             // Clear the spatial grid to release all stored entity references
             if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
