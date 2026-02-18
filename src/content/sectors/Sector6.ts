@@ -29,7 +29,7 @@ export const Sector6: SectorDef = {
     id: 5,
     name: "sectors.sector_6_name",
     environment: {
-        bgColor: 0xffff00,
+        bgColor: 0x000000,
         fogDensity: 0.01,
         ambientIntensity: 0.4,
         groundColor: 0x111111,
@@ -39,6 +39,7 @@ export const Sector6: SectorDef = {
         cameraHeight: CAMERA_HEIGHT,
         weather: 'rain',
         weatherDensity: 0.5,
+        wind: { strengthMin: 0.5, strengthMax: 1.0 },
     },
     atmosphereZones: SECTOR6_ZONES,
     groundType: 'GRAVEL',
@@ -46,7 +47,7 @@ export const Sector6: SectorDef = {
 
     playerSpawn: { x: 0, z: -0 },
     familySpawn: { x: 0, z: 0 },
-    bossSpawn: { x: 0, z: -100 },
+    bossSpawn: null,
 
     collectibles: [],
 
@@ -55,24 +56,22 @@ export const Sector6: SectorDef = {
 
         // --- PLAZA (Center 0,0) ---
         // Circular concrete plaza
-        const plazaGeo = new THREE.CylinderGeometry(20, 20, 0.5, 32);
+        const plazaGeo = new THREE.CylinderGeometry(20, 20, 0.6, 32);
         const plazaMat = MATERIALS.concrete;
         const plaza = new THREE.Mesh(plazaGeo, plazaMat);
         plaza.position.set(0, -0.25, 0);
         plaza.receiveShadow = true;
         scene.add(plaza);
 
-        /*
-        const ambient = new THREE.AmbientLight(0x404040, 0.4);
+        const ambient = new THREE.AmbientLight(0xffffee, 0.4);
         ambient.name = 'AMBIENT_LIGHT';
         scene.add(ambient);
 
         // Add some lights to the plaza
-        const pl = new THREE.PointLight(0xffaa00, 5, 30);
+        const pl = new THREE.PointLight(0xffaa00, 50, 30);
         pl.position.set(0, 8, 0);
         pl.castShadow = true;
         scene.add(pl);
-        */
 
         // --- INTERACTION STATIONS ---
         // 1. Armory (West)
@@ -103,6 +102,13 @@ export const Sector6: SectorDef = {
             sprite.scale.set(20, 5, 1);
             scene.add(sprite);
         };
+
+        // Vehicls at the spawn point
+        SectorGenerator.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 2, 'police');
+        SectorGenerator.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 2, 'ambulance');
+        SectorGenerator.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 2, 'sedan');
+        SectorGenerator.spawnDriveableVehicle(ctx, 0, - 10, Math.PI / 2, 'timber_truck');
+        SectorGenerator.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 2, 'bus');
 
         // --- BIOME GENERATION ---
         // Iterate through ZONES to generate content

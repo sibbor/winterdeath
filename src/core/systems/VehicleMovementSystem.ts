@@ -32,18 +32,29 @@ export class VehicleMovementSystem implements System {
         const state = session.state;
         const input = session.engine.input.state;
 
-        if (state.activeVehicle) {
-            this.handleVehicleControl(
-                state.activeVehicle,
-                this.playerGroup,
-                input,
-                state,
-                delta,
-                session,
-                now
-            );
-        } else {
-            // Ensure engine is off
+        // [VINTERDÖD] Update ALL vehicles in the sector (not just the active one)
+        // This allows boats to be pushed even when the player is outside.
+        const interactables = state.sectorState?.ctx?.interactables;
+        if (interactables) {
+            for (let i = 0; i < interactables.length; i++) {
+                const obj = interactables[i];
+                if (obj.userData?.vehicleDef) {
+                    const isActive = (state.activeVehicle === obj);
+                    this.handleVehiclePhysics(
+                        obj,
+                        this.playerGroup,
+                        isActive ? input : null, // Only pass input if active
+                        state,
+                        delta,
+                        session,
+                        now
+                    );
+                }
+            }
+        }
+
+        // Ensure engine sounds/state are reset if no vehicle is active
+        if (!state.activeVehicle) {
             if (state.vehicleEngineState !== 'OFF') {
                 state.vehicleEngineState = 'OFF';
                 state.vehicleSpeed = 0;
@@ -52,10 +63,10 @@ export class VehicleMovementSystem implements System {
         }
     }
 
-    private handleVehicleControl(
+    private handleVehiclePhysics(
         vehicle: THREE.Object3D,
         playerGroup: THREE.Group,
-        input: any,
+        input: any | null, // null if NOT active
         state: any,
         delta: number,
         session: GameSessionLogic,
@@ -75,7 +86,8 @@ export class VehicleMovementSystem implements System {
         const angVel = vehicle.userData.angularVelocity as THREE.Vector3;
 
         // --- AUDIO ENGINE ---
-        if (state.vehicleEngineState === 'OFF') {
+        if (input && state.vehicleEngineState === 'OFF') {
+            console.log("VehicleMovementSystem: engine on");
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
             soundManager.startVehicleEngine(def.category === 'BOAT' ? 'BOAT' : 'CAR');
@@ -93,39 +105,59 @@ export class VehicleMovementSystem implements System {
         let throttle = 0;
         let steer = 0;
         let handbrake = false;
+        if (input) {
+            // Keyboard Throttle
+            if (input.w) throttle += 1;
+            if (input.s) throttle -= 1;
 
-        if (input.w) throttle += 1;
-        if (input.s) throttle -= 1;
+            // Keyboard Steer (Inverted as per user preference / A/D switched)
+            if (input.a) steer -= 1;
+            if (input.d) steer += 1;
 
-        // Inverted as per user preference (A/D switched)
-        if (input.a) steer -= 1;
-        if (input.d) steer += 1;
+            if (input.space) handbrake = true;
 
-        if (input.space) handbrake = true;
+            // Mobile Joystick support
+            // [VINTERDÖD FIX] Split joysticks: Left = Throttle, Right = Steer
+            if (input.joystickMove) {
+                throttle += input.joystickMove.y * -1;
+            }
+            if (input.joystickAim) {
+                steer += input.joystickAim.x;
+            }
 
-        if (input.joystickMove) {
-            throttle += input.joystickMove.y * -1;
-            steer += input.joystickMove.x;
+            // [VINTERDÖD] specialized logic for BOATS: engine only works in water
+            if (def.category === 'BOAT') {
+                const buoyancy = session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z);
+                if (!buoyancy.inWater || vehicle.position.y < buoyancy.waterLevel - 0.5) {
+                    // If not in water (or very stuck inside the ground), cut power
+                    // We keep a small margin to allow starting at the shore
+                    if (Math.abs(throttle) > 0.1) {
+                        // console.log("Boat: No engine power on land!");
+                        throttle = 0;
+                    }
+                }
+            }
         }
 
-        // --- SPEED DECOMPOSITION ---
-        const forwardSpeed = vel.dot(_forward);
-        const lateralSpeed = vel.dot(_right);
-        const speedSq = vel.lengthSq();
-        const speed = Math.sqrt(speedSq);
-        const isReversing = forwardSpeed < -0.5;
+        // Clamp to avoid "double-power" when using both keyboard and joystick
+        throttle = Math.max(-1, Math.min(1, throttle));
+        steer = Math.max(-1, Math.min(1, steer));
 
         // --- ACCELERATION / REVERSE ---
         if (throttle !== 0) {
             const maxSpd = throttle > 0 ? def.maxSpeed : def.maxSpeed * def.reverseSpeedFraction;
-            const atLimit = throttle > 0 ? (forwardSpeed >= maxSpd) : (forwardSpeed <= -maxSpd);
+            const fwdSpeed = vel.dot(_forward);
+            const atLimit = throttle > 0 ? (fwdSpeed >= maxSpd) : (fwdSpeed <= -maxSpd);
 
             if (!atLimit) {
+                console.log("VehicleMovementSystem: accelerating (" + maxSpd + " km/h)");
+
                 // Drivetrain traction scaling
                 let tractionMul = 1.0;
                 if (def.drivetrain === 'FWD') {
                     // FWD: loses traction at high lateral speed (understeer)
-                    tractionMul = 1.0 - Math.min(0.5, Math.abs(lateralSpeed) * 0.05);
+                    const latSpd = vel.dot(_right);
+                    tractionMul = 1.0 - Math.min(0.5, Math.abs(latSpd) * 0.05);
                 } else if (def.drivetrain === 'RWD') {
                     // RWD: full power but oversteer tendency (handled in lateral friction)
                     tractionMul = 1.0;
@@ -144,6 +176,13 @@ export class VehicleMovementSystem implements System {
             // Handbrake reduces lateral grip for donuts/drifts
             angVel.multiplyScalar(0.97);
         }
+
+        // --- SPEED DECOMPOSITION (Calculated AFTER acceleration to avoid stale negation) ---
+        const forwardSpeed = vel.dot(_forward);
+        const lateralSpeed = vel.dot(_right);
+        const speedSq = vel.lengthSq();
+        const speed = Math.sqrt(speedSq);
+        const isReversing = forwardSpeed < -0.5;
 
         // --- STEERING ---
         if (Math.abs(steer) > 0.1 && speedSq > 0.5) {
@@ -203,16 +242,18 @@ export class VehicleMovementSystem implements System {
         // --- APPLY ROTATION ---
         vehicle.rotation.y += angVel.y * delta;
 
-        // --- AUDIO UPDATE ---
-        const normSpeed = Math.min(1.0, speed / def.maxSpeed);
-        state.vehicleSpeed = speed;
-        soundManager.updateVehicleEngine(normSpeed);
+        // --- AUDIO & HUD UPDATE ---
+        if (input) {
+            const normSpeed = Math.min(1.0, speed / def.maxSpeed);
+            state.vehicleSpeed = speed;
+            soundManager.updateVehicleEngine(normSpeed);
 
-        // Skidding sound if turning sharply at speed
-        if (speedSq > 25 && Math.abs(angVel.y) > 0.8) {
-            soundManager.playVehicleSkid(0.5);
-        } else {
-            soundManager.playVehicleSkid(0);
+            // Skidding sound if turning sharply at speed
+            if (speedSq > 25 && Math.abs(angVel.y) > 0.8) {
+                soundManager.playVehicleSkid(0.5);
+            } else {
+                soundManager.playVehicleSkid(0);
+            }
         }
 
         // --- COLLISION: ENEMIES ---
@@ -222,37 +263,41 @@ export class VehicleMovementSystem implements System {
         this.handleObstacleCollisions(vehicle, vel, def, session);
 
         // --- SYNC PLAYER TO VEHICLE ---
-        playerGroup.position.copy(vehicle.position);
-        playerGroup.quaternion.copy(vehicle.quaternion);
+        if (input) {
+            playerGroup.position.copy(vehicle.position);
+            playerGroup.quaternion.copy(vehicle.quaternion);
 
-        // Seat offset includes suspension bounce
-        playerGroup.position.x += def.seatOffset.x;
-        playerGroup.position.y += def.seatOffset.y + suspY;
-        playerGroup.position.z += def.seatOffset.z;
+            // Seat offset includes suspension bounce
+            playerGroup.position.x += def.seatOffset.x;
+            playerGroup.position.y += def.seatOffset.y + suspY;
+            playerGroup.position.z += def.seatOffset.z;
 
-        // Reset character orientation relative to vehicle
-        for (let i = 0; i < playerGroup.children.length; i++) {
-            const child = playerGroup.children[i];
-            if (child.rotation) {
-                child.rotation.y = 0;
+            // Reset character orientation relative to vehicle
+            for (let i = 0; i < playerGroup.children.length; i++) {
+                const child = playerGroup.children[i];
+                if (child.rotation) {
+                    child.rotation.y = 0;
+                }
             }
-        }
 
-        // --- DISMOUNT ---
-        if (input.e && !state.eDepressed) {
-            state.eDepressed = true;
-            state.activeVehicle = null;
-            state.activeVehicleType = null;
-            state.vehicleSpeed = 0;
-            state.vehicleEngineState = 'OFF';
-            soundManager.stopVehicleEngine();
-            soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+            // --- DISMOUNT ---
+            if (input.e && !state.eDepressed) {
+                console.log("VehicleMovementSystem: dismount");
 
-            // Dismount offset (from vehicle definition)
-            _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
-                .applyQuaternion(vehicle.quaternion);
-            playerGroup.position.add(_dismountDir);
-            playerGroup.position.y = 0;
+                state.eDepressed = true;
+                state.activeVehicle = null;
+                state.activeVehicleType = null;
+                state.vehicleSpeed = 0;
+                state.vehicleEngineState = 'OFF';
+                soundManager.stopVehicleEngine();
+                soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+
+                // Dismount offset (from vehicle definition)
+                _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
+                    .applyQuaternion(vehicle.quaternion);
+                playerGroup.position.add(_dismountDir);
+                playerGroup.position.y = 0;
+            }
         }
     }
 

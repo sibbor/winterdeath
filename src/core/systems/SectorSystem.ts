@@ -177,18 +177,21 @@ export class SectorSystem implements System {
         };
 
         // 3. Process Interaction Requests
-        if (state.interactionRequest && state.interactionRequest.type === 'sector_specific') {
+        if (state.interactionRequest && state.interactionRequest.active && state.interactionRequest.type === 'sector_specific') {
             const req = state.interactionRequest;
-            state.interactionRequest = null; // Consume request
+            this.currentSector.onInteract(
+                req.id,
+                req.object,
+                state,
+                events
+            );
 
-            if (this.currentSector.onInteract) {
-                this.currentSector.onInteract(
-                    req.id,
-                    req.object,
-                    state,
-                    events
-                );
-            }
+            // Reset flags to avoid double-processing in other systems
+            // We do this AFTER the handler call now to ensure data is preserved during the event
+            state.interactionRequest.active = false;
+            state.interactionRequest.id = '';
+            state.interactionRequest.object = null;
+            state.interactionRequest.type = null;
         }
 
         // 4. Centralized Atmosphere Update (Data-driven)

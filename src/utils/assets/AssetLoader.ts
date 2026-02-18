@@ -58,4 +58,7 @@ export const TEXTURES = {
     bark_birch_bump: loader.loadTexture('/assets/textures/bark_birch_bump.png'),
     concrete_bump: loader.loadTexture('/assets/textures/concrete_bump.png'),
     brick_bump: loader.loadTexture('/assets/textures/brick_bump.png'),
+    water_foam: loader.loadTexture('/assets/textures/water_foam.png'),
+    water_ripple: loader.loadTexture('/assets/textures/water_ripple.png'),
+    water_wave: loader.loadTexture('/assets/textures/water_wave.png'),
 };

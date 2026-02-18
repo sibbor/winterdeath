@@ -142,8 +142,8 @@ const CampHUD: React.FC<CampHUDProps> = ({
             {/* Top Right Logo */}
             <div className={`absolute top-0 right-0 p-8 flex flex-col items-end pointer-events-none z-30 transition-opacity duration-300 opacity-100 ${isMobileDevice ? 'scale-75 origin-top-right' : ''}`}>
                 <div className="mb-4 text-right">
-                    <h1 className="text-6xl font-black text-white italic tracking-tighter drop-shadow-lg leading-none">VINTER</h1>
-                    <h1 className="text-6xl font-black text-red-600 italic tracking-tighter drop-shadow-lg leading-none">DÖD</h1>
+                    <h1 className="text-6xl font-black text-white italic tracking-tighter drop-shadow-lg leading-none">{t('ui.game_title_1')}</h1>
+                    <h1 className="text-6xl font-black text-red-600 italic tracking-tighter drop-shadow-lg leading-none">{t('ui.game_title_2')}</h1>
                 </div>
             </div>
 

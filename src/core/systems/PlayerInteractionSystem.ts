@@ -7,8 +7,10 @@ import { getCollectibleById } from '../../content/collectibles';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
 
-// [VINTERDÖD] Shared object for detection returns.
+// Shared object for detection returns.
 // Eliminates constant { type, pos } garbage allocations.
 const _detectionResult = {
     type: null as 'chest' | 'collectible' | 'sector_specific' | 'vehicle' | null,
@@ -17,7 +19,7 @@ const _detectionResult = {
     object: null as THREE.Object3D | null
 };
 
-// [VINTERDÖD] Type for ActiveAnimation. 
+// Type for ActiveAnimation. 
 // OPTIMIZATION: Removed material array caching entirely since we use Scale instead of Opacity.
 interface ActiveAnimation {
     obj: THREE.Group;
@@ -55,14 +57,14 @@ export class PlayerInteractionSystem implements System {
                 state.chests,
                 state.triggers,
                 state.sectorState,
-                state // Vi skickar in hela state för att komma åt collisionGrid
+                state // Pass entire state to access collisionGrid if needed
             );
 
             state.interactionType = _detectionResult.type;
 
             let label = (_detectionResult.object?.userData?.interactionLabel as string) || null;
 
-            // [VINTERDÖD] Dynamic label for vehicles
+            // Dynamic label for vehicles
             if (state.activeVehicle && _detectionResult.object === state.activeVehicle) {
                 label = 'ui.exit_vehicle';
             } else if (_detectionResult.type === 'vehicle') {
@@ -81,23 +83,30 @@ export class PlayerInteractionSystem implements System {
         }
 
         // 2. Handle Interaction Press (Edge Triggered)
-        if (input.e && !state.eDepressed) {
-            state.eDepressed = true;
+        if (input.e) {
+            if (!state.eDepressed) {
+                state.eDepressed = true; // Lock the button state immediately
 
-            // Re-validate if we have a target
-            if (state.interactionType) {
-                this.handleInteraction(
-                    state.interactionType,
-                    this.playerGroup.position,
-                    state.chests,
-                    state.triggers,
-                    state,
-                    session
-                );
+                if (state.interactionType) {
+                    // Optimization: If we are in a vehicle and the detected target is THIS vehicle,
+                    // we do NOT consume the input here. We let VehicleMovementSystem handle the dismount.
+                    const isExit = (state.interactionType === 'vehicle' && state.activeVehicle && _detectionResult.object === state.activeVehicle);
+
+                    if (!isExit) {
+                        this.handleInteraction(
+                            state.interactionType,
+                            this.playerGroup.position,
+                            state.chests,
+                            state.triggers,
+                            state,
+                            session
+                        );
+                    }
+                }
             }
+        } else {
+            state.eDepressed = false;
         }
-
-        if (!input.e) state.eDepressed = false;
 
         // 3. Update Active Animations (Synced with Game Loop)
         const animLen = this.activeAnimations.length;
@@ -117,10 +126,10 @@ export class PlayerInteractionSystem implements System {
             anim.obj.scale.set(s, s, s);
 
             if (anim.progress >= 1) {
-                // --- ZERO-RECOMPILE FIX HÄR! ---
-                // Vi använder traverse för att gömma nätet och stänga av ljuset 
-                // istället för att ta bort det från the Scene. Då behöver inte
-                // GPU:n kompilera om banans shaders!
+                // --- ZERO-RECOMPILE FIX HERE! ---
+                // We use traverse to hide the mesh and turn off lights instead 
+                // of removing it from the scene. This prevents the GPU from 
+                // recompiling the environment shaders!
                 anim.obj.traverse((child) => {
                     if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight || child instanceof THREE.DirectionalLight) {
                         child.intensity = 0;
@@ -136,7 +145,7 @@ export class PlayerInteractionSystem implements System {
                     this.collectibles.pop();
                 }
 
-                // [VINTERDÖD FIX] Öppna UI:t exakt när animationen är klar och objektet är borta!
+                // Open the UI exactly when the animation finishes and the object is hidden!
                 if (this.onCollectibleFound && anim.collectibleId) {
                     this.onCollectibleFound(anim.collectibleId);
                 }
@@ -151,14 +160,14 @@ export class PlayerInteractionSystem implements System {
     /**
      * Scans the environment for the closest interactable object.
      * Priority: Collectibles > Triggers > Chests > Vehicles > Mission Objects
-     * [VINTERDÖD] Modifies the global _detectionResult instead of returning a new object.
+     * Modifies the global _detectionResult instead of returning a new object.
      */
     private detectInteraction(
         playerPos: THREE.Vector3,
         chests: any[],
         triggers: any[],
         sectorState: any,
-        state: any // Lades till!
+        state: any
     ): void {
 
         // --- 1. Check Collectibles (3.5m radius) ---
@@ -184,81 +193,87 @@ export class PlayerInteractionSystem implements System {
             }
         }
 
-        // --- 3. [VINTERDÖD] Check Driveable Vehicles (Generic Bounds + 2m) ---
-        if (state.collisionGrid && !state.activeVehicle) {
-            // Sökradien i gridet måste vara stor nog att nå fordonets "centrum" även om
-            // vi står längst fram på en 12 meter lång buss. 15.0 räcker mer än väl.
-            const nearby = state.collisionGrid.getNearbyObstacles(playerPos, 15.0);
-
-            for (let i = 0; i < nearby.length; i++) {
-                const obs = nearby[i];
-                if (obs.mesh && obs.mesh.userData && obs.mesh.userData.vehicleDef) {
-                    const def = obs.mesh.userData.vehicleDef;
-
-                    // --- ZERO-GC OBB CHECK ---
-                    // Kopiera in spelarens position och transformera den till fordonets lokala rymd.
-                    // Detta eliminerar behovet av att räkna på fordonets rotation!
-                    _v1.copy(playerPos);
-                    obs.mesh.worldToLocal(_v1);
-
-                    // Hur många meter utanför fordonet man kan interagera
-                    const interactMargin = 2.0;
-
-                    // def.size är half-extents (halva storleken från centrum).
-                    // Nu kollar vi enkelt om spelarens lokala pos är inom lådan + 2m på alla sidor.
-                    if (
-                        Math.abs(_v1.x) <= def.size.x + interactMargin &&
-                        Math.abs(_v1.z) <= def.size.z + interactMargin &&
-                        Math.abs(_v1.y) <= def.size.y + interactMargin
-                    ) {
-                        _detectionResult.position.copy(obs.position);
-                        _detectionResult.position.y += 1.0;
-                        _detectionResult.type = 'vehicle';
-                        _detectionResult.object = obs.mesh;
-                        return;
-                    }
-                }
-            }
+        // --- 3. EXPLICIT CHECK: Active Vehicle (Exit Prompt) ---
+        // This ensures the exit prompt always works regardless of spatial grid indexing.
+        if (state.activeVehicle) {
+            _detectionResult.position.copy(state.activeVehicle.position);
+            _detectionResult.position.y += 1.0;
+            _detectionResult.type = 'vehicle';
+            _detectionResult.object = state.activeVehicle;
+            return;
         }
 
-        // --- 4. Check Generic Sector Interactables (Triggers/Stations) ---
-        const tLen = triggers.length;
-        for (let i = 0; i < tLen; i++) {
-            const t = triggers[i];
-            if (t.userData?.isInteractable) {
-                let inRange = false;
-                if (t.size) { // Box
-                    const dist = Math.max(t.size.width, t.size.depth) * 0.7; // Approx
-                    if (playerPos.distanceToSquared(t.position) < dist * dist) inRange = true;
-                } else {
-                    const r = t.radius || 2.0;
-                    if (playerPos.distanceToSquared(t.position) < r * r) inRange = true;
-                }
-
-                if (inRange) {
-                    _detectionResult.position.copy(t.position);
-                    _detectionResult.type = 'sector_specific';
-                    _detectionResult.id = t.userData.interactionId;
-                    _detectionResult.object = t;
-                    return;
-                }
-            }
-        }
-
-        // Scan Physics/Obstacle Objects (Boats, Stations, etc)
+        // --- 4. Check Generic Sector Interactables (Triggers/Stations/Moved Vehicles) ---
+        // Removed grid-based vehicle lookup since vehicles move and the grid is static.
+        // Scanning interactables list directly is robust and performant enough for < 100 objects.
         if (sectorState.ctx && sectorState.ctx.interactables) {
             const len = sectorState.ctx.interactables.length;
             for (let i = 0; i < len; i++) {
                 const obj = sectorState.ctx.interactables[i];
-                if (obj.userData?.isInteractable) {
+                if (!obj || !obj.userData?.isInteractable) continue;
+
+                // Use world position for detection to support nested interactables
+                obj.getWorldPosition(_v1);
+
+                // Vehicle specific check (OBB)
+                const def = obj.userData.vehicleDef;
+                if (def && obj.userData.interactionType === 'VEHICLE') {
+                    _v3.copy(playerPos);
+                    obj.worldToLocal(_v3);
+                    const margin = 2.0;
+
+                    if (
+                        Math.abs(_v3.x) <= def.size.x + margin &&
+                        Math.abs(_v3.z) <= def.size.z + margin
+                    ) {
+                        _detectionResult.position.copy(_v1);
+                        _detectionResult.position.y += 1.0;
+                        _detectionResult.type = 'vehicle';
+                        _detectionResult.object = obj;
+                        return;
+                    }
+                } else {
+                    // Regular Point/Radius/Box Interaction (Stations, NPCs, etc)
                     const r = obj.userData.interactionRadius || 4.0;
-                    if (playerPos.distanceToSquared(obj.position) < r * r) {
-                        _detectionResult.position.copy(obj.position);
-                        _detectionResult.type = 'sector_specific';
+                    if (playerPos.distanceToSquared(_v1) < r * r) {
+                        _detectionResult.position.copy(_v1);
+                        _detectionResult.type = (obj.userData.interactionType as any) || 'sector_specific';
                         _detectionResult.id = obj.userData.interactionId;
                         _detectionResult.object = obj;
                         return;
                     }
+                }
+            }
+        }
+
+        // --- 5. Check Mission Triggers ---
+        const tLen = triggers.length;
+        for (let i = 0; i < tLen; i++) {
+            const t = triggers[i];
+
+            // Raw logic check (Triggers are raw JS objects, NOT meshes, so no userData check)
+            if (t.type === 'INTERACT' || t.type === 'TERMINAL') {
+                let inRange = false;
+
+                // Zero-GC manual squared distance
+                const dx = playerPos.x - t.position.x;
+                const dz = playerPos.z - t.position.z;
+                const distSq = dx * dx + dz * dz;
+
+                if (t.size) { // Box
+                    const maxDim = Math.max(t.size.width, t.size.depth) * 0.7; // Approx
+                    if (distSq < maxDim * maxDim) inRange = true;
+                } else {
+                    const r = t.radius || 2.0;
+                    if (distSq < r * r) inRange = true;
+                }
+
+                if (inRange) {
+                    _detectionResult.position.set(t.position.x, playerPos.y, t.position.z);
+                    _detectionResult.type = 'sector_specific';
+                    _detectionResult.id = t.id;
+                    _detectionResult.object = null; // Raw triggers don't have a 3D object
+                    return;
                 }
             }
         }
@@ -278,10 +293,10 @@ export class PlayerInteractionSystem implements System {
     ) {
         if (!type) return;
 
-        // [VINTERDÖD] Hoppa in i fordonet!
+        // Jump into the vehicle!
         if (type === 'vehicle' && _detectionResult.object) {
             state.activeVehicle = _detectionResult.object;
-            // Rensa resultatet så vi inte loopar
+            // Clear the result so we don't loop
             _detectionResult.type = null;
             _detectionResult.object = null;
             return;
@@ -298,15 +313,15 @@ export class PlayerInteractionSystem implements System {
                     c.opened = true;
                     soundManager.playOpenChest();
 
-                    // Om denna funktion instansierar Nya material/meshes kan den också lagga. 
-                    // Se till att WorldLootSystem använder Object Pooling (återanvänder instanser)!
+                    // If this function instantiates new materials/meshes it might lag. 
+                    // Ensure WorldLootSystem uses Object Pooling (reusing instances)!
                     WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
                     const light = c.mesh.getObjectByName('chestLight') as THREE.PointLight | THREE.SpotLight;
                     if (light) {
                         // --- OPTIMIZATION: ZERO SHADER RECOMPILATION ---
-                        // Sätt intensity till 0 istället för visible = false.
-                        // Detta hindrar Three.js från att rekompilera ALLA shaders i scenen!
+                        // Set intensity to 0 instead of visible = false.
+                        // This prevents Three.js from recompiling ALL shaders in the scene!
                         light.intensity = 0;
                     }
 
@@ -351,15 +366,15 @@ export class PlayerInteractionSystem implements System {
         collectible.userData.pickedUp = true;
 
         // --- AUDIO SYNC FIX ---
-        // Spela det glada ljudet exakt när spelaren klickar och animationen börjar
+        // Play the pickup sound exactly when the player clicks and the animation starts
         if ((soundManager as any).collectibleFound) {
             (soundManager as any).collectibleFound();
         } else {
             soundManager.playUiPickup(); // Fallback
         }
 
-        // [VINTERDÖD FIX] Tog bort setTimeout. UI:t triggas nu i uppdaterings-loopen
-        // när animationen (0.8s) nått sitt slut.
+        // Removed setTimeout. The UI is now triggered in the update loop 
+        // when the animation (0.8s) reaches its end.
 
         // --- OPTIMIZATION FIX ---
         // Removed massive material cloning loop. Object is just passed to the animation system.
@@ -369,7 +384,7 @@ export class PlayerInteractionSystem implements System {
             startY: collectible.position.y,
             progress: 0,
             duration: 0.8,
-            collectibleId: collectibleId // Skickar med ID:t hit istället!
+            collectibleId: collectibleId // Sent with the animation block
         });
     }
 }

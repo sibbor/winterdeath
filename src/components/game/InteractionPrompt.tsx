@@ -2,8 +2,8 @@ import React from 'react';
 import { t } from '../../utils/i18n';
 
 interface InteractionPromptProps {
-    type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | 'sector_specific' | null;
-    label?: string;
+    type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | 'sector_specific' | 'vehicle' | null;
+    label?: string | null;
     screenPos?: { x: number, y: number } | null;
     isMobileDevice?: boolean;
     onInteract?: () => void;
@@ -16,24 +16,25 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, scre
     let textKey = '';
     let colorClass = '';
 
+    // Välj färg och textnyckel beroende på interaktion
     if (type === 'collectible') {
         textKey = 'ui.interact_pickup_collectible';
-        colorClass = 'border-green-300 text-white';
+        colorClass = 'border-green-400 text-green-100';
     } else if (type === 'chest') {
         textKey = 'ui.interact_open_chest';
-        colorClass = 'border-yellow-500 text-yellow-500';
+        colorClass = 'border-yellow-500 text-yellow-100';
     } else if (type === 'plant_explosive') {
         textKey = 'ui.interact_plant_explosive';
-        colorClass = 'border-red-500 text-red-500';
+        colorClass = 'border-red-500 text-red-100';
     } else if (type === 'knock_on_port') {
         textKey = 'ui.interact_knock_on_port';
-        colorClass = 'border-white-500 text-white-500';
-    } else if (type === 'sector_specific') {
-        textKey = label || 'ui.interact';
-        colorClass = 'border-blue-400 text-blue-200';
+        colorClass = 'border-gray-400 text-white';
+    } else if (type === 'vehicle') {
+        textKey = label || 'ui.enter_vehicle';
+        colorClass = 'border-blue-400 text-blue-100';
     } else {
         textKey = label || 'ui.interact';
-        colorClass = 'border-white-500 text-white-500';
+        colorClass = 'border-gray-400 text-white';
     }
 
     const style: React.CSSProperties = screenPos ? {
@@ -48,6 +49,12 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, scre
         position: 'absolute'
     };
 
+    // Failsafe: Om i18n inte hittar ordet, visa "textKey" istället för en tom textbox
+    let translatedText = t(textKey);
+    if (!translatedText || translatedText.trim() === '') {
+        translatedText = textKey;
+    }
+
     return (
         <div
             style={style}
@@ -57,10 +64,9 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, scre
                 if (onInteract) onInteract();
             }}
         >
-            <div className={`bg-black/90 border-2 ${colorClass} px-4 py-1 font-bold uppercase tracking-wide text-sm group-hover:scale-105 group-active:scale-95 transition-transform`}>
-                [{key}] {t(textKey)}
+            <div className={`bg-black/90 border-2 ${colorClass} px-4 py-1 font-bold uppercase tracking-wide text-sm group-hover:scale-105 group-active:scale-95 transition-transform shadow-lg shadow-black/50`}>
+                [{key}] {translatedText}
             </div>
-
         </div>
     );
 };

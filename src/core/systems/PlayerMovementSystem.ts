@@ -263,6 +263,14 @@ export class PlayerMovementSystem implements System {
                                 }
                             }
                         }
+                        if (obs.mesh?.userData?.vehicleDef) {
+                            // [VINTERDÖD] Apply push to vehicle if on land
+                            // We use a simple nudge velocity in the direction of the collision
+                            _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(isDashing ? 8.0 : 3.0);
+                            if (obs.mesh.userData.velocity) {
+                                (obs.mesh.userData.velocity as THREE.Vector3).add(_v1);
+                            }
+                        }
                         adjusted = true;
                     }
                 }

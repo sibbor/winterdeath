@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
+import { TEXTURES } from '../../utils/assets/AssetLoader';
+import { createWaterMaterial, createRippleMaterial } from '../../utils/assets/materials';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
@@ -87,7 +89,7 @@ export const AssetPreloader = {
         });
         addToWarmup(ModelFactory.createBoss('Boss', { color: 0xff0000, scale: 3 } as any));
 
-        // [VINTERDÖD OPTIMERING] Yielda efter stora komplexa modeller
+        // Yielda efter stora komplexa modeller
         if (yieldToMain) await yieldToMain();
 
         // Batch 3: Environmental Props (Static Meshes)
@@ -110,7 +112,7 @@ export const AssetPreloader = {
         prefillFX(GEOMETRY.particle, MATERIALS.smoke, 100);
         prefillFX(GEOMETRY.flame, MATERIALS.fire, 30);
 
-        // Batch 5: [VINTERDÖD] Instanced Systems Warmup (Weather & Wind)
+        // Batch 5: Instanced Systems Warmup (Weather & Wind)
         // Shaders for InstancedMesh differ from StandardMesh. We MUST warm up both.
         const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
             const mesh = new THREE.InstancedMesh(geo, mat, 1);
@@ -140,6 +142,18 @@ export const AssetPreloader = {
 
         if (yieldToMain) await yieldToMain();
 
+        // Batch 6: Water System Warmup
+        // Ensures the heavy GLSL shaders for water are compiled before they appear
+        const dummyWaterConfig = { color: 0x0077be, opacity: 0.85, roughness: 0.1, metalness: 0.0, fresnelStrength: 0.5, uvScale: 5.0 };
+        const waterMat = createWaterMaterial(dummyWaterConfig, 10, 10, TEXTURES.water_foam, TEXTURES.water_wave);
+        const waterMesh = new THREE.Mesh(GEOMETRY.box, waterMat);
+        addToWarmup(waterMesh);
+
+        const rippleMat = createRippleMaterial(TEXTURES.water_ripple);
+        addInstancedWarmup(GEOMETRY.box, rippleMat);
+
+        if (yieldToMain) await yieldToMain();
+
         // 4. INCREMENTAL COMPILATION
         try {
             // Kompilerar grundscenen först (dimma, bakgrund, ljus)
@@ -151,7 +165,6 @@ export const AssetPreloader = {
             const batchSize = 4; // Lämplig storlek, lagom mycket shader compile per frame
 
             for (let i = 0; i < childLen; i += batchSize) {
-                // [VINTERDÖD OPTIMERING]
                 // Istället för att loopa ALLA children och sätta false, sätter vi bara
                 // PÅ vår lilla batch om 4...
                 for (let j = 0; j < batchSize && (i + j) < childLen; j++) {

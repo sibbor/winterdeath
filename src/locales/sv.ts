@@ -205,7 +205,7 @@ export const sv = {
         apply: "VERKSTÄLL",
         reset: "ÅTERSTÄLL",
         playground_armory: "LEKPLATS VAPENFÖRRÅD",
-        station_armory: "VAPENFÖRRÅD",
+        station_armory: "VAPEN",
         station_spawner: "FIENDER",
         station_environment: "VÄDER",
         background_color: "BAKGRUNDSFÄRG",

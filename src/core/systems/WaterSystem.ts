@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 import { soundManager } from '../../utils/sound';
-import { createWaterMaterial } from '../../utils/assets/materials';
+import { TEXTURES } from '../../utils/assets/AssetLoader';
+import { createWaterMaterial, createRippleMaterial } from '../../utils/assets/materials';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-// Kept outside the class to avoid memory allocation during runtime.
-const _tempColor = new THREE.Color();
 const _buoyancyResult = { inWater: false, waterLevel: 0 };
-const _activeRipples: WaterRipple[] = [];
 const _dummyMatrix = new THREE.Matrix4();
 const _dummyPosition = new THREE.Vector3();
 const _dummyScale = new THREE.Vector3();
@@ -17,50 +15,6 @@ const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _pushDir = new THREE.Vector3();
 const _playerFlat = new THREE.Vector3();
-
-// ===================================================================
-// WATER RIPPLE (Pooled Physical Data)
-// ===================================================================
-class WaterRipple {
-    position: THREE.Vector2 = new THREE.Vector2();
-    radius: number = 0;
-    maxRadius: number = 5;
-    speed: number = 3;
-    amplitude: number = 0.2;
-    active: boolean = false;
-
-    spawn(x: number, z: number, maxRadius: number = 5, amplitude: number = 0.2): void {
-        this.position.set(x, z);
-        this.radius = 0;
-        this.maxRadius = maxRadius;
-        this.amplitude = amplitude;
-        this.active = true;
-    }
-
-    update(dt: number): void {
-        if (!this.active) return;
-        this.radius += 3 * dt;
-        if (this.radius >= this.maxRadius) this.active = false;
-    }
-
-    getDisplacement(x: number, z: number): number {
-        const dx = x - this.position.x;
-        const dz = z - this.position.y;
-        const distSq = dx * dx + dz * dz;
-
-        const outerLimit = (this.radius + 1.0);
-        const innerLimit = Math.max(0, this.radius - 1.0);
-
-        if (distSq > outerLimit * outerLimit || distSq < innerLimit * innerLimit) return 0;
-
-        const dist = Math.sqrt(distSq);
-        const edgeDist = Math.abs(dist - this.radius);
-        const falloff = 1.0 - edgeDist;
-        const fade = 1.0 - (this.radius / this.maxRadius);
-
-        return this.amplitude * falloff * fade * Math.sin(this.radius * 2);
-    }
-}
 
 // ===================================================================
 // WATER STYLES
@@ -90,11 +44,11 @@ export type WaterBodyType = 'lake' | 'pond' | 'pool' | 'stream' | 'waterfall';
 export interface WaterBodyDef {
     style: WaterStyle;
     shape: 'rect' | 'circle';
-    waveAmplitude: number;        // Vertex wave strength (0 = still)
-    flowDirection: THREE.Vector2; // Normalized direction for streams (0,0 = no flow)
-    flowStrength: number;         // Units/sec current push
-    buoyancyForce: number;        // Upward force multiplier
-    ambientRippleChance: number;  // Per-frame random ripple probability
+    waveAmplitude: number;
+    flowDirection: THREE.Vector2;
+    flowStrength: number;
+    buoyancyForce: number;
+    ambientRippleChance: number;
 }
 
 const WATER_BODY_PRESETS: Record<WaterBodyType, WaterBodyDef> = {
@@ -162,7 +116,7 @@ export class WaterSurface {
         }
 
         this.mesh = new THREE.Mesh(geometry, null as any);
-        this.mesh.position.set(x, 0.05, z);
+        this.mesh.position.set(x, 0.25, z);
 
         const posAttribute = geometry.attributes.position;
         const uvs = new Float32Array(posAttribute.count * 2);
@@ -172,52 +126,18 @@ export class WaterSurface {
         }
         geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-        // Use the factory function from our materials definition
-        this.material = createWaterMaterial(config, width, depth, foamTexture, waveTexture);
+        this.material = createWaterMaterial(config, width, depth, foamTexture, waveTexture, shape);
 
         this.mesh.material = this.material;
         this.mesh.receiveShadow = true;
-        this.mesh.renderOrder = 1; // Render after ground (depthWrite: false needs explicit ordering)
-        this.mesh.frustumCulled = false; // Vertex positions are modified every frame — bounding sphere is always stale
+        this.mesh.renderOrder = 1;
+        this.mesh.frustumCulled = false;
         this.mesh.userData.material = 'WATER';
     }
 
     update(dt: number): void {
         this.time += dt;
         this.material.uniforms.uTime.value = this.time;
-    }
-
-    applyRippleDisplacement(ripples: WaterRipple[]): void {
-        let activeCount = 0;
-        const rippleLen = ripples.length;
-        for (let i = 0; i < rippleLen; i++) {
-            if (ripples[i].active) {
-                _activeRipples[activeCount++] = ripples[i];
-            }
-        }
-
-        if (activeCount === 0) return;
-
-        const geometry = this.mesh.geometry as THREE.BufferGeometry;
-        const position = geometry.attributes.position;
-        const posArray = position.array as Float32Array;
-        const count = position.count;
-
-        for (let i = 0; i < count; i++) {
-            const i3 = i * 3;
-            const worldX = posArray[i3] + this.mesh.position.x;
-            const worldZ = posArray[i3 + 2] + this.mesh.position.z;
-
-            let y = Math.sin(worldX * 0.5 + this.time * 1.5) * 0.1 + Math.sin(worldZ * 0.4 + this.time * 1.2) * 0.1;
-
-            for (let j = 0; j < activeCount; j++) {
-                y += _activeRipples[j].getDisplacement(worldX, worldZ);
-            }
-
-            posArray[i3 + 1] = y;
-        }
-
-        position.needsUpdate = true;
     }
 
     contains(x: number, z: number): boolean {
@@ -234,7 +154,7 @@ export class WaterSurface {
 }
 
 // ===================================================================
-// WATER BODY (Groups surface + registered props + splash sources)
+// WATER BODY
 // ===================================================================
 export class WaterBody {
     type: WaterBodyType;
@@ -286,8 +206,6 @@ export class WaterBody {
 export class WaterSystem {
     surfaces: WaterSurface[] = [];
     waterBodies: WaterBody[] = [];
-    ripplePool: WaterRipple[] = [];
-    poolIndex: number = 0;
 
     visualRipples: THREE.InstancedMesh | null = null;
 
@@ -312,22 +230,18 @@ export class WaterSystem {
 
     private graphicRippleAlphaAttr!: THREE.InstancedBufferAttribute;
 
-    constructor(scene: THREE.Scene, poolSize: number = 30) {
+    constructor(scene: THREE.Scene) {
         this.scene = scene;
 
-        const textureLoader = new THREE.TextureLoader();
-
-        this.waveTexture = textureLoader.load('/assets/textures/water_wave.png');
+        this.waveTexture = TEXTURES.water_wave;
         this.waveTexture.wrapS = THREE.RepeatWrapping;
         this.waveTexture.wrapT = THREE.RepeatWrapping;
 
-        this.foamTexture = textureLoader.load('/assets/textures/water_foam.png');
+        this.foamTexture = TEXTURES.water_foam;
         this.foamTexture.wrapS = THREE.RepeatWrapping;
         this.foamTexture.wrapT = THREE.RepeatWrapping;
 
-        this.rippleTexture = textureLoader.load('/assets/textures/water_ripple.png');
-
-        for (let i = 0; i < poolSize; i++) this.ripplePool.push(new WaterRipple());
+        this.rippleTexture = TEXTURES.water_ripple;
 
         this.setupVisualRipples();
     }
@@ -336,32 +250,7 @@ export class WaterSystem {
         const geometry = new THREE.PlaneGeometry(1, 1);
         geometry.rotateX(-Math.PI / 2);
 
-        const material = new THREE.ShaderMaterial({
-            uniforms: { uTex: { value: this.rippleTexture } },
-            vertexShader: `
-                attribute float instanceAlpha;
-                varying float vAlpha;
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    vAlpha = instanceAlpha;
-                    vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                uniform sampler2D uTex;
-                varying float vAlpha;
-                varying vec2 vUv;
-                void main() {
-                    vec4 tex = texture2D(uTex, vUv);
-                    gl_FragColor = vec4(tex.rgb, tex.a * vAlpha);
-                }
-            `,
-            transparent: true,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending
-        });
+        const material = createRippleMaterial(this.rippleTexture);
 
         this.visualRipples = new THREE.InstancedMesh(geometry, material, this.maxGraphicRipples);
         this.visualRipples.count = 0;
@@ -433,10 +322,6 @@ export class WaterSystem {
     }
 
     spawnRipple(x: number, z: number, maxRadius: number = 3, amplitude: number = 0.15): void {
-        const ripple = this.ripplePool[this.poolIndex];
-        ripple.spawn(x, z, maxRadius, amplitude);
-        this.poolIndex = (this.poolIndex + 1) % this.ripplePool.length;
-
         if (this.graphicRippleCount < this.maxGraphicRipples && this.visualRipples) {
             const idx = this.graphicRippleCount;
             this.graphicRippleAges[idx] = 0;
@@ -463,14 +348,9 @@ export class WaterSystem {
     }
 
     update(dt: number, now: number = 0): void {
-        const poolLen = this.ripplePool.length;
-        for (let i = 0; i < poolLen; i++) this.ripplePool[i].update(dt);
-
         const surfLen = this.surfaces.length;
         for (let i = 0; i < surfLen; i++) {
-            const s = this.surfaces[i];
-            s.update(dt);
-            s.applyRippleDisplacement(this.ripplePool);
+            this.surfaces[i].update(dt);
         }
 
         this.updateGraphicRipples(dt);
@@ -663,19 +543,31 @@ export class WaterSystem {
     }
 
     checkBuoyancy(x: number, y: number, z: number): { inWater: boolean, waterLevel: number } {
-        const len = this.surfaces.length;
-        for (let i = 0; i < len; i++) {
-            const s = this.surfaces[i];
-            if (s.contains(x, z)) {
-                _buoyancyResult.inWater = y < s.mesh.position.y + 0.5;
-                _buoyancyResult.waterLevel = s.mesh.position.y;
-                return _buoyancyResult;
+        const bodyLen = this.waterBodies.length;
+        for (let i = 0; i < bodyLen; i++) {
+            const body = this.waterBodies[i];
+            const bounds = body.surface.bounds;
+
+            let inBounds = false;
+            if (body.def.shape === 'circle') {
+                const radius = Math.max(bounds.width, bounds.depth) * 0.5;
+                const dx = x - bounds.x;
+                const dz = z - bounds.z;
+                inBounds = (dx * dx + dz * dz) <= radius * radius;
+            } else {
+                const halfW = bounds.width * 0.5;
+                const halfD = bounds.depth * 0.5;
+                inBounds = x >= bounds.x - halfW && x <= bounds.x + halfW &&
+                    z >= bounds.z - halfD && z <= bounds.z + halfD;
+            }
+
+            if (inBounds) {
+                const lakeTime = body.surface.time;
+                const waveY = Math.sin(x * 0.5 + lakeTime * 1.5) * 0.1 + Math.sin(z * 0.4 + lakeTime * 1.2) * 0.1;
+                return { inWater: true, waterLevel: 0.25 + waveY };
             }
         }
-
-        _buoyancyResult.inWater = false;
-        _buoyancyResult.waterLevel = 0;
-        return _buoyancyResult;
+        return { inWater: false, waterLevel: 0 };
     }
 
     dispose(): void {
@@ -695,10 +587,6 @@ export class WaterSystem {
             this.visualRipples.geometry.dispose();
             (this.visualRipples.material as THREE.Material).dispose();
         }
-
-        if (this.waveTexture) this.waveTexture.dispose();
-        if (this.foamTexture) this.foamTexture.dispose();
-        if (this.rippleTexture) this.rippleTexture.dispose();
 
         this.playerGroup = null;
         this.spawnPartCb = null;

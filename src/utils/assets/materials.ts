@@ -14,18 +14,20 @@ export function createWaterMaterial(
     width: number,
     depth: number,
     foamTexture: THREE.Texture,
-    waveTexture: THREE.Texture
+    waveTexture: THREE.Texture,
+    shape: 'rect' | 'circle' = 'rect'
 ): THREE.ShaderMaterial {
     return new THREE.ShaderMaterial({
         uniforms: {
-            uTime: { value: 0.0 }, // Uppdateras via referens i loopen
+            uTime: { value: 0.0 },
             uColor: { value: new THREE.Color(config.color) },
             uOpacity: { value: config.opacity },
             uFresnelStrength: { value: config.fresnelStrength || 0.5 },
             uFoamTexture: { value: foamTexture },
             uWaveTexture: { value: waveTexture },
             uUvScale: { value: config.uvScale || 5.0 },
-            uPlaneSize: { value: new THREE.Vector2(width, depth) }
+            uPlaneSize: { value: new THREE.Vector2(width, depth) },
+            uIsCircle: { value: shape === 'circle' ? 1.0 : 0.0 }
         },
         vertexShader: `
             varying vec3 vNormal;
@@ -40,7 +42,7 @@ export function createWaterMaterial(
                 vLocalPos = position; 
                 vec3 pos = position;
                 
-                // Low-cost wave vertex displacement
+                // GPU-Side wave vertex displacement (keeps CPU buffers stable)
                 float wave = sin(pos.x * 0.5 + uTime * 1.5) * 0.1 + sin(pos.z * 0.4 + uTime * 1.2) * 0.1;
                 pos.y += wave;
 
@@ -62,6 +64,7 @@ export function createWaterMaterial(
             uniform sampler2D uWaveTexture;
             uniform float uUvScale;
             uniform vec2 uPlaneSize;
+            uniform float uIsCircle;
             
             varying vec3 vNormal;
             varying vec3 vViewPosition;
@@ -83,17 +86,23 @@ export function createWaterMaterial(
                 float noiseVal = texture2D(uFoamTexture, foamUv).r;
                 float foam = smoothstep(0.45, 0.55, noiseVal);
 
-                vec2 edgeDist = abs(vLocalPos.xz) / (uPlaneSize * 0.5);
-                float maxEdge = max(edgeDist.x, edgeDist.y);
-                float shoreFoam = smoothstep(0.8, 0.98, maxEdge); 
+                // Shore Foam Math: Radial (Circle) vs Rectangular (Box)
+                float shoreFoam = 0.0;
+                if (uIsCircle > 0.5) {
+                    float radius = length(vLocalPos.xz);
+                    float maxRadius = uPlaneSize.x * 0.5;
+                    shoreFoam = smoothstep(maxRadius * 0.8, maxRadius * 0.98, radius);
+                } else {
+                    vec2 edgeDist = abs(vLocalPos.xz) / (uPlaneSize * 0.5);
+                    float maxEdge = max(edgeDist.x, edgeDist.y);
+                    shoreFoam = smoothstep(0.8, 0.98, maxEdge); 
+                }
                 
                 float finalFoam = max(foam, shoreFoam);
 
                 vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
                 vec3 halfVector = normalize(lightDir + viewDir);
                 float NdotH = max(0.0, dot(normal, halfVector));
-                
-                // Hardcoded exponent (64.0) saves uniform parsing time on GPU
                 float specular = pow(NdotH, 64.0) * uFresnelStrength;
 
                 vec3 finalColor = mix(waterColor, vec3(1.0), finalFoam * 0.8);
@@ -103,6 +112,39 @@ export function createWaterMaterial(
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false
+    });
+};
+
+/**
+ * Creates an instanced shader material for water ripples.
+ * Uses an instanceAlpha attribute to fade individual ripples independently.
+ */
+export function createRippleMaterial(rippleTexture: THREE.Texture): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        uniforms: { uTex: { value: rippleTexture } },
+        vertexShader: `
+            attribute float instanceAlpha;
+            varying float vAlpha;
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                vAlpha = instanceAlpha;
+                vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D uTex;
+            varying float vAlpha;
+            varying vec2 vUv;
+            void main() {
+                vec4 tex = texture2D(uTex, vUv);
+                gl_FragColor = vec4(tex.rgb, tex.a * vAlpha);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
     });
 };
 

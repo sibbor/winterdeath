@@ -320,9 +320,7 @@ export const SectorGenerator = {
 
         // Persistence Check: Don't spawn if already found
         const foundList = (ctx as any).collectiblesFound || [];
-        if (foundList.includes(id)) {
-            return;
-        }
+        if (foundList.includes(id)) return;
 
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
@@ -603,8 +601,15 @@ export const SectorGenerator = {
             vehicle = ObjectGenerator.createVehicle(visualType, 1.0, colorOverride, addSnow);
         }
 
-        vehicle.position.set(x, 0.5, z);
+        const spawnY = vehicleType === 'boat' ? 1.0 : 0.5;
+        vehicle.position.set(x, spawnY, z);
         vehicle.rotation.y = rotation;
+
+        // Attach interaction metadata (Fixes empty prompt)
+        vehicle.userData.isInteractable = true;
+        vehicle.userData.interactionId = `vehicle_${vehicleType}_${Math.random().toString(36).substr(2, 5)}`;
+        vehicle.userData.interactionLabel = 'ui.enter_vehicle';
+        vehicle.userData.interactionType = 'VEHICLE';
 
         // Attach physics data from database
         vehicle.userData.vehicleDef = def;
@@ -612,10 +617,16 @@ export const SectorGenerator = {
         vehicle.userData.angularVelocity = new THREE.Vector3();
         vehicle.userData.suspY = 0;
         vehicle.userData.suspVelY = 0;
-        vehicle.userData.interactionRadius = Math.max(def.size.x, def.size.z) * 0.5 + 3.0;
+
+        const interactionRad = Math.max(def.size.x, def.size.z) * 0.5 + 2.0;
+        vehicle.userData.interactionRadius = interactionRad;
         vehicle.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
 
         ctx.scene.add(vehicle);
+
+        // Register in interactables list
+        if (!ctx.interactables) ctx.interactables = [];
+        ctx.interactables.push(vehicle);
 
         // Add collision obstacle
         SectorGenerator.addObstacle(ctx, {
@@ -1143,14 +1154,14 @@ export const SectorGenerator = {
         const terminal = ObjectGenerator.createTerminal(terminalType);
         terminal.position.set(x, 0, z);
         terminal.lookAt(0, 0, 0);
-        terminal.name = type; // Critical for lookup if needed, though we use obj reference now
+        terminal.name = type;
 
         let label = 'ui.interact';
         if (type === 'TERMINAL_ARMORY') label = 'ui.station_armory';
         else if (type === 'TERMINAL_SPAWNER') label = 'ui.station_spawner';
         else if (type === 'TERMINAL_ENV') label = 'ui.station_environment';
 
-        // [VINTERDÖD] Standardized Interaction
+        // Standardized Interaction
         SectorGenerator.addInteractable(ctx, terminal, {
             id: type,
             label: label,
