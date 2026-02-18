@@ -1,11 +1,113 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
 import { createProceduralDiffuse } from './procedural';
+import { WaterStyleConfig } from '../../core/systems/WaterSystem';
 
 const DIFFUSE = createProceduralDiffuse();
 
 /**
- * [VINTERDÖD] patchWindMaterial
+ * Creates a highly optimized Water Shader Material.
+ * Zero-GC ready: Update 'uTime.value' directly in your render loop.
+ */
+export function createWaterMaterial(
+    config: WaterStyleConfig,
+    width: number,
+    depth: number,
+    foamTexture: THREE.Texture,
+    waveTexture: THREE.Texture
+): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        uniforms: {
+            uTime: { value: 0.0 }, // Uppdateras via referens i loopen
+            uColor: { value: new THREE.Color(config.color) },
+            uOpacity: { value: config.opacity },
+            uFresnelStrength: { value: config.fresnelStrength || 0.5 },
+            uFoamTexture: { value: foamTexture },
+            uWaveTexture: { value: waveTexture },
+            uUvScale: { value: config.uvScale || 5.0 },
+            uPlaneSize: { value: new THREE.Vector2(width, depth) }
+        },
+        vertexShader: `
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            varying vec2 vUv;
+            varying vec3 vWorldPosition;
+            varying vec3 vLocalPos; 
+            uniform float uTime;
+
+            void main() {
+                vUv = uv;
+                vLocalPos = position; 
+                vec3 pos = position;
+                
+                // Low-cost wave vertex displacement
+                float wave = sin(pos.x * 0.5 + uTime * 1.5) * 0.1 + sin(pos.z * 0.4 + uTime * 1.2) * 0.1;
+                pos.y += wave;
+
+                vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
+                vec4 mvPosition = viewMatrix * worldPosition;
+                
+                vWorldPosition = worldPosition.xyz;
+                vViewPosition = -mvPosition.xyz;
+                vNormal = normalMatrix * normal;
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform float uTime;
+            uniform vec3 uColor;
+            uniform float uOpacity;
+            uniform float uFresnelStrength;
+            uniform sampler2D uFoamTexture;
+            uniform sampler2D uWaveTexture;
+            uniform float uUvScale;
+            uniform vec2 uPlaneSize;
+            
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            varying vec2 vUv;
+            varying vec3 vLocalPos;
+
+            void main() {
+                vec3 viewDir = normalize(vViewPosition);
+                vec3 normal = normalize(vNormal);
+
+                float fresnelFactor = clamp(dot(viewDir, normal), 0.0, 1.0);
+                vec3 waterColor = mix(uColor * 0.6, uColor * 1.2, fresnelFactor);
+
+                vec2 scrollUv = vUv + uTime * 0.02;
+                vec2 waveDistortion = texture2D(uWaveTexture, scrollUv).rg * 2.0 - 1.0;
+                
+                vec2 foamUv = (vUv * uUvScale) + (waveDistortion * 0.1) + (uTime * 0.05);
+
+                float noiseVal = texture2D(uFoamTexture, foamUv).r;
+                float foam = smoothstep(0.45, 0.55, noiseVal);
+
+                vec2 edgeDist = abs(vLocalPos.xz) / (uPlaneSize * 0.5);
+                float maxEdge = max(edgeDist.x, edgeDist.y);
+                float shoreFoam = smoothstep(0.8, 0.98, maxEdge); 
+                
+                float finalFoam = max(foam, shoreFoam);
+
+                vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+                vec3 halfVector = normalize(lightDir + viewDir);
+                float NdotH = max(0.0, dot(normal, halfVector));
+                
+                // Hardcoded exponent (64.0) saves uniform parsing time on GPU
+                float specular = pow(NdotH, 64.0) * uFresnelStrength;
+
+                vec3 finalColor = mix(waterColor, vec3(1.0), finalFoam * 0.8);
+                gl_FragColor = vec4(finalColor + vec3(specular), uOpacity);
+            }
+        `,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+};
+
+/**
+ * [VINTERDÖD] createWaterMaterial
  * Optimazed vertex shader injection for instanced vegetation and trees.
  * Calculates wind deformation in World Space and transforms to Local Space.
  */
