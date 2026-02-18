@@ -72,7 +72,7 @@ export const AssetPreloader = {
         const matLen = matKeys.length;
         for (let i = 0; i < matLen; i++) {
             const k = matKeys[i];
-            if (['road', 'asphalt', 'snow', 'concrete'].includes(k as string)) continue;
+            if (['road', 'asphalt', 'concrete'].includes(k as string)) continue;
 
             addToWarmup(new THREE.Mesh(GEOMETRY.box, (MATERIALS as any)[k]));
 
@@ -90,7 +90,7 @@ export const AssetPreloader = {
         // [VINTERDÖD OPTIMERING] Yielda efter stora komplexa modeller
         if (yieldToMain) await yieldToMain();
 
-        // Batch 3: Environmental Props
+        // Batch 3: Environmental Props (Static Meshes)
         addToWarmup(new THREE.Mesh(GEOMETRY.treeTrunk, MATERIALS.treeTrunk));
         addToWarmup(new THREE.Mesh(GEOMETRY.foliageCluster, MATERIALS.treeFirNeedles));
         addToWarmup(new THREE.Mesh(GEOMETRY.barrel, MATERIALS.barrel));
@@ -109,6 +109,34 @@ export const AssetPreloader = {
         };
         prefillFX(GEOMETRY.particle, MATERIALS.smoke, 100);
         prefillFX(GEOMETRY.flame, MATERIALS.fire, 30);
+
+        // Batch 5: [VINTERDÖD] Instanced Systems Warmup (Weather & Wind)
+        // Shaders for InstancedMesh differ from StandardMesh. We MUST warm up both.
+        const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
+            const mesh = new THREE.InstancedMesh(geo, mat, 1);
+            mesh.setMatrixAt(0, new THREE.Matrix4());
+            addToWarmup(mesh);
+        };
+
+        // Weather Particles
+        addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow);
+        addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain);
+        addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash);
+        addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember);
+
+        // Wind-patched Vegetation
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.hedge);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.grass);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.flower);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.wheat);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeSilhouette);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeFirNeedles);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesOak);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
+        addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
+        addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
+        addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
+        addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.deadWood);
 
         if (yieldToMain) await yieldToMain();
 
@@ -148,8 +176,6 @@ export const AssetPreloader = {
         try {
             await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
             if (yieldToMain) await yieldToMain();
-
-            await ObjectGenerator.initBuildingPrototypes(yieldToMain);
 
             ObjectGenerator.createVehicle('station wagon');
             ObjectGenerator.createBuilding(4, 4, 4, 0x888888);

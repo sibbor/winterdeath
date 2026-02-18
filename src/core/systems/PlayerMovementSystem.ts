@@ -5,7 +5,6 @@ import { FXSystem } from './FXSystem';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/sound';
 import { AIState } from '../../types/enemy';
-import { WaterSystem } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Direction / MoveVec
@@ -25,6 +24,11 @@ export class PlayerMovementSystem implements System {
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
+        if (state.activeVehicle) {
+            state.isMoving = false; // Player model itself isn't running
+            return; // Skip normal movement/rotation
+        }
+
         this.handleShake(input, state, delta);
 
         // Movement logic
@@ -37,11 +41,6 @@ export class PlayerMovementSystem implements System {
             disableInput,
             session
         );
-
-        if (state.activeVehicle) {
-            state.isMoving = false; // Player model itself isn't running
-            return; // Skip normal movement/rotation
-        }
 
         state.isMoving = isMoving;
 
@@ -80,8 +79,8 @@ export class PlayerMovementSystem implements System {
 
         if (state.spaceDepressed && !state.isRolling) {
             if (!state.isRushing && now - state.spacePressTime > 150) {
-                if (state.stamina >= 10) {
-                    if (!state.rushCostPaid) { state.stamina -= 10; state.rushCostPaid = true; }
+                if (state.stamina >= 2) {
+                    if (!state.rushCostPaid) { state.stamina -= 2; state.rushCostPaid = true; }
                     state.isRushing = true;
                 }
             }
@@ -93,7 +92,7 @@ export class PlayerMovementSystem implements System {
         if (state.isRushing) {
             state.lastStaminaUseTime = now;
             if (state.stamina > 0) {
-                state.stamina -= 30 * delta;
+                state.stamina -= 5 * delta;
                 speed *= 1.75;
 
                 if ((now / 200 | 0) % 2 === 0) {
@@ -155,8 +154,8 @@ export class PlayerMovementSystem implements System {
                     const pY = playerGroup.position.y;
                     const pZ = playerGroup.position.z;
 
-                    if (state.sectorState && state.sectorState.waterSystem) {
-                        const ws = state.sectorState.waterSystem as WaterSystem;
+                    if (session.engine.water) {
+                        const ws = session.engine.water;
                         const buoyancy = ws.checkBuoyancy(pX, pY, pZ);
 
                         if (buoyancy.inWater) {

@@ -47,7 +47,7 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
     );
 };
 
-const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouseMove, onInteractionStart, onInteractionEnd }: any) => {
+const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouseMove, onInteractionStart, onInteractionEnd, onClickImmediate, isMobileDevice }: any) => {
     const toMapPercent = useCallback((x: number, z: number) => {
         const width = bounds.maxX - bounds.minX;
         const height = bounds.maxZ - bounds.minZ;
@@ -96,15 +96,16 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
                 onMouseMove({ x, z });
             }}
             onMouseDown={(e) => {
+                if (isMobileDevice) return; // PC only
                 const rect = e.currentTarget.getBoundingClientRect();
                 const px = ((e.clientX - rect.left) / rect.width) * 100;
                 const py = ((e.clientY - rect.top) / rect.height) * 100;
                 const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
                 const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
-                onInteractionStart({ x, z });
+                onClickImmediate({ x, z });
             }}
-            onMouseUp={onInteractionEnd}
-            onMouseLeave={onInteractionEnd}
+            onMouseUp={() => { }}
+            onMouseLeave={() => { }}
             onTouchStart={(e) => {
                 const touch = e.touches[0];
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -178,7 +179,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
     }, [allEntities]);
 
     const bounds = useMemo(() => {
-        if (allEntities.length === 0) return { minX: -500, maxX: 500, minZ: -500, maxZ: 500 };
+        if (allEntities.length === 0) return { minX: -450, maxX: 450, minZ: -450, maxZ: 450 };
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
         allEntities.forEach(e => {
             minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x);
@@ -216,38 +217,41 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
             heightClass="h-[80vh]"
             titleColorClass="text-blue-500"
             footer={
-                <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500"></span> {t('ui.player')}</div>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full"></span> {t('ui.family_member')}</div>
-                    <div className="flex items-center gap-2">💀 {t('ui.boss')}</div>
-                    <div className="flex items-center gap-2">📦 {t('ui.chest')}</div>
-                    <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
-                    <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
+                <div className="gap-3">
+                    <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
+                        <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500"></span> {t('ui.player')}</div>
+                        <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full"></span> {t('ui.family_member')}</div>
+                        <div className="flex items-center gap-2">💀 {t('ui.boss')}</div>
+                        <div className="flex items-center gap-2">📦 {t('ui.chest')}</div>
+                        <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
+                        <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
+                    </div>
+                    <div>
+                        <div className="">
+                            <div className="flex gap-4">
+                                <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
+                                    <span className="text-[10px] text-blue-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
+                                    <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
+                                        {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                    </span>
+                                </div>
+                                {!isMobileDevice && (
+                                    <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
+                                        <span className="text-[10px] text-gray-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
+                                        <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
+                                            {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="text-[10px] text-gray-500 font-mono italic">
+                                {isMobileDevice ? t('ui.long_press_to_teleport') : t('ui.click_to_teleport')}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             }
         >
-            <div className="flex flex-wrap justify-between items-center mb-4 gap-4 border-b border-white/10 pb-4">
-                <div className="flex gap-4">
-                    <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
-                        <span className="text-[10px] text-blue-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
-                        <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
-                            {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
-                        </span>
-                    </div>
-                    {!isMobileDevice && (
-                        <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
-                            <span className="text-[10px] text-gray-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
-                            <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
-                                {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
-                            </span>
-                        </div>
-                    )}
-                </div>
-                <div className="text-[10px] text-gray-500 font-mono italic">
-                    {t('ui.tap_to_ping')}
-                </div>
-            </div>
-
             <div className="w-full relative bg-black/40 h-[60vh]">
                 <MapCanvas
                     bounds={bounds}
@@ -256,6 +260,11 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                     onMouseMove={setMouseCoords}
                     onInteractionStart={handleInteractionStart}
                     onInteractionEnd={handleInteractionEnd}
+                    onClickImmediate={(coords: { x: number, z: number }) => {
+                        soundManager.playUiConfirm();
+                        onSelectCoords(coords.x, coords.z);
+                    }}
+                    isMobileDevice={isMobileDevice}
                 />
             </div>
             <TooltipOverlay data={tooltipData} />

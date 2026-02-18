@@ -131,11 +131,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             }
         };
         window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc);
-        window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc);
     }, [activeModal]);
 
 
-    // --- THREE.JS SCENE SETUP ---
     useEffect(() => {
         if (!containerRef.current) {
             return;

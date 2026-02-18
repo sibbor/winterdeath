@@ -32,9 +32,16 @@ const App: React.FC = () => {
     const [showTeleportMenu, setShowTeleportMenu] = useState(false);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
-    const [isLoadingSector, setIsLoadingSector] = useState(false);
-    const [isLoadingCamp, setIsLoadingCamp] = useState(false);
+    const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.SECTOR);
+    const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
+    const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
+
+    useEffect(() => {
+        if (isInitialBoot && !isLoadingSector && !isLoadingCamp) {
+            setIsInitialBoot(false);
+        }
+    }, [isLoadingSector, isLoadingCamp, isInitialBoot]);
 
     useEffect(() => {
         const checkMobile = () => {
@@ -486,6 +493,7 @@ const App: React.FC = () => {
                 <ScreenLoading
                     sectorIndex={gameState.currentSector}
                     isCamp={isLoadingCamp}
+                    isInitialBoot={isInitialBoot}
                     isMobileDevice={isMobileDevice}
                     debugInfo={{
                         fps,
@@ -567,7 +575,7 @@ const App: React.FC = () => {
                 />
             )}
 
-            {gameState.screen === GameScreen.PROLOGUE && (
+            {gameState.screen === GameScreen.PROLOGUE && !isLoadingSector && (
                 <Prologue onComplete={handlePrologueComplete} isMobileDevice={isMobileDevice} />
             )}
 

@@ -192,7 +192,7 @@ export const EnemyAI = {
 
                 const wanderStepInterval = 1200;
                 if (now > (e.lastStepTime || 0) + wanderStepInterval) {
-                    callbacks.playSound('step_zombie');
+                    //callbacks.playSound('step_zombie');
                     e.lastStepTime = now;
                 }
                 break;
@@ -209,7 +209,7 @@ export const EnemyAI = {
                     const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
                         if (e.type === 'TANK') callbacks.playSound('tank_smash');
-                        else callbacks.playSound('step_snow');
+                        //else callbacks.playSound('step_snow');
                         e.lastStepTime = now;
                     }
 

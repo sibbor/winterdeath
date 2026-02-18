@@ -6,11 +6,7 @@ import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
-import { WaterSystem } from '../../core/systems/WaterSystem';
-import { WeatherSystem } from '../../core/systems/WeatherSystem';
-import { WindSystem } from '../../core/systems/WindSystem';
 import { CAMERA_HEIGHT } from '../constants';
-import { TriggerHandler } from '../../core/systems/TriggerHandler';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -19,18 +15,14 @@ const _v4 = new THREE.Vector3();
 const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _q1 = new THREE.Quaternion();
-
-// Water ripples
-const _lastPlayerRipple: number = 0;
-const _lastBoatRipple: number = 0;
 const _boatPos = new THREE.Vector3(); // Zero-GC scratchpad
 
 export const SECTOR6_ZONES: AtmosphereZone[] = [
-    { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: 'rain', bgColor: 0xff0000, fogDensity: 0.035, ambient: 0.2 },
-    { label: "ABANDONED FARM", x: 342, z: 111, weather: 'none', bgColor: 0xff00ff, fogDensity: 0.01, ambient: 0.5 },
-    { label: "THE VILLAGE", x: 211, z: -291, weather: 'ash', bgColor: 0xffeeee, fogDensity: 0.04, ambient: 0.3 },
-    { label: "CRYSTAL LAKE", x: -211, z: -291, weather: 'snow', bgColor: 0x111133, fogDensity: 0.02, ambient: 0.35 },
-    { label: "ANCIENT RUINS", x: -342, z: 111, weather: 'ember', bgColor: 0x0000ff, fogDensity: 0.03, ambient: 0.4 }
+    { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: 'rain', bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
+    { label: "ABANDONED FARM", x: 342, z: 111, weather: 'none', bgColor: 0xff00ff, fogDensity: 0.005, ambient: 0.5 },
+    { label: "THE VILLAGE", x: 211, z: -291, weather: 'ash', bgColor: 0xffeeee, fogDensity: 0.004, ambient: 0.3 },
+    { label: "CRYSTAL LAKE", x: -211, z: -291, weather: 'snow', bgColor: 0x111133, fogDensity: 0.002, ambient: 0.35 },
+    { label: "ANCIENT RUINS", x: -342, z: 111, weather: 'ember', bgColor: 0x0000ff, fogDensity: 0.003, ambient: 0.4 }
 ];
 
 export const Sector6: SectorDef = {
@@ -70,25 +62,17 @@ export const Sector6: SectorDef = {
         plaza.receiveShadow = true;
         scene.add(plaza);
 
+        /*
         const ambient = new THREE.AmbientLight(0x404040, 0.4);
         ambient.name = 'AMBIENT_LIGHT';
         scene.add(ambient);
-
-        // --- GROUND (Gravel) ---
-        /*
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), MATERIALS.gravel);
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -0.8; // Lowered to prevent Z-fighting with water (y=0) and clipping when waves dip
-        ground.receiveShadow = true;
-        ground.userData = { isGround: true };
-        scene.add(ground);
-        */
 
         // Add some lights to the plaza
         const pl = new THREE.PointLight(0xffaa00, 5, 30);
         pl.position.set(0, 8, 0);
         pl.castShadow = true;
         scene.add(pl);
+        */
 
         // --- INTERACTION STATIONS ---
         // 1. Armory (West)
@@ -140,7 +124,7 @@ export const Sector6: SectorDef = {
             const points = curve.getPoints(60);
 
             // Generate Path
-            if (i === 3) { // Water/Lake Path
+            if (i === 3) {
                 PathGenerator.createGravelPath(ctx, points, 8);
             } else {
                 PathGenerator.createGravelPath(ctx, points, 8);
@@ -173,43 +157,8 @@ export const Sector6: SectorDef = {
         ];
         EnvironmentGenerator.fillWheatField(ctx, farmRect, 0.4);
 
-        // --- Tractor ---
-        const tractor = ObjectGenerator.createVehicle('tractor');
-
-        // Calculate position and rotation upfront. Avoid math inside loops if this is part of one.
-        tractor.position.set(p1.x, 0.5, p1.z);
-        tractor.rotation.y = Math.random() * Math.PI;
-
-        // Physics Data
-        tractor.userData = {
-            id: 'tractor_1',
-            vehicleDef: {
-                type: 'CAR',
-                speed: 40,
-                turnSpeed: 2.5,
-                acceleration: 15.0,
-                friction: 0.98,
-                mass: 1000,
-                drag: 0.92,
-                seats: 2,
-                forward: { x: 0, y: 0, z: 1 }
-            },
-            interactionRadius: 8.0,
-            velocity: new THREE.Vector3(),
-            angularVelocity: new THREE.Vector3(),
-            radius: 5
-        };
-
-        SectorGenerator.addInteractable(ctx, tractor, {
-            id: 'tractor_1',
-            label: 'ui.enter_vehicle',
-            type: 'sector_specific',
-            radius: 8.0
-        });
-
-        scene.add(tractor);
-        SectorGenerator.addObstacle(ctx, { mesh: tractor, position: tractor.position, radius: 7, collider: { type: 'box', size: new THREE.Vector3(5, 2, 12) } });
-
+        // --- Tractor (Driveable) ---
+        SectorGenerator.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');
 
         // 3. VILLAGE
         const p2 = SECTOR6_ZONES[2];
@@ -227,119 +176,40 @@ export const Sector6: SectorDef = {
             }
         }
 
-        // --- CAR ---
-        const car = ObjectGenerator.createVehicle('station_wagon');
-
-        // Calculate position and rotation upfront. Avoid math inside loops if this is part of one.
-        car.position.set(p2.x, 0.5, p2.z);
-        car.rotation.y = Math.PI / 0.5;
-
-        // Physics Data
-        car.userData = {
-            id: 'car_1',
-            vehicleDef: {
-                type: 'CAR',
-                speed: 150, // Max speed
-                turnSpeed: 5.0,
-                acceleration: 15.0,
-                friction: 0.98,
-                mass: 1500,
-                drag: 0.92,
-                seats: 5,
-                forward: { x: 0, y: 0, z: 1 }
-            },
-            interactionRadius: 8.0,
-            velocity: new THREE.Vector3(),
-            angularVelocity: new THREE.Vector3(),
-            radius: 5
-        };
-
-        SectorGenerator.addInteractable(ctx, car, {
-            id: 'car_1',
-            label: 'ui.enter_vehicle',
-            type: 'sector_specific',
-            radius: 8.0
-        });
-
-        scene.add(car);
-        SectorGenerator.addObstacle(ctx, { mesh: car, position: car.position, radius: 7, collider: { type: 'box', size: new THREE.Vector3(5, 2, 12) } });
+        // --- Car (Driveable) ---
+        SectorGenerator.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
 
 
         // 4. WATER
         const p3 = SECTOR6_ZONES[3];
 
-        // Initialize WaterSystem if not exists
-        if (!ctx.state.sectorState.waterSystem) {
-            ctx.state.sectorState.waterSystem = new WaterSystem(scene);
-        }
-        const waterSystem = ctx.state.sectorState.waterSystem as WaterSystem;
-
-        // Lake Surface - Scaled
-        waterSystem.addSurface(p3.x, p3.z, 200, 200, 'crystal', 'circle');
+        // Create a typed water body via the engine-owned WaterSystem
+        const lake = SectorGenerator.addWaterBody(ctx, 'lake', p3.x, p3.z, 200, 200);
 
         // --- LARGE STONE WITH FOAM ---
-        const bigStone = EnvironmentGenerator.createRock(35, 15); // Reduced height to look sunken? Or just big.
+        const bigStone = EnvironmentGenerator.createRock(35, 15);
         bigStone.position.set(p3.x - 30, -2, p3.z + 20);
         bigStone.scale.set(1.5, 1.2, 1.5);
         scene.add(bigStone);
         SectorGenerator.addObstacle(ctx, { mesh: bigStone, position: bigStone.position, radius: 10, collider: { type: 'sphere', radius: 10 } });
 
-        // Permanent splash/foam effect stored in userData for the update loop to find
-        bigStone.userData.isSplashSource = true;
-        bigStone.userData.velocity = new THREE.Vector3(); // Prevent crash
-        ctx.state.sectorState.physicsProps = ctx.state.sectorState.physicsProps || [];
-        // Note: We add it to physicsProps in the array definition below
+        // Register as splash source — WaterSystem handles ambient ripples/foam automatically
+        if (lake) lake.registerSplashSource(bigStone);
 
-        // Actually, better to handle the effect separately or make it "static" in physics.
-        bigStone.userData.isStatic = true;
-
-        // --- WOODEN BOAT ---
-        const boatGroup = ObjectGenerator.createBoat();
-
-        // Calculate position and rotation upfront. Avoid math inside loops if this is part of one.
-        boatGroup.position.set(p3.x, 0.5, p3.z);
-        boatGroup.rotation.y = Math.random() * Math.PI;
-
-        // Physics Data
-        boatGroup.userData = {
-            id: 'boat_1',
-            vehicleDef: {
-                type: 'BOAT',
-                speed: 15,
-                turnSpeed: 1.5,
-                acceleration: 8.0,
-                friction: 0.98,
-                mass: 200,
-                drag: 0.92,
-                seats: 2,
-                forward: { x: 0, y: 0, z: 1 }
-            },
-            interactionRadius: 8.0,
-            velocity: new THREE.Vector3(),
-            angularVelocity: new THREE.Vector3(),
-            radius: 5
-        };
-
-        SectorGenerator.addInteractable(ctx, boatGroup, {
-            id: 'boat_1',
-            label: 'ui.enter_vehicle',
-            type: 'sector_specific',
-            radius: 8.0
-        });
-
-        scene.add(boatGroup);
-        SectorGenerator.addObstacle(ctx, { mesh: boatGroup, position: boatGroup.position, radius: 7, collider: { type: 'box', size: new THREE.Vector3(5, 2, 12) } });
+        const boatGroup = SectorGenerator.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
 
         // Interactive Ball
         const ball = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4, metalness: 0.1 }));
         ball.position.set(p3.x + 10, 5, p3.z + 10);
         ball.castShadow = true;
-        ball.userData = { isBall: true, velocity: new THREE.Vector3(), angularVelocity: new THREE.Vector3(), radius: 1.5, mass: 5, friction: 0.98 };
+        ball.userData = { isBall: true, radius: 1.5, mass: 5, friction: 0.98 };
         scene.add(ball);
 
-        // Store for Physics Update
-        ctx.state.sectorState.physicsProps = [boatGroup, ball];
-        if (bigStone) (ctx.state.sectorState.physicsProps as any[]).push(bigStone);
+        // Register floating props — WaterSystem handles buoyancy, drag, collisions automatically
+        if (lake) {
+            if (boatGroup) lake.registerFloatingProp(boatGroup);
+            lake.registerFloatingProp(ball);
+        }
 
         // 5. SURPRISE
         const p4 = SECTOR6_ZONES[4];
@@ -398,145 +268,6 @@ export const Sector6: SectorDef = {
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
-        // Environment systems are now owned by the Engine
-        const waterSystem = gameState.engine.water;
-        const weatherSystem = gameState.engine.weather;
-        const windSystem = gameState.engine.wind;
 
-        if (waterSystem) {
-
-            const scene = events.scene;
-
-            // Physics Props Logic
-            if (sectorState.physicsProps) {
-                const props = sectorState.physicsProps as THREE.Mesh[];
-
-                // --- PLAYER WATER LOGIC ---
-                if (playerPos) {
-                    const pBuoyancy = waterSystem.checkBuoyancy(playerPos.x, playerPos.y, playerPos.z);
-
-                    // Entry Splash
-                    if (pBuoyancy.inWater && !sectorState.playerWasInWater) {
-                        waterSystem.spawnRipple(playerPos.x, playerPos.z, 3, 0.3);
-                        events.emitNoise(playerPos, 20, 'splash');
-                    }
-
-                    // Moving Ripples
-                    if (pBuoyancy.inWater) {
-                        // Check movement
-                        if (sectorState.lastPlayerPos) {
-                            const dist = playerPos.distanceTo(sectorState.lastPlayerPos);
-                            if (dist > 0.1 && Math.random() < 0.5) {
-                                waterSystem.spawnRipple(playerPos.x, playerPos.z, 1.5, 0.1);
-                            }
-                        }
-                    }
-
-                    // Update State
-                    sectorState.playerWasInWater = pBuoyancy.inWater;
-                    if (!sectorState.lastPlayerPos) sectorState.lastPlayerPos = new THREE.Vector3(); // One-time allocation
-                    sectorState.lastPlayerPos.copy(playerPos);
-                }
-
-                for (let i = 0; i < props.length; i++) {
-                    const prop = props[i];
-                    const ud = prop.userData;
-                    const pos = prop.position;
-
-                    // 1. Gravity / Buoyancy
-                    if (!ud.isStatic) {
-                        const buoyancy = waterSystem ? waterSystem.checkBuoyancy(pos.x, pos.y, pos.z) : { inWater: false, waterLevel: 0 };
-
-                        if (buoyancy.inWater) {
-                            // Float
-                            const depth = buoyancy.waterLevel - pos.y;
-                            if (depth > 0) {
-                                // Upward force (Buoyancy) - stronger if deeper
-                                ud.velocity.y += depth * 10 * dt;
-                                // Damping in water
-                                ud.velocity.multiplyScalar(0.9);
-                            }
-
-                            // Water Current / Bobbing
-                            ud.velocity.y += Math.sin(now * 0.003 + pos.x) * 0.05 * dt;
-
-                            // Ripples if moving
-                            const speed = Math.sqrt(ud.velocity.x * ud.velocity.x + ud.velocity.z * ud.velocity.z);
-                            if (speed > 0.5 && Math.random() < 0.3) {
-                                waterSystem.spawnRipple(pos.x, pos.z, 2, 0.1);
-                            }
-
-                            // Splash Particles (if fast)
-                            if (speed > 2.0 && Math.random() < 0.15) {
-                                // Assuming spawnPart exists on ctx, if not we might need to use ctx.callbacks or sim
-                                if ((events as any).spawnPart) (events as any).spawnPart(pos.x, 0.1, pos.z, 'splash', 3);
-                            }
-
-                        } else {
-                            // Gravity
-                            ud.velocity.y -= 20 * dt;
-                        }
-
-                        // 2. Player Collision (Simple Radial Push)
-                        _v1.copy(playerPos).setY(pos.y); // Player pos at same height
-                        const distSq = pos.distanceToSquared(_v1);
-                        const combinedRadius = ud.radius + 1.0; // Player radius approx 1.0
-
-                        if (distSq < combinedRadius * combinedRadius) {
-                            // Push
-                            _v2.subVectors(pos, _v1).normalize();
-                            const force = 10.0; // Push strength
-                            ud.velocity.addScaledVector(_v2, force * dt);
-
-                            // Also wake up if sleeping?
-                        }
-
-                        // 3. Integrate
-                        pos.addScaledVector(ud.velocity, dt * 10); // Scale velocity to match game units/speed? Or just dt
-
-                        // Ground Floor collision (lake bed?)
-                        if (pos.y < -5) {
-                            pos.y = -5;
-                            ud.velocity.y = 0;
-                        }
-
-                        // Directional Drag for Boat
-                        if (ud.vehicleDef?.type === 'BOAT') {
-                            const savedY = ud.velocity.y;
-                            // Forward
-                            _v3.set(0, 0, 1).applyQuaternion(prop.quaternion);
-                            // Right
-                            _v2.set(1, 0, 0).applyQuaternion(prop.quaternion);
-
-                            const fSpeed = ud.velocity.dot(_v3);
-                            const rSpeed = ud.velocity.dot(_v2);
-
-                            // Reconstruct with asymmetric friction
-                            ud.velocity.copy(_v3).multiplyScalar(fSpeed * 0.98).add(_v2.multiplyScalar(rSpeed * 0.90));
-                            ud.velocity.y = savedY;
-
-                            if (ud.angularVelocity) {
-                                prop.rotation.y += ud.angularVelocity.y * dt;
-                                ud.angularVelocity.multiplyScalar(0.95);
-                            }
-                        } else {
-                            // Standard Friction
-                            ud.velocity.multiplyScalar(ud.friction || 0.98);
-                        }
-
-                        // Update Matrix
-                        prop.updateMatrixWorld();
-                    }
-
-                    // Splash Source (Big Stone)
-                    if (ud.isSplashSource && waterSystem) {
-                        if (Math.random() < 0.3) {
-                            waterSystem.spawnRipple(pos.x + (Math.random() - 0.5) * 6, pos.z + (Math.random() - 0.5) * 6, 5, 0.2);
-                        }
-                        events.spawnPart(pos.x, 0, pos.z, 'foam', 1);
-                    }
-                }
-            }
-        }
     }
 };

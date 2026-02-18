@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MATERIALS, WindUniforms } from '../../utils/assets/materials';
+import { MATERIALS } from '../../utils/assets/materials';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from './SectorGenerator';
 
@@ -10,6 +10,14 @@ const LOD_DISTANCES = {
     MEDIUM: 60,
     LOW: 120
 };
+
+// [VINTERDÖD] Pre-allokerade matte-objekt för brutal matris-komposition.
+// Blixtsnabbt jämfört med att använda Object3D.updateMatrix().
+const _pos = new THREE.Vector3();
+const _quat = new THREE.Quaternion();
+const _scale = new THREE.Vector3();
+const _euler = new THREE.Euler();
+const PI2 = Math.PI * 2;
 
 // --- TYPES ---
 interface TreePrototype {
@@ -39,19 +47,22 @@ const bakeGeo = (geo: THREE.BufferGeometry, pos: THREE.Vector3, rot: THREE.Euler
     return geo;
 };
 
-const isPointInPolygon = (p: THREE.Vector3, polygon: THREE.Vector3[]) => {
+// [VINTERDÖD] Zero-GC polygon check. Tar in råa nummer istället för att kräva en "new Vector3".
+const isPointInPolygon = (px: number, pz: number, polygon: THREE.Vector3[]) => {
     let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const len = polygon.length;
+    for (let i = 0, j = len - 1; i < len; j = i++) {
         const xi = polygon[i].x, zi = polygon[i].z;
         const xj = polygon[j].x, zj = polygon[j].z;
-        const intersect = ((zi > p.z) !== (zj > p.z))
-            && (p.x < (xj - xi) * (p.z - zi) / (zj - zi) + xi);
+        const intersect = ((zi > pz) !== (zj > pz))
+            && (px < (xj - xi) * (pz - zi) / (zj - zi) + xi);
         if (intersect) inside = !inside;
     }
     return inside;
 };
 
 // --- PROTOTYPE GENERATORS ---
+// (Prototyperna genereras bara en gång vid uppstart, så här är allokeringar helt OK)
 
 const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreePrototype => {
     const trunkGeos: THREE.BufferGeometry[] = [];
@@ -64,7 +75,6 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreeProt
         return x - Math.floor(x);
     };
 
-    // PINE: High Canopy, Tall Trunk (Scotland Pine style)
     const trunkH = 4.5 + rng() * 2.0;
     const trunkGeo = new THREE.CylinderGeometry(0.2, 0.45, trunkH, 7);
     trunkGeo.translate(0, trunkH / 2, 0);
@@ -73,14 +83,13 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreeProt
     bakeGeo(trunkGeo, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
     trunkGeos.push(trunkGeo);
 
-    // Foliage: Starts high up
     const layers = 4 + Math.floor(rng() * 3);
     let y = trunkH * 0.7;
     let r = 2.5 + rng() * 1.0;
 
     for (let i = 0; i < layers; i++) {
         const h = 1.5 + rng() * 1.0;
-        const nextR = r * 0.65; // Quick taper
+        const nextR = r * 0.65;
 
         const cone = new THREE.ConeGeometry(r, h, 7);
         cone.translate(0, h / 2, 0);
@@ -100,7 +109,6 @@ const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreeProt
         r = nextR;
     }
 
-    // Top
     const topH = 2.0;
     const top = new THREE.ConeGeometry(r, topH, 6);
     top.translate(0, topH / 2, 0);
@@ -126,7 +134,6 @@ const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePr
         return x - Math.floor(x);
     };
 
-    // SPRUCE: Dense, touches ground, conical
     const trunkH = 4.0 + rng() * 2.0;
     const trunkGeo = new THREE.CylinderGeometry(0.3, 0.7, trunkH, 7);
     trunkGeo.translate(0, trunkH / 2, 0);
@@ -135,14 +142,13 @@ const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePr
     bakeGeo(trunkGeo, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
     trunkGeos.push(trunkGeo);
 
-    // Foliage: Starts very low
     const layers = 10 + Math.floor(rng() * 5);
-    let y = 0.5; // Nearly ground level
-    let r = 3.5 + rng() * 1.0; // Wide base
+    let y = 0.5;
+    let r = 3.5 + rng() * 1.0;
 
     for (let i = 0; i < layers; i++) {
         const h = 1.0 + rng() * 0.5;
-        const nextR = r * 0.85; // Slow taper
+        const nextR = r * 0.85;
 
         const cone = new THREE.ConeGeometry(r, h, 8);
         cone.translate(0, h / 2, 0);
@@ -162,7 +168,6 @@ const generateSprucePrototype = (seed: number, hasSnow: boolean = false): TreePr
         r = nextR;
     }
 
-    // Top
     const topH = 1.5;
     const top = new THREE.ConeGeometry(r, topH, 6);
     top.translate(0, topH / 2, 0);
@@ -187,22 +192,19 @@ const generateOakPrototype = (seed: number): TreePrototype => {
         return x - Math.floor(x);
     };
 
-    // OAK: Massive, twisted trunk, huge canopy
     const trunkH = 2.5 + rng() * 0.8;
     const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, trunkH, 7);
     trunkGeo.translate(0, trunkH / 2, 0);
     bakeGeo(trunkGeo, new THREE.Vector3(0, 0, 0), new THREE.Euler((rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3), new THREE.Vector3(1, 1, 1));
     trunkGeos.push(trunkGeo);
 
-    // Leaves: Massive Clumps
     const clusters = 12 + Math.floor(rng() * 6);
     for (let i = 0; i < clusters; i++) {
         const size = 1.8 + rng() * 1.2;
         const sphere = new THREE.DodecahedronGeometry(size, 0);
 
-        // Distribute wide
         const radius = 1.5 + rng() * 2.5;
-        const angle = rng() * Math.PI * 2;
+        const angle = rng() * PI2;
         const y = trunkH * 0.8 + rng() * 2.0;
 
         sphere.translate(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
@@ -227,9 +229,7 @@ const generateDeadTreePrototype = (seed: number): TreePrototype => {
         return x - Math.floor(x);
     };
 
-    // DEAD: Angular, jagged, low-poly
     const trunkH = 3.5 + rng() * 2.5;
-    // Use fewer segments (4) for a square/angular look
     const trunk = new THREE.CylinderGeometry(0.15, 0.35, trunkH, 4);
     trunk.translate(0, trunkH / 2, 0);
     const leanX = (rng() - 0.5) * 0.3;
@@ -237,13 +237,10 @@ const generateDeadTreePrototype = (seed: number): TreePrototype => {
     bakeGeo(trunk, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
     trunkGeos.push(trunk);
 
-    // Snapped Top?
     if (rng() > 0.5) {
-        // Add a jagged top piece
         const topH = 0.5 + rng() * 0.5;
         const top = new THREE.ConeGeometry(0.15, topH, 3);
         top.translate(0, topH / 2, 0);
-        // Place at top of trunk, rotated sharply
         const tx = trunkH * Math.sin(leanZ);
         const tz = trunkH * Math.sin(leanX);
         const snappedRot = new THREE.Euler((rng() - 0.5) * 1.5, rng() * 3, (rng() - 0.5) * 1.5);
@@ -251,19 +248,16 @@ const generateDeadTreePrototype = (seed: number): TreePrototype => {
         trunkGeos.push(top);
     }
 
-    // Angular Branches
     const branches = 2 + Math.floor(rng() * 4);
     for (let i = 0; i < branches; i++) {
         const y = 1.0 + rng() * (trunkH - 1.5);
         const len = 0.8 + rng() * 1.2;
-        // 3 segments for triangle branches (sharp)
         const branch = new THREE.CylinderGeometry(0.02, 0.12, len, 3);
         branch.translate(0, len / 2, 0);
 
-        const rotY = rng() * Math.PI * 2;
-        const rotZ = Math.PI / 3 + rng() * Math.PI / 4; // Steeper angle
+        const rotY = rng() * PI2;
+        const rotZ = Math.PI / 3 + rng() * Math.PI / 4;
 
-        // Position on trunk
         const bx = y * Math.sin(leanZ);
         const bz = y * Math.sin(leanX);
 
@@ -287,28 +281,25 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
         return x - Math.floor(x);
     };
 
-    // BIRCH: Slender, white, tall
     const height = 5.0 + rng() * 2.5;
-    const trunkRadius = 0.12; // Thinner
+    const trunkRadius = 0.12;
 
     const trunk = new THREE.CylinderGeometry(trunkRadius * 0.6, trunkRadius, height, 5);
     trunk.translate(0, height / 2, 0);
-    const leanX = (rng() - 0.5) * 0.2; // More lean
+    const leanX = (rng() - 0.5) * 0.2;
     const leanZ = (rng() - 0.5) * 0.2;
     bakeGeo(trunk, new THREE.Vector3(0, 0, 0), new THREE.Euler(leanX, 0, leanZ), new THREE.Vector3(1, 1, 1));
     trunkGeos.push(trunk);
 
-    // Leaves: Small clumps attached high up
     const clusters = 8 + Math.floor(rng() * 4);
     for (let i = 0; i < clusters; i++) {
         const y = height * 0.5 + rng() * height * 0.5;
-        const size = 0.6 + rng() * 0.5; // Smaller clumps
+        const size = 0.6 + rng() * 0.5;
         const sphere = new THREE.IcosahedronGeometry(size, 0);
 
         const r = 0.4 + rng() * 1.2;
-        const a = rng() * Math.PI * 2;
+        const a = rng() * PI2;
 
-        // Position relative to lean
         const lx = y * Math.sin(leanZ);
         const lz = y * Math.sin(leanX);
 
@@ -324,8 +315,6 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
     };
 };
 
-// --- MAIN GENERATOR CLASS ---
-
 export const EnvironmentGenerator = {
 
     initNaturePrototypes: async (yieldToMain?: () => Promise<void>) => {
@@ -340,21 +329,174 @@ export const EnvironmentGenerator = {
         }
     },
 
-    // Support legacy call with alias if needed, or simply let AssetPreloader call initNaturePrototypes
-    // For safety, we can adding initPrototypes as an alias:
     initPrototypes: async (yieldToMain?: () => Promise<void>) => {
         return EnvironmentGenerator.initNaturePrototypes(yieldToMain);
+    },
+
+    createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
+        if (!points || points.length < 2) return;
+
+        const mountainWidth = 30;
+        const mountainHeightPeak = 10;
+        const segmentsX = 70;
+        const segmentsZ = 30;
+        const mountainSideBias = 1.0;
+
+        const COLORS = {
+            SNOW: new THREE.Color(0xffffff),
+            ROCK_LIGHT: new THREE.Color(0x888899),
+            ROCK_DARK: new THREE.Color(0x444455),
+        };
+
+        const curve = new THREE.CatmullRomCurve3(points);
+        const planeGeo = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsZ);
+        const posAttr = planeGeo.getAttribute('position');
+        const vertex = new THREE.Vector3();
+        const targetPointOnCurve = new THREE.Vector3();
+
+        for (let i = 0; i <= segmentsX; i++) {
+            const t = i / segmentsX;
+            curve.getPointAt(t, targetPointOnCurve);
+            const tangent = curve.getTangentAt(t).normalize();
+            const sideDirection = new THREE.Vector3(-tangent.z, 0, tangent.x);
+
+            for (let j = 0; j <= segmentsZ; j++) {
+                const index = i * (segmentsZ + 1) + j;
+                const vFactor = j / segmentsZ;
+                const vOffset = (vFactor - mountainSideBias) * mountainWidth;
+                const distToRidge = Math.abs(vFactor - 0.4) * mountainWidth;
+
+                let baseHeight = 0;
+                const maxDist = mountainWidth * 0.7;
+                if (distToRidge < maxDist) {
+                    baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
+                }
+
+                let finalY = 0;
+                let xJitter = 0;
+                let zJitter = 0;
+
+                if (baseHeight > 1.0) {
+                    finalY = Math.max(0, baseHeight + (Math.random() - 0.5) * 12);
+                    xJitter = (Math.random() - 0.5) * 4;
+                    zJitter = (Math.random() - 0.5) * 4;
+                }
+
+                const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
+                const finalZ = targetPointOnCurve.z + (sideDirection.z * vOffset) + zJitter;
+                const finalYPos = targetPointOnCurve.y + finalY;
+
+                posAttr.setXYZ(index, finalX, finalYPos, finalZ);
+            }
+        }
+
+        if (opening) {
+            const openingPos = new THREE.Vector3();
+            opening.getWorldPosition(openingPos);
+            const safeZoneRadius = 14;
+            const clearanceHeight = 10;
+
+            for (let i = 0; i < posAttr.count; i++) {
+                vertex.fromBufferAttribute(posAttr, i);
+                const dist = Math.sqrt(Math.pow(vertex.x - openingPos.x, 2) + Math.pow(vertex.z - openingPos.z, 2));
+                if (dist < safeZoneRadius && vertex.y < clearanceHeight) {
+                    posAttr.setY(i, -25);
+                }
+            }
+        }
+
+        posAttr.needsUpdate = true;
+        let mountainGeo = planeGeo.toNonIndexed();
+        mountainGeo.computeVertexNormals();
+
+        const count = mountainGeo.getAttribute('position').count;
+        const colors = new Float32Array(count * 3);
+        const finalPosAttr = mountainGeo.getAttribute('position');
+        const normalAttr = mountainGeo.getAttribute('normal');
+        const normal = new THREE.Vector3();
+        const up = new THREE.Vector3(0, 1, 0);
+        const color = new THREE.Color();
+
+        for (let i = 0; i < count; i += 3) {
+            const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
+            normal.fromBufferAttribute(normalAttr, i);
+            const upwardness = normal.dot(up);
+
+            if ((h > mountainHeightPeak * 0.55 && upwardness > 0.65) || (upwardness > 0.9 && h > 10)) {
+                color.copy(COLORS.SNOW);
+            } else {
+                color.copy(Math.random() > 0.5 ? COLORS.ROCK_LIGHT : COLORS.ROCK_DARK);
+            }
+
+            for (let j = 0; j < 3; j++) {
+                const idx = (i + j) * 3;
+                colors[idx] = color.r;
+                colors[idx + 1] = color.g;
+                colors[idx + 2] = color.b;
+            }
+        }
+
+        mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const mountainMat = new THREE.MeshStandardMaterial({
+            vertexColors: true,
+            flatShading: true,
+            roughness: 0.9,
+            side: THREE.DoubleSide
+        });
+
+        const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+        ctx.scene.add(mountain);
+    },
+
+    createMountainOpening: () => {
+        const tunnelWidthOuter = 16;
+        const tunnelHeightWalls = 5;
+        const tunnelArchRise = 2;
+        const tunnelThickness = 3;
+        const tunnelDepth = 5;
+
+        const halfWidthO = tunnelWidthOuter / 2;
+        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
+        const caveOpeningGroup = new THREE.Group();
+
+        const archShape = new THREE.Shape();
+        archShape.moveTo(-halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
+        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
+        archShape.lineTo(halfWidthO, 0);
+        archShape.lineTo(-halfWidthO, 0);
+
+        const halfWidthI = halfWidthO - tunnelThickness;
+        const wallHeightI = tunnelHeightWalls;
+        const controlPointY_I = controlPointY_O - tunnelThickness;
+
+        const holePath = new THREE.Path();
+        holePath.moveTo(halfWidthI, 0);
+        holePath.lineTo(halfWidthI, wallHeightI);
+        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
+        holePath.lineTo(-halfWidthI, 0);
+        holePath.lineTo(halfWidthI, 0);
+
+        archShape.holes.push(holePath);
+
+        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
+        archGeo.translate(0, 0, -tunnelDepth / 2);
+
+        const tunnelMat = MATERIALS.concrete.clone();
+        tunnelMat.side = THREE.DoubleSide;
+        const arch = new THREE.Mesh(archGeo, tunnelMat);
+        caveOpeningGroup.add(arch);
+
+        return caveOpeningGroup;
     },
 
     createRock: (width: number, height: number, sharpness: number = 0.5) => {
         const group = new THREE.Group();
         const mat = MATERIALS.stone;
 
-        // Main bulk
         const r = width * 0.4;
-        const geo = new THREE.DodecahedronGeometry(r, 0); // Low poly
+        const geo = new THREE.DodecahedronGeometry(r, 0);
 
-        // Randomize shape via scale
         const sx = 1.0 + (Math.random() - 0.5) * 0.4;
         const sz = 1.0 + (Math.random() - 0.5) * 0.4;
         const sy = (height / width) * (1.0 + (Math.random() - 0.5) * 0.4);
@@ -363,12 +505,9 @@ export const EnvironmentGenerator = {
         mesh.scale.set(sx, sy, sz);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-
-        // Random rotation
         mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
         group.add(mesh);
 
-        // Add 1-2 smaller chunks for detail
         if (Math.random() > 0.3) {
             const sub = new THREE.Mesh(geo, mat);
             sub.scale.set(sx * 0.5, sy * 0.5, sz * 0.5);
@@ -441,7 +580,7 @@ export const EnvironmentGenerator = {
         }
 
         const trunkMesh = new THREE.InstancedMesh(proto.trunkGeo, trunkMat, matrices.length);
-        trunkMesh.castShadow = !materialOverride; // Disable shadows for silhouettes (assimilated from CampWorld logic)
+        trunkMesh.castShadow = !materialOverride;
         trunkMesh.receiveShadow = !materialOverride;
 
         let leavesMesh: THREE.InstancedMesh | undefined;
@@ -456,28 +595,29 @@ export const EnvironmentGenerator = {
                     map: (leavesMat as any).map,
                     alphaTest: (leavesMat as any).alphaTest
                 });
-                let snowMesh: THREE.InstancedMesh | undefined;
-                if (proto.snowGeo && !materialOverride) { // No snow on silhouettes
-                    snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
-                    snowMesh.castShadow = true;
-                }
-
-                for (let i = 0; i < matrices.length; i++) {
-                    trunkMesh.setMatrixAt(i, matrices[i]);
-                    if (leavesMesh) leavesMesh.setMatrixAt(i, matrices[i]);
-                    if (snowMesh) snowMesh.setMatrixAt(i, matrices[i]);
-                }
-
-                trunkMesh.instanceMatrix.needsUpdate = true;
-                if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
-                if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
-
-                if (!ctx.uniqueMeshes) (ctx as any).uniqueMeshes = [];
-                ctx.scene.add(trunkMesh);
-                if (leavesMesh) ctx.scene.add(leavesMesh);
-                if (snowMesh) ctx.scene.add(snowMesh);
             }
         }
+
+        let snowMesh: THREE.InstancedMesh | undefined;
+        if (proto.snowGeo && !materialOverride) {
+            snowMesh = new THREE.InstancedMesh(proto.snowGeo, MATERIALS.snow, matrices.length);
+            snowMesh.castShadow = true;
+        }
+
+        for (let i = 0; i < matrices.length; i++) {
+            trunkMesh.setMatrixAt(i, matrices[i]);
+            if (leavesMesh) leavesMesh.setMatrixAt(i, matrices[i]);
+            if (snowMesh) snowMesh.setMatrixAt(i, matrices[i]);
+        }
+
+        trunkMesh.instanceMatrix.needsUpdate = true;
+        if (leavesMesh) leavesMesh.instanceMatrix.needsUpdate = true;
+        if (snowMesh) snowMesh.instanceMatrix.needsUpdate = true;
+
+        if (!ctx.uniqueMeshes) (ctx as any).uniqueMeshes = [];
+        ctx.scene.add(trunkMesh);
+        if (leavesMesh) ctx.scene.add(leavesMesh);
+        if (snowMesh) ctx.scene.add(snowMesh);
     },
 
     addInstancedGrass: (ctx: SectorContext, matrices: THREE.Matrix4[], isFlower: boolean = false, scaleY: number = 1.0) => {
@@ -498,7 +638,7 @@ export const EnvironmentGenerator = {
 
         const mesh = new THREE.InstancedMesh(geo, mat, matrices.length);
         mesh.receiveShadow = true;
-        mesh.castShadow = false; // Explicitly disable shadows for grass/flowers
+        mesh.castShadow = false;
 
         for (let i = 0; i < matrices.length; i++) {
             mesh.setMatrixAt(i, matrices[i]);
@@ -507,65 +647,54 @@ export const EnvironmentGenerator = {
         ctx.scene.add(mesh);
     },
 
-    /**
-     * Mixed usage createForest
-     * Supports both Rect Area and Polygon (via overloading checks)
-     */
     createForest: (ctx: SectorContext,
         region: { x: number, z: number, w: number, d: number } | THREE.Vector3[],
         countOrSpacing: number,
         type: string | string[] = 'PINE') => {
 
-        // Check if region is Polygon (Array)
         if (Array.isArray(region)) {
-            // Redirect to Polygon implementation
             EnvironmentGenerator.createForestFromPolygon(ctx, region, countOrSpacing, type as string | string[]);
             return;
         }
 
-        // Rect Area implementation
         const area = region as { x: number, z: number, w: number, d: number };
-        const count = countOrSpacing; // In this case it's count
+        const count = countOrSpacing;
 
         const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
-        const dummy = new THREE.Object3D();
 
         for (let i = 0; i < count; i++) {
             const x = area.x + (Math.random() - 0.5) * area.w;
             const z = area.z + (Math.random() - 0.5) * area.d;
 
             const scale = 0.8 + Math.random() * 0.6;
-            dummy.position.set(x, 0, z);
-            dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
-
-            // Random lean
             const leanX = (Math.random() - 0.5) * 0.1;
             const leanZ = (Math.random() - 0.5) * 0.1;
-            dummy.rotateX(leanX);
-            dummy.rotateZ(leanZ);
 
-            dummy.scale.setScalar(scale);
-            dummy.updateMatrix();
+            // [VINTERDÖD] Zero-GC matrisbyggande utan Object3D.
+            _pos.set(x, 0, z);
+            _euler.set(leanX, Math.random() * PI2, leanZ);
+            _quat.setFromEuler(_euler);
+            _scale.setScalar(scale);
 
-            // Pick type if array
+            const mat = new THREE.Matrix4();
+            mat.compose(_pos, _quat, _scale);
+
             let selectedType = type;
             if (Array.isArray(type)) {
                 selectedType = type[Math.floor(Math.random() * type.length)];
             }
             if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD', 'BIRCH'][Math.floor(Math.random() * 4)];
-
-            const variant = i % 3;
-            // Ensure selectedType is a string
             if (typeof selectedType !== 'string') selectedType = 'PINE';
 
+            const variant = i % 3;
             const key = `${selectedType}_${variant}`;
 
             if (!matrixBuckets[key]) matrixBuckets[key] = [];
-            matrixBuckets[key].push(dummy.matrix.clone());
+            matrixBuckets[key].push(mat);
 
             SectorGenerator.addObstacle(ctx, {
                 position: new THREE.Vector3(x, 0, z),
-                quaternion: new THREE.Quaternion(),
+                quaternion: new THREE.Quaternion(), // Trädens colliders står alltid upprätt
                 collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
                 id: `tree_${i}`
             });
@@ -580,12 +709,16 @@ export const EnvironmentGenerator = {
         if (!polygon || polygon.length < 3) return;
 
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        polygon.forEach(p => {
+        const polyLen = polygon.length;
+
+        // [VINTERDÖD] Bort med forEach!
+        for (let i = 0; i < polyLen; i++) {
+            const p = polygon[i];
             if (p.x < minX) minX = p.x;
             if (p.x > maxX) maxX = p.x;
             if (p.z < minZ) minZ = p.z;
             if (p.z > maxZ) maxZ = p.z;
-        });
+        }
 
         const width = maxX - minX;
         const depth = maxZ - minZ;
@@ -593,38 +726,37 @@ export const EnvironmentGenerator = {
         const count = Math.floor(area / (spacing * spacing));
 
         const matrixBuckets: Record<string, THREE.Matrix4[]> = {};
-        const dummy = new THREE.Object3D();
 
         for (let i = 0; i < count; i++) {
             const x = minX + Math.random() * width;
             const z = minZ + Math.random() * depth;
 
-            if (isPointInPolygon(new THREE.Vector3(x, 0, z), polygon)) {
+            // [VINTERDÖD] Skicka nummer, inte ett nytt objekt.
+            if (isPointInPolygon(x, z, polygon)) {
                 const scale = 0.8 + Math.random() * 0.6;
-                dummy.position.set(x, 0, z);
-                dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+                const leanX = (Math.random() - 0.5) * 0.1;
+                const leanZ = (Math.random() - 0.5) * 0.1;
 
-                // Lean
-                dummy.rotateX((Math.random() - 0.5) * 0.1);
-                dummy.rotateZ((Math.random() - 0.5) * 0.1);
+                _pos.set(x, 0, z);
+                _euler.set(leanX, Math.random() * PI2, leanZ);
+                _quat.setFromEuler(_euler);
+                _scale.setScalar(scale);
 
-                dummy.scale.setScalar(scale);
-                dummy.updateMatrix();
+                const mat = new THREE.Matrix4();
+                mat.compose(_pos, _quat, _scale);
 
                 let selectedType = type;
                 if (Array.isArray(type)) {
                     selectedType = type[Math.floor(Math.random() * type.length)];
                 }
                 if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD', 'BIRCH'][Math.floor(Math.random() * 4)];
-
-                const variant = i % 3;
-                // Ensure selectedType is a string
                 if (typeof selectedType !== 'string') selectedType = 'PINE';
 
+                const variant = i % 3;
                 const key = `${selectedType}_${variant}`;
 
                 if (!matrixBuckets[key]) matrixBuckets[key] = [];
-                matrixBuckets[key].push(dummy.matrix.clone());
+                matrixBuckets[key].push(mat);
 
                 SectorGenerator.addObstacle(ctx, {
                     position: new THREE.Vector3(x, 0, z),
@@ -644,30 +776,34 @@ export const EnvironmentGenerator = {
         if (!polygon || polygon.length < 3) return;
 
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        polygon.forEach(p => {
+        const polyLen = polygon.length;
+        for (let i = 0; i < polyLen; i++) {
+            const p = polygon[i];
             if (p.x < minX) minX = p.x;
             if (p.x > maxX) maxX = p.x;
             if (p.z < minZ) minZ = p.z;
             if (p.z > maxZ) maxZ = p.z;
-        });
+        }
 
         const w = maxX - minX;
         const d = maxZ - minZ;
         const count = Math.floor(w * d * 0.5 * density);
 
         const matrices: THREE.Matrix4[] = [];
-        const dummy = new THREE.Object3D();
 
         for (let i = 0; i < count; i++) {
             const x = minX + Math.random() * w;
             const z = minZ + Math.random() * d;
 
-            if (isPointInPolygon(new THREE.Vector3(x, 0, z), polygon)) {
-                dummy.position.set(x, 0, z);
-                dummy.scale.set(1, 1.5 + Math.random(), 1);
-                dummy.rotation.y = Math.random() * Math.PI;
-                dummy.updateMatrix();
-                matrices.push(dummy.matrix.clone());
+            if (isPointInPolygon(x, z, polygon)) {
+                _pos.set(x, 0, z);
+                _euler.set(0, Math.random() * Math.PI, 0);
+                _quat.setFromEuler(_euler);
+                _scale.set(1, 1.5 + Math.random(), 1);
+
+                const mat = new THREE.Matrix4();
+                mat.compose(_pos, _quat, _scale);
+                matrices.push(mat);
             }
         }
 
@@ -691,11 +827,10 @@ export const EnvironmentGenerator = {
             const isFallen = Math.random() > 0.3;
             const tree = EnvironmentGenerator.createDeadTree(isFallen ? 'fallen' : 'standing', 0.8 + Math.random() * 0.5);
             tree.position.set(tx, 0, tz);
-            tree.rotation.y = Math.random() * Math.PI * 2;
+            tree.rotation.y = Math.random() * PI2;
 
             ctx.scene.add(tree);
 
-            // Add collider for standing trees only (fallen usually low enough to walk over or separate handling)
             if (!isFallen) {
                 SectorGenerator.addObstacle(ctx, {
                     position: new THREE.Vector3(tx, 0, tz),
@@ -704,7 +839,6 @@ export const EnvironmentGenerator = {
             }
         }
 
-        // Add scattered debris/logs
         EnvironmentGenerator.fillArea(ctx, { x, z }, { width: w, height: d }, 15, 'debris');
     },
 
@@ -715,59 +849,59 @@ export const EnvironmentGenerator = {
         let count = 0;
 
         if (Array.isArray(region)) {
-            // Polygon - calc bounds
             let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-            region.forEach(p => {
+            const polyLen = region.length;
+            for (let i = 0; i < polyLen; i++) {
+                const p = region[i];
                 if (p.x < minX) minX = p.x;
                 if (p.x > maxX) maxX = p.x;
                 if (p.z < minZ) minZ = p.z;
                 if (p.z > maxZ) maxZ = p.z;
-            });
+            }
             const w = maxX - minX;
             const d = maxZ - minZ;
-            count = Math.floor(w * d * countOrDensity); // Treat as density for poly
+            count = Math.floor(w * d * countOrDensity);
             area = { x: minX, z: minZ, w, d };
         } else {
             area = region;
-            count = countOrDensity; // Treat as absolute count for rect
+            count = countOrDensity;
         }
 
         const matrices: THREE.Matrix4[] = [];
-        const dummy = new THREE.Object3D();
 
         for (let i = 0; i < count; i++) {
             const x = area.x + Math.random() * area.w;
             const z = area.z + Math.random() * area.d;
 
-            if (Array.isArray(region)) {
-                if (!isPointInPolygon(new THREE.Vector3(x, 0, z), region)) continue;
-            }
+            if (Array.isArray(region) && !isPointInPolygon(x, z, region)) continue;
 
-            dummy.position.set(x, 0, z);
-            dummy.rotation.y = Math.random() * Math.PI * 2;
-            dummy.scale.setScalar(0.8 + Math.random() * 0.5);
-            dummy.updateMatrix();
-            matrices.push(dummy.matrix.clone());
+            _pos.set(x, 0, z);
+            _euler.set(0, Math.random() * PI2, 0);
+            _quat.setFromEuler(_euler);
+            _scale.setScalar(0.8 + Math.random() * 0.5);
+
+            const mat = new THREE.Matrix4();
+            mat.compose(_pos, _quat, _scale);
+            matrices.push(mat);
         }
 
         EnvironmentGenerator.addInstancedGrass(ctx, matrices, true);
     },
 
     fillAreaWithGrass: (ctx: SectorContext, region: { x: number, z: number, w: number, d: number } | THREE.Vector3[], density: number = 2.0) => {
-        // Wrapper for legacy or simple grass filling
-        EnvironmentGenerator.fillAreaWithFlowers(ctx, region, density);
-        // Note: fillAreaWithFlowers actually adds grass too, but we can specialize if needed.
-        // For now, mapping to the same logic but maybe different internal flag if we want just grass?
-        // Let's copy the logic but set isFlower=false explicitly for all
-
         let area: { x: number, z: number, w: number, d: number };
         let count = 0;
+
         if (Array.isArray(region)) {
             let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-            region.forEach(p => {
-                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-                if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
-            });
+            const polyLen = region.length;
+            for (let i = 0; i < polyLen; i++) {
+                const p = region[i];
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.z < minZ) minZ = p.z;
+                if (p.z > maxZ) maxZ = p.z;
+            }
             count = Math.floor((maxX - minX) * (maxZ - minZ) * density);
             area = { x: minX, z: minZ, w: maxX - minX, d: maxZ - minZ };
         } else {
@@ -776,24 +910,25 @@ export const EnvironmentGenerator = {
         }
 
         const matrices: THREE.Matrix4[] = [];
-        const dummy = new THREE.Object3D();
+
         for (let i = 0; i < count; i++) {
             const x = area.x + Math.random() * area.w;
             const z = area.z + Math.random() * area.d;
-            if (Array.isArray(region) && !isPointInPolygon(new THREE.Vector3(x, 0, z), region)) continue;
 
-            dummy.position.set(x, 0, z);
-            dummy.rotation.y = Math.random() * Math.PI * 2;
-            dummy.scale.setScalar(0.8 + Math.random() * 0.5);
-            dummy.updateMatrix();
-            matrices.push(dummy.matrix.clone());
+            if (Array.isArray(region) && !isPointInPolygon(x, z, region)) continue;
+
+            _pos.set(x, 0, z);
+            _euler.set(0, Math.random() * PI2, 0);
+            _quat.setFromEuler(_euler);
+            _scale.setScalar(0.8 + Math.random() * 0.5);
+
+            const mat = new THREE.Matrix4();
+            mat.compose(_pos, _quat, _scale);
+            matrices.push(mat);
         }
         EnvironmentGenerator.addInstancedGrass(ctx, matrices, false);
     },
 
-    /**
-     * Legacy compatible fillArea with overload support
-     */
     fillArea: (ctx: SectorContext,
         centerOrArea: { x: number, z: number, w?: number, d?: number },
         sizeOrDensity: { width: number, height: number } | number,
@@ -802,36 +937,37 @@ export const EnvironmentGenerator = {
         avoidCenterRadius: number = 0,
         exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
 
-        // Check for new signature: (ctx, area{x,z,w,d}, density)
         if ((centerOrArea as any).w !== undefined && typeof sizeOrDensity === 'number' && count === undefined) {
             const area = centerOrArea as { x: number, z: number, w: number, d: number };
-            const density = sizeOrDensity as number; // It's density in new sig
+            const density = sizeOrDensity as number;
 
-            // Reuse existing logic (with default PINE/OAK mix?)
             const treeCount = Math.floor(area.w * area.d * 0.01 * density);
             EnvironmentGenerator.createForest(ctx, area, treeCount, 'PINE');
 
-            // Grass impl...
             const grassCount = Math.floor(area.w * area.d * 0.1 * density);
             const grassMatrices: THREE.Matrix4[] = [];
             const flowerMatrices: THREE.Matrix4[] = [];
-            const dummy = new THREE.Object3D();
+
             for (let i = 0; i < grassCount; i++) {
                 const x = area.x + (Math.random() - 0.5) * area.w;
                 const z = area.z + (Math.random() - 0.5) * area.d;
-                dummy.position.set(x, 0, z);
-                dummy.scale.setScalar(0.8 + Math.random() * 0.5);
-                dummy.rotation.y = Math.random() * Math.PI;
-                dummy.updateMatrix();
-                if (Math.random() > 0.9) flowerMatrices.push(dummy.matrix.clone());
-                else grassMatrices.push(dummy.matrix.clone());
+
+                _pos.set(x, 0, z);
+                _euler.set(0, Math.random() * Math.PI, 0);
+                _quat.setFromEuler(_euler);
+                _scale.setScalar(0.8 + Math.random() * 0.5);
+
+                const mat = new THREE.Matrix4();
+                mat.compose(_pos, _quat, _scale);
+
+                if (Math.random() > 0.9) flowerMatrices.push(mat);
+                else grassMatrices.push(mat);
             }
             EnvironmentGenerator.addInstancedGrass(ctx, grassMatrices, false);
             EnvironmentGenerator.addInstancedGrass(ctx, flowerMatrices, true);
             return;
         }
 
-        // Legacy Signature
         const center = centerOrArea as { x: number, z: number };
         let w = 0, d = 0;
         if (typeof sizeOrDensity === 'number') { w = sizeOrDensity; d = sizeOrDensity; }
@@ -843,12 +979,10 @@ export const EnvironmentGenerator = {
         if (type === 'tree') {
             EnvironmentGenerator.createForest(ctx, area, numItems, 'PINE');
         } else if (type === 'rock') {
-            // Placeholder Rock Gen
             for (let i = 0; i < numItems; i++) {
                 const x = area.x + (Math.random() - 0.5) * area.w;
                 const z = area.z + (Math.random() - 0.5) * area.d;
 
-                // Simple Check
                 if (avoidCenterRadius > 0 && Math.hypot(x - center.x, z - center.z) < avoidCenterRadius) continue;
 
                 const s = 0.5 + Math.random() * 1.5;
@@ -865,13 +999,11 @@ export const EnvironmentGenerator = {
                 });
             }
         } else if (type === 'debris') {
-            // Placeholder Debris
             for (let i = 0; i < numItems; i++) {
                 const x = area.x + (Math.random() - 0.5) * area.w;
                 const z = area.z + (Math.random() - 0.5) * area.d;
                 if (avoidCenterRadius > 0 && Math.hypot(x - center.x, z - center.z) < avoidCenterRadius) continue;
 
-                // Simple Plank
                 const plank = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.3), MATERIALS.deadWood);
                 plank.position.set(x, 0.05, z);
                 plank.rotation.y = Math.random() * Math.PI;
@@ -881,5 +1013,4 @@ export const EnvironmentGenerator = {
     }
 };
 
-// Initialize prototypes
 EnvironmentGenerator.initNaturePrototypes();

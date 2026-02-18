@@ -3,6 +3,7 @@ import { Enemy } from '../EnemyManager';
 import { Obstacle } from '../world/CollisionResolution';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
+import { haptic } from '../../utils/HapticManager';
 import { WEAPONS, WeaponBehavior, WeaponType } from '../../content/weapons';
 import { FXSystem } from '../systems/FXSystem';
 import { SpatialGrid } from '../world/SpatialGrid';
@@ -70,6 +71,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             ctx.spawnPart(pos.x, 0, pos.z, 'debris', 25, undefined, undefined, undefined, 2.0);
             ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
             soundManager.playExplosion();
+            //haptic.explosion();
 
             if (ctx.noiseEvents) ctx.noiseEvents.push({ pos: pos.clone(), radius: 80, time: ctx.now, active: true });
 
@@ -106,8 +108,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 0, pos.z, 'glass', 15);
             soundManager.playExplosion();
-
-            // ZERO-GC: Pool FireZones
+            //haptic.explosion();
             let fz: FireZone | null = null;
             for (let i = 0; i < FIREZONE_POOL.length; i++) {
                 if (FIREZONE_POOL[i].life <= 0) {
@@ -142,6 +143,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1, undefined, undefined, undefined, 8.0);
             soundManager.playExplosion();
+            //haptic.explosion();
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             for (const e of nearby) {
                 e.isBlinded = true;

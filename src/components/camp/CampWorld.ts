@@ -23,7 +23,7 @@ const setupTrees = async (scene: THREE.Scene) => {
     const treeInstances: { x: number, z: number, scale: number, darken: number }[] = [];
 
     // 1. HIGH DARK SILHOUETTES (Denser & Wider)
-    for (let i = 0; i < 60; i++) { // Increased count for better background fill since it's cheap now
+    for (let i = 0; i < 60; i++) {
         const x = (srandom() - 0.5) * 120;
         const z = -45 - srandom() * 80;
         let scale = 1.0 + srandom() * 2.5;
@@ -49,7 +49,6 @@ const setupTrees = async (scene: THREE.Scene) => {
     treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
 
     // --- TREE INSTANTIATION ---
-    // Make sure prototypes are initialized
     await EnvironmentGenerator.initNaturePrototypes();
 
     const normalMatrices: Record<string, THREE.Matrix4[]> = {};
@@ -67,7 +66,6 @@ const setupTrees = async (scene: THREE.Scene) => {
         dummy.scale.setScalar(inst.scale);
         dummy.updateMatrix();
 
-        // Bucket by Variant
         // Variant logic: consistent based on position
         const variantIdx = Math.floor(Math.abs(inst.x + inst.z)) % 3;
         const key = `PINE_${variantIdx}`;
@@ -81,12 +79,8 @@ const setupTrees = async (scene: THREE.Scene) => {
         }
     }
 
-    // Create Silhouette Material (Shared)
-    const silhouetteMat = MATERIALS.treeFirNeedles.clone(); // Clone generic to keep properties, or standard
-    silhouetteMat.color.setHex(0x000000); // Pure black
-    silhouetteMat.color.addScalar(0.12); // Lift slightly
-    silhouetteMat.roughness = 1.0;
-    silhouetteMat.metalness = 0.0;
+    // [VINTERDÖD] Använd det globala, patchade materialet. Inga kloner!
+    const silhouetteMat = MATERIALS.treeSilhouette;
 
     // Render Normal Trees
     for (const key in normalMatrices) {

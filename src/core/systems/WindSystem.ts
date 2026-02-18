@@ -18,30 +18,28 @@ export class WindSystem {
   private baseAngle: number = 0.0;
   private angleVariance: number = Math.PI;
 
-  private boundUniforms: WindBind[] = [];
   private overrideActive: boolean = false;
+
+  // Här lagrar detta specifika WindSystem sina referenser
+  private boundUniforms: WindBind[] = [];
 
   constructor() { }
 
   /**
-   * [VINTERDÖD] Safe binding. Checks if material and shader exist before pushing.
+   * [VINTERDÖD] Binder ett materials uniforms till detta WindSystem.
+   * Eftersom vi pre-allokerar i userData, slipper vi oroa oss för när shadern kompileras.
    */
   public bindMaterial(mat: THREE.Material | undefined) {
-    // [VINTERDÖD] Safety check for undefined materials
-    if (!mat) return;
+    if (!mat || !mat.userData.windUniforms) return;
 
-    const shader = mat.userData.shader;
-    if (shader && shader.uniforms.uTime && shader.uniforms.uWind) {
-      // Check if already bound to avoid duplicates in the array
-      for (let i = 0; i < this.boundUniforms.length; i++) {
-        if (this.boundUniforms[i].uTime === shader.uniforms.uTime) return;
-      }
+    const uniforms = mat.userData.windUniforms as WindBind;
 
-      this.boundUniforms.push({
-        uTime: shader.uniforms.uTime,
-        uWind: shader.uniforms.uWind
-      });
+    // Undvik dubbletter (O(N) check är ok här då listan är pytteliten)
+    for (let i = 0; i < this.boundUniforms.length; i++) {
+      if (this.boundUniforms[i].uTime === uniforms.uTime) return;
     }
+
+    this.boundUniforms.push(uniforms);
   }
 
   setOverride(direction: number, strength: number) {
@@ -52,7 +50,11 @@ export class WindSystem {
     this.direction.set(this.current.x, 0, this.current.y).normalize();
   }
 
-  setRandomBounds(minStrength: number, maxStrength: number, baseAngle: number = 0.0, angleVariance: number = Math.PI) {
+  clearOverride() {
+    this.overrideActive = false;
+  }
+
+  setRandomWind(minStrength: number, maxStrength: number, baseAngle: number = 0.0, angleVariance: number = Math.PI) {
     this.minStrength = minStrength;
     this.maxStrength = maxStrength;
     this.baseAngle = baseAngle;
@@ -61,15 +63,20 @@ export class WindSystem {
   }
 
   update(now: number, deltaTime: number = 0.016): THREE.Vector2 {
-    // [VINTERDÖD] Attempt to bind core materials if they aren't tracked yet.
-    // We only do this check if the list is incomplete to save CPU cycles.
-    if (this.boundUniforms.length < 6) {
+    if (this.boundUniforms.length === 0) {
+      this.bindMaterial(MATERIALS.hedge);
       this.bindMaterial(MATERIALS.grass);
+      this.bindMaterial(MATERIALS.flower);
+      this.bindMaterial(MATERIALS.wheat);
       this.bindMaterial(MATERIALS.treeFirNeedles);
       this.bindMaterial(MATERIALS.treeLeavesOak);
       this.bindMaterial(MATERIALS.treeLeavesBirch);
-      this.bindMaterial(MATERIALS.flower);
-      this.bindMaterial(MATERIALS.wheat);
+      this.bindMaterial(MATERIALS.treeLeaves);
+      this.bindMaterial(MATERIALS.treeTrunk);
+      this.bindMaterial(MATERIALS.treeTrunkOak);
+      this.bindMaterial(MATERIALS.treeTrunkBirch);
+      this.bindMaterial(MATERIALS.deadWood);
+      this.bindMaterial(MATERIALS.treeSilhouette);
     }
 
     if (!this.overrideActive && now > this.nextChange) {
@@ -89,7 +96,7 @@ export class WindSystem {
     this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 
-    // [VINTERDÖD] Zero-overhead uniform push.
+    // Brutal iterations-loop för just DETTA WindSystem
     const timeSec = now * 0.001;
     const windX = this.current.x;
     const windY = this.current.y;

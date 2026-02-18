@@ -35,7 +35,7 @@ export const createProceduralDiffuse = () => {
         const canvas = document.createElement('canvas');
         canvas.width = sw;
         canvas.height = sh;
-        const ctx = canvas.getContext('2d')!;
+        const ctx = canvas.getContext('2d', { alpha: false })!; // [VINTERDÖD] Om inte alfakanal behövs explicit, säg det för prestanda.
 
         fn(ctx, QUALITY);
 
@@ -43,7 +43,34 @@ export const createProceduralDiffuse = () => {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
 
+        // [VINTERDÖD FIX] ZERO-CPU OVERHEAD.
+        // Stänger av uppdateringen av texturens UV-matris varje frame. 
+        // Detta är ett måste för CanvasTextures som appliceras på tusentals träd/mark-objekt.
+        texture.matrixAutoUpdate = false;
+
         // Performance optimization: Signal that this texture won't change again
+        texture.needsUpdate = false;
+
+        return texture;
+    };
+
+    /**
+     * Internal helper för texturer med Alfa-kanal.
+     */
+    const drawAlpha = (w: number, h: number, fn: (ctx: CanvasRenderingContext2D, scale: number) => void) => {
+        const sw = Math.floor(w * QUALITY);
+        const sh = Math.floor(h * QUALITY);
+        const canvas = document.createElement('canvas');
+        canvas.width = sw;
+        canvas.height = sh;
+        const ctx = canvas.getContext('2d')!;
+
+        fn(ctx, QUALITY);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.matrixAutoUpdate = false;
         texture.needsUpdate = false;
 
         return texture;
@@ -82,15 +109,14 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    const pineBranch = draw(512, 512, (ctx, s) => { // Increased resolution for new detail
+    const pineBranch = drawAlpha(512, 512, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
-        // 1. Needles (Dense, dark green, painterly strokes)
         const needleColors = ['#1a261a', '#263326', '#0d1a0d', '#1f2e1f'];
         const center = w / 2;
         const needleCount = 2000 * s * s;
 
         for (let i = 0; i < needleCount; i++) {
-            const y = Math.random() * (h - 12 * s) + 12 * s; // Position along stem
+            const y = Math.random() * (h - 12 * s) + 12 * s;
             const progress = y / h;
             const maxW = (220 * s) * Math.pow(progress, 0.6);
 
@@ -113,7 +139,6 @@ export const createProceduralDiffuse = () => {
             ctx.stroke();
         }
 
-        // 2. Stem (Dark wood)
         ctx.strokeStyle = '#3e2723';
         ctx.lineWidth = 12 * s;
         ctx.beginPath();
@@ -121,11 +146,9 @@ export const createProceduralDiffuse = () => {
         ctx.lineTo(center, 10 * s);
         ctx.stroke();
 
-        // 3. Snow Clumps (Painterly white blobs on top)
         ctx.fillStyle = '#f0f8ff';
         ctx.globalAlpha = 1.0;
 
-        // Large clumps
         for (let i = 0; i < 40; i++) {
             const y = Math.random() * (h * 0.9);
             const widthAtY = (200 * s) * Math.pow(y / h, 0.6);
@@ -138,7 +161,7 @@ export const createProceduralDiffuse = () => {
                 ctx.fill();
             }
         }
-        // Fine snow dust
+
         const dustCount = 300 * s * s;
         for (let i = 0; i < dustCount; i++) {
             const x = Math.random() * w;
@@ -152,14 +175,11 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    const bark = draw(512, 1024, (ctx, s) => { // BARK_W, BARK_H
+    const bark = draw(512, 1024, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
-
-        // 1. Base
         ctx.fillStyle = '#2b2622';
         ctx.fillRect(0, 0, w, h);
 
-        // 2. Ridges
         const ridgeCount = 200 * s * s;
         for (let i = 0; i < ridgeCount; i++) {
             ctx.fillStyle = Math.random() > 0.5 ? '#1a1512' : '#3e3630';
@@ -170,7 +190,6 @@ export const createProceduralDiffuse = () => {
             ctx.fillRect(x, y, rw, rh);
         }
 
-        // 3. Moss Gradient
         const mossGrad = ctx.createLinearGradient(0, h, 0, h * 0.4);
         mossGrad.addColorStop(0, 'rgba(60, 100, 40, 0.9)');
         mossGrad.addColorStop(0.6, 'rgba(80, 120, 50, 0.4)');
@@ -178,7 +197,6 @@ export const createProceduralDiffuse = () => {
         ctx.fillStyle = mossGrad;
         ctx.fillRect(0, 0, w, h);
 
-        // 4. Snow in crevices
         const snowCreviceCount = 300 * s * s;
         for (let i = 0; i < snowCreviceCount; i++) {
             const x = Math.random() * w;
@@ -202,7 +220,7 @@ export const createProceduralDiffuse = () => {
         ctx.beginPath(); ctx.moveTo(340 * s, 100 * s); ctx.lineTo(300 * s, 140 * s); ctx.stroke();
     });
 
-    const frostAlpha = draw(256, 256, (ctx, s) => {
+    const frostAlpha = drawAlpha(256, 256, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         const grad = ctx.createLinearGradient(0, 0, w, 0);
         grad.addColorStop(0.0, 'rgba(255,255,255,1.0)');
@@ -221,7 +239,7 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    const halo = draw(256, 256, (ctx, s) => {
+    const halo = drawAlpha(256, 256, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
         g.addColorStop(0, 'rgba(255, 255, 240, 1)');
@@ -259,7 +277,7 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    const fenceMesh = draw(128, 128, (ctx, s) => {
+    const fenceMesh = drawAlpha(128, 128, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         ctx.clearRect(0, 0, w, h); ctx.strokeStyle = '#aaaaaa'; ctx.lineWidth = 3 * s;
         for (let i = 0; i <= w; i += 8 * s) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
@@ -285,7 +303,7 @@ export const createProceduralDiffuse = () => {
         ctx.globalAlpha = 1.0;
     });
 
-    const footprint = draw(64, 128, (ctx, s) => {
+    const footprint = drawAlpha(64, 128, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#ffffff';
         ctx.beginPath(); ctx.ellipse(w / 2, 35 * s, 20 * s, 30 * s, 0, 0, Math.PI * 2); ctx.fill();

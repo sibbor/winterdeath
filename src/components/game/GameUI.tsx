@@ -5,7 +5,7 @@ import InteractionPrompt from './InteractionPrompt';
 interface GameUIProps {
     onCloseClue: () => void;
 
-    interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
+    interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
     interactionLabel?: string;
     interactionScreenPos?: { x: number, y: number } | null;
     isMobileDevice?: boolean;

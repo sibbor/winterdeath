@@ -26,7 +26,7 @@ export const CampEnvironment = {
         const engine = Engine.getInstance();
 
         // [VINTERDÖD] Sync persistent systems to the new Camp scene
-        engine.wind.setRandomBounds(0.02, 0.4, Math.PI); //Math.PI * 0.25, 0.0);
+        engine.wind.setRandomWind(0.02, 0.05);
         engine.weather.reAttach(scene);
         engine.water.reAttach(scene);
 

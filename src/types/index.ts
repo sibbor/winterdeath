@@ -131,7 +131,6 @@ export interface Vector2 {
 
 export type TriggerType = 'COLLECTIBLE' | 'THOUGHTS' | 'SPEECH' | 'POI' | 'EVENT';
 
-// --- NEW ACTION SYSTEM ---
 export type TriggerActionType =
   | 'SPAWN_ENEMY'
   | 'PLAY_SOUND'
@@ -143,7 +142,7 @@ export type TriggerActionType =
   | 'START_WAVE'
   | 'START_CINEMATIC'
   | 'TRIGGER_FAMILY_FOLLOW'
-  | 'OPEN_UI'; // New
+  | 'OPEN_UI';
 
 export interface TriggerAction {
   type: TriggerActionType;
@@ -257,7 +256,7 @@ export interface GameCanvasProps {
   onMapInit: (items: MapItem[]) => void;
   bossPermanentlyDefeated: boolean;
   familyAlreadyRescued?: boolean;
-  rescuedFamilyIndices: number[]; // Added to support multiple followers
+  rescuedFamilyIndices: number[];
   onSectorLoaded: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onCollectibleFound: (id: string) => void;

@@ -1,6 +1,4 @@
-
 import * as THREE from 'three';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { ObjectGenerator } from './ObjectGenerator';
@@ -8,7 +6,10 @@ import { EnvironmentGenerator } from './EnvironmentGenerator';
 import { PathGenerator } from './PathGenerator';
 import { EffectManager } from '../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
+import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
+import { WaterBodyType, WaterStyle, WaterBody } from '../systems/WaterSystem';
+import { Engine } from '../engine/Engine';
 
 // Shared Utilities for Sector Generation
 const _c1 = new THREE.Color();
@@ -96,39 +97,61 @@ export const SectorGenerator = {
         if (ctx.yield) await ctx.yield();
     },
 
-    /**
-     * Main Orchestrator for building a sector.
-     * Uses the new structured lifecycle to standardize generation.
-     */
+    /*
+    * Main Orchestrator for building a sector.
+    * Uses the new structured lifecycle to standardize generation.
+    */
     build: async (ctx: SectorContext, def: any) => {
+        const engine = Engine.getInstance();
+
+        // Clear any water bodies from the previous sector before building the new one
+        if (engine?.water) engine.water.clearBodies();
+
         // 1. Automatic Content (Ground, Bounds, Collectibles)
         await SectorGenerator.generateAutomaticContent(ctx, def);
 
-        // 2. Setup Environment (Lights, Fog, etc.)
+        // 2. Wind Configuration 
+        const w = def.environment?.wind;
+        if (engine?.wind) {
+            const minStrength = w?.strengthMin ?? 0.02;
+            const maxStrength = w?.strengthMax ?? 0.05;
+
+            let baseAngle = 0;
+            let angleVariance = w?.angleVariance ?? Math.PI;
+
+            if (w?.direction && (w.direction.x !== 0 || w.direction.z !== 0)) {
+                baseAngle = Math.atan2(w.direction.z, w.direction.x);
+                angleVariance = w.angleVariance ?? (Math.PI / 4);
+            }
+
+            engine.wind.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
+        }
+
+        // 3. Setup Environment (Lights, Fog, etc.)
         if (def.setupEnvironment) {
             await def.setupEnvironment(ctx);
             if (ctx.yield) await ctx.yield();
         }
 
-        // 3. Setup Props (Static Objects)
+        // 4. Setup Props (Static Objects)
         if (def.setupProps) {
             await def.setupProps(ctx);
             if (ctx.yield) await ctx.yield();
         }
 
-        // 4. Setup Custom Content (POIs, Cinematics, Special Logic)
+        // 5. Setup Custom Content (POIs, Cinematics, Special Logic)
         if (def.setupContent) {
             await def.setupContent(ctx);
             if (ctx.yield) await ctx.yield();
         }
 
-        // 5. Setup Zombies (Hordes, Spawning)
+        // 6. Setup Zombies (Hordes, Spawning)
         if (def.setupZombies) {
             await def.setupZombies(ctx);
             if (ctx.yield) await ctx.yield();
         }
 
-        // 6. Legacy Support (Escape Hatch)
+        // 7. Legacy Support (Escape Hatch)
         if (def.generate) {
             await def.generate(ctx);
         }
@@ -527,24 +550,6 @@ export const SectorGenerator = {
             collider: {
                 type: 'box' as const,
                 size: (building.userData.size as THREE.Vector3).clone(),
-                // Position is logic relative to the object's origin (center bottom vs center center)
-                // The collider logic in WindSystem might need adjustment if it expects center-center
-                // but usually box colliders are center-relative.  
-                // Building origin is usually bottom-center. 
-                // WindSystem box collider logic uses local Y check: `if (_v1.y + height < -hY || _v1.y > hY)`
-                // which implies the collider definitions should be centered on the volume.
-                // WE DON'T PASS position inside collider usually, we pass the Obstacle.position.
-                // But for buildings, the mesh origin is at bottom, but box center is at h/2.
-                // We might need to offset the obstacle.position or handle it via a new offset property?
-                // WindSystem logic: `_m1.copy(obstacle.mesh.matrixWorld).invert()` -> Transforms entity into local space.
-                // If the mesh origin is at ground, local space (0,0,0) is at ground.
-                // If dimensions are (10, 10, 10), then Y extends from 0 to 10? No, BoxGeometry defaults to centered.
-                // ObjectGenerator.createBuilding uses BoxGeometry and TRIES to align it.
-                // Let's rely on the existing mesh for now as we didn't remove it for buildings.
-                // Just ensuring we pass what WindSystem expects if we used raw data.
-                // Since we pass 'mesh', WindSystem uses matrixWorld, which handles the offset automatically.
-                // So this change is just to satisfy the interface if we went meshless, but we have mesh here.
-                // For safety with new interface:
             }
         });
 
@@ -574,6 +579,74 @@ export const SectorGenerator = {
         });
 
         return vehicle;
+    },
+
+    /**
+     * Spawn a driveable vehicle with full physics data from the VEHICLES database.
+     * Replaces manual userData setup — just pass the VehicleType and position.
+     */
+    spawnDriveableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number,
+        vehicleType: VehicleType, colorOverride?: number, addSnow?: boolean) => {
+
+        const def = VEHICLES[vehicleType];
+        if (!def) {
+            console.warn(`[VehicleSystem] Unknown vehicle type: ${vehicleType}`);
+            return null;
+        }
+
+        // Use ObjectGenerator for visual mesh — boat has a separate generator
+        let vehicle: THREE.Object3D;
+        if (vehicleType === 'boat') {
+            vehicle = ObjectGenerator.createBoat();
+        } else {
+            const visualType = vehicleType === 'station_wagon' ? 'station wagon' : vehicleType;
+            vehicle = ObjectGenerator.createVehicle(visualType, 1.0, colorOverride, addSnow);
+        }
+
+        vehicle.position.set(x, 0.5, z);
+        vehicle.rotation.y = rotation;
+
+        // Attach physics data from database
+        vehicle.userData.vehicleDef = def;
+        vehicle.userData.velocity = new THREE.Vector3();
+        vehicle.userData.angularVelocity = new THREE.Vector3();
+        vehicle.userData.suspY = 0;
+        vehicle.userData.suspVelY = 0;
+        vehicle.userData.interactionRadius = Math.max(def.size.x, def.size.z) * 0.5 + 3.0;
+        vehicle.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
+
+        ctx.scene.add(vehicle);
+
+        // Add collision obstacle
+        SectorGenerator.addObstacle(ctx, {
+            mesh: vehicle,
+            position: vehicle.position,
+            collider: { type: 'box', size: new THREE.Vector3(def.size.x, def.size.y, def.size.z) },
+            type: `Vehicle_${vehicleType}`
+        });
+
+        return vehicle;
+    },
+
+    /**
+     * Spawn a floatable/driveable boat with physics from the VEHICLES database.
+     * Semantic wrapper for water-based vehicles.
+     */
+    spawnFloatableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number,
+        vehicleType: VehicleType = 'boat', colorOverride?: number) => {
+        return SectorGenerator.spawnDriveableVehicle(ctx, x, z, rotation, vehicleType, colorOverride, false);
+    },
+
+    /**
+     * Create a typed water body through the engine-owned WaterSystem.
+     * Returns a WaterBody that can have floating props and splash sources registered.
+     */
+    addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: {
+        style?: WaterStyle; shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number;
+    }): WaterBody | null => {
+        const engine = Engine.getInstance();
+        if (!engine?.water) return null;
+        return engine.water.addWaterBody(type, x, z, width, depth, options);
     },
 
     spawnContainer: (ctx: SectorContext, x: number, z: number, rotation: number, colorOverride?: number, addSnow: boolean = true) => {
@@ -775,20 +848,6 @@ export const SectorGenerator = {
         });
     },
 
-    spawnBuildingPiece: (ctx: SectorContext, type: string, x: number, z: number, rotY: number = 0) => {
-        const piece = ObjectGenerator.createBuildingPiece(type);
-        piece.position.set(x, 0, z);
-        piece.rotation.y = rotY;
-        ctx.scene.add(piece);
-        if (type.includes('Wall') || type.includes('Frame')) {
-            SectorGenerator.addObstacle(ctx, {
-                mesh: piece,
-                position: piece.position,
-                collider: { type: 'box', size: new THREE.Vector3(4, 4, 1) }
-            });
-        }
-    },
-
     spawnEnemy: (ctx: SectorContext, type: string, x: number, z: number) => {
         ctx.mapItems.push({
             id: `enemy_spawn_${Math.random()}`,
@@ -817,8 +876,8 @@ export const SectorGenerator = {
         sectorDef: any,
         zones?: any[]
     ) => {
-        const weatherSystem = gameState.weatherSystem;
-        const windSystem = gameState.windSystem;
+        const weatherSystem = Engine.getInstance().weather;
+        const windSystem = Engine.getInstance().wind;
         const scene = events.scene;
         if (!playerPos || !weatherSystem || !scene) return;
 
@@ -981,163 +1040,16 @@ export const SectorGenerator = {
         PathGenerator.createBoundry(ctx, polygon, name);
     },
 
+    // [VINTERDÖD] Facade methods pointing to EnvironmentGenerator
     createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
-        if (!points || points.length < 2) return;
-
-        if (ctx.debugMode) SectorGenerator.visualizePath(ctx, points, 0xffffff);
-
-        const mountainWidth = 30;
-        const mountainHeightPeak = 10;
-        const segmentsX = 70;
-        const segmentsZ = 30;
-        const mountainSideBias = 1.0;
-
-        const COLORS = {
-            SNOW: new THREE.Color(0xffffff),
-            ROCK_LIGHT: new THREE.Color(0x888899),
-            ROCK_DARK: new THREE.Color(0x444455),
-        };
-
-        const curve = new THREE.CatmullRomCurve3(points);
-        const planeGeo = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsZ);
-        const posAttr = planeGeo.getAttribute('position');
-        const vertex = new THREE.Vector3();
-        const targetPointOnCurve = new THREE.Vector3();
-
-        for (let i = 0; i <= segmentsX; i++) {
-            const t = i / segmentsX;
-            curve.getPointAt(t, targetPointOnCurve);
-            const tangent = curve.getTangentAt(t).normalize();
-            const sideDirection = new THREE.Vector3(-tangent.z, 0, tangent.x);
-
-            for (let j = 0; j <= segmentsZ; j++) {
-                const index = i * (segmentsZ + 1) + j;
-                const vFactor = j / segmentsZ;
-                const vOffset = (vFactor - mountainSideBias) * mountainWidth;
-                const distToRidge = Math.abs(vFactor - 0.4) * mountainWidth;
-
-                let baseHeight = 0;
-                const maxDist = mountainWidth * 0.7;
-                if (distToRidge < maxDist) {
-                    baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
-                }
-
-                let finalY = 0;
-                let xJitter = 0;
-                let zJitter = 0;
-
-                if (baseHeight > 1.0) {
-                    finalY = Math.max(0, baseHeight + (Math.random() - 0.5) * 12);
-                    xJitter = (Math.random() - 0.5) * 4;
-                    zJitter = (Math.random() - 0.5) * 4;
-                }
-
-                const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
-                const finalZ = targetPointOnCurve.z + (sideDirection.z * vOffset) + zJitter;
-                const finalYPos = targetPointOnCurve.y + finalY;
-
-                posAttr.setXYZ(index, finalX, finalYPos, finalZ);
-            }
+        if (ctx.debugMode) {
+            SectorGenerator.visualizePath(ctx, points, 0xffffff);
         }
-
-        if (opening) {
-            const openingPos = new THREE.Vector3();
-            opening.getWorldPosition(openingPos);
-            const safeZoneRadius = 14;
-            const clearanceHeight = 10;
-
-            for (let i = 0; i < posAttr.count; i++) {
-                vertex.fromBufferAttribute(posAttr, i);
-                const dist = Math.sqrt(Math.pow(vertex.x - openingPos.x, 2) + Math.pow(vertex.z - openingPos.z, 2));
-                if (dist < safeZoneRadius && vertex.y < clearanceHeight) {
-                    posAttr.setY(i, -25);
-                }
-            }
-        }
-
-        posAttr.needsUpdate = true;
-        let mountainGeo = planeGeo.toNonIndexed();
-        mountainGeo.computeVertexNormals();
-
-        const count = mountainGeo.getAttribute('position').count;
-        const colors = new Float32Array(count * 3);
-        const finalPosAttr = mountainGeo.getAttribute('position');
-        const normalAttr = mountainGeo.getAttribute('normal');
-        const normal = new THREE.Vector3();
-        const up = new THREE.Vector3(0, 1, 0);
-        const color = new THREE.Color();
-
-        for (let i = 0; i < count; i += 3) {
-            const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
-            normal.fromBufferAttribute(normalAttr, i);
-            const upwardness = normal.dot(up);
-
-            if ((h > mountainHeightPeak * 0.55 && upwardness > 0.65) || (upwardness > 0.9 && h > 10)) {
-                color.copy(COLORS.SNOW);
-            } else {
-                color.copy(Math.random() > 0.5 ? COLORS.ROCK_LIGHT : COLORS.ROCK_DARK);
-            }
-
-            for (let j = 0; j < 3; j++) {
-                const idx = (i + j) * 3;
-                colors[idx] = color.r;
-                colors[idx + 1] = color.g;
-                colors[idx + 2] = color.b;
-            }
-        }
-
-        mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        const mountainMat = new THREE.MeshStandardMaterial({
-            vertexColors: true,
-            flatShading: true,
-            roughness: 0.9,
-            side: THREE.DoubleSide
-        });
-
-        const mountain = new THREE.Mesh(mountainGeo, mountainMat);
-        ctx.scene.add(mountain);
+        EnvironmentGenerator.createMountain(ctx, points, opening);
     },
 
     createMountainOpening: () => {
-        const tunnelWidthOuter = 16;
-        const tunnelHeightWalls = 5;
-        const tunnelArchRise = 2;
-        const tunnelThickness = 3;
-        const tunnelDepth = 5;
-
-        const halfWidthO = tunnelWidthOuter / 2;
-        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
-        const caveOpeningGroup = new THREE.Group();
-
-        const archShape = new THREE.Shape();
-        archShape.moveTo(-halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
-        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
-        archShape.lineTo(halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, 0);
-
-        const halfWidthI = halfWidthO - tunnelThickness;
-        const wallHeightI = tunnelHeightWalls;
-        const controlPointY_I = controlPointY_O - tunnelThickness;
-
-        const holePath = new THREE.Path();
-        holePath.moveTo(halfWidthI, 0);
-        holePath.lineTo(halfWidthI, wallHeightI);
-        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
-        holePath.lineTo(-halfWidthI, 0);
-        holePath.lineTo(halfWidthI, 0);
-
-        archShape.holes.push(holePath);
-
-        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
-        archGeo.translate(0, 0, -tunnelDepth / 2);
-
-        const tunnelMat = MATERIALS.concrete.clone();
-        tunnelMat.side = THREE.DoubleSide;
-        const arch = new THREE.Mesh(archGeo, tunnelMat);
-        caveOpeningGroup.add(arch);
-
-        return caveOpeningGroup;
+        return EnvironmentGenerator.createMountainOpening();
     },
 
     createForest: (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
@@ -1267,4 +1179,3 @@ export const SectorGenerator = {
         });
     }
 };
-

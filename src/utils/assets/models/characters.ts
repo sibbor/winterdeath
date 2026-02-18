@@ -76,6 +76,8 @@ export const CharacterModels = {
         // Viktigt för långa objekt i Three.js:
         // Förhindra att lasern försvinner om spelaren står precis utanför kameran
         laserSight.frustumCulled = false;
+        laserSight.renderOrder = 999;
+        (laserSight.material as THREE.Material).depthTest = false;
 
         laserSight.userData.isLaserSight = true;
         laserSight.name = 'laserSight';

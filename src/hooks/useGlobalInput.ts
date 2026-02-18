@@ -11,6 +11,7 @@ interface UIState {
     isBossIntroActive?: boolean;
     hp: number;
     isSettingsOpen: boolean;
+    isInteractionOpen: boolean;
     isAdventureLogOpen: boolean;
 }
 

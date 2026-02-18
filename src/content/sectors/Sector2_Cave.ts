@@ -172,7 +172,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             else { pz = cz + d / 2 - offset; px = cx + (Math.random() - 0.5) * (w - 2); rot = Math.PI; }
 
             const type = Math.random() > 0.5 ? 'shelf' : 'box';
-            const prop = type === 'shelf' ? ObjectGenerator.createShelf() : ObjectGenerator.createBox();
+            const prop = type === 'shelf' ? ObjectGenerator.createShelf() : ObjectGenerator.createBarrel();
 
             prop.position.set(px, cy, pz);
             prop.rotation.y = rot + (Math.random() - 0.5) * 0.2;
@@ -367,17 +367,35 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
     const rightPost = new THREE.Mesh(new THREE.BoxGeometry(2, 16, 4), frameMat);
     rightPost.position.x = 10;
     frameGroup.add(rightPost);
+    SectorGenerator.addObstacle(ctx, {
+        mesh: frameGroup,
+        collider: { type: 'box', size: new THREE.Vector3(22, 17, 4) }
+    });
+
     scene.add(frameGroup);
 
-    // 2. The Doors (L/R) - Widened to 10m each, 17m height, lowered to reach ground
     const doorL = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
     doorL.name = 's2_shelter_port_left';
     doorL.position.set(-5, -1, 0); // Relative to frame, positioned to close gap
     frameGroup.add(doorL);
 
+    const doorObstacleL = {
+        mesh: doorL,
+        collider: { type: 'box', size: new THREE.Vector3(10, 17, 1) }
+    };
+    SectorGenerator.addObstacle(ctx, doorObstacleL);
+    (ctx as any).sectorState.doorObstacleL = doorObstacleL;
+
     const doorR = new THREE.Mesh(new THREE.BoxGeometry(10, 17, 1), MATERIALS.metalPanel);
     doorR.name = 's2_shelter_port_right';
     doorR.position.set(5, -1, 0); // Relative to frame, positioned to close gap
     frameGroup.add(doorR);
+
+    const doorObstacleR = {
+        mesh: doorR,
+        collider: { type: 'box', size: new THREE.Vector3(10, 17, 1) }
+    };
+    SectorGenerator.addObstacle(ctx, doorObstacleR);
+    (ctx as any).sectorState.doorObstacleR = doorObstacleR;
 
 };

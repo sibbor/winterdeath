@@ -1,10 +1,27 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
+import { FXSystem } from './FXSystem';
+import { EnemyManager } from '../EnemyManager';
 import { soundManager } from '../../utils/sound';
+import { VehicleDef } from '../../content/vehicles';
+import { MATERIALS } from '../../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3();
+const _forward = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _toEnemy = new THREE.Vector3();
+const _knockDir = new THREE.Vector3();
+const _dismountDir = new THREE.Vector3();
+
+// Collision damage cooldown per enemy (avoids dealing damage every frame)
+const _hitCooldowns = new Map<string, number>();
+const HIT_COOLDOWN_MS = 350;
+
+// Minimum speed² thresholds for damage tiers
+const SPEED_SQ_PUSH = 4.0;        // > 2 u/s — nudge
+const SPEED_SQ_KNOCKBACK = 36.0;  // > 6 u/s — knockback
+const SPEED_SQ_SPLATTER = 144.0;  // > 12 u/s — splatter (instant kill modifier)
 
 export class VehicleMovementSystem implements System {
     id = 'vehicle_movement';
@@ -29,6 +46,7 @@ export class VehicleMovementSystem implements System {
             // Ensure engine is off
             if (state.vehicleEngineState !== 'OFF') {
                 state.vehicleEngineState = 'OFF';
+                state.vehicleSpeed = 0;
                 soundManager.stopVehicleEngine();
             }
         }
@@ -43,12 +61,15 @@ export class VehicleMovementSystem implements System {
         session: GameSessionLogic,
         now: number
     ) {
-        const def = vehicle.userData.vehicleDef;
+        const def: VehicleDef | undefined = vehicle.userData.vehicleDef;
         if (!def) return;
 
-        // Vehicle Data (Velocity/AngularVelocity stored in userData for persistence)
+        delta = Math.min(delta, 0.1);
+
         if (!vehicle.userData.velocity) vehicle.userData.velocity = new THREE.Vector3();
         if (!vehicle.userData.angularVelocity) vehicle.userData.angularVelocity = new THREE.Vector3();
+        if (vehicle.userData.suspY === undefined) vehicle.userData.suspY = 0;
+        if (vehicle.userData.suspVelY === undefined) vehicle.userData.suspVelY = 0;
 
         const vel = vehicle.userData.velocity as THREE.Vector3;
         const angVel = vehicle.userData.angularVelocity as THREE.Vector3;
@@ -57,58 +78,134 @@ export class VehicleMovementSystem implements System {
         if (state.vehicleEngineState === 'OFF') {
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
-            soundManager.startVehicleEngine(def.type);
-            soundManager.playVehicleEnter(def.type);
+            soundManager.startVehicleEngine(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+            soundManager.playVehicleEnter(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+            // Reset velocity on entry to prevent leftover floating/physics velocity
+            vel.set(0, 0, 0);
+            angVel.set(0, 0, 0);
         }
 
-        // Input
+        // --- COMPUTE FORWARD & RIGHT VECTORS ---
+        _forward.set(0, 0, 1).applyQuaternion(vehicle.quaternion);
+        _right.set(1, 0, 0).applyQuaternion(vehicle.quaternion);
+
+        // --- INPUT ---
         let throttle = 0;
         let steer = 0;
+        let handbrake = false;
 
         if (input.w) throttle += 1;
         if (input.s) throttle -= 1;
 
-        // Inverted as per user request (A/D switched)
+        // Inverted as per user preference (A/D switched)
         if (input.a) steer -= 1;
         if (input.d) steer += 1;
+
+        if (input.space) handbrake = true;
 
         if (input.joystickMove) {
             throttle += input.joystickMove.y * -1;
             steer += input.joystickMove.x;
         }
 
-        // Apply Forces
-        const fwd = def.forward || { x: 0, y: 0, z: 1 };
-        _v1.set(fwd.x, fwd.y, fwd.z).applyQuaternion(vehicle.quaternion);
-
-        // Acceleration
-        if (throttle !== 0) {
-            const acc = def.acceleration * throttle * delta;
-            vel.addScaledVector(_v1, acc);
-        }
-
-        // Steering (Torque)
+        // --- SPEED DECOMPOSITION ---
+        const forwardSpeed = vel.dot(_forward);
+        const lateralSpeed = vel.dot(_right);
         const speedSq = vel.lengthSq();
-        if (Math.abs(steer) > 0.1) {
-            // [VINTERDÖD] Invert steering when reversing
-            // We check the direction of travel relative to the heading
-            // vel.dot(_v1) > 0 means forward, < 0 means reverse
-            const directionalSteer = (vel.dot(_v1) < -0.1) ? -steer : steer;
-            angVel.y -= directionalSteer * def.turnSpeed * delta;
+        const speed = Math.sqrt(speedSq);
+        const isReversing = forwardSpeed < -0.5;
+
+        // --- ACCELERATION / REVERSE ---
+        if (throttle !== 0) {
+            const maxSpd = throttle > 0 ? def.maxSpeed : def.maxSpeed * def.reverseSpeedFraction;
+            const atLimit = throttle > 0 ? (forwardSpeed >= maxSpd) : (forwardSpeed <= -maxSpd);
+
+            if (!atLimit) {
+                // Drivetrain traction scaling
+                let tractionMul = 1.0;
+                if (def.drivetrain === 'FWD') {
+                    // FWD: loses traction at high lateral speed (understeer)
+                    tractionMul = 1.0 - Math.min(0.5, Math.abs(lateralSpeed) * 0.05);
+                } else if (def.drivetrain === 'RWD') {
+                    // RWD: full power but oversteer tendency (handled in lateral friction)
+                    tractionMul = 1.0;
+                }
+                // AWD: neutral, full traction always
+
+                const acc = def.acceleration * throttle * tractionMul * delta;
+                vel.addScaledVector(_forward, acc);
+            }
         }
 
-        // Drag/Friction
-        vel.multiplyScalar(def.friction);
-        angVel.multiplyScalar(def.friction); // Rotational drag
+        // --- HANDBRAKE ---
+        if (handbrake) {
+            const brakeDamp = 1.0 - (def.brakeForce * delta);
+            vel.multiplyScalar(Math.max(0.0, brakeDamp));
+            // Handbrake reduces lateral grip for donuts/drifts
+            angVel.multiplyScalar(0.97);
+        }
 
-        // Apply Velocity
+        // --- STEERING ---
+        if (Math.abs(steer) > 0.1 && speedSq > 0.5) {
+            // Invert steering when reversing
+            const directionalSteer = isReversing ? -steer : steer;
+
+            // Speed-dependent turning: sharper at low speed, wider at high speed
+            const speedFactor = Math.min(1.0, 4.0 / (1.0 + speed));
+            angVel.y -= directionalSteer * def.turnSpeed * speedFactor * delta;
+        }
+
+        // --- LATERAL FRICTION (Drift Physics) ---
+        // Decompose velocity into forward & lateral, apply different friction to each
+        const fwdComponent = forwardSpeed;
+        const latComponent = lateralSpeed;
+
+        // Determine effective lateral friction
+        let effLatFriction = def.lateralFriction;
+        if (handbrake) {
+            // Handbrake drastically reduces lateral friction for drifting
+            effLatFriction *= 0.3;
+        }
+        if (def.drivetrain === 'RWD' && Math.abs(throttle) > 0.5 && speedSq > 16) {
+            // RWD oversteers under throttle at speed
+            effLatFriction *= 0.85;
+        }
+
+        // Reconstruct velocity from components with asymmetric friction
+        const dampedFwd = fwdComponent * def.friction;
+        const dampedLat = latComponent * (1.0 - (1.0 - def.friction) * 1.0) * effLatFriction;
+
+        vel.copy(_forward).multiplyScalar(dampedFwd);
+        vel.addScaledVector(_right, dampedLat);
+
+        // Rotational drag
+        angVel.multiplyScalar(handbrake ? 0.92 : 0.90);
+
+        // --- SUSPENSION ---
+        let suspY = vehicle.userData.suspY as number;
+        let suspVelY = vehicle.userData.suspVelY as number;
+
+        // Spring-damper system
+        suspVelY -= suspY * def.suspensionStiffness * delta;
+        suspVelY *= (1.0 - def.suspensionDamping * delta);
+        suspY += suspVelY * delta;
+
+        // Clamp suspension travel
+        if (suspY > 0.3) { suspY = 0.3; suspVelY = 0; }
+        if (suspY < -0.3) { suspY = -0.3; suspVelY = 0; }
+
+        vehicle.userData.suspY = suspY;
+        vehicle.userData.suspVelY = suspVelY;
+
+        // --- APPLY VELOCITY ---
         vehicle.position.addScaledVector(vel, delta);
 
-        // Apply Rotation
+        // --- APPLY ROTATION ---
         vehicle.rotation.y += angVel.y * delta;
 
         // --- AUDIO UPDATE ---
-        const normSpeed = Math.min(1.0, vel.length() / (def.speed || 15));
+        const normSpeed = Math.min(1.0, speed / def.maxSpeed);
+        state.vehicleSpeed = speed;
         soundManager.updateVehicleEngine(normSpeed);
 
         // Skidding sound if turning sharply at speed
@@ -118,40 +215,186 @@ export class VehicleMovementSystem implements System {
             soundManager.playVehicleSkid(0);
         }
 
-        // ------------------------
-        // Sync Player to Vehicle
-        // ------------------------
+        // --- COLLISION: ENEMIES ---
+        this.handleEnemyCollisions(vehicle, vel, def, session, now);
+
+        // --- COLLISION: OBSTACLES ---
+        this.handleObstacleCollisions(vehicle, vel, def, session);
+
+        // --- SYNC PLAYER TO VEHICLE ---
         playerGroup.position.copy(vehicle.position);
         playerGroup.quaternion.copy(vehicle.quaternion);
 
-        // Force player mesh and flashlight to look forward relative to vehicle
+        // Seat offset includes suspension bounce
+        playerGroup.position.x += def.seatOffset.x;
+        playerGroup.position.y += def.seatOffset.y + suspY;
+        playerGroup.position.z += def.seatOffset.z;
+
+        // Reset character orientation relative to vehicle
         for (let i = 0; i < playerGroup.children.length; i++) {
             const child = playerGroup.children[i];
-
-            // Reset character orientation (mesh/flashlight/laser sight etc.)
             if (child.rotation) {
                 child.rotation.y = 0;
             }
         }
 
-        // Offset player visually (sit in boat)
-        playerGroup.position.y += 0.5;
-
-        // ------------------------
-        // Dismount
-        // ------------------------
+        // --- DISMOUNT ---
         if (input.e && !state.eDepressed) {
             state.eDepressed = true;
             state.activeVehicle = null;
             state.activeVehicleType = null;
+            state.vehicleSpeed = 0;
             state.vehicleEngineState = 'OFF';
             soundManager.stopVehicleEngine();
-            soundManager.playVehicleExit(def.type);
+            soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
-            // Dismount offset (Left side)
-            _v1.set(4.0, 0, 0).applyQuaternion(vehicle.quaternion);
-            playerGroup.position.add(_v1);
+            // Dismount offset (from vehicle definition)
+            _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
+                .applyQuaternion(vehicle.quaternion);
+            playerGroup.position.add(_dismountDir);
             playerGroup.position.y = 0;
         }
+    }
+
+    // --- ENEMY COLLISION SYSTEM ---
+    private handleEnemyCollisions(
+        vehicle: THREE.Object3D,
+        vel: THREE.Vector3,
+        def: VehicleDef,
+        session: GameSessionLogic,
+        now: number
+    ) {
+        const state = session.state;
+        const speedSq = vel.lengthSq();
+        if (speedSq < SPEED_SQ_PUSH) return; // Too slow to damage
+
+        const scene = session.engine.scene;
+        const hitRadius = Math.max(def.size.x, def.size.z) * 0.5 + 1.0;
+        const enemies = state.collisionGrid.getNearbyEnemies(vehicle.position, hitRadius);
+
+        for (let i = 0; i < enemies.length; i++) {
+            const e = enemies[i];
+            if (e.deathState !== 'alive') continue;
+
+            // Distance check
+            _toEnemy.subVectors(e.mesh.position, vehicle.position);
+            _toEnemy.y = 0;
+            const distSq = _toEnemy.lengthSq();
+            const collisionRad = (hitRadius * 0.7) + (e.widthScale || 1.0) * (e.originalScale || 1.0);
+
+            if (distSq > collisionRad * collisionRad) continue;
+
+            // Cooldown check to avoid multi-frame damage
+            const lastHit = _hitCooldowns.get(e.id) || 0;
+            if (now - lastHit < HIT_COOLDOWN_MS) continue;
+            _hitCooldowns.set(e.id, now);
+
+            const speed = Math.sqrt(speedSq);
+
+            // Calculate damage based on speed and mass
+            const baseDamage = speed * def.mass * def.collisionDamageMultiplier * 0.01;
+
+            // Direction of knockback (vehicle forward + away-from-center)
+            _knockDir.copy(_toEnemy).normalize();
+            if (_knockDir.lengthSq() < 0.01) _knockDir.copy(_forward);
+
+            if (speedSq >= SPEED_SQ_SPLATTER) {
+                // HIGH SPEED: Instant kill — splatter
+                e.hp = 0;
+                e.lastDamageType = 'vehicle_splatter';
+                e.deathState = 'exploded';
+                e.dead = true;
+
+                const forceDir = _knockDir.clone().multiplyScalar(speed * 2.0).setY(3.0);
+                EnemyManager.explodeEnemy(e, forceDir, {
+                    spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: any, v?: any, col?: number, s?: number) =>
+                        FXSystem.spawnPart(scene, state.particles, x, y, z, t, c, m, v, col, s),
+                    spawnDecal: (x: number, z: number, s: number, mat?: any) =>
+                        FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat),
+                });
+
+                state.cameraShake = Math.min(state.cameraShake + 0.4, 1.5);
+                soundManager.playImpact('flesh');
+
+            } else if (speedSq >= SPEED_SQ_KNOCKBACK) {
+                // MEDIUM SPEED: Heavy knockback + damage
+                e.hp -= baseDamage;
+                e.lastDamageType = 'vehicle_ram';
+                e.hitTime = now;
+
+                const knockForce = def.ramKnockback * (speed / def.maxSpeed);
+                _knockDir.multiplyScalar(knockForce).setY(2.0);
+                e.knockbackVel.add(_knockDir);
+
+                FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1, e.mesh.position.z, 'blood', 20);
+                FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
+                    1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
+
+                state.cameraShake = Math.min(state.cameraShake + 0.2, 1.0);
+                soundManager.playImpact('flesh');
+
+                // Trigger suspension bounce on impact
+                vehicle.userData.suspVelY += 3.0;
+
+            } else {
+                // LOW SPEED: Light push
+                e.hp -= baseDamage * 0.3;
+                e.lastDamageType = 'vehicle_push';
+
+                _knockDir.multiplyScalar(def.ramKnockback * 0.3);
+                e.knockbackVel.add(_knockDir);
+
+                e.slowTimer = 0.5;
+            }
+        }
+    }
+
+    // --- OBSTACLE COLLISION SYSTEM ---
+    private handleObstacleCollisions(
+        vehicle: THREE.Object3D,
+        vel: THREE.Vector3,
+        def: VehicleDef,
+        session: GameSessionLogic,
+    ) {
+        const state = session.state;
+        const hitRadius = Math.max(def.size.x, def.size.z) * 0.5;
+        const obstacles = state.collisionGrid.getNearbyObstacles(vehicle.position, hitRadius + 2.0);
+
+        for (let i = 0; i < obstacles.length; i++) {
+            const obs = obstacles[i];
+            // Skip self-collision (the vehicle itself is an obstacle)
+            if (obs.mesh === vehicle) continue;
+
+            const obsPos = obs.position;
+            _toEnemy.subVectors(vehicle.position, obsPos);
+            _toEnemy.y = 0;
+            const distSq = _toEnemy.lengthSq();
+            const combinedRad = hitRadius + (obs.radius || 2.0);
+
+            if (distSq < combinedRad * combinedRad && distSq > 0.01) {
+                const dist = Math.sqrt(distSq);
+                const overlap = combinedRad - dist;
+
+                // Push vehicle out of obstacle
+                _toEnemy.normalize().multiplyScalar(overlap * 0.6);
+                vehicle.position.add(_toEnemy);
+
+                // Reduce velocity on impact (bounce off)
+                const impactDot = vel.dot(_toEnemy.normalize());
+                if (impactDot < 0) {
+                    vel.addScaledVector(_toEnemy, -impactDot * 1.2); // Slight bounce
+                }
+
+                // Trigger suspension jolt
+                vehicle.userData.suspVelY += Math.abs(impactDot) * 0.5;
+
+                // Decelerate proportional to impact
+                vel.multiplyScalar(0.85);
+            }
+        }
+    }
+
+    cleanup() {
+        _hitCooldowns.clear();
     }
 }

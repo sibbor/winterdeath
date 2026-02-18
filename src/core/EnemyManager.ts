@@ -4,6 +4,7 @@ import type { Enemy } from '../types/enemy';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
 import { soundManager } from '../utils/sound';
+import { haptic } from '../utils/HapticManager';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ZombieRenderer } from './renderers/ZombieRenderer';
 import { CorpseRenderer } from './renderers/CorpseRenderer';
@@ -176,12 +177,13 @@ export const EnemyManager = {
 
         const baseScale = enemy.originalScale || 1.0;
 
-        // [VINTERDÖD] 5 chunks
+        // 5 chunks
         for (let i = 0; i < 5 * mult; i++) {
             _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
             callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, _v2.clone(), enemy.color, baseScale * (isBoss ? 1.5 : 0.8));
         }
         soundManager.playExplosion();
+        haptic.explosion();
     },
 
     update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any) => {
@@ -282,6 +284,15 @@ export const EnemyManager = {
                 state.killsByType[kType] = (state.killsByType[kType] || 0) + 1;
                 state.killsInRun++;
                 callbacks.gainXp(e.score || 10);
+
+                // Boss-specific: trigger defeat flow + big scrap drop
+                if (e.isBoss && e.bossId !== undefined) {
+                    callbacks.onBossKilled(e.bossId);
+                    callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 500);
+                } else if (Math.random() < 0.15) {
+                    // Regular enemies: 15% chance to drop 1-5 scrap
+                    callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 1 + Math.floor(Math.random() * 5));
+                }
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 

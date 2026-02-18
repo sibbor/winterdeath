@@ -99,7 +99,10 @@ export class GameSessionLogic {
             triggers: [] as SectorTrigger[],
             obstacles: [] as Obstacle[],
             collisionGrid: new SpatialGrid(),
+
+            // --- SECTOR & WORLD ---
             busUnlocked: false,
+            bossIntroActive: false,
             clueActive: false,
             bossDefeatedTime: 0,
             lastActionTime: now,
@@ -119,23 +122,29 @@ export class GameSessionLogic {
             framesSinceHudUpdate: 0,
             lastFpsUpdate: 0,
             isMoving: false,
-            interactionType: null,
-            interactionLabel: null,
 
-            // [VINTERDÖD] Zero-GC: Interaction target
-            hasInteractionTarget: false,
-            interactionTargetPos: new THREE.Vector3(),
-
-            bossIntroActive: false,
+            // --- COLLECTIBLES ---
             sessionCollectiblesFound: [],
             collectiblesFound: props.stats.collectiblesFound || [],
             mapItems: [],
+
+            // --- VEHICLES ---
             activeVehicle: null,
             activeVehicleType: null,
+            vehicleSpeed: 0,
             vehicleEngineState: 'OFF',
 
-            // [VINTERDÖD] Zero-GC: Pre-allocated interaction request object
-            interactionRequest: { active: false, id: '', object: null, type: null }
+            // --- INTERACTION ---
+            interactionType: null,
+            interactionLabel: null,
+            hasInteractionTarget: false,
+            interactionTargetPos: new THREE.Vector3(),
+            interactionRequest: {
+                active: false,
+                id: '',
+                object: null,
+                type: null
+            }
         };
     }
 

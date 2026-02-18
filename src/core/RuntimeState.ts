@@ -1,6 +1,7 @@
 ﻿import * as THREE from 'three';
 import { SectorTrigger, SectorState } from '../types';
 import { WeaponType } from '../content/weapons';
+import { VehicleType } from '../content/vehicles';
 import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
@@ -106,7 +107,7 @@ export interface RuntimeState {
     isMoving: boolean;
 
     // --- INTERACTION ---
-    interactionType: 'chest' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
+    interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
     interactionLabel: string | null;
     hasInteractionTarget: boolean; // Nyckel för att slippa null
     interactionTargetPos: THREE.Vector3;
@@ -121,7 +122,8 @@ export interface RuntimeState {
     mapItems: any[];
 
     activeVehicle: THREE.Object3D | null;
-    activeVehicleType: 'CAR' | 'BOAT' | null;
+    activeVehicleType: VehicleType | null;
+    vehicleSpeed: number;
     vehicleEngineState: 'OFF' | 'STARTING' | 'RUNNING';
 
     // --- PRE-ALLOCATED REQUEST OBJECT (Zero-GC) ---

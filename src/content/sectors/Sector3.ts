@@ -22,15 +22,8 @@ const LOCATIONS = {
     },
     TRIGGERS: {
         FOREST_NOISE: { x: 20, z: -18 },
-        POI_MAST: { x: 215, z: -250 },
-        FOUND_ESMERALDA: { x: -215, z: -25 }
-        /*s3_dead_bodies: "Poor bastards... Children, look away!",
-        s3_tractor: "Nice tractor. Wonder if it's working?",
-
-        s3_poi_burning_farm: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night.",
-        s3_poi_the_farm: "The egg farm. This is the place where we used to get our eggs from.",
-        s3_poi_the_mast:
-        */
+        POI_MAST: { x: 215, z: -25 },
+        FOUND_ESMERALDA: { x: 215, z: -25 }
     },
     POIS: {
         SPAWN: { x: 0, z: 0, rot: Math.PI / 2 },
@@ -71,7 +64,7 @@ export const Sector3: SectorDef = {
     environment: {
         bgColor: 0x051015,
         fogDensity: 0.02,
-        ambientIntensity: 0.3, // Increased for readability
+        ambientIntensity: 0.3,
         groundColor: 0x112211,
         fov: 50,
         skyLight: { visible: true, color: 0x88ffaa, intensity: 0.8, position: { x: 50, y: 35, z: 50 } }, // Slightly brighter moon

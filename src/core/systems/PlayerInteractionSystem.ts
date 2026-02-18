@@ -11,7 +11,7 @@ const _v1 = new THREE.Vector3();
 // [VINTERDÖD] Shared object for detection returns.
 // Eliminates constant { type, pos } garbage allocations.
 const _detectionResult = {
-    type: null as 'chest' | 'collectible' | 'sector_specific' | null,
+    type: null as 'chest' | 'collectible' | 'sector_specific' | 'vehicle' | null,
     position: new THREE.Vector3(),
     id: null as string | null,
     object: null as THREE.Object3D | null
@@ -24,7 +24,7 @@ interface ActiveAnimation {
     startY: number;
     progress: number;
     duration: number;
-    collectibleId?: string; // [VINTERDÖD] Lades till för att veta vilket UI som ska öppnas när animationen är klar
+    collectibleId?: string;
 }
 
 export class PlayerInteractionSystem implements System {
@@ -55,23 +55,28 @@ export class PlayerInteractionSystem implements System {
                 state.chests,
                 state.triggers,
                 state.sectorState,
-                session.mapId
+                state // Vi skickar in hela state för att komma åt collisionGrid
             );
 
             state.interactionType = _detectionResult.type;
 
             let label = (_detectionResult.object?.userData?.interactionLabel as string) || null;
-            // [VINTERDÖD] Dynamic label for vehicles: Exit vs Enter
+
+            // [VINTERDÖD] Dynamic label for vehicles
             if (state.activeVehicle && _detectionResult.object === state.activeVehicle) {
                 label = 'ui.exit_vehicle';
+            } else if (_detectionResult.type === 'vehicle') {
+                label = 'ui.enter_vehicle';
             }
+
             state.interactionLabel = label;
 
             if (_detectionResult.position && _detectionResult.type) {
                 if (!state.interactionTargetPos) state.interactionTargetPos = new THREE.Vector3();
                 state.interactionTargetPos.copy(_detectionResult.position);
+                state.hasInteractionTarget = true;
             } else {
-                state.interactionTargetPos = null;
+                state.hasInteractionTarget = false;
             }
         }
 
@@ -112,11 +117,17 @@ export class PlayerInteractionSystem implements System {
             anim.obj.scale.set(s, s, s);
 
             if (anim.progress >= 1) {
-                session.engine.scene.remove(anim.obj);
-
-                // IMPORTANT FIX: Removed geometry and material dispose() here. 
-                // Since we never cloned the geometry, disposing it here would 
-                // permanently break any future spawned collectibles of the same type.
+                // --- ZERO-RECOMPILE FIX HÄR! ---
+                // Vi använder traverse för att gömma nätet och stänga av ljuset 
+                // istället för att ta bort det från the Scene. Då behöver inte
+                // GPU:n kompilera om banans shaders!
+                anim.obj.traverse((child) => {
+                    if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight || child instanceof THREE.DirectionalLight) {
+                        child.intensity = 0;
+                    } else if (child instanceof THREE.Mesh) {
+                        child.visible = false;
+                    }
+                });
 
                 const idx = this.collectibles.indexOf(anim.obj);
                 if (idx > -1) {
@@ -139,7 +150,7 @@ export class PlayerInteractionSystem implements System {
 
     /**
      * Scans the environment for the closest interactable object.
-     * Priority: Collectibles > Triggers > Chests > Mission Objects
+     * Priority: Collectibles > Triggers > Chests > Vehicles > Mission Objects
      * [VINTERDÖD] Modifies the global _detectionResult instead of returning a new object.
      */
     private detectInteraction(
@@ -147,7 +158,7 @@ export class PlayerInteractionSystem implements System {
         chests: any[],
         triggers: any[],
         sectorState: any,
-        mapId: number
+        state: any // Lades till!
     ): void {
 
         // --- 1. Check Collectibles (3.5m radius) ---
@@ -173,8 +184,44 @@ export class PlayerInteractionSystem implements System {
             }
         }
 
-        // --- 4. Check Generic Sector Interactables (Triggers/Vehicles/Stations) ---
-        // Scan Trigger Volumes
+        // --- 3. [VINTERDÖD] Check Driveable Vehicles (Generic Bounds + 2m) ---
+        if (state.collisionGrid && !state.activeVehicle) {
+            // Sökradien i gridet måste vara stor nog att nå fordonets "centrum" även om
+            // vi står längst fram på en 12 meter lång buss. 15.0 räcker mer än väl.
+            const nearby = state.collisionGrid.getNearbyObstacles(playerPos, 15.0);
+
+            for (let i = 0; i < nearby.length; i++) {
+                const obs = nearby[i];
+                if (obs.mesh && obs.mesh.userData && obs.mesh.userData.vehicleDef) {
+                    const def = obs.mesh.userData.vehicleDef;
+
+                    // --- ZERO-GC OBB CHECK ---
+                    // Kopiera in spelarens position och transformera den till fordonets lokala rymd.
+                    // Detta eliminerar behovet av att räkna på fordonets rotation!
+                    _v1.copy(playerPos);
+                    obs.mesh.worldToLocal(_v1);
+
+                    // Hur många meter utanför fordonet man kan interagera
+                    const interactMargin = 2.0;
+
+                    // def.size är half-extents (halva storleken från centrum).
+                    // Nu kollar vi enkelt om spelarens lokala pos är inom lådan + 2m på alla sidor.
+                    if (
+                        Math.abs(_v1.x) <= def.size.x + interactMargin &&
+                        Math.abs(_v1.z) <= def.size.z + interactMargin &&
+                        Math.abs(_v1.y) <= def.size.y + interactMargin
+                    ) {
+                        _detectionResult.position.copy(obs.position);
+                        _detectionResult.position.y += 1.0;
+                        _detectionResult.type = 'vehicle';
+                        _detectionResult.object = obs.mesh;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // --- 4. Check Generic Sector Interactables (Triggers/Stations) ---
         const tLen = triggers.length;
         for (let i = 0; i < tLen; i++) {
             const t = triggers[i];
@@ -231,6 +278,15 @@ export class PlayerInteractionSystem implements System {
     ) {
         if (!type) return;
 
+        // [VINTERDÖD] Hoppa in i fordonet!
+        if (type === 'vehicle' && _detectionResult.object) {
+            state.activeVehicle = _detectionResult.object;
+            // Rensa resultatet så vi inte loopar
+            _detectionResult.type = null;
+            _detectionResult.object = null;
+            return;
+        }
+
         if (type === 'collectible') {
             this.handleCollectiblePickup(playerPos, session);
         }
@@ -268,11 +324,10 @@ export class PlayerInteractionSystem implements System {
         }
         else if (type === 'sector_specific') {
             // Dispatch to RuntimeState for SectorSystem to consume
-            state.interactionRequest = {
-                id: _detectionResult.id!,
-                object: _detectionResult.object!,
-                type: 'sector_specific'
-            };
+            state.interactionRequest.active = true;
+            state.interactionRequest.id = _detectionResult.id!;
+            state.interactionRequest.object = _detectionResult.object!;
+            state.interactionRequest.type = 'sector_specific';
         }
     }
 

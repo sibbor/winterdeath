@@ -1,7 +1,6 @@
 import { SoundCore } from './audio/SoundCore';
 import { SoundBank } from './audio/SoundBank';
-import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators } from './audio/SoundLib';
-import { PLAYER_CHARACTER } from '../content/constants';
+import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './audio/SoundLib';
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.
@@ -27,6 +26,11 @@ export class SoundManager {
   private vehicleGain: GainNode | null = null;
   private vehicleSkidOsc: AudioBufferSourceNode | null = null;
   private vehicleSkidGain: GainNode | null = null;
+
+  // Music (ambient loops & boss fight)
+  private musicSource: AudioBufferSourceNode | null = null;
+  private musicGain: GainNode | null = null;
+  private currentMusicId: string | null = null;
 
   // Cached procedural buffers
   private campfireBuffer: AudioBuffer | null = null;
@@ -484,8 +488,47 @@ export class SoundManager {
   }
 
   playMusic(id: string) {
-    // Implementation for looped background music if needed
-    //console.log(`playMusic: ${id}`);
+    // Avoid restarting the same track
+    if (this.currentMusicId === id) return;
+    this.stopMusic();
+
+    const buffer = createMusicBuffer(this.core.ctx, id);
+    if (!buffer) return;
+
+    const gain = this.core.ctx.createGain();
+    gain.gain.setValueAtTime(0, this.core.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.35, this.core.ctx.currentTime + 2.0); // 2s fade-in
+    gain.connect(this.core.masterGain);
+
+    const src = this.core.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    src.connect(gain);
+    src.start();
+
+    this.musicSource = src;
+    this.musicGain = gain;
+    this.currentMusicId = id;
+  }
+
+  isMusicPlaying() {
+    return this.musicSource !== null;
+  }
+
+  stopMusic(fadeDuration: number = 1.5) {
+    if (!this.musicSource || !this.musicGain) return;
+    const gain = this.musicGain;
+    const src = this.musicSource;
+    this.musicSource = null;
+    this.musicGain = null;
+    this.currentMusicId = null;
+
+    // Fade out then stop
+    gain.gain.setValueAtTime(gain.gain.value, this.core.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, this.core.ctx.currentTime + fadeDuration);
+    setTimeout(() => {
+      try { src.stop(); } catch (_) { /* already stopped */ }
+    }, fadeDuration * 1000 + 50);
   }
 }
 

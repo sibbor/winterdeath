@@ -113,7 +113,7 @@ export class SectorSystem implements System {
                 session.engine.wind.clearOverride();
             },
             setWindRandomized: (active: boolean) => {
-                session.engine.wind.setRandomized(active);
+                session.engine.wind.setRandomWind(0.02, 0.05);
             },
             setWeather: (type: any, count?: number) => {
                 session.engine.weather.sync(type, count || 100);

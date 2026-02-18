@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../content/weapons';
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
 import { soundManager } from '../../utils/sound';
+import { haptic } from '../../utils/HapticManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -59,6 +60,7 @@ export const WeaponHandler = {
             state.reloadEndTime = 0;
             state.throwChargeStart = 0;
             soundManager.playWeaponSwap();
+            //haptic.weaponSwap();
         }
     },
 
@@ -91,6 +93,7 @@ export const WeaponHandler = {
                     state.reloadEndTime = 0;
                     state.throwChargeStart = 0;
                     soundManager.playWeaponSwap();
+                    //haptic.weaponSwap();
                 }
                 input.scrollDown = input.scrollUp = false;
             }
@@ -108,6 +111,7 @@ export const WeaponHandler = {
             state.isReloading = true;
             state.reloadEndTime = now + wep.reloadTime;
             soundManager.playMagOut();
+            //haptic.reload();
         }
 
         if (state.isReloading && now > state.reloadEndTime) {
@@ -235,6 +239,7 @@ export const WeaponHandler = {
                     }
 
                     soundManager.playShot(wep.name);
+                    //haptic.gunshot();
 
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
                     const spread = wep.name === WeaponType.SHOTGUN ? 0.15 : 0;

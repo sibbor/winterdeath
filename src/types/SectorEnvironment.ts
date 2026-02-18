@@ -19,6 +19,12 @@ export interface SectorEnvironment {
     cameraHeight?: number;
     weather: WeatherType;
     weatherDensity?: number;
+    wind?: {
+        strengthMin?: number;
+        strengthMax?: number;
+        direction?: { x: number, z: number };
+        angleVariance?: number;
+    };
 }
 
 export interface AtmosphereZone {

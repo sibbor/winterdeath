@@ -58,20 +58,20 @@ export class WeatherSystem {
             return;
         }
 
-        // [VINTERDÖD] Assign shared material and pre-calculate physics multipliers
+        // Assign shared material and pre-calculate physics multipliers
         let selectedMaterial: THREE.Material;
         if (type === 'rain') {
-            selectedMaterial = MATERIALS.rain;
+            selectedMaterial = MATERIALS.particle_rain;
             this.swayMult = 5.0; // Heavy, low sway
         } else if (type === 'ash') {
-            selectedMaterial = MATERIALS.ash;
+            selectedMaterial = MATERIALS.particle_ash;
             this.swayMult = 15.0; // Light, drifting
         } else if (type === 'ember') {
-            selectedMaterial = MATERIALS.ember;
+            selectedMaterial = MATERIALS.particle_ember;
             this.swayMult = 25.0; // Very light, erratic
         } else {
-            selectedMaterial = MATERIALS.snow;
-            this.swayMult = 20.0; // Soft sway
+            selectedMaterial = MATERIALS.particle_snow;
+            this.swayMult = 40.0; // Soft sway
         }
 
         // Setup or update InstancedMesh

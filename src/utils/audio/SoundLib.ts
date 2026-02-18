@@ -790,3 +790,172 @@ export const Synth = {
         s.start();
     }
 };
+
+// ===================================================================
+// MUSIC GENERATORS (Looping ambient & boss fight)
+// ===================================================================
+
+/**
+ * Creates a seamlessly-looping AudioBuffer for a given music ID.
+ * Returns null if the ID is unknown.
+ */
+export function createMusicBuffer(ctx: AudioContext, id: string): AudioBuffer | null {
+    switch (id) {
+        case 'ambient_wind_loop': return _genWindLoop(ctx);
+        case 'ambient_forest_loop': return _genForestLoop(ctx);
+        case 'ambient_scrapyard_loop': return _genScrapyardLoop(ctx);
+        case 'ambient_finale_loop': return _genFinaleLoop(ctx);
+        case 'boss_metal': return _genBossMetal(ctx);
+        default: return null;
+    }
+}
+
+/** Sectors 1, 2, 6 — low brown-noise wind with occasional gusts (8s). */
+function _genWindLoop(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const white = Math.random() * 2 - 1;
+        // Brown noise base
+        last = (last + 0.02 * white) / 1.02;
+        // Slow gust envelope (two gusts per 8s)
+        const gust = 0.6 + 0.4 * Math.sin(t * Math.PI * 0.5) * Math.sin(t * Math.PI * 0.25);
+        // Fade in/out at loop boundaries (first/last 0.1s)
+        const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
+        d[i] = last * 3.5 * gust * fade;
+    }
+    return buf;
+}
+
+/** Sector 3 — forest: layered rustling + distant bird chirps (8s). */
+function _genForestLoop(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    // Bird chirp times (seconds into the loop)
+    const chirps = [0.8, 2.3, 4.1, 5.7, 7.2];
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        // Soft rustling (high-passed brown noise)
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.015 * white) / 1.015;
+        let val = last * 1.5;
+        // Bird chirps: short sine sweeps
+        for (let c = 0; c < chirps.length; c++) {
+            const dt = t - chirps[c];
+            if (dt >= 0 && dt < 0.15) {
+                const freq = 2400 + 800 * Math.sin(dt * Math.PI / 0.15);
+                val += Math.sin(2 * Math.PI * freq * dt) * 0.06 * Math.exp(-20 * dt);
+            }
+        }
+        const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
+        d[i] = val * fade;
+    }
+    return buf;
+}
+
+/** Sector 4 — scrapyard: industrial hum + distant metal clanks (8s). */
+function _genScrapyardLoop(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+    // Metal clank times
+    const clanks = [1.2, 3.5, 5.0, 6.8];
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        // Low industrial hum (60Hz + harmonics)
+        const hum = Math.sin(2 * Math.PI * 60 * t) * 0.04
+            + Math.sin(2 * Math.PI * 120 * t) * 0.02
+            + Math.sin(2 * Math.PI * 180 * t) * 0.01;
+        // Distant noise bed
+        const noise = (Math.random() * 2 - 1) * 0.015;
+        // Metal clanks
+        let clank = 0;
+        for (let c = 0; c < clanks.length; c++) {
+            const dt = t - clanks[c];
+            if (dt >= 0 && dt < 0.4) {
+                clank += Math.sin(2 * Math.PI * 800 * dt) * 0.08 * Math.exp(-15 * dt)
+                    + Math.sin(2 * Math.PI * 1200 * dt) * 0.04 * Math.exp(-20 * dt);
+            }
+        }
+        const fade = Math.min(1, Math.min(t / 0.1, (dur - t) / 0.1));
+        d[i] = (hum + noise + clank) * fade;
+    }
+    return buf;
+}
+
+/** Sector 5 — finale: tense low drone + distant rumble (8s). */
+function _genFinaleLoop(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        // Tense drone: detuned oscillators
+        const drone = Math.sin(2 * Math.PI * 55 * t) * 0.06
+            + Math.sin(2 * Math.PI * 55.5 * t) * 0.05  // slight detune for tension
+            + Math.sin(2 * Math.PI * 110 * t) * 0.03;
+        // Slow rumble (brown noise)
+        const white = Math.random() * 2 - 1;
+        last = (last + 0.01 * white) / 1.01;
+        const rumble = last * 1.2;
+        // Slow pulse (heartbeat-like)
+        const pulse = 0.7 + 0.3 * Math.sin(t * Math.PI * 0.8);
+        const fade = Math.min(1, Math.min(t / 0.15, (dur - t) / 0.15));
+        d[i] = (drone + rumble) * pulse * fade;
+    }
+    return buf;
+}
+
+/** Boss fight — hardcore metal: driving kick + distorted sawtooth riff (8s). */
+function _genBossMetal(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+
+    // BPM = 180, 8s = 24 beats, kick on every beat
+    const bpm = 180;
+    const beatDur = 60 / bpm;
+
+    // Simple riff: power chord pattern (E5 power chord: E2=82Hz, B2=123Hz)
+    const riffFreqs = [82, 123, 164]; // E2, B2, E3
+
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const beatPhase = (t % beatDur) / beatDur;
+
+        // Kick drum: low thud on every beat
+        const beatT = t % beatDur;
+        const kick = Math.sin(2 * Math.PI * 60 * beatT) * 0.4 * Math.exp(-30 * beatT)
+            + (Math.random() * 2 - 1) * 0.1 * Math.exp(-80 * beatT);
+
+        // Distorted sawtooth riff (clipped for distortion)
+        let riff = 0;
+        for (let f = 0; f < riffFreqs.length; f++) {
+            // Sawtooth: 2*(t*freq - floor(t*freq+0.5))
+            const phase = t * riffFreqs[f];
+            riff += (2 * (phase - Math.floor(phase + 0.5))) * 0.12;
+        }
+        // Hard clip for distortion
+        riff = Math.max(-0.4, Math.min(0.4, riff * 2.5));
+
+        // Hi-hat: noise burst on off-beats (8th notes)
+        const hihatPhase = (t % (beatDur * 0.5)) / (beatDur * 0.5);
+        const hihatT = t % (beatDur * 0.5);
+        const hihat = (Math.random() * 2 - 1) * 0.06 * Math.exp(-120 * hihatT);
+
+        const fade = Math.min(1, Math.min(t / 0.05, (dur - t) / 0.05));
+        d[i] = (kick + riff + hihat) * 0.7 * fade;
+    }
+    return buf;
+}

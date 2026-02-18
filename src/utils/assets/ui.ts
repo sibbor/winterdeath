@@ -5,7 +5,8 @@ import { FAMILY_MEMBERS, PLAYER_CHARACTER } from '../../content/constants';
 export const createTextSprite = (text: string) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 256; canvas.height = 64;
+    canvas.width = 256;
+    canvas.height = 64;
     ctx.font = 'bold 32px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';

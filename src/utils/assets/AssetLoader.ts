@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 
 class AssetLoader {
@@ -18,27 +17,31 @@ class AssetLoader {
     }
 
     /**
-     * Loads a texture and sets standard properties for environment maps
+     * Loads a texture and sets standard properties for environment maps.
+     * [VINTERDÖD] Uses flat arguments instead of objects to prevent GC allocations.
      */
-    public loadTexture(path: string, repeat: { x: number, y: number } = { x: 1, y: 1 }): THREE.Texture {
-        const cacheKey = `${path}_${repeat.x}_${repeat.y}`;
+    public loadTexture(path: string, repeatX: number = 1, repeatY: number = 1): THREE.Texture {
+        const cacheKey = `${path}_${repeatX}_${repeatY}`;
 
         if (this.textureCacheSource.has(cacheKey)) {
             return this.textureCacheSource.get(cacheKey)!;
         }
 
         const texture = this.textureLoader.load(path);
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(repeat.x, repeat.y);
-        texture.anisotropy = 8;
-        texture.matrixAutoUpdate = false;
 
         // Standard environment settings
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(repeat.x, repeat.y);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(repeatX, repeatY);
 
-        // Performance: Anisotropy for sharp looks at distance
-        texture.anisotropy = 8;
+        // Performance: Anisotropy for sharp looks at distance. 
+        // 4 is a great sweet spot for mobile/desktop performance.
+        texture.anisotropy = 4;
+
+        // [VINTERDÖD CRITICAL FIX] Disable auto-update to save CPU cycles per frame.
+        // BUT we MUST call updateMatrix() once manually to apply the repeat settings!
+        texture.matrixAutoUpdate = false;
+        texture.updateMatrix();
 
         this.textureCacheSource.set(cacheKey, texture);
         return texture;

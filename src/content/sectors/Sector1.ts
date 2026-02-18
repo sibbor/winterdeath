@@ -64,17 +64,22 @@ export const Sector1: SectorDef = {
     environment: {
         bgColor: 0x020208,
         fogDensity: 0.02,
-        ambientIntensity: 0.4, // Increased from 0.2 for better general visibility
+        ambientIntensity: 0.4,
         groundColor: 0xddddff,
         fov: 50,
         skyLight: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
-        weather: 'snow'
+        weather: 'snow',
+        wind: {
+            strengthMin: 0.05,
+            strengthMax: 1.0,
+            direction: { x: 1, z: 1 },
+            angleVariance: Math.PI / 4
+        }
     },
     // Automatic Content
     groundType: 'SNOW',
-    //bounds: { width: 500, depth: 900 },
     ambientLoop: 'ambient_wind_loop',
 
     // --- ADJUST SPAWN POINTS HERE ---
@@ -469,14 +474,6 @@ export const Sector1: SectorDef = {
         // Bus Orientation: Lying on side (X-rotation), Front pointing East (+X)
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, 1.8, LOCATIONS.TRIGGERS.BUS.z);
         bus.rotation.set(Math.PI / 2, 0, 0); // Lying on side
-
-        // Interaction Data
-        SectorGenerator.addInteractable(ctx, bus, {
-            id: 'tunnel_bus',
-            label: 'ui.interact_plant_explosive',
-            type: 'sector_specific'
-        });
-
         bus.updateMatrixWorld();
 
         const busBox = new THREE.Box3().setFromObject(bus);
@@ -503,6 +500,12 @@ export const Sector1: SectorDef = {
         // Store references in sectorState for interactive explosion
         (ctx as any).busObject = bus;
         (ctx as any).busObjectIdx = busIdx;
+
+        SectorGenerator.addInteractable(ctx, bus, {
+            id: 'tunnel_bus',
+            label: 'ui.interact_plant_explosive',
+            type: 'sector_specific'
+        });
 
         // Fences
         const ty = LOCATIONS.POIS.TRAIN_YARD;
@@ -702,17 +705,15 @@ export const Sector1: SectorDef = {
 
             // --- THE BUS EVENT ---
             // --- THE BUS EVENT (Handled via Interaction now) ---
-            /*
             {
                 id: 's1_bus_event',
                 position: LOCATIONS.TRIGGERS.BUS,
-                radius: 8,
+                radius: 12, // Slightly larger for better discovery
                 type: 'EVENT',
                 content: null,
                 triggered: false,
-                actions: [ ...moved to onInteract/onUpdate... ]
+                actions: [] // Logic handled in onUpdate based on triggered flag
             },
-            */
 
             // --- FIND LOKE EVENT ---
             {
@@ -754,6 +755,9 @@ export const Sector1: SectorDef = {
 
             // Immediate feedback
             events.setNotification({ text: events.t('clues.s1_event_tunnel_blocked'), duration: 1500 });
+        } else if (id === 'tunnel_bus_explode') {
+            state.sectorState.busInteractionTriggered = true;
+            object.userData.isInteractable = false;
         }
     },
 
@@ -899,16 +903,35 @@ export const Sector1: SectorDef = {
         if (sectorState.hordeTarget !== undefined && sectorState.hordeKilled >= sectorState.hordeTarget
             && !sectorState.busCanBeInteractedWith
             && playerPos.distanceTo(new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z)) < 25) {
+
             sectorState.busCanBeInteractedWith = true;
             sectorState.waveActive = false; // Progress bar finished
             events.setNotification({ visible: true, text: events.t('clues.s1_event_tunnel_plant_explosives'), timestamp: now });
+
+            // Make it interactable now
+            const busObj = (sectorState.ctx as any).busObject;
+            if (busObj) {
+                events.setInteraction({
+                    id: 'tunnel_bus_explode',
+                    text: events.t('ui.interact_blow_up_bus'),
+                    position: busObj.position,
+                    action: () => {
+                        sectorState.busInteractionTriggered = true;
+                        busObj.userData.isInteractable = false;
+                    }
+                });
+
+                // Also Register in the Interaction System properly
+                busObj.userData.isInteractable = true;
+                busObj.userData.interactionId = 'tunnel_bus_explode';
+                busObj.userData.interactionLabel = 'ui.interact_blow_up_bus';
+                busObj.userData.interactionType = 'sector_specific';
+            }
         }
 
         // Handle Bus Gate & Interaction
         if (sectorState.busCanBeInteractedWith && !sectorState.busExploded) {
             const busObj = (sectorState.ctx as any).busObject;
-            const dist = playerPos.distanceTo(busObj.position);
-            const proximity = 8;
             const nowTime = now;
 
             // EXECUTING EXPLOSION

@@ -299,7 +299,8 @@ export const Sector2: SectorDef = {
             SectorGenerator.addInteractable(ctx, doorFrame, {
                 id: 'cave_door',
                 label: 'ui.interact_knock_on_port',
-                type: 'sector_specific'
+                type: 'sector_specific',
+                radius: 12.0
             });
         }
     },
@@ -415,6 +416,10 @@ export const Sector2: SectorDef = {
                 const openDist = Math.min(10, elapsed * 0.005);
                 if (doorL) doorL.position.x = -5 - openDist;
                 if (doorR) doorR.position.x = 5 + openDist;
+
+                // Disable physical collisions once opening starts
+                if (sectorState.doorObstacleL?.collider) sectorState.doorObstacleL.collider.size.set(0, 0, 0);
+                if (sectorState.doorObstacleR?.collider) sectorState.doorObstacleR.collider.size.set(0, 0, 0);
 
                 if (elapsed > 2000) {
                     jc.phase = 'JORDAN_WALK';
