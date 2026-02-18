@@ -580,9 +580,9 @@ export const SectorGenerator = {
     },
 
     /**
-     * Spawn a driveable vehicle with full physics data from the VEHICLES database.
-     * Replaces manual userData setup — just pass the VehicleType and position.
-     */
+         * Spawn a driveable vehicle with full physics data from the VEHICLES database.
+         * Replaces manual userData setup — just pass the VehicleType and position.
+         */
     spawnDriveableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number,
         vehicleType: VehicleType, colorOverride?: number, addSnow?: boolean) => {
 
@@ -592,51 +592,67 @@ export const SectorGenerator = {
             return null;
         }
 
-        // Use ObjectGenerator for visual mesh — boat has a separate generator
-        let vehicle: THREE.Object3D;
+        // Create a root container. This aligns physics and logic to standard forward (Z-axis).
+        const vehicleRoot = new THREE.Group();
+
+        // Use ObjectGenerator for visual mesh
+        let visualMesh: THREE.Object3D;
         if (vehicleType === 'boat') {
-            vehicle = ObjectGenerator.createBoat();
+            visualMesh = ObjectGenerator.createBoat();
         } else {
             const visualType = vehicleType === 'station_wagon' ? 'station wagon' : vehicleType;
-            vehicle = ObjectGenerator.createVehicle(visualType, 1.0, colorOverride, addSnow);
+            visualMesh = ObjectGenerator.createVehicle(visualType, 1.0, colorOverride, addSnow);
         }
 
-        const spawnY = vehicleType === 'boat' ? 1.0 : 0.5;
-        vehicle.position.set(x, spawnY, z);
-        vehicle.rotation.y = rotation;
+        // Fix model alignment. Rotate visual mesh 90 degrees so the front aligns with Z-axis
+        visualMesh.rotation.y = -Math.PI / 2;
 
-        // Attach interaction metadata (Fixes empty prompt)
-        vehicle.userData.isInteractable = true;
-        vehicle.userData.interactionId = `vehicle_${vehicleType}_${Math.random().toString(36).substr(2, 5)}`;
-        vehicle.userData.interactionLabel = 'ui.enter_vehicle';
-        vehicle.userData.interactionType = 'VEHICLE';
+        // Add visual representation to the root node
+        vehicleRoot.add(visualMesh);
+
+        const spawnY = vehicleType === 'boat' ? 1.0 : 0.5;
+        vehicleRoot.position.set(x, spawnY, z);
+        vehicleRoot.rotation.y = rotation;
+
+        // Attach interaction metadata
+        vehicleRoot.userData.isInteractable = true;
+        vehicleRoot.userData.interactionId = `vehicle_${vehicleType}_${Math.random().toString(36).substring(2, 7)}`;
+        vehicleRoot.userData.interactionLabel = 'ui.enter_vehicle';
+        vehicleRoot.userData.interactionType = 'VEHICLE';
 
         // Attach physics data from database
-        vehicle.userData.vehicleDef = def;
-        vehicle.userData.velocity = new THREE.Vector3();
-        vehicle.userData.angularVelocity = new THREE.Vector3();
-        vehicle.userData.suspY = 0;
-        vehicle.userData.suspVelY = 0;
+        vehicleRoot.userData.vehicleDef = def;
+        vehicleRoot.userData.velocity = new THREE.Vector3();
+        vehicleRoot.userData.angularVelocity = new THREE.Vector3();
+        vehicleRoot.userData.suspY = 0;
+        vehicleRoot.userData.suspVelY = 0;
 
         const interactionRad = Math.max(def.size.x, def.size.z) * 0.5 + 2.0;
-        vehicle.userData.interactionRadius = interactionRad;
-        vehicle.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
+        vehicleRoot.userData.interactionRadius = interactionRad;
+        vehicleRoot.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
 
-        ctx.scene.add(vehicle);
+        ctx.scene.add(vehicleRoot);
 
         // Register in interactables list
-        if (!ctx.interactables) ctx.interactables = [];
-        ctx.interactables.push(vehicle);
+        if (!ctx.interactables) {
+            ctx.interactables = [];
+        }
+        ctx.interactables.push(vehicleRoot);
 
-        // Add collision obstacle
+        // Add collision obstacle.
+        // Because the visual mesh is rotated 90 degrees, length and width are swapped on the root node.
         SectorGenerator.addObstacle(ctx, {
-            mesh: vehicle,
-            position: vehicle.position,
-            collider: { type: 'box', size: new THREE.Vector3(def.size.x, def.size.y, def.size.z) },
+            mesh: vehicleRoot,
+            position: vehicleRoot.position,
+            collider: {
+                type: 'box',
+                // X and Z size values swapped to match the 90-degree visual rotation
+                size: new THREE.Vector3(def.size.z, def.size.y, def.size.x)
+            },
             type: `Vehicle_${vehicleType}`
         });
 
-        return vehicle;
+        return vehicleRoot;
     },
 
     /**
