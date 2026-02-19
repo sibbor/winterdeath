@@ -675,7 +675,7 @@ export const GamePlaySounds = {
     playHeartbeat: (core: SoundCore) => SoundBank.play(core, 'fx_heartbeat', 0.3),
 
     playFootstep: (core: SoundCore, type: 'step' | 'snow' | 'metal' | 'wood' | 'water' = 'step') => {
-        const key = `step_${type}`;
+        const key = type === 'step' ? 'step' : `step_${type}`;
         // Random pitch and volume variance for natural feel
         const pitch = 0.9 + Math.random() * 0.3;
         const vol = 0.15 + Math.random() * 0.05;
