@@ -5,6 +5,7 @@ import { FXSystem } from './FXSystem';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/sound';
 import { AIState } from '../../types/enemy';
+import { _buoyancyResult } from './WaterSystem'; // Imported scratchpad
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Direction / MoveVec
@@ -89,6 +90,18 @@ export class PlayerMovementSystem implements System {
         let speed = 15;
         if (state.stats?.speed) speed = 15 * state.stats.speed;
 
+        // --- 2. WATER PHYSICS & DRAG ---
+        let inWater = false;
+        if (session.engine.water) {
+            session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
+            inWater = _buoyancyResult.inWater;
+
+            // Apply massive friction if submerged (prevents running normally in lakes)
+            if (inWater) {
+                speed *= 0.6;
+            }
+        }
+
         if (state.isRushing) {
             state.lastStaminaUseTime = now;
             if (state.stamina > 0) {
@@ -96,7 +109,10 @@ export class PlayerMovementSystem implements System {
                 speed *= 1.75;
 
                 if ((now / 200 | 0) % 2 === 0) {
-                    FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
+                    // Only spawn smoke if we are not in water
+                    if (!inWater) {
+                        FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
+                    }
                 }
             } else {
                 state.isRushing = false;
@@ -149,23 +165,12 @@ export class PlayerMovementSystem implements System {
                 // --- AUDIO: Footsteps ---
                 const stepInterval = state.isRushing ? 250 : 400;
                 if (now > (state.lastStepTime || 0) + stepInterval) {
-                    let inWater = false;
-                    const pX = playerGroup.position.x;
-                    const pY = playerGroup.position.y;
-                    const pZ = playerGroup.position.z;
-
-                    if (session.engine.water) {
-                        const ws = session.engine.water;
-                        const buoyancy = ws.checkBuoyancy(pX, pY, pZ);
-
-                        if (buoyancy.inWater) {
-                            inWater = true;
-                            soundManager.playFootstep('water');
-                            ws.spawnRipple(pX, pZ, 2, 0.3);
+                    if (inWater) {
+                        soundManager.playFootstep('water');
+                        if (session.engine.water) {
+                            session.engine.water.spawnRipple(playerGroup.position.x, playerGroup.position.z, 2);
                         }
-                    }
-
-                    if (!inWater) {
+                    } else {
                         soundManager.playFootstep('step');
                     }
                     state.lastStepTime = now;
@@ -203,14 +208,13 @@ export class PlayerMovementSystem implements System {
                     const obs = nearby[j];
 
                     if (applyCollisionResolution(_v3, 0.5, obs)) {
-
                         const entityData = obs.mesh?.userData?.entity;
 
                         // --- Enemy Collision & Knockback Logic ---
                         if (entityData) {
                             const enemy = entityData;
 
-                            // [VINTERDÖD] Bryt Bite-attacken direkt om vi dashar in i dem!
+                            // Break Bite attack immediately if we dash into them!
                             if (isDashing && enemy.state === AIState.BITING && !enemy.dead) {
                                 enemy.state = AIState.IDLE;
                                 enemy.stunTimer = 1.0;
@@ -219,39 +223,39 @@ export class PlayerMovementSystem implements System {
                                 soundManager.playImpact('flesh');
                             }
 
-                            // [VINTERDÖD] Alltid tillåt tackling (men kraften varierar)
+                            // Always allow tackles (but force varies)
                             const canTackle = !enemy.dead && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
 
                             if (canTackle) {
                                 const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
                                 const massInverse = 1.0 / Math.max(0.5, mass);
-                                const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse; // Bossar rör sig knappt
+                                const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse; // Bosses barely move
 
-                                // --- BOWLING-KÄGLOR FYSIK ---
-                                // Extremt mycket högre force och lift vid rush!
+                                // --- BOWLING PIN PHYSICS ---
+                                // Considerably higher force and lift during rush!
                                 const force = (isDashing ? 45.0 : 8.0) * pushMultiplier;
                                 const lift = (isDashing ? 12.0 : 2.0) * pushMultiplier;
 
-                                // 1. Beräkna rörelseriktning
+                                // 1. Calculate movement direction
                                 _v1.copy(baseMoveVec).normalize();
 
-                                // 2. Beräkna radiell riktning (utåt från spelaren) för att de ska sprida sig åt sidorna
+                                // 2. Calculate radial direction (outward from player) to spread them sideways
                                 _v5.set(
                                     enemy.mesh.position.x - playerGroup.position.x,
                                     0,
                                     enemy.mesh.position.z - playerGroup.position.z
                                 ).normalize();
 
-                                // 3. Mixa riktningarna. 2 delar framåt, 1 del utåt.
+                                // 3. Mix directions. 2 parts forward, 1 part outward.
                                 _v1.multiplyScalar(2.0).add(_v5).normalize();
 
-                                // Applicera farten!
+                                // Apply velocity!
                                 enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
 
-                                // Tvinga ut dem ur deras nuvarande State så de inte fryser mitt i luften
+                                // Force them out of their current state so they don't freeze mid-air
                                 enemy.state = AIState.IDLE;
 
-                                // Ge dem tillräckligt mycket stun så att de hinner landa innan de jagar igen
+                                // Apply enough stun so they land before chasing again
                                 enemy.stunTimer = isDashing ? 2.5 : 0.8;
                                 enemy.isBlinded = true;
                                 enemy.blindUntil = now + (isDashing ? 2500 : 800);
@@ -264,9 +268,8 @@ export class PlayerMovementSystem implements System {
                             }
                         }
                         if (obs.mesh?.userData?.vehicleDef) {
-                            // [VINTERDÖD] Apply push to vehicle if on land
-                            // We use a simple nudge velocity in the direction of the collision
-                            _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(isDashing ? 8.0 : 3.0);
+                            // [VINTERDÖD] Extremt mjuk knuff, WaterSystem sköter resten
+                            _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(isDashing ? 0.2 : 0.05);
                             if (obs.mesh.userData.velocity) {
                                 (obs.mesh.userData.velocity as THREE.Vector3).add(_v1);
                             }

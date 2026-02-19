@@ -727,9 +727,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
             FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
         };
+
         const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => {
             FXSystem.spawnPart(scene, stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
         };
+
         const spawnFloatingText = (x: number, y: number, z: number, text: string, color?: string) => {
             FXSystem.spawnFloatingText(scene, x, y, z, text, color);
         };
@@ -1128,8 +1130,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new WorldLootSystem(playerGroup, scene));
+
             const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, ctx.collectibles, onCollectibleFoundInternal);
             session.addSystem(interactionSystem);
+
             session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
                 setNotification: (n: any) => { if (n && n.visible && n.text) spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
                 t: (key: string) => t(key),
@@ -1144,8 +1148,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 scene: engine.scene,
                 setCameraOverride: (params: any) => cameraOverrideRef.current = params,
                 emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
-                spawnZombie, spawnHorde
+                spawnZombie, spawnHorde,
             }));
+
             session.addSystem(new EnemySystem(playerGroup, {
                 spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound,
                 onBossKilled: (id: number) => {
@@ -1461,7 +1466,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
                     const tgt = propsRef.current.teleportTarget;
                     playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
-                    spawnPart(tgt.x, 1, tgt.z, 'smoke', 20); soundManager.playTone(800, 'sine', 0.2, 0.1);
+                    spawnPart(tgt.x, 1, tgt.z, 'smoke', 20);
+                    soundManager.playTone(800, 'sine', 0.2, 0.1);
 
                     for (let i = 0; i < activeFamilyMembers.current.length; i++) {
                         const fm = activeFamilyMembers.current[i];

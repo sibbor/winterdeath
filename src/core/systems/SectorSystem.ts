@@ -20,13 +20,11 @@ const SECTORS: Record<number, SectorDef> = {
     5: Sector6
 };
 
-// --- PERFORMANCE SCRATCHPADS ---
-const _v1 = new THREE.Vector3();
-
 export class SectorSystem implements System {
     id = 'sector_system';
     private currentSector: SectorDef;
     private lastChimeTime = 0;
+    private waterInitialized = false;
 
     constructor(
         private playerGroup: THREE.Group,
@@ -59,10 +57,21 @@ export class SectorSystem implements System {
         const scene = session.engine.scene;
         const pPos = this.playerGroup.position;
 
+        // Initialize water system callbacks and player reference once
+        if (!this.waterInitialized && session.engine.water) {
+            session.engine.water.setPlayerRef(this.playerGroup);
+            session.engine.water.setCallbacks({
+                spawnPart: this.callbacks.spawnPart,
+                emitNoise: this.callbacks.emitNoise
+            });
+            this.waterInitialized = true;
+        }
+
         // 1. Optimized Proximity Check (Zero-GC)
         if (now - this.lastChimeTime > 2500) {
             const items = state.mapItems;
-            for (let i = 0; i < items.length; i++) {
+            const itemsLen = items.length;
+            for (let i = 0; i < itemsLen; i++) {
                 const item = items[i];
                 if (item.type === 'TRIGGER' && item.id.startsWith('collectible_')) {
                     const realId = item.id.replace('collectible_', '');
@@ -70,11 +79,7 @@ export class SectorSystem implements System {
 
                     const dx = item.x - pPos.x;
                     const dz = item.z - pPos.z;
-                    const distSq = dx * dx + dz * dz;
-
-                    if (distSq < 64) { // 8m radius
-                        // soundManager logic is handled via callbacks to keep system clean
-                        // this.callbacks.playSound('collectible_chime'); 
+                    if (dx * dx + dz * dz < 64) {
                         this.lastChimeTime = now;
                         break;
                     }
@@ -86,12 +91,8 @@ export class SectorSystem implements System {
         const events = {
             spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
                 const newEnemy = EnemyManager.spawn(
-                    scene,
-                    pPos,
-                    forcedType,
-                    forcedPos,
-                    state.bossSpawned,
-                    state.enemies.length
+                    scene, pPos, forcedType, forcedPos,
+                    state.bossSpawned, state.enemies.length
                 );
                 if (newEnemy) state.enemies.push(newEnemy);
             },
@@ -105,72 +106,45 @@ export class SectorSystem implements System {
             spawnPart: this.callbacks.spawnPart,
             startCinematic: this.callbacks.startCinematic,
             setCameraOverride: this.callbacks.setCameraOverride,
-            // Environment Controls
-            setWind: (direction: number, strength: number) => {
-                session.engine.wind.setOverride(direction, strength);
-            },
-            resetWind: () => {
-                session.engine.wind.clearOverride();
-            },
-            setWindRandomized: (active: boolean) => {
-                session.engine.wind.setRandomWind(0.02, 0.05);
-            },
-            setWeather: (type: any, count?: number) => {
-                session.engine.weather.sync(type, count || 100);
-            },
+            setWind: (direction: number, strength: number) => session.engine.wind.setOverride(direction, strength),
+            resetWind: () => session.engine.wind.clearOverride(),
+            setWindRandomized: (active: boolean) => session.engine.wind.setRandomWind(0.02, 0.05),
+            setWeather: (type: any, count?: number) => session.engine.weather.sync(type, count || 100),
             setLight: (params: any) => {
-                if (params.skyLightColor || params.skyLightIntensity !== undefined || params.skyLightPosition || params.skyLightVisible !== undefined) {
-                    const skyLight = scene.getObjectByName('SKY_LIGHT') as THREE.DirectionalLight;
-                    if (skyLight) {
-                        if (params.skyLightColor) skyLight.color.copy(params.skyLightColor);
-                        if (params.skyLightIntensity !== undefined) skyLight.intensity = params.skyLightIntensity;
-                        if (params.skyLightPosition) skyLight.position.set(params.skyLightPosition.x, params.skyLightPosition.y, params.skyLightPosition.z);
-                        if (params.skyLightVisible !== undefined) skyLight.visible = params.skyLightVisible;
-                    }
+                const skyLight = scene.getObjectByName('SKY_LIGHT') as THREE.DirectionalLight;
+                if (skyLight) {
+                    if (params.skyLightColor) skyLight.color.copy(params.skyLightColor);
+                    if (params.skyLightIntensity !== undefined) skyLight.intensity = params.skyLightIntensity;
+                    if (params.skyLightPosition) skyLight.position.set(params.skyLightPosition.x, params.skyLightPosition.y, params.skyLightPosition.z);
+                    if (params.skyLightVisible !== undefined) skyLight.visible = params.skyLightVisible;
                 }
-                if (params.ambientIntensity !== undefined) {
-                    const amb = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
-                    if (amb) amb.intensity = params.ambientIntensity;
-                }
+                const amb = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
+                if (amb && params.ambientIntensity !== undefined) amb.intensity = params.ambientIntensity;
             },
-            setBackgroundColor: (color: number) => {
-                scene.background = new THREE.Color(color);
-            },
+            setBackgroundColor: (color: number) => { scene.background = new THREE.Color(color); },
             setGroundColor: (color: number) => {
-                const ground = scene.getObjectByName('GROUND');
-                if (ground && (ground as THREE.Mesh).material) {
-                    const mat = (ground as THREE.Mesh).material as THREE.MeshStandardMaterial;
-                    if (mat.color) mat.color.setHex(color);
-                }
+                const ground = scene.getObjectByName('GROUND') as THREE.Mesh;
+                if (ground && ground.material) (ground.material as THREE.MeshStandardMaterial).color.setHex(color);
             },
             setFOV: (fov: number) => {
                 const camera = (session.engine as any).camera as THREE.PerspectiveCamera;
-                if (camera) {
-                    camera.fov = fov;
-                    camera.updateProjectionMatrix();
-                }
+                if (camera) { camera.fov = fov; camera.updateProjectionMatrix(); }
             },
             setFog: (color: THREE.Color, density: number) => {
-                if (scene.fog && (scene.fog as THREE.FogExp2).density !== undefined) {
-                    const fog = scene.fog as THREE.FogExp2;
-                    fog.color.copy(color);
-                    fog.density = density;
+                if (scene.fog) {
+                    (scene.fog as THREE.FogExp2).color.copy(color);
+                    (scene.fog as THREE.FogExp2).density = density;
                 }
             },
             setWater: (level?: number, waveHeight?: number) => {
-                // WaterSystem is now Engine-owned.
-                // Note: Water level is usually per-surface, but we can add a global check if needed.
-                // For now, we interact with engine.water
+                // Future expansion: hook into engine.water for global level changes
+                // Can make changes in Sector 6:s Weather station here...
             },
-            emitNoise: (pos: THREE.Vector3, radius: number, type: string) => {
-                session.makeNoise(pos, radius, type as any);
-            },
+            emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
             spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => {
-                // Delegate to main callbacks if available, or loop spawnZombie
                 if (this.callbacks.spawnHorde) {
                     this.callbacks.spawnHorde(count, type, pos);
                 } else {
-                    // Fallback
                     for (let i = 0; i < count; i++) this.callbacks.spawnZombie(type || 'WALKER', pos);
                 }
             }
@@ -179,40 +153,12 @@ export class SectorSystem implements System {
         // 3. Process Interaction Requests
         if (state.interactionRequest && state.interactionRequest.active && state.interactionRequest.type === 'sector_specific') {
             const req = state.interactionRequest;
-            this.currentSector.onInteract(
-                req.id,
-                req.object,
-                state,
-                events
-            );
-
-            // Reset flags to avoid double-processing in other systems
-            // We do this AFTER the handler call now to ensure data is preserved during the event
+            this.currentSector.onInteract(req.id, req.object, state, events);
             state.interactionRequest.active = false;
-            state.interactionRequest.id = '';
-            state.interactionRequest.object = null;
-            state.interactionRequest.type = null;
         }
 
-        // 4. Centralized Atmosphere Update (Data-driven)
-        SectorGenerator.updateAtmosphere(
-            dt,
-            now,
-            pPos,
-            state,
-            state.sectorState,
-            events,
-            this.currentSector,
-            this.currentSector.atmosphereZones
-        );
-
-        this.currentSector.onUpdate(
-            dt,
-            now,
-            pPos,
-            state,
-            state.sectorState,
-            events
-        );
+        // 4. Centralized Atmosphere Update
+        SectorGenerator.updateAtmosphere(dt, now, pPos, state, state.sectorState, events, this.currentSector, this.currentSector.atmosphereZones);
+        this.currentSector.onUpdate(dt, now, pPos, state, state.sectorState, events);
     }
 }

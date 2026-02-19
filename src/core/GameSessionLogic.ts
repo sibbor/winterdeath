@@ -66,7 +66,11 @@ export class GameSessionLogic {
             isRolling: false,
 
             invulnerableUntil: 0,
-            spacePressTime: 0, spaceDepressed: false, eDepressed: false, isRushing: false, rushCostPaid: false,
+            spacePressTime: 0,
+            spaceDepressed: false,
+            eDepressed: false,
+            isRushing: false,
+            rushCostPaid: false,
             wasFiring: false,
             throwChargeStart: 0,
 

@@ -190,32 +190,53 @@ export const Sector6: SectorDef = {
         const p3 = SECTOR6_ZONES[3];
 
         // Create a typed water body via the engine-owned WaterSystem
+        // 1. Create the water body (The Lake)
         const lake = SectorGenerator.addWaterBody(ctx, 'lake', p3.x, p3.z, 200, 200);
 
-        // --- LARGE STONE WITH FOAM ---
+        // 2. LARGE STONE WITH SPLASHES
         const bigStone = EnvironmentGenerator.createRock(35, 15);
         bigStone.position.set(p3.x - 30, -2, p3.z + 20);
         bigStone.scale.set(1.5, 1.2, 1.5);
         scene.add(bigStone);
-        SectorGenerator.addObstacle(ctx, { mesh: bigStone, position: bigStone.position, radius: 10, collider: { type: 'sphere', radius: 10 } });
 
-        // Register as splash source — WaterSystem handles ambient ripples/foam automatically
+        // Add physical obstacle for collisions
+        SectorGenerator.addObstacle(ctx, {
+            mesh: bigStone,
+            position: bigStone.position,
+            radius: 10,
+            collider: { type: 'sphere', radius: 10 }
+        });
+
+        // Register as splash source for the new 'splash' particles
         if (lake) lake.registerSplashSource(bigStone);
 
+        // 3. BOAT (Floatable Vehicle)
         const boatGroup = SectorGenerator.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
+        if (lake && boatGroup) {
+            lake.registerFloatingProp(boatGroup);
+        }
 
-        // Interactive Ball
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4, metalness: 0.1 }));
+        // 4. INTERACTIVE BALL
+        const ballGeom = new THREE.SphereGeometry(1.5, 16, 16);
+        const ballMat = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4, metalness: 0.1 });
+        const ball = new THREE.Mesh(ballGeom, ballMat);
+
         ball.position.set(p3.x + 10, 5, p3.z + 10);
         ball.castShadow = true;
-        ball.userData = { isBall: true, radius: 1.5, mass: 5, friction: 0.98 };
+
+        // velocity is required for the buoyancy physics to work
+        ball.userData = {
+            isBall: true,
+            radius: 1.5,
+            mass: 5,
+            friction: 0.96, // Increased friction for water damping
+            velocity: new THREE.Vector3(0, 0, 0)
+        };
+
         scene.add(ball);
 
-        // Register floating props — WaterSystem handles buoyancy, drag, collisions automatically
-        if (lake) {
-            if (boatGroup) lake.registerFloatingProp(boatGroup);
-            lake.registerFloatingProp(ball);
-        }
+        // Register ball so it can float and be pushed by the player
+        if (lake) lake.registerFloatingProp(ball);
 
         // 5. SURPRISE
         const p4 = SECTOR6_ZONES[4];

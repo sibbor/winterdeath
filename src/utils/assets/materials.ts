@@ -13,7 +13,7 @@ export function createWaterMaterial(
     config: WaterStyleConfig,
     width: number,
     depth: number,
-    foamTexture: THREE.Texture,
+    flowTexture: THREE.Texture,
     waveTexture: THREE.Texture,
     shape: 'rect' | 'circle' = 'rect'
 ): THREE.ShaderMaterial {
@@ -23,9 +23,9 @@ export function createWaterMaterial(
             uColor: { value: new THREE.Color(config.color) },
             uOpacity: { value: config.opacity },
             uFresnelStrength: { value: config.fresnelStrength || 0.5 },
-            uFoamTexture: { value: foamTexture },
+            uFlowTexture: { value: flowTexture },
             uWaveTexture: { value: waveTexture },
-            uUvScale: { value: config.uvScale || 5.0 },
+            uUvScale: { value: config.uvScale || 1.0 },
             uPlaneSize: { value: new THREE.Vector2(width, depth) },
             uIsCircle: { value: shape === 'circle' ? 1.0 : 0.0 }
         },
@@ -33,23 +33,22 @@ export function createWaterMaterial(
             varying vec3 vNormal;
             varying vec3 vViewPosition;
             varying vec2 vUv;
-            varying vec3 vWorldPosition;
             varying vec3 vLocalPos; 
             uniform float uTime;
 
             void main() {
                 vUv = uv;
                 vLocalPos = position; 
-                vec3 pos = position;
                 
-                // GPU-Side wave vertex displacement (keeps CPU buffers stable)
-                float wave = sin(pos.x * 0.5 + uTime * 1.5) * 0.1 + sin(pos.z * 0.4 + uTime * 1.2) * 0.1;
-                pos.y += wave;
+                // 1. Calculate World Position FIRST
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                
+                // 2. PERFECT SYNC: Wave math based on WORLD coordinates
+                float wave = sin(worldPosition.x * 0.5 + uTime * 1.5) * 0.1 + sin(worldPosition.z * 0.4 + uTime * 1.2) * 0.1;
+                worldPosition.y += wave;
 
-                vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
                 vec4 mvPosition = viewMatrix * worldPosition;
                 
-                vWorldPosition = worldPosition.xyz;
                 vViewPosition = -mvPosition.xyz;
                 vNormal = normalMatrix * normal;
                 gl_Position = projectionMatrix * mvPosition;
@@ -60,7 +59,7 @@ export function createWaterMaterial(
             uniform vec3 uColor;
             uniform float uOpacity;
             uniform float uFresnelStrength;
-            uniform sampler2D uFoamTexture;
+            uniform sampler2D uFlowTexture;
             uniform sampler2D uWaveTexture;
             uniform float uUvScale;
             uniform vec2 uPlaneSize;
@@ -78,15 +77,13 @@ export function createWaterMaterial(
                 float fresnelFactor = clamp(dot(viewDir, normal), 0.0, 1.0);
                 vec3 waterColor = mix(uColor * 0.6, uColor * 1.2, fresnelFactor);
 
-                vec2 scrollUv = vUv + uTime * 0.02;
+                vec2 scrollUv = vUv + uTime * 0.01;
                 vec2 waveDistortion = texture2D(uWaveTexture, scrollUv).rg * 2.0 - 1.0;
                 
-                vec2 foamUv = (vUv * uUvScale) + (waveDistortion * 0.1) + (uTime * 0.05);
+                vec2 flowUv = (vUv * uUvScale) + (waveDistortion * 0.05) + (uTime * 0.03);
+                float noiseVal = texture2D(uFlowTexture, flowUv).r;
+                float flowHighlight = smoothstep(0.6, 0.9, noiseVal);
 
-                float noiseVal = texture2D(uFoamTexture, foamUv).r;
-                float foam = smoothstep(0.45, 0.55, noiseVal);
-
-                // Shore Foam Math: Radial (Circle) vs Rectangular (Box)
                 float shoreFoam = 0.0;
                 if (uIsCircle > 0.5) {
                     float radius = length(vLocalPos.xz);
@@ -98,30 +95,33 @@ export function createWaterMaterial(
                     shoreFoam = smoothstep(0.8, 0.98, maxEdge); 
                 }
                 
-                float finalFoam = max(foam, shoreFoam);
+                float finalFoam = max(flowHighlight * 0.3, shoreFoam);
 
                 vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
                 vec3 halfVector = normalize(lightDir + viewDir);
                 float NdotH = max(0.0, dot(normal, halfVector));
                 float specular = pow(NdotH, 64.0) * uFresnelStrength;
 
-                vec3 finalColor = mix(waterColor, vec3(1.0), finalFoam * 0.8);
+                vec3 finalColor = mix(waterColor, vec3(1.0), finalFoam);
                 gl_FragColor = vec4(finalColor + vec3(specular), uOpacity);
             }
         `,
         transparent: true,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide,
         depthWrite: false
     });
 };
 
 /**
- * Creates an instanced shader material for water ripples.
- * Uses an instanceAlpha attribute to fade individual ripples independently.
+ * Creates an instanced shader material for water ripples (the flat expanding ring).
+ * Implements smoothstep dissolve based on instanceAlpha.
  */
 export function createRippleMaterial(rippleTexture: THREE.Texture): THREE.ShaderMaterial {
     return new THREE.ShaderMaterial({
-        uniforms: { uTex: { value: rippleTexture } },
+        uniforms: {
+            tRipple: { value: rippleTexture },
+            uColor: { value: new THREE.Color(0xccffff) }
+        },
         vertexShader: `
             attribute float instanceAlpha;
             varying float vAlpha;
@@ -134,12 +134,102 @@ export function createRippleMaterial(rippleTexture: THREE.Texture): THREE.Shader
             }
         `,
         fragmentShader: `
-            uniform sampler2D uTex;
+            uniform sampler2D tRipple;
+            uniform vec3 uColor;
             varying float vAlpha;
             varying vec2 vUv;
             void main() {
-                vec4 tex = texture2D(uTex, vUv);
-                gl_FragColor = vec4(tex.rgb, tex.a * vAlpha);
+                vec4 tex = texture2D(tRipple, vUv);
+                // Erode/dissolve effect based on alpha
+                float erode = smoothstep(1.0 - vAlpha - 0.1, 1.0 - vAlpha + 0.1, tex.r);
+                gl_FragColor = vec4(uColor * tex.rgb, erode * vAlpha * tex.a);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+};
+
+/**
+ * Creates an instanced shader material for the radial splash (outward cone).
+ * Pans the texture downwards to simulate expanding foam.
+ */
+export function createRadialSplashMaterial(splashTexture: THREE.Texture): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        uniforms: {
+            tSplash: { value: splashTexture },
+            uColor: { value: new THREE.Color(0xddffff) }
+        },
+        vertexShader: `
+            attribute float instanceAlpha;
+            varying float vAlpha;
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                vAlpha = instanceAlpha;
+                vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D tSplash;
+            uniform vec3 uColor;
+            varying float vAlpha;
+            varying vec2 vUv;
+            void main() {
+                // Pan texture down the cone as time (1.0 - alpha) progresses
+                vec2 pannedUv = vec2(vUv.x * 2.0, vUv.y - (1.0 - vAlpha) * 1.5);
+                vec4 tex = texture2D(tSplash, pannedUv);
+                
+                float erode = smoothstep(1.0 - vAlpha, 1.0 - vAlpha + 0.2, tex.r);
+                float fadeY = smoothstep(1.0, 0.2, vUv.y); // Fade out at the top edge
+                
+                gl_FragColor = vec4(uColor * tex.rgb, erode * vAlpha * fadeY * tex.a);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending
+    });
+};
+
+/**
+ * Creates an instanced shader material for the upward splash (center column).
+ * Pans the texture upwards.
+ */
+export function createUpwardSplashMaterial(splashTexture: THREE.Texture): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+        uniforms: {
+            tSplash: { value: splashTexture },
+            uColor: { value: new THREE.Color(0xffffff) }
+        },
+        vertexShader: `
+            attribute float instanceAlpha;
+            varying float vAlpha;
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                vAlpha = instanceAlpha;
+                vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D tSplash;
+            uniform vec3 uColor;
+            varying float vAlpha;
+            varying vec2 vUv;
+            void main() {
+                // Pan texture up to simulate rising column
+                vec2 pannedUv = vec2(vUv.x * 2.0, vUv.y + (1.0 - vAlpha) * 2.0);
+                vec4 tex = texture2D(tSplash, pannedUv);
+                
+                float erode = smoothstep(1.0 - vAlpha, 1.0 - vAlpha + 0.3, tex.r);
+                float fadeY = smoothstep(1.0, 0.0, vUv.y); // Fade out completely at the very top
+                
+                gl_FragColor = vec4(uColor * tex.rgb, erode * vAlpha * fadeY * tex.a * 0.8);
             }
         `,
         transparent: true,
@@ -340,7 +430,7 @@ export const MATERIALS = {
     logEnd: new THREE.MeshStandardMaterial({ color: 0xbc8f8f, roughness: 0.8, bumpMap: DIFFUSE.stone, bumpScale: 0.1 }),
 
     // ---- WEAPONS & COMBAT ----
-    bullet: new THREE.MeshBasicMaterial({ color: 0xffffaa }),
+    bullet: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
     molotov: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     scrap: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),

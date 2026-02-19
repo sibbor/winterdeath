@@ -6,6 +6,7 @@ import { EnemyManager } from '../EnemyManager';
 import { soundManager } from '../../utils/sound';
 import { VehicleDef } from '../../content/vehicles';
 import { MATERIALS } from '../../utils/assets';
+import { _buoyancyResult } from './WaterSystem'; // [VINTERDÖD] Zero-GC import
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _forward = new THREE.Vector3();
@@ -32,11 +33,12 @@ export class VehicleMovementSystem implements System {
         const state = session.state;
         const input = session.engine.input.state;
 
-        // [VINTERDÖD] Update ALL vehicles in the sector (not just the active one)
+        // Update ALL vehicles in the sector (not just the active one)
         // This allows boats to be pushed even when the player is outside.
         const interactables = state.sectorState?.ctx?.interactables;
         if (interactables) {
-            for (let i = 0; i < interactables.length; i++) {
+            const len = interactables.length;
+            for (let i = 0; i < len; i++) {
                 const obj = interactables[i];
                 if (obj.userData?.vehicleDef) {
                     const isActive = (state.activeVehicle === obj);
@@ -87,7 +89,6 @@ export class VehicleMovementSystem implements System {
 
         // --- AUDIO ENGINE ---
         if (input && state.vehicleEngineState === 'OFF') {
-            console.log("VehicleMovementSystem: engine on");
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
             soundManager.startVehicleEngine(def.category === 'BOAT' ? 'BOAT' : 'CAR');
@@ -105,6 +106,7 @@ export class VehicleMovementSystem implements System {
         let throttle = 0;
         let steer = 0;
         let handbrake = false;
+
         if (input) {
             // Keyboard Throttle
             if (input.w) throttle += 1;
@@ -116,8 +118,7 @@ export class VehicleMovementSystem implements System {
 
             if (input.space) handbrake = true;
 
-            // Mobile Joystick support
-            // [VINTERDÖD FIX] Split joysticks: Left = Throttle, Right = Steer
+            // Mobile Joystick support (Left = Throttle, Right = Steer)
             if (input.joystickMove) {
                 throttle += input.joystickMove.y * -1;
             }
@@ -125,15 +126,15 @@ export class VehicleMovementSystem implements System {
                 steer += input.joystickAim.x;
             }
 
-            // [VINTERDÖD] specialized logic for BOATS: engine only works in water
+            // Specialized logic for BOATS: engine only works in water
             if (def.category === 'BOAT') {
-                const buoyancy = session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z);
-                if (!buoyancy.inWater || vehicle.position.y < buoyancy.waterLevel - 0.5) {
-                    // If not in water (or very stuck inside the ground), cut power
-                    // We keep a small margin to allow starting at the shore
-                    if (Math.abs(throttle) > 0.1) {
-                        // console.log("Boat: No engine power on land!");
-                        throttle = 0;
+                if (session.engine.water) {
+                    session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z);
+                    if (!_buoyancyResult.inWater || vehicle.position.y < _buoyancyResult.waterLevel - 0.5) {
+                        // If not in water (or very stuck inside the ground), cut power
+                        if (Math.abs(throttle) > 0.1) {
+                            throttle = 0;
+                        }
                     }
                 }
             }
@@ -150,8 +151,6 @@ export class VehicleMovementSystem implements System {
             const atLimit = throttle > 0 ? (fwdSpeed >= maxSpd) : (fwdSpeed <= -maxSpd);
 
             if (!atLimit) {
-                console.log("VehicleMovementSystem: accelerating (" + maxSpd + " km/h)");
-
                 // Drivetrain traction scaling
                 let tractionMul = 1.0;
                 if (def.drivetrain === 'FWD') {
@@ -177,7 +176,7 @@ export class VehicleMovementSystem implements System {
             angVel.multiplyScalar(0.97);
         }
 
-        // --- SPEED DECOMPOSITION (Calculated AFTER acceleration to avoid stale negation) ---
+        // --- SPEED DECOMPOSITION ---
         const forwardSpeed = vel.dot(_forward);
         const lateralSpeed = vel.dot(_right);
         const speedSq = vel.lengthSq();
@@ -195,41 +194,33 @@ export class VehicleMovementSystem implements System {
         }
 
         // --- LATERAL FRICTION (Drift Physics) ---
-        // Decompose velocity into forward & lateral, apply different friction to each
         const fwdComponent = forwardSpeed;
         const latComponent = lateralSpeed;
 
-        // Determine effective lateral friction
         let effLatFriction = def.lateralFriction;
         if (handbrake) {
-            // Handbrake drastically reduces lateral friction for drifting
             effLatFriction *= 0.3;
         }
         if (def.drivetrain === 'RWD' && Math.abs(throttle) > 0.5 && speedSq > 16) {
-            // RWD oversteers under throttle at speed
             effLatFriction *= 0.85;
         }
 
-        // Reconstruct velocity from components with asymmetric friction
         const dampedFwd = fwdComponent * def.friction;
         const dampedLat = latComponent * (1.0 - (1.0 - def.friction) * 1.0) * effLatFriction;
 
         vel.copy(_forward).multiplyScalar(dampedFwd);
         vel.addScaledVector(_right, dampedLat);
 
-        // Rotational drag
         angVel.multiplyScalar(handbrake ? 0.92 : 0.90);
 
         // --- SUSPENSION ---
         let suspY = vehicle.userData.suspY as number;
         let suspVelY = vehicle.userData.suspVelY as number;
 
-        // Spring-damper system
         suspVelY -= suspY * def.suspensionStiffness * delta;
         suspVelY *= (1.0 - def.suspensionDamping * delta);
         suspY += suspVelY * delta;
 
-        // Clamp suspension travel
         if (suspY > 0.3) { suspY = 0.3; suspVelY = 0; }
         if (suspY < -0.3) { suspY = -0.3; suspVelY = 0; }
 
@@ -248,7 +239,6 @@ export class VehicleMovementSystem implements System {
             state.vehicleSpeed = speed;
             soundManager.updateVehicleEngine(normSpeed);
 
-            // Skidding sound if turning sharply at speed
             if (speedSq > 25 && Math.abs(angVel.y) > 0.8) {
                 soundManager.playVehicleSkid(0.5);
             } else {
@@ -256,10 +246,8 @@ export class VehicleMovementSystem implements System {
             }
         }
 
-        // --- COLLISION: ENEMIES ---
+        // --- COLLISION ---
         this.handleEnemyCollisions(vehicle, vel, def, session, now);
-
-        // --- COLLISION: OBSTACLES ---
         this.handleObstacleCollisions(vehicle, vel, def, session);
 
         // --- SYNC PLAYER TO VEHICLE ---
@@ -267,13 +255,12 @@ export class VehicleMovementSystem implements System {
             playerGroup.position.copy(vehicle.position);
             playerGroup.quaternion.copy(vehicle.quaternion);
 
-            // Seat offset includes suspension bounce
             playerGroup.position.x += def.seatOffset.x;
             playerGroup.position.y += def.seatOffset.y + suspY;
             playerGroup.position.z += def.seatOffset.z;
 
-            // Reset character orientation relative to vehicle
-            for (let i = 0; i < playerGroup.children.length; i++) {
+            const childLen = playerGroup.children.length;
+            for (let i = 0; i < childLen; i++) {
                 const child = playerGroup.children[i];
                 if (child.rotation) {
                     child.rotation.y = 0;
@@ -282,8 +269,6 @@ export class VehicleMovementSystem implements System {
 
             // --- DISMOUNT ---
             if (input.e && !state.eDepressed) {
-                console.log("VehicleMovementSystem: dismount");
-
                 state.eDepressed = true;
                 state.activeVehicle = null;
                 state.activeVehicleType = null;
@@ -292,7 +277,6 @@ export class VehicleMovementSystem implements System {
                 soundManager.stopVehicleEngine();
                 soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
-                // Dismount offset (from vehicle definition)
                 _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
                     .applyQuaternion(vehicle.quaternion);
                 playerGroup.position.add(_dismountDir);
@@ -301,7 +285,6 @@ export class VehicleMovementSystem implements System {
         }
     }
 
-    // --- ENEMY COLLISION SYSTEM ---
     private handleEnemyCollisions(
         vehicle: THREE.Object3D,
         vel: THREE.Vector3,
@@ -311,17 +294,17 @@ export class VehicleMovementSystem implements System {
     ) {
         const state = session.state;
         const speedSq = vel.lengthSq();
-        if (speedSq < SPEED_SQ_PUSH) return; // Too slow to damage
+        if (speedSq < SPEED_SQ_PUSH) return;
 
         const scene = session.engine.scene;
         const hitRadius = Math.max(def.size.x, def.size.z) * 0.5 + 1.0;
         const enemies = state.collisionGrid.getNearbyEnemies(vehicle.position, hitRadius);
+        const eLen = enemies.length;
 
-        for (let i = 0; i < enemies.length; i++) {
+        for (let i = 0; i < eLen; i++) {
             const e = enemies[i];
             if (e.deathState !== 'alive') continue;
 
-            // Distance check
             _toEnemy.subVectors(e.mesh.position, vehicle.position);
             _toEnemy.y = 0;
             const distSq = _toEnemy.lengthSq();
@@ -329,22 +312,17 @@ export class VehicleMovementSystem implements System {
 
             if (distSq > collisionRad * collisionRad) continue;
 
-            // Cooldown check to avoid multi-frame damage
             const lastHit = _hitCooldowns.get(e.id) || 0;
             if (now - lastHit < HIT_COOLDOWN_MS) continue;
             _hitCooldowns.set(e.id, now);
 
             const speed = Math.sqrt(speedSq);
-
-            // Calculate damage based on speed and mass
             const baseDamage = speed * def.mass * def.collisionDamageMultiplier * 0.01;
 
-            // Direction of knockback (vehicle forward + away-from-center)
             _knockDir.copy(_toEnemy).normalize();
             if (_knockDir.lengthSq() < 0.01) _knockDir.copy(_forward);
 
             if (speedSq >= SPEED_SQ_SPLATTER) {
-                // HIGH SPEED: Instant kill — splatter
                 e.hp = 0;
                 e.lastDamageType = 'vehicle_splatter';
                 e.deathState = 'exploded';
@@ -362,7 +340,6 @@ export class VehicleMovementSystem implements System {
                 soundManager.playImpact('flesh');
 
             } else if (speedSq >= SPEED_SQ_KNOCKBACK) {
-                // MEDIUM SPEED: Heavy knockback + damage
                 e.hp -= baseDamage;
                 e.lastDamageType = 'vehicle_ram';
                 e.hitTime = now;
@@ -378,11 +355,9 @@ export class VehicleMovementSystem implements System {
                 state.cameraShake = Math.min(state.cameraShake + 0.2, 1.0);
                 soundManager.playImpact('flesh');
 
-                // Trigger suspension bounce on impact
                 vehicle.userData.suspVelY += 3.0;
 
             } else {
-                // LOW SPEED: Light push
                 e.hp -= baseDamage * 0.3;
                 e.lastDamageType = 'vehicle_push';
 
@@ -394,7 +369,6 @@ export class VehicleMovementSystem implements System {
         }
     }
 
-    // --- OBSTACLE COLLISION SYSTEM ---
     private handleObstacleCollisions(
         vehicle: THREE.Object3D,
         vel: THREE.Vector3,
@@ -404,10 +378,10 @@ export class VehicleMovementSystem implements System {
         const state = session.state;
         const hitRadius = Math.max(def.size.x, def.size.z) * 0.5;
         const obstacles = state.collisionGrid.getNearbyObstacles(vehicle.position, hitRadius + 2.0);
+        const oLen = obstacles.length;
 
-        for (let i = 0; i < obstacles.length; i++) {
+        for (let i = 0; i < oLen; i++) {
             const obs = obstacles[i];
-            // Skip self-collision (the vehicle itself is an obstacle)
             if (obs.mesh === vehicle) continue;
 
             const obsPos = obs.position;
@@ -420,20 +394,15 @@ export class VehicleMovementSystem implements System {
                 const dist = Math.sqrt(distSq);
                 const overlap = combinedRad - dist;
 
-                // Push vehicle out of obstacle
                 _toEnemy.normalize().multiplyScalar(overlap * 0.6);
                 vehicle.position.add(_toEnemy);
 
-                // Reduce velocity on impact (bounce off)
                 const impactDot = vel.dot(_toEnemy.normalize());
                 if (impactDot < 0) {
-                    vel.addScaledVector(_toEnemy, -impactDot * 1.2); // Slight bounce
+                    vel.addScaledVector(_toEnemy, -impactDot * 1.2);
                 }
 
-                // Trigger suspension jolt
                 vehicle.userData.suspVelY += Math.abs(impactDot) * 0.5;
-
-                // Decelerate proportional to impact
                 vel.multiplyScalar(0.85);
             }
         }

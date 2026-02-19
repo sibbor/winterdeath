@@ -41,7 +41,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
                         {isInitialBoot ? (
                             <div className="flex flex-col items-center">
                                 <span className="block leading-none">{t('ui.game_title_1')}</span>
-                                <span className="block leading-none text-red-600 drop-shadow-[0_0_15px_rgba(220,38,38,0.5)]">{t('ui.game_title_2')}</span>
+                                <span className="block leading-none text-red-600">{t('ui.game_title_2')}</span>
                             </div>
                         ) : (
                             t(`sectors.${sectorKey}_name`)
