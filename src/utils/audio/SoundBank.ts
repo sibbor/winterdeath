@@ -44,7 +44,7 @@ export class SoundBank {
      * Call this during the game's initial loading screen.
      */
     static preloadAll(core: SoundCore) {
-        this.generators.forEach((_, key) => this.preload(core, key));
+        for (const key of this.generators.keys()) this.preload(core, key);
     }
 
     /**

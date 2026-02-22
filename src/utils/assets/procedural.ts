@@ -323,6 +323,7 @@ export const createProceduralDiffuse = () => {
  */
 export const disposeProceduralTextures = () => {
     if (!cachedTextures) return;
-    Object.values(cachedTextures).forEach(t => t.dispose());
+    const vals = Object.values(cachedTextures);
+    for (let i = 0; i < vals.length; i++) vals[i].dispose();
     cachedTextures = null;
 };

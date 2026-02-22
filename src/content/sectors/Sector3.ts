@@ -5,6 +5,7 @@ import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
+import { cameraFar } from 'three/tsl';
 
 const LOCATIONS = {
     SPAWN: {
@@ -26,7 +27,6 @@ const LOCATIONS = {
         FOUND_ESMERALDA: { x: 215, z: -25 }
     },
     POIS: {
-        SPAWN: { x: 0, z: 0, rot: Math.PI / 2 },
         FARM: { x: 150, z: -120 },
         FARMHOUSE: { x: 275, z: -175 },
         BARN: { x: 305, z: -150 },
@@ -110,8 +110,8 @@ export const Sector3: SectorDef = {
         SectorGenerator.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
 
         // 1.1. Farm House area props and bodies
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x + 5, LOCATIONS.POIS.FARMHOUSE.z + 5, 'WALKER', Math.random() * Math.PI);
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARMHOUSE.x - 5, LOCATIONS.POIS.FARMHOUSE.z + 10, 'RUNNER', Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, 'WALKER', Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, 'RUNNER', Math.random() * Math.PI);
         SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
 
         // 1.2. Farm House area props
@@ -120,8 +120,8 @@ export const Sector3: SectorDef = {
         SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
         SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
 
-        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 15, LOCATIONS.POIS.FARMHOUSE.z + 10, Math.PI / 4, 1.2);
-        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARMHOUSE.x - 12, LOCATIONS.POIS.FARMHOUSE.z + 14, Math.PI / 3, 1.0);
+        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 15, LOCATIONS.POIS.FARM.z + 10, Math.PI / 4, 1.2);
+        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
 
         // 1.3 Timber truck on the road near the farm
         SectorGenerator.spawnTimberPile(ctx, 122, -92, 0, 2.0);
@@ -154,7 +154,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(80, 0, -80),
             new THREE.Vector3(0, 0, -80)
         ];
-        await SectorGenerator.createForest(ctx, clearingPoly, 12, ['spruce', 'pine', 'birch']);
+        await SectorGenerator.createForest(ctx, clearingPoly, 12, ['spruce', 'pine']);
 
         // --- 6. The Mast ---
         const mastPos = LOCATIONS.POIS.MAST;
@@ -172,13 +172,13 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z - 30),
             new THREE.Vector3(mastPos.x + 30, 0, mastPos.z - 30),
             new THREE.Vector3(mastPos.x + 30, 0, mastPos.z + 30),
-            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30)
+            //new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30)
         ], 'black', 2.5);
 
-        // Kontrollrummet (Byggnaden under masten)
+        // Control room
         const controlRoom = SectorGenerator.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
 
-        // Masten (Sammanslagen geometri)
+        // The mast
         const mastGroup = new THREE.Group();
         mastGroup.position.set(mastPos.x, 5, mastPos.z);
 
@@ -195,13 +195,15 @@ export const Sector3: SectorDef = {
         lightHub.name = "mastWarningLights";
         lightHub.position.y = 60;
 
-        [2, -2].forEach(posX => {
+        const lightXs = [2, -2];
+        for (let i = 0; i < lightXs.length; i++) {
+            const posX = lightXs[i];
             const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000 }));
             lamp.position.x = posX;
             const pLight = new THREE.PointLight(0xff0000, 10, 50);
             lamp.add(pLight);
             lightHub.add(lamp);
-        });
+        }
 
         mastGroup.add(lightHub);
         mastGroup.userData.isObstacle = true;
@@ -249,10 +251,10 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(300, 0, -100)  // Road
         ];
 
-        hordeSpots.forEach((pos, i) => {
+        for (let i = 0; i < hordeSpots.length; i++) {
             const count = 5 + Math.floor(ctx.rng() * 5);
-            ctx.spawnHorde(count, undefined, pos);
-        });
+            ctx.spawnHorde(count, undefined, hordeSpots[i]);
+        }
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {

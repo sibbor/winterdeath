@@ -39,13 +39,23 @@ export class EffectManager {
                 const offset05 = createOffset(VEC_UP_05, opts?.offset);
                 const offset1 = createOffset(VEC_UP_1, opts?.offset);
 
+                const isLarge = opts?.onRoof || (opts?.area && opts.area.x * opts.area.z > 20);
+                const firePart = isLarge ? 'large_fire' : 'flame';
+                const smokePart = isLarge ? 'large_smoke' : 'smoke';
+
+                // Scale spawn rates relative to massive roofs
+                const largeCount = isLarge ? (opts?.area ? Math.max(2, Math.floor((opts.area.x * opts.area.z) / 25)) : 3) : 1;
+                const fireInterval = isLarge ? 25 : 50;
+                const sparkInterval = isLarge ? 60 : 150;
+                const smokeInterval = isLarge ? 50 : 200;
+
                 effects.push(
                     { type: 'light', color: 0xff7722, intensity: opts?.intensity || 40, distance: opts?.distance || 50, offset: opts?.offset || VEC_UP_1, flicker: true },
-                    { type: 'emitter', particle: 'flame', interval: 50, count: 1, offset: offset05, spread: 0.3, color: 0xffaa00, area: opts?.area },
-                    { type: 'emitter', particle: 'spark', interval: 150, count: 1, offset: offset1, spread: 0.4, color: 0xffdd00, area: opts?.area }
+                    { type: 'emitter', particle: firePart, interval: fireInterval, count: largeCount, offset: offset05, spread: 0.3, color: 0xffaa00, area: opts?.area },
+                    { type: 'emitter', particle: 'spark', interval: sparkInterval, count: largeCount, offset: offset1, spread: 0.4, color: 0xffdd00, area: opts?.area }
                 );
                 if (opts?.smoke) {
-                    effects.push({ type: 'emitter', particle: 'black_smoke', interval: 200, count: 1, offset: VEC_UP_15, spread: 0.3, area: opts?.area });
+                    effects.push({ type: 'emitter', particle: smokePart, interval: smokeInterval, count: largeCount, offset: VEC_UP_15, spread: 0.3, area: opts?.area });
                 }
                 break;
 

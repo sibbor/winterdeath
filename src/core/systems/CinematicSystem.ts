@@ -126,7 +126,10 @@ export const CinematicSystem = {
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             cinematic.fadingOut = true;
             if (activeScriptLine.trigger) {
-                activeScriptLine.trigger.split(',').forEach((t: string) => window.dispatchEvent(new CustomEvent(t.trim())));
+                const triggers = activeScriptLine.trigger.split(',');
+                for (let i = 0; i < triggers.length; i++) {
+                    window.dispatchEvent(new CustomEvent(triggers[i].trim()));
+                }
             }
             callbacks.playCinematicLine(cinematic.lineIndex + 1);
         }

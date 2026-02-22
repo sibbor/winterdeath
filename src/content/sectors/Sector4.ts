@@ -179,8 +179,8 @@ function spawnSectorHordes(ctx: SectorContext) {
         new THREE.Vector3(-80, 0, -80)   // Left Flank
     ];
 
-    hordeSpots.forEach((pos, i) => {
+    for (let i = 0; i < hordeSpots.length; i++) {
         const count = 6 + Math.floor(ctx.rng() * 4);
-        ctx.spawnHorde(count, undefined, pos);
-    });
+        ctx.spawnHorde(count, undefined, hordeSpots[i]);
+    }
 }

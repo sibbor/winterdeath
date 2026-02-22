@@ -74,10 +74,10 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
     const cavePos = new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0, LOCATIONS.POIS.CAVE_ENTRANCE.z);
     let splitIdx = -1;
     let minDist = Infinity;
-    blockPointsWest.forEach((p, i) => {
-        const d = p.distanceTo(cavePos);
+    for (let i = 0; i < blockPointsWest.length; i++) {
+        const d = blockPointsWest[i].distanceTo(cavePos);
         if (d < minDist) { minDist = d; splitIdx = i; }
-    });
+    }
 
     if (splitIdx !== -1) {
         const gap = 10;
@@ -192,11 +192,11 @@ export const Sector2: SectorDef = {
 
         // Electric Poles along Railway
         const polyline = railTrackCurve.getSpacedPoints(15);
-        polyline.forEach((p, i) => {
+        for (let i = 0; i < polyline.length; i++) {
             if (i % 3 === 0) {
-                SectorGenerator.spawnElectricPole(ctx, p.x + 8, p.z, 0);
+                SectorGenerator.spawnElectricPole(ctx, polyline[i].x + 8, polyline[i].z, 0);
             }
-        });
+        }
 
         // --- FOREST ---
         const forestOffset = 8;
@@ -217,8 +217,8 @@ export const Sector2: SectorDef = {
             ...PathGenerator.getOffsetPoints(fPoints, forestOffset + forestDepth).reverse()
         ];
 
-        forestLeft.forEach(p => p.y = 0);
-        forestRight.forEach(p => p.y = 0);
+        for (let i = 0; i < forestLeft.length; i++) forestLeft[i].y = 0;
+        for (let i = 0; i < forestRight.length; i++) forestRight[i].y = 0;
 
         SectorGenerator.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
         SectorGenerator.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
@@ -326,8 +326,9 @@ export const Sector2: SectorDef = {
             c.userData.type === 'family' || c.userData.isFamilyMember
         );
 
-        familyMembers.forEach((member: THREE.Group, index: number) => {
-            if (member.userData.name === 'Jordan' && sectorState.jordanCinematic?.phase !== 'COMPLETE') return;
+        for (let index = 0; index < familyMembers.length; index++) {
+            const member = familyMembers[index];
+            if (member.userData.name === 'Jordan' && sectorState.jordanCinematic?.phase !== 'COMPLETE') continue;
 
             const ring = member.children.find((c: any) => c.userData.isRing);
             const familyObj = {
@@ -352,7 +353,7 @@ export const Sector2: SectorDef = {
                 },
                 index
             );
-        });
+        }
 
         // --- SCENE-DEPENDENT LOGIC ---
         if ((events as any).scene) {
@@ -502,7 +503,8 @@ export const Sector2: SectorDef = {
             { id: 6, x: 60, z: -125, zombies: 5 },
         ];
 
-        roomCenters.forEach(r => {
+        for (let j = 0; j < roomCenters.length; j++) {
+            const r = roomCenters[j];
             if (!sectorState.spawnedRooms[r.id]) {
                 const dist = Math.sqrt((playerPos.x - r.x) ** 2 + (playerPos.z - r.z) ** 2);
                 if (dist < 30) {
@@ -518,6 +520,6 @@ export const Sector2: SectorDef = {
                     }
                 }
             }
-        });
+        }
     }
 };

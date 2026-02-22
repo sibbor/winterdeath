@@ -147,7 +147,11 @@ export const PathGenerator = {
         buildRibbon(PathGenerator.getOffsetPoints(pointsList, -1.0), 0.2, 0.08, railMat, 'Rail_L');
         buildRibbon(PathGenerator.getOffsetPoints(pointsList, 1.0), 0.2, 0.08, railMat, 'Rail_R');
 
-        curve.getSpacedPoints(20).forEach(p => ctx.mapItems.push({ id: `rail_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: 2, color: '#333' }));
+        const railPts = curve.getSpacedPoints(20);
+        for (let i = 0; i < railPts.length; i++) {
+            const p = railPts[i];
+            ctx.mapItems.push({ id: `rail_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: 2, color: '#333' });
+        }
         return curve;
     },
 
@@ -205,7 +209,10 @@ export const PathGenerator = {
         mesh.renderOrder = 2; mesh.receiveShadow = true;
         ctx.scene.add(mesh);
 
-        pts.filter((_, i) => i % 10 === 0).forEach(p => ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: width / 2, color: type === 'ROAD' ? '#222' : '#4a3a2a' }));
+        for (let i = 0; i < pts.length; i += 10) {
+            const p = pts[i];
+            ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: width / 2, color: type === 'ROAD' ? '#222' : '#4a3a2a' });
+        }
         return curve;
     },
 
@@ -213,12 +220,14 @@ export const PathGenerator = {
         const mat = new THREE.MeshStandardMaterial({ color: 0x004488, transparent: true, opacity: 0.6, metalness: 0.8 });
         const curve = PathGenerator.createPointPath(ctx, points, width, mat, 'PATH');
         const len = curve.getLength();
-        curve.getSpacedPoints(Math.ceil(len / 40)).forEach(p => {
+        const lightPts = curve.getSpacedPoints(Math.ceil(len / 40));
+        for (let i = 0; i < lightPts.length; i++) {
+            const p = lightPts[i];
             const light = new THREE.PointLight(0x00aaff, 5, 20);
             light.position.set(p.x, 1, p.z);
             ctx.scene.add(light);
             ctx.flickeringLights.push({ light, baseInt: 5, flickerRate: 0.05 });
-        });
+        }
         return curve;
     },
 
@@ -304,7 +313,8 @@ export const PathGenerator = {
         const parts: any[] = [];
         proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
 
-        parts.forEach(p => {
+        for (let k = 0; k < parts.length; k++) {
+            const p = parts[k];
             const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, segCount);
             if (color !== 'wood' && color !== 'mesh') {
                 const m = p.mesh.material.clone();
@@ -321,7 +331,7 @@ export const PathGenerator = {
             }
             im.instanceMatrix.needsUpdate = true;
             ctx.scene.add(im);
-        });
+        }
 
         for (let i = 0; i < segCount; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
@@ -342,7 +352,8 @@ export const PathGenerator = {
         const parts: any[] = [];
         proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
 
-        parts.forEach(p => {
+        for (let k = 0; k < parts.length; k++) {
+            const p = parts[k];
             const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, pts.length - 1);
             for (let i = 0; i < pts.length - 1; i++) {
                 const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
@@ -354,7 +365,7 @@ export const PathGenerator = {
             }
             im.instanceMatrix.needsUpdate = true;
             ctx.scene.add(im);
-        });
+        }
 
         for (let i = 0; i < pts.length - 1; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);

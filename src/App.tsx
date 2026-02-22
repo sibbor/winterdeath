@@ -307,12 +307,13 @@ const App: React.FC = () => {
             const currentViewed = prev.stats.viewedCollectibles || [];
             const newViewed = [...currentViewed];
             let changed = false;
-            ids.forEach(id => {
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i];
                 if (!newViewed.includes(id)) {
                     newViewed.push(id);
                     changed = true;
                 }
-            });
+            }
             if (!changed) return prev;
             return {
                 ...prev,

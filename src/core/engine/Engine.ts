@@ -6,6 +6,7 @@ import { InputManager } from './InputManager';
 import { WindSystem } from '../systems/WindSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { WaterSystem } from '../systems/WaterSystem';
+import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 
 /**
  * The Engine class acts as the central hub for the 3D environment.
@@ -237,26 +238,66 @@ export class Engine {
         if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
 
+        const frameStart = performance.now();
         // Delta time clamping prevents physics-warp during frame drops
         const dt = Math.min(this.clock.getDelta(), 0.05);
         const now = performance.now();
 
+        const monitor = PerformanceMonitor.getInstance();
+        monitor.startFrame();
+
         // 1. Environmental Systems Update
+        monitor.begin('wind');
         this.wind.update(now, dt);
+        monitor.end('wind');
+
+        monitor.begin('weather');
         this.weather.update(dt, now);
+        monitor.end('weather');
+
+        monitor.begin('water');
         this.water.setWaterDynamics(this.wind.strength, this.wind.current);
         this.water.update(dt, now);
+        monitor.end('water');
 
         // 2. Logic Update
+        monitor.begin('logic');
         if (this.onUpdate) this.onUpdate(dt);
+        monitor.end('logic');
 
         // 3. Render Pass
+        monitor.begin('render');
         if (!this.isRenderingPaused) {
             if (this.onRender) {
                 this.onRender();
             } else {
+                // Split standard render into setup (CPU) and draw (GPU/Driver payload)
+                monitor.begin('render_setup');
+                this.scene.updateMatrixWorld();
+                this.camera.updateMatrixWorld();
+                if (this.renderer.shadowMap.enabled) {
+                    this.renderer.shadowMap.needsUpdate = true;
+                }
+                monitor.end('render_setup');
+
+                monitor.begin('render_draw');
                 this.renderer.render(this.scene, this.camera);
+                monitor.end('render_draw');
             }
+        }
+        monitor.end('render');
+
+        const totalTime = performance.now() - frameStart;
+
+        // Output heavy frames via the new PerformanceMonitor
+        if (totalTime > 50) {
+            const extraStats = {
+                drawCalls: this.renderer.info.render.calls,
+                triangles: this.renderer.info.render.triangles,
+                geometries: this.renderer.info.memory.geometries,
+                textures: this.renderer.info.memory.textures
+            };
+            monitor.printIfHeavy('Game Engine Performance', totalTime, 50, extraStats);
         }
     };
 

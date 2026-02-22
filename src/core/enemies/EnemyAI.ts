@@ -11,8 +11,9 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3(); // [VINTERDÖD] Dedicated scratchpad for separation force
 const _color = new THREE.Color();
-const _blackColor = new THREE.Color(0x000000); // [VINTERDÖD] Statisk färg för bränn-lerp
+const _blackColor = new THREE.Color(0x000000);
 
 // --- DEBUG ASSETS ---
 const _debugRingGeo = new THREE.RingGeometry(0.95, 1.0, 16);
@@ -112,28 +113,24 @@ export const EnemyAI = {
         const distSq = dx * dx + dz * dz;
         const canSeePlayer = distSq < 900;
 
-        if (allEnemies) {
-            if (!e.separationForce) e.separationForce = new THREE.Vector3();
-            let sepCount = 0;
-            const separationRadiusSq = 1.0;
+        // [VINTERDÖD] Zero-GC & O(1) grid lookup separation force instead of looping allEnemies O(n^2)
+        _v6.set(0, 0, 0);
+        const separationRadiusSq = 1.0;
+        const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, 1.5);
 
-            // [VINTERDÖD] Deklarerar variabler utanför loopen för absolut Zero-GC säkerhet
-            let other: Enemy, odx: number, odz: number, odSq: number, od: number;
+        let other: Enemy, odx: number, odz: number, odSq: number, od: number;
+        for (let i = 0; i < nearbyEnemies.length; i++) {
+            other = nearbyEnemies[i];
+            if (other === e || other.deathState !== 'alive') continue;
 
-            for (let i = 0; i < allEnemies.length; i++) {
-                other = allEnemies[i];
-                if (other === e || other.deathState === 'dead') continue;
+            odx = e.mesh.position.x - other.mesh.position.x;
+            odz = e.mesh.position.z - other.mesh.position.z;
+            odSq = odx * odx + odz * odz;
 
-                odx = e.mesh.position.x - other.mesh.position.x;
-                odz = e.mesh.position.z - other.mesh.position.z;
-                odSq = odx * odx + odz * odz;
-
-                if (odSq < separationRadiusSq && odSq > 0.001) {
-                    od = Math.sqrt(odSq);
-                    e.separationForce.x += (odx / od) / od;
-                    e.separationForce.z += (odz / od) / od;
-                    sepCount++;
-                }
+            if (odSq < separationRadiusSq && odSq > 0.001) {
+                od = Math.sqrt(odSq);
+                _v6.x += (odx / od) / od;
+                _v6.z += (odz / od) / od;
             }
         }
 
@@ -142,7 +139,10 @@ export const EnemyAI = {
         if (!canSeePlayer && noiseEvents.length > 0) {
             for (let i = 0; i < noiseEvents.length; i++) {
                 const n = noiseEvents[i];
-                if (!n.active || now - n.time > 2000) continue;
+                // Ljudets maxålder hanteras och städas helt av GameSessionLogic nu,
+                // vi bryr oss bara om det fortfarande är aktivt!
+                if (!n.active) continue;
+
                 if (e.mesh.position.distanceToSquared(n.pos) < (n.radius * n.radius)) {
                     heardNoise = true; noisePos = n.pos; break;
                 }
@@ -186,13 +186,12 @@ export const EnemyAI = {
             case AIState.WANDER:
                 e.searchTimer -= delta;
                 _v1.copy(e.mesh.position).addScaledVector(e.velocity, delta);
-                moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid);
+                moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
                 if (canSeePlayer) e.state = AIState.CHASE;
                 else if (e.searchTimer <= 0) { e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0; }
 
                 const wanderStepInterval = 1200;
                 if (now > (e.lastStepTime || 0) + wanderStepInterval) {
-                    //callbacks.playSound('step_zombie');
                     e.lastStepTime = now;
                 }
                 break;
@@ -204,12 +203,11 @@ export const EnemyAI = {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
                     if (e.type === 'BOMBER' && distSq < 12.0) { e.state = AIState.EXPLODING; e.explosionTimer = 1.5; return; }
 
-                    moveEntity(e, target, delta, e.speed, collisionGrid);
+                    moveEntity(e, target, delta, e.speed, collisionGrid, _v6);
 
                     const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
                         if (e.type === 'TANK') callbacks.playSound('tank_smash');
-                        //else callbacks.playSound('step_snow');
                         e.lastStepTime = now;
                     }
 
@@ -282,7 +280,7 @@ export const EnemyAI = {
 
             case AIState.SEARCH:
                 e.searchTimer -= delta;
-                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid);
+                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid, _v6);
                 else e.mesh.rotation.y += delta * 2.5;
                 if (canSeePlayer) e.state = AIState.CHASE; else if (e.searchTimer <= 0) e.state = AIState.IDLE;
                 break;
@@ -332,7 +330,7 @@ export const EnemyAI = {
 
 // --- HELPERS ---
 
-function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3) {
     _v1.set(target.x, e.mesh.position.y, target.z);
     _v2.subVectors(_v1, e.mesh.position);
     const dist = _v2.length();
@@ -343,9 +341,10 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     if (e.slowTimer > 0) curSpeed *= 0.55;
 
     _v3.copy(_v2).multiplyScalar(curSpeed * delta);
-    if (e.separationForce) {
-        _v3.addScaledVector(e.separationForce, delta * 5.0);
-        e.separationForce.set(0, 0, 0);
+
+    // Använder den globalt beräknade separationskraften
+    if (sepForce.lengthSq() > 0) {
+        _v3.addScaledVector(sepForce, delta * 5.0);
     }
 
     e.velocity.copy(_v2).multiplyScalar(curSpeed);
@@ -369,7 +368,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
-    if (!e.lastSeenPos) e.lastSeenPos = new THREE.Vector3();
+    if (!e.lastSeenPos) e.lastSeenPos = new THREE.Vector3(); // Allokeras en gång per objekt i poolen, OK!
     e.lastSeenPos.copy(pos);
     e.lastSeenTime = now;
 }
@@ -403,7 +402,6 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'debris', 5, undefined, undefined, 0x333333, 0.5);
         }
 
-        // [VINTERDÖD] Återinförd cache-logik för att undvika frame-by-frame traversering
         let body = e.mesh.userData.bodyCache;
         let colorMats: THREE.Material[] = e.mesh.userData.colorMats;
 
@@ -436,7 +434,6 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             ash.scale.setScalar(s);
         }
 
-        // [VINTERDÖD] Platt iteration istället för onödig kloning och callback-funktioner
         _color.set(e.color).lerp(_blackColor, progress);
         if (colorMats) {
             for (let i = 0; i < colorMats.length; i++) {
@@ -446,6 +443,8 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
 
         if (progress >= 1.0) {
             if (ash && e.mesh.parent) {
+                // ZERO-GC WARNING: ash.clone() causes a minor memory allocation. 
+                // Consider building an ASH_POOL in EnemyManager in the future.
                 const permanentAsh = ash.clone();
                 permanentAsh.applyMatrix4(e.mesh.matrixWorld);
 
@@ -476,7 +475,13 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'gore', count, undefined, undefined, undefined, scale);
             callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'limb', 2, undefined, undefined, undefined, scale);
 
-            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0 * scale, MATERIALS.bloodDecal);
+            let burstScale = 1.0;
+            // Direct comparison saves string memory allocation vs String(x).toLowerCase()
+            const dmgType = e.lastDamageType;
+            if (dmgType === WeaponType.GRENADE || dmgType === WeaponType.MOLOTOV) burstScale = 3.0;
+            else if (dmgType === WeaponType.SHOTGUN || dmgType === WeaponType.REVOLVER) burstScale = 2.0;
+
+            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0 * scale * burstScale, MATERIALS.bloodDecal, 'splatter');
         }
         if (now - e.deathTimer! > 100) e.deathState = 'dead';
         return;

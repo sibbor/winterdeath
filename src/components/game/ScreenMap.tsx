@@ -170,21 +170,23 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
 
     const groupedEntities = useMemo(() => {
         const groups: Record<string, MapItem[]> = {};
-        allEntities.forEach(item => {
+        for (let i = 0; i < allEntities.length; i++) {
+            const item = allEntities[i];
             const key = `${Math.round(item.x / 10)}_${Math.round(item.z / 10)}`;
             if (!groups[key]) groups[key] = [];
             groups[key].push(item);
-        });
+        }
         return Object.values(groups).map(g => g.sort((a, b) => getItemPriority(b.type) - getItemPriority(a.type)));
     }, [allEntities]);
 
     const bounds = useMemo(() => {
         if (allEntities.length === 0) return { minX: -450, maxX: 450, minZ: -450, maxZ: 450 };
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        allEntities.forEach(e => {
+        for (let i = 0; i < allEntities.length; i++) {
+            const e = allEntities[i];
             minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x);
             minZ = Math.min(minZ, e.z); maxZ = Math.max(maxZ, e.z);
-        });
+        }
         const pad = 100;
         return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
     }, [allEntities]);

@@ -10,17 +10,18 @@ import { ScrapItem } from './systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { Obstacle } from './world/CollisionResolution';
 import { soundManager } from '../utils/sound';
+import { PerformanceMonitor } from './systems/PerformanceMonitor';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
     radius: number;
     type: 'footstep' | 'gunshot' | 'explosion' | 'other';
     time: number;
-    active: boolean; // Added for pooling logic
+    active: boolean;
 }
 
 export class GameSessionLogic {
-    public inputDisabled: boolean = false; // Cutscenes/Menu
+    public inputDisabled: boolean = false;
     public isMobile: boolean = false;
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
@@ -30,16 +31,11 @@ export class GameSessionLogic {
     private systems: System[] = [];
 
     // --- NOISE POOLING ---
-    // Pre-allocated objects to avoid GC churn from AI sensory events
+    // Zero-GC: Single array. We reuse objects by toggling the 'active' flag.
     public noiseEvents: NoiseEvent[] = [];
-    private noisePool: NoiseEvent[] = [];
 
     constructor(public engine: Engine) { }
 
-    /**
-     * Factory for creating a clean game state.
-     * Pre-allocates essential vectors to allow Zero-GC updates during runtime.
-     */
     static createInitialState(props: GameCanvasProps): RuntimeState {
         const now = performance.now();
         return {
@@ -120,7 +116,7 @@ export class GameSessionLogic {
 
             deathVel: new THREE.Vector3(),
 
-            // [VINTERDÖD] Zero-GC: Pre-allocated vectors with boolean flags instead of null
+            // Zero-GC: Pre-allocated vectors with boolean flags instead of null
             hasLastTrailPos: false,
             lastTrailPos: new THREE.Vector3(),
 
@@ -157,39 +153,48 @@ export class GameSessionLogic {
         this.state = state;
     }
 
-    /**
-     * Main simulation loop.
-     * Clears frame-based events and iterates through all registered systems.
-     */
     update(dt: number, mapId: number = 0) {
-        // [VINTERDÖD] Return active noise events to the pool (Zero-GC caching array len)
-        const noiseLen = this.noiseEvents.length;
-        if (noiseLen > 0) {
-            for (let i = 0; i < noiseLen; i++) {
-                this.noisePool.push(this.noiseEvents[i]);
+        const now = performance.now();
+
+        // Zero-GC Expiration: Ljud lever i 500ms så AI hinner reagera, sedan "släcks" de
+        for (let i = 0; i < this.noiseEvents.length; i++) {
+            const evt = this.noiseEvents[i];
+            if (evt.active && now - evt.time > 500) {
+                evt.active = false;
             }
-            this.noiseEvents.length = 0;
         }
 
         this.mapId = mapId;
         if (!this.state) return;
-        const now = performance.now();
 
         const systems = this.systems;
         const len = systems.length;
+        const monitor = PerformanceMonitor.getInstance();
 
         // High-performance system iteration
         for (let i = 0; i < len; i++) {
-            systems[i].update(this, dt, now);
+            const sys = systems[i];
+            const id = sys.id || `sys_${i}`;
+            monitor.begin(id);
+            sys.update(this, dt, now);
+            monitor.end(id);
         }
     }
 
     /**
      * Registers a sound event in the world for AI to react to.
-     * Zero-GC: Uses object pooling for event data.
+     * Zero-GC: Reuses inactive event objects.
      */
     makeNoise(pos: THREE.Vector3, radius: number, type: 'footstep' | 'gunshot' | 'explosion' | 'other' = 'other') {
-        let event = this.noisePool.pop();
+        let event = null;
+
+        // Leta efter ett inaktivt event att återanvända
+        for (let i = 0; i < this.noiseEvents.length; i++) {
+            if (!this.noiseEvents[i].active) {
+                event = this.noiseEvents[i];
+                break;
+            }
+        }
 
         if (!event) {
             event = {
@@ -197,8 +202,9 @@ export class GameSessionLogic {
                 radius: 0,
                 type: 'other',
                 time: 0,
-                active: true
+                active: false
             };
+            this.noiseEvents.push(event);
         }
 
         // Setup event data without cloning new objects
@@ -206,9 +212,7 @@ export class GameSessionLogic {
         event.radius = radius;
         event.type = type;
         event.time = performance.now();
-        event.active = true; // [VINTERDÖD] FIX: Måste slås på när den återvinns från poolen.
-
-        this.noiseEvents.push(event);
+        event.active = true;
     }
 
     addSystem(system: System) {
@@ -217,40 +221,29 @@ export class GameSessionLogic {
     }
 
     removeSystem(id: string) {
-        // [VINTERDÖD] Zero-GC sökning (inget findIndex med callback)
         for (let i = 0; i < this.systems.length; i++) {
             if (this.systems[i].id === id) {
                 const sys = this.systems[i];
-                if (sys.cleanup) sys.cleanup(this); // Ensure proper GPU/Memory cleanup
+                if (sys.cleanup) sys.cleanup(this);
                 this.systems.splice(i, 1);
                 break;
             }
         }
     }
 
-    /**
-     * Tears down the session, cleans up all sub-systems, 
-     * and aggressively clears state references to prevent memory leaks 
-     * between game sessions.
-     */
     dispose() {
-        // 1. Cleanup systems (removes meshes from scene, calls their cleanup)
         const systems = this.systems;
         for (let i = 0; i < systems.length; i++) {
             if (systems[i].cleanup) systems[i].cleanup(this);
         }
         this.systems = [];
 
-        // 1.5 Döda alla aktiva ljud i Web Audio API
         soundManager.stopAll();
 
-        // 2. Clear noise pools
+        // Rensa den enda arrayen vi nu använder för ljud
         this.noiseEvents.length = 0;
-        this.noisePool.length = 0;
 
-        // 3. Smart, Zero-GC rensning av hela state-objektet
         if (this.state) {
-            // Dynamic loop to empty lists, but keep references (Zero-GC)
             for (const key in this.state) {
                 if (Object.prototype.hasOwnProperty.call(this.state, key)) {
                     const property = (this.state as any)[key];
@@ -260,13 +253,11 @@ export class GameSessionLogic {
                 }
             }
 
-            // Reset specific vehicle props to prevent HMR bugs:
             this.state.activeVehicle = null;
             this.state.activeVehicleType = null;
             this.state.vehicleSpeed = 0;
             this.state.vehicleEngineState = 'OFF';
 
-            // Clear the spatial grid to release all stored entity references
             if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
                 this.state.collisionGrid.clear();
             }

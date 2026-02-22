@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WaterStyleConfig, createWaterMaterial, patchWaterVegetationMaterial } from '../../utils/assets/materials_water';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { MATERIALS } from '../../utils/assets/materials';
+import { PerformanceMonitor } from './PerformanceMonitor';
 
 interface WaterBind {
     uTime: { value: number };
@@ -383,6 +384,7 @@ export class WaterSystem {
 
     public update(dt: number, now: number): void {
         this.globalTime += dt;
+        let t0 = performance.now();
 
         // Bind strictly aquatic vegetation shaders
         if (this.boundUniforms.length === 0) {
@@ -457,6 +459,8 @@ export class WaterSystem {
                 this.surfaces[i].material.uniforms.uWaterDirection.value.copy(this.waterDirection);
             }
         }
+        PerformanceMonitor.getInstance().addTime('water_surfaces', performance.now() - t0);
+        t0 = performance.now();
 
         // --- 3. Body Physics & Splashes ---
         for (let i = 0; i < bLen; i++) {
@@ -465,9 +469,13 @@ export class WaterSystem {
             this.updateSplashSources(body, dt);
         }
 
-        this.updateInstancedLilies(dt);
-
         if (this.playerGroup) this.updatePlayerLogic(dt);
+        PerformanceMonitor.getInstance().addTime('water_physics', performance.now() - t0);
+        t0 = performance.now();
+
+        this.updateInstancedLilies(dt);
+        PerformanceMonitor.getInstance().addTime('water_flora', performance.now() - t0);
+        t0 = performance.now();
 
         // Ripples and splashes for moving objects
         for (let i = 0; i < bLen; i++) {
@@ -495,6 +503,7 @@ export class WaterSystem {
                 }
             }
         }
+        PerformanceMonitor.getInstance().addTime('water_particles', performance.now() - t0);
     }
 
     private updateBodyPhysics(body: WaterBody, dt: number): void {

@@ -108,6 +108,8 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps, debugInfo }) => {
                         <div className="text-right text-xs text-gray-300">{Math.round(debugInfo.camera.fov)}°</div>
                     </>
                 )}
+
+
             </div>
         </div>
     );

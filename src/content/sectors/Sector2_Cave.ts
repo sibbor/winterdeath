@@ -72,7 +72,8 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
 
     // Floor generation
     const allSpaces: Box[] = [...rooms, ...corridors];
-    allSpaces.forEach(s => {
+    for (let i = 0; i < allSpaces.length; i++) {
+        const s = allSpaces[i];
         const floorMat = MATERIALS.gravel.clone();
         floorMat.bumpScale = 3.0;
         if (floorMat.map) {
@@ -93,7 +94,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         floor.position.set(s.x, 0.06, s.z);
         floor.receiveShadow = true;
         innerCave.add(floor);
-    });
+    }
 
     if (ctx.yield) await ctx.yield();
 
@@ -320,7 +321,9 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         }
 
         // Cleanup geometries
-        wallGeometries.forEach(g => g.dispose());
+        for (let i = 0; i < wallGeometries.length; i++) {
+            wallGeometries[i].dispose();
+        }
     }
 
     if (ctx.yield) await ctx.yield();

@@ -15,6 +15,7 @@ import { _buoyancyResult } from '../systems/WaterSystem';
 export interface FireZone {
     mesh: THREE.Mesh;
     radius: number;
+    radiusSq: number; // Pre-calculated to save math operations in frame updates
     life: number;
     _lastDamageTime?: number;
 }
@@ -40,6 +41,7 @@ export interface Projectile {
     weapon: string;
     vel: THREE.Vector3;
     origin: THREE.Vector3;
+    speed: number; // Cached to avoid p.vel.length() checks in frame updates
     damage: number;
     life: number;
     maxRadius?: number;
@@ -69,13 +71,11 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
     [WeaponType.GRENADE]: {
         onImpact: (pos, radius, ctx, damage = 180, hitWater = false) => {
             if (!hitWater) {
-                // Surface explosion visuals
                 ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1, undefined, undefined, undefined, 15.0);
                 ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1, undefined, undefined, undefined, 12.0);
                 ctx.spawnPart(pos.x, 0, pos.z, 'debris', 25, undefined, undefined, undefined, 2.0);
             }
 
-            // Water Check for explosions (handles near-misses on the shoreline)
             const engine = Engine.getInstance();
             let inWater = hitWater;
             let waterY = pos.y;
@@ -89,7 +89,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 
             if (inWater) {
                 ctx.spawnPart(pos.x, waterY, pos.z, 'splash', 85);
-                // Massive ripple for underwater explosion
                 if (engine.water) {
                     engine.water.spawnExplosionRipple(pos.x, pos.z, 200.0);
                 }
@@ -99,6 +98,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             soundManager.playExplosion();
             //haptic.explosion();
 
+            // ZERO-GC WARNING: pos.clone() allocates memory. Consider pooling noiseEvents in the future!
             if (ctx.noiseEvents) ctx.noiseEvents.push({ pos: pos.clone(), radius: 80, time: ctx.now, active: true });
 
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius + 3.0);
@@ -135,6 +135,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             ctx.spawnPart(pos.x, 0, pos.z, 'glass', 15);
             soundManager.playExplosion();
             //haptic.explosion();
+
             let fz: FireZone | null = null;
             for (let i = 0; i < FIREZONE_POOL.length; i++) {
                 if (FIREZONE_POOL[i].life <= 0) {
@@ -142,21 +143,20 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                     break;
                 }
             }
+
             if (!fz) {
-                fz = { mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), radius, life: 6.0 };
+                fz = { mesh: new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), radius, radiusSq: radius * radius, life: 6.0 };
                 FIREZONE_POOL.push(fz);
             }
 
             fz.radius = radius;
+            fz.radiusSq = radius * radius;
             fz.life = 6.0;
             fz._lastDamageTime = 0;
             fz.mesh.rotation.x = -Math.PI / 2;
             fz.mesh.position.set(pos.x, 0.24, pos.z);
             fz.mesh.scale.setScalar(fz.radius / 3.5);
 
-            fz.mesh.scale.setScalar(fz.radius / 3.5);
-
-            // Water Check for explosions
             const engine = Engine.getInstance();
             let inWater = false;
             let waterY = 0;
@@ -169,7 +169,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             }
 
             if (inWater) {
-                // Molotov extinguishes instantly but causes huge steam bloom
                 ctx.spawnPart(pos.x, waterY, pos.z, 'large_smoke', 20);
                 ctx.spawnPart(pos.x, waterY, pos.z, 'splash', 10);
                 if (engine.water) engine.water.spawnRipple(pos.x, pos.z, 8.0);
@@ -179,10 +178,13 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             }
 
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
+            const rSq = fz.radiusSq;
             for (const e of direct) {
-                e.lastDamageType = WeaponType.MOLOTOV;
-                e.isBurning = true;
-                e.afterburnTimer = 5.0;
+                if (e.mesh.position.distanceToSquared(pos) < rSq) {
+                    e.lastDamageType = WeaponType.MOLOTOV;
+                    e.isBurning = true;
+                    e.afterburnTimer = 5.0;
+                }
             }
         }
     },
@@ -191,12 +193,16 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1, undefined, undefined, undefined, 8.0);
             soundManager.playExplosion();
             //haptic.explosion();
+
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius);
+            const rSq = radius * radius;
             for (const e of nearby) {
-                e.isBlinded = true;
-                e.blindTimer = 4.0;
-                e.stunTimer = 1.5;
-                ctx.spawnPart(e.mesh.position.x, 1.8, e.mesh.position.z, 'stun_star', 3, undefined, undefined, undefined, 0.8);
+                if (e.mesh.position.distanceToSquared(pos) < rSq) {
+                    e.isBlinded = true;
+                    e.blindTimer = 4.0;
+                    e.stunTimer = 1.5;
+                    ctx.spawnPart(e.mesh.position.x, 1.8, e.mesh.position.z, 'stun_star', 3, undefined, undefined, undefined, 0.8);
+                }
             }
         }
     }
@@ -205,7 +211,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 // --- SYSTEM ---
 
 export const ProjectileSystem = {
-    // ZERO-GC: Reuses both the data object AND the underlying THREE.Mesh
     _getProjectile: (): Projectile => {
         for (let i = 0; i < PROJECTILE_POOL.length; i++) {
             const p = PROJECTILE_POOL[i];
@@ -216,13 +221,13 @@ export const ProjectileSystem = {
             }
         }
 
-        // Pre-allocate new projectile if pool is empty
         const p: Projectile = {
             mesh: new THREE.Mesh(),
             type: 'bullet',
             weapon: '',
             vel: new THREE.Vector3(),
             origin: new THREE.Vector3(),
+            speed: 0,
             damage: 0,
             life: 0,
             hitEntities: new Set(),
@@ -240,12 +245,10 @@ export const ProjectileSystem = {
         p.type = 'bullet';
         p.weapon = weapon;
 
-        // Configure pooled mesh
         p.mesh.geometry = GEOMETRY.bullet;
         p.mesh.material = MATERIALS.bullet;
         p.mesh.position.copy(origin);
 
-        // FIXED: Apply spread in World Space to the actual physics vector first!
         _v1.copy(dir);
         if (data.spread && data.spread > 0) {
             _v1.x += (Math.random() - 0.5) * data.spread;
@@ -253,17 +256,15 @@ export const ProjectileSystem = {
             _v1.normalize();
         }
 
-        // Align mesh to physics vector
         _v2.copy(origin).add(_v1);
         p.mesh.lookAt(_v2);
-        p.mesh.rotateX(Math.PI / 2); // Bullet mesh orientation fix
+        p.mesh.rotateX(Math.PI / 2);
 
         if (p.mesh.parent !== scene) scene.add(p.mesh);
-
-        // Cleanup marker if object was previously a throwable
         if (p.marker && p.marker.parent === scene) scene.remove(p.marker);
 
-        p.vel.copy(_v1).multiplyScalar(data.bulletSpeed || 70);
+        p.speed = data.bulletSpeed || 70;
+        p.vel.copy(_v1).multiplyScalar(p.speed);
         p.origin.copy(origin);
         p.damage = data.damage;
         p.life = 1.5;
@@ -278,23 +279,23 @@ export const ProjectileSystem = {
         p.type = 'throwable';
         p.weapon = weapon;
 
-        // Configure pooled mesh
         p.mesh.geometry = GEOMETRY.grenade;
         p.mesh.material = weapon === WeaponType.MOLOTOV ? MATERIALS.molotov : MATERIALS.grenade;
         p.mesh.position.copy(origin);
-        p.mesh.rotation.set(0, 0, 0); // Reset rotation for arc spinning
+        p.mesh.rotation.set(0, 0, 0);
 
         if (p.mesh.parent !== scene) scene.add(p.mesh);
 
         const throwDist = 5 + charge * 30;
         const time = 1.0;
+
         p.vel.set((dir.x * throwDist) / time, (0 - origin.y + 0.5 * 30 * time * time) / time, (dir.z * throwDist) / time);
+        p.speed = p.vel.length();
         p.origin.copy(origin);
         p.damage = data.damage;
         p.life = time + 0.5;
         p.maxRadius = data.range;
 
-        // Pool Marker mesh
         if (!p.marker) {
             p.marker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
             p.marker.rotation.x = -Math.PI / 2;
@@ -315,7 +316,6 @@ export const ProjectileSystem = {
         const data = WEAPONS[weapon];
         if (!data) return;
 
-        // FLAMETHROWER
         if (weapon === WeaponType.FLAMETHROWER) {
             const count = Math.ceil(delta * 0.06);
             for (let i = 0; i < count; i++) {
@@ -325,16 +325,22 @@ export const ProjectileSystem = {
 
             const coneAngle = Math.cos(25 * Math.PI / 180);
             const range = data.range;
+            const rangeSq = range * range;
 
             const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
             for (const e of enemies) {
                 if (e.deathState !== 'alive') continue;
 
                 _v1.subVectors(e.mesh.position, origin);
-                const dist = _v1.length();
-                if (dist > range) continue;
+                const distSq = _v1.lengthSq();
 
-                _v1.normalize();
+                // Exclude early without expensive Math.sqrt
+                if (distSq > rangeSq) continue;
+
+                // Manual normalize avoids duplicate length computation
+                const dist = Math.sqrt(distSq);
+                _v1.divideScalar(dist);
+
                 const dot = direction.dot(_v1);
 
                 if (dot > coneAngle) {
@@ -354,22 +360,26 @@ export const ProjectileSystem = {
                 }
             }
         }
-
-        // ARC-CANNON
         else if (weapon === WeaponType.ARC_CANNON) {
             const range = data.range;
+            const rangeSq = range * range;
             const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
+
             let target = null;
             let minDist = Infinity;
             const aimThreshold = 0.95;
 
             for (const e of enemies) {
                 if (e.deathState !== 'alive') continue;
-                _v1.subVectors(e.mesh.position, origin);
-                const dist = _v1.length();
-                if (dist > range) continue;
 
-                _v1.normalize();
+                _v1.subVectors(e.mesh.position, origin);
+                const distSq = _v1.lengthSq();
+                if (distSq > rangeSq) continue;
+
+                // Manual normalize avoids duplicate length computation
+                const dist = Math.sqrt(distSq);
+                _v1.divideScalar(dist);
+
                 if (direction.dot(_v1) > aimThreshold) {
                     if (dist < minDist) {
                         minDist = dist;
@@ -383,7 +393,6 @@ export const ProjectileSystem = {
                 const chainMax = 5;
                 const chainRange = 8.0;
 
-                // ZERO-GC: Clear and reuse global scratchpad arrays/sets
                 _arcCannonHitList.length = 0;
                 _arcCannonHitIds.clear();
 
@@ -447,11 +456,11 @@ export const ProjectileSystem = {
     update: (delta: number, now: number, ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[]) => {
         ctx.now = now;
 
-        // ZERO-GC: Ensure function is only allocated once if missing, avoiding frame-by-frame allocation
         if (!ctx.addFireZone) {
             ctx.addFireZone = (z: FireZone) => fireZones.push(z);
         }
 
+        // Safe backward iteration allows efficient swap-and-pop internally
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
             if (p.type === 'bullet') updateBullet(p, i, delta, ctx, projectiles);
@@ -465,11 +474,17 @@ export const ProjectileSystem = {
             if (!fz._lastDamageTime || now - fz._lastDamageTime > 500) {
                 fz._lastDamageTime = now;
                 const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
+                const rSq = fz.radiusSq;
                 for (const e of nearby) {
                     if (e.deathState !== 'alive') continue;
-                    e.lastDamageType = WeaponType.MOLOTOV;
-                    e.hp -= 15; e.isBurning = true; e.afterburnTimer = 5.0; e.burnTimer = 0.5;
-                    ctx.trackStats('damage', 15, !!e.isBoss);
+                    if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
+                        e.lastDamageType = WeaponType.MOLOTOV;
+                        e.hp -= 15;
+                        e.isBurning = true;
+                        e.afterburnTimer = 5.0;
+                        e.burnTimer = 0.5;
+                        ctx.trackStats('damage', 15, !!e.isBoss);
+                    }
                 }
             }
 
@@ -482,7 +497,6 @@ export const ProjectileSystem = {
 
             if (fz.life <= 0) {
                 ctx.scene.remove(fz.mesh);
-                // ZERO-GC: Swap-and-Pop instead of .splice
                 fireZones[i] = fireZones[fireZones.length - 1];
                 fireZones.pop();
             }
@@ -497,7 +511,7 @@ export const ProjectileSystem = {
         }
         for (const f of fireZones) {
             if (f.mesh.parent) scene.remove(f.mesh);
-            f.life = 0; // Mark for reuse
+            f.life = 0;
         }
         projectiles.length = 0; fireZones.length = 0;
     }
@@ -517,7 +531,8 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
     const nearbyObs = ctx.collisionGrid.getNearbyObstacles(p.mesh.position, 2.0);
     for (const obs of nearbyObs) {
         const obsPos = obs.position;
-        if (p.mesh.position.distanceToSquared(obsPos) < (obs.radius || 2) ** 2) {
+        const rad = obs.radius || 2;
+        if (p.mesh.position.distanceToSquared(obsPos) < rad * rad) {
             destroyBullet = true;
             ctx.spawnPart(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, 'smoke', 3);
             soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
@@ -527,7 +542,8 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
 
     if (!destroyBullet) {
         _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
-        const bulletTravelDist = p.vel.length() * delta;
+        // Cached bullet speed saves Math.sqrt here
+        const bulletTravelDist = p.speed * delta;
         const searchRad = 5.0 + bulletTravelDist;
         const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, searchRad);
 
@@ -596,7 +612,6 @@ function updateBullet(p: Projectile, index: number, delta: number, ctx: GameCont
         ctx.scene.remove(p.mesh);
         p.active = false;
 
-        // ZERO-GC: Swap-and-Pop
         projectiles[index] = projectiles[projectiles.length - 1];
         projectiles.pop();
     }
@@ -636,7 +651,6 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
         if (behavior) behavior.onImpact(_v1, p.maxRadius || 10, ctx, p.damage, hitWater);
         p.active = false;
 
-        // ZERO-GC: Swap-and-Pop
         projectiles[index] = projectiles[projectiles.length - 1];
         projectiles.pop();
     } else {

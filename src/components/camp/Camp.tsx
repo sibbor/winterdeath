@@ -185,18 +185,23 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const familyMembers: any[] = [];
         const activeMembers: any[] = [PLAYER_CHARACTER];
 
-        if (debugMode) FAMILY_MEMBERS.forEach(m => activeMembers.push(m));
+        if (debugMode) {
+            for (let i = 0; i < FAMILY_MEMBERS.length; i++) activeMembers.push(FAMILY_MEMBERS[i]);
+        }
         else {
-            (rescuedFamilyIndices || []).forEach(sectorId => {
+            const indices = rescuedFamilyIndices || [];
+            for (let i = 0; i < indices.length; i++) {
+                const sectorId = indices[i];
                 if (sectorId < 4) activeMembers.push(FAMILY_MEMBERS[sectorId]);
                 else if (sectorId === 4) { activeMembers.push(FAMILY_MEMBERS[4]); activeMembers.push(FAMILY_MEMBERS[5]); }
-            });
+            }
         }
 
         const humans = activeMembers.filter(m => m.race === 'human');
         const animals = activeMembers.filter(m => m.race === 'animal');
 
-        activeMembers.forEach((memberData) => {
+        for (let globalIdx = 0; globalIdx < activeMembers.length; globalIdx++) {
+            const memberData = activeMembers[globalIdx];
             // Use createFamilyMember for everyone (removes flashlight/gun for player in camp)
             const member = ModelFactory.createFamilyMember(memberData);
 
@@ -232,7 +237,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             let baseY = bodyMesh ? bodyMesh.userData.baseY : 0;
             familyMembers.push({ mesh: member, baseY, phase: Math.random() * Math.PI * 2, bounce: 0, name: memberData.name, seed: Math.random() * 100 });
-        });
+        }
         scene.add(familyGroup);
 
         // --- INTERACTION HANDLING ---
@@ -339,7 +344,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             lastTime = perfTime;
 
             // Family Animations
-            familyMembers.forEach(fm => {
+            for (let i = 0; i < familyMembers.length; i++) {
+                const fm = familyMembers[i];
                 const isSpeaking = talkingMembers.has(fm.mesh.uuid) || fm.bounce > 0;
                 if (fm.bounce > 0) { fm.bounce -= 0.02; if (fm.bounce < 0) fm.bounce = 0; }
                 const body = fm.mesh.children.find((c: any) => c.userData.isBody) as THREE.Mesh;
@@ -359,7 +365,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                         seed: fm.seed
                     }, now, 0.016);
                 }
-            });
+            }
 
             perfTime = performance.now();
             timings.familyAnimation = perfTime - lastTime;
@@ -436,13 +442,18 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             timings.raycasting = perfTime - lastTime;
             lastTime = perfTime;
 
-            Object.keys(outlines).forEach(key => { outlines[key].visible = !isIdleRef.current && (hoveredRef.current === key); });
-            interactables.forEach(o => {
+            const outlineKeys = Object.keys(outlines);
+            for (let i = 0; i < outlineKeys.length; i++) {
+                const key = outlineKeys[i];
+                outlines[key].visible = !isIdleRef.current && (hoveredRef.current === key);
+            }
+            for (let i = 0; i < interactables.length; i++) {
+                const o = interactables[i];
                 if (o.userData.type === 'family') {
                     (o.material as THREE.MeshStandardMaterial).emissiveIntensity = (o.userData.id === hoveredRef.current) ? 0.5 + Math.sin(frame * 0.2) * 0.5 : 0;
                     (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
                 }
-            });
+            }
 
             perfTime = performance.now();
             timings.outlines = perfTime - lastTime;
@@ -480,7 +491,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             window.removeEventListener('mousemove', onMM); window.removeEventListener('click', onCL); window.removeEventListener('resize', onResize);
             // We NO LONGER dispose the renderer here as it's shared
             // We only unmount it if necessary, but mount() handles unparenting
-            activeChats.current.forEach(c => { if (c.element.parentNode) c.element.parentNode.removeChild(c.element); });
+            const chats = activeChats.current;
+            for (let i = 0; i < chats.length; i++) {
+                const c = chats[i];
+                if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
+            }
         };
     }, [rescuedFamilyIndices, debugMode, textures]);
 
@@ -518,11 +533,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 isMobileDevice={isMobileDevice}
                 onMarkCollectiblesViewed={(newIds) => {
                     const updated = [...(stats.viewedCollectibles || [])];
-                    newIds.forEach(id => {
+                    for (let i = 0; i < newIds.length; i++) {
+                        const id = newIds[i];
                         if (!updated.includes(id)) {
                             updated.push(id);
                         }
-                    });
+                    }
                     onSaveStats({ ...stats, viewedCollectibles: updated });
                 }}
             />}

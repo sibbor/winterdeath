@@ -215,9 +215,10 @@ export const Sector1: SectorDef = {
             { x: 224, z: 168, s: [20, 8, 20], rotation: Math.PI / 3, color: 0x444444 },
             { x: 117, z: 170, s: [16, 14, 16], rotation: Math.PI / 6, color: 0x777777 }
         ];
-        randomBuildings.forEach((b) => {
+        for (let i = 0; i < randomBuildings.length; i++) {
+            const b = randomBuildings[i];
             SectorGenerator.spawnBuilding(ctx, b.x, b.z, b.s[0], b.s[1], b.s[2], b.rotation, b.color, true, true);
-        });
+        }
 
         // SMU: stone wall
         SectorGenerator.createStoneWall(ctx, [
@@ -438,13 +439,14 @@ export const Sector1: SectorDef = {
             { x: 128, z: 337, ry: 0.8, rz: -0.8 }, // Moved from 139 (Tunnel blocked) to 128
             { x: 131, z: 339, ry: -0.2, rz: 0.1 }
         ];
-        debrisPositions.forEach(d => {
+        for (let i = 0; i < debrisPositions.length; i++) {
+            const d = debrisPositions[i];
             const mesh = new THREE.Mesh(debrisGeo, MATERIALS.guardrail);
             mesh.position.set(d.x, 5, d.z);
             mesh.rotation.set(0, d.ry, d.rz);
             mesh.castShadow = true;
             ctx.scene.add(mesh);
-        });
+        }
 
         // Skid Marks (Sliding from West towards the broken edge)
         // Left Tire
@@ -846,7 +848,8 @@ export const Sector1: SectorDef = {
             { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: 'WALKER' },
         ];
 
-        buildingPOIs.forEach(poi => {
+        for (let j = 0; j < buildingPOIs.length; j++) {
+            const poi = buildingPOIs[j];
             const dist = playerPos.distanceTo(new THREE.Vector3(poi.pos.x, 0, poi.pos.z));
             if (dist < 45 && !sectorState.spawns[poi.name]) {
                 sectorState.spawns[poi.name] = true;
@@ -861,7 +864,7 @@ export const Sector1: SectorDef = {
                     events.spawnZombie(type, new THREE.Vector3(poi.pos.x + offX, 0, poi.pos.z + offZ));
                 }
             }
-        });
+        }
 
         // 4. Town Center Forest - Harder group
         const townCenterWoods = new THREE.Vector3(145, 0, 240);
@@ -1103,11 +1106,11 @@ function spawnSectorHordes(ctx: SectorContext) {
         new THREE.Vector3(-40, 0, -20)  // Embankment
     ];
 
-    hordeSpots.forEach((pos, i) => {
+    for (let i = 0; i < hordeSpots.length; i++) {
         // Randomize count 5-8
         // Don't spawn too many or perf will die
         const count = 5 + Math.floor(ctx.rng() * 4);
-        ctx.spawnHorde(count, undefined, pos);
-    });
+        ctx.spawnHorde(count, undefined, hordeSpots[i]);
+    }
 }
 */

@@ -574,9 +574,9 @@ export const ObjectGenerator = {
         group.userData.isFire = true;
         group.userData.effects = [
             { type: 'light', color: 0xff7722, intensity: 30 * scale, distance: 40 * scale, offset: new THREE.Vector3(0, 1.5, 0), flicker: true },
-            { type: 'emitter', particle: 'flame', interval: 60, count: 1, offset: new THREE.Vector3(0, 0.5, 0), spread: 0.5, color: 0xffaa00 },
-            { type: 'emitter', particle: 'spark', interval: 100, count: 1, offset: new THREE.Vector3(0, 1.0, 0), spread: 0.8, color: 0xffdd00 },
-            { type: 'emitter', particle: 'smoke', interval: 200, count: 1, offset: new THREE.Vector3(0, 1.8, 0), spread: 0.4 }
+            { type: 'emitter', particle: 'campfire_flame', interval: 60, count: 1, offset: new THREE.Vector3(0, 0.5, 0), spread: 0.5, color: 0xffaa00 },
+            { type: 'emitter', particle: 'campfire_spark', interval: 100, count: 1, offset: new THREE.Vector3(0, 1.0, 0), spread: 0.8, color: 0xffdd00 },
+            { type: 'emitter', particle: 'campfire_smoke', interval: 200, count: 1, offset: new THREE.Vector3(0, 1.8, 0), spread: 0.4 }
         ];
 
         ctx.scene.add(group);
@@ -762,11 +762,13 @@ export const ObjectGenerator = {
         group.add(crossArm);
 
         const insGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3);
-        [-1.2, 0, 1.2].forEach(x => {
+        const xs = [-1.2, 0, 1.2];
+        for (let i = 0; i < xs.length; i++) {
+            const x = xs[i];
             const ins = new THREE.Mesh(insGeo, MATERIALS.stone);
             ins.position.set(x, 9.2, 0);
             group.add(ins);
-        });
+        }
 
         group.userData.material = 'WOOD';
         return group;

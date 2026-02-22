@@ -124,7 +124,9 @@ export class SoundManager {
 
   playVictory() {
     const now = this.core.ctx.currentTime;
-    [440, 554, 659, 880].forEach((freq, i) => {
+    const freqs = [440, 554, 659, 880];
+    for (let i = 0; i < freqs.length; i++) {
+      const freq = freqs[i];
       const osc = this.core.ctx.createOscillator();
       const gain = this.core.ctx.createGain();
       osc.frequency.value = freq;
@@ -138,7 +140,7 @@ export class SoundManager {
       osc.stop(now + i * 0.1 + 2.0);
       // Track as BufferSource for global stop control
       this.core.track(osc as unknown as AudioBufferSourceNode);
-    });
+    }
   }
 
   /**

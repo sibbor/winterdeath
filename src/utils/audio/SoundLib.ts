@@ -33,7 +33,8 @@ const Generators = {
             const t = i / ctx.sampleRate;
             let val = 0;
 
-            notes.forEach((freq, idx) => {
+            for (let idx = 0; idx < notes.length; idx++) {
+                const freq = notes[idx];
                 const offset = idx * 0.1;
                 if (t >= offset && t < offset + noteDur) {
                     const localT = t - offset;
@@ -46,7 +47,7 @@ const Generators = {
 
                     val += wave * env * 0.1;
                 }
-            });
+            }
             data[i] = val;
         }
         return buffer;

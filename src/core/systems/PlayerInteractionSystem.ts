@@ -4,6 +4,7 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/sound';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../../content/collectibles';
+import { FXSystem } from './FXSystem';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -110,12 +111,23 @@ export class PlayerInteractionSystem implements System {
 
             if (anim.progress > 1) anim.progress = 1;
 
-            anim.obj.position.y = anim.startY + anim.progress * 2.0;
+            anim.obj.position.y = anim.startY + anim.progress * 12.0;
             anim.obj.rotation.y += 3.0 * dt;
 
             // Animate scale down instead of material opacity to avoid shader recompilation and GC
             const s = 1.0 - anim.progress;
             anim.obj.scale.set(s, s, s);
+
+            // [VINTERDÖD] Special "Blow Away" animation for named components
+            const ring = anim.obj.getObjectByName('collectibleRing');
+            if (ring) {
+                // Ring blows up even faster and fades out
+                ring.position.y = 0.05 + anim.progress * 15.0;
+            }
+            const beam = anim.obj.getObjectByName('collectibleBeam');
+            if (beam) {
+                beam.scale.set(0.05 * s, 4.0, 0.05 * s);
+            }
 
             if (anim.progress >= 1) {
                 // Traverse and hide to avoid removing from scene (keeps GPU state stable)
@@ -126,6 +138,9 @@ export class PlayerInteractionSystem implements System {
                         child.visible = false;
                     }
                 });
+
+                // [VINTERDÖD] Cleanup emitters to prevent "left behind" particles
+                anim.obj.userData.effects = [];
 
                 const idx = this.collectibles.indexOf(anim.obj);
                 if (idx > -1) {
@@ -345,8 +360,28 @@ export class PlayerInteractionSystem implements System {
             obj: collectible,
             startY: collectible.position.y,
             progress: 0,
-            duration: 0.8,
+            duration: 1.2,
             collectibleId: collectibleId
         });
+
+        // [VINTERDÖD] Spawn initial blow-away burst
+        for (let i = 0; i < 15; i++) {
+            _v1.set(
+                (Math.random() - 0.5) * 2,
+                10 + Math.random() * 10,
+                (Math.random() - 0.5) * 2
+            );
+            FXSystem.spawnPart(
+                session.engine.scene,
+                session.state.particles,
+                collectible.position.x,
+                0.1,
+                collectible.position.z,
+                'spark',
+                1,
+                undefined,
+                _v1
+            );
+        }
     }
 }

@@ -9,6 +9,7 @@ import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { createProceduralDiffuse } from '../../utils/assets/procedural';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
+import { PerformanceMonitor } from './PerformanceMonitor';
 
 let warmedUp = false;
 let lastSectorIndex = -1;
@@ -21,9 +22,14 @@ export const AssetPreloader = {
     warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, yieldToMain?: () => Promise<void>) => {
         if (warmedUp) return;
 
+        const monitor = PerformanceMonitor.getInstance();
+        monitor.begin('asset_warmup_total');
+
         // 0. PROCEDURAL CACHE WARMUP
+        monitor.begin('asset_warmup_procedural');
         // Generate and cache all procedural textures once before shader compilation starts.
         createProceduralDiffuse();
+        monitor.end('asset_warmup_procedural');
         if (yieldToMain) await yieldToMain();
 
         // 1. AUDIO SYSTEM WARMUP
@@ -41,13 +47,17 @@ export const AssetPreloader = {
                 'step', 'step_snow', 'step_metal', 'step_wood', 'step_water'
             ];
             // Ljud är små resurser att initiera, ingen yield krävs mitt i arrayen
-            essentialSounds.forEach(k => SoundBank.get(soundCore, k));
+            for (let i = 0; i < essentialSounds.length; i++) {
+                SoundBank.get(soundCore, essentialSounds[i]);
+            }
         }
+        monitor.end('asset_warmup_audio');
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
         // 2. SHADER PERMUTATION SETUP
+        monitor.begin('asset_warmup_geometry');
         // Detta tvingar Three.js att generera rätt shader-kod för belysning och dimma.
         if (envConfig) {
             scene.fog = new THREE.FogExp2(envConfig.fogColor || envConfig.bgColor, envConfig.fogDensity);
@@ -94,9 +104,11 @@ export const AssetPreloader = {
 
         // Batch 2: Characters & Projectiles
         addToWarmup(ModelFactory.createPlayer());
-        Object.keys(ZOMBIE_TYPES).forEach(type => {
+        const zombieKeys = Object.keys(ZOMBIE_TYPES);
+        for (let i = 0; i < zombieKeys.length; i++) {
+            const type = zombieKeys[i];
             addToWarmup(ModelFactory.createZombie(type, (ZOMBIE_TYPES as any)[type]));
-        });
+        }
         addToWarmup(ModelFactory.createBoss('Boss', { color: 0xff0000, scale: 3 } as any));
 
         // Yielda efter stora komplexa modeller
@@ -183,9 +195,12 @@ export const AssetPreloader = {
         const iceMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), iceMat);
         addToWarmup(iceMesh);
 
+        monitor.end('asset_warmup_geometry');
+
         if (yieldToMain) await yieldToMain();
 
         // 4. INCREMENTAL COMPILATION
+        monitor.begin('asset_warmup_compilation');
         try {
             // Kompilerar grundscenen först (dimma, bakgrund, ljus)
             renderer.compile(scene, camera);
@@ -215,8 +230,10 @@ export const AssetPreloader = {
         } catch (e) {
             console.warn("Shader warmup failed or interrupted", e);
         }
+        monitor.end('asset_warmup_compilation');
 
         // 5. GENERATOR CACHE WARMUP
+        monitor.begin('asset_warmup_generators');
         try {
             await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
             if (yieldToMain) await yieldToMain();
@@ -236,12 +253,20 @@ export const AssetPreloader = {
         } catch (e) {
             console.warn("Generator warmup failed", e);
         }
+        monitor.end('asset_warmup_generators');
 
         // 6. CLEANUP
         // Vi rensar scenen, men vi gör INGEN .dispose() på material/geometri, 
         // eftersom syftet med warmup var just att lägga in dem i Three.js GPU-cache!
         scene.clear();
         warmedUp = true;
+
+        monitor.end('asset_warmup_total');
+
+        // Print warmup stats
+        console.log(`[AssetPreloader] Warmup Complete. Details:`, monitor.getTimings());
+        // Clean the monitor to avoid leaking warmup times into the main gameplay HUD
+        monitor.startFrame();
     },
 
     isWarmedUp: () => warmedUp,

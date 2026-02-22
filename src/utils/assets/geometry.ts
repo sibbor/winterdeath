@@ -104,6 +104,20 @@ const createSplashGeo = () => {
     return geo;
 };
 
+const createSplatterGeo = () => {
+    const geo = new THREE.CircleGeometry(1, 16);
+    const pos = geo.attributes.position;
+    for (let i = 1; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const r = Math.sqrt(x * x + y * y);
+        const newR = 1.0 - (i % 2 === 0 ? 0.1 : 0.4 + Math.random() * 0.4);
+        pos.setXY(i, (x / r) * newR, (y / r) * newR);
+    }
+    geo.computeVertexNormals();
+    return geo;
+};
+
 export const GEOMETRY = {
     bullet: new THREE.SphereGeometry(0.15, 8, 8),
     grenade: new THREE.DodecahedronGeometry(0.3),
@@ -137,6 +151,7 @@ export const GEOMETRY = {
     chestLid: new THREE.BoxGeometry(1.5, 0.4, 1.0),
     blastRadius: new THREE.RingGeometry(0.05, 1, 32),
     decal: new THREE.CircleGeometry(1, 12),
+    splatterDecal: createSplatterGeo(),
     fogParticle: new THREE.PlaneGeometry(20, 20),
     weatherParticle: new THREE.PlaneGeometry(0.1, 0.1),
     barrel: new THREE.CylinderGeometry(0.8, 0.8, 2.5, 10),

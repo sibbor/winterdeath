@@ -173,7 +173,13 @@ export const EnemyManager = {
 
         // [VINTERDÖD] Uppdaterad logik: 10 droppar, 1 stor pöl
         callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 10 * mult);
-        callbacks.spawnDecal(pos.x, pos.z, isBoss ? 6.0 : 3.0, MATERIALS.bloodDecal);
+
+        let burstScale = 1.0;
+        const dmgType = enemy.lastDamageType ? String(enemy.lastDamageType).toLowerCase() : '';
+        if (dmgType === 'grenade' || dmgType === 'molotov' || dmgType === 'barrel') burstScale = 3.0;
+        else if (dmgType === 'shotgun' || dmgType === 'revolver') burstScale = 2.0;
+
+        callbacks.spawnDecal(pos.x, pos.z, (isBoss ? 6.0 : 3.0) * burstScale, MATERIALS.bloodDecal, 'splatter');
 
         const baseScale = enemy.originalScale || 1.0;
 

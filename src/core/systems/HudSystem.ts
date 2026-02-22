@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { WEAPONS, BOSSES } from '../../content/constants';
 import { WeaponType } from '../../content/weapons';
-
+import { PerformanceMonitor } from './PerformanceMonitor';
 
 export const HudSystem = {
     getHudData: (
@@ -141,7 +141,16 @@ export const HudSystem = {
                 enemies: state.enemies.length,
                 objects: state.obstacles.length,
                 drawCalls: 0, // Injected by GameSession
-                coords: { x: playerPos.x, z: playerPos.z }
+                coords: { x: playerPos.x, z: playerPos.z },
+                performance: {
+                    cpu: PerformanceMonitor.getInstance().getTimings(),
+                    memory: (performance as any).memory ? {
+                        heapLimit: Math.round((performance as any).memory.jsHeapSizeLimit / 1048576),
+                        heapTotal: Math.round((performance as any).memory.totalJSHeapSize / 1048576),
+                        heapUsed: Math.round((performance as any).memory.usedJSHeapSize / 1048576)
+                    } : null,
+                    renderer: (window as any).gameEngine?.getRendererStats() || null
+                }
             }
         };
     }

@@ -182,12 +182,14 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     dTop.position.y = dH; deskGroup.add(dTop);
 
     // Legs
-    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(p => {
+    const legPositions = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+    for (let i = 0; i < legPositions.length; i++) {
+        const p = legPositions[i];
         const l = new THREE.Mesh(GEOMETRY.box, darkerWoodMat);
         l.scale.set(0.15, dH, 0.15);
         l.position.set(p[0] * (dW / 2 - 0.2), dH / 2, p[1] * (dD / 2 - 0.2));
         deskGroup.add(l);
-    });
+    }
 
     // Staples books
     for (let i = 0; i < 3; i++) {
@@ -371,7 +373,10 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     medGroup.add(skillOutline);
     outlines['skills'] = skillOutline;
 
-    [rackGroup, deskGroup, mapGroup, medGroup].forEach(g => g.traverse(c => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; }));
+    const stationGroups = [rackGroup, deskGroup, mapGroup, medGroup];
+    for (let i = 0; i < stationGroups.length; i++) {
+        stationGroups[i].traverse(c => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; });
+    }
 
     return { interactables, outlines };
 };

@@ -147,16 +147,16 @@ export class SoundCore {
    */
   stopAll() {
     // Stop and disconnect all active audio sources
-    this.activeSources.forEach(source => {
+    for (const source of this.activeSources) {
       try {
         source.stop();
         source.disconnect();
       } catch (e) { /* Already stopped */ }
-    });
+    }
     this.activeSources.clear();
 
     // Clear all scheduled timeouts
-    this.activeTimeouts.forEach(id => clearTimeout(id));
+    for (const id of this.activeTimeouts) clearTimeout(id);
     this.activeTimeouts.clear();
   }
 }

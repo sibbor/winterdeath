@@ -341,6 +341,7 @@ export const SectorGenerator = {
         const ringGeo = new THREE.RingGeometry(0.6, 0.7, 32);
         const ringMat = new THREE.MeshBasicMaterial({ color: colorPrimary, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
         const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.name = 'collectibleRing';
         ring.rotation.x = -Math.PI / 2;
         ring.position.y = 0.05;
         group.add(ring);
@@ -356,6 +357,7 @@ export const SectorGenerator = {
             depthWrite: false
         });
         const beam = new THREE.Mesh(beamGeo, beamMat);
+        beam.name = 'collectibleBeam';
         beam.position.y = 2;
         group.add(beam);
 
@@ -363,6 +365,7 @@ export const SectorGenerator = {
         const innerRingGeo = new THREE.TorusGeometry(0.3, 0.02, 8, 24);
         const innerRingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
         const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
+        innerRing.name = 'collectibleInnerRing';
         innerRing.rotation.x = Math.PI / 2;
         innerRing.position.y = 1.0;
         group.add(innerRing);
@@ -1250,7 +1253,8 @@ export const SectorGenerator = {
     },
 
     visualizeTriggers: (ctx: SectorContext) => {
-        ctx.triggers.forEach(trig => {
+        for (let i = 0; i < ctx.triggers.length; i++) {
+            const trig = ctx.triggers[i];
             SectorGenerator.spawnDebugMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase());
             const ringGeo = new THREE.RingGeometry(trig.radius - 0.2, trig.radius, 32);
             const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
@@ -1258,7 +1262,7 @@ export const SectorGenerator = {
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(trig.position.x, 0.1, trig.position.z);
             ctx.scene.add(ring);
-        });
+        }
     },
 
     generatePlaceholder: async (ctx: SectorContext) => {

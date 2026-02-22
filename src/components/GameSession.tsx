@@ -25,6 +25,7 @@ import { TriggerHandler } from '../core/systems/TriggerHandler';
 import { LightingSystem } from '../core/systems/LightingSystem';
 import { DeathSystem } from '../core/systems/DeathSystem';
 import { AssetPreloader } from '../core/systems/AssetPreloader';
+import { PerformanceMonitor } from '../core/systems/PerformanceMonitor';
 import { PlayerMovementSystem } from '../core/systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../core/systems/VehicleMovementSystem';
 import { PlayerCombatSystem } from '../core/systems/PlayerCombatSystem';
@@ -123,6 +124,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const useInstantLoad = isSameSector && isWarmedUp;
 
     const [isSectorLoading, setIsSectorLoading] = useState(!useInstantLoad);
+    const isBuildingSectorRef = useRef(!useInstantLoad);
     const [deathPhase, setDeathPhase] = useState<DeathPhase>('NONE');
     const deathPhaseRef = useRef<DeathPhase>('NONE');
     useEffect(() => { deathPhaseRef.current = deathPhase; }, [deathPhase]);
@@ -724,8 +726,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         FootprintSystem.init(scene);
         EnemyManager.init(scene);
 
-        const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material) => {
-            FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material);
+        const spawnDecal = (x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
+            FXSystem.spawnDecal(scene, stateRef.current.bloodDecals, x, z, scale, material, type);
         };
 
         const spawnPart = (x: number, y: number, z: number, type: any, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => {
@@ -923,6 +925,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             setIsSectorLoading(true);
+            isBuildingSectorRef.current = true;
+            engine.isRenderingPaused = true;
 
             const rng = seededRandom(propsRef.current.currentSector + 4242);
             const env = currentSector.environment;
@@ -991,9 +995,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             await SectorGenerator.build(ctx, currentSector);
 
             AssetPreloader.setLastSectorIndex(propsRef.current.currentSector);
-
-            if (!useInstantLoad) setIsSectorLoading(false);
-            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
@@ -1169,9 +1170,51 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             camera.position.set(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ);
             camera.lookAt(playerGroup.position);
 
+            // [VINTERDÖD] Force a robust yield to guarantee the loading screen mounts its final state
+            if (!useInstantLoad) {
+                await new Promise<void>(resolve => {
+                    requestAnimationFrame(() => setTimeout(resolve, 50));
+                });
+            }
+
+            // [VINTERDÖD] Initialize all instanced pools so their shaders compile NOW rather than mid-combat
+            FXSystem.preload(engine.scene);
+            EnemyManager.init(engine.scene);
+
+            // [VINTERDÖD] Absorb the massive shader compilation hit (can take up to 2.5s)
+            // BEFORE dropping the loading screen. This ensures Frame 1 of gameplay is 60 FPS.
+            const monitor = PerformanceMonitor.getInstance();
+            monitor.begin('render_compile_final');
+
+            // CRITICAL HACK: Three.js renderer.compile() SKIPS InstancedMeshes if count === 0.
+            // But CorpseRenderer and FXSystem initialize with count = 0. We must fake count = 1.
+            const originalCounts = new Map<THREE.InstancedMesh, number>();
+            scene.traverse((obj: any) => {
+                if (obj.isInstancedMesh && obj.count === 0) {
+                    originalCounts.set(obj, obj.count);
+                    obj.count = 1;
+                    // Force a dummy matrix so WebGL doesn't complain about uninitialized buffers
+                    obj.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, -9999, 0));
+                    obj.instanceMatrix.needsUpdate = true;
+                }
+            });
+
+            engine.renderer.compile(scene, camera);
+
+            // Restore the original 0 counts
+            for (const [obj, count] of originalCounts.entries()) {
+                obj.count = count;
+            }
+
+            monitor.end('render_compile_final');
+            console.log(`[GameSession] Final Shader Linking took ${monitor.getTimings()['render_compile_final'].toFixed(2)}ms`);
+            monitor.startFrame(); // Zero out to prevent log bleeding into the gameplay loop
+
+            isBuildingSectorRef.current = false;
+            engine.isRenderingPaused = false;
+
             if (isMounted.current) setIsSectorLoading(false);
             stateRef.current.mapItems = mapItems;
-            EnemyManager.init(engine.scene);
 
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
             if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
@@ -1257,7 +1300,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         let frame = 0;
 
         engine.onUpdate = (dt: number) => {
-            if (!isMounted.current || propsRef.current.isPaused) return;
+            if (!isMounted.current || propsRef.current.isPaused || isBuildingSectorRef.current) return;
 
             const now = performance.now();
             const input = engine.input.state;
@@ -1365,22 +1408,33 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     const mesh = burningObjects[i];
                     if (!mesh.userData.effects) continue;
                     const effs = mesh.userData.effects;
+
+                    const cos = Math.cos(mesh.rotation.y);
+                    const sin = Math.sin(mesh.rotation.y);
+
                     for (let j = 0; j < effs.length; j++) {
                         const eff = effs[j];
                         if (eff.type === 'emitter') {
                             if (Math.random() < 0.8) {
-                                _vInteraction.copy(mesh.position);
-                                if (eff.offset) _vInteraction.add(eff.offset);
-                                if (eff.area) {
-                                    _vInteraction.x += (Math.random() - 0.5) * eff.area.x;
-                                    _vInteraction.z += (Math.random() - 0.5) * eff.area.z;
-                                } else {
-                                    _vInteraction.x += (Math.random() - 0.5) * (eff.spread || 0.4);
-                                    _vInteraction.z += (Math.random() - 0.5) * (eff.spread || 0.4);
-                                }
                                 let count = eff.particle === 'flame' ? 2 : (eff.count || 1);
                                 if (eff.area && (eff.area.x * eff.area.z > 50)) count = Math.max(count, 3);
-                                spawnPart(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, count, undefined, undefined, eff.color);
+
+                                for (let k = 0; k < count; k++) {
+                                    _vInteraction.copy(mesh.position);
+                                    if (eff.offset) _vInteraction.add(eff.offset);
+
+                                    if (eff.area) {
+                                        const lx = (Math.random() - 0.5) * eff.area.x;
+                                        const lz = (Math.random() - 0.5) * eff.area.z;
+                                        _vInteraction.x += lx * cos + lz * sin;
+                                        _vInteraction.z += -lx * sin + lz * cos;
+                                    } else {
+                                        _vInteraction.x += (Math.random() - 0.5) * (eff.spread || 0.4);
+                                        _vInteraction.z += (Math.random() - 0.5) * (eff.spread || 0.4);
+                                    }
+
+                                    spawnPart(_vInteraction.x, _vInteraction.y, _vInteraction.z, eff.particle, 1, undefined, undefined, eff.color);
+                                }
                             }
                         }
                     }
@@ -1681,7 +1735,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (state.activeEffects) {
                 for (let i = 0; i < state.activeEffects.length; i++) {
                     const obj = state.activeEffects[i];
-                    if (!obj.userData.effects) continue;
+                    if (!obj.visible || !obj.userData.effects) continue;
                     const effects = obj.userData.effects;
                     for (let j = 0; j < effects.length; j++) {
                         const eff = effects[j];
@@ -1738,7 +1792,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             soundManager.setReverb(0);
-            soundManager.stopRadioStatic();
+            soundManager.stopAll();
 
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
             session.dispose();
@@ -1845,12 +1899,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             z: playerGroupRef.current?.position.z || 0
                         }}
                         onSpawnEnemies={(newEnemies) => {
-                            newEnemies.forEach(e => {
+                            for (let i = 0; i < newEnemies.length; i++) {
+                                const e = newEnemies[i];
                                 stateRef.current.enemies.push(e);
                                 if (e.type && !stateRef.current.seenEnemies.includes(e.type)) {
                                     stateRef.current.seenEnemies.push(e.type);
                                 }
-                            });
+                            }
                         }}
                     />
                 </div>

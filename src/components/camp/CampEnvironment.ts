@@ -21,6 +21,18 @@ export interface CampEffectsState {
     fireLight: THREE.PointLight;
 }
 
+const CONST_GEO = {
+    flame: new THREE.DodecahedronGeometry(0.6),
+    spark: new THREE.BoxGeometry(0.05, 0.05, 0.05),
+    smoke: new THREE.DodecahedronGeometry(0.6)
+};
+
+const CONST_MAT = {
+    flame: new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 }),
+    spark: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
+    smoke: new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.3 })
+};
+
 export const CampEnvironment = {
     initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType): CampEffectsState => {
         const engine = Engine.getInstance();
@@ -40,8 +52,32 @@ export const CampEnvironment = {
         const starSystem = CampEnvironment.setupSky(scene, textures);
         const fireLight = CampEnvironment.setupCampfire(scene, textures);
 
+        // [VINTERDÖD] Pre-allocate all Campfire particles to 100% avoid Zero-GC stutter on load
+        const flames: any[] = [];
+        const sparkles: any[] = [];
+        const smokes: any[] = [];
+
+        for (let i = 0; i < 20; i++) {
+            const f = new THREE.Mesh(CONST_GEO.flame, CONST_MAT.flame.clone());
+            f.visible = false;
+            scene.add(f);
+            flames.push({ mesh: f, life: 0, speed: 0 });
+        }
+        for (let i = 0; i < 30; i++) {
+            const s = new THREE.Mesh(CONST_GEO.spark, CONST_MAT.spark.clone());
+            s.visible = false;
+            scene.add(s);
+            sparkles.push({ mesh: s, life: 0, vy: 0, vx: 0, vz: 0 });
+        }
+        for (let i = 0; i < 20; i++) {
+            const sm = new THREE.Mesh(CONST_GEO.smoke, CONST_MAT.smoke.clone());
+            sm.visible = false;
+            scene.add(sm);
+            smokes.push({ mesh: sm, life: 0, speed: 0 });
+        }
+
         return {
-            particles: { flames: [], sparkles: [], smokes: [] },
+            particles: { flames, sparkles, smokes },
             starSystem,
             fireLight
         };
@@ -172,8 +208,6 @@ export const CampEnvironment = {
     },
 
     updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {
-        // [VINTERDÖD] Wind and Weather are now updated globally by the Engine.
-        // We fetch the current wind force directly for camp particles.
         const wind = Engine.getInstance().wind.current;
 
         // Update Stars
@@ -188,44 +222,86 @@ export const CampEnvironment = {
         }
 
         const { flames, sparkles, smokes } = state.particles;
-        flames.forEach(f => f.mesh.visible = true);
-        sparkles.forEach(s => s.mesh.visible = true);
-        smokes.forEach(s => s.mesh.visible = true);
 
         // Flames
-        if (frame % 4 === 0 && flames.length < 20) {
-            const f = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6), new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 }));
-            f.position.set((Math.random() - 0.5) * 1.5, 0.2, (Math.random() - 0.5) * 1.5);
-            f.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            scene.add(f); flames.push({ mesh: f, life: 1.0, speed: 0.03 + Math.random() * 0.04 });
+        if (frame % 4 === 0) {
+            for (let i = 0; i < flames.length; i++) {
+                if (flames[i].life <= 0) {
+                    const f = flames[i];
+                    f.mesh.position.set((Math.random() - 0.5) * 1.5, 0.2, (Math.random() - 0.5) * 1.5);
+                    f.mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                    f.mesh.visible = true;
+                    f.life = 1.0;
+                    f.speed = 0.03 + Math.random() * 0.04;
+                    break;
+                }
+            }
         }
-        for (let i = flames.length - 1; i >= 0; i--) {
-            const f = flames[i]; f.life -= 0.015; f.mesh.position.y += f.speed; f.mesh.position.x += wind.x; f.mesh.position.z += wind.y;
-            f.mesh.scale.setScalar(f.life); f.mesh.material.opacity = f.life; f.mesh.rotation.y += 0.05;
-            if (f.life <= 0) { scene.remove(f.mesh); flames.splice(i, 1); }
+        for (let i = 0; i < flames.length; i++) {
+            const f = flames[i];
+            if (f.life > 0) {
+                f.life -= 0.015;
+                f.mesh.position.y += f.speed;
+                f.mesh.position.x += wind.x;
+                f.mesh.position.z += wind.y;
+                f.mesh.scale.setScalar(Math.max(0.01, f.life));
+                (f.mesh.material as THREE.Material).opacity = f.life;
+                f.mesh.rotation.y += 0.05;
+                if (f.life <= 0) f.mesh.visible = false;
+            }
         }
 
         // Sparkles
-        if (frame % 2 === 0 && sparkles.length < 30) {
-            const s = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
-            s.position.set((Math.random() - 0.5) * 1.0, 1.0, (Math.random() - 0.5) * 1.0);
-            scene.add(s); sparkles.push({ mesh: s, life: 1, vy: 0.05 + Math.random() * 0.05, vx: (Math.random() - 0.5) * 0.02, vz: (Math.random() - 0.5) * 0.02 });
+        if (frame % 2 === 0) {
+            for (let i = 0; i < sparkles.length; i++) {
+                if (sparkles[i].life <= 0) {
+                    const s = sparkles[i];
+                    s.mesh.position.set((Math.random() - 0.5) * 1.0, 1.0, (Math.random() - 0.5) * 1.0);
+                    s.mesh.visible = true;
+                    s.life = 1.0;
+                    s.vy = 0.05 + Math.random() * 0.05;
+                    s.vx = (Math.random() - 0.5) * 0.02;
+                    s.vz = (Math.random() - 0.5) * 0.02;
+                    break;
+                }
+            }
         }
-        for (let i = sparkles.length - 1; i >= 0; i--) {
-            const s = sparkles[i]; s.life -= 0.01; s.mesh.position.y += s.vy; s.mesh.position.x += s.vx + wind.x * 2.5; s.mesh.position.z += s.vz + wind.y * 2.5;
-            if (s.life <= 0) { scene.remove(s.mesh); sparkles.splice(i, 1); }
+        for (let i = 0; i < sparkles.length; i++) {
+            const s = sparkles[i];
+            if (s.life > 0) {
+                s.life -= 0.01;
+                s.mesh.position.y += s.vy;
+                s.mesh.position.x += s.vx + wind.x * 2.5;
+                s.mesh.position.z += s.vz + wind.y * 2.5;
+                if (s.life <= 0) s.mesh.visible = false;
+            }
         }
 
         // Smoke
-        if (frame % 20 === 0 && smokes.length < 20) {
-            const sm = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6), new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.3 }));
-            sm.position.set((Math.random() - 0.5) * 0.5, 2.0, (Math.random() - 0.5) * 0.5);
-            scene.add(sm); smokes.push({ mesh: sm, life: 1, speed: 0.02 });
+        if (frame % 20 === 0) {
+            for (let i = 0; i < smokes.length; i++) {
+                if (smokes[i].life <= 0) {
+                    const sm = smokes[i];
+                    sm.mesh.position.set((Math.random() - 0.5) * 0.5, 2.0, (Math.random() - 0.5) * 0.5);
+                    sm.mesh.scale.setScalar(1.0);
+                    sm.mesh.visible = true;
+                    sm.life = 1.0;
+                    sm.speed = 0.02;
+                    break;
+                }
+            }
         }
-        for (let i = smokes.length - 1; i >= 0; i--) {
-            const sm = smokes[i]; sm.life -= 0.005; sm.mesh.position.y += sm.speed; sm.mesh.scale.multiplyScalar(1.01); sm.mesh.position.x += wind.x * 1.5; sm.mesh.position.z += wind.y * 1.5; sm.mesh.material.opacity = sm.life * 0.3;
-            if (sm.life <= 0) { scene.remove(sm.mesh); smokes.splice(i, 1); }
+        for (let i = 0; i < smokes.length; i++) {
+            const sm = smokes[i];
+            if (sm.life > 0) {
+                sm.life -= 0.005;
+                sm.mesh.position.y += sm.speed;
+                sm.mesh.scale.multiplyScalar(1.01);
+                sm.mesh.position.x += wind.x * 1.5;
+                sm.mesh.position.z += wind.y * 1.5;
+                (sm.mesh.material as THREE.Material).opacity = sm.life * 0.3;
+                if (sm.life <= 0) sm.mesh.visible = false;
+            }
         }
-
     }
 };

@@ -147,14 +147,20 @@ export const FXSystem = {
     // --- SPAWNING ---
 
     _spawnDecalImmediate: (req: SpawnRequest) => {
-        const d = FXSystem.getPooledMesh(req.scene, GEOMETRY.decal, req.material || MATERIALS.bloodDecal, 'decal');
+        const geo = req.type === 'splatter' ? GEOMETRY.splatterDecal : GEOMETRY.decal;
+        const d = FXSystem.getPooledMesh(req.scene, geo, req.material || MATERIALS.bloodDecal, 'decal');
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
 
         // [VINTERDÖD] Sätt upp animationen!
         // Lagra det tänkta målet, men börja på skala noll.
         d.userData.targetScale = req.scale || 1.0;
-        d.scale.setScalar(0.01);
+
+        if (req.type === 'splatter') {
+            d.scale.setScalar(d.userData.targetScale); // Instantly appear
+        } else {
+            d.scale.setScalar(0.01); // Grow over time
+        }
 
         d.renderOrder = 50;
 
@@ -166,9 +172,10 @@ export const FXSystem = {
 
         const t = req.type;
         const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
-            t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' ||
+            t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' || t === 'large_smoke' ||
             t === 'debris_trail' || t === 'glass' || t === 'stun_star' ||
-            t === 'chunk' || t === 'gore' || t === 'limb' || t === 'splash';
+            t === 'chunk' || t === 'gore' || t === 'limb' || t === 'splash' ||
+            t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke';
 
         const p = FXSystem.getPooledState();
 
@@ -177,6 +184,16 @@ export const FXSystem = {
         p.isPooled = !req.customMesh;
         p.isInstanced = isInstanced;
         p.color = req.color;
+        if (p.color === undefined && isInstanced) {
+            const st = t as string;
+            if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame') p.color = 0xff7700;
+            else if (st === 'spark' || st === 'stun_star' || st === 'campfire_spark') p.color = 0xffcc00;
+            else if (st === 'smoke' || st === 'large_smoke' || st === 'campfire_smoke') p.color = 0x555555;
+            else if (st === 'blood' || st === 'gore' || st === 'limb') p.color = 0x880000;
+            else if (st === 'glass' || st === 'flash') p.color = 0xffffff;
+            else if (st === 'splash') p.color = 0x77bbcc;
+            else p.color = 0x888888; // Default generic gray
+        }
 
         if (req.customMesh) {
             p.mesh = req.customMesh;
@@ -187,8 +204,8 @@ export const FXSystem = {
 
             if (t === 'gore' || t === 'limb' || t === 'chunk') geo = GEOMETRY.gore;
             else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'] || (MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
-            else if (t === 'fire' || t === 'flame' || t === 'large_fire') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
-            else if (t === 'spark' || t === 'smoke') mat = MATERIALS.bullet;
+            else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+            else if (t === 'spark' || t === 'smoke' || t === 'campfire_spark' || t === 'campfire_smoke') mat = MATERIALS.bullet;
             else if (t === 'debris' || t === 'debris_trail') mat = MATERIALS.stone;
             else if (t === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (t === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
@@ -207,24 +224,34 @@ export const FXSystem = {
         else if (UNIQUE_MATERIAL_TYPES.includes(t)) p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
 
         const s = req.scale || 1.0;
-        if (t === 'large_fire') p.mesh.scale.setScalar(1.6 * Math.random() * s);
-        else if (t === 'large_smoke') p.mesh.scale.setScalar(2.4 * Math.random() * s);
-
-        // Splash scale range
+        if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
+        else if (t === 'large_smoke') p.mesh.scale.setScalar(4.0 * Math.random() * s);
+        else if (t === 'flame' || t === 'smoke') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
+        else if (t === 'spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
         else if (t === 'splash') p.mesh.scale.setScalar((0.5 + Math.random() * 0.7) * s);
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
         if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
         else {
             const speedScale = (t === 'chunk' || t === 'gore' || t === 'limb') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
+            const isFireFX = (t === 'flame' || t === 'spark' || t === 'smoke');
+            const isLargeFX = (t === 'large_fire' || t === 'large_smoke');
+            const vyScale = isLargeFX ? 3.0 : (isFireFX ? 1.8 : 0.8);
+            const hzScale = isLargeFX ? 2.0 : (isFireFX ? 1.2 : 1.0);
+
             p.vel.set(
-                (Math.random() - 0.5) * speedScale,
-                Math.random() * speedScale * (t === 'splash' ? 1.5 : 0.8),
-                (Math.random() - 0.5) * speedScale
+                (Math.random() - 0.5) * speedScale * hzScale,
+                Math.random() * speedScale * (t === 'splash' ? 1.5 : vyScale),
+                (Math.random() - 0.5) * speedScale * hzScale
             );
         }
 
-        p.life = (t === 'blood' ? 120 : (t === 'debris' ? 200 : 30)) + Math.random() * 20;
+        let baseLife = 30;
+        if (t === 'blood') baseLife = 120;
+        else if (t === 'debris') baseLife = 200;
+        else if (t === 'large_fire' || t === 'large_smoke' || t === 'flame' || t === 'smoke' || t === 'spark') baseLife = 60;
+
+        p.life = baseLife + Math.random() * 20;
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
@@ -233,10 +260,18 @@ export const FXSystem = {
 
     // --- INTERFACE ---
 
-    spawnDecal: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material) => {
+    preload: (scene: THREE.Scene) => {
+        const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
+        for (let i = 0; i < types.length; i++) {
+            const imesh = FXSystem._getInstancedMesh(scene, types[i]);
+            if (imesh.parent !== scene) scene.add(imesh);
+        }
+    },
+
+    spawnDecal: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
         let req = DECAL_REQUEST_POOL.pop();
-        if (!req) req = { scene, particlesList: decalList, x, y: 0, z, type: 'decal', customVel: new THREE.Vector3() };
-        else { req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; }
+        if (!req) req = { scene, particlesList: decalList, x, y: 0, z, type, customVel: new THREE.Vector3() };
+        else { req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; req.type = type; }
 
         req.scale = scale;
         req.material = material;
@@ -274,7 +309,8 @@ export const FXSystem = {
         const safeDelta = Math.min(delta, 0.1);
 
         // 1. Process Queues (Budgeted)
-        const pLimit = Math.min(FXSystem.particleQueue.length, 30);
+        // Increased from 30 to 250 to prevent Molotovs and highly active scenes from delaying particles by multiple seconds.
+        const pLimit = Math.min(FXSystem.particleQueue.length, 250);
         for (let i = 0; i < pLimit; i++) {
             const req = FXSystem.particleQueue.shift()!;
             if (!req.scene) req.scene = scene;
@@ -418,21 +454,29 @@ export const FXSystem = {
         if (!FXSystem._instancedMeshes[type]) {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.blood;
-            if (type === 'spark') mat = MATERIALS.bullet;
-            if (type === 'debris') mat = MATERIALS.stone;
-            if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
-            if (type === 'gore' || type === 'limb' || type === 'chunk') {
+
+            if (type === 'fire' || type === 'flame' || type === 'large_fire' || type === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
+            else if (type === 'spark' || type === 'smoke' || type === 'campfire_spark' || type === 'campfire_smoke') mat = MATERIALS.bullet;
+            else if (type === 'debris' || type === 'debris_trail') mat = MATERIALS.stone;
+            else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
+            else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
+            else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
+            else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
+            else if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
+            else if (type === 'gore' || type === 'limb' || type === 'chunk') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();
                 (mat as any).color.setHex(0xffffff);
             }
-            if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
 
             const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
-            imesh.frustumCulled = true;
+            imesh.frustumCulled = false; // [VINTERDÖD] Must be false to prevent shader compilation stutter when camera moves
             scene.add(imesh);
             FXSystem._instancedMeshes[type] = imesh;
             FXSystem._instancedCounts[type] = 0;
+        } else if (FXSystem._instancedMeshes[type].parent !== scene) {
+            // [VINTERDÖD] Re-attach if we changed scenes
+            scene.add(FXSystem._instancedMeshes[type]);
         }
         return FXSystem._instancedMeshes[type];
     },

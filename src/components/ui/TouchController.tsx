@@ -35,7 +35,8 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
         const w = window.innerWidth;
         const h = window.innerHeight;
 
-        touches.forEach((t: any) => {
+        for (let i = 0; i < touches.length; i++) {
+            const t: any = touches[i];
             if (isInteractiveElement(t.target)) return;
 
             const x = t.clientX;
@@ -51,7 +52,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 rightTouchId.current = t.identifier;
                 setRightStick({ active: true, center: { x, y }, curr: { x, y } });
             }
-        });
+        }
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
@@ -60,7 +61,8 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
 
         const touches = Array.from(e.changedTouches);
 
-        touches.forEach((t: any) => {
+        for (let i = 0; i < touches.length; i++) {
+            const t: any = touches[i];
             if (t.identifier === leftTouchId.current) {
                 // We use the state's center. 
                 const center = leftStick.center;
@@ -105,7 +107,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                     inputState.fire = false;
                 }
             }
-        });
+        }
     };
 
     const handleTouchEnd = (e: React.TouchEvent) => {
@@ -113,7 +115,8 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
 
         const touches = Array.from(e.changedTouches);
 
-        touches.forEach((t: any) => {
+        for (let i = 0; i < touches.length; i++) {
+            const t: any = touches[i];
             if (t.identifier === leftTouchId.current) {
                 leftTouchId.current = null;
                 setLeftStick(prev => ({ ...prev, active: false, curr: prev.center }));
@@ -125,7 +128,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 inputState.joystickAim.set(0, 0);
                 inputState.fire = false;
             }
-        });
+        }
     };
 
     const handleAction = (action: 'r' | 'space' | 'e', pressed: boolean) => {
