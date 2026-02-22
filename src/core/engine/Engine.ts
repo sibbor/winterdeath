@@ -244,7 +244,8 @@ export class Engine {
         // 1. Environmental Systems Update
         this.wind.update(now, dt);
         this.weather.update(dt, now);
-        this.water.update(dt);
+        this.water.setWaterDynamics(this.wind.strength, this.wind.current);
+        this.water.update(dt, now);
 
         // 2. Logic Update
         if (this.onUpdate) this.onUpdate(dt);

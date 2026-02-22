@@ -45,7 +45,7 @@ const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
 const UNIQUE_MATERIAL_TYPES = [
     'fire', 'flame', 'large_fire', 'large_smoke',
-    'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash'
+    'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash', 'splash'
 ];
 
 export const FXSystem = {
@@ -168,7 +168,7 @@ export const FXSystem = {
         const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
             t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' ||
             t === 'debris_trail' || t === 'glass' || t === 'stun_star' ||
-            t === 'chunk' || t === 'gore' || t === 'limb';
+            t === 'chunk' || t === 'gore' || t === 'limb' || t === 'splash';
 
         const p = FXSystem.getPooledState();
 
@@ -195,6 +195,7 @@ export const FXSystem = {
             else if (t === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
             else if (t === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
             else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
+            else if (t === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
 
             p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, t, isInstanced);
         }
@@ -209,17 +210,16 @@ export const FXSystem = {
         if (t === 'large_fire') p.mesh.scale.setScalar(1.6 * Math.random() * s);
         else if (t === 'large_smoke') p.mesh.scale.setScalar(2.4 * Math.random() * s);
 
-        // [VINTERDÖD] Mycket större bloddroppar (från ~1.2 till ~2.0 bas)
-        else if (t === 'blood') p.mesh.scale.setScalar((2.0 + Math.random() * 1.5) * s);
-
+        // Splash scale range
+        else if (t === 'splash') p.mesh.scale.setScalar((0.5 + Math.random() * 0.7) * s);
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
         if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
         else {
-            const speedScale = (t === 'chunk' || t === 'gore' || t === 'limb') ? 8.0 : 1.0;
+            const speedScale = (t === 'chunk' || t === 'gore' || t === 'limb') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
             p.vel.set(
                 (Math.random() - 0.5) * speedScale,
-                Math.random() * speedScale * 0.8,
+                Math.random() * speedScale * (t === 'splash' ? 1.5 : 0.8),
                 (Math.random() - 0.5) * speedScale
             );
         }
@@ -315,13 +315,13 @@ export const FXSystem = {
 
             if (!p.landed) {
                 p.mesh.position.addScaledVector(p.vel, safeDelta);
-                if (['chunk', 'debris', 'glass', 'limb', 'blood', 'gore'].includes(p.type)) {
+                if (['chunk', 'debris', 'glass', 'limb', 'blood', 'gore', 'splash'].includes(p.type)) {
                     p.vel.y -= 25 * safeDelta;
-                    if (p.type !== 'blood') {
+                    if (p.type !== 'blood' && p.type !== 'splash') {
                         p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
                         p.mesh.rotation.z += p.rotVel.z * 10 * safeDelta;
                     }
-                    if (p.mesh.position.y <= 0.05) {
+                    if (p.mesh.position.y <= (p.type === 'splash' ? -5.0 : 0.05)) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
                         if (!p.inUse) continue;
                     }
@@ -354,7 +354,8 @@ export const FXSystem = {
             t.life -= safeDelta;
             if (t.life <= 0) {
                 t.mesh.parent?.remove(t.mesh);
-                FXSystem.textQueue.splice(i, 1);
+                FXSystem.textQueue[i] = FXSystem.textQueue[FXSystem.textQueue.length - 1];
+                FXSystem.textQueue.pop();
                 continue;
             }
             t.mesh.position.y += 0.5 * safeDelta;
@@ -419,6 +420,7 @@ export const FXSystem = {
             let mat: THREE.Material = MATERIALS.blood;
             if (type === 'spark') mat = MATERIALS.bullet;
             if (type === 'debris') mat = MATERIALS.stone;
+            if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
             if (type === 'gore' || type === 'limb' || type === 'chunk') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();

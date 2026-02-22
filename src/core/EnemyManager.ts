@@ -51,7 +51,7 @@ export const EnemyManager = {
         enemyPool.length = 0;
     },
 
-    cleanup: () => {
+    clear: () => {
         zombieRenderer?.destroy();
         corpseRenderer?.destroy();
         zombieRenderer = null;
@@ -296,7 +296,10 @@ export const EnemyManager = {
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
-                const recycled = enemies.splice(i, 1)[0];
+                const recycled = enemies[i];
+                enemies[i] = enemies[enemies.length - 1];
+                enemies.pop();
+
                 recycled.dead = true;
                 recycled.deathState = 'dead';
                 if (!recycled.isBoss) enemyPool.push(recycled);

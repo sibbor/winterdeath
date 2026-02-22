@@ -1,5 +1,5 @@
-
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const createZombieBodyGeo = () => {
     const points = [];
@@ -71,6 +71,39 @@ const createPetTailGeo = () => {
     return new THREE.TubeGeometry(path, 8, 0.04, 6, false);
 };
 
+const createSplashGeo = () => {
+    // [VINTERDÖD] Crossed droplet planes for splash. 25% larger than the previous 0.2 sphere limit.
+    const w = 0.25;
+    const h = 0.4;
+
+    // Create base plane
+    const plane1 = new THREE.PlaneGeometry(w, h);
+    plane1.translate(0, h / 2, 0); // Origin at bottom
+
+    const plane2 = plane1.clone();
+    plane2.rotateY(Math.PI / 2);
+
+    const geo = BufferGeometryUtils.mergeGeometries([plane1, plane2]);
+    geo.computeVertexNormals();
+
+    const count = geo.attributes.position.count;
+    const colors = new Float32Array(count * 3);
+    const pos = geo.attributes.position;
+    const topColor = new THREE.Color(0xffffff);
+    const bottomColor = new THREE.Color(0x77aaff);
+
+    for (let i = 0; i < count; i++) {
+        const y = pos.getY(i); // range -1 to 1
+        const t = (y + 1) / 2; // range 0 to 1
+        const c = topColor.clone().lerp(bottomColor, 1.0 - t);
+        colors[i * 3] = c.r;
+        colors[i * 3 + 1] = c.g;
+        colors[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    return geo;
+};
+
 export const GEOMETRY = {
     bullet: new THREE.SphereGeometry(0.15, 8, 8),
     grenade: new THREE.DodecahedronGeometry(0.3),
@@ -117,5 +150,6 @@ export const GEOMETRY = {
     ashPile: new THREE.ConeGeometry(0.6, 0.4, 8),
     shard: new THREE.TetrahedronGeometry(0.1, 0),
     shockwave: new THREE.RingGeometry(0.5, 1.5, 32),
-    flame: new THREE.DodecahedronGeometry(0.5)
+    flame: new THREE.DodecahedronGeometry(0.5),
+    splash: createSplashGeo()
 };

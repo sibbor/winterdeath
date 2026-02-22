@@ -73,7 +73,6 @@ export class WindSystem {
       this.bindMaterial(MATERIALS.treeLeavesBirch);
       this.bindMaterial(MATERIALS.treeLeaves);
       this.bindMaterial(MATERIALS.treeTrunk);
-      this.bindMaterial(MATERIALS.treeTrunkOak);
       this.bindMaterial(MATERIALS.treeTrunkBirch);
       this.bindMaterial(MATERIALS.deadWood);
       this.bindMaterial(MATERIALS.treeSilhouette);
@@ -111,5 +110,10 @@ export class WindSystem {
     }
 
     return this.current;
+  }
+
+  public clear(): void {
+    this.boundUniforms.length = 0;
+    this.overrideActive = false;
   }
 }

@@ -316,6 +316,77 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
 };
 
 export const EnvironmentGenerator = {
+    createWaterLily: (scale: number = 1.0) => {
+        const group = new THREE.Group();
+        // Lily pad geometry (slightly curved cylinder/disc)
+        const padGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
+        const pad = new THREE.Mesh(padGeo, MATERIALS.waterLily);
+        pad.scale.set(1, 1, 0.8);
+        group.add(pad);
+
+        // Hanging Stem Geometry
+        const stemLength = 1.5;
+        const stemGeo = new THREE.CylinderGeometry(0.03, 0.03, stemLength, 4);
+        stemGeo.translate(0, -stemLength / 2, 0);
+        // Use seaweed material so it gets the underwater sway shader
+        const stem = new THREE.Mesh(stemGeo, MATERIALS.seaweed);
+        group.add(stem);
+
+        // Flower
+        if (Math.random() > 0.6) {
+            const flowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
+            const flower = new THREE.Mesh(flowerGeo, MATERIALS.waterLilyFlower);
+            flower.position.set(0.1, 0.1, 0.1);
+            flower.rotation.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
+            group.add(flower);
+        }
+
+        group.scale.setScalar(scale);
+        group.userData.material = 'PLANT';
+        group.userData.isBall = true; // Use this to allow water pushing logic
+        group.userData.mass = 0.5; // Very light
+        group.userData.floatOffset = 0.06; // Keep it visibly floating on top
+
+        // Add stem connecting lily pad to the procedural lake bed
+        /*
+        const stemLen = currentDepth + 0.5; // Slightly longer for wave bobbing
+        const stemGeo = new THREE.CylinderGeometry(0.04, 0.04, stemLen, 4);
+        stemGeo.translate(0, -stemLen / 2, 0); // Origin at top
+        const stemMat = MATERIALS.seaweed;
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        stem.userData.material = 'LEAVES';
+        group.add(stem); // Attach to lily so it bobs with it!
+        */
+
+        return group;
+    },
+
+    createSeaweed: (width: number = 1.0, height: number = 2.0) => {
+        const group = new THREE.Group();
+
+        // [VINTERDÖD] Seaweed geo - more segments for better bending
+        const geo = new THREE.PlaneGeometry(0.3 * width, height * 1.5, 2, 4);
+        geo.translate(0, height * 0.75, 0);
+
+        // Apply wind patch so seaweed sways like grass/vines
+        const mat = MATERIALS.seaweed;
+
+        const strands = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < strands; i++) {
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.y = Math.random() * Math.PI;
+            mesh.position.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
+            // Different phase offsets for wind
+            mesh.userData.windPhaseX = Math.random() * Math.PI * 2;
+            mesh.userData.windPhaseZ = Math.random() * Math.PI * 2;
+            group.add(mesh);
+        }
+
+        group.userData.material = 'LEAVES';
+        // Add slightly wider non-visible collider
+        group.userData.size = new THREE.Vector3(width * 0.8, height * 1.5, width * 0.8);
+        return group;
+    },
 
     initNaturePrototypes: async (yieldToMain?: () => Promise<void>) => {
         const VARIANTS = 3;

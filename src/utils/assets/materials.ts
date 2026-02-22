@@ -1,299 +1,11 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
-import { createProceduralDiffuse } from './procedural';
-import { WaterStyleConfig } from '../../core/systems/WaterSystem';
+import { createProceduralDiffuse } from './procedural'
+import { WaterStyleConfig, createWaterMaterial, patchCutoutMaterial, patchWaterVegetationMaterial } from './materials_water';
+import { patchWindMaterial } from './materials_wind';
 
+// Pre-define common colors
 const DIFFUSE = createProceduralDiffuse();
-
-/**
- * Creates a highly optimized Water Shader Material.
- * Zero-GC ready: Update 'uTime.value' directly in your render loop.
- */
-export function createWaterMaterial(
-    config: WaterStyleConfig,
-    width: number,
-    depth: number,
-    flowTexture: THREE.Texture,
-    waveTexture: THREE.Texture,
-    shape: 'rect' | 'circle' = 'rect'
-): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: {
-            uTime: { value: 0.0 },
-            uColor: { value: new THREE.Color(config.color) },
-            uOpacity: { value: config.opacity },
-            uFresnelStrength: { value: config.fresnelStrength || 0.5 },
-            uFlowTexture: { value: flowTexture },
-            uWaveTexture: { value: waveTexture },
-            uUvScale: { value: config.uvScale || 1.0 },
-            uPlaneSize: { value: new THREE.Vector2(width, depth) },
-            uIsCircle: { value: shape === 'circle' ? 1.0 : 0.0 }
-        },
-        vertexShader: `
-            varying vec3 vNormal;
-            varying vec3 vViewPosition;
-            varying vec2 vUv;
-            varying vec3 vLocalPos; 
-            uniform float uTime;
-
-            void main() {
-                vUv = uv;
-                vLocalPos = position; 
-                
-                // 1. Calculate World Position FIRST
-                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                
-                // 2. PERFECT SYNC: Wave math based on WORLD coordinates
-                float wave = sin(worldPosition.x * 0.5 + uTime * 1.5) * 0.1 + sin(worldPosition.z * 0.4 + uTime * 1.2) * 0.1;
-                worldPosition.y += wave;
-
-                vec4 mvPosition = viewMatrix * worldPosition;
-                
-                vViewPosition = -mvPosition.xyz;
-                vNormal = normalMatrix * normal;
-                gl_Position = projectionMatrix * mvPosition;
-            }
-        `,
-        fragmentShader: `
-            uniform float uTime;
-            uniform vec3 uColor;
-            uniform float uOpacity;
-            uniform float uFresnelStrength;
-            uniform sampler2D uFlowTexture;
-            uniform sampler2D uWaveTexture;
-            uniform float uUvScale;
-            uniform vec2 uPlaneSize;
-            uniform float uIsCircle;
-            
-            varying vec3 vNormal;
-            varying vec3 vViewPosition;
-            varying vec2 vUv;
-            varying vec3 vLocalPos;
-
-            void main() {
-                vec3 viewDir = normalize(vViewPosition);
-                vec3 normal = normalize(vNormal);
-
-                float fresnelFactor = clamp(dot(viewDir, normal), 0.0, 1.0);
-                vec3 waterColor = mix(uColor * 0.6, uColor * 1.2, fresnelFactor);
-
-                vec2 scrollUv = vUv + uTime * 0.01;
-                vec2 waveDistortion = texture2D(uWaveTexture, scrollUv).rg * 2.0 - 1.0;
-                
-                vec2 flowUv = (vUv * uUvScale) + (waveDistortion * 0.05) + (uTime * 0.03);
-                float noiseVal = texture2D(uFlowTexture, flowUv).r;
-                float flowHighlight = smoothstep(0.6, 0.9, noiseVal);
-
-                float shoreFoam = 0.0;
-                if (uIsCircle > 0.5) {
-                    float radius = length(vLocalPos.xz);
-                    float maxRadius = uPlaneSize.x * 0.5;
-                    shoreFoam = smoothstep(maxRadius * 0.8, maxRadius * 0.98, radius);
-                } else {
-                    vec2 edgeDist = abs(vLocalPos.xz) / (uPlaneSize * 0.5);
-                    float maxEdge = max(edgeDist.x, edgeDist.y);
-                    shoreFoam = smoothstep(0.8, 0.98, maxEdge); 
-                }
-                
-                float finalFoam = max(flowHighlight * 0.3, shoreFoam);
-
-                vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
-                vec3 halfVector = normalize(lightDir + viewDir);
-                float NdotH = max(0.0, dot(normal, halfVector));
-                float specular = pow(NdotH, 64.0) * uFresnelStrength;
-
-                vec3 finalColor = mix(waterColor, vec3(1.0), finalFoam);
-                gl_FragColor = vec4(finalColor + vec3(specular), uOpacity);
-            }
-        `,
-        transparent: true,
-        side: THREE.FrontSide,
-        depthWrite: false
-    });
-};
-
-/**
- * Creates an instanced shader material for water ripples (the flat expanding ring).
- * Implements smoothstep dissolve based on instanceAlpha.
- */
-export function createRippleMaterial(rippleTexture: THREE.Texture): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: {
-            tRipple: { value: rippleTexture },
-            uColor: { value: new THREE.Color(0xccffff) }
-        },
-        vertexShader: `
-            attribute float instanceAlpha;
-            varying float vAlpha;
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                vAlpha = instanceAlpha;
-                vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
-                gl_Position = projectionMatrix * mvPosition;
-            }
-        `,
-        fragmentShader: `
-            uniform sampler2D tRipple;
-            uniform vec3 uColor;
-            varying float vAlpha;
-            varying vec2 vUv;
-            void main() {
-                vec4 tex = texture2D(tRipple, vUv);
-                // Erode/dissolve effect based on alpha
-                float erode = smoothstep(1.0 - vAlpha - 0.1, 1.0 - vAlpha + 0.1, tex.r);
-                gl_FragColor = vec4(uColor * tex.rgb, erode * vAlpha * tex.a);
-            }
-        `,
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending
-    });
-};
-
-/**
- * Creates an instanced shader material for the radial splash (outward cone).
- * Pans the texture downwards to simulate expanding foam.
- */
-export function createRadialSplashMaterial(splashTexture: THREE.Texture): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: {
-            tSplash: { value: splashTexture },
-            uColor: { value: new THREE.Color(0xddffff) }
-        },
-        vertexShader: `
-            attribute float instanceAlpha;
-            varying float vAlpha;
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                vAlpha = instanceAlpha;
-                vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
-                gl_Position = projectionMatrix * mvPosition;
-            }
-        `,
-        fragmentShader: `
-            uniform sampler2D tSplash;
-            uniform vec3 uColor;
-            varying float vAlpha;
-            varying vec2 vUv;
-            void main() {
-                // Pan texture down the cone as time (1.0 - alpha) progresses
-                vec2 pannedUv = vec2(vUv.x * 2.0, vUv.y - (1.0 - vAlpha) * 1.5);
-                vec4 tex = texture2D(tSplash, pannedUv);
-                
-                float erode = smoothstep(1.0 - vAlpha, 1.0 - vAlpha + 0.2, tex.r);
-                float fadeY = smoothstep(1.0, 0.2, vUv.y); // Fade out at the top edge
-                
-                gl_FragColor = vec4(uColor * tex.rgb, erode * vAlpha * fadeY * tex.a);
-            }
-        `,
-        transparent: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending
-    });
-};
-
-/**
- * Creates an instanced shader material for the upward splash (center column).
- * Pans the texture upwards.
- */
-export function createUpwardSplashMaterial(splashTexture: THREE.Texture): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: {
-            tSplash: { value: splashTexture },
-            uColor: { value: new THREE.Color(0xffffff) }
-        },
-        vertexShader: `
-            attribute float instanceAlpha;
-            varying float vAlpha;
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                vAlpha = instanceAlpha;
-                vec4 mvPosition = viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
-                gl_Position = projectionMatrix * mvPosition;
-            }
-        `,
-        fragmentShader: `
-            uniform sampler2D tSplash;
-            uniform vec3 uColor;
-            varying float vAlpha;
-            varying vec2 vUv;
-            void main() {
-                // Pan texture up to simulate rising column
-                vec2 pannedUv = vec2(vUv.x * 2.0, vUv.y + (1.0 - vAlpha) * 2.0);
-                vec4 tex = texture2D(tSplash, pannedUv);
-                
-                float erode = smoothstep(1.0 - vAlpha, 1.0 - vAlpha + 0.3, tex.r);
-                float fadeY = smoothstep(1.0, 0.0, vUv.y); // Fade out completely at the very top
-                
-                gl_FragColor = vec4(uColor * tex.rgb, erode * vAlpha * fadeY * tex.a * 0.8);
-            }
-        `,
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending
-    });
-};
-
-/**
- * [VINTERDÖD] createWaterMaterial
- * Optimazed vertex shader injection for instanced vegetation and trees.
- * Calculates wind deformation in World Space and transforms to Local Space.
- */
-export const patchWindMaterial = <T extends THREE.Material>(material: T): T => {    // Pre-allokera referenserna så lazy-compilation inte sabbar bindningen
-    const windUniforms = {
-        uTime: { value: 0 },
-        uWind: { value: new THREE.Vector2(0, 0) }
-    };
-
-    material.userData.windUniforms = windUniforms;
-
-    material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = windUniforms.uTime;
-        shader.uniforms.uWind = windUniforms.uWind;
-
-        shader.vertexShader = `
-            uniform float uTime;
-            uniform vec2 uWind;
-            ${shader.vertexShader}
-        `.replace(
-            '#include <begin_vertex>',
-            `
-            #include <begin_vertex>
-            
-            float h = max(0.0, position.y);
-            float bend = (h * 0.1) + (h * h * 0.02);
-
-            // [VINTERDÖD] Hämta rätt matris beroende på om objektet är instansierat (skog/gräs) 
-            // eller ett unikt objekt (t.ex. en dynamisk boss eller spelaren).
-            #ifdef USE_INSTANCING
-                mat4 instanceWorldMatrix = modelMatrix * instanceMatrix;
-            #else
-                mat4 instanceWorldMatrix = modelMatrix;
-            #endif
-
-            // Beräkna unik position i världen för organiskt brus/darr
-            vec4 wPos = instanceWorldMatrix * vec4(position, 1.0);
-            float noise = sin(uTime * 1.8 + wPos.x * 0.1 + wPos.z * 0.1) * 0.04;
-            vec2 windVec = uWind + (noise * 0.5);
-
-            // [VINTERDÖD] Omvandla vindvektorn från World Space till Instansens Local Space
-            mat3 invRot = transpose(mat3(instanceWorldMatrix));
-            vec3 localWind = invRot * vec3(windVec.x, 0.0, windVec.y);
-
-            // Applicera vertex-förskjutning
-            transformed.x += localWind.x * bend;
-            transformed.z += localWind.z * bend;
-            transformed.y -= length(localWind.xz) * bend * 0.15;
-            `
-        );
-    };
-    return material;
-};
-
 
 export const MATERIALS = {
     // ---- WEATHER PARTICLES (EJ PATCHADE - RÖRS VIA CPU) ----
@@ -347,6 +59,25 @@ export const MATERIALS = {
         color: 0x2d4c1e,
         roughness: 0.9,
         flatShading: true
+    })),
+    // ---- NATURAL & VEGETATION ----
+    waterLily: patchWaterVegetationMaterial(new THREE.MeshStandardMaterial({
+        color: 0x4a7c59,
+        roughness: 0.8,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    waterLilyFlower: patchWaterVegetationMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffeebb,
+        roughness: 0.8,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
+    seaweed: patchWaterVegetationMaterial(new THREE.MeshStandardMaterial({
+        color: 0x2e5c3e,
+        roughness: 0.9,
+        flatShading: true,
+        side: THREE.DoubleSide
     })),
     treeSilhouette: patchWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x1e1e1e,
@@ -403,11 +134,15 @@ export const MATERIALS = {
         flatShading: true
     })),
 
-    // ---- STATISKA NATUROBJEKT (EJ PATCHADE) ----
     treeStumpTop: new THREE.MeshStandardMaterial({
         color: 0xbc8f8f,
         map: DIFFUSE.treeRings,
         roughness: 0.8
+    }),
+    waterSplash: new THREE.MeshBasicMaterial({
+        color: 0x77bbcc, // Shallow water color
+        transparent: true,
+        opacity: 0.8
     }),
     stone: new THREE.MeshStandardMaterial({
         color: 0x888888,
@@ -456,6 +191,7 @@ export const MATERIALS = {
     glassShard: new THREE.MeshBasicMaterial({ color: 0xccffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }),
     blood: new THREE.MeshBasicMaterial({ color: 0xaa0000 }),
     gore: new THREE.MeshStandardMaterial({ color: 0x660000, roughness: 0.2 }),
+    splash: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true }),
 
     // ---- DECALS ----
     bloodDecal: new THREE.MeshBasicMaterial({
@@ -534,6 +270,15 @@ export const MATERIALS = {
         emissive: 0xffffff, // Subtle glow to maintain whiteness in shadows
         emissiveIntensity: 0.15
     }),
+    snowCutout: patchCutoutMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 1.0,
+        metalness: 0.0,
+        bumpMap: TEXTURES.snow_bump,
+        bumpScale: 0.4,
+        emissive: 0xffffff,
+        emissiveIntensity: 0.15
+    })),
     asphalt: new THREE.MeshStandardMaterial({
         color: 0x222222,
         map: DIFFUSE.asphalt,
@@ -553,6 +298,15 @@ export const MATERIALS = {
         polygonOffset: true,
         polygonOffsetFactor: -1
     }),
+    gravelCutout: patchCutoutMaterial(new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        map: DIFFUSE.gravel,
+        roughness: 1.0,
+        bumpMap: TEXTURES.stone_bump,
+        bumpScale: 2.8,
+        polygonOffset: true,
+        polygonOffsetFactor: -1
+    })),
     dirt: new THREE.MeshStandardMaterial({
         color: 0x4a3b32,
         map: DIFFUSE.gravel,
@@ -562,6 +316,15 @@ export const MATERIALS = {
         polygonOffset: true,
         polygonOffsetFactor: -1
     }),
+    dirtCutout: patchCutoutMaterial(new THREE.MeshStandardMaterial({
+        color: 0x4a3b32,
+        map: DIFFUSE.gravel,
+        roughness: 1.0,
+        bumpMap: TEXTURES.stone_bump,
+        bumpScale: 2.8,
+        polygonOffset: true,
+        polygonOffsetFactor: -1
+    })),
     frost: new THREE.MeshStandardMaterial({
         color: 0xffffff,
         transparent: true,

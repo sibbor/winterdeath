@@ -101,7 +101,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                         max="20"
                         value={count}
                         onChange={(e) => setCount(parseInt(e.target.value))}
-                        className="w-full accent-red-600"
+                        className="w-full h-4 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-600 my-2"
                     />
                 </div>
 

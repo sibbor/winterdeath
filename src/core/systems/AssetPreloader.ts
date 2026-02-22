@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
-import { createWaterMaterial, createRippleMaterial } from '../../utils/assets/materials';
+import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { createProceduralDiffuse } from '../../utils/assets/procedural';
+import { VEHICLES, VehicleType } from '../../content/vehicles';
 
 let warmedUp = false;
 let lastSectorIndex = -1;
@@ -82,6 +83,11 @@ export const AssetPreloader = {
             if (i % 15 === 0 && yieldToMain) await yieldToMain();
         }
 
+        // Extremely important: Warm up cutout materials properly so they compile once
+        addToWarmup(new THREE.Mesh(GEOMETRY.box, MATERIALS.snowCutout));
+        addToWarmup(new THREE.Mesh(GEOMETRY.box, MATERIALS.dirtCutout));
+        addToWarmup(new THREE.Mesh(GEOMETRY.box, MATERIALS.gravelCutout));
+
         // Batch 2: Characters & Projectiles
         addToWarmup(ModelFactory.createPlayer());
         Object.keys(ZOMBIE_TYPES).forEach(type => {
@@ -111,6 +117,7 @@ export const AssetPreloader = {
         };
         prefillFX(GEOMETRY.particle, MATERIALS.smoke, 100);
         prefillFX(GEOMETRY.flame, MATERIALS.fire, 30);
+        prefillFX(GEOMETRY.splash, MATERIALS.splash, 60);
 
         // Batch 5: Instanced Systems Warmup (Weather & Wind)
         // Shaders for InstancedMesh differ from StandardMesh. We MUST warm up both.
@@ -135,6 +142,8 @@ export const AssetPreloader = {
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeFirNeedles);
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesOak);
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.waterLily);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.seaweed);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
@@ -142,15 +151,21 @@ export const AssetPreloader = {
 
         if (yieldToMain) await yieldToMain();
 
-        // Batch 6: Water System Warmup
-        // Ensures the heavy GLSL shaders for water are compiled before they appear
-        const dummyWaterConfig = { color: 0x0077be, opacity: 0.85, roughness: 0.1, metalness: 0.0, fresnelStrength: 0.5, uvScale: 5.0 };
-        const waterMat = createWaterMaterial(dummyWaterConfig, 10, 10, TEXTURES.water_foam, TEXTURES.water_wave);
-        const waterMesh = new THREE.Mesh(GEOMETRY.box, waterMat);
+        // --- WATER SYSTEM WARMUP ---
+        const dummyRipples: THREE.Vector4[] = [];
+        const dummyObjects: THREE.Vector4[] = [];
+        for (let i = 0; i < 16; i++) {
+            dummyRipples.push(new THREE.Vector4(0, 0, -1000, 0));
+        }
+        for (let i = 0; i < 8; i++) {
+            dummyObjects.push(new THREE.Vector4(0, 0, 0, 0));
+        }
+        const waterMat = createWaterMaterial('nordic', 10, 10, dummyRipples, dummyObjects);
+        const waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), waterMat);
         addToWarmup(waterMesh);
-
-        const rippleMat = createRippleMaterial(TEXTURES.water_ripple);
-        addInstancedWarmup(GEOMETRY.box, rippleMat);
+        const iceMat = createWaterMaterial('ice', 10, 10, dummyRipples, dummyObjects);
+        const iceMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), iceMat);
+        addToWarmup(iceMesh);
 
         if (yieldToMain) await yieldToMain();
 
@@ -190,8 +205,15 @@ export const AssetPreloader = {
             await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
             if (yieldToMain) await yieldToMain();
 
-            ObjectGenerator.createVehicle('station wagon');
+            // Warm up all vehicle types
+            const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
+            for (const vt of vehicleTypes) {
+                ObjectGenerator.createVehicle(vt);
+            }
+            ObjectGenerator.createBoat();
             ObjectGenerator.createBuilding(4, 4, 4, 0x888888);
+            EnvironmentGenerator.createWaterLily();
+            EnvironmentGenerator.createSeaweed();
             EnvironmentGenerator.createRock(2, 2);
 
             if (yieldToMain) await yieldToMain();

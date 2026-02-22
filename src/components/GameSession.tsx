@@ -976,7 +976,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             };
 
             const ctx: SectorContext = {
-                scene, obstacles: stateRef.current.obstacles, collisionGrid: stateRef.current.collisionGrid, chests: stateRef.current.chests,
+                scene, engine, obstacles: stateRef.current.obstacles, collisionGrid: stateRef.current.collisionGrid, chests: stateRef.current.chests,
                 flickeringLights, burningObjects, rng, triggers: stateRef.current.triggers, mapItems, debugMode: propsRef.current.debugMode,
                 textures: textures, spawnZombie,
                 spawnHorde,
@@ -1336,7 +1336,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     bossMesh.scale.setScalar(3.0 + Math.sin(now * 0.02) * 0.1);
                 }
                 if (playerMeshRef.current) {
-                    _animStateScratch.isMoving = false; _animStateScratch.isRushing = false; _animStateScratch.isRolling = false; _animStateScratch.rollStartTime = 0; _animStateScratch.staminaRatio = 1.0; _animStateScratch.isSpeaking = false; _animStateScratch.isThinking = false; _animStateScratch.isIdleLong = false;
+                    _animStateScratch.isMoving = false;
+                    _animStateScratch.isRushing = false;
+                    _animStateScratch.isRolling = false;
+                    _animStateScratch.rollStartTime = 0;
+                    _animStateScratch.staminaRatio = 1.0;
+                    _animStateScratch.isSpeaking = false;
+                    _animStateScratch.isThinking = false;
+                    _animStateScratch.isIdleLong = false;
+                    _animStateScratch.isWading = false;
+                    _animStateScratch.isSwimming = false;
                     PlayerAnimation.update(playerMeshRef.current, _animStateScratch, now, delta);
                 }
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -1465,6 +1474,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
                 if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
                     const tgt = propsRef.current.teleportTarget;
+
+                    // Cleanup vehicle state if teleporting
+                    if (state.activeVehicle) {
+                        state.activeVehicle = null;
+                        state.activeVehicleType = null;
+                        state.vehicleSpeed = 0;
+                        state.vehicleThrottle = 0;
+                    }
+
                     playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
                     spawnPart(tgt.x, 1, tgt.z, 'smoke', 20);
                     soundManager.playTone(800, 'sine', 0.2, 0.1);
@@ -1479,7 +1497,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         }
                     }
 
-                    lastTeleportRef.current = tgt.timestamp; camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ); camera.lookAt(playerGroupRef.current.position);
+                    lastTeleportRef.current = tgt.timestamp;
+                    camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ);
+                    camera.lookAt(playerGroupRef.current.position);
                     prevPosRef.current.copy(playerGroupRef.current.position);
                 }
 
@@ -1507,7 +1527,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
 
                 if (playerMeshRef.current) {
-                    _animStateScratch.isMoving = isMoving; _animStateScratch.isRushing = state.isRushing; _animStateScratch.isRolling = state.isRolling; _animStateScratch.rollStartTime = state.rollStartTime; _animStateScratch.staminaRatio = state.stamina / state.maxStamina; _animStateScratch.isSpeaking = state.speakBounce > 0 || now < state.speakingUntil; _animStateScratch.isThinking = now < state.thinkingUntil; _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
+                    _animStateScratch.isMoving = isMoving;
+                    _animStateScratch.isRushing = state.isRushing;
+                    _animStateScratch.isRolling = state.isRolling;
+                    _animStateScratch.rollStartTime = state.rollStartTime;
+                    _animStateScratch.staminaRatio = state.stamina / state.maxStamina;
+                    _animStateScratch.isSpeaking = state.speakBounce > 0 || now < state.speakingUntil;
+                    _animStateScratch.isThinking = now < state.thinkingUntil;
+                    _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
+                    _animStateScratch.isWading = state.isWading;
+                    _animStateScratch.isSwimming = state.isSwimming;
                     PlayerAnimation.update(playerMeshRef.current, _animStateScratch, now, delta);
                 }
             }
@@ -1688,6 +1717,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (bossIntroTimerRef.current) clearTimeout(bossIntroTimerRef.current);
 
+            // Clear water bodies to avoid retaining surface uniforms loop in engine.water over Camp
+            if (engine.water) {
+                engine.water.clear();
+            }
+
             engine.stop();
             engine.input.disable();
             engineRef.current = null;
@@ -1708,7 +1742,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
             session.dispose();
-            EnemyManager.cleanup();
+            EnemyManager.clear();
         };
     }, [props.currentSector, props.startAtCheckpoint, textures]);
 

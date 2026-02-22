@@ -36,8 +36,10 @@ interface GameHUDProps {
     bossPos?: { x: number, z: number } | null;
     distanceTraveled?: number;
     isDead?: boolean; // New prop for death effect
-    debugMode?: boolean;
     isBossIntro?: boolean;
+    isDriving?: boolean;
+    vehicleSpeed?: number;
+    throttleState?: number;
     debugInfo?: any;
     onTogglePause?: () => void;
     onToggleMap?: () => void;
@@ -48,11 +50,13 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     throwableReadyTime = 0, throwableAmmo = 3, kills = 0, bossSpawned = false, bossDefeated = false,
     familyDistance = null, familySignal = 0, familyFound = false, level = 1, currentXp = 0, nextLevelXp = 100,
     reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false,
+    isDriving = false, vehicleSpeed = 0, throttleState = 0,
     fps = 0, debugInfo, onTogglePause, onToggleMap
 }) => {
     const hpP = Math.max(0, (hp / maxHp) * 100);
     const stP = Math.max(0, (stamina / maxStamina) * 100);
     const xpP = Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100));
+    const speedKmH = Math.round(vehicleSpeed * 3.6);
 
     const [isShaking, setIsShaking] = useState(false);
     const [showLevelUp, setShowLevelUp] = useState(false);
@@ -355,19 +359,40 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                     </div>
 
-                    {/* Centered Action Bar (Weapons) */}
+                    {/* Action Bar or Speedometer */}
                     <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 transform translate-y-2`}>
-                        <div className={`gap-4 flex items-end pb-2 pointer-events-auto`}>
-                            <div>{renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}</div>
-                            <div>{renderSlot('2', loadout.secondary, activeWeapon === loadout.secondary)}</div>
-                            <div>{renderSlot('3', loadout.throwable, activeWeapon === loadout.throwable)}</div>
-                            <div>{renderSlot('4', loadout.special, activeWeapon === loadout.special)}</div>
-                            <div>{renderSlot('5', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}</div>
-                        </div>
+                        {isDriving ? (
+                            <div className="flex flex-col items-center justify-end pb-8">
+                                {/* Speedometer Display */}
+                                <div className="bg-black/90 border-2 border-zinc-700 px-8 py-3 w-[200px] text-center skew-x-[-10deg] shadow-[0_0_15px_rgba(0,0,0,0.8)]">
+                                    <span className="text-5xl font-black text-white tracking-tighter block skew-x-[10deg] drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
+                                        {speedKmH}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block skew-x-[10deg] mt-1">KM/H</span>
+                                </div>
+                                {/* Pedals */}
+                                <div className="flex gap-4 mt-2">
+                                    <div className={`px-4 py-1 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState < 0 ? 'bg-red-600/30 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
+                                        <span className="text-[10px] font-black uppercase tracking-widest block skew-x-[10deg]">BRK</span>
+                                    </div>
+                                    <div className={`px-4 py-1 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState > 0 ? 'bg-emerald-600/30 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] text-emerald-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
+                                        <span className="text-[10px] font-black uppercase tracking-widest block skew-x-[10deg]">GAS</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className={`gap-4 flex items-end pb-2 pointer-events-auto transition-opacity duration-300`}>
+                                <div>{renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}</div>
+                                <div>{renderSlot('2', loadout.secondary, activeWeapon === loadout.secondary)}</div>
+                                <div>{renderSlot('3', loadout.throwable, activeWeapon === loadout.throwable)}</div>
+                                <div>{renderSlot('4', loadout.special, activeWeapon === loadout.special)}</div>
+                                <div>{renderSlot('5', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}</div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Right Weapon Details */}
-                    <div className={`flex flex-col md:flex-row items-end gap-5 mb-2 md:min-w-[200px] justify-end`}>
+                    <div className={`flex flex-col md:flex-row items-end gap-5 mb-2 md:min-w-[200px] justify-end transition-opacity duration-300 ${isDriving ? 'opacity-0' : 'opacity-100'}`}>
                         {wep && (
                             <>
                                 {/* Weapon Name & Level (or Signal Strength for Radio) */}

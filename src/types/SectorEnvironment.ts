@@ -55,6 +55,7 @@ export interface CinematicConfig {
 
 export interface SectorContext {
     scene: THREE.Scene;
+    engine: any;
     obstacles: any[];
     collisionGrid: SpatialGrid;
     chests: any[];

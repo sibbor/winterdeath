@@ -7,6 +7,8 @@ import { haptic } from '../../utils/HapticManager';
 import { WEAPONS, WeaponBehavior, WeaponType } from '../../content/weapons';
 import { FXSystem } from '../systems/FXSystem';
 import { SpatialGrid } from '../world/SpatialGrid';
+import { Engine } from '../engine/Engine';
+import { _buoyancyResult } from '../systems/WaterSystem';
 
 // --- INTERFACES ---
 
@@ -63,13 +65,37 @@ const FIREZONE_POOL: FireZone[] = [];
 
 // --- REGISTRIES ---
 
-const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radius: number, ctx: GameContext, damage?: number) => void }> = {
+const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radius: number, ctx: GameContext, damage?: number, hitWater?: boolean) => void }> = {
     [WeaponType.GRENADE]: {
-        onImpact: (pos, radius, ctx, damage = 180) => {
-            ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1, undefined, undefined, undefined, 15.0);
-            ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1, undefined, undefined, undefined, 12.0);
-            ctx.spawnPart(pos.x, 0, pos.z, 'debris', 25, undefined, undefined, undefined, 2.0);
-            ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
+        onImpact: (pos, radius, ctx, damage = 180, hitWater = false) => {
+            if (!hitWater) {
+                // Surface explosion visuals
+                ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1, undefined, undefined, undefined, 15.0);
+                ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1, undefined, undefined, undefined, 12.0);
+                ctx.spawnPart(pos.x, 0, pos.z, 'debris', 25, undefined, undefined, undefined, 2.0);
+            }
+
+            // Water Check for explosions (handles near-misses on the shoreline)
+            const engine = Engine.getInstance();
+            let inWater = hitWater;
+            let waterY = pos.y;
+            if (engine && engine.water && !inWater) {
+                engine.water.checkBuoyancy(pos.x, pos.y, pos.z);
+                if (_buoyancyResult.inWater && pos.y <= _buoyancyResult.waterLevel) {
+                    inWater = true;
+                    waterY = _buoyancyResult.waterLevel;
+                }
+            }
+
+            if (inWater) {
+                ctx.spawnPart(pos.x, waterY, pos.z, 'splash', 85);
+                // Massive ripple for underwater explosion
+                if (engine.water) {
+                    engine.water.spawnExplosionRipple(pos.x, pos.z, 200.0);
+                }
+            } else {
+                ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
+            }
             soundManager.playExplosion();
             //haptic.explosion();
 
@@ -128,8 +154,29 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             fz.mesh.position.set(pos.x, 0.24, pos.z);
             fz.mesh.scale.setScalar(fz.radius / 3.5);
 
-            if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
-            ctx.addFireZone(fz);
+            fz.mesh.scale.setScalar(fz.radius / 3.5);
+
+            // Water Check for explosions
+            const engine = Engine.getInstance();
+            let inWater = false;
+            let waterY = 0;
+            if (engine && engine.water) {
+                engine.water.checkBuoyancy(pos.x, pos.y, pos.z);
+                if (_buoyancyResult.inWater && pos.y <= _buoyancyResult.waterLevel) {
+                    inWater = true;
+                    waterY = _buoyancyResult.waterLevel;
+                }
+            }
+
+            if (inWater) {
+                // Molotov extinguishes instantly but causes huge steam bloom
+                ctx.spawnPart(pos.x, waterY, pos.z, 'large_smoke', 20);
+                ctx.spawnPart(pos.x, waterY, pos.z, 'splash', 10);
+                if (engine.water) engine.water.spawnRipple(pos.x, pos.z, 8.0);
+            } else {
+                if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
+                ctx.addFireZone(fz);
+            }
 
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             for (const e of direct) {
@@ -561,11 +608,32 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     p.mesh.rotation.x += 8 * delta;
     if (p.marker) (p.marker.material as any).opacity = 0.4 + Math.abs(Math.sin(now * 0.01)) * 0.6;
 
-    if (p.mesh.position.y <= 0.1 || p.life <= 0) {
+    let destroyed = false;
+    let hitWater = false;
+    let hitY = 0;
+
+    const engine = Engine.getInstance();
+    if (engine && engine.water) {
+        engine.water.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+        if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {
+            destroyed = true;
+            hitWater = true;
+            hitY = _buoyancyResult.waterLevel;
+            ctx.spawnPart(p.mesh.position.x, hitY, p.mesh.position.z, 'splash', 15);
+            engine.water.spawnRipple(p.mesh.position.x, p.mesh.position.z, 5.0);
+        }
+    }
+
+    if (!destroyed && (p.mesh.position.y <= 0.1 || p.life <= 0)) {
+        destroyed = true;
+        hitY = 0;
+    }
+
+    if (destroyed) {
         ctx.scene.remove(p.mesh); if (p.marker) ctx.scene.remove(p.marker);
-        _v1.copy(p.mesh.position).setY(0);
+        _v1.copy(p.mesh.position).setY(hitY);
         const behavior = THROWABLE_BEHAVIORS[p.weapon];
-        if (behavior) behavior.onImpact(_v1, p.maxRadius || 10, ctx, p.damage);
+        if (behavior) behavior.onImpact(_v1, p.maxRadius || 10, ctx, p.damage, hitWater);
         p.active = false;
 
         // ZERO-GC: Swap-and-Pop

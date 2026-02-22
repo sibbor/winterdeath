@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
+import { Engine } from '../engine/Engine';
+import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Target Position
@@ -15,6 +17,8 @@ const _animState = {
     isSpeaking: false,
     isThinking: false,
     isIdleLong: false,
+    isWading: false,
+    isSwimming: false,
     seed: 0
 };
 
@@ -110,11 +114,18 @@ export const FamilySystem = {
             const isIdleLong = timeSinceMove > 10000;
 
             // [VINTERDÖD] Direkt uppdatering av scratchpad. Tvingar även till booleans med dubbla negationer (!!) vid behov.
-            _animState.isMoving = fmIsMoving || !!familyMember.isMoving;
-            _animState.isSpeaking = (familyMember.isSpeaking !== undefined) ? familyMember.isSpeaking : (now < state.speakingUntil);
-            _animState.isThinking = (familyMember.isThinking !== undefined) ? familyMember.isThinking : (now < state.thinkingUntil);
-            _animState.isIdleLong = isIdleLong && !fmIsMoving;
             _animState.seed = familyMember.seed;
+
+            // Add aquatic state check for family members
+            const engine = Engine.getInstance();
+            if (engine?.water) {
+                engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z);
+                _animState.isSwimming = _buoyancyResult.depth > 1.2;
+                _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
+            } else {
+                _animState.isSwimming = false;
+                _animState.isWading = false;
+            }
 
             PlayerAnimation.update(body, _animState, now, delta);
         }

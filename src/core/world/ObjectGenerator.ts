@@ -65,6 +65,7 @@ export const ObjectGenerator = {
         return group;
     },
 
+
     createFence: (length: number = 3.0) => {
         const group = new THREE.Group();
 
@@ -384,6 +385,9 @@ export const ObjectGenerator = {
         boatMesh.castShadow = true;
         boatMesh.receiveShadow = true;
 
+        // Visual front (+Z) needs to point opposite to match vehicles' physical forward
+        boatMesh.rotateY(Math.PI * 4);
+
         return boatMesh;
     },
 
@@ -512,7 +516,7 @@ export const ObjectGenerator = {
 
         vehicleBody.scale.set(scale, scale, scale);
         vehicleBody.userData.material = 'METAL';
-        vehicleBody.rotateY(Math.PI / 2);
+        vehicleBody.rotateY(Math.PI * 1.5);
 
         return vehicleBody;
     },

@@ -105,7 +105,7 @@ export const SectorGenerator = {
         const engine = Engine.getInstance();
 
         // Clear any water bodies from the previous sector before building the new one
-        if (engine?.water) engine.water.clearBodies();
+        if (engine?.water) engine.water.clear();
 
         // 1. Automatic Content (Ground, Bounds, Collectibles)
         await SectorGenerator.generateAutomaticContent(ctx, def);
@@ -133,6 +133,13 @@ export const SectorGenerator = {
             if (ctx.yield) await ctx.yield();
         }
 
+        // Sync water lighting with sector moon/sun
+        const skyLight = def.environment?.skyLight;
+        if (skyLight?.visible && skyLight.position && engine?.water) {
+            _v1_sg.set(skyLight.position.x, skyLight.position.y || 100, skyLight.position.z);
+            engine.water.setLightPosition(_v1_sg);
+        }
+
         // 4. Setup Props (Static Objects)
         if (def.setupProps) {
             await def.setupProps(ctx);
@@ -158,18 +165,14 @@ export const SectorGenerator = {
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
-        let mat: THREE.MeshStandardMaterial;
+        let mat: THREE.Material;
 
         if (type === 'GRAVEL') {
-            mat = MATERIALS.gravel.clone();
-            mat.bumpScale = 0.5; // Increased bumpScale for gravel
+            mat = MATERIALS.gravelCutout;
         } else if (type === 'DIRT') {
-            mat = MATERIALS.gravel.clone();
-            mat.color.setHex(0x3d2b1f);
-            mat.bumpScale = 0.5; // Increased bumpScale for dirt
+            mat = MATERIALS.dirtCutout;
         } else {
-            mat = MATERIALS.snow.clone();
-            mat.bumpScale = 0.5; // Increased bumpScale for snow
+            mat = MATERIALS.snowCutout;
         }
 
         const geo = new THREE.PlaneGeometry(size.width, size.depth);
@@ -183,23 +186,20 @@ export const SectorGenerator = {
             if (ctx.yield && i % 1000 === 0) await ctx.yield(); // Yield for large geometry updates
         }
 
-        // Ensure shared textures have RepeatWrapping (set once globally)
-        if (mat.map) {
-            mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
-        }
-        if (mat.bumpMap) {
-            mat.bumpMap.wrapS = mat.bumpMap.wrapT = THREE.RepeatWrapping;
-        }
-        if ((mat as any).normalMap) {
-            (mat as any).normalMap.wrapS = (mat as any).normalMap.wrapT = THREE.RepeatWrapping;
-        }
-
         const mesh = new THREE.Mesh(geo, mat);
         mesh.name = `Ground_${type}`;
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05; // Standardized snow/ground base
         mesh.receiveShadow = true;
+
         ctx.scene.add(mesh);
+
+        // Register with engine for cutout uniform management
+        const engine = Engine.getInstance();
+        if (engine && engine.water) {
+            engine.water.registerGround(mesh);
+        }
+
         if (ctx.yield) await ctx.yield();
     },
 
@@ -603,10 +603,6 @@ export const SectorGenerator = {
             const visualType = vehicleType === 'station_wagon' ? 'station wagon' : vehicleType;
             visualMesh = ObjectGenerator.createVehicle(visualType, 1.0, colorOverride, addSnow);
         }
-
-        // Fix model alignment. Rotate visual mesh 90 degrees so the front aligns with Z-axis
-        visualMesh.rotation.y = -Math.PI / 2;
-
         // Add visual representation to the root node
         vehicleRoot.add(visualMesh);
 
@@ -619,6 +615,10 @@ export const SectorGenerator = {
         vehicleRoot.userData.interactionId = `vehicle_${vehicleType}_${Math.random().toString(36).substring(2, 7)}`;
         vehicleRoot.userData.interactionLabel = 'ui.enter_vehicle';
         vehicleRoot.userData.interactionType = 'VEHICLE';
+
+        if (vehicleType === 'boat') {
+            vehicleRoot.userData.floatOffset = 0.5; // Let the hull ride higher on the waves
+        }
 
         // Attach physics data from database
         vehicleRoot.userData.vehicleDef = def;
@@ -646,8 +646,9 @@ export const SectorGenerator = {
             position: vehicleRoot.position,
             collider: {
                 type: 'box',
-                // X and Z size values swapped to match the 90-degree visual rotation
-                size: new THREE.Vector3(def.size.z, def.size.y, def.size.x)
+                // X and Z size values swapped to match the 90-degree visual rotation.
+                // Multiply by 2 because def.size defines half-extents, but box collider expects full size.
+                size: new THREE.Vector3(def.size.z * 2, def.size.y * 2, def.size.x * 2)
             },
             type: `Vehicle_${vehicleType}`
         });
@@ -676,17 +677,148 @@ export const SectorGenerator = {
         return engine.water.addWaterBody(type, x, z, width, depth, options);
     },
 
+    /**
+     * Lake Bed
+     * Creates a dark sloped gravel floor under a water body to provide physical depth.
+     */
+    spawnLakeBed: (ctx: SectorContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: 'rect' | 'circle' = 'rect') => {
+        // Create highly tessellated geometry so we can slope the vertices
+        const segmentsX = Math.max(16, Math.floor(width / 2));
+        const segmentsY = Math.max(16, Math.floor(depth / 2));
+        const geo = shape === 'circle'
+            ? new THREE.CircleGeometry(width / 2, segmentsX * 2)
+            : new THREE.PlaneGeometry(width, depth, segmentsX, segmentsY);
+
+        const mat = MATERIALS.gravel.clone();
+        // Darker, colder color for the lake bed
+        mat.color.setHex(0x1a212e);
+        mat.bumpScale = 0.8;
+
+        const posAttr = geo.getAttribute('position');
+        const rX = width / 2;
+        const rZ = depth / 2;
+
+        for (let i = 0; i < posAttr.count; i++) {
+            const vx = posAttr.getX(i);
+            const vy = posAttr.getY(i); // This is Z in world space since plane is created flat
+
+            // Calculate distance to edge (0.0 at center, 1.0 at edge)
+            let rawDist = 0;
+            if (shape === 'circle') {
+                rawDist = Math.sqrt((vx * vx) / (rX * rX) + (vy * vy) / (rZ * rZ));
+            } else {
+                rawDist = Math.max(Math.abs(vx) / rX, Math.abs(vy) / rZ);
+            }
+
+            // Map edge distance to depth with a soft curve
+            // Starts sloping down from the edge until 2 units away, then flat bottom
+            const edgeDistMeters = (1.0 - rawDist) * Math.min(rX, rZ);
+            let slopeDepth = floorDepth;
+            const slopeSlopeWdith = 2.0;
+
+            if (edgeDistMeters < slopeSlopeWdith) {
+                const f = edgeDistMeters / slopeSlopeWdith; // 0 at surface, 1 at bottom
+                // Smooth ease-in-out curve
+                slopeDepth = floorDepth * (f * f * (3 - 2 * f));
+            }
+
+            // Set the depth (Z in local space before rotation)
+            posAttr.setZ(i, -slopeDepth + (Math.random() - 0.5) * 0.1);
+        }
+
+        posAttr.needsUpdate = true;
+        geo.computeVertexNormals();
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.x = -Math.PI / 2;
+        // Floor is placed exactly at water level, vertices slope downwards into the water
+        mesh.position.set(x, 0, z);
+        mesh.receiveShadow = true;
+        ctx.scene.add(mesh);
+
+        // Add UV repeat for the lake bed texture
+        const repeatX = width / 8;
+        const repeatY = depth / 8;
+        const uvAttr = geo.attributes.uv;
+        for (let i = 0; i < uvAttr.count; i++) {
+            uvAttr.setXY(i, uvAttr.getX(i) * repeatX, uvAttr.getY(i) * repeatY);
+        }
+
+        return mesh;
+    },
+
+    /**
+     * High-level helper to spawn Water + Recessed Bed in one go.
+     */
+    addLake: (ctx: SectorContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
+        const water = SectorGenerator.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle' });
+        SectorGenerator.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, 'circle');
+
+        // Spawn lake bed props
+        const numProps = Math.floor(radius * radius * 0.05);
+        const floraInstances: any[] = [];
+
+        for (let i = 0; i < numProps; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.random() * radius * 0.9;
+            const pX = x + Math.cos(angle) * r;
+            const pZ = z + Math.sin(angle) * r;
+
+            const rand = Math.random();
+            // Calculate terrain height at this specific spot
+            const distFromCenter = Math.sqrt((pX - x) * (pX - x) + (pZ - z) * (pZ - z));
+            const maxR = radius;
+            const edgeDistMeters = maxR - distFromCenter;
+            let currentDepth = floorDepth;
+            if (edgeDistMeters < 2.0) {
+                const f = edgeDistMeters / 2.0;
+                currentDepth = floorDepth * (f * f * (3 - 2 * f));
+            }
+
+            if (rand < 0.3) {
+                // Rock
+                const rock = EnvironmentGenerator.createRock(1.5 + Math.random() * 2, 1 + Math.random() * 1.5);
+                rock.position.set(pX, -currentDepth + 0.2, pZ);
+                ctx.scene.add(rock);
+            } else if (rand < 0.7) {
+                // Seaweed (Instanced)
+                floraInstances.push({
+                    type: 'seaweed',
+                    position: new THREE.Vector3(pX, -currentDepth + 0.1, pZ),
+                    rotationY: Math.random() * Math.PI,
+                    scale: { x: 1.0 + Math.random() * 0.5, y: 1.5 + Math.random() * 2, z: 1.0 }
+                });
+            } else {
+                // Water Lily (Instanced)
+                const lilyScale = 0.8 + Math.random() * 0.4;
+                floraInstances.push({
+                    type: 'lily',
+                    position: new THREE.Vector3(pX, 0, pZ),
+                    rotationY: Math.random() * Math.PI,
+                    scale: { x: lilyScale, y: lilyScale, z: lilyScale }
+                });
+            }
+        }
+
+        const engine = Engine.getInstance();
+        if (engine?.water) {
+            engine.water.populateFlora(floraInstances);
+        }
+
+        return water;
+    },
+
     spawnContainer: (ctx: SectorContext, x: number, z: number, rotation: number, colorOverride?: number, addSnow: boolean = true) => {
         const container = ObjectGenerator.createContainer(colorOverride, addSnow);
         container.position.set(x, 0, z);
         container.rotation.y = rotation;
         ctx.scene.add(container);
 
-        // Add Collision (default: 6.0m L x 2.6m H x 2.4m W)
+        // Add Collision (default: 8.0m L x 3.0m H x 2.5m W)
         SectorGenerator.addObstacle(ctx, {
             mesh: container,
             position: container.position,
-            collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6, 2.4) }
+            collider: { type: 'box', size: new THREE.Vector3(8.0, 3.0, 2.5) }
         });
 
         return container;

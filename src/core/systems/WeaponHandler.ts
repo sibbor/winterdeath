@@ -3,6 +3,8 @@ import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../conte
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
 import { soundManager } from '../../utils/sound';
 import { haptic } from '../../utils/HapticManager';
+import { Engine } from '../engine/Engine';
+import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -304,10 +306,22 @@ export const WeaponHandler = {
 
                         for (let i = 0; i <= 20; i++) {
                             const t = (i / 20) * tMax;
+                            const tx = playerGroup.position.x + vx * t;
+                            const tz = playerGroup.position.z + vz * t;
+
+                            let groundY = 0.1;
+                            const engine = Engine.getInstance();
+                            if (engine && engine.water) {
+                                engine.water.checkBuoyancy(tx, 0.5, tz);
+                                if (_buoyancyResult.inWater) {
+                                    groundY = _buoyancyResult.waterLevel + 0.05;
+                                }
+                            }
+
                             _v4.set(
-                                playerGroup.position.x + vx * t,
-                                Math.max(0.1, startY + vy * t - 0.5 * g * t * t),
-                                playerGroup.position.z + vz * t
+                                tx,
+                                Math.max(groundY, startY + vy * t - 0.5 * g * t * t),
+                                tz
                             );
 
                             if (i < 20) {
@@ -327,6 +341,7 @@ export const WeaponHandler = {
                         }
                         posAttr.needsUpdate = true;
                         (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
+                        (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
                     }
                 }
             } else if (state.throwChargeStart > 0) {

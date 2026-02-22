@@ -85,12 +85,14 @@ export class PlayerCombatSystem implements System {
             transparent: true,
             opacity: 0.8,
             depthWrite: false,
+            depthTest: false,
             side: THREE.DoubleSide
         });
 
         this.trajectoryLine = new THREE.Mesh(lineGeo, lineMat);
         this.trajectoryLine.visible = false;
         this.trajectoryLine.frustumCulled = false;
+        this.trajectoryLine.renderOrder = 999;
         scene.add(this.trajectoryLine);
 
         // --- Cache Laser Sight Reference ---

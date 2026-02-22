@@ -224,6 +224,22 @@ const Generators = {
         return buffer;
     },
 
+    swimming: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.6; // Longer duration for slosh
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Sloshing noise (two bands)
+            const lowSlosh = (Math.random() * 2 - 1) * 0.15 * Math.exp(-5 * t) * Math.sin(2 * Math.PI * 2 * t);
+            const highSplash = (Math.random() * 2 - 1) * 0.1 * Math.exp(-12 * t);
+            // Low rumble
+            const rumble = Math.sin(2 * Math.PI * 60 * t) * 0.1 * Math.exp(-8 * t);
+            data[i] = lowSlosh + highSplash + rumble;
+        }
+        return buffer;
+    },
+
     // IMPACTS
     impact_flesh: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.15;
@@ -595,6 +611,7 @@ export function registerSoundGenerators() {
     SoundBank.register('step_metal', Generators.step_metal);
     SoundBank.register('step_wood', Generators.step_wood);
     SoundBank.register('step_water', Generators.step_water);
+    SoundBank.register('swimming', Generators.swimming);
 
     // Mechanical
     SoundBank.register('mech_mag_out', Generators.mech_mag_out);
@@ -680,6 +697,12 @@ export const GamePlaySounds = {
         const pitch = 0.9 + Math.random() * 0.3;
         const vol = 0.15 + Math.random() * 0.05;
         SoundBank.play(core, key, vol, pitch, false, true);
+    },
+    playSwimming: (core: SoundCore) => {
+        // Sloshier, deeper sound for swimming
+        const pitch = 0.8 + Math.random() * 0.4;
+        const vol = 0.2 + Math.random() * 0.1;
+        SoundBank.play(core, 'swimming', vol, pitch, false, true);
     },
 
     playImpact: (core: SoundCore, type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') => {

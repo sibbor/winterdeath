@@ -76,6 +76,7 @@ export class SoundManager {
   playImpact(type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') {
     GamePlaySounds.playImpact(this.core, type);
   }
+  playSwimming() { GamePlaySounds.playSwimming(this.core); }
 
   // --- VOICE DELEGATES ---
   playVoice(name: string) { VoiceSounds.playVoice(this.core, name); }
@@ -331,13 +332,14 @@ export class SoundManager {
   }
 
   updateVehicleEngine(rpm: number) {
-    if (!this.vehicleOsc || !this.vehicleGain) return;
+    if (!this.vehicleOsc || !this.vehicleGain || !Number.isFinite(rpm)) return;
     const now = this.core.ctx.currentTime;
-    // rpm is 0..1 (normalized speed/throttle)
     const targetPitch = 0.8 + rpm * 1.5;
-    this.vehicleOsc.playbackRate.setTargetAtTime(targetPitch, now, 0.1);
     const targetVol = 0.1 + rpm * 0.3;
-    this.vehicleGain.gain.setTargetAtTime(targetVol, now, 0.1);
+    if (Number.isFinite(targetPitch) && Number.isFinite(targetVol)) {
+      this.vehicleOsc.playbackRate.setTargetAtTime(targetPitch, now, 0.1);
+      this.vehicleGain.gain.setTargetAtTime(targetVol, now, 0.1);
+    }
   }
 
   stopVehicleEngine() {
@@ -358,13 +360,13 @@ export class SoundManager {
   playVehicleSkid(intensity: number) {
     if (intensity < 0.1) {
       if (this.vehicleSkidOsc) {
-        this.vehicleSkidGain?.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.1);
+        this.vehicleSkidGain?.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.05);
         const osc = this.vehicleSkidOsc;
         const gain = this.vehicleSkidGain;
         this.core.safeTimeout(() => {
           try { osc.stop(); osc.disconnect(); } catch (e) { }
           try { gain.disconnect(); } catch (e) { }
-        }, 200);
+        }, 50);
         this.vehicleSkidOsc = null;
         this.vehicleSkidGain = null;
       }

@@ -112,6 +112,9 @@ export const HudSystem = {
             bossPos: bPos,
             distanceTraveled: Math.floor(distanceTraveled),
             kills: state.killsInRun,
+            isDriving: !!state.activeVehicleType,
+            vehicleSpeed: state.vehicleSpeed || 0,
+            throttleState: state.vehicleThrottle || 0,
             spEarned: spEarned,
             skillPoints: (props.stats?.skillPoints || 0) + spEarned, // Total SP: base + session (safely)
             debugInfo: {

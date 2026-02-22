@@ -15,7 +15,7 @@ const _v4 = new THREE.Vector3();
 const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _q1 = new THREE.Quaternion();
-const _boatPos = new THREE.Vector3(); // Zero-GC scratchpad
+const _boatPos = new THREE.Vector3();
 
 export const SECTOR6_ZONES: AtmosphereZone[] = [
     { label: "FOREST OF SHADOWS", x: 0, z: -360, weather: 'rain', bgColor: 0xff0000, fogDensity: 0.005, ambient: 0.2 },
@@ -45,7 +45,7 @@ export const Sector6: SectorDef = {
     groundType: 'GRAVEL',
     ambientLoop: 'ambient_wind_loop',
 
-    playerSpawn: { x: 0, z: -0 },
+    playerSpawn: { x: 0, z: 0 },
     familySpawn: { x: 0, z: 0 },
     bossSpawn: null,
 
@@ -125,16 +125,12 @@ export const Sector6: SectorDef = {
             const curve = new THREE.QuadraticBezierCurve3(
                 new THREE.Vector3(0, 0, 0),
                 new THREE.Vector3(x * 0.5 + Math.sin(angle + 1.5) * 90, 0, z * 0.5 + Math.cos(angle + 1.5) * 90),
-                new THREE.Vector3(x, 0, z)
+                new THREE.Vector3(x, 0, i == 3 ? z + 70 : z)
             );
             const points = curve.getPoints(60);
 
             // Generate Path
-            if (i === 3) {
-                PathGenerator.createGravelPath(ctx, points, 8);
-            } else {
-                PathGenerator.createGravelPath(ctx, points, 8);
-            }
+            PathGenerator.createPath(ctx, points, 4, MATERIALS.dirt);
 
             // Add POI Label
             addPoiLabel(zone.label, { x, z });
@@ -189,17 +185,15 @@ export const Sector6: SectorDef = {
         // 4. WATER
         const p3 = SECTOR6_ZONES[3];
 
-        // Create a typed water body via the engine-owned WaterSystem
-        // 1. Create the water body (The Lake)
-        const lake = SectorGenerator.addWaterBody(ctx, 'lake', p3.x, p3.z, 200, 200);
+        // 4.1. Create the water body (The Lake) + Recessed Bed
+        const lake = SectorGenerator.addLake(ctx, p3.x, p3.z, 75, 5.0);
 
-        // 2. LARGE STONE WITH SPLASHES
-        const bigStone = EnvironmentGenerator.createRock(35, 15);
+        // 4.2. Large stone
+        const bigStone = EnvironmentGenerator.createRock(35, 15, 10);
         bigStone.position.set(p3.x - 30, -2, p3.z + 20);
         bigStone.scale.set(1.5, 1.2, 1.5);
         scene.add(bigStone);
 
-        // Add physical obstacle for collisions
         SectorGenerator.addObstacle(ctx, {
             mesh: bigStone,
             position: bigStone.position,
@@ -210,33 +204,40 @@ export const Sector6: SectorDef = {
         // Register as splash source for the new 'splash' particles
         if (lake) lake.registerSplashSource(bigStone);
 
-        // 3. BOAT (Floatable Vehicle)
+        // 4.3. Boat
         const boatGroup = SectorGenerator.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
         if (lake && boatGroup) {
             lake.registerFloatingProp(boatGroup);
+            lake.registerSplashSource(boatGroup);
         }
 
-        // 4. INTERACTIVE BALL
+        // 4.4. Interactive ball
         const ballGeom = new THREE.SphereGeometry(1.5, 16, 16);
         const ballMat = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4, metalness: 0.1 });
         const ball = new THREE.Mesh(ballGeom, ballMat);
 
         ball.position.set(p3.x + 10, 5, p3.z + 10);
         ball.castShadow = true;
-
-        // velocity is required for the buoyancy physics to work
         ball.userData = {
             isBall: true,
             radius: 1.5,
             mass: 5,
-            friction: 0.96, // Increased friction for water damping
+            friction: 0.96,
             velocity: new THREE.Vector3(0, 0, 0)
         };
-
         scene.add(ball);
+        if (lake) {
+            lake.registerFloatingProp(ball);
+            lake.registerSplashSource(ball);
+        }
 
-        // Register ball so it can float and be pushed by the player
-        if (lake) lake.registerFloatingProp(ball);
+        SectorGenerator.addObstacle(ctx, {
+            mesh: ball,
+            position: ball.position,
+            radius: 1.5,
+            collider: { type: 'sphere', radius: 1.5 },
+            type: 'Ball'
+        });
 
         // 5. SURPRISE
         const p4 = SECTOR6_ZONES[4];

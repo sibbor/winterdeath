@@ -160,6 +160,8 @@ export const CinematicSystem = {
                 isSpeaking: isSpeaking,
                 isThinking: false,
                 isIdleLong: false,
+                isSwimming: false,
+                isWading: false,
                 seed: actor.userData.seed || 0
             }, now, delta);
         }

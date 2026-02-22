@@ -12,6 +12,8 @@ export interface AnimState {
     isSpeaking: boolean;
     isThinking: boolean;
     isIdleLong: boolean;
+    isWading?: boolean;
+    isSwimming?: boolean;
     seed: number;
 }
 
@@ -58,16 +60,24 @@ export const PlayerAnimation = {
             scaleY = 1.0 - (squashFactor * 0.4);
             scaleXZ = 1.0 + (squashFactor * 0.4);
             positionY = 0.2;
-
+        } else if (animState.isSwimming) {
+            // Swimming Animation: Heavy lean, deep bobbing
+            const swimSpeed = 0.008;
+            const bob = Math.sin(now * swimSpeed);
+            rotationX = 1.3; // Horizontal "swimming" lean
+            positionY = -0.4 + bob * 0.15; // Bobbing in water
+            scaleY = 1.0 + bob * 0.05;
+            rotationZ = Math.sin(now * swimSpeed * 0.5) * 0.1;
         } else if (animState.isMoving) {
             const moveSpeed = animState.isRushing ? 0.020 : 0.012;
-            const bob = Math.sin(now * moveSpeed);
+            const wadingFactor = animState.isWading ? 0.6 : 1.0;
+            const bob = Math.sin(now * moveSpeed * wadingFactor);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;
 
-            rotationX = animState.isRushing ? 0.4 : 0.2; // Lean forward
+            rotationX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2);
             scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
             scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
-            rotationZ = Math.cos(now * moveSpeed) * 0.05; // Side-to-side stride tilt
+            rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.05;
 
         } else {
             // Stationary behaviors (Breathing, Speaking, Thinking)
@@ -112,7 +122,7 @@ export const PlayerAnimation = {
         mesh.position.y = (baseHeight * scaleY) + positionY;
 
         // --- 4. Optimized Footprints (Zero-GC) ---
-        if (animState.isMoving || animState.isRushing) {
+        if ((animState.isMoving || animState.isRushing) && !animState.isSwimming) {
             const moveFreq = animState.isRushing ? 0.020 : 0.012;
             const sway = Math.cos(now * moveFreq);
             const lastSway = mesh.userData.lastSway || 0;

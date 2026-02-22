@@ -426,6 +426,9 @@ const App: React.FC = () => {
                                 weaponLevels={gameState.weaponLevels}
                                 debugMode={gameState.debugMode}
                                 isBossIntro={isBossIntroActive}
+                                isDriving={hudState.isDriving}
+                                vehicleSpeed={hudState.vehicleSpeed}
+                                throttleState={hudState.throttleState}
                                 isMobileDevice={true}
                                 onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
                                 onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
@@ -441,6 +444,9 @@ const App: React.FC = () => {
                                 weaponLevels={gameState.weaponLevels}
                                 debugMode={gameState.debugMode}
                                 isBossIntro={isBossIntroActive}
+                                isDriving={hudState.isDriving}
+                                vehicleSpeed={hudState.vehicleSpeed}
+                                throttleState={hudState.throttleState}
                                 onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
                                 onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
                                 onSelectWeapon={(slot) => {

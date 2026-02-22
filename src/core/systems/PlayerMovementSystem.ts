@@ -92,15 +92,58 @@ export class PlayerMovementSystem implements System {
 
         // --- 2. WATER PHYSICS & DRAG ---
         let inWater = false;
+        let isSwimming = state.isSwimming || false;
+        let isWading = false;
+
         if (session.engine.water) {
             session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
-            inWater = _buoyancyResult.inWater;
+            inWater = _buoyancyResult.inWater && !state.activeVehicle;
+            if (state.activeVehicle) {
+                isSwimming = false;
+                isWading = false;
+            }
 
-            // Apply massive friction if submerged (prevents running normally in lakes)
             if (inWater) {
-                speed *= 0.6;
+                //const subDepth = _buoyancyResult.waterLevel - playerGroup.position.y; // True depth below current water wave
+                // The actual physical depth of the water at this coordinate (flat water vs ground bed)
+                const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
+
+                // Depth-based states (with hysteresis to prevent bobbing)
+                if (flatDepth > 1.25) {
+                    isSwimming = true;
+                    speed *= 0.35; // Slow deliberate swimming
+                } else if (flatDepth > 0.95 && isSwimming) { // Hysteresis buffer
+                    isSwimming = true;
+                    speed *= 0.35;
+                } else if (flatDepth > 0.4) {
+                    isSwimming = false;
+                    isWading = true;
+                    speed *= 0.6; // Heavy wading through deep snow/water
+                } else {
+                    isSwimming = false;
+                    speed *= 0.85; // Shallow splashing
+                }
+
+                // Vertical Sinking
+                // Target Y: If swimming, stay near the surface (~0.35m) taking waves into account. 
+                const swimY = _buoyancyResult.waterLevel - 0.35;
+                const targetY = isSwimming ? swimY : _buoyancyResult.groundY; // Walk directly on the sloped ground
+
+                // Smoothly interpolate Y to prevent jitter from wave bobbing
+                playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
+            } else {
+                isSwimming = false;
+                isWading = false;
+                // Snap back to ground height (Safeguard)
+                if (playerGroup.position.y !== 0) {
+                    playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * delta);
+                    if (Math.abs(playerGroup.position.y) < 0.01) playerGroup.position.y = 0;
+                }
             }
         }
+
+        state.isSwimming = isSwimming;
+        state.isWading = isWading;
 
         if (state.isRushing) {
             state.lastStaminaUseTime = now;
@@ -162,13 +205,21 @@ export class PlayerMovementSystem implements System {
 
                 this.performMove(playerGroup, _v1, state, session, now, delta);
 
-                // --- AUDIO: Footsteps ---
-                const stepInterval = state.isRushing ? 250 : 400;
+                // --- AUDIO: Footsteps & swimming ---
+                const stepInterval = state.isSwimming ? 350 : (state.isRushing ? 250 : 400); // Faster swimming strokes
                 if (now > (state.lastStepTime || 0) + stepInterval) {
                     if (inWater) {
-                        soundManager.playFootstep('water');
+                        if (isSwimming) {
+                            soundManager.playSwimming();
+                            // Generate big splashes while swimming forward
+                            FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, playerGroup.position.y + 1.0, playerGroup.position.z, 'splash', 3);
+                        } else {
+                            soundManager.playFootstep('water');
+                        }
+
                         if (session.engine.water) {
-                            session.engine.water.spawnRipple(playerGroup.position.x, playerGroup.position.z, 2);
+                            const ripplePower = isSwimming ? 4.0 : 1.5;
+                            session.engine.water.spawnRipple(playerGroup.position.x, playerGroup.position.z, ripplePower);
                         }
                     } else {
                         soundManager.playFootstep('step');
@@ -267,12 +318,19 @@ export class PlayerMovementSystem implements System {
                                 }
                             }
                         }
-                        if (obs.mesh?.userData?.vehicleDef) {
-                            // [VINTERDÖD] Extremt mjuk knuff, WaterSystem sköter resten
-                            _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(isDashing ? 0.2 : 0.05);
-                            if (obs.mesh.userData.velocity) {
-                                (obs.mesh.userData.velocity as THREE.Vector3).add(_v1);
+                        if (obs.mesh && obs.mesh.userData.velocity) {
+                            const mass = obs.mesh.userData.mass || 1000.0; // Heavy fallback (like vehicle defaults)
+                            const massInverse = 1.0 / Math.max(0.5, mass);
+                            let pushForce = (isDashing ? 6.0 : 1.5) * massInverse;
+
+                            // The rock shouldn't be pushed (no velocity), boat moves slowly, ball is pushed easily.
+                            _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(pushForce);
+
+                            if (obs.mesh.userData.isBall) {
+                                _v1.multiplyScalar(2.0); // Make ball even easier to push
                             }
+
+                            (obs.mesh.userData.velocity as THREE.Vector3).add(_v1);
                         }
                         adjusted = true;
                     }
