@@ -31,10 +31,14 @@ export const AssetPreloader = {
         const soundCore = (window as any).gameEngine?.sound;
         if (soundCore) {
             const essentialSounds = [
-                'ui_hover', 'ui_click', 'shot_pistol', 'walker_groan',
+                'ui_hover', 'ui_click', 'shot_pistol', 'shot_smg', 'shot_rifle',
+                'shot_shotgun', 'shot_revolver', 'shot_minigun',
+                'walker_groan', 'walker_death', 'runner_scream', 'tank_roar',
                 'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone', 'impact_wood',
                 'door_metal_shut', 'fx_heartbeat', 'ui_level_up',
-                'loot_scrap', 'chest_open', 'ui_chime'
+                'loot_scrap', 'chest_open', 'ui_chime', 'explosion', 'ignite',
+                'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
+                'step', 'step_snow', 'step_metal', 'step_wood', 'step_water'
             ];
             // Ljud är små resurser att initiera, ingen yield krävs mitt i arrayen
             essentialSounds.forEach(k => SoundBank.get(soundCore, k));
@@ -118,6 +122,10 @@ export const AssetPreloader = {
         prefillFX(GEOMETRY.particle, MATERIALS.smoke, 100);
         prefillFX(GEOMETRY.flame, MATERIALS.fire, 30);
         prefillFX(GEOMETRY.splash, MATERIALS.splash, 60);
+        prefillFX(GEOMETRY.particle, MATERIALS.blood, 200);
+        prefillFX(GEOMETRY.particle, MATERIALS.bullet, 50); // Sparks
+        prefillFX(GEOMETRY.particle, MATERIALS.stone, 100); // Debris
+        prefillFX(GEOMETRY.gore, MATERIALS.gore, 50);
 
         // Batch 5: Instanced Systems Warmup (Weather & Wind)
         // Shaders for InstancedMesh differ from StandardMesh. We MUST warm up both.
@@ -143,11 +151,19 @@ export const AssetPreloader = {
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesOak);
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.waterLily);
+        addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.waterLilyFlower);
         addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.seaweed);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
         addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.deadWood);
+
+        // UI & Feedback Effects Warmup
+        addToWarmup(new THREE.Mesh(GEOMETRY.shockwave, MATERIALS.shockwave));
+        addToWarmup(new THREE.Mesh(GEOMETRY.shard, MATERIALS.glassShard));
+        addToWarmup(new THREE.Mesh(GEOMETRY.aimRing, MATERIALS.aimReticle));
+        addToWarmup(new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker));
+        addToWarmup(new THREE.Mesh(GEOMETRY.sphere, MATERIALS.flashWhite));
 
         if (yieldToMain) await yieldToMain();
 

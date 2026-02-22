@@ -319,7 +319,7 @@ export class SoundManager {
 
   // --- VEHICLE AUDIO ---
 
-  startVehicleEngine(type: 'BOAT' | 'CAR') {
+  playVehicleEngine(type: 'BOAT' | 'CAR') {
     if (this.vehicleOsc) return;
     const key = type === 'BOAT' ? 'vehicle_engine_boat' : 'vehicle_engine_car';
     const sound = SoundBank.play(this.core, key, 0, 1.0, true);

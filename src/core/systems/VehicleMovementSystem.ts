@@ -93,8 +93,8 @@ export class VehicleMovementSystem implements System {
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
             const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
-            soundManager.startVehicleEngine(category);
             soundManager.playVehicleEnter(category);
+            soundManager.playVehicleEngine(category);
             vel.set(0, 0, 0);
             angVel.set(0, 0, 0);
         }
@@ -241,7 +241,11 @@ export class VehicleMovementSystem implements System {
                 soundManager.updateVehicleEngine(normSpeed);
             }
 
-            if (def.category !== 'BOAT' && speedSq > 25 && (angVel.y > 0.8 || angVel.y < -0.8)) {
+            // Skidding logic (Only cars/trucks, NOT boats)
+            const latSpeed = currentLatSpeed < 0 ? -currentLatSpeed : currentLatSpeed;
+            const isSkidding = latSpeed > 4.5 || (speedSq > 25 && (angVel.y > 0.8 || angVel.y < -0.8));
+
+            if (def.category !== 'BOAT' && isSkidding) {
                 soundManager.playVehicleSkid(0.5);
             } else {
                 soundManager.playVehicleSkid(0);

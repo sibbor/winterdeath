@@ -390,15 +390,25 @@ const Generators = {
         return buffer;
     },
     vehicle_skid: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.4;
+        const length = ctx.sampleRate * 2.0; // 2s loop for better variation
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // High pitch friction noise
-            const noise = (Math.random() * 2 - 1) * 0.2 * Math.exp(-2 * t);
-            const squeal = Math.sin(2 * Math.PI * 800 * t) * 0.1 * Math.exp(-3 * t);
-            data[i] = noise + squeal;
+            // Mixed friction noise
+            const lowNoise = (Math.random() * 2 - 1) * 0.15;
+            const highNoise = (Math.random() * 2 - 1) * 0.1;
+
+            // Squeal with frequency jitter (vibrato) to avoid mechanical loop feel
+            const jitter = Math.sin(2 * Math.PI * 15 * t) * 50; // 15Hz jitter
+            const squeal = Math.sin(2 * Math.PI * (800 + jitter) * t) * 0.08;
+
+            // Smooth loop envelope (fade in/out at edges)
+            let env = 1.0;
+            if (t < 0.1) env = t / 0.1;
+            else if (t > 1.9) env = (2.0 - t) / 0.1;
+
+            data[i] = (lowNoise + highNoise + squeal) * env;
         }
         return buffer;
     },
