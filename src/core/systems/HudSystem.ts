@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { WEAPONS, BOSSES } from '../../content/constants';
 import { WeaponType } from '../../content/weapons';
@@ -27,9 +26,9 @@ export const HudSystem = {
                 hp: activeBossObj.hp,
                 maxHp: activeBossObj.maxHp
             };
-        } else if (state.sectorState && state.sectorState.waveActive && state.sectorState.hordeTarget > 0) {
+        } else if (state.sectorState && state.sectorState.hordeTarget > 0 && state.sectorState.zombiesKilled < state.sectorState.zombiesKillTarget) {
             // Visualize Zombie Wave as a Boss Bar
-            const remaining = Math.max(0, state.sectorState.hordeTarget - state.sectorState.hordeKilled);
+            const remaining = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
             bossInfo = {
                 active: true,
                 name: 'ui.zombie_wave',
@@ -61,7 +60,7 @@ export const HudSystem = {
         // Calculate potential SP earned in this run, excluding what's already been saved to global stats
         const sessionCollectibles = state.sessionCollectiblesFound || [];
         const globalCollectibles = (props.stats && props.stats.collectiblesFound) || [];
-        const newCollectiblesCount = sessionCollectibles.filter(id => !globalCollectibles.includes(id)).length;
+        const newCollectiblesCount = sessionCollectibles.filter((id: string) => !globalCollectibles.includes(id)).length;
 
         // SP from levels gained in this specific run
         const levelGained = Math.max(0, state.level - (props.stats?.level || 1));

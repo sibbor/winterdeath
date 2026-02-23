@@ -31,7 +31,6 @@ export class PlayerMovementSystem implements System {
             return;
         }
 
-        this.handleShake(input, state, delta);
 
         const isMoving = this.handleMovement(
             this.playerGroup,
@@ -287,28 +286,6 @@ export class PlayerMovementSystem implements System {
         }
     }
 
-    private handleShake(input: any, state: any, delta: number) {
-        if (!state.shakeIntensity) state.shakeIntensity = 0;
-        let shakeInput = 0;
-
-        const inSpace = !!input.space;
-        const inFire = !!input.fire;
-        const inA = !!input.a;
-        const inD = !!input.d;
-
-        if (inSpace && !state.lastSpace) shakeInput += 1;
-        if (inFire && !state.lastFire) shakeInput += 1;
-        if (inA && !state.lastA) shakeInput += 0.5;
-        if (inD && !state.lastD) shakeInput += 0.5;
-
-        state.lastSpace = inSpace;
-        state.lastFire = inFire;
-        state.lastA = inA;
-        state.lastD = inD;
-
-        if (shakeInput > 0) state.shakeIntensity += shakeInput;
-        state.shakeIntensity = Math.max(0, state.shakeIntensity - delta * 2.0);
-    }
 
     private handleRotation(playerGroup: THREE.Group, input: any, state: any, isMobile: boolean, disableInput: boolean, isMoving: boolean, session: GameSessionLogic) {
         if (disableInput) return;

@@ -127,8 +127,7 @@ export class SectorSystem implements System {
                 if (ground && ground.material) (ground.material as THREE.MeshStandardMaterial).color.setHex(color);
             },
             setFOV: (fov: number) => {
-                const camera = (session.engine as any).camera as THREE.PerspectiveCamera;
-                if (camera) { camera.fov = fov; camera.updateProjectionMatrix(); }
+                session.engine.camera.set('fov', fov);
             },
             setFog: (color: THREE.Color, density: number) => {
                 if (scene.fog) {

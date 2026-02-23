@@ -80,6 +80,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const activeModalRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
 
     const nextChatterTime = useRef<number>(Date.now() + 5000);
+    const nextWildlifeTime = useRef<number>(Date.now() + 15000); // Start after 15s
     const activeChats = useRef<Array<{ id: string, mesh: THREE.Object3D, text: string, startTime: number, duration: number, element: HTMLDivElement, playedSound: boolean }>>([]);
 
     const envStateRef = useRef<CampEffectsState | null>(null);
@@ -156,19 +157,18 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         // Reset Scene for Camp
         scene.clear();
+        camera.reset();
 
-        camera.position.set(0, 10, 22);
-        camera.fov = 50;
-        camera.far = 2500; // Increase draw distance for stars (r=1800)
-        camera.updateProjectionMatrix();
+        camera.setPosition(0, 10, 22, true);
+        camera.set('fov', 50);
+        camera.set('far', 2500); // Increase draw distance for stars (r=1800)
 
         scene.background = new THREE.Color(0x050510);
         scene.fog = new THREE.FogExp2(0x050510, 0.015);
 
         const BASE_LOOK_AT = new THREE.Vector3(0, 2, -5);
         const CINEMATIC_LOOK_AT = new THREE.Vector3(0, 8, -5);
-        const currentLookAt = BASE_LOOK_AT.clone();
-        camera.lookAt(currentLookAt);
+        camera.lookAt(BASE_LOOK_AT.x, BASE_LOOK_AT.y, BASE_LOOK_AT.z, true);
 
         const hemiLight = new THREE.HemisphereLight(0x444455, 0x111115, 0.6);
         scene.add(hemiLight);
@@ -267,8 +267,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const onResize = () => {
             const width = container.clientWidth;
             const height = container.clientHeight;
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
+            camera.set('aspect', width / height);
             engine.renderer.setSize(width, height);
         };
         window.addEventListener('resize', onResize);
@@ -305,9 +304,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                             input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },
                             aim: { x: 0, y: 0 },
                             cam: {
-                                x: parseFloat(camera.position.x.toFixed(1)),
-                                y: parseFloat(camera.position.y.toFixed(1)),
-                                z: parseFloat(camera.position.z.toFixed(1))
+                                x: parseFloat(camera.threeCamera.position.x.toFixed(1)),
+                                y: parseFloat(camera.threeCamera.position.y.toFixed(1)),
+                                z: parseFloat(camera.threeCamera.position.z.toFixed(1))
                             },
                             modes: 'Camp',
                             enemies: 0,
@@ -336,8 +335,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             // Camera Lerp
             const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
-            currentLookAt.lerp(targetLookAt, isIdleRef.current ? 0.002 : 0.05);
-            camera.lookAt(currentLookAt);
+            camera.set('lookSpeed', isIdleRef.current ? 0.2 : 3.0);
+            camera.lookAt(targetLookAt.x, targetLookAt.y, targetLookAt.z);
 
             perfTime = performance.now();
             timings.camera = perfTime - lastTime;
@@ -399,6 +398,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             timings.chatter = perfTime - lastTime;
             lastTime = perfTime;
 
+            // Wildlife Ambiance
+            if (now > nextWildlifeTime.current && !activeModalRef.current) {
+                const roll = Math.random();
+                if (roll > 0.5) soundManager.playOwlHoot();
+                else soundManager.playBirdAmbience();
+
+                // Random interval between 30 and 90 seconds
+                nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
+            }
+
             // Update Chats
             for (let i = activeChats.current.length - 1; i >= 0; i--) {
                 const chat = activeChats.current[i];
@@ -410,7 +419,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 if (timeAlive >= 0) {
                     if (!chat.playedSound) { soundManager.playVoice(chat.mesh.userData.name); chat.playedSound = true; }
                     chat.element.style.opacity = timeAlive < 500 ? '1' : (timeAlive > chat.duration ? '0' : '1');
-                    const vec = new THREE.Vector3(); chat.mesh.getWorldPosition(vec); vec.y += 1.8; vec.project(camera);
+                    const vec = new THREE.Vector3(); chat.mesh.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
                     chat.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`; chat.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`; chat.element.style.transform = 'translate(-50%, -100%)';
                 }
             }
@@ -420,7 +429,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             lastTime = perfTime;
 
             // Raycasting
-            raycaster.setFromCamera(mouse, camera);
+            raycaster.setFromCamera(mouse, camera.threeCamera);
             const hits = raycaster.intersectObjects(interactables);
             let newHover = null, toolTipText = "", tooltipX = 0, tooltipY = 0;
 
@@ -430,7 +439,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 newHover = target.userData.id;
                 if (newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) {
                     toolTipText = `${target.userData.name}`;
-                    const vec = new THREE.Vector3(); target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera);
+                    const vec = new THREE.Vector3(); target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
                     tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
                 }
             }
@@ -459,7 +468,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             timings.outlines = perfTime - lastTime;
             lastTime = perfTime;
 
-            engine.renderer.render(scene, camera);
+            engine.renderer.render(scene, camera.threeCamera);
 
             perfTime = performance.now();
             timings.render = perfTime - lastTime;

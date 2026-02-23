@@ -9,10 +9,11 @@ import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-
 const LOCATIONS = {
     SPAWN: {
-        PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
+        //DON'T REMOVE:
+        //PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
+        PLAYER: { x: 138, z: 313, rot: Math.PI / 1.25 },
         FAMILY: { x: 144, z: 400, y: 4 },
         BOSS: { x: 174, z: 380 }
     },
@@ -43,11 +44,11 @@ const LOCATIONS = {
     },
     TRIGGERS: {
         START_TRACKS: { x: 6, z: 30 },
-        CHAOS_HERE: { x: 204, z: 157 },
+        CHAOS_HERE: { x: 196, z: 160 },
         BLOOD_STAINS: { x: 34, z: 47 },
         STILL_TRACKING: { x: 87, z: 60 },
         TOWN_CENTER: { x: 145, z: 260 },
-        BUS: { x: 138, z: 331 },
+        BUS: { x: 138, z: 333 },
         TUNNEL: { x: 138, z: 344 }
     },
     OVERPASS: [
@@ -57,6 +58,21 @@ const LOCATIONS = {
         new THREE.Vector3(20, 5, 364)
     ]
 } as const;
+
+// Zero-GC Pre-allocated Vectors for the Update Loop
+const _busPos = new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z);
+const _trainYardPos = new THREE.Vector3(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
+const _viewPos = new THREE.Vector3();
+const _camTarget = new THREE.Vector3();
+const _lookAt = new THREE.Vector3();
+const _camOverrideTarget = new THREE.Vector3();
+const _camOverrideLookAt = new THREE.Vector3();
+const _busOriginalPos = new THREE.Vector3();
+
+// Offsets for Camera Panning Sequences
+const _offsetTrainYard = new THREE.Vector3(0, 15, 20);
+const _zoomOffsetTarget = new THREE.Vector3(12, 0.5, 5);
+const _zoomOffsetLook = new THREE.Vector3(6.5, 0, 2.5);
 
 export const Sector1: SectorDef = {
     id: 0,
@@ -78,22 +94,18 @@ export const Sector1: SectorDef = {
             angleVariance: Math.PI / 4
         }
     },
-    // Automatic Content
     groundType: 'SNOW',
     ambientLoop: 'ambient_wind_loop',
 
-    // --- ADJUST SPAWN POINTS HERE ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
-    // Auto-Spawn Collectibles
     collectibles: [
         { id: 's1_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
         { id: 's1_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
-    // Cinematic Camera Setup
     cinematic: {
         offset: LOCATIONS.CINEMATIC.OFFSET,
         lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
@@ -103,7 +115,6 @@ export const Sector1: SectorDef = {
         const { scene, obstacles } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
-        // Reward Chest at boss spawn
         SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // Road: Vargstigen -> Drive Way
@@ -118,6 +129,11 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(-42, 0, 35),
             new THREE.Vector3(-42, 0, -48)
         ], 16);
+
+        // Street Lights along Vargstigen
+        for (let z = -40; z <= 30; z += 35) {
+            SectorGenerator.spawnStreetLight(ctx, -50, z, Math.PI / 2);
+        }
 
         // Path: Home -> SMU
         PathGenerator.createDirtPath(ctx, [
@@ -150,12 +166,7 @@ export const Sector1: SectorDef = {
 
         // Street Lights along Main Road
         for (let x = 70; x <= 230; x += 40) {
-            SectorGenerator.spawnStreetLight(ctx, x, 280, Math.PI / 2);
-        }
-
-        // Street Lights along Vargstigen
-        for (let z = -40; z <= 30; z += 35) {
-            SectorGenerator.spawnStreetLight(ctx, -50, z, Math.PI / 2);
+            SectorGenerator.spawnStreetLight(ctx, x, 280, Math.PI);
         }
 
         // Path: Home -> Forest Path (Footprints)
@@ -166,7 +177,7 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(27, 0, 31)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
 
-        // Path: SMU -> Collectible 1 -> Main Road (Footprints)
+        // Path: Home -> Forest Path (Footprints)
         PathGenerator.createDecalPath(ctx, [
             new THREE.Vector3(181, 0, 81),
             new THREE.Vector3(189, 0, 89),
@@ -178,10 +189,10 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(201, 0, 148)
         ], { spacing: 0.6, size: 0.4, material: MATERIALS.footprintDecal, variance: 0.2 });
 
-        // Home: House:
+        // Home - House
         SectorGenerator.spawnBuilding(ctx, LOCATIONS.BUILDINGS.HOME.x - 2, LOCATIONS.BUILDINGS.HOME.z + 10, 20, 7, 25, 0, 0xffffff, true, true, 1.0);
 
-        // Home: Police car and family's car
+        // Home - Police car and family's car
         SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
         const familyCar = SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
         SectorGenerator.setOnFire(ctx, familyCar, { smoke: true, intensity: 200, distance: 50, onRoof: true });
@@ -200,14 +211,14 @@ export const Sector1: SectorDef = {
             collider: { type: 'box', size: new THREE.Vector3(60, 20, 50) }
         });
 
-        // Fence between SMU/Kindergarten
+        // Fence between kindergarten and SMU
         SectorGenerator.createFence(ctx, [
             new THREE.Vector3(104, 0, 19),
             new THREE.Vector3(104, 0, 67),
             new THREE.Vector3(203, 0, 73)
         ], 'mesh', 1.5, false);
 
-        // Random Buildings
+        // Random buildings
         const randomBuildings = [
             { x: 54, z: 15, s: [15, 12, 15], rotation: 0, color: 0x776655 },
             { x: 237, z: 92, s: [18, 15, 20], rotation: 1.55, color: 0x555566 },
@@ -220,15 +231,7 @@ export const Sector1: SectorDef = {
             SectorGenerator.spawnBuilding(ctx, b.x, b.z, b.s[0], b.s[1], b.s[2], b.rotation, b.color, true, true);
         }
 
-        // SMU: stone wall
-        SectorGenerator.createStoneWall(ctx, [
-            new THREE.Vector3(203, 0, 71),
-            new THREE.Vector3(206, 0, 112),
-            new THREE.Vector3(205, 0, 134),
-            new THREE.Vector3(203, 0, 146)
-        ], 1.5, 1.5);
-
-        // POI: SMU
+        // SMU
         const smu = new THREE.Mesh(new THREE.BoxGeometry(50, 10, 50), MATERIALS.brownBrick);
         smu.position.set(LOCATIONS.POIS.SMU.x, 5, LOCATIONS.POIS.SMU.z);
         smu.castShadow = true;
@@ -239,12 +242,12 @@ export const Sector1: SectorDef = {
         });
         SectorGenerator.setOnFire(ctx, smu, { smoke: true, intensity: 200, distance: 50, onRoof: true });
 
-        // 2 blue colored containers behind (west of) the building
+        // SMU - Containers
         SectorGenerator.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
         SectorGenerator.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z + 5, 0, 0x0044cc);
 
-        // Burning Cars
-        const carColors = [0x3355ff, 0xcccccc, 0xcc2222]; // Blue, Silver, Red
+        // SMU - Cars
+        const carColors = [0x3355ff, 0xcccccc, 0xcc2222];
         const carType = ['suv', 'station wagon', 'sedan'] as const;
         for (let i = 0; i < 3; i++) {
             const rotation = Math.random() * Math.PI;
@@ -253,21 +256,27 @@ export const Sector1: SectorDef = {
             SectorGenerator.setOnFire(ctx, car, { smoke: true, intensity: 200, distance: 50, onRoof: true });
         }
 
-        // Hedges:
-        SectorGenerator.createHedge(ctx, [new THREE.Vector3(141, 0, 190), new THREE.Vector3(146, 0, 230)]);
-        SectorGenerator.createHedge(ctx, [new THREE.Vector3(130, 0, 193), new THREE.Vector3(136, 0, 231)]);
+        // SMU - Stone wall
+        SectorGenerator.createStoneWall(ctx, [
+            new THREE.Vector3(203, 0, 71),
+            new THREE.Vector3(206, 0, 112),
+            new THREE.Vector3(205, 0, 134),
+            new THREE.Vector3(203, 0, 146)
+        ], 1.5, 1.5);
 
-        // POI: Church 
+        // Town center - hedges
+        SectorGenerator.createHedge(ctx, [new THREE.Vector3(141, 0, 188), new THREE.Vector3(146, 0, 230)]);
+        SectorGenerator.createHedge(ctx, [new THREE.Vector3(139, 0, 195), new THREE.Vector3(136, 0, 231)]);
+
+        // Church
         const churchGroup = new THREE.Group();
         churchGroup.position.set(LOCATIONS.POIS.CHURCH.x, 0, LOCATIONS.POIS.CHURCH.z);
 
-        // Merge body and tower parts
         const churchBodyGeo = new THREE.BoxGeometry(15, 12, 15);
         churchBodyGeo.translate(0, 6, 0);
         const churchBody = new THREE.Mesh(churchBodyGeo, MATERIALS.brownBrick);
         churchGroup.add(churchBody);
 
-        // Cross (Merged)
         const crossVGeo = new THREE.BoxGeometry(0.5, 4, 0.2);
         crossVGeo.translate(0, 8, 7.6);
         const crossHGeo = new THREE.BoxGeometry(2.5, 0.5, 0.2);
@@ -276,7 +285,6 @@ export const Sector1: SectorDef = {
         const cross = new THREE.Mesh(mergedCrossGeo, MATERIALS.crossEmissive);
         churchGroup.add(cross);
 
-        // Tower (Merged)
         const towerGeo = new THREE.BoxGeometry(4, 12, 4);
         towerGeo.translate(-10, 6, -15);
         const towerTopGeo = new THREE.ConeGeometry(6, 2, 6);
@@ -290,15 +298,23 @@ export const Sector1: SectorDef = {
             mesh: churchGroup,
             collider: { type: 'box', size: new THREE.Vector3(15, 20, 25) }
         });
-        // Add separate collider for the Tower which is offset
         SectorGenerator.addObstacle(ctx, {
             position: new THREE.Vector3(LOCATIONS.POIS.CHURCH.x - 10, 0, LOCATIONS.POIS.CHURCH.z - 15),
             collider: { type: 'box', size: new THREE.Vector3(6, 20, 6) }
         });
-        // Church burning on roof
-        SectorGenerator.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 50, onRoof: true });
 
-        // Café 
+        // Dark green metal doors
+        const doorMat = MATERIALS.blackMetal.clone();
+        doorMat.color.setHex(0x004422); // Dark green
+        const doorGeo = new THREE.PlaneGeometry(6, 6);
+        const doors = new THREE.Mesh(doorGeo, doorMat);
+        doors.position.set(0, 3, 7.6);
+        churchGroup.add(doors);
+
+        SectorGenerator.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+        SectorGenerator.setOnFire(ctx, tower, { smoke: true, intensity: 100, distance: 50, onRoof: true });
+
+        // Cafe
         const cafeGroup = new THREE.Group();
         cafeGroup.position.set(LOCATIONS.POIS.CAFE.x, 6, LOCATIONS.POIS.CAFE.z);
 
@@ -314,19 +330,15 @@ export const Sector1: SectorDef = {
         cafeGroup.add(cafeBody);
         cafeGroup.castShadow = true;
 
-        // Cafe mesh is approx 17m wide (5+5+12 - overlaps), 12m deep.
         const obstacle_cafe = { mesh: cafeGroup, collider: { type: 'box' as const, size: new THREE.Vector3(18, 20, 12) } };
         SectorGenerator.addObstacle(ctx, obstacle_cafe);
 
-        const cafeSign = createTextSprite(t('clues.s1_poi_cafe'));
-        cafeSign.position.set(0, 3, 6.5);
-        cafeGroup.add(cafeSign);
-
         scene.add(cafeGroup);
-        // Neon Sign for Cafe
+
         SectorGenerator.spawnNeonSign(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z - 6, 0, "CAFÉ", 0xffaa00);
 
-        // Grocery Store (Mataffär)
+
+        // Grocery store
         const grocery = SectorGenerator.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 15, 10, 30, 0, {
             lowerMat: MATERIALS.whiteBrick,
             upperMat: MATERIALS.wooden_fasade,
@@ -335,7 +347,6 @@ export const Sector1: SectorDef = {
             withRoof: false
         });
 
-        // West side shop windows
         const grocWinMat = MATERIALS.glass;
         const grocWinGeo = new THREE.PlaneGeometry(3.5, 3.5);
         for (let z = -10; z <= 10; z += 5) {
@@ -345,33 +356,34 @@ export const Sector1: SectorDef = {
             scene.add(win);
         }
 
-        // North side glass entrance
         const grocEntrance = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), MATERIALS.glass);
         grocEntrance.position.set(LOCATIONS.POIS.GROCERY.x, 3, LOCATIONS.POIS.GROCERY.z - 15.1);
         scene.add(grocEntrance);
 
-        // Signage
-        SectorGenerator.spawnNeonSign(ctx, LOCATIONS.POIS.GROCERY.x - 7.7, LOCATIONS.POIS.GROCERY.z - 2, -Math.PI / 2, "Mataffär", 0xff0000, true);
-        SectorGenerator.spawnNeonHeart(ctx, LOCATIONS.POIS.GROCERY.x - 7.7, 3.5, LOCATIONS.POIS.GROCERY.z + 6, -Math.PI / 2, 0xff0000);
+        const heartX = LOCATIONS.POIS.GROCERY.x - 7.7;
+        const heartZ = LOCATIONS.POIS.GROCERY.z + 6;
+        SectorGenerator.spawnNeonHeart(ctx, heartX, 7.5, heartZ, -Math.PI / 2, 0xff0000, 2.0);
+        SectorGenerator.spawnNeonSign(ctx, heartX, LOCATIONS.POIS.GROCERY.z - 2, -Math.PI / 2, "Ica Hjärtat", 0xffffff, true, 1.5);
 
-        // 2 black colored containers behind the building
         SectorGenerator.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x - 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
         SectorGenerator.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x + 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
 
-        // Gym 
+        // Gym
+        const gymMat = MATERIALS.sheet_metal.clone();
+        gymMat.color.setHex(0xeae7d6); // Lighter cream/beige tint
         const gym = SectorGenerator.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 40, 12, 20, 0, {
-            lowerMat: MATERIALS.sheet_metal,
-            upperMat: MATERIALS.sheet_metal,
-            shopWindows: false,
+            lowerMat: gymMat,
+            upperMat: gymMat,
+            shopWindows: true,
             upperWindows: true,
-            withRoof: false
+            withRoof: false,
+            mapRepeat: { x: 40, y: 1 }
         });
 
-        // West side glass staircase
         SectorGenerator.spawnGlassStaircase(ctx, LOCATIONS.POIS.GYM.x - 23, LOCATIONS.POIS.GYM.z, 6, 12, 8, 0);
 
-        const gymSign = createTextSprite(t('clues.s1_poi_gym'));
-        gymSign.position.set(0, 5, 10.1);
+        const gymSign = createTextSprite("Gånghester Gym");
+        gymSign.position.set(-10, 4.5, 10.1); // Repositioned for visibility
         gym.add(gymSign);
 
         // Pizzeria
@@ -382,11 +394,12 @@ export const Sector1: SectorDef = {
             upperWindows: true,
             withRoof: true
         });
-        SectorGenerator.spawnNeonSign(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z + 7.6, Math.PI, "PIZZERIA", 0xffaa00, true);
+        SectorGenerator.spawnNeonSign(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z + 7.6, Math.PI, "Gånghester Pizzera", 0xffffff, true, 1.0, 0x000000);
+        // Positioned at y:4.0 (halfway up the 8m building)
+        const pizSign = scene.children[scene.children.length - 1];
+        pizSign.position.y = 4.0;
 
-        // --- OVERPASS & TUNNEL ---
-        // 1. Earth Mound (Embankment) - Split into two parts to leave gap for tunnel
-        // West Segment (Left of Tunnel) - X=20 to ~114
+        // Embankment
         const embankmentWest = [
             new THREE.Vector3(20, 5, 364),
             new THREE.Vector3(84, 5, 350),
@@ -394,7 +407,6 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createEmbankment(ctx, embankmentWest, 18, 5, MATERIALS.dirt);
 
-        // East Segment (Right of Tunnel) - X=145 to 264
         const embankmentEast = [
             new THREE.Vector3(145, 5, 345),
             new THREE.Vector3(264, 5, 345)
@@ -405,38 +417,33 @@ export const Sector1: SectorDef = {
         const overpassPoints = LOCATIONS.OVERPASS.map(p => p.clone());
         PathGenerator.createRoad(ctx, overpassPoints, 12);
 
-        // --- GUARDRAILS & CRASH SCENE ---
-        // South Guardrail (Continuous - Left side facing West)
-        const railSouth = [
+        const guardRailSouth = [
             new THREE.Vector3(264, 5, 351),
             new THREE.Vector3(135, 5, 351),
             new THREE.Vector3(84, 5, 356),
             new THREE.Vector3(20, 5, 370)
         ];
-        SectorGenerator.createGuardrail(ctx, railSouth, true);
+        SectorGenerator.createGuardrail(ctx, guardRailSouth, true);
 
-        // North Guardrail (Broken - Right side facing West)
-        // Segment 1: West of crash
-        const railNorthWest = [
+        const guardRailNorthWest = [
             new THREE.Vector3(130, 5, 339),
             new THREE.Vector3(84, 5, 344),
             new THREE.Vector3(20, 5, 358)
         ];
-        SectorGenerator.createGuardrail(ctx, railNorthWest, true);
+        SectorGenerator.createGuardrail(ctx, guardRailNorthWest, true);
 
-        // Segment 2: East of crash
-        const railNorthEast = [
+        const guardRailNorthEast = [
             new THREE.Vector3(264, 5, 339),
             new THREE.Vector3(145, 5, 339)
         ];
-        SectorGenerator.createGuardrail(ctx, railNorthEast, true);
+        SectorGenerator.createGuardrail(ctx, guardRailNorthEast, true);
 
-        // Debris: Twisted Metal hanging off the edge
+        // TODO: FIX THIS
         const debrisGeo = new THREE.BoxGeometry(0.15, 0.3, 5);
         const debrisPositions = [
             { x: 144, z: 339, ry: 0.2, rz: 0.1 },
-            { x: 142, z: 338, ry: 0.5, rz: -0.5 }, // Hanging
-            { x: 128, z: 337, ry: 0.8, rz: -0.8 }, // Moved from 139 (Tunnel blocked) to 128
+            { x: 142, z: 338, ry: 0.5, rz: -0.5 },
+            { x: 128, z: 337, ry: 0.8, rz: -0.8 },
             { x: 131, z: 339, ry: -0.2, rz: 0.1 }
         ];
         for (let i = 0; i < debrisPositions.length; i++) {
@@ -448,41 +455,37 @@ export const Sector1: SectorDef = {
             ctx.scene.add(mesh);
         }
 
+        // TODO: FIX THIS
         // Skid Marks (Sliding from West towards the broken edge)
         // Left Tire
         PathGenerator.createDecalPath(ctx, [
-            new THREE.Vector3(100, 5.5, 344),
-            new THREE.Vector3(115, 5.5, 343),
-            new THREE.Vector3(125, 5.5, 341),
-            new THREE.Vector3(130, 5.5, 339)
+            new THREE.Vector3(100, 6, 344),
+            new THREE.Vector3(115, 6, 343),
+            new THREE.Vector3(125, 6, 341),
+            new THREE.Vector3(130, 6, 339)
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
-        // Right Tire
+        // Right tire
         PathGenerator.createDecalPath(ctx, [
-            new THREE.Vector3(100, 5.5, 346.5),
-            new THREE.Vector3(115, 5.5, 345.5),
-            new THREE.Vector3(125, 5.5, 343.5),
-            new THREE.Vector3(131, 5.5, 341.5)
+            new THREE.Vector3(100, 6, 346.5),
+            new THREE.Vector3(115, 6, 345.5),
+            new THREE.Vector3(125, 6, 343.5),
+            new THREE.Vector3(131, 6, 341.5)
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
 
-        // 2. Concrete Tunnel at
-        // This is where one road segment of the overpass crosses.
-        // The tunnel should be oriented to connect town center to station.
+        // Tunnel
         const tunnelPos = new THREE.Vector3(LOCATIONS.TRIGGERS.TUNNEL.x, 0, LOCATIONS.TRIGGERS.TUNNEL.z);
         ObjectGenerator.createTunnel(ctx, tunnelPos, 9, 3.5, 21, 0, 2.5, 0.5);
 
-        // 3. The "Tunnel Blocker" Bus
+        // Bus (tunnel blocker)
         const bus = ObjectGenerator.createVehicle('bus', 1, 0x009ddb, false);
-
-        // Bus Orientation: Lying on side (X-rotation), Front pointing East (+X)
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, 1.8, LOCATIONS.TRIGGERS.BUS.z);
-        bus.rotation.set(Math.PI / 2, 0, 0); // Lying on side
+        bus.rotation.set(-Math.PI / 2, 0, 0);
         bus.updateMatrixWorld();
 
         const busBox = new THREE.Box3().setFromObject(bus);
         const busSize = new THREE.Vector3();
         busBox.getSize(busSize);
 
-        // Create a centered dummy mesh for collision to avoid offset issues with the visual group
         const busCenter = new THREE.Vector3();
         busBox.getCenter(busCenter);
         const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
@@ -493,33 +496,76 @@ export const Sector1: SectorDef = {
 
         const busIdx = obstacles.length;
         const obstacle_bus = { mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
-        SectorGenerator.addObstacle(ctx, obstacle_bus);
 
-        // Bus - Burn effect (Relative to center of top face)
-        SectorGenerator.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
         scene.add(bus);
 
-        // Store references in sectorState for interactive explosion
+        SectorGenerator.addObstacle(ctx, obstacle_bus);
+        SectorGenerator.setOnFire(ctx, bus, { smoke: true, intensity: 25, distance: 50, onRoof: true });
+        SectorGenerator.addInteractable(ctx, bus, {
+            id: 'tunnel_bus_explode',
+            label: 'ui.interact_blow_up_bus',
+            type: 'sector_specific',
+            radius: 15.0
+        });
+        // Non-interactble from start
+        bus.userData.isInteractable = false;
+
+        // Store references for the event logic
         (ctx as any).busObject = bus;
         (ctx as any).busObjectIdx = busIdx;
 
-        SectorGenerator.addInteractable(ctx, bus, {
-            id: 'tunnel_bus',
-            label: 'ui.interact_plant_explosive',
-            type: 'sector_specific'
-        });
-
-        // Fences
+        // ----------------------------
+        // Train yard - Fence
         const ty = LOCATIONS.POIS.TRAIN_YARD;
-        SectorGenerator.createFence(ctx, [new THREE.Vector3(ty.x - 60, 0, ty.z + 40), new THREE.Vector3(ty.x + 60, 0, ty.z + 40)], 'mesh', 2.5, true);
-        // Station Ground
+        const fenceHeight = 3;
+
+        // South Side (Solid)
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x - 60, 0, ty.z + 40),
+            new THREE.Vector3(ty.x + 60, 0, ty.z + 40)
+        ], 'mesh', fenceHeight, true);
+
+        // North Side (Openings for path/railroad)
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x - 60, 0, ty.z - 40),
+            new THREE.Vector3(ty.x - 17, 0, ty.z - 40),
+            new THREE.Vector3(ty.x - 17, 0, ty.z - 43),
+        ], 'mesh', fenceHeight, true);
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x - 5, 0, ty.z - 43),
+            new THREE.Vector3(ty.x - 5, 0, ty.z - 40),
+            new THREE.Vector3(ty.x + 60, 0, ty.z - 40)
+        ], 'mesh', fenceHeight, true);
+
+        // West Side (Opening for railroad)
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x - 60, 0, ty.z - 40),
+            new THREE.Vector3(ty.x - 60, 0, ty.z - 6)
+        ], 'mesh', fenceHeight, true);
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x - 60, 0, ty.z),
+            new THREE.Vector3(ty.x - 60, 0, ty.z + 40)
+        ], 'mesh', fenceHeight, true);
+
+        // East Side (Opening for railroad)
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x + 60, 0, ty.z - 40),
+            new THREE.Vector3(ty.x + 60, 0, ty.z + 5),
+        ], 'mesh', fenceHeight, true);
+        SectorGenerator.createFence(ctx, [
+            new THREE.Vector3(ty.x + 60, 0, ty.z + 11),
+            new THREE.Vector3(ty.x + 60, 0, ty.z + 40)
+        ], 'mesh', fenceHeight, true);
+
+
+        // Train yard - Ground
         const stationGround = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), MATERIALS.asphalt);
         stationGround.rotation.x = -Math.PI / 2;
         stationGround.position.set(LOCATIONS.POIS.TRAIN_YARD.x, 0.025, LOCATIONS.POIS.TRAIN_YARD.z);
         stationGround.receiveShadow = true;
         scene.add(stationGround);
 
-        // Rail Track:
+        // Trainyard - rail track
         PathGenerator.createRailTrack(ctx, [
             new THREE.Vector3(-17, 0, 450),
             new THREE.Vector3(0, 0, 435),
@@ -528,18 +574,16 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(260, 0, 415),
         ]);
 
-        // Locomotive
+        // Train yard - Train
         const train = new THREE.Group();
         train.position.set(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
         train.rotation.y = -0.05;
         const matBody = MATERIALS.train; const matBlack = MATERIALS.blackMetal;
 
-        // Chassis (Black Metal)
         const chassis = new THREE.Mesh(new THREE.BoxGeometry(16, 1.5, 4), matBlack);
         chassis.position.y = 1.5;
         train.add(chassis);
 
-        // Boiler and Cabin merged (Train Mat)
         const boilerGeo = new THREE.CylinderGeometry(1.8, 1.8, 10, 16);
         boilerGeo.rotateZ(Math.PI / 2);
         boilerGeo.translate(2, 4.0, 0);
@@ -556,9 +600,8 @@ export const Sector1: SectorDef = {
             collider: { type: 'box', size: new THREE.Vector3(18, 12, 6) }
         });
 
-        // --- FOREST ---
-        // FOREST
-        // Forest: Home 1
+        // FORESTS
+        // Forest: Home -> SMU
         let forestPolygon = [
             new THREE.Vector3(37, 0, 44),
             new THREE.Vector3(36, 0, 30),
@@ -568,7 +611,7 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
-        // Forest: Home 2
+        // Forest: Home -> SMU
         forestPolygon = [
             new THREE.Vector3(-27, 0, 45),
             new THREE.Vector3(-27, 0, 80),
@@ -577,22 +620,28 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(85, 0, 147),
             new THREE.Vector3(55, 0, 177),
             new THREE.Vector3(123, 0, 148),
-            new THREE.Vector3(123, 0, 85),
+            new THREE.Vector3(123, 0, 115),
+            new THREE.Vector3(109, 0, 115),
+            new THREE.Vector3(101, 0, 96),
             new THREE.Vector3(96, 0, 78),
             new THREE.Vector3(70, 0, 55),
             new THREE.Vector3(32, 0, 55),
             new THREE.Vector3(24, 0, 37),
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
-        // Forest: SMU
+
+        // Forest
         forestPolygon = [
-            new THREE.Vector3(199, 0, 140),
+            new THREE.Vector3(188, 0, 151),
+            new THREE.Vector3(188, 0, 140),
             new THREE.Vector3(174, 0, 137),
+            new THREE.Vector3(125, 0, 137),
             new THREE.Vector3(129, 0, 163),
             new THREE.Vector3(142, 0, 173),
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 12, 'pine');
-        // Forest: Town center (north west)
+
+        // Forest - Cafe
         forestPolygon = [
             new THREE.Vector3(128, 0, 200),
             new THREE.Vector3(65, 0, 234),
@@ -606,19 +655,19 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 12, 'birch');
 
-        // Forest: Town center (south west)
+        // Forsest - Gym
         forestPolygon = [
             new THREE.Vector3(20, 0, 230),
             new THREE.Vector3(66, 0, 230),
             new THREE.Vector3(66, 0, 285),
-            new THREE.Vector3(83, 0, 285),
-            new THREE.Vector3(83, 0, 340),
+            new THREE.Vector3(72, 0, 285),
+            new THREE.Vector3(72, 0, 340),
             new THREE.Vector3(28, 0, 350),
 
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 10, 'birch');
 
-        // Forest: Town center (east)
+        // Forest - Town center
         forestPolygon = [
             new THREE.Vector3(145, 0, 198),
             new THREE.Vector3(147, 0, 218),
@@ -639,9 +688,9 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(227, 0, 187),
             new THREE.Vector3(203, 0, 172),
         ];
-        SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
+        SectorGenerator.createForest(ctx, forestPolygon, 8, 'birch');
 
-        // Forest: Train Yard (north west)
+        // Forest: Trainyard - North-West
         forestPolygon = [
             new THREE.Vector3(88, 0, 364),
             new THREE.Vector3(88, 0, 392),
@@ -651,7 +700,7 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
-        // Forest: Train Yard (north east)
+        // Forst
         forestPolygon = [
             new THREE.Vector3(212, 0, 359),
             new THREE.Vector3(250, 0, 359),
@@ -660,7 +709,6 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
-        // Forest: Train Yard (south of railroad)
         forestPolygon = [
             new THREE.Vector3(88, 0, 403),
             new THREE.Vector3(88, 0, 441),
@@ -674,11 +722,9 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
-        // --- FENCES ---
         const ty2 = LOCATIONS.POIS.TRAIN_YARD;
         SectorGenerator.createFence(ctx, [new THREE.Vector3(ty2.x - 60, 0, ty2.z - 40), new THREE.Vector3(ty2.x + 60, 0, ty2.z - 40)], 'mesh', 2, true);
 
-        // Dead Bodies & Extra Chests
         SectorGenerator.spawnDeadBody(ctx, 37, 44, 'WALKER', 0, true);
         SectorGenerator.spawnChest(ctx, 45, 45, 'standard');
         SectorGenerator.spawnChest(ctx, 110, 80, 'standard');
@@ -687,16 +733,14 @@ export const Sector1: SectorDef = {
 
     setupContent: (ctx: SectorContext) => {
         const { triggers } = ctx;
-        // --- TRIGGERS ---
+
         triggers.push(
-            // Clues (Action: 50 XP Reward)
             { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: 'THOUGHTS', content: "clues.s1_start_tracks", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: 'THOUGHTS', content: "clues.s1_blood_stains", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: 'THOUGHTS', content: "clues.s1_they_must_be_scared", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_still_tracking', position: LOCATIONS.TRIGGERS.STILL_TRACKING, radius: 15, type: 'THOUGHTS', content: "clues.s1_still_tracking", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_town_center', position: LOCATIONS.TRIGGERS.TOWN_CENTER, radius: 80, type: 'THOUGHTS', content: "clues.s1_town_center", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
 
-            // POIs (Action: 250 XP Reward)
             { id: 's1_poi_building_on_fire', position: LOCATIONS.POIS.SMU, size: { width: 60, depth: 60 }, type: 'POI', content: "clues.s1_poi_building_on_fire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's1_poi_church', position: LOCATIONS.POIS.CHURCH, size: { width: 30, depth: 30 }, type: 'POI', content: "clues.s1_poi_church", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's1_poi_cafe', position: LOCATIONS.POIS.CAFE, size: { width: 25, depth: 25 }, type: 'POI', content: "clues.s1_poi_cafe", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
@@ -705,19 +749,9 @@ export const Sector1: SectorDef = {
             { id: 's1_poi_gym', position: LOCATIONS.POIS.GYM, size: { width: 45, depth: 25 }, type: 'POI', content: "clues.s1_poi_gym", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's1_poi_train_yard', position: LOCATIONS.POIS.TRAIN_YARD, size: { width: 130, depth: 90 }, type: 'POI', content: "clues.s1_poi_train_yard", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
 
-            // --- THE BUS EVENT ---
-            // --- THE BUS EVENT (Handled via Interaction now) ---
-            {
-                id: 's1_bus_event',
-                position: LOCATIONS.TRIGGERS.BUS,
-                radius: 12, // Slightly larger for better discovery
-                type: 'EVENT',
-                content: null,
-                triggered: false,
-                actions: [] // Logic handled in onUpdate based on triggered flag
-            },
+            // THE NATIVE BUS EVENT TRIGGER
+            { id: 's1_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: 'SPEECH', content: "clues.s1_event_tunnel_blocked", triggered: false, actions: [] },
 
-            // --- FIND LOKE EVENT ---
             {
                 id: 'found_loke',
                 position: LOCATIONS.SPAWN.FAMILY,
@@ -729,9 +763,7 @@ export const Sector1: SectorDef = {
             }
         );
 
-        // ===== ENVIRONMENTAL FEATURES =====
-
-        // Flower garden near home
+        /* TODO: FIX THIS  DO NOT REMOVE
         const homeFlowers = [
             new THREE.Vector3(8, 0, -8),
             new THREE.Vector3(12, 0, -8),
@@ -740,7 +772,6 @@ export const Sector1: SectorDef = {
         ];
         EnvironmentGenerator.fillAreaWithFlowers(ctx, homeFlowers, 1.0);
 
-        // Wildflowers near church area
         const churchFlowers = [
             new THREE.Vector3(160, 0, 235),
             new THREE.Vector3(170, 0, 235),
@@ -748,369 +779,270 @@ export const Sector1: SectorDef = {
             new THREE.Vector3(160, 0, 245)
         ];
         EnvironmentGenerator.fillAreaWithFlowers(ctx, churchFlowers, 0.7);
+        */
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
-        if (id === 'tunnel_bus') {
-            object.userData.isInteractable = false;
-            state.sectorState.busSequence = { startTime: state.time || Date.now(), step: 0 };
-
-            // Immediate feedback
-            events.setNotification({ text: events.t('clues.s1_event_tunnel_blocked'), duration: 1500 });
-        } else if (id === 'tunnel_bus_explode') {
+        // Only triggered when the player hits [E] after the wave is cleared
+        if (id === 'tunnel_bus_explode') {
             state.sectorState.busInteractionTriggered = true;
             object.userData.isInteractable = false;
         }
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
-        const state = gameState;
-        if (!sectorState.spawns) sectorState.spawns = {};
+        if (!sectorState.spawns) {
+            sectorState.spawns = {};
+        }
 
-        // --- BUS SEQUENCE ---
-        if (sectorState.busSequence) {
-            const seq = sectorState.busSequence;
-            const elapsed = now - seq.startTime;
+        if (sectorState.busEventState === undefined) {
+            sectorState.busEventState = 0;
+            sectorState.zombiesKilled = 0;
+            sectorState.zombiesKillTarget = 0;
+        }
 
-            if (seq.step === 0 && elapsed > 1500) {
-                events.playSound('explosion');
-                events.cameraShake(5.0);
-                // Pan Camera manually or via event? generic setCameraOverride is robust
-                events.setCameraOverride({
+        // State 0: Wait for player to approach the bus
+        if (sectorState.busEventState === 0) {
+            const busTrigger = gameState.triggers?.find((t: any) => t.id === 's1_event_tunnel_blocked');
+            if (busTrigger && busTrigger.triggered) {
+                sectorState.busEventState = 1;
+                sectorState.busEventTimer = now;
+            }
+        }
+
+        // State 1: Wait 1.5s, then trigger first distant explosion
+        else if (sectorState.busEventState === 1 && now - sectorState.busEventTimer > 1500) {
+            sectorState.busEventState = 2;
+            sectorState.busEventTimer = now;
+
+            if (events.playSound) events.playSound('explosion');
+            if (events.cameraShake) events.cameraShake(1.0);
+
+            gameState.triggers.push({
+                id: 'dyn_speech_' + Date.now(),
+                position: playerPos.clone(),
+                radius: 100,
+                type: 'SPEECH',
+                content: "clues.s1_event_tunnel_whats_happening",
+                triggered: false,
+                actions: []
+            });
+        }
+
+        // State 2: Wait 2s, then pan camera via WINDOW event
+        else if (sectorState.busEventState === 2 && now - sectorState.busEventTimer > 2000) {
+            sectorState.busEventState = 3;
+            sectorState.busEventTimer = now;
+
+            const w = window as any;
+            if (w.setCameraOverride) {
+                _camOverrideTarget.copy(_trainYardPos).add(_offsetTrainYard);
+                _camOverrideLookAt.copy(_trainYardPos);
+                w.setCameraOverride({
                     active: true,
-                    targetPos: new THREE.Vector3(150, 0, 400), // Train Yard
-                    lookAtPos: new THREE.Vector3(150, 2, 400),
-                    endTime: now + 4000
+                    targetPos: _camOverrideTarget.clone(),
+                    lookAtPos: _camOverrideLookAt.clone(),
+                    endTime: performance.now() + 4000 // Force hold for 4 seconds
                 });
-                seq.step++;
-            }
-            if (seq.step === 1 && elapsed > 2500) {
-                events.playSound('explosion');
-                events.cameraShake(5.0);
-                seq.step++;
-            }
-            if (seq.step === 2 && elapsed > 3500) {
-                events.setNotification({ text: events.t('clues.s1_event_tunnel_whats_happening'), duration: 3000 });
-                seq.step++;
-            }
-            if (seq.step === 3 && elapsed > 6500) {
-                // START WAVE
-                // events.spawnHorde(30); // Not directly available in events interface?
-                // events was: spawnZombie, spawnHorde... Yes!
-                events.spawnHorde(30, 'WALKER', new THREE.Vector3(150, 0, 400)); // Train yard focus
-
-                // Specific spawns
-                const LOCS = {
-                    CHURCH: new THREE.Vector3(165, 0, 240),
-                    CAFE: new THREE.Vector3(110, 0, 250),
-                    PIZZERIA: new THREE.Vector3(200, 0, 250),
-                    GYM: new THREE.Vector3(105, 0, 295),
-                    GROCERY: new THREE.Vector3(170, 0, 300)
-                };
-
-                for (let i = 0; i < 6; i++) events.spawnZombie('RUNNER', LOCS.CHURCH);
-                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.CAFE);
-                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.PIZZERIA);
-                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.GYM);
-                for (let i = 0; i < 6; i++) events.spawnZombie('WALKER', LOCS.GROCERY);
-
-                seq.step++;
-                sectorState.busSequence = null; // Done
             }
         }
 
-        // 1. Initial Group (3 walkers, 1.5s after start)
-        if (!sectorState.spawns.initial && now - state.startTime > 0) {
-            sectorState.spawns.initial = true;
-            for (let i = 0; i < 3; i++) {
-                events.spawnZombie('WALKER', new THREE.Vector3(14, 0, 1));
+        // State 3: Wait 2s for camera to arrive, then BIG explosion at train yard
+        else if (sectorState.busEventState === 3 && now - sectorState.busEventTimer > 2000) {
+            sectorState.busEventState = 4;
+            sectorState.busEventTimer = now;
+
+            if (events.playSound) events.playSound('explosion');
+            if (events.cameraShake) events.cameraShake(5.0);
+
+            if (events.emitNoise) {
+                events.emitNoise(_trainYardPos.clone(), 200, 'loud_explosion');
             }
         }
 
-        // 2. Forest (Home -> SMU) - Varied zombies
-        const forestHomeSMU = new THREE.Vector3(70, 0, 50);
-        if (playerPos.distanceTo(forestHomeSMU) < 40 && !sectorState.spawns.forest_home_smu) {
-            sectorState.spawns.forest_home_smu = true;
-            for (let i = 0; i < 6; i++) {
-                const type = Math.random() > 0.7 ? 'RUNNER' : 'WALKER';
-                const offX = (Math.random() - 0.5) * 30;
-                const offZ = (Math.random() - 0.5) * 30;
-                events.spawnZombie(type, new THREE.Vector3(forestHomeSMU.x + offX, 0, forestHomeSMU.z + offZ));
+        // State 4: Wait 2s on explosion view, then return camera and spawn wave
+        else if (sectorState.busEventState === 4 && now - sectorState.busEventTimer > 2000) {
+            sectorState.busEventState = 5;
+            sectorState.busEventTimer = now;
+
+            const w = window as any;
+            if (w.setCameraOverride) {
+                w.setCameraOverride(null);
             }
+
+            gameState.triggers.push({
+                id: 'dyn_speech_' + Date.now(),
+                position: playerPos.clone(),
+                radius: 100,
+                type: 'SPEECH',
+                content: "clues.s1_event_tunnel_explosion_attracted_zombies",
+                triggered: false,
+                actions: []
+            });
+
+            // ZOMBIE WAVE
+            const LOCS = [
+                LOCATIONS.POIS.CHURCH,
+                LOCATIONS.POIS.CAFE,
+                LOCATIONS.POIS.PIZZERIA,
+                LOCATIONS.POIS.GYM,
+                LOCATIONS.POIS.GROCERY
+            ];
+
+            let totalSpawned = 0;
+            for (let i = 0; i < LOCS.length; i++) {
+                for (let j = 0; j < 6; j++) {
+                    _viewPos.set(LOCS[i].x, 0, LOCS[i].z);
+                    if (events.spawnZombie) events.spawnZombie(undefined, _viewPos.clone());
+                    totalSpawned++;
+                }
+            }
+
+            for (let i = 0; i < 30; i++) {
+                if (events.spawnZombie) events.spawnZombie('WALKER', _trainYardPos.clone());
+                totalSpawned++;
+            }
+
+            sectorState.zombiesKillTarget = 1; //Math.floor(totalSpawned * 0.8);
+            sectorState.zombiesKilled = 0;
+
+            sectorState.startingKills = gameState.killsInRun;
         }
 
-        // 3. Buildings - Zombies around key locations
-        const buildingPOIs = [
-            { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, type: 'MIXED' },
-            { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, type: 'WALKER' },
-            { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, type: 'RUNNER' },
-            { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, type: 'MIXED' },
-            { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: 'WALKER' },
-        ];
+        // State 5: Wait for player to kill the wave
+        else if (sectorState.busEventState === 5) {
+            sectorState.zombiesKilled = gameState.killsInRun - sectorState.startingKills;
 
-        for (let j = 0; j < buildingPOIs.length; j++) {
-            const poi = buildingPOIs[j];
-            const dist = playerPos.distanceTo(new THREE.Vector3(poi.pos.x, 0, poi.pos.z));
-            if (dist < 45 && !sectorState.spawns[poi.name]) {
-                sectorState.spawns[poi.name] = true;
-                for (let i = 0; i < poi.count; i++) {
-                    let type = 'WALKER';
-                    if (poi.type === 'MIXED') type = Math.random() > 0.8 ? 'RUNNER' : 'WALKER';
-                    else if (poi.type === 'RUNNER') type = Math.random() > 0.3 ? 'RUNNER' : 'WALKER';
-                    else if (poi.type === 'WALKER') type = 'WALKER';
+            if (sectorState.zombiesKilled >= sectorState.zombiesKillTarget) {
+                sectorState.busEventState = 6;
+                sectorState.busEventTimer = now;
 
-                    const offX = (Math.random() - 0.5) * 20;
-                    const offZ = (Math.random() - 0.5) * 20;
-                    events.spawnZombie(type, new THREE.Vector3(poi.pos.x + offX, 0, poi.pos.z + offZ));
+                gameState.triggers.push({
+                    id: 'dyn_speech_' + Date.now(),
+                    position: playerPos.clone(),
+                    radius: 100,
+                    type: 'SPEECH',
+                    content: "clues.s1_event_tunnel_plant_explosives",
+                    triggered: false,
+                    actions: []
+                });
+
+                // CRITICAL FIX: Mark flag for PlayerInteractionSystem
+                sectorState.busCanBeInteractedWith = true;
+
+                const busObj = (sectorState.ctx as any).busObject;
+                if (busObj) {
+                    busObj.userData.isInteractable = true;
                 }
             }
         }
 
-        // 4. Town Center Forest - Harder group
-        const townCenterWoods = new THREE.Vector3(145, 0, 240);
-        if (playerPos.distanceTo(townCenterWoods) < 50 && !sectorState.spawns.town_forest) {
-            sectorState.spawns.town_forest = true;
-            for (let i = 0; i < 8; i++) {
-                let type = 'WALKER';
-                const roll = Math.random();
-                if (roll > 0.8) type = 'TANK';
-                if (roll > 0.9) type = 'BOMBER';
-                else if (roll > 0.7) type = 'RUNNER';
+        // State 6: Wait for player to press [E]
+        else if (sectorState.busEventState === 6 && sectorState.busInteractionTriggered) {
+            sectorState.busEventState = 7;
+            sectorState.busEventTimer = now;
+            sectorState.lastBeepTime = now;
 
-                const offX = (Math.random() - 0.5) * 40;
-                const offZ = (Math.random() - 0.5) * 40;
-                events.spawnZombie(type, new THREE.Vector3(townCenterWoods.x + offX, 0, townCenterWoods.z + offZ));
-            }
-        }
-
-        // Train Smoke
-        if (events.spawnPart) {
-            const interval = 80; // Smoke rate
-            if (now - (sectorState.lastSmokeTime || 0) > interval) {
-                (sectorState as any).lastSmokeTime = now;
-                const tPos = LOCATIONS.POIS.TRAIN_YARD;
-                const yRot = -0.05;
-                const localX = 6, localY = 7.0, localZ = 0;
-                const wx = tPos.x + (localX * Math.cos(yRot) - localZ * Math.sin(yRot));
-                const wz = tPos.z + (localX * Math.sin(yRot) + localZ * Math.cos(yRot));
-
-                events.spawnPart(wx, localY, wz, 'black_smoke', 1);
-            }
-        }
-
-        // --- WAVE LOGIC ---
-        if (sectorState.hordeKilled === undefined) sectorState.hordeKilled = 0;
-        if (sectorState.busCanBeInteractedWith === undefined) sectorState.busCanBeInteractedWith = false;
-
-        // Explode Bus interaction criteria
-        if (sectorState.hordeTarget !== undefined && sectorState.hordeKilled >= sectorState.hordeTarget
-            && !sectorState.busCanBeInteractedWith
-            && playerPos.distanceTo(new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z)) < 25) {
-
-            sectorState.busCanBeInteractedWith = true;
-            sectorState.waveActive = false; // Progress bar finished
-            events.setNotification({ visible: true, text: events.t('clues.s1_event_tunnel_plant_explosives'), timestamp: now });
-
-            // Make it interactable now
             const busObj = (sectorState.ctx as any).busObject;
             if (busObj) {
-                events.setInteraction({
-                    id: 'tunnel_bus_explode',
-                    text: events.t('ui.interact_blow_up_bus'),
-                    position: busObj.position,
-                    action: () => {
-                        sectorState.busInteractionTriggered = true;
-                        busObj.userData.isInteractable = false;
-                    }
-                });
+                _busOriginalPos.copy(busObj.position);
 
-                // Also Register in the Interaction System properly
-                busObj.userData.isInteractable = true;
-                busObj.userData.interactionId = 'tunnel_bus_explode';
-                busObj.userData.interactionLabel = 'ui.interact_blow_up_bus';
-                busObj.userData.interactionType = 'sector_specific';
-            }
-        }
-
-        // Handle Bus Gate & Interaction
-        if (sectorState.busCanBeInteractedWith && !sectorState.busExploded) {
-            const busObj = (sectorState.ctx as any).busObject;
-            const nowTime = now;
-
-            // EXECUTING EXPLOSION
-            if ((sectorState as any).busExplosionStartTime) {
-                const elapsed = nowTime - (sectorState as any).busExplosionStartTime;
-                const ring = (sectorState as any).busRing;
-
-                // 2s delay before explosion
-                if (elapsed < 3000) {
-                    // Pulsing Ring Effect
-                    if (ring) {
-                        const pulse = (Math.sin(elapsed * 0.01) + 1) * 0.5; // 0..1
-                        ring.material.opacity = 0.3 + (pulse * 0.5);
-                        ring.scale.setScalar(1.0 + (pulse * 0.2));
-                        const red = new THREE.Color(0xff0000);
-                        const yellow = new THREE.Color(0xffff00);
-                        ring.material.color.copy(red).lerp(yellow, pulse);
-                    }
-
-                    // BEEP BEEP (Every 500ms, then 250ms)
-                    const beepInterval = elapsed > 2000 ? 250 : 500;
-                    const lastBeep = (sectorState as any).lastBeepTime || 0;
-                    if (nowTime - lastBeep > beepInterval) {
-                        (sectorState as any).lastBeepTime = nowTime;
-                        events.playTone(880, 'sine', 0.1, 0.15);
-                    }
-
-                    // SHAKE BUS
-                    if (busObj) {
-                        const shakeAmount = 0.05 + (elapsed / 3000) * 0.15;
-                        busObj.position.x = (sectorState as any).originalBusPos.x + (Math.random() - 0.5) * shakeAmount;
-                        busObj.position.z = (sectorState as any).originalBusPos.z + (Math.random() - 0.5) * shakeAmount;
-                        events.cameraShake(0.5);
-                    }
-                } else {
-                    // BOOM TIME (3s elapsed)
-                    (sectorState as any).busExplosionStartTime = null;
-                    if (ring) {
-                        events.scene.remove(ring);
-                        (sectorState as any).busRing = null;
-
-                        // Clear Camera Override
-                        if (events.setCameraOverride) {
-                            events.setCameraOverride(null);
-                        }
-                    }
-
-                    sectorState.busExploded = true;
-                    (sectorState as any).busInteractionActive = false;
-                    events.setNotification({
-                        visible: true,
-                        text: events.t('clues.s1_event_tunnel_cleared'),
-                        timestamp: now
+                const w = window as any;
+                if (w.setCameraOverride) {
+                    _camOverrideTarget.copy(busObj.position).add(_zoomOffsetTarget);
+                    _camOverrideLookAt.copy(busObj.position).add(_zoomOffsetLook);
+                    w.setCameraOverride({
+                        active: true,
+                        targetPos: _camOverrideTarget.clone(),
+                        lookAtPos: _camOverrideLookAt.clone(),
+                        endTime: performance.now() + 3000
                     });
-
-                    // Explosion FX
-                    events.playSound('explosion');
-                    events.cameraShake(5);
-
-                    // ATTRACT ZOMBIES ON EXPLOSION
-                    const attrackAreaRadius = 100;
-                    if (events.emitNoise) {
-                        events.emitNoise(busObj.position, attrackAreaRadius, 'loud_explosion');
-                    }
-
-                    // Chain notifications: Wait for "Tunnel Cleared" to fade before showing "Zombies Attracted"
-                    setTimeout(() => {
-                        events.setNotification({
-                            visible: true,
-                            text: events.t('clues.s1_event_tunnel_explosion_attracted_zombies'),
-                            timestamp: Date.now()
-                        });
-                    }, 3500);
-
-                    // Remove/Hide Bus
-                    if (busObj) {
-                        busObj.visible = false;
-                        events.scene.remove(busObj);
-                    }
-
-                    // Disable Collider
-                    const obstacles = (sectorState.ctx as any).obstacles;
-                    const busColliderIdx = (sectorState.ctx as any).busObjectIdx;
-                    if (busColliderIdx !== undefined && obstacles && obstacles[busColliderIdx]) {
-                        obstacles[busColliderIdx].collider.size.set(0, 0, 0);
-                    }
-
-                    // Spawn Rubble (5 pieces)
-                    const rubbleGeo = new THREE.BoxGeometry(2, 2, 4);
-                    const rubbleMat = MATERIALS.concrete.clone();
-                    rubbleMat.color.setHex(0x009ddb);
-                    for (let i = 0; i < 5; i++) {
-                        const r = new THREE.Mesh(rubbleGeo, rubbleMat);
-                        // Random scatter/rotation
-                        r.position.copy(busObj.position);
-                        r.position.x += (Math.random() - 0.5) * 8;
-                        r.position.z += (Math.random() - 0.5) * 8;
-                        r.position.y = 1;
-                        r.rotation.set(Math.random(), Math.random(), Math.random());
-                        r.castShadow = true;
-                        events.scene.add(r);
-                    }
                 }
-                // Processing explosion -> Skip interaction check
-                return;
-            }
 
-            // INTERACTION TRIGGERED BY PLAYER INTERACTION SYSTEM
-            if ((sectorState as any).busInteractionTriggered && !(sectorState as any).busExplosionStartTime) {
-                // Start Countdown Sequence
-                (sectorState as any).busExplosionStartTime = nowTime;
-                (sectorState as any).originalBusPos = busObj.position.clone();
-                (sectorState as any).lastBeepTime = nowTime;
-                events.playTone(880, 'sine', 0.1, 0.2);
-
-                // Spawn Red Ring
                 const ringGeo = new THREE.RingGeometry(6, 7, 32);
                 const ringMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
                 const ring = new THREE.Mesh(ringGeo, ringMat);
                 ring.rotation.x = -Math.PI / 2;
                 ring.position.copy(busObj.position);
                 ring.position.y = 1.0;
-                events.scene.add(ring);
-                (sectorState as any).busRing = ring;
+                if (events.scene) events.scene.add(ring);
+                sectorState.busRing = ring;
+            }
 
-                // Clear the prompt if it was lingering (controlled by InteractionSystem, but good safety)
-                events.setInteraction(null);
+            if (events.playTone) events.playTone(880, 'sine', 0.1, 0.2);
+        }
 
-                // Zoom Camera to Bus Front ("159" sign)
-                if (events.setCameraOverride) {
-                    const busPos = busObj.position.clone();
-                    // Bus is lying on side (X-rotation), Front is +X.
-                    // "159" sign is at local x + something.
-                    // Let's look exactly at the front sign position.
-                    // Sign pos was: s.c[0] / 2 + 0.05, s.c[1] - 0.2, 0  (Local to bus)
+        // State 7: Bomb countdown sequence
+        else if (sectorState.busEventState === 7) {
+            const elapsed = now - sectorState.busEventTimer;
+            const busObj = (sectorState.ctx as any).busObject;
 
-                    // World Position of Front:
-                    // Bus Rotation is (PI/2, 0, 0).
-                    // Front is +X. Top is -Z (in world)? No. 
-                    // Let's just look at the Bus Center + Offset
+            if (elapsed < 3000) {
+                const beepInterval = elapsed > 2000 ? 250 : 500;
+                if (now - sectorState.lastBeepTime > beepInterval) {
+                    sectorState.lastBeepTime = now;
+                    if (events.playTone) events.playTone(880, 'sine', 0.1, 0.15);
+                }
 
-                    const camTarget = busPos.clone().add(new THREE.Vector3(-6, 4, 3)); // Closer and adjusted angle
-                    const lookAt = busPos.clone().add(new THREE.Vector3(6.5, 0.5, 0)); // Look specifically at the destination sign area
+                if (sectorState.busRing) {
+                    const pulse = (Math.sin(elapsed * 0.01) + 1) * 0.5;
+                    sectorState.busRing.material.opacity = 0.3 + (pulse * 0.5);
+                    sectorState.busRing.scale.setScalar(1.0 + (pulse * 0.2));
+                    sectorState.busRing.material.color.setRGB(1.0, pulse, 0.0);
+                }
 
-                    events.setCameraOverride({
-                        active: true,
-                        targetPos: camTarget,
-                        lookAtPos: lookAt,
-                        endTime: nowTime + 4000 // Slightly longer than explosion to hold frame
-                    });
+                if (busObj) {
+                    const shakeAmount = 0.05 + (elapsed / 3000) * 0.15;
+                    busObj.position.x = _busOriginalPos.x + (Math.random() - 0.5) * shakeAmount;
+                    busObj.position.z = _busOriginalPos.z + (Math.random() - 0.5) * shakeAmount;
+                    if (events.cameraShake) events.cameraShake(0.5);
+                }
+            } else {
+                // EXPLODE BUS
+                sectorState.busEventState = 8;
+                sectorState.busEventTimer = now;
+
+                if (sectorState.busRing) {
+                    if (events.scene) events.scene.remove(sectorState.busRing);
+                    sectorState.busRing = null;
+                }
+
+                if (events.playSound) events.playSound('explosion');
+                if (events.cameraShake) events.cameraShake(10);
+
+                if (busObj) {
+                    busObj.visible = false;
+
+                    const obstacles = (sectorState.ctx as any).obstacles;
+                    const busColliderIdx = (sectorState.ctx as any).busObjectIdx;
+                    if (busColliderIdx !== undefined && obstacles && obstacles[busColliderIdx]) {
+                        obstacles[busColliderIdx].collider.size.set(0, 0, 0);
+                    }
+
+                    SectorGenerator.extinguish(sectorState.ctx, busObj);
+                    SectorGenerator.spawnBusRubble(sectorState.ctx, _busOriginalPos.x, _busOriginalPos.z, 10);
                 }
             }
         }
+
+        // State 8: Short wait after explosion before returning camera
+        else if (sectorState.busEventState === 8 && now - sectorState.busEventTimer > 2000) {
+            sectorState.busEventState = 9;
+
+            const w = window as any;
+            if (w.setCameraOverride) {
+                w.setCameraOverride(null);
+            }
+
+            gameState.triggers.push({
+                id: 'dyn_speech_' + Date.now(),
+                position: playerPos.clone(),
+                radius: 100,
+                type: 'SPEECH',
+                content: "clues.s1_event_tunnel_cleared",
+                triggered: false,
+                actions: []
+            });
+        }
     },
 };
-
-
-// Legacy spawn function removed - logic moved to controlled onUpdate triggers
-/*
-function spawnSectorHordes(ctx: SectorContext) {
-    if (!ctx.spawnHorde) return;
-
-    // Defined Horde Locations
-    const hordeSpots = [
-        new THREE.Vector3(20, 0, 20),   // Near Start
-        new THREE.Vector3(45, 0, -30),  // Woods
-        new THREE.Vector3(-10, 0, 50),  // Road
-        new THREE.Vector3(60, 0, 60),   // Town Center
-        new THREE.Vector3(-40, 0, -20)  // Embankment
-    ];
-
-    for (let i = 0; i < hordeSpots.length; i++) {
-        // Randomize count 5-8
-        // Don't spawn too many or perf will die
-        const count = 5 + Math.floor(ctx.rng() * 4);
-        ctx.spawnHorde(count, undefined, hordeSpots[i]);
-    }
-}
-*/

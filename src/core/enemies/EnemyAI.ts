@@ -222,7 +222,8 @@ export const EnemyAI = {
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
 
-                if (Math.random() < 0.005) callbacks.playSound(e.type === 'RUNNER' ? 'runner_scream' : (e.type === 'TANK' ? 'tank_roar' : 'walker_groan'));
+                // TODO - DON'T REMOVE: improve sound before enabling this:
+                //if (Math.random() < 0.005) callbacks.playSound(e.type === 'RUNNER' ? 'runner_scream' : (e.type === 'TANK' ? 'tank_roar' : 'walker_groan'));
                 break;
 
             case AIState.WANDER:
@@ -249,19 +250,27 @@ export const EnemyAI = {
 
                     const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
-                        if (e.type === 'TANK') callbacks.playSound('tank_smash');
+                        // TODO - DON'T REMOVE: improve sound before enabling this:
+                        //if (e.type === 'TANK') callbacks.playSound('tank_smash');
                         e.lastStepTime = now;
                     }
 
-                    if (Math.random() < 0.01) callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : (e.type === 'TANK' ? 'tank_roar' : 'walker_attack'));
+                    // TODO - DON'T REMOVE: improve sound before enabling this:
+                    //if (Math.random() < 0.01) callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : (e.type === 'TANK' ? 'tank_roar' : 'walker_attack'));
 
                     const attackRange = e.type === 'TANK' ? 7.0 : 3.8;
                     if (distSq < attackRange && e.attackCooldown <= 0) {
                         if (e.type === 'TANK') {
-                            e.attackCooldown = 3000; callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH'); callbacks.playSound('tank_smash');
+                            e.attackCooldown = 3000;
+                            callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
+                            // TODO - DON'T REMOVE: improve sound before enabling this:
+                            //callbacks.playSound('tank_smash');
                         } else {
-                            e.state = AIState.BITING; e.grappleTimer = 2.0; e.attackCooldown = 2000;
-                            callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : 'walker_attack');
+                            e.state = AIState.BITING;
+                            e.grappleTimer = 2.0;
+                            e.attackCooldown = 2000;
+                            // TODO - DON'T REMOVE: improve sound before enabling this:
+                            //callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : 'walker_attack');
                         }
                     }
                 }
@@ -315,7 +324,8 @@ export const EnemyAI = {
 
                 e.mesh.visible = true;
 
-                if (now % 400 < 30) callbacks.playSound('bomber_beep');
+                // TODO - DON'T REMOVE: improve sound before enabling this:
+                //if (now % 400 < 30) callbacks.playSound('bomber_beep');
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;

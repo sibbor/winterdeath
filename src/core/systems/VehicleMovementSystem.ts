@@ -348,7 +348,7 @@ export class VehicleMovementSystem implements System {
                         FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat),
                 });
 
-                state.cameraShake = state.cameraShake + 0.4 > 1.5 ? 1.5 : state.cameraShake + 0.4;
+                session.engine.camera.shake(0.4);
                 soundManager.playImpact('flesh');
 
             } else if (speedSq >= SPEED_SQ_KNOCKBACK) {
@@ -363,7 +363,7 @@ export class VehicleMovementSystem implements System {
                 FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
                     1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
 
-                state.cameraShake = state.cameraShake + 0.2 > 1.0 ? 1.0 : state.cameraShake + 0.2;
+                session.engine.camera.shake(0.2);
                 soundManager.playImpact('flesh');
 
                 vehicle.userData.suspVelY += 3.0;

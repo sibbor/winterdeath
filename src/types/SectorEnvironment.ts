@@ -79,6 +79,12 @@ export interface SectorContext {
     state: any; // RuntimeState (for systems like waterSystem, windSystem)
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
+
+    // --- NEW CAMERA CALLBACKS ---
+    setCameraAngle?: (angle: number) => void;
+    setCameraHeight?: (heightMod: number) => void;
+    setCameraOverride?: (active: boolean, targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3, durationMs?: number) => void;
+    shakeCamera?: (amount: number, type?: 'general' | 'hurt') => void;
 }
 
 export interface SectorDef {

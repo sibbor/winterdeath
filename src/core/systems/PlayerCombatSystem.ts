@@ -145,7 +145,7 @@ export class PlayerCombatSystem implements System {
                     this.reloadBar,
                     state,
                     this.playerGroup.position,
-                    session.engine.camera.quaternion,
+                    session.engine.camera.threeCamera.quaternion,
                     now
                 );
             }

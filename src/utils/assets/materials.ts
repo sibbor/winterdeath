@@ -396,7 +396,13 @@ export const MATERIALS = {
         metalness: 0.6
     }),
     blackMetal: new THREE.MeshStandardMaterial({ color: 0x050505, metalness: 0.6, roughness: 0.4 }),
-    crossEmissive: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.0 }),
+    crossEmissive: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 5.0 }),
+    busBlue: new THREE.MeshStandardMaterial({
+        color: 0x009ddb,
+        roughness: 0.9,
+        bumpMap: TEXTURES.concrete_bump,
+        bumpScale: 0.1
+    }),
     container: new THREE.MeshStandardMaterial({
         color: 0x888888,
         map: DIFFUSE.containerMetal,

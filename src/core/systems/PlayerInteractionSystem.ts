@@ -111,22 +111,56 @@ export class PlayerInteractionSystem implements System {
 
             if (anim.progress > 1) anim.progress = 1;
 
-            anim.obj.position.y = anim.startY + anim.progress * 12.0;
+            // --- 1. SEPARERA YXAN FRÅN EFFEKTERNA ---
+            // Mjuk inbromsning (ease-out). Yxan flyter upp max 1.5 meter och stannar.
+            const easeOut = 1.0 - Math.pow(1.0 - anim.progress, 3);
+            anim.obj.position.y = anim.startY + (1.5 * easeOut);
             anim.obj.rotation.y += 3.0 * dt;
 
-            // Animate scale down instead of material opacity to avoid shader recompilation and GC
-            const s = 1.0 - anim.progress;
-            anim.obj.scale.set(s, s, s);
+            // Ringen och strålen ska skjuta upp ytterligare 10 meter
+            const fxTargetY = anim.startY + (anim.progress * 10.0);
 
-            // [VINTERDÖD] Special "Blow Away" animation for named components
-            const ring = anim.obj.getObjectByName('collectibleRing');
-            if (ring) {
-                // Ring blows up even faster and fades out
-                ring.position.y = 0.05 + anim.progress * 15.0;
-            }
-            const beam = anim.obj.getObjectByName('collectibleBeam');
-            if (beam) {
-                beam.scale.set(0.05 * s, 4.0, 0.05 * s);
+            // Gå igenom alla delar i objektet för att separera beteendet
+            anim.obj.children.forEach(child => {
+                if (child.name === 'collectibleRing' || child.name === 'collectibleBeam') {
+                    // Flytta effekterna uppåt lokalt (relativt till yxan som stannat)
+                    child.position.y = fxTargetY - anim.obj.position.y;
+
+                    // Fade:a ut och krymp effekterna över hela animationen
+                    const fxScale = 1.0 - anim.progress;
+                    if (child.name === 'collectibleBeam') {
+                        child.scale.set(0.05 * fxScale, 4.0, 0.05 * fxScale);
+                    } else {
+                        child.scale.setScalar(Math.max(0.001, fxScale));
+                    }
+                } else if (child instanceof THREE.Mesh) {
+                    // Detta är själva YXAN! Låt den guppa lite mjukt.
+                    child.position.y = Math.sin(anim.progress * Math.PI * 4) * 0.1;
+
+                    // Krymp yxan FÖRST under de absolut sista 10% av animationen
+                    // så den är tydlig hela vägen tills UI:t ska visas.
+                    if (anim.progress > 0.9) {
+                        const shrink = (1.0 - anim.progress) * 10.0;
+                        child.scale.setScalar(Math.max(0.001, shrink));
+                    } else {
+                        child.scale.setScalar(1.0);
+                    }
+                }
+            });
+
+            // [VINTERDÖD] Se till att partiklarna (smoke/sparks) följer med strålen upp!
+            if (anim.obj.userData.effects) {
+                anim.obj.userData.effects.forEach((eff: any) => {
+                    // Spara original-offseten första gången
+                    if (!eff.originalOffset) {
+                        eff.originalOffset = eff.offset ? eff.offset.clone() : new THREE.Vector3();
+                    }
+                    if (!eff.offset) eff.offset = new THREE.Vector3();
+
+                    // Applicera offseten högre och högre upp
+                    eff.offset.copy(eff.originalOffset);
+                    eff.offset.y += (fxTargetY - anim.obj.position.y);
+                });
             }
 
             if (anim.progress >= 1) {
@@ -139,7 +173,7 @@ export class PlayerInteractionSystem implements System {
                     }
                 });
 
-                // [VINTERDÖD] Cleanup emitters to prevent "left behind" particles
+                // Cleanup emitters to prevent "left behind" particles
                 anim.obj.userData.effects = [];
 
                 const idx = this.collectibles.indexOf(anim.obj);
@@ -148,6 +182,7 @@ export class PlayerInteractionSystem implements System {
                     this.collectibles.pop();
                 }
 
+                // HÄR triggas ScreenCollectibleFound (När animationen är 100% klar)
                 if (this.onCollectibleFound && anim.collectibleId) {
                     this.onCollectibleFound(anim.collectibleId);
                 }

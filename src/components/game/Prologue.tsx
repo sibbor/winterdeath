@@ -17,7 +17,12 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         const handleLocaleChange = () => setLocale(getLocale());
         window.addEventListener('locale-changed', handleLocaleChange);
         soundManager.playUiConfirm();
-        return () => window.removeEventListener('locale-changed', handleLocaleChange);
+        soundManager.playPrologueMusic();
+
+        return () => {
+            window.removeEventListener('locale-changed', handleLocaleChange);
+            soundManager.stopPrologueMusic();
+        };
     }, []);
 
     const prologueData = t('story.prologue') as any[];

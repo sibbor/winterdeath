@@ -409,6 +409,15 @@ export class SoundManager {
     SoundBank.play(this.core, 'vehicle_horn', 0.5);
   }
 
+  // --- WILDLIFE ---
+  playOwlHoot() {
+    SoundBank.play(this.core, 'owl_hoot', 0.15, 0.9 + Math.random() * 0.2);
+  }
+
+  playBirdAmbience() {
+    SoundBank.play(this.core, 'bird_ambience', 0.15, 0.9 + Math.random() * 0.2);
+  }
+
   playArcCannonZap() {
     // Sharp high-pitch zap
     const ctx = this.core.ctx;
@@ -462,6 +471,10 @@ export class SoundManager {
       case 'impact_concrete': this.playImpact('concrete'); break;
       case 'impact_stone': this.playImpact('stone'); break;
       case 'impact_wood': this.playImpact('wood'); break;
+
+      // Wildlife
+      case 'owl_hoot': this.playOwlHoot(); break;
+      case 'bird_ambience': this.playBirdAmbience(); break;
 
       case 'zombie_bite':
       case 'walker_attack': this.playWalkerAttack(); break;
@@ -533,6 +546,14 @@ export class SoundManager {
     setTimeout(() => {
       try { src.stop(); } catch (_) { /* already stopped */ }
     }, fadeDuration * 1000 + 50);
+  }
+
+  playPrologueMusic() {
+    this.playMusic('prologue_sad');
+  }
+
+  stopPrologueMusic() {
+    this.stopMusic(2.0); // Slightly longer fade for music
   }
 }
 

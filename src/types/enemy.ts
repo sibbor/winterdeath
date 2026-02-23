@@ -72,6 +72,7 @@ export interface Enemy {
     hitTime: number;         // Timestamp of the most recent damage event
     lastStepTime?: number;   // Timestamp of the last footstep sound
     lastTackleTime?: number; // Timestamp of the last physical collision with the player
+    lastVehicleHit?: number; // Timestamp of the last vehicle collision
     fleeing: boolean;        // Flag for retreat behavior
 
     // Status Effects (Timers are delta-based for consistency)

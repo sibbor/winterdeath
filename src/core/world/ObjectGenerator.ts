@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createProceduralDiffuse, MATERIALS, GEOMETRY, ModelFactory, createSignMesh, createTextSprite } from '../../utils/assets';
 import { SectorContext } from '../../types/SectorEnvironment';
+import { SectorGenerator } from './SectorGenerator';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { EffectManager } from '../systems/EffectManager';
 
@@ -12,6 +13,7 @@ const _position = new THREE.Vector3();
 const _scale = new THREE.Vector3();
 const _rotation = new THREE.Euler();
 const _quat = new THREE.Quaternion();
+const _v1_og = new THREE.Vector3();
 
 // Lazy load textures
 let sharedTextures: any = null;
@@ -591,35 +593,53 @@ export const ObjectGenerator = {
 
         const mat = MATERIALS.concrete;
 
+        // Vänster vägg
         const sideL = new THREE.Mesh(new THREE.BoxGeometry(wallThick, height, length), mat);
         sideL.position.set(-width / 2 - wallThick / 2, height / 2, 0);
         group.add(sideL);
 
+        // Höger vägg
         const sideR = new THREE.Mesh(new THREE.BoxGeometry(wallThick, height, length), mat);
         sideR.position.set(width / 2 + wallThick / 2, height / 2, 0);
         group.add(sideR);
 
+        // Tak
         const roof = new THREE.Mesh(new THREE.BoxGeometry(width + wallThick * 2, roofThick, length), mat);
         roof.position.set(0, height + roofThick / 2, 0);
         group.add(roof);
 
         ctx.scene.add(group);
 
-        const colL = new THREE.Object3D();
-        colL.position.copy(pos).setY(pos.y + height / 2);
-        colL.rotation.y = rotation;
-        colL.translateX(-width / 2 - wallThick / 2);
-        colL.updateMatrixWorld();
-        ctx.scene.add(colL);
-        ctx.obstacles.push({ mesh: colL, collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) } });
+        // --------------------------------------------------------
+        // KOLLISIONSHANTERING
+        // Tvinga fram en uppdatering av världen så vi kan hämta 
+        // de exakta globala positionerna för väggarna.
+        // --------------------------------------------------------
+        group.updateMatrixWorld(true);
 
-        const colR = new THREE.Object3D();
-        colR.position.copy(pos).setY(pos.y + height / 2);
-        colR.rotation.y = rotation;
-        colR.translateX(width / 2 + wallThick / 2);
-        colR.updateMatrixWorld();
-        ctx.scene.add(colR);
-        ctx.obstacles.push({ mesh: colR, collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) } });
+        const worldPosL = new THREE.Vector3();
+        sideL.getWorldPosition(worldPosL);
+
+        const worldPosR = new THREE.Vector3();
+        sideR.getWorldPosition(worldPosR);
+
+        const worldQuat = new THREE.Quaternion();
+        group.getWorldQuaternion(worldQuat);
+
+        // Använd SectorGenerator.addObstacle så de hamnar i SpatialGrid!
+        // Vi skickar in position och quaternion direkt istället för meshen 
+        // för att vara 100% säkra på att det blir världskoordinater.
+        SectorGenerator.addObstacle(ctx, {
+            position: worldPosL,
+            quaternion: worldQuat,
+            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) }
+        });
+
+        SectorGenerator.addObstacle(ctx, {
+            position: worldPosR,
+            quaternion: worldQuat,
+            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) }
+        });
 
         return group;
     },
@@ -714,10 +734,12 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true) => {
+    createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
         const group = new THREE.Group();
         if (withBacking) {
-            const base = new THREE.Mesh(new THREE.BoxGeometry(text.length * 0.4 + 1, 0.8, 0.2), MATERIALS.blackMetal);
+            const mat = MATERIALS.blackMetal.clone();
+            mat.color.setHex(backgroundColor);
+            const base = new THREE.Mesh(new THREE.BoxGeometry(text.length * 0.4 + 1, 0.8, 0.2), mat);
             group.add(base);
         }
 
@@ -727,6 +749,7 @@ export const ObjectGenerator = {
         group.add(label);
 
         EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
+        group.scale.setScalar(scale);
         group.userData.material = 'METAL';
         return group;
     },
@@ -821,10 +844,24 @@ export const ObjectGenerator = {
         withRoof?: boolean,
         withLights?: boolean,
         shopWindows?: boolean,
-        upperWindows?: boolean
+        upperWindows?: boolean,
+        allSides?: boolean,
+        upperRows?: number,
+        mapRepeat?: { x: number, y: number }
     } = {}) => {
         const group = new THREE.Group();
-        const { lowerMat, upperMat, withRoof = true, withLights = true, shopWindows = true, upperWindows = true } = opts;
+        const {
+            lowerMat,
+            upperMat,
+            withRoof = true,
+            withLights = true,
+            shopWindows = true,
+            upperWindows = true,
+            allSides = false,
+            upperRows = 1,
+            mapRepeat
+        } = opts;
+
         const midPoint = height * 0.4;
 
         const lowerGeo = new THREE.BoxGeometry(width, midPoint, depth).translate(0, midPoint / 2, 0);
@@ -834,7 +871,17 @@ export const ObjectGenerator = {
 
         const upperHeight = height - midPoint;
         const upperGeo = new THREE.BoxGeometry(width, upperHeight, depth).translate(0, midPoint + upperHeight / 2, 0);
-        const upperMesh = new THREE.Mesh(upperGeo, upperMat || MATERIALS.wooden_fasade);
+
+        let finalUpperMat = upperMat || MATERIALS.wooden_fasade;
+        if (mapRepeat && (finalUpperMat as any).map) {
+            finalUpperMat = finalUpperMat.clone();
+            (finalUpperMat as any).map = (finalUpperMat as any).map.clone();
+            (finalUpperMat as any).map.repeat.set(mapRepeat.x, mapRepeat.y);
+            (finalUpperMat as any).map.wrapS = (finalUpperMat as any).map.wrapT = THREE.RepeatWrapping;
+            (finalUpperMat as any).map.needsUpdate = true;
+        }
+
+        const upperMesh = new THREE.Mesh(upperGeo, finalUpperMat);
         upperMesh.castShadow = true; upperMesh.receiveShadow = true;
         group.add(upperMesh);
 
@@ -847,23 +894,46 @@ export const ObjectGenerator = {
         }
 
         if (shopWindows) {
+            const winWidth = 3.5;
             const winHeight = midPoint * 0.7;
-            const winGeo = new THREE.PlaneGeometry(3.5, winHeight);
+            const winGeo = new THREE.PlaneGeometry(winWidth, winHeight);
 
-            let winCount = 0;
-            for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) winCount++;
+            const sides = allSides ? 4 : 1;
+            let totalWinCount = 0;
 
-            if (winCount > 0) {
-                const instancedWindows = new THREE.InstancedMesh(winGeo, MATERIALS.glass, winCount);
+            for (let s = 0; s < sides; s++) {
+                const isSide = s === 1 || s === 3;
+                const sideWidth = isSide ? depth : width;
+                for (let x = -sideWidth / 2 + 2.5; x <= sideWidth / 2 - 2.5; x += 4.5) totalWinCount++;
+            }
+
+            if (totalWinCount > 0) {
+                const instancedWindows = new THREE.InstancedMesh(winGeo, MATERIALS.glass, totalWinCount);
                 let idx = 0;
-                for (let x = -width / 2 + 2.5; x <= width / 2 - 2.5; x += 4.5) {
-                    _matrix.makeTranslation(x, midPoint / 2, depth / 2 + 0.05);
-                    instancedWindows.setMatrixAt(idx++, _matrix);
 
-                    if (withLights) {
-                        const light = new THREE.PointLight(0xffffaa, 4, 10);
-                        light.position.set(x, midPoint / 2, depth / 2 - 1);
-                        group.add(light);
+                for (let s = 0; s < sides; s++) {
+                    const isSide = s === 1 || s === 3;
+                    const sideWidth = isSide ? depth : width;
+                    const sideDepth = isSide ? width : depth;
+                    const rotation = (s * Math.PI) / 2;
+
+                    for (let x = -sideWidth / 2 + 2.5; x <= sideWidth / 2 - 2.5; x += 4.5) {
+                        _position.set(x, midPoint / 2, sideDepth / 2 + 0.05);
+                        _rotation.set(0, rotation, 0);
+                        _quat.setFromEuler(_rotation);
+                        _position.applyQuaternion(_quat);
+
+                        _matrix.makeRotationFromQuaternion(_quat);
+                        _matrix.setPosition(_position);
+
+                        instancedWindows.setMatrixAt(idx++, _matrix);
+
+                        if (withLights) {
+                            const light = new THREE.PointLight(0xffffaa, 4, 10);
+                            _v1_og.set(x, midPoint / 2, sideDepth / 2 - 1).applyQuaternion(_quat);
+                            light.position.copy(_v1_og);
+                            group.add(light);
+                        }
                     }
                 }
                 instancedWindows.instanceMatrix.needsUpdate = true;
@@ -872,16 +942,46 @@ export const ObjectGenerator = {
         }
 
         if (upperWindows) {
-            const upWinGeo = new THREE.PlaneGeometry(1.2, 1.5);
-            let upWinCount = 0;
-            for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) upWinCount++;
+            const upWinWidth = 1.2;
+            const upWinHeight = 1.5;
+            const upWinGeo = new THREE.PlaneGeometry(upWinWidth, upWinHeight);
 
-            if (upWinCount > 0) {
-                const instancedUpWindows = new THREE.InstancedMesh(upWinGeo, LOCAL_MATS.upWindow, upWinCount);
+            const sides = allSides ? 4 : 1;
+            let totalUpWinCount = 0;
+
+            for (let s = 0; s < sides; s++) {
+                const isSide = s === 1 || s === 3;
+                const sideWidth = isSide ? depth : width;
+                for (let r = 0; r < upperRows; r++) {
+                    for (let x = -sideWidth / 2 + 2; x <= sideWidth / 2 - 2; x += 4) totalUpWinCount++;
+                }
+            }
+
+            if (totalUpWinCount > 0) {
+                const instancedUpWindows = new THREE.InstancedMesh(upWinGeo, LOCAL_MATS.upWindow, totalUpWinCount);
                 let idx = 0;
-                for (let x = -width / 2 + 2; x <= width / 2 - 2; x += 4) {
-                    _matrix.makeTranslation(x, midPoint + upperHeight / 2, depth / 2 + 0.05);
-                    instancedUpWindows.setMatrixAt(idx++, _matrix);
+
+                for (let s = 0; s < sides; s++) {
+                    const isSide = s === 1 || s === 3;
+                    const sideWidth = isSide ? depth : width;
+                    const sideDepth = isSide ? width : depth;
+                    const rotation = (s * Math.PI) / 2;
+                    const rowHeight = upperHeight / (upperRows + 1);
+
+                    for (let r = 0; r < upperRows; r++) {
+                        const yPos = midPoint + (r + 1) * rowHeight;
+                        for (let x = -sideWidth / 2 + 2; x <= sideWidth / 2 - 2; x += 4) {
+                            _position.set(x, yPos, sideDepth / 2 + 0.05);
+                            _rotation.set(0, rotation, 0);
+                            _quat.setFromEuler(_rotation);
+                            _position.applyQuaternion(_quat);
+
+                            _matrix.makeRotationFromQuaternion(_quat);
+                            _matrix.setPosition(_position);
+
+                            instancedUpWindows.setMatrixAt(idx++, _matrix);
+                        }
+                    }
                 }
                 instancedUpWindows.instanceMatrix.needsUpdate = true;
                 group.add(instancedUpWindows);
@@ -892,7 +992,7 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createNeonHeart: (color: number = 0xff0000) => {
+    createNeonHeart: (color: number = 0xff0000, scale: number = 1.0) => {
         const group = new THREE.Group();
         const x = 0, y = 0;
         const heartShape = new THREE.Shape();
@@ -905,17 +1005,18 @@ export const ObjectGenerator = {
         heartShape.bezierCurveTo(x + 7, y, x + 5, y + 5, x + 5, y + 5);
 
         const geo = new THREE.ShapeGeometry(heartShape);
-        geo.scale(0.04, -0.04, 0.04);
+        geo.scale(0.10, -0.10, 0.10);
         geo.translate(-0.2, 0.4, 0);
 
         if (!neonHeartCache[color]) neonHeartCache[color] = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
 
         group.add(new THREE.Mesh(geo, neonHeartCache[color]));
 
-        const light = new THREE.PointLight(color, 15, 12);
+        const light = new THREE.PointLight(color, 50, 50);
         light.position.set(0, 0, 0.5);
         group.add(light);
 
+        group.scale.setScalar(scale);
         return group;
     },
 
@@ -972,5 +1073,30 @@ export const ObjectGenerator = {
         group.add(glow);
 
         return group;
+    },
+
+    createBusRubble: (ctx: SectorContext, x: number, z: number, count: number) => {
+        const geometry = new THREE.BoxGeometry(2, 2, 4);
+        const mesh = new THREE.InstancedMesh(geometry, MATERIALS.busBlue, count);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        for (let i = 0; i < count; i++) {
+            _position.set(
+                x + (Math.random() - 0.5) * 8,
+                1.0,
+                z + (Math.random() - 0.5) * 8
+            );
+            _rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            _quat.setFromEuler(_rotation);
+            _scale.setScalar(0.8 + Math.random() * 0.4);
+
+            _matrix.compose(_position, _quat, _scale);
+            mesh.setMatrixAt(i, _matrix);
+        }
+
+        mesh.instanceMatrix.needsUpdate = true;
+        ctx.scene.add(mesh);
+        return mesh;
     }
 };

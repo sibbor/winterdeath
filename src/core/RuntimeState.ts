@@ -49,7 +49,6 @@ export interface RuntimeState {
     chests: any[];
     bloodDecals: any[];
 
-    cameraShake: number;
     lastHudUpdate: number;
     startTime: number;
     lastShotTime: number;
@@ -78,8 +77,8 @@ export interface RuntimeState {
     lastStaminaUseTime: number;
     noiseLevel: number;
     speakBounce: number;
+    cameraShake: number;
     hurtShake: number;
-    shakeIntensity: number;
 
     // --- SECTOR & WORLD ---
     sectorState: SectorState;

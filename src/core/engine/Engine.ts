@@ -3,6 +3,7 @@ import { DEFAULT_GRAPHICS } from '../../content/constants';
 import { GraphicsSettings } from '../../types';
 export type { GraphicsSettings };
 import { InputManager } from './InputManager';
+import { CameraSystem } from '../systems/CameraSystem';
 import { WindSystem } from '../systems/WindSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { WaterSystem } from '../systems/WaterSystem';
@@ -22,7 +23,7 @@ export class Engine {
 
     // Core Systems
     public scene: THREE.Scene;
-    public camera: THREE.PerspectiveCamera;
+    public camera: CameraSystem;
     public renderer!: THREE.WebGLRenderer;
     public input: InputManager;
 
@@ -49,17 +50,13 @@ export class Engine {
         this.scene = new THREE.Scene();
         this.clock = new THREE.Clock();
 
-        // Setup Camera with a standard 50deg FOV
-        this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.camera.position.set(0, 40, 20);
-        this.camera.lookAt(0, 0, 0);
-
         this.initRenderer();
 
         this.input = new InputManager();
         this.input.enable();
 
         // Initialize persistent environmental systems
+        this.camera = new CameraSystem();
         this.wind = new WindSystem();
         this.weather = new WeatherSystem(this.scene, this.wind);
         this.water = new WaterSystem(this.scene);
@@ -226,8 +223,7 @@ export class Engine {
         const width = this.container.clientWidth || window.innerWidth;
         const height = this.container.clientHeight || window.innerHeight;
 
-        this.camera.aspect = width / height;
-        this.camera.updateProjectionMatrix();
+        this.camera.set('aspect', width / height);
         this.renderer.setSize(width, height);
     };
 
@@ -246,7 +242,19 @@ export class Engine {
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 
-        // 1. Environmental Systems Update
+        // 1. Logic Update (Physics, Movement, Systems)
+        // This must happen BEFORE the camera/fx update to avoid 1-frame lag.
+        monitor.begin('logic');
+        if (this.onUpdate) this.onUpdate(dt);
+        monitor.end('logic');
+
+        // 2. Camera Systems Update
+        // Now has access to the final positions from this frame.
+        monitor.begin('camera');
+        this.camera.update(dt, now);
+        monitor.end('camera');
+
+        // 3. Environmental Systems Update
         monitor.begin('wind');
         this.wind.update(now, dt);
         monitor.end('wind');
@@ -260,11 +268,6 @@ export class Engine {
         this.water.update(dt, now);
         monitor.end('water');
 
-        // 2. Logic Update
-        monitor.begin('logic');
-        if (this.onUpdate) this.onUpdate(dt);
-        monitor.end('logic');
-
         // 3. Render Pass
         monitor.begin('render');
         if (!this.isRenderingPaused) {
@@ -274,14 +277,14 @@ export class Engine {
                 // Split standard render into setup (CPU) and draw (GPU/Driver payload)
                 monitor.begin('render_setup');
                 this.scene.updateMatrixWorld();
-                this.camera.updateMatrixWorld();
+                this.camera.threeCamera.updateMatrixWorld();
                 if (this.renderer.shadowMap.enabled) {
                     this.renderer.shadowMap.needsUpdate = true;
                 }
                 monitor.end('render_setup');
 
                 monitor.begin('render_draw');
-                this.renderer.render(this.scene, this.camera);
+                this.renderer.render(this.scene, this.camera.threeCamera);
                 monitor.end('render_draw');
             }
         }

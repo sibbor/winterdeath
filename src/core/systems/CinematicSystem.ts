@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import React from 'react';
+import { CameraSystem } from './CameraSystem';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
 import { soundManager } from '../../utils/sound';
 
@@ -13,7 +14,7 @@ const _UP = new THREE.Vector3(0, 1, 0);
 export const CinematicSystem = {
     update: (
         cinematic: any,
-        camera: THREE.Camera,
+        camera: CameraSystem,
         playerMesh: THREE.Mesh | null,
         bubbleRef: React.RefObject<HTMLDivElement>,
         now: number,
@@ -55,9 +56,9 @@ export const CinematicSystem = {
             _v1.copy(cinematic.midPoint).addScaledVector(_v2, zoomFactor);
         }
 
-        // Smooth camera movement (Lerp)
-        camera.position.lerp(_v1, 0.05);
-        camera.lookAt(cinematic.cameraLookAt);
+        // Send target to CameraSystem for smoothing
+        camera.setPosition(_v1.x, _v1.y, _v1.z);
+        camera.lookAt(cinematic.cameraLookAt.x, cinematic.cameraLookAt.y, cinematic.cameraLookAt.z);
 
         // --- 2. SPEAKER IDENTIFICATION ---
         const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
@@ -94,7 +95,7 @@ export const CinematicSystem = {
             }
 
             // Project 3D to Normalized Screen Space
-            _v4.project(camera);
+            _v4.project(camera.threeCamera);
 
             const screenW = window.innerWidth;
             const screenH = window.innerHeight;

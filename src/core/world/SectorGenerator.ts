@@ -827,8 +827,8 @@ export const SectorGenerator = {
         return container;
     },
 
-    spawnNeonSign: (ctx: SectorContext, x: number, z: number, rotation: number, text: string, color: number = 0x00ffff, withBacking: boolean = true) => {
-        const sign = ObjectGenerator.createNeonSign(text, color, withBacking);
+    spawnNeonSign: (ctx: SectorContext, x: number, z: number, rotation: number, text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
+        const sign = ObjectGenerator.createNeonSign(text, color, withBacking, scale, backgroundColor);
         sign.position.set(x, 5.5, z); // Elevated
         sign.rotation.y = rotation;
         ctx.scene.add(sign);
@@ -877,8 +877,8 @@ export const SectorGenerator = {
         return building;
     },
 
-    spawnNeonHeart: (ctx: SectorContext, x: number, y: number, z: number, rotation: number, color: number = 0xff0000) => {
-        const heart = ObjectGenerator.createNeonHeart(color);
+    spawnNeonHeart: (ctx: SectorContext, x: number, y: number, z: number, rotation: number, color: number = 0xff0000, scale: number = 1.0) => {
+        const heart = ObjectGenerator.createNeonHeart(color, scale);
         heart.position.set(x, y, z);
         heart.rotation.y = rotation;
         ctx.scene.add(heart);
@@ -1302,43 +1302,30 @@ export const SectorGenerator = {
     },
 
     spawnTerminal: (ctx: SectorContext, x: number, z: number, type: 'TERMINAL_ARMORY' | 'TERMINAL_SPAWNER' | 'TERMINAL_ENV') => {
-        const terminalType = type === 'TERMINAL_ARMORY' ? 'ARMORY' : type === 'TERMINAL_SPAWNER' ? 'SPAWNER' : 'ENV';
-        const terminal = ObjectGenerator.createTerminal(terminalType);
+        const terminal = ObjectGenerator.createTerminal(type.replace('TERMINAL_', '') as any);
         terminal.position.set(x, 0, z);
-        terminal.lookAt(0, 0, 0);
-        terminal.name = type;
-
-        let label = 'ui.interact';
-        if (type === 'TERMINAL_ARMORY') label = 'ui.station_armory';
-        else if (type === 'TERMINAL_SPAWNER') label = 'ui.station_spawner';
-        else if (type === 'TERMINAL_ENV') label = 'ui.station_environment';
-
-        // Standardized Interaction
-        SectorGenerator.addInteractable(ctx, terminal, {
-            id: type,
-            label: label,
-            type: 'sector_specific',
-            radius: 2.5
-        });
-
         ctx.scene.add(terminal);
-        if (ctx.interactables) ctx.interactables.push(terminal);
+        return terminal;
+    },
 
-        SectorGenerator.addObstacle(ctx, {
-            mesh: terminal,
-            position: terminal.position,
-            collider: { type: 'box', size: new THREE.Vector3(1.2, 2, 1) }
-        });
+    spawnBusRubble: (ctx: SectorContext, x: number, z: number, count: number) => {
+        return ObjectGenerator.createBusRubble(ctx, x, z, count);
+    },
 
-        // Visual Marker
-        const icon = type === 'TERMINAL_ARMORY' ? '🔫' : type === 'TERMINAL_SPAWNER' ? '🧟' : '⛈️';
-        ctx.mapItems.push({
-            id: `terminal_${type}`,
-            x, z,
-            type: 'POI',
-            label: label,
-            icon: icon,
-            color: '#ffffff'
-        });
+    extinguish: (ctx: SectorContext, object: THREE.Object3D) => {
+        object.userData.isFire = false;
+        object.userData.effects = [];
+
+        if (ctx.flickeringLights) {
+            for (let i = ctx.flickeringLights.length - 1; i >= 0; i--) {
+                const fl = ctx.flickeringLights[i];
+                const distSq = fl.light.position.distanceToSquared(object.position);
+                if (distSq < 100) {
+                    ctx.scene.remove(fl.light);
+                    ctx.flickeringLights[i] = ctx.flickeringLights[ctx.flickeringLights.length - 1];
+                    ctx.flickeringLights.pop();
+                }
+            }
+        }
     }
 };

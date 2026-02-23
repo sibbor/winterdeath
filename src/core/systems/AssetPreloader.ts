@@ -10,6 +10,7 @@ import { SoundBank } from '../../utils/audio/SoundBank';
 import { createProceduralDiffuse } from '../../utils/assets/procedural';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { PerformanceMonitor } from './PerformanceMonitor';
+import { CameraSystem } from './CameraSystem';
 
 let warmedUp = false;
 let lastSectorIndex = -1;
@@ -19,7 +20,7 @@ export const AssetPreloader = {
      * Pre-compiles shaders and initializes assets to prevent frame drops during gameplay.
      * Uses incremental batching to keep the UI thread responsive.
      */
-    warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, yieldToMain?: () => Promise<void>) => {
+    warmupAsync: async (renderer: THREE.WebGLRenderer, envConfig: any, gameCamera?: CameraSystem, yieldToMain?: () => Promise<void>) => {
         if (warmedUp) return;
 
         const monitor = PerformanceMonitor.getInstance();
@@ -44,17 +45,26 @@ export const AssetPreloader = {
                 'door_metal_shut', 'fx_heartbeat', 'ui_level_up',
                 'loot_scrap', 'chest_open', 'ui_chime', 'explosion', 'ignite',
                 'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
-                'step', 'step_snow', 'step_metal', 'step_wood', 'step_water'
+                'step', 'step_snow', 'step_metal', 'step_wood', 'step_water',
+                'owl_hoot', 'bird_ambience'
             ];
             // Ljud är små resurser att initiera, ingen yield krävs mitt i arrayen
             for (let i = 0; i < essentialSounds.length; i++) {
                 SoundBank.get(soundCore, essentialSounds[i]);
             }
+
+            // Warm up essential music (procedural generation can be slow)
+            const essentialMusic = ['ambient_wind_loop', 'ambient_forest_loop', 'prologue_sad'];
+            const { createMusicBuffer } = await import('../../utils/audio/SoundLib');
+            for (let i = 0; i < essentialMusic.length; i++) {
+                createMusicBuffer(soundCore.ctx, essentialMusic[i]);
+                if (yieldToMain) await yieldToMain();
+            }
         }
         monitor.end('asset_warmup_audio');
 
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+        const camera = gameCamera ? gameCamera.threeCamera : new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
         // 2. SHADER PERMUTATION SETUP
         monitor.begin('asset_warmup_geometry');
@@ -245,6 +255,9 @@ export const AssetPreloader = {
             }
             ObjectGenerator.createBoat();
             ObjectGenerator.createBuilding(4, 4, 4, 0x888888);
+            ObjectGenerator.createNeonSign("WARMUP", 0x00ffff, true);
+            ObjectGenerator.createNeonHeart(0xff0000);
+            ObjectGenerator.createBusRubble(ctx as any, 0, 0, 10);
             EnvironmentGenerator.createWaterLily();
             EnvironmentGenerator.createSeaweed();
             EnvironmentGenerator.createRock(2, 2);

@@ -390,8 +390,8 @@ export const Sector2: SectorDef = {
                         sectorState.jordanCinematic.timer = performance.now();
                         soundManager.playMetalDoorOpen();
                         window.dispatchEvent(new CustomEvent('hide_hud'));
-                        if ((window as any).setCameraOverride) {
-                            (window as any).setCameraOverride({
+                        if (events.setCameraOverride) {
+                            events.setCameraOverride({
                                 active: true,
                                 targetPos: fixedCamTarget,
                                 lookAtPos: fixedCamLookAt,
@@ -446,7 +446,7 @@ export const Sector2: SectorDef = {
 
                 if (elapsed > 500 && jc.phase === 'FINISHED_AFTER_DIALOGUE') {
                     jc.phase = 'COMPLETE';
-                    if ((window as any).clearCameraOverride) (window as any).clearCameraOverride();
+                    if (events.setCameraOverride) events.setCameraOverride(null);
                     window.dispatchEvent(new CustomEvent('show_hud'));
                     window.dispatchEvent(new CustomEvent('boss-spawn-trigger'));
                     window.dispatchEvent(new CustomEvent('family-follow'));
@@ -476,7 +476,7 @@ export const Sector2: SectorDef = {
                 jc.phase = 'WAITING_FOR_CONCLUSION';
                 const jordanObj = (events as any).familyMesh || scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && (c.userData.name === 'Jordan' || c.userData.id === 'Jordan'));
                 if (jordanObj && (events as any).startCinematic) {
-                    (events as any).startCinematic(jordanObj, 102, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
+                    (events as any).startCinematic(jordanObj, 102);
                 }
             }
 

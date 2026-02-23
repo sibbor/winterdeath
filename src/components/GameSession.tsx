@@ -80,6 +80,7 @@ export interface GameSessionHandle {
     getSectorStats: (isExtraction?: boolean, aborted?: boolean) => SectorStats;
     triggerInput: (key: string) => void;
     rotateCamera: (dir: number) => void;
+    adjustPitch: (dir: number) => void;
 }
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
@@ -135,9 +136,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const distanceTraveledRef = useRef(0);
     const lastTeleportRef = useRef<number>(0);
     const lastDrawCallsRef = useRef(0);
-    const cameraAngleRef = useRef(0);
-    const cameraAngleTargetRef = useRef(0);
-    const cameraHeightModifierRef = useRef(0);
 
     // Zero-GC prevPos tracker
     const prevPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
@@ -196,10 +194,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 e.preventDefault();
             }
             switch (e.key) {
-                case 'ArrowLeft': cameraAngleTargetRef.current += Math.PI / 4; break;
-                case 'ArrowRight': cameraAngleTargetRef.current -= Math.PI / 4; break;
-                case 'ArrowUp': cameraHeightModifierRef.current = Math.min(20, cameraHeightModifierRef.current + 2.5); break;
-                case 'ArrowDown': cameraHeightModifierRef.current = Math.max(-5, cameraHeightModifierRef.current - 2.5); break;
+                case 'ArrowLeft': engineRef.current?.camera.adjustAngle(Math.PI / 4); break;
+                case 'ArrowRight': engineRef.current?.camera.adjustAngle(-Math.PI / 4); break;
+                case 'ArrowUp':
+                    engineRef.current?.camera.adjustPitch(2.0);
+                    break;
+                case 'ArrowDown':
+                    engineRef.current?.camera.adjustPitch(-2.0);
+                    break;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -440,6 +442,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (familyMemberRef.current) setFoundMemberName(familyMemberRef.current.name);
 
         setCinematicActive(true);
+        engineRef.current?.camera.setCinematic(true);
         stateRef.current.isInteractionOpen = true;
         stateRef.current.familyFound = true;
 
@@ -507,6 +510,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     const endCinematic = () => {
         setCinematicActive(false);
+        engineRef.current?.camera.setCinematic(false);
         setCurrentLine(null);
         stateRef.current.isInteractionOpen = false;
         stateRef.current.familyFound = true;
@@ -608,22 +612,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                     break;
                 case 'CAMERA_SHAKE':
-                    if (payload && payload.amount) stateRef.current.cameraShake = payload.amount;
+                    if (payload && payload.amount) engineRef.current?.camera.shake(payload.amount);
                     break;
                 case 'CAMERA_PAN':
                     if (payload && payload.target && payload.duration) {
-                        cameraOverrideRef.current = {
-                            active: true,
-                            targetPos: new THREE.Vector3(payload.target.x, 30, payload.target.z + 20),
-                            lookAtPos: new THREE.Vector3(payload.target.x, 0, payload.target.z),
-                            endTime: performance.now() + payload.duration
-                        };
+                        engineRef.current?.camera.setCinematic(true);
+                        engineRef.current?.camera.setPosition(payload.target.x, 30, payload.target.z + 20);
+                        engineRef.current?.camera.lookAt(payload.target.x, 0, payload.target.z);
+
+                        setTimeout(() => {
+                            engineRef.current?.camera.setCinematic(false);
+                        }, payload.duration);
                     }
                     break;
                 case 'START_WAVE':
                     if (payload && payload.count) {
-                        stateRef.current.sectorState.hordeKilled = 0;
-                        stateRef.current.sectorState.hordeTarget = payload.count;
+                        stateRef.current.sectorState.zombiesKilled = 0;
+                        stateRef.current.sectorState.zombiesKillTarget = payload.count;
                         stateRef.current.sectorState.waveActive = true;
                         spawnNotification(`${t('ui.zombie_wave')}`);
                     }
@@ -685,10 +690,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }, 50);
         },
         rotateCamera: (dir: number) => {
-            cameraAngleTargetRef.current += dir * (Math.PI / 4);
+            engineRef.current?.camera.adjustAngle(dir * (Math.PI / 4));
         },
         adjustPitch: (dir: number) => {
-            cameraHeightModifierRef.current = Math.max(-10, Math.min(20, cameraHeightModifierRef.current + (dir * 5)));
+            engineRef.current?.camera.adjustPitch(dir * 2.0);
         }
     }));
 
@@ -932,17 +937,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const env = currentSector.environment;
 
             const yielder = useInstantLoad ? undefined : yieldToMain;
-            await AssetPreloader.warmupAsync(engine.renderer, env, yielder);
+            await AssetPreloader.warmupAsync(engine.renderer, env, camera, yielder);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             scene.background = new THREE.Color(env.bgColor);
             scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
 
-            camera.fov = env.fov;
-            camera.updateProjectionMatrix();
-            camera.position.set(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ);
-            camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z);
+            camera.reset();
+            camera.set('fov', env.fov);
+            camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
+            camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z, true);
 
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
 
@@ -1042,6 +1047,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             flashlightRef.current = flashlight;
 
             scene.add(playerGroup);
+
+            // Läs av vad just den här banan vill ha för kamerainställningar
+            const envCameraZ = currentSector.environment.cameraOffsetZ;
+            const envCameraY = currentSector.environment.cameraHeight || CAMERA_HEIGHT;
+
+            engine.camera.setPosition(
+                playerGroup.position.x,
+                envCameraY,
+                playerGroup.position.z + envCameraZ,
+                true // Immediate = true; no rubber banding on spawn
+            );
+
+            engine.camera.follow(
+                playerGroup.position,
+                envCameraZ,
+                envCameraY
+            );
 
             prevPosRef.current.copy(playerGroup.position);
             hasSetPrevPosRef.current = true;
@@ -1145,9 +1167,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 },
                 playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
                 playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
-                cameraShake: (amount: number) => stateRef.current.cameraShake = amount,
+                cameraShake: (amount: number) => engine.camera.shake(amount),
                 scene: engine.scene,
-                setCameraOverride: (params: any) => cameraOverrideRef.current = params,
+                setCameraOverride: (params: any) => {
+                    if (params) {
+                        engine.camera.setCinematic(true);
+                        engine.camera.setPosition(params.targetPos.x, params.targetPos.y, params.targetPos.z);
+                        engine.camera.lookAt(params.lookAtPos.x, params.lookAtPos.y, params.lookAtPos.z);
+                    } else {
+                        engine.camera.setCinematic(false);
+                    }
+                },
                 emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
                 spawnZombie, spawnHorde,
             }));
@@ -1167,8 +1197,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             prevInputRef.current = false;
-            camera.position.set(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ);
-            camera.lookAt(playerGroup.position);
+            camera.setPosition(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ, true);
+            camera.lookAt(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, true);
 
             // [VINTERDÖD] Force a robust yield to guarantee the loading screen mounts its final state
             if (!useInstantLoad) {
@@ -1199,7 +1229,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             });
 
-            engine.renderer.compile(scene, camera);
+            engine.renderer.compile(scene, camera.threeCamera);
 
             // Restore the original 0 counts
             for (const [obj, count] of originalCounts.entries()) {
@@ -1347,18 +1377,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const hudMesh = familyMemberRef.current?.mesh || null;
 
                 if (!isBossIntro) {
-                    const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera);
+                    const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera.threeCamera);
                     hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                     propsRef.current.onUpdateHUD({ ...hudData, fps, debugMode: propsRef.current.debugMode });
                 } else {
                     if (propsRef.current.onUpdateHUD && engineRef.current) {
                         const now = performance.now();
                         const cam = engineRef.current.camera;
-                        const hudData = HudSystem.getHudData(stateRef.current, playerGroupRef.current!.position, familyMemberRef.current?.mesh || null, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, cam);
+                        const hudData = HudSystem.getHudData(stateRef.current, playerGroupRef.current!.position, familyMemberRef.current?.mesh || null, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, cam.threeCamera);
                         propsRef.current.onUpdateHUD({ ...hudData, fps: 60, debugMode: propsRef.current.debugMode });
                     }
                     if (propsRef.current.onUpdateHUD && now % 5 === 0) {
-                        const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera);
+                        const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera.threeCamera);
                         hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
                         propsRef.current.onUpdateHUD({ ...hudData, fps: Math.round(1000 / delta) });
                     }
@@ -1371,7 +1401,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const introTime = now - bossIntroRef.current.startTime;
 
                 _vCamera.set(bossPos.x, 12, bossPos.z + 20);
-                camera.position.lerp(_vCamera, 0.05);
+                camera.setPosition(_vCamera.x, _vCamera.y, _vCamera.z);
                 camera.lookAt(bossPos.x, bossPos.y + 3, bossPos.z);
 
                 if (frame % 5 === 0 && introTime < 3000) {
@@ -1442,7 +1472,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (state.isDead) {
-                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, _fxCallbacks);
+                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera.threeCamera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, _fxCallbacks);
                 if (playerGroupRef.current) FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
@@ -1552,15 +1582,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
 
                     lastTeleportRef.current = tgt.timestamp;
-                    camera.position.set(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ);
-                    camera.lookAt(playerGroupRef.current.position);
+                    camera.setPosition(tgt.x, 50, tgt.z + currentSector.environment.cameraOffsetZ, true);
+                    camera.lookAt(playerGroupRef.current.position.x, playerGroupRef.current.position.y, playerGroupRef.current.position.z, true);
                     prevPosRef.current.copy(playerGroupRef.current.position);
                 }
 
                 gameSessionRef.current!.inputDisabled = !!propsRef.current.disableInput || (!!cameraOverrideRef.current?.active);
                 gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
                 gameSessionRef.current!.debugMode = propsRef.current.debugMode;
-                gameSessionRef.current!.cameraAngle = cameraAngleRef.current;
+                gameSessionRef.current!.cameraAngle = camera.angle;
                 gameSessionRef.current!.update(delta, propsRef.current.mapId || 0);
 
                 if (state.hp / state.maxHp <= 0.1 && !state.isDead) {
@@ -1602,32 +1632,53 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
 
-            if (state.windSystem) state.windSystem.update(delta);
-            if (engine.water) engine.water.update(delta, now);
+            // Environmental systems are now updated centrally by the Engine
             FootprintSystem.update(delta);
 
             if (playerGroupRef.current) {
                 FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
             }
 
-            if (isCinematic) {
-                CinematicSystem.update(cinematicRef.current, camera, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine }, activeFamilyMembers.current);
-            }
-
+            // Centraliserad kamerahantering i GameSession:
             if (!isCinematic && !isBossIntro) {
                 if (cameraOverrideRef.current && cameraOverrideRef.current.active) {
                     const override = cameraOverrideRef.current;
                     if (now > override.endTime) {
                         cameraOverrideRef.current = null;
+                        engine.camera.setCinematic(false);
                     } else {
-                        _vCamera.copy(camera.position).lerp(override.targetPos, 0.05);
-                        camera.position.copy(_vCamera);
-                        camera.lookAt(override.lookAtPos);
+                        // Mjuk interpolation till override-målet
+                        _vCamera.copy(engine.camera.position).lerp(override.targetPos, 1.0 - Math.exp(-10.0 * delta));
+                        engine.camera.setPosition(_vCamera.x, _vCamera.y, _vCamera.z, true);
+                        engine.camera.lookAt(override.lookAtPos.x, override.lookAtPos.y, override.lookAtPos.z, true);
                     }
                 } else {
-                    cameraAngleRef.current += (cameraAngleTargetRef.current - cameraAngleRef.current) * 0.1;
-                    CameraSystem.update(camera, playerGroupRef.current.position, currentSector.environment.cameraOffsetZ, state, false, delta, cameraAngleRef.current, cameraHeightModifierRef.current);
+                    // Skicka in eventuella skakningar
+                    if (state.hurtShake > 0) {
+                        engine.camera.shake(state.hurtShake, 'hurt');
+                        state.hurtShake = Math.max(0, state.hurtShake - 2.0 * delta);
+                    }
+                    if (state.cameraShake > 0) {
+                        engine.camera.shake(state.cameraShake, 'general');
+                        state.cameraShake = Math.max(0, state.cameraShake - 5.0 * delta);
+                    }
+
+                    // Camera: Follow the player
+                    const envCameraZ = currentSector.environment.cameraOffsetZ;
+                    const envCameraY = currentSector.environment.cameraHeight || CAMERA_HEIGHT;
+                    engine.camera.setCinematic(false);
+                    engine.camera.follow(
+                        playerGroupRef.current.position,
+                        envCameraZ,
+                        envCameraY
+                    );
                 }
+            } else if (isCinematic) {
+                engine.camera.setCinematic(true);
+                CinematicSystem.update(cinematicRef.current, engine.camera as any, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine }, activeFamilyMembers.current);
+            } else {
+                // Boss intro etc
+                engine.camera.setCinematic(true);
             }
 
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -1648,7 +1699,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     _vInteraction.y += 2.5;
                 }
 
-                const vector = _vInteraction.project(camera);
+                const vector = _vInteraction.project(camera.threeCamera);
                 const screenX = Math.round((vector.x + 1) / 2 * 100);
                 const screenY = Math.round((1 - vector.y) / 2 * 100);
 

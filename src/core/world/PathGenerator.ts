@@ -438,27 +438,43 @@ export const PathGenerator = {
         const pts = curve.getSpacedPoints(segments);
         const v: number[] = [], idx: number[] = [], uv: number[] = [];
 
+        // Lokala vektorer för att undvika GC och state-krockar
+        const _v1 = new THREE.Vector3();
+        const _v2 = new THREE.Vector3();
+        const _up = new THREE.Vector3(0, 1, 0);
+
         for (let i = 0; i < pts.length; i++) {
             const pt = pts[i];
             if (i < pts.length - 1) _v1.subVectors(pts[i + 1], pt).normalize();
             else _v1.subVectors(pt, pts[i - 1]).normalize();
             _v2.crossVectors(_v1, _up).normalize();
 
-            const p1 = pt.clone().addScaledVector(_v2, -width * 0.6).setY(0.1);
-            const p2 = pt.clone().addScaledVector(_v2, -width * 0.5).setY(height);
-            const p3 = pt.clone().addScaledVector(_v2, width * 0.5).setY(height);
-            const p4 = pt.clone().addScaledVector(_v2, width * 0.6).setY(0.1);
+            // Mjuka backar (30% sluttning på vardera sida)
+            const p1 = pt.clone().addScaledVector(_v2, -width * 0.5).setY(0.1);
+            const p2 = pt.clone().addScaledVector(_v2, -width * 0.2).setY(height);
+            const p3 = pt.clone().addScaledVector(_v2, width * 0.2).setY(height);
+            const p4 = pt.clone().addScaledVector(_v2, width * 0.5).setY(0.1);
 
             v.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, p4.x, p4.y, p4.z);
+
             const u = i / segments * (curve.getLength() / width);
             uv.push(0, u, 0.3, u, 0.7, u, 1, u);
 
             if (i > 0) {
                 const o = (i - 1) * 4, c = i * 4;
-                idx.push(o, c, o + 1, o + 1, c, c + 1, o + 1, c + 1, o + 2, o + 2, c + 1, c + 2, o + 2, c + 2, o + 3, o + 3, c + 2, c + 3);
 
-                // Add Collision for Embankment Segment
-                // We create a box between previous point and current point
+                // KORRIGERAT: Vänd på ordningen av indexen för att skapa 
+                // Counter-Clockwise (CCW) trianglar! Nu pekar backen uppåt mot ljuset.
+                idx.push(
+                    o, o + 1, c,
+                    o + 1, c + 1, c,
+                    o + 1, o + 2, c + 1,
+                    o + 2, c + 2, c + 1,
+                    o + 2, o + 3, c + 2,
+                    o + 3, c + 3, c + 2
+                );
+
+                // Kollisionen fungerade perfekt
                 const pPrev = pts[i - 1];
                 const pCurr = pts[i];
                 const mid = _v1.addVectors(pPrev, pCurr).multiplyScalar(0.5);
@@ -472,11 +488,19 @@ export const PathGenerator = {
                 });
             }
         }
+
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
         geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-        geo.setIndex(idx); geo.computeVertexNormals();
+        geo.setIndex(idx);
+
+        // Dessa tre är viktiga för custom-geometri!
+        geo.computeVertexNormals();
+        geo.computeBoundingSphere();
+        geo.computeBoundingBox();
+
         const mesh = new THREE.Mesh(geo, material);
-        mesh.receiveShadow = true; ctx.scene.add(mesh);
+        mesh.receiveShadow = true;
+        ctx.scene.add(mesh);
     },
 };

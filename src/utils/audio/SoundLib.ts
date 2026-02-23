@@ -416,6 +416,50 @@ const Generators = {
     vehicle_horn: (ctx: AudioContext) => {
         return createTone(ctx, 'square', 440, 0.5, 0.3);
     },
+
+    // WILDLIFE
+    owl_hoot: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.8;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Two "hoos"
+            let val = 0;
+            if (t < 0.3) {
+                const f = 600 - 50 * (t / 0.3);
+                val = Math.sin(2 * Math.PI * f * t) * 0.15 * Math.exp(-10 * t);
+            } else if (t > 0.4 && t < 0.7) {
+                const dt = t - 0.4;
+                const f = 580 - 60 * (dt / 0.3);
+                val = Math.sin(2 * Math.PI * f * dt) * 0.15 * Math.exp(-10 * dt);
+            }
+            data[i] = val;
+        }
+        return buffer;
+    },
+    bird_ambience: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 1.2;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Rustle start
+            let rustle = 0;
+            if (t < 0.3) rustle = (Math.random() * 2 - 1) * 0.05 * Math.exp(-10 * t);
+            // Flapping sequence (quick noise pulses)
+            let flaps = 0;
+            if (t > 0.2) {
+                const flapT = (t - 0.2) % 0.1;
+                const flapIdx = Math.floor((t - 0.2) / 0.1);
+                if (flapIdx < 8) {
+                    flaps = (Math.random() * 2 - 1) * 0.1 * Math.exp(-30 * flapT);
+                }
+            }
+            data[i] = rustle + flaps;
+        }
+        return buffer;
+    },
 };
 
 // --- HELPER GENERATORS ---
@@ -656,6 +700,10 @@ export function registerSoundGenerators() {
     SoundBank.register('vehicle_engine_car', Generators.vehicle_engine_car);
     SoundBank.register('vehicle_skid', Generators.vehicle_skid);
     SoundBank.register('vehicle_horn', Generators.vehicle_horn);
+
+    // Wildlife
+    SoundBank.register('owl_hoot', Generators.owl_hoot);
+    SoundBank.register('bird_ambience', Generators.bird_ambience);
 }
 
 
@@ -829,19 +877,28 @@ export const Synth = {
 // MUSIC GENERATORS (Looping ambient & boss fight)
 // ===================================================================
 
+const musicCache = new Map<string, AudioBuffer>();
+
 /**
  * Creates a seamlessly-looping AudioBuffer for a given music ID.
  * Returns null if the ID is unknown.
  */
 export function createMusicBuffer(ctx: AudioContext, id: string): AudioBuffer | null {
+    if (musicCache.has(id)) return musicCache.get(id)!;
+
+    let buffer: AudioBuffer | null = null;
     switch (id) {
-        case 'ambient_wind_loop': return _genWindLoop(ctx);
-        case 'ambient_forest_loop': return _genForestLoop(ctx);
-        case 'ambient_scrapyard_loop': return _genScrapyardLoop(ctx);
-        case 'ambient_finale_loop': return _genFinaleLoop(ctx);
-        case 'boss_metal': return _genBossMetal(ctx);
+        case 'ambient_wind_loop': buffer = _genWindLoop(ctx); break;
+        case 'ambient_forest_loop': buffer = _genForestLoop(ctx); break;
+        case 'ambient_scrapyard_loop': buffer = _genScrapyardLoop(ctx); break;
+        case 'ambient_finale_loop': buffer = _genFinaleLoop(ctx); break;
+        case 'boss_metal': buffer = _genBossMetal(ctx); break;
+        case 'prologue_sad': buffer = _genPrologueSad(ctx); break;
         default: return null;
     }
+
+    if (buffer) musicCache.set(id, buffer);
+    return buffer;
 }
 
 /** Sectors 1, 2, 6 — low brown-noise wind with occasional gusts (8s). */
@@ -990,6 +1047,51 @@ function _genBossMetal(ctx: AudioContext): AudioBuffer {
 
         const fade = Math.min(1, Math.min(t / 0.05, (dur - t) / 0.05));
         d[i] = (kick + riff + hihat) * 0.7 * fade;
+    }
+    return buf;
+}
+
+/** 
+ * Prologue — Sad melancholic music (The Last of Us style).
+ * Plucked acoustic guitar feel: Am, F, C, G (8s loop).
+ */
+function _genPrologueSad(ctx: AudioContext): AudioBuffer {
+    const sr = ctx.sampleRate;
+    const dur = 8.0;
+    const buf = ctx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+
+    // Minor progression: Am (A2, C3, E3), F (F2, A2, C3), C (C2, E2, G2), G (G2, B2, D3)
+    const chords = [
+        [110, 130.81, 164.81], // Am
+        [87.31, 110, 130.81],  // F
+        [130.81, 164.81, 196],  // C
+        [98, 123.47, 146.83]   // G
+    ];
+
+    const notesPerChord = 4;
+    const noteDur = dur / (chords.length * notesPerChord);
+
+    for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const chordIdx = Math.floor(t / (dur / chords.length));
+        const noteIdx = Math.floor((t % (dur / chords.length)) / noteDur);
+
+        const currentChord = chords[chordIdx];
+        const freq = currentChord[noteIdx % currentChord.length];
+
+        // Pluck envelope
+        const noteT = t % noteDur;
+        // String-like pluck: Sine + short noise burst at start
+        const string = Math.sin(2 * Math.PI * freq * noteT) * 0.25 * Math.exp(-2.5 * noteT);
+        const noiseAtk = (Math.random() * 2 - 1) * 0.05 * Math.exp(-50 * noteT);
+
+        // Add some harmonics for "acoustic" richness
+        const harmonic = Math.sin(2 * Math.PI * freq * 2 * noteT) * 0.1 * Math.exp(-4 * noteT);
+
+        const val = (string + noiseAtk + harmonic);
+        const fade = Math.min(1, Math.min(t / 0.2, (dur - t) / 0.2));
+        d[i] = val * fade;
     }
     return buf;
 }

@@ -194,7 +194,6 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
         }
 
         return (
-
             <button key={slot}
                 onClick={(e) => { e.stopPropagation(); onSelectWeapon && onSelectWeapon(slot); }}
                 onTouchStart={(e) => {
@@ -336,27 +335,27 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                 </div>
                             </div>
                         </div>
+
+                        {/* Boss Bar or Kill Tracker - MOVED UNDER RESOURCES */}
+                        <div className="flex flex-col gap-2 w-[200px]">
+                            {isBossActive ? (
+                                <div className="w-full text-center">
+                                    <h3 className="text-white font-black text-[10px] uppercase tracking-tighter drop-shadow-lg mb-0.5">{t(boss!.name)}</h3>
+                                    <div className="h-1.5 bg-black/90 border border-red-900 overflow-hidden shadow-2xl skew-x-[-10deg]">
+                                        <div className="h-full bg-red-700 transition-all duration-300" style={{ width: `${(boss!.hp / boss!.maxHp) * 100}%` }} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`bg-black/90 border border-red-900/50 px-3 py-1 skew-x-[-10deg] transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'} flex flex-col items-start w-max`}>
+                                    <span className="text-red-700 font-black text-[10px] tracking-[0.2em] block skew-x-[10deg] uppercase">
+                                        {kills} {t('ui.kills')}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Boss Bar or Kill Tracker */}
-                    {isBossActive ? (
-                        <div className={`absolute top-4 left-1/2 -translate-x-1/2 w-[300px] text-center`}>
-                            <h3 className="text-white font-black text-sm uppercase tracking-tighter drop-shadow-lg mb-1">{t(boss!.name)}</h3>
-                            <div className="h-2 bg-black/90 border border-red-900 overflow-hidden shadow-2xl skew-x-[-10deg]">
-                                <div className="h-full bg-red-700 transition-all duration-300" style={{ width: `${(boss!.hp / boss!.maxHp) * 100}%` }} />
-                            </div>
-                        </div>
-                    ) : (
-                        <div className={`absolute top-4 right-4 bg-black/90 border border-red-900/50 px-4 py-1 skew-x-[-10deg] transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'} flex flex-col items-end`}>
-                            <span className="text-red-700 font-black text-sm tracking-[0.2em] block skew-x-[10deg] uppercase">
-                                {kills} {t('ui.kills')}
-                            </span>
-
-
-                        </div>
-                    )}
-
-                    {/* Top Right Actions (Boss Mode only) - Kept existing */}
+                    {/* Top Right Actions (Boss Mode only) */}
                     {isBossActive && !isBossIntro && (
                         <div className="absolute top-4 right-4 flex gap-2 pointer-events-auto">
                             <button onClick={onToggleMap} className="w-10 h-10 bg-zinc-900/80 border border-zinc-700 text-white flex items-center justify-center skew-x-[-10deg] active:bg-zinc-800">
@@ -382,70 +381,19 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                 </div>
 
                 {/* Bottom Interface */}
-                <div className={`flex justify-between items-end relative w-full transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-
-                    {/* Placeholder for Bottom-Left Action (Empty on Mobile for symmetry) */}
-                    <div className="w-4"></div>
-
-                    {/* Centered Action Bar (Weapons) -- MOVED TO BOTTOM LEFT FOR MOBILE */}
-                    <div className={`absolute bottom-0 left-4 transform`}>
-                        {isDriving ? (
-                            <div className="flex flex-col items-center justify-end pb-4">
-                                {/* Speedometer Display */}
-                                <div className="bg-black/90 border-2 border-zinc-700 px-6 py-2 w-[140px] text-center skew-x-[-10deg] shadow-[0_0_10px_rgba(0,0,0,0.8)]">
-                                    <span className="text-3xl font-black text-white tracking-tighter block skew-x-[10deg] drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
-                                        {speedKmH}
-                                    </span>
-                                    <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest block skew-x-[10deg] mt-1">KM/H</span>
-                                </div>
-                                {/* Pedals */}
-                                <div className="flex gap-2 mt-2">
-                                    <div className={`px-3 py-0.5 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState < 0 ? 'bg-red-600/30 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] text-red-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
-                                        <span className="text-[8px] font-black uppercase tracking-widest block skew-x-[10deg]">BRK</span>
-                                    </div>
-                                    <div className={`px-3 py-0.5 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState > 0 ? 'bg-emerald-600/30 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] text-emerald-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
-                                        <span className="text-[8px] font-black uppercase tracking-widest block skew-x-[10deg]">GAS</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className={`gap-2 flex items-end pb-2 pointer-events-auto transition-opacity duration-300`}>
-                                {/* Clickable for mobile weapon switching */}
-                                {renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}
-                                {renderSlot('2', loadout.secondary, activeWeapon === loadout.secondary)}
-                                {renderSlot('3', loadout.throwable, activeWeapon === loadout.throwable)}
-                                {renderSlot('4', loadout.special, activeWeapon === loadout.special)}
-                                {renderSlot('5', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Right Weapon Details */}
-                    <div className={`flex flex-col items-end gap-2 mb-2 justify-end right-4 absolute bottom-0 transition-opacity duration-300 ${isDriving ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`absolute bottom-4 left-4 right-4 pointer-events-none flex flex-col items-start justify-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                    {/* Active Weapon Details - MOVED TO ABOVE SLOT BAR */}
+                    <div className={`flex flex-col items-start gap-1 transition-opacity duration-300 ${isDriving ? 'opacity-0' : 'opacity-100'}`}>
                         {wep && (
                             <>
-                                {/* Weapon Name & Level (or Signal Strength for Radio) */}
-                                <div className="flex flex-col items-end mb-1">
-                                    <h2 className={`text-sm font-black uppercase tracking-widest italic drop-shadow-md text-right leading-none ${isRadioActive ? 'text-white' : 'text-zinc-200'}`}>
+                                <div className="flex flex-col items-start">
+                                    <h2 className={`text-[10px] font-black uppercase tracking-widest italic drop-shadow-md leading-none ${isRadioActive ? 'text-white' : 'text-zinc-200'}`}>
                                         {isRadioActive ? t('weapons.radio') : t(wep.displayName)}
                                     </h2>
-                                    {!isRadioActive ? (
-                                        <div className="text-[8px] font-bold text-zinc-500 bg-black/90 px-1 py-0.5 border-b-2 border-zinc-800 uppercase tracking-[0.2em] mt-1">
-                                            {t('ui.level')} {currentWeaponLevel}
-                                        </div>
-                                    ) : (
-                                        /* Radio Signal Label */
-                                        <div className="text-[8px] font-bold text-zinc-500 bg-black/90 px-1 py-0.5 border-b-2 border-zinc-800 uppercase tracking-[0.2em] mt-1">
-                                            {t('ui.signal_strength')}
-                                        </div>
-                                    )}
                                 </div>
 
-                                {/* Status Box (Ammo or Radio) */}
-                                <div className={`relative bg-zinc-950 border-2 p-2 min-w-[80px] h-10 flex items-center justify-center shadow-2xl overflow-hidden skew-x-[-10deg]`}
+                                <div className={`relative bg-zinc-950 border-2 p-1 min-w-[70px] h-8 flex items-center justify-center shadow-2xl overflow-hidden skew-x-[-10deg]`}
                                     style={{ borderColor: wep.color }}>
-
-                                    {/* Reloading Fill - Behind Content */}
                                     {isReloading && (
                                         <div className="absolute inset-0 z-0 pointer-events-none">
                                             <div className="w-full h-full origin-bottom transition-transform duration-100 ease-linear"
@@ -457,32 +405,28 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                             </div>
                                         </div>
                                     )}
-
-                                    {/* Content (Ammo or Radio) */}
                                     <div className="skew-x-[10deg] w-full text-center relative z-10">
                                         {isRadioActive ? (
                                             familyFound ? (
                                                 <div className="flex flex-col items-center leading-none">
-                                                    <span className={`text-blue-300 font-black uppercase tracking-widest text-[8px] animate-pulse`}>{isBossActive ? t('ui.defeat_boss') : t('ui.target_located')}</span>
-                                                    {isBossActive && <span className={`text-[6px] text-red-500 font-bold uppercase tracking-[0.2em] mt-1`}>{t('ui.protect_family')}</span>}
+                                                    <span className={`text-blue-300 font-black uppercase tracking-widest text-[7px] animate-pulse`}>{isBossActive ? t('ui.defeat_boss') : t('ui.target_located')}</span>
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col items-center justify-center">
-                                                    {/* Signal Strength Value Only */}
                                                     {familySignal > 0.05 ? (
-                                                        <span className={`text-base font-black text-white tracking-wider`}>{Math.floor(familySignal * 100)}%</span>
+                                                        <span className={`text-xs font-black text-white tracking-wider`}>{Math.floor(familySignal * 100)}%</span>
                                                     ) : (
-                                                        <span className={`text-[10px] font-bold text-blue-500/50 animate-pulse tracking-widest`}>{t('ui.scanning')}</span>
+                                                        <span className={`text-[8px] font-bold text-blue-500/50 animate-pulse tracking-widest`}>{t('ui.scanning')}</span>
                                                     )}
                                                 </div>
                                             )
                                         ) : (
                                             <div className="flex items-baseline justify-center">
-                                                <span className={`text-2xl font-black text-white tracking-tighter leading-none`}>
+                                                <span className={`text-xl font-black text-white tracking-tighter leading-none`}>
                                                     {ammo}
                                                 </span>
                                                 {!isThrowableActive && (
-                                                    <span className={`text-sm font-bold text-zinc-600 ml-1`}>
+                                                    <span className={`text-[10px] font-bold text-zinc-600 ml-1`}>
                                                         /{magSize}
                                                     </span>
                                                 )}
@@ -492,6 +436,45 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                 </div>
                             </>
                         )}
+                    </div>
+
+                    <div className={`flex justify-between items-end w-full mt-2`}>
+
+                        {/* Placeholder for Bottom-Left Action (Empty on Mobile for symmetry) */}
+                        <div className="w-4"></div>
+
+                        {/* Centered Action Bar (Weapons) -- MOVED TO BOTTOM LEFT FOR MOBILE */}
+                        <div className={`relative transform`}>
+                            {isDriving ? (
+                                <div className="flex flex-col items-center justify-end pb-4">
+                                    {/* Speedometer Display */}
+                                    <div className="bg-black/90 border-2 border-zinc-700 px-6 py-2 w-[140px] text-center skew-x-[-10deg] shadow-[0_0_10px_rgba(0,0,0,0.8)]">
+                                        <span className="text-3xl font-black text-white tracking-tighter block skew-x-[10deg] drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
+                                            {speedKmH}
+                                        </span>
+                                        <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest block skew-x-[10deg] mt-1">KM/H</span>
+                                    </div>
+                                    {/* Pedals */}
+                                    <div className="flex gap-2 mt-2">
+                                        <div className={`px-3 py-0.5 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState < 0 ? 'bg-red-600/30 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] text-red-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
+                                            <span className="text-[8px] font-black uppercase tracking-widest block skew-x-[10deg]">BRK</span>
+                                        </div>
+                                        <div className={`px-3 py-0.5 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState > 0 ? 'bg-emerald-600/30 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] text-emerald-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
+                                            <span className="text-[8px] font-black uppercase tracking-widest block skew-x-[10deg]">GAS</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`gap-2 flex items-end pb-0 pointer-events-auto transition-opacity duration-300`}>
+                                    {/* Clickable for mobile weapon switching */}
+                                    {renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}
+                                    {renderSlot('2', loadout.secondary, activeWeapon === loadout.secondary)}
+                                    {renderSlot('3', loadout.throwable, activeWeapon === loadout.throwable)}
+                                    {renderSlot('4', loadout.special, activeWeapon === loadout.special)}
+                                    {renderSlot('5', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

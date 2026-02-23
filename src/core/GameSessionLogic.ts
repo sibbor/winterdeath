@@ -80,7 +80,7 @@ export class GameSessionLogic {
             chests: [] as any[],
             bloodDecals: [] as any[],
 
-            cameraShake: 0, lastHudUpdate: 0, startTime: now, lastShotTime: 0,
+            lastHudUpdate: 0, startTime: now, lastShotTime: 0,
             shotsFired: 0, shotsHit: 0, throwablesThrown: 0,
             damageDealt: 0, damageTaken: 0,
             bossDamageDealt: 0, bossDamageTaken: 0,
@@ -92,7 +92,8 @@ export class GameSessionLogic {
             familyFound: !!props.familyAlreadyRescued, familyExtracted: false,
             chestsOpened: 0, bigChestsOpened: 0, killsInRun: 0, isInteractionOpen: false, bossSpawned: false,
             lastDamageTime: 0, lastStaminaUseTime: 0,
-            noiseLevel: 0, speakBounce: 0, hurtShake: 0, shakeIntensity: 0,
+            noiseLevel: 0, speakBounce: 0,
+            cameraShake: 0, hurtShake: 0,
 
             sectorState: {
                 envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
