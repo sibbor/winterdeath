@@ -58,19 +58,30 @@ export class SpatialGrid {
     // --- ENEMY MANAGEMENT ---
 
     updateEnemyGrid(enemies: Enemy[]) {
-        this.enemyCells.clear();
+        // ZERO-GC: Instead of discarding the map and creating new arrays every frame,
+        // we just empty the existing arrays in memory.
+        for (const cell of this.enemyCells.values()) {
+            cell.length = 0;
+        }
+
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
-            // Only index enemies that are actually in the game logic
+
+            // Only index enemies that are actually alive
             if (e.dead || e.deathState !== 'alive') continue;
 
-            const hash = this.getHash(e.mesh.position.x, e.mesh.position.z);
-            let cell = this.enemyCells.get(hash);
-            if (!cell) {
-                cell = [];
-                this.enemyCells.set(hash, cell);
-            }
-            cell.push(e);
+            // Calculate the enemy's actual radius.
+            // If they stand on the border between two cells, they must be indexed in both!
+            const hitRadius = 1.0 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
+
+            this.forEachCellInRange(e.mesh.position.x, e.mesh.position.z, hitRadius, (hash) => {
+                let cell = this.enemyCells.get(hash);
+                if (!cell) {
+                    cell = []; // Created only the very first time a cell is visited
+                    this.enemyCells.set(hash, cell);
+                }
+                cell.push(e);
+            });
         }
     }
 
@@ -87,7 +98,8 @@ export class SpatialGrid {
             if (cell) {
                 for (let i = 0; i < cell.length; i++) {
                     const e = cell[i];
-                    if (!this.seenEnemyIds.has(e.id)) { // Check ID to prevent duplicates if an enemy covers multiple cells
+                    // Check ID to prevent duplicates if an enemy covers multiple cells
+                    if (!this.seenEnemyIds.has(e.id)) {
                         this.seenEnemyIds.add(e.id);
                         this.enemyQueryResults.push(e);
                     }
@@ -98,7 +110,6 @@ export class SpatialGrid {
     }
 
     // --- HELPERS ---
-
     private forEachCellInRange(x: number, z: number, radius: number, callback: (hash: number) => void) {
         const sX = Math.floor((x - radius) / this.cellSize);
         const eX = Math.floor((x + radius) / this.cellSize);
