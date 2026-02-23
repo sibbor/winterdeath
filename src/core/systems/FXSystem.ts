@@ -291,16 +291,48 @@ export const FXSystem = {
         }
     },
 
-    textQueue: [] as { mesh: THREE.Sprite, life: number }[],
+    // --- ZERO-GC TEXT POOL ---
+    _textPool: [] as { mesh: THREE.Sprite, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, texture: THREE.CanvasTexture, active: boolean, life: number }[],
     spawnFloatingText: (scene: THREE.Scene, x: number, y: number, z: number, text: string, color: string = '#ffffff') => {
-        const sprite = createTextSprite(text);
-        sprite.position.set(x, y + 1.5, z);
-        sprite.scale.set(1.5, 1.5, 1.5);
-        sprite.material.color.set(color);
-        sprite.renderOrder = 100;
+        let pooled = FXSystem._textPool.find(t => !t.active);
 
-        scene.add(sprite);
-        FXSystem.textQueue.push({ mesh: sprite, life: 1.5 });
+        if (!pooled) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d')!;
+            const texture = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: true });
+            const mesh = new THREE.Sprite(mat);
+
+            // Bevara 4:1 aspect ratio, men gör den lagom stor i världen
+            mesh.scale.set(3.0, 0.75, 1.0);
+            scene.add(mesh);
+
+            pooled = { mesh, canvas, ctx, texture, active: true, life: 0 };
+            FXSystem._textPool.push(pooled);
+        }
+
+        // Rensa och rita ny text på befintlig canvas
+        pooled.ctx.clearRect(0, 0, 256, 64);
+        pooled.ctx.font = 'bold 46px Arial'; // Större text!
+        pooled.ctx.fillStyle = 'white';
+        pooled.ctx.textAlign = 'center';
+        pooled.ctx.textBaseline = 'middle';
+
+        // Tjock svart kontur (Shadow) så den syns mot snön!
+        pooled.ctx.strokeStyle = 'black';
+        pooled.ctx.lineWidth = 5;
+        pooled.ctx.strokeText(text, 128, 32);
+        pooled.ctx.fillText(text, 128, 32);
+
+        pooled.texture.needsUpdate = true; // Säger till WebGL att läsa in canvasen igen
+
+        pooled.mesh.position.set(x, y + 1.5, z);
+        pooled.mesh.material.color.set(color); // Färgar den vita texten
+        pooled.mesh.material.opacity = 1.0;
+        pooled.mesh.visible = true;
+        pooled.life = 1.5;
+        pooled.active = true;
     },
 
     // --- MAIN UPDATE LOOP ---
@@ -384,17 +416,19 @@ export const FXSystem = {
             }
         }
 
-        // 3. Update Text Floaters
-        for (let i = FXSystem.textQueue.length - 1; i >= 0; i--) {
-            const t = FXSystem.textQueue[i];
+        // 3. Update Text Floaters (Zero-GC)
+        for (let i = 0; i < FXSystem._textPool.length; i++) {
+            const t = FXSystem._textPool[i];
+            if (!t.active) continue;
+
             t.life -= safeDelta;
             if (t.life <= 0) {
-                t.mesh.parent?.remove(t.mesh);
-                FXSystem.textQueue[i] = FXSystem.textQueue[FXSystem.textQueue.length - 1];
-                FXSystem.textQueue.pop();
+                t.active = false;
+                t.mesh.visible = false;
                 continue;
             }
-            t.mesh.position.y += 0.5 * safeDelta;
+
+            t.mesh.position.y += 1.2 * safeDelta;
             t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
         }
 
