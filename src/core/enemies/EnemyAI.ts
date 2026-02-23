@@ -4,7 +4,7 @@ import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution
 import { MATERIALS } from '../../utils/assets';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType } from '../../content/weapons';
-import { FXSystem } from '../systems/FXSystem'; // [Lagt till] För blod/partiklar i shove/tackle
+import { FXSystem } from '../systems/FXSystem';
 import { soundManager } from '../../utils/sound';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -14,7 +14,7 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3(); // Dedicated scratchpad for separation force
-const _UP = new THREE.Vector3(0, 1, 0); // [Lagt till] Behövs för cross-product i bowlingfysiken
+const _UP = new THREE.Vector3(0, 1, 0); // Needed for cross-product in bowling physics
 const _color = new THREE.Color();
 const _blackColor = new THREE.Color(0x000000);
 
@@ -101,28 +101,44 @@ export const EnemyAI = {
             e.mesh.visible = true;
         }
 
-        // --- 4. STATUS EFFECTS & STUNS ---
+        // --- 4. STATUS EFFECTS ---
         handleStatusEffects(e, delta, now, callbacks);
+
+        // --- 5. MASS-BASED KNOCKBACK PHYSICS ---
+        // This must run BEFORE the stun return so ragdolling enemies actually fly backwards
+        if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
+            const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+            const moveInertia = delta / Math.max(0.5, mass);
+
+            e.mesh.position.addScaledVector(e.knockbackVel, moveInertia);
+            e.knockbackVel.y -= 50 * delta;
+
+            const friction = 1.0 + (mass * 2.0);
+            e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
+
+            if (e.mesh.position.y <= 0) {
+                e.mesh.position.y = 0;
+                e.knockbackVel.set(0, 0, 0);
+            }
+        }
+
+        // --- 6. STUNS & RAGDOLLS (Early Returns) ---
         if (e.stunTimer && e.stunTimer > 0) {
             e.stunTimer -= delta;
 
             // --- RAGDOLL PHYSICS ---
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
-                // Snurra vilt i luften och på marken
                 e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
                 e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
                 e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
 
-                // Friktion: dämpa snurrandet när de slagit i marken
                 if (e.mesh.position.y <= 0.1) {
                     e.mesh.userData.spinVel.multiplyScalar(Math.max(0, 1 - 6.0 * delta));
                 }
 
-                // De sista 0.6 sekunderna av stun: Spela upp en "resa sig upp"-animation (lerp tillbaka till stå-position)
                 if (e.stunTimer < 0.6) {
                     const recoveryProgress = 1.0 - (e.stunTimer / 0.6);
-                    // Rulla mjukt tillbaka X och Z (lutningen) till noll. Y låter vi vara så de behåller sin riktning.
                     e.mesh.rotation.x = THREE.MathUtils.lerp(e.mesh.rotation.x, 0, recoveryProgress);
                     e.mesh.rotation.z = THREE.MathUtils.lerp(e.mesh.rotation.z, 0, recoveryProgress);
                     e.mesh.quaternion.setFromEuler(e.mesh.rotation);
@@ -137,16 +153,14 @@ export const EnemyAI = {
                 e.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
             }
 
-            // Stjärn-partiklar över huvudet
             if (Math.random() < 0.1) {
                 callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.0, e.mesh.position.z, 'stun_star', 1, undefined, undefined, 0xffff00, 0.3);
             }
 
-            // Återställ när stun är klar
             if (e.stunTimer <= 0) {
                 e.state = AIState.CHASE;
-                e.mesh.userData.isRagdolling = false; // Stäng av ragdoll
-                e.mesh.rotation.x = 0; // Tvinga dem helt upprätta
+                e.mesh.userData.isRagdolling = false;
+                e.mesh.rotation.x = 0;
                 e.mesh.rotation.z = 0;
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
             }
@@ -155,7 +169,7 @@ export const EnemyAI = {
 
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
-        // --- 5. SENSORS & SEPARATION ---
+        // --- 7. SENSORS & SEPARATION ---
         const dx = playerPos.x - e.mesh.position.x;
         const dz = playerPos.z - e.mesh.position.z;
         const distSq = dx * dx + dz * dz;
@@ -194,24 +208,7 @@ export const EnemyAI = {
             }
         }
 
-        // --- 6. MASS-BASED KNOCKBACK PHYSICS ---
-        if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
-            const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
-            const moveInertia = delta / Math.max(0.5, mass);
-
-            e.mesh.position.addScaledVector(e.knockbackVel, moveInertia);
-            e.knockbackVel.y -= 50 * delta;
-
-            const friction = 1.0 + (mass * 2.0);
-            e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
-
-            if (e.mesh.position.y <= 0) {
-                e.mesh.position.y = 0;
-                e.knockbackVel.set(0, 0, 0);
-            }
-        }
-
-        // --- 7. STATE MACHINE ---
+        // --- 8. STATE MACHINE ---
         switch (e.state) {
             case AIState.IDLE:
                 e.idleTimer -= delta;
@@ -273,38 +270,29 @@ export const EnemyAI = {
             case AIState.BITING:
                 e.grappleTimer -= delta * (shakeIntensity > 1.0 ? 6.0 : 1.0);
 
-                // 1. Beräkna en optimal bit-position (1.2m från spelaren, så de inte hamnar inuti)
                 _v1.subVectors(e.mesh.position, playerPos);
                 _v1.y = 0;
                 if (_v1.lengthSq() < 0.01) _v1.set(0, 0, 1);
                 _v1.normalize();
-
                 _v2.copy(playerPos).addScaledVector(_v1, 1.2);
 
-                // 2. Följ efter spelaren aggressivt till denna position (Zero-GC, med kollision)
                 moveEntity(e, _v2, delta, e.speed * 2.5, collisionGrid, _v6);
 
-                // Titta alltid direkt på spelaren under bettet
                 _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                 e.mesh.lookAt(_v5);
 
                 const currentDistSq = e.mesh.position.distanceToSquared(playerPos);
-
-                // 3. Om spelaren rushar/rullar iväg och avståndet blir för stort -> Bryt greppet!
-                if (currentDistSq > 6.25) { // 2.5 meter i kvadrat
+                if (currentDistSq > 6.25) {
                     e.state = AIState.CHASE;
-                    e.attackCooldown = 1500; // Ger spelaren utrymme att andas
+                    e.attackCooldown = 1500;
                     break;
                 }
-
-                // 4. Gör bara skada om zombien faktiskt lyckas stanna nära spelaren
-                if (currentDistSq < 4.0) { // Inom 2.0 meter
+                if (currentDistSq < 4.0) {
                     if (now % 500 < 30) {
                         callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
                         callbacks.playSound('impact_flesh');
                     }
                 }
-
                 if (e.grappleTimer <= 0) {
                     e.state = AIState.CHASE;
                     e.attackCooldown = 1000;
@@ -361,7 +349,7 @@ export const EnemyAI = {
                 break;
         }
 
-        // --- 8. FINAL UPDATES ---
+        // --- 9. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
 
         if (e.slowTimer > 0) e.slowTimer -= delta;
@@ -382,7 +370,7 @@ export const EnemyAI = {
         }
     },
 
-    // --- EXTERNA INTERAKTIONER FRÅN ANDRA SYSTEM [LAGT TILL] ---
+    // --- EXTERNAL INTERACTIONS FROM OTHER SYSTEMS ---
 
     applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, now: number) => {
         let shovedAnyone = false;
@@ -462,21 +450,19 @@ export const EnemyAI = {
             _v1.normalize();
         }
 
-        // Tvinga zombien att flyga åt HÖGER eller VÄNSTER (ur vägen för spelaren!)
         if (isDashing) {
             _v5.copy(moveVec).normalize();
             const dot = _v1.dot(_v5);
 
-            // Ligger zombien i vägen framför oss?
             if (dot > 0.3) {
-                _v3.crossVectors(_v5, _UP).normalize(); // Tvärs åt sidan
-                if (_v1.dot(_v3) < 0) _v3.negate();     // Kontrollera om zombien är något till vänster
-                _v1.lerp(_v3, 0.85).normalize();        // Tvinga dem starkt åt sidan, som plogkanten på ett tåg
+                _v3.crossVectors(_v5, _UP).normalize();
+                if (_v1.dot(_v3) < 0) _v3.negate();
+                _v1.lerp(_v3, 0.85).normalize();
             }
         }
 
-        const force = (isDashing ? 60.0 : 8.0) * pushMultiplier;
-        const lift = (isDashing ? 22.0 : 2.0) * pushMultiplier;
+        const force = (isDashing ? 30.0 : 8.0) * pushMultiplier;
+        const lift = (isDashing ? 30.0 : 2.0) * pushMultiplier;
 
         enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
         enemy.state = AIState.IDLE;
@@ -515,7 +501,6 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 
     _v3.copy(_v2).multiplyScalar(curSpeed * delta);
 
-    // Använder den globalt beräknade separationskraften
     if (sepForce.lengthSq() > 0) {
         _v3.addScaledVector(sepForce, delta * 5.0);
     }

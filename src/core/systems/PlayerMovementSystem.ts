@@ -72,6 +72,7 @@ export class PlayerMovementSystem implements System {
             state.rushCostPaid = false;
         }
 
+        // Shove triggers immediately on Space press
         if (input.space && !state.spaceDepressed && !disableInput) {
             state.spaceDepressed = true;
             state.spacePressTime = now;
@@ -99,39 +100,25 @@ export class PlayerMovementSystem implements System {
         if (session.engine.water) {
             session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
             inWater = _buoyancyResult.inWater && !state.activeVehicle;
-            if (state.activeVehicle) {
-                isSwimming = false;
-                isWading = false;
-            }
 
             if (inWater) {
-                // The actual physical depth of the water at this coordinate (flat water vs ground bed)
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
 
-                // Depth-based states (with hysteresis to prevent bobbing)
                 if (flatDepth > 1.25) {
-                    isSwimming = true;
-                    speed *= 0.35;
+                    isSwimming = true; speed *= 0.35;
                 } else if (flatDepth > 0.95 && isSwimming) {
-                    isSwimming = true;
-                    speed *= 0.35;
+                    isSwimming = true; speed *= 0.35;
                 } else if (flatDepth > 0.4) {
-                    isSwimming = false;
-                    isWading = true;
-                    speed *= 0.6;
+                    isSwimming = false; isWading = true; speed *= 0.6;
                 } else {
-                    isSwimming = false;
-                    speed *= 0.85;
+                    isSwimming = false; speed *= 0.85;
                 }
 
-                // Vertical Sinking
-                // Target Y: If swimming, stay near the surface (~0.35m) taking waves into account. 
                 const swimY = _buoyancyResult.waterLevel - 0.35;
                 const targetY = isSwimming ? swimY : _buoyancyResult.groundY;
                 playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
             } else {
                 isSwimming = false; isWading = false;
-                // Snap back to ground height (Safeguard)
                 if (playerGroup.position.y !== 0) {
                     playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * delta);
                     if (Math.abs(playerGroup.position.y) < 0.01) playerGroup.position.y = 0;
@@ -148,7 +135,6 @@ export class PlayerMovementSystem implements System {
                 state.stamina -= 5 * delta;
                 speed *= 1.75;
 
-                // Only spawn smoke if we are not in water
                 if ((now / 200 | 0) % 2 === 0 && !inWater) {
                     FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
                 }
@@ -161,7 +147,6 @@ export class PlayerMovementSystem implements System {
             }
         }
 
-        // --- HEALTH REGEN (5 HP/5s) ---
         if (state.hp < state.maxHp && !state.isDead && now - state.lastDamageTime > 5000) {
             state.hp = Math.min(state.maxHp, state.hp + 3 * delta);
         }
@@ -241,34 +226,48 @@ export class PlayerMovementSystem implements System {
 
             for (let i = 0; i < 4; i++) {
                 let adjusted = false;
-                const nearby = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
-                const nLen = nearby.length;
+
+                // --- 1. FIENDE-KOLLISION (PLOGEN) ---
+                // FIX: Vi måste specifikt be griden om att ge oss FIENDER!
+                const searchRadius = isDashing ? 2.5 : 1.0;
+                const nearbyEnemies = state.collisionGrid.getNearbyEnemies(_v3, searchRadius);
+                const eLen = nearbyEnemies.length;
+
+                for (let j = 0; j < eLen; j++) {
+                    const enemy = nearbyEnemies[j];
+                    const distSq = _v3.distanceToSquared(enemy.mesh.position);
+
+                    // PLOG-RADIE: Större än deras attackradie så vi träffar dem FÖRST!
+                    const hitRadiusSq = isDashing ? 4.5 : 0.8;
+
+                    if (distSq < hitRadiusSq) {
+                        // Delegera den brutala bowling-fysiken till EnemyAI
+                        EnemyAI.applyTackle(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
+
+                        // Om vi INTE dashar, hantera mjuk kollision så vi inte går igenom dem
+                        if (!isDashing) {
+                            const overlap = Math.sqrt(hitRadiusSq) - Math.sqrt(distSq);
+                            if (overlap > 0 && distSq > 0.001) {
+                                _v1.subVectors(_v3, enemy.mesh.position).normalize().multiplyScalar(overlap);
+                                _v3.add(_v1);
+                                adjusted = true;
+                            }
+                        }
+                    }
+                }
+
+                // --- 2. STANDARD WALL/OBJECT COLLISION ---
+                // Griden hämtar nu bara stenar, fordon och träd här
+                const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
+                const nLen = nearbyObs.length;
 
                 for (let j = 0; j < nLen; j++) {
-                    const obs = nearby[j];
-                    const entityData = obs.mesh?.userData?.entity;
+                    const obs = nearbyObs[j];
 
-                    // --- ENEMY COLLISION DELEGATION ---
-                    if (entityData) {
-                        const enemy = entityData;
-                        const distSq = _v3.distanceToSquared(enemy.mesh.position);
-
-                        // PLOG-RADIE: 4.5 (ca 2.1m). Större än deras attackradie!
-                        const hitRadiusSq = isDashing ? 4.5 : 0.8;
-
-                        if (distSq < hitRadiusSq) {
-                            EnemyAI.applyTackle(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
-                        }
-
-                        // PLOG-MAGI: Om vi dashar plöjer vi IGENOM dem. Vi studsar inte!
-                        if (isDashing) continue;
-                    }
-
-                    // --- STANDARD WALL/OBJECT COLLISION ---
                     if (applyCollisionResolution(_v3, 0.5, obs)) {
                         adjusted = true;
 
-                        if (obs.mesh && obs.mesh.userData.velocity && !entityData) {
+                        if (obs.mesh && obs.mesh.userData.velocity) {
                             const mass = obs.mesh.userData.mass || 1000.0;
                             const massInverse = 1.0 / Math.max(0.5, mass);
                             let pushForce = (isDashing ? 6.0 : 1.5) * massInverse;
@@ -281,6 +280,7 @@ export class PlayerMovementSystem implements System {
                         }
                     }
                 }
+
                 if (!adjusted) break;
             }
             playerGroup.position.copy(_v3);

@@ -98,7 +98,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                     <input
                         type="range"
                         min="1"
-                        max="20"
+                        max="100"
                         value={count}
                         onChange={(e) => setCount(parseInt(e.target.value))}
                         className="w-full h-4 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-600 my-2"

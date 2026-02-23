@@ -304,8 +304,7 @@ export const FXSystem = {
             const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: true });
             const mesh = new THREE.Sprite(mat);
 
-            // Bevara 4:1 aspect ratio, men gör den lagom stor i världen
-            mesh.scale.set(3.0, 0.75, 1.0);
+            mesh.scale.set(3.0, 0.75, 2.0);
             scene.add(mesh);
 
             pooled = { mesh, canvas, ctx, texture, active: true, life: 0 };
@@ -314,7 +313,7 @@ export const FXSystem = {
 
         // Rensa och rita ny text på befintlig canvas
         pooled.ctx.clearRect(0, 0, 256, 64);
-        pooled.ctx.font = 'bold 46px Arial'; // Större text!
+        pooled.ctx.font = 'bold 64px Arial';
         pooled.ctx.fillStyle = 'white';
         pooled.ctx.textAlign = 'center';
         pooled.ctx.textBaseline = 'middle';

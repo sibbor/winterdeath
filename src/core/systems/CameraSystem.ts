@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { CAMERA_HEIGHT } from '../../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-// Pre-allocated vector used to avoid memory allocation every frame
 const _v1 = new THREE.Vector3();
+const _idealPos = new THREE.Vector3(); // Håller kamerans "sanna" mjuka position
+let _initialized = false;
 
 export const CameraSystem = {
     /**
      * Updates the camera position and orientation.
-     * Uses linear interpolation (lerp) for smoothness and applies shake effects.
+     * Uses frame-independent lerp for silken smoothness and safe shake isolation.
      */
     update: (
         camera: THREE.Camera,
@@ -22,42 +23,57 @@ export const CameraSystem = {
     ) => {
         if (isCinematic) return;
 
+        // Första gången funktionen körs, synkronisera den ideala positionen med kameran
+        if (!_initialized) {
+            _idealPos.copy(camera.position);
+            _initialized = true;
+        }
+
         // 1. Calculate rotated offsets
-        // sin/cos determine the X/Z position relative to the target based on the rotation angle
         const offsetX = offsetZ * Math.sin(angle);
         const offsetZRotated = offsetZ * Math.cos(angle);
 
-        // 2. Set the ideal target position into our scratchpad vector (Zero-GC)
+        // 2. Set the ideal target position into our scratchpad vector
         _v1.set(
             targetPos.x + offsetX,
             CAMERA_HEIGHT + heightModifier,
             targetPos.z + offsetZRotated
         );
 
-        // 3. Smoothly move camera toward the target
-        // lerp(target, alpha) where alpha 0.1 provides a soft follow effect
-        camera.position.lerp(_v1, 0.1);
+        // 3. Framerate-Independent Lerp
+        // 15.0 är kamerans "följsamhet". Öka siffran för en stelare kamera, minska för slappare/släpigare.
+        const lerpFactor = 1.0 - Math.exp(-15.0 * delta);
 
-        // 4. Face the camera toward the player/target object
+        // Vi lerpar _idealPos, INTE kameran direkt. Detta isolerar vår mjuka rörelse från skak-effekter!
+        _idealPos.lerp(_v1, lerpFactor);
+
+        // 4. Applicera den perfekta positionen till kameran och titta på spelaren
+        camera.position.copy(_idealPos);
         camera.lookAt(targetPos);
 
-        // 5. Apply Camera Shake Effects (Hurt & Environmental)
-
-        // Handle Damage Shake (High intensity, fast decay)
+        // 5. Apply Camera Shake Effects
+        // Genom att manipulera camera.position EFTER att vi sparar dess rena position,
+        // får vi skaket visuellt utan att förstöra beräkningarna för nästa frame.
         if (state.hurtShake > 0) {
             state.hurtShake = Math.max(0, state.hurtShake - 2.0 * delta);
             const amt = state.hurtShake * 0.5;
-            // Direct position modification for immediate visual feedback
             camera.position.x += (Math.random() - 0.5) * amt;
             camera.position.z += (Math.random() - 0.5) * amt;
         }
 
-        // Handle General Camera Shake (Explosions, etc.)
         if (state.cameraShake > 0) {
             state.cameraShake = Math.max(0, state.cameraShake - 5.0 * delta);
             const amt = state.cameraShake * 0.5;
             camera.position.x += (Math.random() - 0.5) * amt;
             camera.position.z += (Math.random() - 0.5) * amt;
         }
+    },
+
+    /**
+     * Call this if you instantly teleport the player across the map, 
+     * so the camera doesn't visually fly across the entire world to catch up.
+     */
+    snapToPlayer: (camera: THREE.Camera) => {
+        _idealPos.copy(camera.position);
     }
 };
