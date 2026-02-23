@@ -60,6 +60,13 @@ export class WindSystem {
     this.baseAngle = baseAngle;
     this.angleVariance = angleVariance;
     this.overrideActive = false;
+    this.nextChange = 0; // Force immediate recalculation on next update
+
+    // Zero-GC Snap: If current wind is vastly outside new bounds, normalize it immediately
+    const curLen = this.current.length();
+    if (curLen > maxStrength * 2.0) {
+      this.current.multiplyScalar(maxStrength / curLen);
+    }
   }
 
   update(now: number, deltaTime: number = 0.016): THREE.Vector2 {
