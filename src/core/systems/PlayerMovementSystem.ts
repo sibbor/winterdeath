@@ -5,14 +5,15 @@ import { FXSystem } from './FXSystem';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/sound';
 import { AIState } from '../../types/enemy';
-import { _buoyancyResult } from './WaterSystem'; // Imported scratchpad
+import { EnemyAI } from '../enemies/EnemyAI';
+import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3(); // Direction / MoveVec
-const _v2 = new THREE.Vector3(); // StepVec
-const _v3 = new THREE.Vector3(); // TestPos
-const _v5 = new THREE.Vector3(); // LookTarget & Outward Vector
-const _v6 = new THREE.Vector3(); // Raw move input
+const _v1 = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
 
 export class PlayerMovementSystem implements System {
@@ -26,13 +27,12 @@ export class PlayerMovementSystem implements System {
         const disableInput = session.inputDisabled || false;
 
         if (state.activeVehicle) {
-            state.isMoving = false; // Player model itself isn't running
-            return; // Skip normal movement/rotation
+            state.isMoving = false;
+            return;
         }
 
         this.handleShake(input, state, delta);
 
-        // Movement logic
         const isMoving = this.handleMovement(
             this.playerGroup,
             input,
@@ -45,7 +45,6 @@ export class PlayerMovementSystem implements System {
 
         state.isMoving = isMoving;
 
-        // Rotation logic
         this.handleRotation(
             this.playerGroup,
             input,
@@ -66,16 +65,18 @@ export class PlayerMovementSystem implements System {
         disableInput: boolean,
         session: GameSessionLogic
     ): boolean {
-        // --- 1. Stamina & Rush Logic ---
+        // --- 1. Stamina, Shove & Rush Logic ---
         if (!input.space) {
             state.isRushing = false;
             state.spaceDepressed = false;
             state.rushCostPaid = false;
         }
-        if (input.space && !state.spaceDepressed) {
+
+        if (input.space && !state.spaceDepressed && !disableInput) {
             state.spaceDepressed = true;
             state.spacePressTime = now;
             state.rushCostPaid = false;
+            EnemyAI.applyShove(playerGroup, 4.0, state, session.engine.scene, now);
         }
 
         if (state.spaceDepressed && !state.isRolling) {
@@ -104,36 +105,32 @@ export class PlayerMovementSystem implements System {
             }
 
             if (inWater) {
-                //const subDepth = _buoyancyResult.waterLevel - playerGroup.position.y; // True depth below current water wave
                 // The actual physical depth of the water at this coordinate (flat water vs ground bed)
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
 
                 // Depth-based states (with hysteresis to prevent bobbing)
                 if (flatDepth > 1.25) {
                     isSwimming = true;
-                    speed *= 0.35; // Slow deliberate swimming
-                } else if (flatDepth > 0.95 && isSwimming) { // Hysteresis buffer
+                    speed *= 0.35;
+                } else if (flatDepth > 0.95 && isSwimming) {
                     isSwimming = true;
                     speed *= 0.35;
                 } else if (flatDepth > 0.4) {
                     isSwimming = false;
                     isWading = true;
-                    speed *= 0.6; // Heavy wading through deep snow/water
+                    speed *= 0.6;
                 } else {
                     isSwimming = false;
-                    speed *= 0.85; // Shallow splashing
+                    speed *= 0.85;
                 }
 
                 // Vertical Sinking
                 // Target Y: If swimming, stay near the surface (~0.35m) taking waves into account. 
                 const swimY = _buoyancyResult.waterLevel - 0.35;
-                const targetY = isSwimming ? swimY : _buoyancyResult.groundY; // Walk directly on the sloped ground
-
-                // Smoothly interpolate Y to prevent jitter from wave bobbing
+                const targetY = isSwimming ? swimY : _buoyancyResult.groundY;
                 playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * delta);
             } else {
-                isSwimming = false;
-                isWading = false;
+                isSwimming = false; isWading = false;
                 // Snap back to ground height (Safeguard)
                 if (playerGroup.position.y !== 0) {
                     playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * delta);
@@ -151,11 +148,9 @@ export class PlayerMovementSystem implements System {
                 state.stamina -= 5 * delta;
                 speed *= 1.75;
 
-                if ((now / 200 | 0) % 2 === 0) {
-                    // Only spawn smoke if we are not in water
-                    if (!inWater) {
-                        FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
-                    }
+                // Only spawn smoke if we are not in water
+                if ((now / 200 | 0) % 2 === 0 && !inWater) {
+                    FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
                 }
             } else {
                 state.isRushing = false;
@@ -166,7 +161,7 @@ export class PlayerMovementSystem implements System {
             }
         }
 
-        // Regen HP
+        // --- HEALTH REGEN (5 HP/5s) ---
         if (state.hp < state.maxHp && !state.isDead && now - state.lastDamageTime > 5000) {
             state.hp = Math.min(state.maxHp, state.hp + 3 * delta);
         }
@@ -205,13 +200,11 @@ export class PlayerMovementSystem implements System {
 
                 this.performMove(playerGroup, _v1, state, session, now, delta);
 
-                // --- AUDIO: Footsteps & swimming ---
-                const stepInterval = state.isSwimming ? 350 : (state.isRushing ? 250 : 400); // Faster swimming strokes
+                const stepInterval = state.isSwimming ? 350 : (state.isRushing ? 250 : 400);
                 if (now > (state.lastStepTime || 0) + stepInterval) {
                     if (inWater) {
                         if (isSwimming) {
                             soundManager.playSwimming();
-                            // Generate big splashes while swimming forward
                             FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, playerGroup.position.y + 1.0, playerGroup.position.z, 'splash', 3);
                         } else {
                             soundManager.playFootstep('water');
@@ -233,106 +226,59 @@ export class PlayerMovementSystem implements System {
         return isMoving;
     }
 
-    /**
-     * Sub-stepped movement with In-Place Collision Resolution
-     */
     private performMove(playerGroup: THREE.Group, baseMoveVec: THREE.Vector3, state: any, session: GameSessionLogic, now: number, delta: number) {
         const dist = baseMoveVec.length();
         if (dist < 0.001) return;
 
         const MAX_STEP = 0.2;
         const steps = Math.ceil(dist / MAX_STEP);
-        _v2.copy(baseMoveVec).divideScalar(steps); // stepVec
+        _v2.copy(baseMoveVec).divideScalar(steps);
 
         const isDashing = state.isRushing || state.isRolling;
 
         for (let s = 0; s < steps; s++) {
-            _v3.copy(playerGroup.position).add(_v2); // testPos
+            _v3.copy(playerGroup.position).add(_v2);
 
-            // Iterative Collision Resolution
             for (let i = 0; i < 4; i++) {
                 let adjusted = false;
-                const nearby = state.collisionGrid.getNearbyObstacles(_v3, 2.0);
+                const nearby = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
                 const nLen = nearby.length;
 
                 for (let j = 0; j < nLen; j++) {
                     const obs = nearby[j];
+                    const entityData = obs.mesh?.userData?.entity;
 
-                    if (applyCollisionResolution(_v3, 0.5, obs)) {
-                        const entityData = obs.mesh?.userData?.entity;
+                    // --- ENEMY COLLISION DELEGATION ---
+                    if (entityData) {
+                        const enemy = entityData;
+                        const distSq = _v3.distanceToSquared(enemy.mesh.position);
 
-                        // --- Enemy Collision & Knockback Logic ---
-                        if (entityData) {
-                            const enemy = entityData;
+                        // PLOG-RADIE: 4.5 (ca 2.1m). Större än deras attackradie!
+                        const hitRadiusSq = isDashing ? 4.5 : 0.8;
 
-                            // Break Bite attack immediately if we dash into them!
-                            if (isDashing && enemy.state === AIState.BITING && !enemy.dead) {
-                                enemy.state = AIState.IDLE;
-                                enemy.stunTimer = 1.0;
-                                enemy.isBlinded = true;
-                                enemy.blindUntil = now + 1000;
-                                soundManager.playImpact('flesh');
-                            }
-
-                            // Always allow tackles (but force varies)
-                            const canTackle = !enemy.dead && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
-
-                            if (canTackle) {
-                                const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
-                                const massInverse = 1.0 / Math.max(0.5, mass);
-                                const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse; // Bosses barely move
-
-                                // --- BOWLING PIN PHYSICS ---
-                                // Considerably higher force and lift during rush!
-                                const force = (isDashing ? 45.0 : 8.0) * pushMultiplier;
-                                const lift = (isDashing ? 12.0 : 2.0) * pushMultiplier;
-
-                                // 1. Calculate movement direction
-                                _v1.copy(baseMoveVec).normalize();
-
-                                // 2. Calculate radial direction (outward from player) to spread them sideways
-                                _v5.set(
-                                    enemy.mesh.position.x - playerGroup.position.x,
-                                    0,
-                                    enemy.mesh.position.z - playerGroup.position.z
-                                ).normalize();
-
-                                // 3. Mix directions. 2 parts forward, 1 part outward.
-                                _v1.multiplyScalar(2.0).add(_v5).normalize();
-
-                                // Apply velocity!
-                                enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
-
-                                // Force them out of their current state so they don't freeze mid-air
-                                enemy.state = AIState.IDLE;
-
-                                // Apply enough stun so they land before chasing again
-                                enemy.stunTimer = isDashing ? 2.5 : 0.8;
-                                enemy.isBlinded = true;
-                                enemy.blindUntil = now + (isDashing ? 2500 : 800);
-                                enemy.lastTackleTime = now;
-
-                                if (isDashing) {
-                                    FXSystem.spawnPart(session.engine.scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
-                                    soundManager.playImpact('flesh');
-                                }
-                            }
+                        if (distSq < hitRadiusSq) {
+                            EnemyAI.applyTackle(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
                         }
-                        if (obs.mesh && obs.mesh.userData.velocity) {
-                            const mass = obs.mesh.userData.mass || 1000.0; // Heavy fallback (like vehicle defaults)
+
+                        // PLOG-MAGI: Om vi dashar plöjer vi IGENOM dem. Vi studsar inte!
+                        if (isDashing) continue;
+                    }
+
+                    // --- STANDARD WALL/OBJECT COLLISION ---
+                    if (applyCollisionResolution(_v3, 0.5, obs)) {
+                        adjusted = true;
+
+                        if (obs.mesh && obs.mesh.userData.velocity && !entityData) {
+                            const mass = obs.mesh.userData.mass || 1000.0;
                             const massInverse = 1.0 / Math.max(0.5, mass);
                             let pushForce = (isDashing ? 6.0 : 1.5) * massInverse;
 
-                            // The rock shouldn't be pushed (no velocity), boat moves slowly, ball is pushed easily.
                             _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(pushForce);
 
-                            if (obs.mesh.userData.isBall) {
-                                _v1.multiplyScalar(2.0); // Make ball even easier to push
-                            }
+                            if (obs.mesh.userData.isBall) _v1.multiplyScalar(2.0);
 
                             (obs.mesh.userData.velocity as THREE.Vector3).add(_v1);
                         }
-                        adjusted = true;
                     }
                 }
                 if (!adjusted) break;

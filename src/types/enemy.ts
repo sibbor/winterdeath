@@ -71,6 +71,7 @@ export interface Enemy {
     dead: boolean;           // Logic-level removal flag
     hitTime: number;         // Timestamp of the most recent damage event
     lastStepTime?: number;   // Timestamp of the last footstep sound
+    lastTackleTime?: number; // Timestamp of the last physical collision with the player
     fleeing: boolean;        // Flag for retreat behavior
 
     // Status Effects (Timers are delta-based for consistency)
@@ -97,7 +98,6 @@ export interface Enemy {
     velocity: THREE.Vector3;     // Primary movement vector
     knockbackVel: THREE.Vector3; // Force applied from hits/explosions
     deathVel: THREE.Vector3;     // Trajectory used during the falling animation
-    separationForce?: THREE.Vector3; // Separation steering vector
 
     // Death, Animation & Cleanup
     lastDamageType?: string;       // Type of damage
@@ -107,7 +107,6 @@ export interface Enemy {
     fallForward: boolean;          // Determines the direction of the fall animation
     bloodSpawned: boolean;         // Boolean to ensure only one blood pool is spawned
     lastKnockback: number;         // Timestamp of the last force application
-    lastVehicleHit?: number;       // Timestamp of the last vehicle impact (Zero-GC tracking)
     deathState: 'alive' | 'dead'   // Type of death
     | 'exploded' | 'burning' | 'shot' | 'gibbed' | 'electrified';
 }

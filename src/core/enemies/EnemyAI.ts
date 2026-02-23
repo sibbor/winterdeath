@@ -4,6 +4,8 @@ import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution
 import { MATERIALS } from '../../utils/assets';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType } from '../../content/weapons';
+import { FXSystem } from '../systems/FXSystem'; // [Lagt till] För blod/partiklar i shove/tackle
+import { soundManager } from '../../utils/sound';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -11,7 +13,8 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
-const _v6 = new THREE.Vector3(); // [VINTERDÖD] Dedicated scratchpad for separation force
+const _v6 = new THREE.Vector3(); // Dedicated scratchpad for separation force
+const _UP = new THREE.Vector3(0, 1, 0); // [Lagt till] Behövs för cross-product i bowlingfysiken
 const _color = new THREE.Color();
 const _blackColor = new THREE.Color(0x000000);
 
@@ -102,9 +105,54 @@ export const EnemyAI = {
         handleStatusEffects(e, delta, now, callbacks);
         if (e.stunTimer && e.stunTimer > 0) {
             e.stunTimer -= delta;
-            e.mesh.position.x += (Math.random() - 0.5) * 0.1;
+
+            // --- RAGDOLL PHYSICS ---
+            if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
+                // Snurra vilt i luften och på marken
+                e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
+                e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
+                e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
+                e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+
+                // Friktion: dämpa snurrandet när de slagit i marken
+                if (e.mesh.position.y <= 0.1) {
+                    e.mesh.userData.spinVel.multiplyScalar(Math.max(0, 1 - 6.0 * delta));
+                }
+
+                // De sista 0.6 sekunderna av stun: Spela upp en "resa sig upp"-animation (lerp tillbaka till stå-position)
+                if (e.stunTimer < 0.6) {
+                    const recoveryProgress = 1.0 - (e.stunTimer / 0.6);
+                    // Rulla mjukt tillbaka X och Z (lutningen) till noll. Y låter vi vara så de behåller sin riktning.
+                    e.mesh.rotation.x = THREE.MathUtils.lerp(e.mesh.rotation.x, 0, recoveryProgress);
+                    e.mesh.rotation.z = THREE.MathUtils.lerp(e.mesh.rotation.z, 0, recoveryProgress);
+                    e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+                }
+            } else {
+                // --- STANDARD STUN (Twitch) ---
+                if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
+                const twitchX = (Math.random() - 0.5) * 0.2;
+                const twitchZ = (Math.random() - 0.5) * 0.2;
+                e.mesh.position.x += twitchX;
+                e.mesh.position.z += twitchZ;
+                e.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
+            }
+
+            // Stjärn-partiklar över huvudet
+            if (Math.random() < 0.1) {
+                callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.0, e.mesh.position.z, 'stun_star', 1, undefined, undefined, 0xffff00, 0.3);
+            }
+
+            // Återställ när stun är klar
+            if (e.stunTimer <= 0) {
+                e.state = AIState.CHASE;
+                e.mesh.userData.isRagdolling = false; // Stäng av ragdoll
+                e.mesh.rotation.x = 0; // Tvinga dem helt upprätta
+                e.mesh.rotation.z = 0;
+                e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+            }
             return;
         }
+
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
         // --- 5. SENSORS & SEPARATION ---
@@ -113,7 +161,6 @@ export const EnemyAI = {
         const distSq = dx * dx + dz * dz;
         const canSeePlayer = distSq < 900;
 
-        // [VINTERDÖD] Zero-GC & O(1) grid lookup separation force instead of looping allEnemies O(n^2)
         _v6.set(0, 0, 0);
         const separationRadiusSq = 1.0;
         const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, 1.5);
@@ -139,8 +186,6 @@ export const EnemyAI = {
         if (!canSeePlayer && noiseEvents.length > 0) {
             for (let i = 0; i < noiseEvents.length; i++) {
                 const n = noiseEvents[i];
-                // Ljudets maxålder hanteras och städas helt av GameSessionLogic nu,
-                // vi bryr oss bara om det fortfarande är aktivt!
                 if (!n.active) continue;
 
                 if (e.mesh.position.distanceToSquared(n.pos) < (n.radius * n.radius)) {
@@ -227,13 +272,43 @@ export const EnemyAI = {
 
             case AIState.BITING:
                 e.grappleTimer -= delta * (shakeIntensity > 1.0 ? 6.0 : 1.0);
-                _v1.set(0, 0, 0.4).applyQuaternion(e.mesh.quaternion);
-                e.mesh.position.copy(playerPos).add(_v1);
-                if (now % 500 < 30) {
-                    callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
-                    callbacks.playSound('impact_flesh');
+
+                // 1. Beräkna en optimal bit-position (1.2m från spelaren, så de inte hamnar inuti)
+                _v1.subVectors(e.mesh.position, playerPos);
+                _v1.y = 0;
+                if (_v1.lengthSq() < 0.01) _v1.set(0, 0, 1);
+                _v1.normalize();
+
+                _v2.copy(playerPos).addScaledVector(_v1, 1.2);
+
+                // 2. Följ efter spelaren aggressivt till denna position (Zero-GC, med kollision)
+                moveEntity(e, _v2, delta, e.speed * 2.5, collisionGrid, _v6);
+
+                // Titta alltid direkt på spelaren under bettet
+                _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
+                e.mesh.lookAt(_v5);
+
+                const currentDistSq = e.mesh.position.distanceToSquared(playerPos);
+
+                // 3. Om spelaren rushar/rullar iväg och avståndet blir för stort -> Bryt greppet!
+                if (currentDistSq > 6.25) { // 2.5 meter i kvadrat
+                    e.state = AIState.CHASE;
+                    e.attackCooldown = 1500; // Ger spelaren utrymme att andas
+                    break;
                 }
-                if (e.grappleTimer <= 0) e.state = AIState.CHASE;
+
+                // 4. Gör bara skada om zombien faktiskt lyckas stanna nära spelaren
+                if (currentDistSq < 4.0) { // Inom 2.0 meter
+                    if (now % 500 < 30) {
+                        callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
+                        callbacks.playSound('impact_flesh');
+                    }
+                }
+
+                if (e.grappleTimer <= 0) {
+                    e.state = AIState.CHASE;
+                    e.attackCooldown = 1000;
+                }
                 break;
 
             case AIState.EXPLODING:
@@ -289,26 +364,6 @@ export const EnemyAI = {
         // --- 8. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
 
-        if (e.stunTimer > 0) {
-            e.stunTimer -= delta;
-
-            if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
-            const twitchX = (Math.random() - 0.5) * 0.2;
-            const twitchZ = (Math.random() - 0.5) * 0.2;
-            e.mesh.position.x += twitchX;
-            e.mesh.position.z += twitchZ;
-            e.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
-
-            if (Math.random() < 0.1) {
-                callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.0, e.mesh.position.z, 'stun_star', 1, undefined, undefined, 0xffff00, 0.3);
-            }
-
-            if (e.stunTimer <= 0) {
-                e.state = AIState.CHASE;
-            }
-            return;
-        }
-
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
         if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
@@ -324,6 +379,124 @@ export const EnemyAI = {
             e.mesh.userData.debugRing.visible = true;
             e.mesh.userData.debugRing.scale.setScalar(hitRadius);
             e.mesh.userData.debugRing.position.set(0, -e.mesh.position.y + 0.05, 0);
+        }
+    },
+
+    // --- EXTERNA INTERAKTIONER FRÅN ANDRA SYSTEM [LAGT TILL] ---
+
+    applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, now: number) => {
+        let shovedAnyone = false;
+
+        for (let i = 0; i < state.enemies.length; i++) {
+            const enemy = state.enemies[i];
+            if (enemy.deathState === 'alive') {
+                const distSq = enemy.mesh.position.distanceToSquared(playerGroup.position);
+
+                if (distSq < radiusSq) {
+                    shovedAnyone = true;
+
+                    enemy.state = AIState.IDLE;
+                    enemy.stunTimer = 1.5;
+                    enemy.attackCooldown = 2000;
+
+                    const damage = 15;
+                    enemy.hp -= damage;
+                    enemy.lastDamageType = 'melee';
+
+                    if (state.callbacks && state.callbacks.trackStats) {
+                        state.callbacks.trackStats('damage', damage, !!enemy.isBoss);
+                    }
+                    if (state.callbacks && state.callbacks.spawnFloatingText) {
+                        state.callbacks.spawnFloatingText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, damage.toString(), "#ffffff");
+                    }
+
+                    _v1.subVectors(enemy.mesh.position, playerGroup.position);
+                    _v1.y = 0;
+                    if (_v1.lengthSq() < 0.01) _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
+                    _v1.normalize();
+
+                    const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+                    const force = 25.0 / Math.max(0.5, mass);
+
+                    enemy.knockbackVel.set(_v1.x * force, 6.0, _v1.z * force);
+
+                    if (!enemy.isBoss) {
+                        enemy.mesh.userData.isRagdolling = true;
+                        if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
+                        enemy.mesh.userData.spinVel.set(
+                            (Math.random() - 0.5) * 15,
+                            (Math.random() - 0.5) * 20,
+                            (Math.random() - 0.5) * 15
+                        );
+                    }
+
+                    FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1.5, enemy.mesh.position.z, 'blood', 8);
+                }
+            }
+        }
+
+        if (shovedAnyone) {
+            soundManager.playImpact('flesh');
+        }
+    },
+
+    applyTackle: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
+        const canTackle = enemy.deathState === 'alive' && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
+        if (!canTackle) return;
+
+        if (enemy.state === AIState.BITING) {
+            enemy.state = AIState.IDLE;
+            enemy.attackCooldown = 1500;
+        }
+
+        const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
+        const massInverse = 1.0 / Math.max(0.5, mass);
+        const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse;
+
+        _v1.subVectors(enemy.mesh.position, impactPos);
+        _v1.y = 0;
+        if (_v1.lengthSq() < 0.01) {
+            _v5.copy(moveVec).normalize();
+            _v1.crossVectors(_v5, _UP).normalize();
+        } else {
+            _v1.normalize();
+        }
+
+        // Tvinga zombien att flyga åt HÖGER eller VÄNSTER (ur vägen för spelaren!)
+        if (isDashing) {
+            _v5.copy(moveVec).normalize();
+            const dot = _v1.dot(_v5);
+
+            // Ligger zombien i vägen framför oss?
+            if (dot > 0.3) {
+                _v3.crossVectors(_v5, _UP).normalize(); // Tvärs åt sidan
+                if (_v1.dot(_v3) < 0) _v3.negate();     // Kontrollera om zombien är något till vänster
+                _v1.lerp(_v3, 0.85).normalize();        // Tvinga dem starkt åt sidan, som plogkanten på ett tåg
+            }
+        }
+
+        const force = (isDashing ? 60.0 : 8.0) * pushMultiplier;
+        const lift = (isDashing ? 22.0 : 2.0) * pushMultiplier;
+
+        enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
+        enemy.state = AIState.IDLE;
+        enemy.lastTackleTime = now;
+
+        if (isDashing) {
+            enemy.stunTimer = 2.0;
+            if (!enemy.isBoss) {
+                enemy.mesh.userData.isRagdolling = true;
+                if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
+                enemy.mesh.userData.spinVel.set(
+                    (Math.random() - 0.5) * 25,
+                    (Math.random() - 0.5) * 30,
+                    (Math.random() - 0.5) * 25
+                );
+            }
+            FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
+            soundManager.playImpact('flesh');
+        } else {
+            enemy.stunTimer = 0.8;
         }
     }
 };
@@ -368,7 +541,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
-    if (!e.lastSeenPos) e.lastSeenPos = new THREE.Vector3(); // Allokeras en gång per objekt i poolen, OK!
+    if (!e.lastSeenPos) e.lastSeenPos = new THREE.Vector3();
     e.lastSeenPos.copy(pos);
     e.lastSeenTime = now;
 }
@@ -443,8 +616,6 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
 
         if (progress >= 1.0) {
             if (ash && e.mesh.parent) {
-                // ZERO-GC WARNING: ash.clone() causes a minor memory allocation. 
-                // Consider building an ASH_POOL in EnemyManager in the future.
                 const permanentAsh = ash.clone();
                 permanentAsh.applyMatrix4(e.mesh.matrixWorld);
 
@@ -476,7 +647,6 @@ function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: a
             callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'limb', 2, undefined, undefined, undefined, scale);
 
             let burstScale = 1.0;
-            // Direct comparison saves string memory allocation vs String(x).toLowerCase()
             const dmgType = e.lastDamageType;
             if (dmgType === WeaponType.GRENADE || dmgType === WeaponType.MOLOTOV) burstScale = 3.0;
             else if (dmgType === WeaponType.SHOTGUN || dmgType === WeaponType.REVOLVER) burstScale = 2.0;
