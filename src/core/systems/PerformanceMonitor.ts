@@ -15,6 +15,12 @@ export class PerformanceMonitor {
     private startTimes: Record<string, number> = {};
     private _lastFrameTotal: number = 0;
 
+    // FPS Tracking
+    private _fps: number = 0;
+    private _frameCount: number = 0;
+    private _lastFpsUpdate: number = 0;
+
+
     // GC Tracking
     private lastHeapSize: number = 0;
     private gcDetected: boolean = false;
@@ -31,7 +37,16 @@ export class PerformanceMonitor {
             this.startTimes[key] = 0;
         }
 
+        const now = performance.now();
+        this._frameCount++;
+        if (now - this._lastFpsUpdate > 1000) {
+            this._fps = this._frameCount;
+            this._frameCount = 0;
+            this._lastFpsUpdate = now;
+        }
+
         // --- EXPERIMENTAL GC TRACKING ---
+
         // (performance.memory is a Chrome/Edge non-standard API)
         const mem = (performance as any).memory;
         if (mem) {
@@ -84,7 +99,12 @@ export class PerformanceMonitor {
         this.timings[id] = (this.timings[id] || 0) + ms;
     }
 
+    public getFps(): number {
+        return this._fps;
+    }
+
     public getTimings(): Record<string, number> {
+
         return this.timings;
     }
 

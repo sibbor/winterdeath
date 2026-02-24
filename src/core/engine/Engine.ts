@@ -238,7 +238,6 @@ export class Engine {
         // Delta time clamping prevents physics-warp during frame drops
         const dt = Math.min(this.clock.getDelta(), 0.05);
         const now = performance.now();
-
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 

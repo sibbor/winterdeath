@@ -29,15 +29,15 @@ let fenceMat: THREE.MeshStandardMaterial | null = null;
 let boatMat: THREE.MeshStandardMaterial | null = null;
 
 const LOCAL_MATS = {
-    litWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 1 }),
+    litWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 5 }),
     darkWindow: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 }),
     upWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 }),
     vehicleWindow: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 }),
-    tractorWheel: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }),
+    vehicleTire: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }),
     sirenBase: new THREE.MeshStandardMaterial({ color: 0x111111 }),
-    sirenBlue: new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 2 }),
-    sirenRed: new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 2 }),
-    caveLampBulb: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 2 }),
+    sirenBlue: new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 20 }),
+    sirenRed: new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 20 }),
+    caveLampBulb: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 20 }),
     caveLampCage: new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true })
 };
 
@@ -502,10 +502,10 @@ export const ObjectGenerator = {
             const frontWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 12);
             const rearWheelGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.6, 12);
 
-            const fwL = new THREE.Mesh(frontWheelGeo, LOCAL_MATS.tractorWheel); fwL.position.set(1.0, 0.4, 0.7); vehicleBody.add(fwL);
-            const fwR = new THREE.Mesh(frontWheelGeo, LOCAL_MATS.tractorWheel); fwR.position.set(1.0, 0.4, -0.7); vehicleBody.add(fwR);
-            const rwL = new THREE.Mesh(rearWheelGeo, LOCAL_MATS.tractorWheel); rwL.position.set(-0.5, 1.2, 1.0); vehicleBody.add(rwL);
-            const rwR = new THREE.Mesh(rearWheelGeo, LOCAL_MATS.tractorWheel); rwR.position.set(-0.5, 1.2, -1.0); vehicleBody.add(rwR);
+            const fwL = new THREE.Mesh(frontWheelGeo, LOCAL_MATS.vehicleTire); fwL.position.set(1.0, 0.4, 0.7); vehicleBody.add(fwL);
+            const fwR = new THREE.Mesh(frontWheelGeo, LOCAL_MATS.vehicleTire); fwR.position.set(1.0, 0.4, -0.7); vehicleBody.add(fwR);
+            const rwL = new THREE.Mesh(rearWheelGeo, LOCAL_MATS.vehicleTire); rwL.position.set(-0.5, 1.2, 1.0); vehicleBody.add(rwL);
+            const rwR = new THREE.Mesh(rearWheelGeo, LOCAL_MATS.vehicleTire); rwR.position.set(-0.5, 1.2, -1.0); vehicleBody.add(rwR);
         }
 
         if (type === 'timber_truck') {
@@ -692,7 +692,7 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createDeadBody: (type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
+    createDeadBody: (type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood?: boolean) => {
         const group = new THREE.Group();
         group.rotation.y = rot;
 
@@ -1075,28 +1075,61 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createBusRubble: (ctx: SectorContext, x: number, z: number, count: number) => {
+    createRubble: (x: number, z: number, count: number, material?: THREE.Material) => {
+        const mat = material == null ? MATERIALS.steel : material;
+
         const geometry = new THREE.BoxGeometry(2, 2, 4);
-        const mesh = new THREE.InstancedMesh(geometry, MATERIALS.busBlue, count);
+        const mesh = new THREE.InstancedMesh(geometry, mat, count);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
+        // Allocate continuous memory for physics (Zero-GC)
+        // 3 floats per instance (x, y, z)
+        const positions = new Float32Array(count * 3);
+        const velocities = new Float32Array(count * 3);
+        const rotations = new Float32Array(count * 3);
+        const spin = new Float32Array(count * 3);
+        const scales = new Float32Array(count);
+
         for (let i = 0; i < count; i++) {
-            _position.set(
-                x + (Math.random() - 0.5) * 8,
-                1.0,
-                z + (Math.random() - 0.5) * 8
-            );
-            _rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            const ix = i * 3;
+
+            // Start near the epicenter
+            positions[ix] = x + (Math.random() - 0.5) * 4.0;
+            positions[ix + 1] = 2.0 + Math.random() * 2.0;
+            positions[ix + 2] = z + (Math.random() - 0.5) * 4.0;
+
+            // Explosive outward velocity
+            velocities[ix] = (Math.random() - 0.5) * 35.0;     // X velocity
+            velocities[ix + 1] = 15.0 + Math.random() * 20.0;  // Y velocity (Upwards)
+            velocities[ix + 2] = (Math.random() - 0.5) * 35.0; // Z velocity
+
+            // Initial rotation
+            rotations[ix] = Math.random() * Math.PI;
+            rotations[ix + 1] = Math.random() * Math.PI;
+            rotations[ix + 2] = Math.random() * Math.PI;
+
+            // Spin speed
+            spin[ix] = (Math.random() - 0.5) * 15.0;
+            spin[ix + 1] = (Math.random() - 0.5) * 15.0;
+            spin[ix + 2] = (Math.random() - 0.5) * 15.0;
+
+            // Randomize scale for variety
+            scales[i] = 0.5 + Math.random() * 0.8;
+
+            _position.set(positions[ix], positions[ix + 1], positions[ix + 2]);
+            _rotation.set(rotations[ix], rotations[ix + 1], rotations[ix + 2]);
             _quat.setFromEuler(_rotation);
-            _scale.setScalar(0.8 + Math.random() * 0.4);
+            _scale.setScalar(scales[i]);
 
             _matrix.compose(_position, _quat, _scale);
             mesh.setMatrixAt(i, _matrix);
         }
 
+        // Store physics data in userData for access in the update loop
+        mesh.userData = { positions, velocities, rotations, spin, scales, active: true };
         mesh.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(mesh);
+
         return mesh;
-    }
+    },
 };

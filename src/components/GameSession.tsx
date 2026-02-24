@@ -722,6 +722,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         engineRef.current = engine;
         engine.input.enable();
 
+        // [VINTERDÖD] Clear any lingering callbacks from Camp or previous sessions
+        engine.onUpdate = null;
+        engine.onRender = null;
+        engine.isRenderingPaused = false;
+
         const session = new GameSessionLogic(engine);
         if (stateRef.current) session.init(stateRef.current);
         gameSessionRef.current = session;
@@ -933,153 +938,167 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             isBuildingSectorRef.current = true;
             engine.isRenderingPaused = true;
 
-            const rng = seededRandom(propsRef.current.currentSector + 4242);
-            const env = currentSector.environment;
+            try {
+                const rng = seededRandom(propsRef.current.currentSector + 4242);
+                const env = currentSector.environment;
 
-            const yielder = useInstantLoad ? undefined : yieldToMain;
-            await AssetPreloader.warmupAsync(engine.renderer, env, camera, yielder);
+                const yielder = useInstantLoad ? undefined : yieldToMain;
+                await AssetPreloader.warmupAsync(engine.renderer, propsRef.current.currentSector, camera, yielder);
 
-            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
+                if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
-            scene.background = new THREE.Color(env.bgColor);
-            scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
+                scene.background = new THREE.Color(env.bgColor);
+                scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
 
-            camera.reset();
-            camera.set('fov', env.fov);
-            camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
-            camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z, true);
+                camera.reset();
+                camera.set('fov', env.fov);
+                camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
+                camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z, true);
 
-            ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
+                ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
 
-            const ambientLight = new THREE.AmbientLight(0x404050, env.ambientIntensity);
-            ambientLight.name = 'AMBIENT_LIGHT';
-            scene.add(ambientLight);
+                const ambientLight = new THREE.AmbientLight(0x404050, env.ambientIntensity);
+                ambientLight.name = 'AMBIENT_LIGHT';
+                scene.add(ambientLight);
 
-            if (env.skyLight && env.skyLight.visible) {
-                const lightPos = env.skyLight.position || { x: 80, y: 50, z: 50 };
-                const skyLight = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
-                skyLight.name = 'SKY_LIGHT';
-                skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
-                skyLight.castShadow = true;
-                skyLight.shadow.camera.left = -100;
-                skyLight.shadow.camera.right = 100;
-                skyLight.shadow.camera.top = 100;
-                skyLight.shadow.camera.bottom = -100;
-                const shadowRes = engine.getSettings().shadowResolution;
-                skyLight.shadow.mapSize.width = shadowRes;
-                skyLight.shadow.mapSize.height = shadowRes;
-                scene.add(skyLight);
-            }
+                if (env.skyLight && env.skyLight.visible) {
+                    const lightPos = env.skyLight.position || { x: 80, y: 50, z: 50 };
+                    const skyLight = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
+                    skyLight.name = 'SKY_LIGHT';
+                    skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
+                    skyLight.castShadow = true;
+                    skyLight.shadow.camera.left = -100;
+                    skyLight.shadow.camera.right = 100;
+                    skyLight.shadow.camera.top = 100;
+                    skyLight.shadow.camera.bottom = -100;
+                    const shadowRes = engine.getSettings().shadowResolution;
+                    skyLight.shadow.mapSize.width = shadowRes;
+                    skyLight.shadow.mapSize.height = shadowRes;
+                    scene.add(skyLight);
+                }
 
-            const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
-                const startPos = pos || (playerGroupRef.current ? playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
-                const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, stateRef.current.bossSpawned, stateRef.current.enemies.length);
-                if (newEnemies) {
-                    for (let i = 0; i < newEnemies.length; i++) {
-                        stateRef.current.enemies.push(newEnemies[i]);
-                        if (!stateRef.current.seenEnemies.includes(newEnemies[i].type)) {
-                            stateRef.current.seenEnemies.push(newEnemies[i].type);
+                const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
+                    const startPos = pos || (playerGroupRef.current ? playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
+                    const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, stateRef.current.bossSpawned, stateRef.current.enemies.length);
+                    if (newEnemies) {
+                        for (let i = 0; i < newEnemies.length; i++) {
+                            stateRef.current.enemies.push(newEnemies[i]);
+                            if (!stateRef.current.seenEnemies.includes(newEnemies[i].type)) {
+                                stateRef.current.seenEnemies.push(newEnemies[i].type);
+                            }
+                        }
+                    }
+                };
+
+                const ctx: SectorContext = {
+                    scene, engine, obstacles: stateRef.current.obstacles, collisionGrid: stateRef.current.collisionGrid, chests: stateRef.current.chests,
+                    flickeringLights, burningObjects, rng, triggers: stateRef.current.triggers, mapItems, debugMode: propsRef.current.debugMode,
+                    textures: textures, spawnZombie,
+                    spawnHorde,
+                    cluesFound: propsRef.current.stats.cluesFound || [], collectiblesFound: propsRef.current.stats.collectiblesFound || [],
+                    collectibles: [], dynamicLights: [], interactables: [], sectorId: propsRef.current.currentSector, smokeEmitters: [],
+                    sectorState: stateRef.current.sectorState, state: stateRef.current, yield: yielder
+                };
+                sectorContextRef.current = ctx;
+                stateRef.current.sectorState.ctx = ctx;
+
+                PathGenerator.resetPathLayer();
+                await SectorGenerator.build(ctx, currentSector);
+
+                AssetPreloader.setLastSectorIndex(propsRef.current.currentSector);
+
+                if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
+
+                const activeEffects: any[] = [];
+                scene.traverse((child) => {
+                    if (child.userData && child.userData.effects) {
+                        const effects = child.userData.effects as any[];
+                        for (let i = 0; i < effects.length; i++) {
+                            const eff = effects[i];
+                            if (eff.type === 'light') {
+                                const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
+                                light.userData.baseIntensity = eff.intensity;
+                                light.userData.isCulled = false;
+                                if (eff.offset) light.position.copy(eff.offset);
+                                child.add(light);
+                                if (eff.flicker) flickeringLights.push({ light, baseIntensity: eff.intensity });
+                            }
+                        }
+                        activeEffects.push(child);
+                    }
+                });
+                stateRef.current.activeEffects = activeEffects;
+
+                const playerGroup = ModelFactory.createPlayer();
+                playerGroupRef.current = playerGroup;
+
+                const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
+                playerMeshRef.current = bodyMesh as THREE.Group;
+
+                const pSpawn = { ...currentSector.playerSpawn };
+                playerGroup.position.set(pSpawn.x, 0, pSpawn.z);
+                if (pSpawn.y) playerGroup.position.y = pSpawn.y;
+                if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot;
+
+                const flashlight = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
+                flashlight.name = 'flashlight';
+                flashlight.position.set(0, 3.5, 0.5);
+                flashlight.target.position.set(0, 0, 10);
+                flashlight.castShadow = true;
+                flashlight.shadow.camera.near = 1;
+                flashlight.shadow.camera.far = 40;
+                flashlight.shadow.bias = -0.0001;
+                playerGroup.add(flashlight);
+                playerGroup.add(flashlight.target);
+                flashlightRef.current = flashlight;
+
+                scene.add(playerGroup);
+
+                const envCameraZ = currentSector.environment.cameraOffsetZ;
+                const envCameraY = currentSector.environment.cameraHeight || CAMERA_HEIGHT;
+
+                engine.camera.setPosition(playerGroup.position.x, envCameraY, playerGroup.position.z + envCameraZ, true);
+                engine.camera.follow(playerGroup.position, envCameraZ, envCameraY);
+
+                prevPosRef.current.copy(playerGroup.position);
+                hasSetPrevPosRef.current = true;
+                activeFamilyMembers.current.length = 0;
+
+                if (propsRef.current.rescuedFamilyIndices) {
+                    for (let i = 0; i < propsRef.current.rescuedFamilyIndices.length; i++) {
+                        const sectorIdx = propsRef.current.rescuedFamilyIndices[i];
+                        const theme = SECTOR_THEMES[sectorIdx];
+                        if (theme && theme.familyMemberId !== undefined) {
+                            const fmData = FAMILY_MEMBERS[theme.familyMemberId];
+                            if (fmData) {
+                                const mesh = ModelFactory.createFamilyMember(fmData);
+                                mesh.position.set(pSpawn.x + (Math.random() - 0.5) * 5, 0, pSpawn.z + 5 + Math.random() * 5);
+                                const markerGroup = new THREE.Group();
+                                markerGroup.position.y = 0.2;
+                                const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
+                                const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+                                fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
+                                const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+                                border.rotation.x = -Math.PI / 2; markerGroup.add(border);
+                                mesh.add(markerGroup);
+                                const fLight = new THREE.PointLight(fmData.color, 2, 8);
+                                fLight.position.y = 2; fLight.userData.baseIntensity = 2; fLight.userData.isCulled = false; mesh.add(fLight);
+                                flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
+                                scene.add(mesh);
+                                activeFamilyMembers.current.push({ mesh, ring: markerGroup, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100 });
+                            }
                         }
                     }
                 }
-            };
 
-            const ctx: SectorContext = {
-                scene, engine, obstacles: stateRef.current.obstacles, collisionGrid: stateRef.current.collisionGrid, chests: stateRef.current.chests,
-                flickeringLights, burningObjects, rng, triggers: stateRef.current.triggers, mapItems, debugMode: propsRef.current.debugMode,
-                textures: textures, spawnZombie,
-                spawnHorde,
-                cluesFound: propsRef.current.stats.cluesFound || [], collectiblesFound: propsRef.current.stats.collectiblesFound || [],
-                collectibles: [], dynamicLights: [], interactables: [], sectorId: propsRef.current.currentSector, smokeEmitters: [],
-                sectorState: stateRef.current.sectorState, state: stateRef.current, yield: yielder
-            };
-            sectorContextRef.current = ctx;
-            stateRef.current.sectorState.ctx = ctx;
-
-            PathGenerator.resetPathLayer();
-            await SectorGenerator.build(ctx, currentSector);
-
-            AssetPreloader.setLastSectorIndex(propsRef.current.currentSector);
-
-            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
-
-            const activeEffects: any[] = [];
-            scene.traverse((child) => {
-                if (child.userData && child.userData.effects) {
-                    const effects = child.userData.effects as any[];
-                    for (let i = 0; i < effects.length; i++) {
-                        const eff = effects[i];
-                        if (eff.type === 'light') {
-                            const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
-                            light.userData.baseIntensity = eff.intensity; // [VINTERDÖD] Spara originalstyrkan
-                            light.userData.isCulled = false;
-                            if (eff.offset) light.position.copy(eff.offset);
-                            child.add(light);
-                            if (eff.flicker) flickeringLights.push({ light, baseIntensity: eff.intensity });
-                        }
-                    }
-                    activeEffects.push(child);
-                }
-            });
-            stateRef.current.activeEffects = activeEffects;
-
-            const playerGroup = ModelFactory.createPlayer();
-            playerGroupRef.current = playerGroup;
-
-            const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
-            playerMeshRef.current = bodyMesh as THREE.Group;
-
-            const pSpawn = { ...currentSector.playerSpawn };
-            playerGroup.position.set(pSpawn.x, 0, pSpawn.z);
-            if (pSpawn.y) playerGroup.position.y = pSpawn.y;
-            if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot;
-
-            const flashlight = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
-            flashlight.name = 'flashlight';
-            flashlight.position.set(0, 3.5, 0.5);
-            flashlight.target.position.set(0, 0, 10);
-            flashlight.castShadow = true;
-            flashlight.shadow.camera.near = 1;
-            flashlight.shadow.camera.far = 40;
-            flashlight.shadow.bias = -0.0001;
-            playerGroup.add(flashlight);
-            playerGroup.add(flashlight.target);
-            flashlightRef.current = flashlight;
-
-            scene.add(playerGroup);
-
-            // Läs av vad just den här banan vill ha för kamerainställningar
-            const envCameraZ = currentSector.environment.cameraOffsetZ;
-            const envCameraY = currentSector.environment.cameraHeight || CAMERA_HEIGHT;
-
-            engine.camera.setPosition(
-                playerGroup.position.x,
-                envCameraY,
-                playerGroup.position.z + envCameraZ,
-                true // Immediate = true; no rubber banding on spawn
-            );
-
-            engine.camera.follow(
-                playerGroup.position,
-                envCameraZ,
-                envCameraY
-            );
-
-            prevPosRef.current.copy(playerGroup.position);
-            hasSetPrevPosRef.current = true;
-
-            activeFamilyMembers.current.length = 0;
-
-            if (propsRef.current.rescuedFamilyIndices) {
-                for (let i = 0; i < propsRef.current.rescuedFamilyIndices.length; i++) {
-                    const sectorIdx = propsRef.current.rescuedFamilyIndices[i];
-                    const theme = SECTOR_THEMES[sectorIdx];
-                    if (theme && theme.familyMemberId !== undefined) {
-                        const fmData = FAMILY_MEMBERS[theme.familyMemberId];
+                if (!propsRef.current.familyAlreadyRescued) {
+                    const theme = SECTOR_THEMES[propsRef.current.currentSector];
+                    const fmId = theme ? theme.familyMemberId : 0;
+                    if (!propsRef.current.rescuedFamilyIndices.includes(propsRef.current.currentSector)) {
+                        const fmData = FAMILY_MEMBERS[fmId];
                         if (fmData) {
                             const mesh = ModelFactory.createFamilyMember(fmData);
-                            mesh.position.set(pSpawn.x + (Math.random() - 0.5) * 5, 0, pSpawn.z + 5 + Math.random() * 5);
-
+                            mesh.position.set(fSpawn.x, 0, fSpawn.z); if (fSpawn.y) mesh.position.y = fSpawn.y;
                             const markerGroup = new THREE.Group();
                             markerGroup.position.y = 0.2;
                             const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
@@ -1088,162 +1107,108 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
                             border.rotation.x = -Math.PI / 2; markerGroup.add(border);
                             mesh.add(markerGroup);
-
                             const fLight = new THREE.PointLight(fmData.color, 2, 8);
-                            fLight.position.y = 2;
-                            fLight.userData.baseIntensity = 2; // [VINTERDÖD] Spara originalstyrkan
-                            fLight.userData.isCulled = false;
-                            mesh.add(fLight);
-
+                            fLight.position.y = 2; fLight.userData.baseIntensity = 2; fLight.userData.isCulled = false; mesh.add(fLight);
                             flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
-
                             scene.add(mesh);
-                            activeFamilyMembers.current.push({
-                                mesh, ring: markerGroup, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100
-                            });
+                            const currentFM = { mesh, ring: markerGroup, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100 };
+                            activeFamilyMembers.current.push(currentFM);
+                            familyMemberRef.current = currentFM;
                         }
                     }
                 }
-            }
 
-            if (!propsRef.current.familyAlreadyRescued) {
-                const theme = SECTOR_THEMES[propsRef.current.currentSector];
-                const fmId = theme ? theme.familyMemberId : 0;
-                if (!propsRef.current.rescuedFamilyIndices.includes(propsRef.current.currentSector)) {
-                    const fmData = FAMILY_MEMBERS[fmId];
-                    if (fmData) {
-                        const mesh = ModelFactory.createFamilyMember(fmData);
-                        mesh.position.set(fSpawn.x, 0, fSpawn.z);
-                        if (fSpawn.y) mesh.position.y = fSpawn.y;
+                session.addSystem(new PlayerMovementSystem(playerGroup));
+                session.addSystem(new VehicleMovementSystem(playerGroup));
+                if (engine.water) {
+                    engine.water.setPlayerRef(playerGroup);
+                    engine.water.setCallbacks({
+                        spawnPart: (x: number, y: number, z: number, type: string, count: number) => spawnPart(x, y, z, type, count),
+                        emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any)
+                    });
+                }
+                session.addSystem(new PlayerCombatSystem(playerGroup));
+                session.addSystem(new WorldLootSystem(playerGroup, scene));
+                session.addSystem(new PlayerInteractionSystem(playerGroup, concludeSector, ctx.collectibles, onCollectibleFoundInternal));
+                session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
+                    setNotification: (n: any) => { if (n && n.visible && n.text) spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
+                    t: (key: string) => t(key),
+                    spawnPart, startCinematic,
+                    setInteraction: (interaction: any) => {
+                        if (interaction) { setInteractionType('plant_explosive'); stateRef.current.currentInteraction = interaction; }
+                        else { setInteractionType(null); stateRef.current.currentInteraction = null; }
+                    },
+                    playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
+                    playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
+                    cameraShake: (amount: number) => engine.camera.shake(amount),
+                    scene: engine.scene,
+                    setCameraOverride: (params: any) => {
+                        if (params) {
+                            engine.camera.setCinematic(true);
+                            engine.camera.setPosition(params.targetPos.x, params.targetPos.y, params.targetPos.z);
+                            engine.camera.lookAt(params.lookAtPos.x, params.lookAtPos.y, params.lookAtPos.z);
+                        } else {
+                            engine.camera.setCinematic(false);
+                        }
+                    },
+                    emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
+                    spawnZombie, spawnHorde,
+                }));
 
-                        const markerGroup = new THREE.Group();
-                        markerGroup.position.y = 0.2;
-                        const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
-                        const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
-                        fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
-                        const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
-                        border.rotation.x = -Math.PI / 2; markerGroup.add(border);
-                        mesh.add(markerGroup);
-
-                        const fLight = new THREE.PointLight(fmData.color, 2, 8);
-                        fLight.position.y = 2;
-                        fLight.userData.baseIntensity = 2; // [VINTERDÖD] Spara originalstyrkan
-                        fLight.userData.isCulled = false;
-                        mesh.add(fLight);
-
-                        flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
-
-                        scene.add(mesh);
-                        const currentFM = { mesh, ring: markerGroup, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100 };
-                        activeFamilyMembers.current.push(currentFM);
-                        familyMemberRef.current = currentFM;
+                session.addSystem(new EnemySystem(playerGroup, {
+                    spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound,
+                    onBossKilled: (id: number) => {
+                        if (!stateRef.current.bossesDefeated.includes(id)) stateRef.current.bossesDefeated.push(id);
+                        stateRef.current.bossDefeatedTime = performance.now();
+                        soundManager.stopMusic();
+                        if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
                     }
+                }));
+
+                if (currentSector.initialAim) {
+                    engine.input.state.aimVector = new THREE.Vector2(currentSector.initialAim.x, currentSector.initialAim.y);
                 }
-            }
 
-            session.addSystem(new PlayerMovementSystem(playerGroup));
-            session.addSystem(new VehicleMovementSystem(playerGroup));
+                prevInputRef.current = false;
+                camera.setPosition(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ, true);
+                camera.lookAt(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, true);
 
-            if (engine.water) {
-                engine.water.setPlayerRef(playerGroup);
-                engine.water.setCallbacks({
-                    spawnPart: (x: number, y: number, z: number, type: string, count: number) => spawnPart(x, y, z, type, count),
-                    emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any)
-                });
-            }
-            session.addSystem(new PlayerCombatSystem(playerGroup));
-            session.addSystem(new WorldLootSystem(playerGroup, scene));
+                if (!useInstantLoad) await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 50)));
 
-            const interactionSystem = new PlayerInteractionSystem(playerGroup, concludeSector, ctx.collectibles, onCollectibleFoundInternal);
-            session.addSystem(interactionSystem);
+                FXSystem.preload(engine.scene);
+                EnemyManager.init(engine.scene);
 
-            session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
-                setNotification: (n: any) => { if (n && n.visible && n.text) spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
-                t: (key: string) => t(key),
-                spawnPart, startCinematic,
-                setInteraction: (interaction: any) => {
-                    if (interaction) { setInteractionType('plant_explosive'); stateRef.current.currentInteraction = interaction; }
-                    else { setInteractionType(null); stateRef.current.currentInteraction = null; }
-                },
-                playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
-                playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
-                cameraShake: (amount: number) => engine.camera.shake(amount),
-                scene: engine.scene,
-                setCameraOverride: (params: any) => {
-                    if (params) {
-                        engine.camera.setCinematic(true);
-                        engine.camera.setPosition(params.targetPos.x, params.targetPos.y, params.targetPos.z);
-                        engine.camera.lookAt(params.lookAtPos.x, params.lookAtPos.y, params.lookAtPos.z);
-                    } else {
-                        engine.camera.setCinematic(false);
+                const monitor = PerformanceMonitor.getInstance();
+                monitor.begin('render_compile_final');
+
+                const originalCounts = new Map<THREE.InstancedMesh, number>();
+                scene.traverse((obj: any) => {
+                    if (obj.isInstancedMesh && obj.count === 0) {
+                        originalCounts.set(obj, obj.count); obj.count = 1;
+                        obj.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, -9999, 0));
+                        obj.instanceMatrix.needsUpdate = true;
                     }
-                },
-                emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
-                spawnZombie, spawnHorde,
-            }));
-
-            session.addSystem(new EnemySystem(playerGroup, {
-                spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound,
-                onBossKilled: (id: number) => {
-                    if (!stateRef.current.bossesDefeated.includes(id)) stateRef.current.bossesDefeated.push(id);
-                    stateRef.current.bossDefeatedTime = performance.now();
-                    soundManager.stopMusic();
-                    if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
-                }
-            }));
-
-            if (currentSector.initialAim) {
-                engine.input.state.aimVector = new THREE.Vector2(currentSector.initialAim.x, currentSector.initialAim.y);
-            }
-
-            prevInputRef.current = false;
-            camera.setPosition(playerGroup.position.x, currentSector.environment.cameraHeight || CAMERA_HEIGHT, playerGroup.position.z + currentSector.environment.cameraOffsetZ, true);
-            camera.lookAt(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, true);
-
-            // [VINTERDÖD] Force a robust yield to guarantee the loading screen mounts its final state
-            if (!useInstantLoad) {
-                await new Promise<void>(resolve => {
-                    requestAnimationFrame(() => setTimeout(resolve, 50));
                 });
+
+                engine.renderer.compile(scene, camera.threeCamera);
+
+                for (const [obj, count] of originalCounts.entries()) { obj.count = count; }
+
+                monitor.end('render_compile_final');
+                console.log(`[GameSession] Final Shader Linking took ${monitor.getTimings()['render_compile_final'].toFixed(2)}ms`);
+            } catch (e) {
+                console.error("[GameSession] Critical Setup Error:", e);
+            } finally {
+                isBuildingSectorRef.current = false;
+                engine.isRenderingPaused = false;
+                if (isMounted.current) setIsSectorLoading(false);
             }
 
-            // [VINTERDÖD] Initialize all instanced pools so their shaders compile NOW rather than mid-combat
-            FXSystem.preload(engine.scene);
-            EnemyManager.init(engine.scene);
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
-            // [VINTERDÖD] Absorb the massive shader compilation hit (can take up to 2.5s)
-            // BEFORE dropping the loading screen. This ensures Frame 1 of gameplay is 60 FPS.
-            const monitor = PerformanceMonitor.getInstance();
-            monitor.begin('render_compile_final');
-
-            // CRITICAL HACK: Three.js renderer.compile() SKIPS InstancedMeshes if count === 0.
-            // But CorpseRenderer and FXSystem initialize with count = 0. We must fake count = 1.
-            const originalCounts = new Map<THREE.InstancedMesh, number>();
-            scene.traverse((obj: any) => {
-                if (obj.isInstancedMesh && obj.count === 0) {
-                    originalCounts.set(obj, obj.count);
-                    obj.count = 1;
-                    // Force a dummy matrix so WebGL doesn't complain about uninitialized buffers
-                    obj.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, -9999, 0));
-                    obj.instanceMatrix.needsUpdate = true;
-                }
-            });
-
-            engine.renderer.compile(scene, camera.threeCamera);
-
-            // Restore the original 0 counts
-            for (const [obj, count] of originalCounts.entries()) {
-                obj.count = count;
-            }
-
-            monitor.end('render_compile_final');
-            console.log(`[GameSession] Final Shader Linking took ${monitor.getTimings()['render_compile_final'].toFixed(2)}ms`);
-            monitor.startFrame(); // Zero out to prevent log bleeding into the gameplay loop
-
-            isBuildingSectorRef.current = false;
-            engine.isRenderingPaused = false;
-
-            if (isMounted.current) setIsSectorLoading(false);
+            stateRef.current.mapItems = mapItems;
+            if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
+            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
             stateRef.current.mapItems = mapItems;
 
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
@@ -1363,34 +1328,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             lastDrawCallsRef.current = engine.renderer.info.render.calls;
             state.framesSinceHudUpdate++;
             if (now - state.lastHudUpdate > 100) {
-                const frames = state.framesSinceHudUpdate;
-                const timeDiff = now - state.lastHudUpdate;
-                const fps = Math.round((frames * 1000) / timeDiff);
-                state.framesSinceHudUpdate = 0;
                 state.lastHudUpdate = now;
 
-                if (now - state.lastFpsUpdate > 500) {
-                    if (propsRef.current.onFPSUpdate) propsRef.current.onFPSUpdate(fps);
-                    state.lastFpsUpdate = now;
-                }
-
                 const hudMesh = familyMemberRef.current?.mesh || null;
+
 
                 if (!isBossIntro) {
                     const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera.threeCamera);
                     hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
-                    propsRef.current.onUpdateHUD({ ...hudData, fps, debugMode: propsRef.current.debugMode });
+                    propsRef.current.onUpdateHUD({ ...hudData, debugMode: propsRef.current.debugMode });
                 } else {
                     if (propsRef.current.onUpdateHUD && engineRef.current) {
                         const now = performance.now();
                         const cam = engineRef.current.camera;
                         const hudData = HudSystem.getHudData(stateRef.current, playerGroupRef.current!.position, familyMemberRef.current?.mesh || null, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, cam.threeCamera);
-                        propsRef.current.onUpdateHUD({ ...hudData, fps: 60, debugMode: propsRef.current.debugMode });
+                        propsRef.current.onUpdateHUD({ ...hudData, debugMode: propsRef.current.debugMode });
                     }
                     if (propsRef.current.onUpdateHUD && now % 5 === 0) {
                         const hudData = HudSystem.getHudData(state, playerGroupRef.current.position, hudMesh, engineRef.current.input.state, now, propsRef.current, distanceTraveledRef.current, engineRef.current.camera.threeCamera);
                         hudData.debugInfo.drawCalls = lastDrawCallsRef.current;
-                        propsRef.current.onUpdateHUD({ ...hudData, fps: Math.round(1000 / delta) });
+                        propsRef.current.onUpdateHUD({ ...hudData });
                     }
                 }
             }

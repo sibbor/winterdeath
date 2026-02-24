@@ -11,6 +11,10 @@ interface Textures {
     tacticalMap: THREE.Texture;
 }
 
+// --- PERSISTENT CACHE ---
+const stationTextures: Record<string, THREE.CanvasTexture> = {};
+const stationGeometries: Record<string, THREE.BufferGeometry> = {};
+
 // Separate function to avoid circular dependency issues in object literal
 const setupTrees = async (scene: THREE.Scene) => {
     // Seeded random for deterministic layout
@@ -106,7 +110,10 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     };
 
     // Map and paper texture
-    const createCanvasTexture = (width: number, height: number, type: 'map' | 'note') => {
+    const getCachedCanvasTexture = (width: number, height: number, type: 'map' | 'note') => {
+        const key = `${type}_${width}x${height}`;
+        if (stationTextures[key]) return stationTextures[key];
+
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext('2d')!;
@@ -124,7 +131,6 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
             ctx.beginPath(); ctx.moveTo(width / 2 - 20, height / 2 - 20); ctx.lineTo(width / 2 + 20, height / 2 + 20); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(width / 2 + 20, height / 2 - 20); ctx.lineTo(width / 2 - 20, height / 2 + 20); ctx.stroke();
         } else {
-            // Skissade textrader
             ctx.strokeStyle = '#777777';
             for (let i = 1; i < 6; i++) {
                 ctx.beginPath(); ctx.moveTo(10, i * 20); ctx.lineTo(width - 10, i * 20); ctx.stroke();
@@ -132,6 +138,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
         }
         const tex = new THREE.CanvasTexture(canvas);
         tex.needsUpdate = true;
+        stationTextures[key] = tex;
         return tex;
     };
 
@@ -153,13 +160,16 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     }
 
     // Weapons
+    const barrelGeo = stationGeometries.barrel || new THREE.CylinderGeometry(0.03, 0.03, 1.2);
+    stationGeometries.barrel = barrelGeo;
+
     for (let i = 0; i < 4; i++) {
         const gun = new THREE.Group();
         const body = new THREE.Mesh(GEOMETRY.box, metalMat);
         body.scale.set(0.2, 1.4, 0.15);
         gun.add(body);
 
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2), metalMat); // Keep cylinder for now or use GEOMETRY.cylinder if exists
+        const barrel = new THREE.Mesh(barrelGeo, metalMat);
         barrel.position.y = 1.3;
         gun.add(barrel);
         gun.position.set(-1.2 + i * 0.8, 0.7, 0.2);
@@ -239,13 +249,17 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     board.position.y = 2.8; mapGroup.add(board);
 
     // Map
-    const map = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.4), new THREE.MeshStandardMaterial({ map: createCanvasTexture(256, 256, 'map') }));
+    const mapGeo = stationGeometries.map_plane || new THREE.PlaneGeometry(2.0, 1.4);
+    stationGeometries.map_plane = mapGeo;
+    const map = new THREE.Mesh(mapGeo, new THREE.MeshStandardMaterial({ map: getCachedCanvasTexture(256, 256, 'map') }));
     map.position.set(0, 2.8, 0.06); mapGroup.add(map);
 
     // Notes
-    const noteTex = createCanvasTexture(128, 128, 'note');
+    const noteTex = getCachedCanvasTexture(128, 128, 'note');
+    const noteGeo = stationGeometries.note_plane || new THREE.PlaneGeometry(0.4, 0.5);
+    stationGeometries.note_plane = noteGeo;
     for (let i = 0; i < 3; i++) {
-        const note = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.5), new THREE.MeshStandardMaterial({ map: noteTex, transparent: true }));
+        const note = new THREE.Mesh(noteGeo, new THREE.MeshStandardMaterial({ map: noteTex, transparent: true }));
         const angle = (i / 4) * Math.PI * 2;
         note.position.set(Math.cos(angle) * 1.2, 2.8 + Math.sin(angle) * 0.7, 0.8);
         note.rotation.z = (Math.random() - 0.5) * 1.2;

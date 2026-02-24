@@ -48,6 +48,18 @@ export class SoundBank {
     }
 
     /**
+     * Async version of preloadAll that yields to the main thread.
+     */
+    static async preloadAllAsync(core: SoundCore, yieldToMain: () => Promise<void>) {
+        const keys = Array.from(this.generators.keys());
+        for (let i = 0; i < keys.length; i++) {
+            this.preload(core, keys[i]);
+            // Yield every 5 sounds to keep the UI responsive
+            if (i % 5 === 0) await yieldToMain();
+        }
+    }
+
+    /**
      * Retrieves a cached AudioBuffer. 
      * If the buffer isn't found, it attempts lazy-generation on the spot.
      */

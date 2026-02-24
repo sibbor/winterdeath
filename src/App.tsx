@@ -23,6 +23,9 @@ import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/sound';
 import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
 import { isMobile } from './utils/device';
+import { AssetPreloader } from './core/systems/AssetPreloader';
+import { Engine } from './core/engine/Engine';
+import { DEFAULT_GRAPHICS, SECTOR_THEMES } from './content/constants';
 
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
@@ -32,16 +35,54 @@ const App: React.FC = () => {
     const [showTeleportMenu, setShowTeleportMenu] = useState(false);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
-    const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.SECTOR);
+    const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR);
     const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
 
+    // [VINTERDÖD] Boot Warmup: Pre-compiles shaders to prevent startup stalls
     useEffect(() => {
-        if (isInitialBoot && !isLoadingSector && !isLoadingCamp) {
-            setIsInitialBoot(false);
+        let isMounted = true;
+        const warmup = async () => {
+            const engine = Engine.getInstance();
+            // Start renderer for compilation if not already alive
+            if (!engine.renderer) {
+                // Temporary minimal mount for compilation context if needed, 
+                // but Engine.getInstance() usually initializes it.
+            }
+
+            const isCamp = gameState.screen === GameScreen.CAMP;
+            const envConfig = isCamp ? null : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
+
+            // [VINTERDÖD] Yield function to prevent "Violation: handler took X ms" 
+            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+            // [VINTERDÖD] MODULAR WARMUP: Load CORE basics first, then active scene requirements.
+            // This saves VRAM and speeds up boot into Camp.
+            // We pass the active camera to ensure accurate shader permutation matching.
+            if (isCamp) {
+                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', null, yieldToMain, engine.camera.threeCamera);
+                await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', null, yieldToMain, engine.camera.threeCamera);
+            } else if (gameState.currentSector !== undefined) {
+                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
+                await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
+            } else {
+                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
+            }
+
+            if (isMounted) {
+                setIsInitialBoot(false);
+                setIsLoadingCamp(false);
+                setIsLoadingSector(false);
+            }
+        };
+
+        if (isInitialBoot) {
+            warmup();
         }
-    }, [isLoadingSector, isLoadingCamp, isInitialBoot]);
+
+        return () => { isMounted = false; };
+    }, []);
 
     useEffect(() => {
         const checkMobile = () => {
@@ -232,9 +273,17 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, currentSector: sectorIndex }));
     };
 
-    const handleStartSector = () => {
+    const handleStartSector = async () => {
         setIsLoadingSector(true);
         setTeleportTarget(null);
+
+        // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
+        // while the loading screen is visible.
+        const engine = Engine.getInstance();
+        const envConfig = SECTOR_THEMES[gameState.currentSector];
+        const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+        await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
+
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setHudState({});
         setCurrentSectorMapItems([]);
@@ -327,7 +376,8 @@ const App: React.FC = () => {
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
-            {gameState.debugMode && !isLoadingSector && !isLoadingCamp && <DebugDisplay fps={fps} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
+            {!isInitialBoot && <DebugDisplay debugMode={gameState.debugMode} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
+
 
             {gameState.screen === GameScreen.CAMP && (
                 <Camp
@@ -350,6 +400,7 @@ const App: React.FC = () => {
                     onCampLoaded={() => setIsLoadingCamp(false)}
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
+                    isRunning={!isLoadingCamp && !isInitialBoot}
                 />
             )}
 
@@ -398,7 +449,7 @@ const App: React.FC = () => {
                         onDeathStateChange={setIsDeathScreenActive}
                         onBossIntroStateChange={setIsBossIntroActive}
                         onMapInit={setCurrentSectorMapItems}
-                        onFPSUpdate={handleFPSUpdate}
+
                         onUpdateLoadout={(loadout, levels) => {
                             setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
                         }}
@@ -557,15 +608,18 @@ const App: React.FC = () => {
                     currentSector={gameState.currentSector}
                     onReturnCamp={() => {
                         setIsDeathScreenActive(false);
-                        setIsLoadingCamp(true);
                         setGameState(prev => {
                             const isCleared = prev.deadBossIndices.includes(prev.currentSector);
-                            // Advance to next sector if cleared and not already at the last one (Sector 4 / Epilogue is index 4, but benchmark is 5)
+                            // Advance to next sector if cleared and not already at the last one
                             const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
                             return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
                         });
+                        // [VINTERDÖD] CAMP warmup is cached from boot — resolve loading immediately
+                        // after one React render cycle so Camp DOM can mount before isRunning=true.
+                        setTimeout(() => setIsLoadingCamp(false), 50);
                         soundManager.playUiConfirm();
                     }}
+
                     onRetry={() => {
                         setIsDeathScreenActive(false);
                         setIsLoadingSector(true);

@@ -468,7 +468,48 @@ export const SectorGenerator = {
         }
 
         EffectManager.attachEffect(object, 'fire', finalOpts)
-        if (ctx.burningObjects) ctx.burningObjects.push(object);
+
+        // [VINTERDÖD] Store reference to the light for direct removal later
+        const effects = object.userData.effects;
+        if (effects) {
+            const lightEffect = effects.find((e: any) => e.type === 'light');
+            if (lightEffect) {
+                // The actual light will be created by the LightingSystem in GameSession.tsx
+                // or similar, but we want to ensure we can find it.
+                // For now, we rely on the proximity check but we'll make it better.
+            }
+        }
+
+        if (ctx.burningObjects && !ctx.burningObjects.includes(object)) {
+            ctx.burningObjects.push(object);
+        }
+    },
+
+    extinguishFire: (ctx: SectorContext, object: THREE.Object3D) => {
+        object.userData.isFire = false;
+        object.userData.effects = [];
+
+        // Remove from burning objects list so GameSession stops processing it
+        if (ctx.burningObjects) {
+            const idx = ctx.burningObjects.indexOf(object);
+            if (idx > -1) {
+                ctx.burningObjects[idx] = ctx.burningObjects[ctx.burningObjects.length - 1];
+                ctx.burningObjects.pop();
+            }
+        }
+
+        if (ctx.flickeringLights) {
+            for (let i = ctx.flickeringLights.length - 1; i >= 0; i--) {
+                const fl = ctx.flickeringLights[i];
+                // Increased radius and checking for object ownership if possible
+                const distSq = fl.light.position.distanceToSquared(object.position);
+                if (distSq < 400) { // Increased to 20m radius for large objects like buses
+                    ctx.scene.remove(fl.light);
+                    ctx.flickeringLights[i] = ctx.flickeringLights[ctx.flickeringLights.length - 1];
+                    ctx.flickeringLights.pop();
+                }
+            }
+        }
     },
 
     spawnDeadBody: (ctx: SectorContext, x: number, z: number, type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
@@ -1308,24 +1349,10 @@ export const SectorGenerator = {
         return terminal;
     },
 
-    spawnBusRubble: (ctx: SectorContext, x: number, z: number, count: number) => {
-        return ObjectGenerator.createBusRubble(ctx, x, z, count);
+    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material) => {
+        const mesh = ObjectGenerator.createRubble(x, z, count, material);
+        ctx.scene.add(mesh);
+        return mesh;
     },
 
-    extinguish: (ctx: SectorContext, object: THREE.Object3D) => {
-        object.userData.isFire = false;
-        object.userData.effects = [];
-
-        if (ctx.flickeringLights) {
-            for (let i = ctx.flickeringLights.length - 1; i >= 0; i--) {
-                const fl = ctx.flickeringLights[i];
-                const distSq = fl.light.position.distanceToSquared(object.position);
-                if (distSq < 100) {
-                    ctx.scene.remove(fl.light);
-                    ctx.flickeringLights[i] = ctx.flickeringLights[ctx.flickeringLights.length - 1];
-                    ctx.flickeringLights.pop();
-                }
-            }
-        }
-    }
 };

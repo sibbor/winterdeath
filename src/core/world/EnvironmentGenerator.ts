@@ -396,7 +396,7 @@ export const EnvironmentGenerator = {
             if (!prototypes[`OAK_${i}`]) prototypes[`OAK_${i}`] = generateOakPrototype(i);
             if (!prototypes[`BIRCH_${i}`]) prototypes[`BIRCH_${i}`] = generateBirchPrototype(i);
             if (!prototypes[`DEAD_${i}`]) prototypes[`DEAD_${i}`] = generateDeadTreePrototype(i);
-            if (yieldToMain && i % 2 === 0) await yieldToMain();
+            if (yieldToMain) await yieldToMain();
         }
     },
 

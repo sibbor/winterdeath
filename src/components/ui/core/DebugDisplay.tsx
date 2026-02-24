@@ -1,115 +1,147 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 
 interface DebugDisplayProps {
-    fps: number;
-    debugInfo?: any;
+    fps?: number; // Kept for compat but will prioritize PerformanceMonitor
+    debugMode: boolean;
+    debugInfo?: {
+        aim?: { x: number; y: number };
+        cam?: { x: number; y: number; z: number };
+        camera?: {
+            x: number;
+            y: number;
+            z: number;
+            rotX: number;
+            rotY: number;
+            rotZ: number;
+            fov: number;
+        };
+        modes?: string;
+        enemies?: number;
+        objects?: number;
+        drawCalls?: number;
+        coords?: { x: number; z: number };
+        performance?: {
+            cpu?: Record<string, number>;
+            memory?: {
+                heapLimit: number;
+                heapTotal: number;
+                heapUsed: number;
+            } | null;
+        };
+    };
 }
 
-const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps, debugInfo }) => {
+const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, debugInfo }) => {
     const [isMinimized, setIsMinimized] = useState(() => {
-        return localStorage.getItem('vinterdod_debug_minimized') === 'true';
+        const saved = localStorage.getItem('vinterdod_debug_minimized');
+        return saved === 'true';
     });
 
-    const toggleMinimized = () => {
-        const newState = !isMinimized;
-        setIsMinimized(newState);
-        localStorage.setItem('vinterdod_debug_minimized', String(newState));
+    const [fps, setFps] = useState(0);
+
+    // Update FPS from PerformanceMonitor for consistency
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setFps(PerformanceMonitor.getInstance().getFps());
+        }, 500); // 2Hz UI update is plenty for FPS
+        return () => clearInterval(interval);
+    }, []);
+
+    const toggleMinimized = (e: React.MouseEvent) => {
+        if (!debugMode) return;
+        e.stopPropagation();
+        const next = !isMinimized;
+        setIsMinimized(next);
+        localStorage.setItem('vinterdod_debug_minimized', String(next));
     };
 
-    // Minimized State (or Simple View if minimized)
+    // --- Mode: OFF - Simple FPS in top-left ---
+    if (!debugMode) {
+        return (
+            <div className="fixed top-0 right-0 z-[9999] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] pointer-events-none select-none backdrop-blur-[2px] border border-white/5 rounded-sm">
+                {Math.round(fps)} FPS
+            </div>
+        );
+    }
+
+
+    // Minimized State (Simple View in top-right)
     if (isMinimized) {
         return (
             <div
                 onClick={toggleMinimized}
-                className="fixed top-12 right-4 bg-green-700/80 px-2 py-1 rounded cursor-pointer z-[9999] shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 transition-colors backdrop-blur-md"
+                className="fixed top-0 right-0 z-[9999] bg-black/40 px-2 py-0.5 cursor-pointer shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 backdrop-blur-md"
             >
-                <div className="font-mono font-bold text-white text-[10px]">
-                    FPS: {Math.round(fps)}
+                <div className="font-mono font-bold text-white text-[12px]">
+                    {Math.round(fps)} FPS
                 </div>
             </div>
         );
     }
 
-    if (!debugInfo) {
-        // Simple FPS View (top right) - only if NOT minimized
-        return (
-            <div
-                onClick={toggleMinimized}
-                className="fixed top-0 right-0 z-[9999] bg-black/50 text-white/50 px-2 py-1 font-mono text-[10px] pointer-events-auto cursor-pointer select-none backdrop-blur-sm border-b border-l border-white/10 hover:bg-black/70 transition-colors"
-            >
-                {fps} FPS
-            </div>
-        );
-    }
-
-    // Expanded State
+    // Expanded State (Right Side Panel)
     return (
         <div
             onClick={toggleMinimized}
-            className="fixed top-1/2 -translate-y-1/2 right-4 bg-black/80 p-4 rounded text-xs font-mono text-green-400 z-[9999] pointer-events-auto cursor-pointer border border-green-900 shadow-2xl hover:bg-black/90 transition-colors select-none backdrop-blur-lg"
+            className="fixed top-1/2 -translate-y-1/2 right-4 w-52 bg-black/80 backdrop-blur-md border border-white/10 p-3 rounded-lg shadow-2xl z-[9999] font-mono text-[10px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/30 transition-all overflow-hidden"
         >
-            <div className="flex justify-between items-center mb-2 border-b border-green-900/50 pb-1 pointer-events-none">
-                <span className="font-bold text-white">DEBUG MONITOR</span>
-                <span className="text-white bg-green-700 px-2 rounded">FPS: {Math.round(fps)}</span>
+            <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+                <span className="font-bold text-white uppercase tracking-wider">Debug Monitor</span>
+                <span className="bg-green-500 text-black px-1 rounded font-bold">{Math.round(fps)} FPS</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                {/* Stats */}
-                <div className="text-gray-400">Coords:</div>
-                <div className="text-right font-bold text-white">
-                    {debugInfo.coords && `${Math.round(debugInfo.coords.x)}, ${Math.round(debugInfo.coords.z)}`}
+            <div className="space-y-2">
+                <div>
+                    <div className="text-white/40 uppercase text-[12px] mb-0.5">Player Position</div>
+                    <div className="flex justify-between">
+                        <span>X: {debugInfo?.coords?.x?.toFixed(1) ?? '0.0'}</span>
+                        <span>Z: {debugInfo?.coords?.z?.toFixed(1) ?? '0.0'}</span>
+                    </div>
                 </div>
 
-                <div className="text-gray-400">Input:</div>
-                <div className="text-right font-bold text-white">
-                    {debugInfo.input && (
-                        <>
-                            <span className={debugInfo.input.w ? 'text-green-400' : 'text-gray-700'}>{debugInfo.input.w ? 'W' : '_'}</span>
-                            <span className={debugInfo.input.a ? 'text-green-400' : 'text-gray-700'}>{debugInfo.input.a ? 'A' : '_'}</span>
-                            <span className={debugInfo.input.s ? 'text-green-400' : 'text-gray-700'}>{debugInfo.input.s ? 'S' : '_'}</span>
-                            <span className={debugInfo.input.d ? 'text-green-400' : 'text-gray-700'}>{debugInfo.input.d ? 'D' : '_'}</span>
-                        </>
-                    )}
+                <div>
+                    <div className="text-white/40 uppercase text-[12px] mb-0.5">Camera</div>
+                    <div className="flex justify-between">
+                        <span>X: {debugInfo?.camera?.x?.toFixed(1) ?? '0.0'}</span>
+                        <span>Y: {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}</span>
+                        <span>Z: {debugInfo?.camera?.z?.toFixed(1) ?? '0.0'}</span>
+                    </div>
                 </div>
 
-                <div className="text-gray-400">Aim:</div>
-                <div className="text-right font-bold text-gray-500">{debugInfo.aim.x}, {debugInfo.aim.y}</div>
-
-                <div className="text-gray-400">Fire/Reload:</div>
-                <div className="text-right font-bold text-gray-500">
-                    {debugInfo.input.fire ? 'FIRE' : '-'} / {debugInfo.input.reload ? 'RLD' : '-'}
+                <div>
+                    <div className="text-white/40 uppercase text-[12px] mb-0.5">World State</div>
+                    <div className="grid grid-cols-2 gap-1">
+                        <div>Enemies: <span className="text-white">{debugInfo?.enemies ?? 0}</span></div>
+                        <div>Mode: <span className="text-white truncate">{debugInfo?.modes ?? 'N/A'}</span></div>
+                        <div>Objects: <span className="text-white">{debugInfo?.objects ?? 0}</span></div>
+                        <div>Draw Calls: <span className="text-white">{debugInfo?.drawCalls ?? 0}</span></div>
+                    </div>
                 </div>
 
-                <div className="col-span-2 border-t border-green-900/30 my-1"></div>
-
-                <div className="text-gray-400">Draw Calls:</div>
-                {debugInfo.drawCalls !== undefined && (
-                    <div className="text-right font-bold text-yellow-500">{debugInfo.drawCalls}</div>
+                {debugInfo?.performance?.cpu && (
+                    <div>
+                        <div className="text-white/40 uppercase text-[12px] mb-0.5">CPU Timings</div>
+                        <div className="space-y-0.5 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                            {Object.entries(debugInfo.performance.cpu).map(([key, val]) => (
+                                <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
+                                    <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
+                                    <span>{(val as number).toFixed(2)}ms</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 )}
 
-                <div className="text-gray-400">Objects:</div>
-                <div className="text-right font-bold text-blue-400">{debugInfo.objects}</div>
-
-                <div className="text-gray-400">Enemies:</div>
-                <div className="text-right font-bold text-red-500">{debugInfo.enemies}</div>
-
-                {debugInfo.camera && (
-                    <>
-                        <div className="col-span-2 border-t border-green-900/30 my-1"></div>
-                        <div className="text-gray-400">Cam Pos:</div>
-                        <div className="text-right text-xs text-gray-300">
-                            {Math.round(debugInfo.camera.x)}, {Math.round(debugInfo.camera.y)}, {Math.round(debugInfo.camera.z)}
+                {debugInfo?.performance?.memory && (
+                    <div>
+                        <div className="text-white/40 uppercase text-[12px] mb-0.5">Memory (RAM)</div>
+                        <div className="flex justify-between">
+                            <span>Used: {debugInfo.performance.memory.heapUsed}MB</span>
+                            <span className="text-white/40">/ {debugInfo.performance.memory.heapLimit}MB</span>
                         </div>
-                        <div className="text-gray-400">Cam Rot:</div>
-                        <div className="text-right text-xs text-gray-300">
-                            {Math.round(debugInfo.camera.rotX * 180 / Math.PI)}°, {Math.round(debugInfo.camera.rotY * 180 / Math.PI)}°
-                        </div>
-                        <div className="text-gray-400">FOV:</div>
-                        <div className="text-right text-xs text-gray-300">{Math.round(debugInfo.camera.fov)}°</div>
-                    </>
+                    </div>
                 )}
-
-
             </div>
         </div>
     );

@@ -67,12 +67,19 @@ const _camTarget = new THREE.Vector3();
 const _lookAt = new THREE.Vector3();
 const _camOverrideTarget = new THREE.Vector3();
 const _camOverrideLookAt = new THREE.Vector3();
-const _busOriginalPos = new THREE.Vector3();
 
-// Offsets for Camera Panning Sequences
-const _offsetTrainYard = new THREE.Vector3(0, 15, 20);
-const _zoomOffsetTarget = new THREE.Vector3(12, 0.5, 5);
-const _zoomOffsetLook = new THREE.Vector3(6.5, 0, 2.5);
+// Zero-GC for the bus event
+const _busOriginalPos = new THREE.Vector3();
+const _matrix = new THREE.Matrix4();
+const _position = new THREE.Vector3();
+const _scale = new THREE.Vector3();
+const _rotation = new THREE.Euler();
+const _quat = new THREE.Quaternion();
+
+// Offsets for Camera Panning Sequences — matched to Camp camera angle (low, close, south-facing)
+const _offsetTrainYard = new THREE.Vector3(0, 10, 22);   // Camp: y=10, z=22 from subject
+const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);  // Bus explode: east side, camp elevation — shows "159" sign
+const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);      // Camp lookAt: subject center + y2
 
 export const Sector1: SectorDef = {
     id: 0,
@@ -83,7 +90,7 @@ export const Sector1: SectorDef = {
         ambientIntensity: 0.4,
         groundColor: 0xddddff,
         fov: 50,
-        skyLight: { visible: true, color: 0x6688ff, intensity: 1.0, position: { x: 50, y: 35, z: 50 } },
+        skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'snow',
@@ -722,9 +729,6 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
-        const ty2 = LOCATIONS.POIS.TRAIN_YARD;
-        SectorGenerator.createFence(ctx, [new THREE.Vector3(ty2.x - 60, 0, ty2.z - 40), new THREE.Vector3(ty2.x + 60, 0, ty2.z - 40)], 'mesh', 2, true);
-
         SectorGenerator.spawnDeadBody(ctx, 37, 44, 'WALKER', 0, true);
         SectorGenerator.spawnChest(ctx, 45, 45, 'standard');
         SectorGenerator.spawnChest(ctx, 110, 80, 'standard');
@@ -810,8 +814,8 @@ export const Sector1: SectorDef = {
             }
         }
 
-        // State 1: Wait 1.5s, then trigger first distant explosion
-        else if (sectorState.busEventState === 1 && now - sectorState.busEventTimer > 1500) {
+        // State 1: Wait 2.0s, then trigger first distant explosion
+        else if (sectorState.busEventState === 1 && now - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 2;
             sectorState.busEventTimer = now;
 
@@ -834,15 +838,14 @@ export const Sector1: SectorDef = {
             sectorState.busEventState = 3;
             sectorState.busEventTimer = now;
 
-            const w = window as any;
-            if (w.setCameraOverride) {
+            if (events.setCameraOverride) {
                 _camOverrideTarget.copy(_trainYardPos).add(_offsetTrainYard);
                 _camOverrideLookAt.copy(_trainYardPos);
-                w.setCameraOverride({
+                events.setCameraOverride({
                     active: true,
-                    targetPos: _camOverrideTarget.clone(),
-                    lookAtPos: _camOverrideLookAt.clone(),
-                    endTime: performance.now() + 4000 // Force hold for 4 seconds
+                    targetPos: _camOverrideTarget,
+                    lookAtPos: _camOverrideLookAt,
+                    endTime: performance.now() + 4000
                 });
             }
         }
@@ -865,10 +868,7 @@ export const Sector1: SectorDef = {
             sectorState.busEventState = 5;
             sectorState.busEventTimer = now;
 
-            const w = window as any;
-            if (w.setCameraOverride) {
-                w.setCameraOverride(null);
-            }
+            if (events.setCameraOverride) events.setCameraOverride(null);
 
             gameState.triggers.push({
                 id: 'dyn_speech_' + Date.now(),
@@ -903,7 +903,9 @@ export const Sector1: SectorDef = {
                 totalSpawned++;
             }
 
-            sectorState.zombiesKillTarget = 1; //Math.floor(totalSpawned * 0.8);
+            // TODO: When we're done debugging:
+            //sectorState.zombiesKillTarget = 1;
+            sectorState.zombiesKillTarget = 1;
             sectorState.zombiesKilled = 0;
 
             sectorState.startingKills = gameState.killsInRun;
@@ -947,14 +949,13 @@ export const Sector1: SectorDef = {
             if (busObj) {
                 _busOriginalPos.copy(busObj.position);
 
-                const w = window as any;
-                if (w.setCameraOverride) {
+                if (events.setCameraOverride) {
                     _camOverrideTarget.copy(busObj.position).add(_zoomOffsetTarget);
                     _camOverrideLookAt.copy(busObj.position).add(_zoomOffsetLook);
-                    w.setCameraOverride({
+                    events.setCameraOverride({
                         active: true,
-                        targetPos: _camOverrideTarget.clone(),
-                        lookAtPos: _camOverrideLookAt.clone(),
+                        targetPos: _camOverrideTarget,
+                        lookAtPos: _camOverrideLookAt,
                         endTime: performance.now() + 3000
                     });
                 }
@@ -978,12 +979,14 @@ export const Sector1: SectorDef = {
             const busObj = (sectorState.ctx as any).busObject;
 
             if (elapsed < 3000) {
+                // Beep sequence
                 const beepInterval = elapsed > 2000 ? 250 : 500;
                 if (now - sectorState.lastBeepTime > beepInterval) {
                     sectorState.lastBeepTime = now;
                     if (events.playTone) events.playTone(880, 'sine', 0.1, 0.15);
                 }
 
+                // Pulsating visual effect on the ring
                 if (sectorState.busRing) {
                     const pulse = (Math.sin(elapsed * 0.01) + 1) * 0.5;
                     sectorState.busRing.material.opacity = 0.3 + (pulse * 0.5);
@@ -991,6 +994,7 @@ export const Sector1: SectorDef = {
                     sectorState.busRing.material.color.setRGB(1.0, pulse, 0.0);
                 }
 
+                // Shake the bus to build tension
                 if (busObj) {
                     const shakeAmount = 0.05 + (elapsed / 3000) * 0.15;
                     busObj.position.x = _busOriginalPos.x + (Math.random() - 0.5) * shakeAmount;
@@ -998,7 +1002,7 @@ export const Sector1: SectorDef = {
                     if (events.cameraShake) events.cameraShake(0.5);
                 }
             } else {
-                // EXPLODE BUS
+                // Trigger the actual explosion
                 sectorState.busEventState = 8;
                 sectorState.busEventTimer = now;
 
@@ -1010,39 +1014,171 @@ export const Sector1: SectorDef = {
                 if (events.playSound) events.playSound('explosion');
                 if (events.cameraShake) events.cameraShake(10);
 
+                // Spawn FX burst — fire particles + smoke in concentric rings
+                if (events.spawnPart) {
+                    // Inner ring: fire
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'fire', 10);
+                    // Mid ring: smoke columns
+                    events.spawnPart(_busOriginalPos.x + 4, 2, _busOriginalPos.z, 'smoke', 4);
+                    events.spawnPart(_busOriginalPos.x - 4, 2, _busOriginalPos.z, 'smoke', 4);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z + 4, 'smoke', 4);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z - 4, 'smoke', 4);
+                    // Scrap scatter
+                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'scrap', 8);
+                }
+
+                // Add explosion flash light
+                const flash = new THREE.PointLight(0xff8800, 50, 60);
+                flash.position.set(_busOriginalPos.x, 3.0, _busOriginalPos.z);
+                events.scene.add(flash);
+                sectorState.explosionLight = flash;
+
                 if (busObj) {
                     busObj.visible = false;
 
+                    //  Move the bus collider below ground level instead of zeroing size.
+                    // This prevents potential division-by-zero or infinite loops in SpatialGrid/Raycaster.
                     const obstacles = (sectorState.ctx as any).obstacles;
                     const busColliderIdx = (sectorState.ctx as any).busObjectIdx;
                     if (busColliderIdx !== undefined && obstacles && obstacles[busColliderIdx]) {
-                        obstacles[busColliderIdx].collider.size.set(0, 0, 0);
+                        obstacles[busColliderIdx].position.y = -1000;
                     }
 
-                    SectorGenerator.extinguish(sectorState.ctx, busObj);
-                    SectorGenerator.spawnBusRubble(sectorState.ctx, _busOriginalPos.x, _busOriginalPos.z, 10);
+                    // Extinguish flames if any
+                    SectorGenerator.extinguishFire(sectorState.ctx, busObj);
+
+                    // Spawn animated rubble — save reference and init landing tracker
+                    sectorState.busRubble = SectorGenerator.spawnRubble(
+                        sectorState.ctx,
+                        _busOriginalPos.x,
+                        _busOriginalPos.z,
+                        15, // Number of rubble pieces
+                        MATERIALS.busBlue
+                    );
+
+                    // Per-piece landing flag (Uint8Array = zero-GC, no object allocation)
+                    if (sectorState.busRubble) {
+                        sectorState.busRubble.userData.hasLanded = new Uint8Array(sectorState.busRubble.count);
+                    }
+                    sectorState.lastMetalImpactTime = 0;
                 }
             }
         }
 
-        // State 8: Short wait after explosion before returning camera
-        else if (sectorState.busEventState === 8 && now - sectorState.busEventTimer > 2000) {
-            sectorState.busEventState = 9;
+        // State 8: Explosion physics, flash fade, and post-explosion events (Zero-GC)
+        else if (sectorState.busEventState === 8) {
+            const elapsed = now - sectorState.busEventTimer;
+            const dtSec = dt * 0.001; // Convert ms to seconds for physics calculations
 
-            const w = window as any;
-            if (w.setCameraOverride) {
-                w.setCameraOverride(null);
+            // Fade out the explosion flash rapidly
+            if (sectorState.explosionLight) {
+                const intensity = Math.max(0, 50 - (elapsed * 0.05));
+                sectorState.explosionLight.intensity = intensity;
+                if (intensity === 0) {
+                    events.scene.remove(sectorState.explosionLight);
+                    sectorState.explosionLight = null;
+                }
             }
 
-            gameState.triggers.push({
-                id: 'dyn_speech_' + Date.now(),
-                position: playerPos.clone(),
-                radius: 100,
-                type: 'SPEECH',
-                content: "clues.s1_event_tunnel_cleared",
-                triggered: false,
-                actions: []
-            });
+            let transitionToState9 = false;
+
+            // Animate rubble physics using TypedArrays
+            if (sectorState.busRubble && sectorState.busRubble.userData.active) {
+                const rubble = sectorState.busRubble;
+                const data = rubble.userData;
+                let stillMoving = false;
+
+                for (let i = 0; i < rubble.count; i++) {
+                    const ix = i * 3;
+
+                    // Only calculate physics if the piece is above ground
+                    if (data.positions[ix + 1] > 0.5) {
+                        stillMoving = true;
+
+                        // Apply gravity
+                        data.velocities[ix + 1] -= 50.0 * dtSec;
+
+                        // Update position
+                        data.positions[ix] += data.velocities[ix] * dtSec;
+                        data.positions[ix + 1] += data.velocities[ix + 1] * dtSec;
+                        data.positions[ix + 2] += data.velocities[ix + 2] * dtSec;
+
+                        // Floor collision check
+                        if (data.positions[ix + 1] <= 0.5) {
+                            data.positions[ix + 1] = 0.5;
+
+                            // Apply friction and bounce
+                            data.velocities[ix] *= 0.4;
+                            data.velocities[ix + 2] *= 0.4;
+                            data.velocities[ix + 1] *= -0.3; // Dampened bounce
+
+                            // Reduce spin on impact
+                            data.spin[ix] *= 0.2;
+                            data.spin[ix + 1] *= 0.2;
+                            data.spin[ix + 2] *= 0.2;
+
+                            // Put to sleep if vertical velocity is very low
+                            if (Math.abs(data.velocities[ix + 1]) < 1.0) {
+                                data.velocities[ix + 1] = 0;
+                            }
+
+                            // Play metal impact sound on first landing only
+                            // Throttle: max 1 sound per 80ms to prevent simultaneous-landing spam
+                            if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
+                                data.hasLanded[i] = 1;
+                                if (now - sectorState.lastMetalImpactTime > 80) {
+                                    sectorState.lastMetalImpactTime = now;
+                                    events.playSound('impact_metal');
+                                }
+                            }
+                        }
+
+                        // Update rotation
+                        data.rotations[ix] += data.spin[ix] * dtSec;
+                        data.rotations[ix + 1] += data.spin[ix + 1] * dtSec;
+                        data.rotations[ix + 2] += data.spin[ix + 2] * dtSec;
+
+                        // Compose matrix (Re-using global scratchpads to avoid GC)
+                        _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
+                        _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
+                        _quat.setFromEuler(_rotation);
+                        _scale.setScalar(data.scales[i]);
+
+                        _matrix.compose(_position, _quat, _scale);
+                        rubble.setMatrixAt(i, _matrix);
+                    }
+                }
+
+                rubble.instanceMatrix.needsUpdate = true;
+
+                // Transition to idle state once all rubble has settled OR time safety is reached
+                if (!stillMoving || elapsed > 2500) {
+                    data.active = false;
+                    transitionToState9 = true;
+                }
+            } else if (elapsed > 2000) {
+                // Fallback transition if rubble doesn't exist for some reason
+                transitionToState9 = true;
+            }
+
+            // Execute the final completion logic once the animation settles
+            if (transitionToState9) {
+                sectorState.busEventState = 9;
+
+                // Reset camera override via events
+                if (events.setCameraOverride) events.setCameraOverride(null);
+
+                // Trigger the "Tunnel cleared" speech bubble
+                gameState.triggers.push({
+                    id: 'dyn_speech_' + Date.now(),
+                    position: playerPos.clone(),
+                    radius: 100,
+                    type: 'SPEECH',
+                    content: "clues.s1_event_tunnel_cleared",
+                    triggered: false,
+                    actions: []
+                });
+            }
         }
     },
 };
