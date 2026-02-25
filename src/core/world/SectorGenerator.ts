@@ -1194,7 +1194,18 @@ export const SectorGenerator = {
         // 4. Apply Atmosphere to Scene (Lerped for smoothness)
         if (scene.fog instanceof THREE.FogExp2) {
             scene.fog.color.lerp(targetFogColor, 0.05);
-            scene.fog.density = THREE.MathUtils.lerp(scene.fog.density, targetFogDensity, 0.05);
+
+            // Camera-height fog correction: FogExp2 measures 3D distance from camera,
+            // so a top-down camera at Y=100 makes the entire ground invisible.
+            // Scale density toward 0 as camera height rises above the normal play range.
+            const engine = Engine.getInstance();
+            const camY = engine?.camera?.position?.y ?? 20;
+            const FOG_HEIGHT_MIN = 25; // below this, fog is at full density
+            const FOG_HEIGHT_MAX = 90; // above this, fog is effectively 0
+            const heightFactor = 1.0 - Math.max(0, Math.min(1, (camY - FOG_HEIGHT_MIN) / (FOG_HEIGHT_MAX - FOG_HEIGHT_MIN)));
+            const effectiveDensity = targetFogDensity * heightFactor;
+
+            scene.fog.density = THREE.MathUtils.lerp(scene.fog.density, effectiveDensity, 0.05);
         }
 
         const ambientLight = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
@@ -1346,6 +1357,14 @@ export const SectorGenerator = {
         const terminal = ObjectGenerator.createTerminal(type.replace('TERMINAL_', '') as any);
         terminal.position.set(x, 0, z);
         ctx.scene.add(terminal);
+
+        // Register as interactable
+        SectorGenerator.addInteractable(ctx, terminal, {
+            id: type,
+            type: 'sector_specific',
+            label: 'ui.interact'
+        });
+
         return terminal;
     },
 

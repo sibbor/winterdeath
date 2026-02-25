@@ -14,6 +14,16 @@ export enum AIState {
 }
 
 /**
+ * Standardized death states for enemies
+ */
+export type EnemyDeathState = 'ALIVE' | 'DEAD' | 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED';
+
+/**
+ * Standardized effect types for semantic visual feedback
+ */
+export type EnemyEffectType = 'STUN' | 'FLAME' | 'SPARK';
+
+/**
  * Static data definitions for different zombie types
  */
 export interface ZombieTypeData {
@@ -108,6 +118,5 @@ export interface Enemy {
     fallForward: boolean;          // Determines the direction of the fall animation
     bloodSpawned: boolean;         // Boolean to ensure only one blood pool is spawned
     lastKnockback: number;         // Timestamp of the last force application
-    deathState: 'alive' | 'dead'   // Type of death
-    | 'exploded' | 'burning' | 'shot' | 'gibbed' | 'electrified';
+    deathState: EnemyDeathState;   // Type of death
 }

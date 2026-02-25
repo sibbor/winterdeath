@@ -5,7 +5,7 @@ import { FXSystem } from './FXSystem';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/sound';
 import { AIState } from '../../types/enemy';
-import { EnemyAI } from '../enemies/EnemyAI';
+import { EnemyManager } from '../EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -76,7 +76,7 @@ export class PlayerMovementSystem implements System {
             state.spaceDepressed = true;
             state.spacePressTime = now;
             state.rushCostPaid = false;
-            EnemyAI.applyShove(playerGroup, 4.0, state, session.engine.scene, now);
+            EnemyManager.applyShove(playerGroup, 4.0, state, session.engine.scene, now);
         }
 
         if (state.spaceDepressed && !state.isRolling) {
@@ -240,8 +240,8 @@ export class PlayerMovementSystem implements System {
                     const hitRadiusSq = isDashing ? 4.5 : 0.8;
 
                     if (distSq < hitRadiusSq) {
-                        // Delegera den brutala bowling-fysiken till EnemyAI
-                        EnemyAI.applyTackle(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
+                        // EnemyManager handles the knockback
+                        EnemyManager.applyTackle(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
 
                         // Om vi INTE dashar, hantera mjuk kollision så vi inte går igenom dem
                         if (!isDashing) {

@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import type React from 'react';
+import { GameSessionLogic } from '../GameSessionLogic';
+import { System } from './System';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
 import { Engine } from '../engine/Engine';
 import { _buoyancyResult } from './WaterSystem';
@@ -7,7 +10,7 @@ import { _buoyancyResult } from './WaterSystem';
 const _v1 = new THREE.Vector3(); // Target Position
 const _v3 = new THREE.Vector3(); // Direction
 
-// 1. Create a single, reusable animation state object outside the render loop
+// Single reusable animation state — avoids per-frame object allocation
 const _animState = {
     isMoving: false,
     isRushing: false,
@@ -22,112 +25,111 @@ const _animState = {
     seed: 0
 };
 
-export const FamilySystem = {
-    update: (
-        familyMember: any,
+export class FamilySystem implements System {
+    id = 'family';
+
+    private playerGroup: THREE.Group;
+    private activeFamilyMembers: React.MutableRefObject<any[]>;
+    private isCinematicRef: React.MutableRefObject<{ active: boolean }>;
+    private callbacks: {
+        setFoundMemberName: (name: string) => void;
+        startCinematic: (mesh: THREE.Group) => void;
+    };
+
+    constructor(
         playerGroup: THREE.Group,
-        state: any,
-        isCinematicActive: boolean,
-        now: number,
-        delta: number,
+        activeFamilyMembers: React.MutableRefObject<any[]>,
+        isCinematicRef: React.MutableRefObject<{ active: boolean }>,
         callbacks: {
             setFoundMemberName: (name: string) => void;
             startCinematic: (mesh: THREE.Group) => void;
-        },
-        followerIndex: number = 0
-    ) => {
-        if (!familyMember.mesh) return;
-
-        const fm = familyMember.mesh;
-        // [VINTERDÖD] Cachea referensen för att undvika onödiga hash-map uppslagningar i JS-motorn
-        const userData = fm.userData;
-
-        // --- 1. Ring Pulse Visual ---
-        const ring = familyMember.ring;
-        if (ring) {
-            const isFollowing = familyMember.following;
-            ring.visible = !isFollowing;
-
-            if (!isFollowing) {
-                const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
-                // [VINTERDÖD] set(x,y,z) kringgår det extra anropet i setScalar
-                ring.scale.set(pulse, pulse, pulse);
-                ring.rotation.y = now * 0.0005;
-            }
         }
+    ) {
+        this.playerGroup = playerGroup;
+        this.activeFamilyMembers = activeFamilyMembers;
+        this.isCinematicRef = isCinematicRef;
+        this.callbacks = callbacks;
+    }
 
-        // --- 2. Following Logic ---
-        let fmIsMoving = false;
+    update(_session: GameSessionLogic, delta: number, now: number) {
+        const members = this.activeFamilyMembers.current;
+        const isCinematicActive = this.isCinematicRef.current.active;
 
-        if (familyMember.following && !isCinematicActive) {
-            _v1.copy(playerGroup.position);
+        for (let i = 0; i < members.length; i++) {
+            const familyMember = members[i];
+            if (!familyMember.mesh) continue;
 
-            if (followerIndex > 0) {
-                // OPTIMIZATION: Replaced heavy trigonometry with simple math.
-                const sign = followerIndex % 2 === 0 ? 1 : -1;
-                const dist = 2.0 + followerIndex * 1.2;
+            const fm = familyMember.mesh;
+            const userData = fm.userData;
 
-                // Directly apply offset to the X axis (Z remains unchanged)
-                _v1.x += sign * dist;
-            }
-
-            const distSq = fm.position.distanceToSquared(_v1);
-
-            if (distSq > 4.0) { // 2.0m threshold
-                fmIsMoving = true;
-
-                _v3.subVectors(_v1, fm.position).normalize();
-
-                // [VINTERDÖD] Pre-kalkylerad hastighet (14 * 0.95 = 13.3)
-                const moveDist = 13.3 * delta;
-
-                fm.position.addScaledVector(_v3, moveDist);
-                fm.lookAt(playerGroup.position);
-
-                userData.lastMoveTime = now;
-            }
-        }
-
-        // --- 3. Optimized Animation Handling ---
-        let body = userData.cachedBody;
-        if (!body) {
-            // [VINTERDÖD] Utplånade .find(). Rå, platt loop istället för callbacks och array-allokering.
-            const children = fm.children;
-            const len = children.length;
-            for (let i = 0; i < len; i++) {
-                if (children[i].userData.isBody) {
-                    body = children[i];
-                    userData.cachedBody = body;
-                    break;
+            // --- 1. Ring Pulse Visual ---
+            const ring = familyMember.ring;
+            if (ring) {
+                const isFollowing = familyMember.following;
+                ring.visible = !isFollowing;
+                if (!isFollowing) {
+                    const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
+                    ring.scale.set(pulse, pulse, pulse);
+                    ring.rotation.y = now * 0.0005;
                 }
             }
-        }
 
-        if (body) {
-            let lastMove = userData.lastMoveTime;
-            if (lastMove === undefined) {
-                lastMove = state.startTime;
-                userData.lastMoveTime = lastMove;
+            // --- 2. Following Logic ---
+            let fmIsMoving = false;
+
+            if (familyMember.following && !isCinematicActive) {
+                _v1.copy(this.playerGroup.position);
+
+                if (i > 0) {
+                    const sign = i % 2 === 0 ? 1 : -1;
+                    const dist = 2.0 + i * 1.2;
+                    _v1.x += sign * dist;
+                }
+
+                const distSq = fm.position.distanceToSquared(_v1);
+
+                if (distSq > 4.0) {
+                    fmIsMoving = true;
+                    _v3.subVectors(_v1, fm.position).normalize();
+                    fm.position.addScaledVector(_v3, 13.3 * delta);
+                    fm.lookAt(this.playerGroup.position);
+                    userData.lastMoveTime = now;
+                }
             }
 
-            const timeSinceMove = now - lastMove;
-            const isIdleLong = timeSinceMove > 10000;
-
-            // [VINTERDÖD] Direkt uppdatering av scratchpad. Tvingar även till booleans med dubbla negationer (!!) vid behov.
-            _animState.seed = familyMember.seed;
-
-            // Add aquatic state check for family members
-            const engine = Engine.getInstance();
-            if (engine?.water) {
-                engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z);
-                _animState.isSwimming = _buoyancyResult.depth > 1.2;
-                _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
-            } else {
-                _animState.isSwimming = false;
-                _animState.isWading = false;
+            // --- 3. Animation ---
+            let body = userData.cachedBody;
+            if (!body) {
+                const children = fm.children;
+                for (let j = 0; j < children.length; j++) {
+                    if (children[j].userData.isBody) {
+                        body = children[j];
+                        userData.cachedBody = body;
+                        break;
+                    }
+                }
             }
 
-            PlayerAnimation.update(body, _animState, now, delta);
+            if (body) {
+                const lastMove = userData.lastMoveTime ?? _session.state.startTime;
+                const isIdleLong = now - lastMove > 10000;
+
+                _animState.seed = familyMember.seed;
+                _animState.isMoving = fmIsMoving;
+                _animState.isIdleLong = isIdleLong;
+
+                const engine = Engine.getInstance();
+                if (engine?.water) {
+                    engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z);
+                    _animState.isSwimming = _buoyancyResult.depth > 1.2;
+                    _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
+                } else {
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                }
+
+                PlayerAnimation.update(body, _animState, now, delta);
+            }
         }
     }
-};
+}

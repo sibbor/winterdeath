@@ -96,7 +96,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                 ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
             }
             soundManager.playExplosion();
-            //haptic.explosion();
+            haptic.explosion();
 
             // ZERO-GC WARNING: pos.clone() allocates memory. Consider pooling noiseEvents in the future!
             if (ctx.noiseEvents) ctx.noiseEvents.push({ pos: pos.clone(), radius: 80, time: ctx.now, active: true });
@@ -104,7 +104,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius + 3.0);
             for (let i = 0; i < nearby.length; i++) {
                 const e = nearby[i];
-                if (e.deathState !== 'alive') continue;
+                if (e.deathState !== 'ALIVE') continue;
 
                 _v2.subVectors(e.mesh.position, pos);
                 const distSq = _v2.lengthSq();
@@ -120,7 +120,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                     if (e.hp <= 0) {
                         const force = 15.0 * (1.0 - Math.sqrt(distSq) / radius);
                         _v4.copy(_v2).normalize().setY(0.5).multiplyScalar(force);
-                        ctx.explodeEnemy(e, _v4);
+                        e.deathVel.copy(_v4);
                     } else {
                         const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
                         _v4.copy(_v2).normalize().multiplyScalar(25 / mass).setY(2.0);
@@ -134,7 +134,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 0, pos.z, 'glass', 15);
             soundManager.playExplosion();
-            //haptic.explosion();
+            haptic.explosion();
 
             let fz: FireZone | null = null;
             for (let i = 0; i < FIREZONE_POOL.length; i++) {
@@ -201,7 +201,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                     e.isBlinded = true;
                     e.blindTimer = 4.0;
                     e.stunTimer = 1.5;
-                    ctx.spawnPart(e.mesh.position.x, 1.8, e.mesh.position.z, 'stun_star', 3, undefined, undefined, undefined, 0.8);
+                    ctx.spawnPart(e.mesh.position.x, 1.8, e.mesh.position.z, 'enemy_effect_stun', 3, undefined, undefined, undefined, 0.8);
                 }
             }
         }
@@ -329,7 +329,7 @@ export const ProjectileSystem = {
 
             const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
             for (const e of enemies) {
-                if (e.deathState !== 'alive') continue;
+                if (e.deathState !== 'ALIVE') continue;
 
                 _v1.subVectors(e.mesh.position, origin);
                 const distSq = _v1.lengthSq();
@@ -370,7 +370,7 @@ export const ProjectileSystem = {
             const aimThreshold = 0.95;
 
             for (const e of enemies) {
-                if (e.deathState !== 'alive') continue;
+                if (e.deathState !== 'ALIVE') continue;
 
                 _v1.subVectors(e.mesh.position, origin);
                 const distSq = _v1.lengthSq();
@@ -406,7 +406,7 @@ export const ProjectileSystem = {
                     let nextDist = Infinity;
 
                     for (const p of potential) {
-                        if (p.deathState !== 'alive' || _arcCannonHitIds.has(p.id)) continue;
+                        if (p.deathState !== 'ALIVE' || _arcCannonHitIds.has(p.id)) continue;
                         const d = p.mesh.position.distanceToSquared(curr.mesh.position);
                         if (d < nextDist) {
                             nextDist = d;
@@ -476,7 +476,7 @@ export const ProjectileSystem = {
                 const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
                 const rSq = fz.radiusSq;
                 for (const e of nearby) {
-                    if (e.deathState !== 'alive') continue;
+                    if (e.deathState !== 'ALIVE') continue;
                     if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
                         e.lastDamageType = WeaponType.MOLOTOV;
                         e.hp -= 15;
@@ -552,7 +552,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
         }
 
         for (const enemy of nearbyEnemies) {
-            if (enemy.deathState !== 'alive' || projectile.hitEntities.has(enemy.id)) continue;
+            if (enemy.deathState !== 'ALIVE' || projectile.hitEntities.has(enemy.id)) continue;
 
             const enemyXZ = _v1.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
             const lineVec = _v2.subVectors(_v4, _v3);
@@ -577,6 +577,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 enemy.lastHitWasHighImpact = isHighImpact;
                 enemy.lastDamageType = projectile.weapon;
                 const actualDmg = Math.max(0, Math.min(enemy.hp, projectile.damage));
+                const isKill = enemy.hp <= 0;
                 enemy.hp -= projectile.damage;
                 enemy.hitTime = ctx.now;
                 enemy.slowTimer = 0.5;
@@ -584,6 +585,12 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
                 const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
                 const force = (projectile.damage / 3) / Math.max(0.3, mass);
+
+                // [VINTERDÖD] Capture death velocity for high-impact kills
+                if (isKill && isHighImpact) {
+                    enemy.deathVel.copy(projectile.vel).normalize().multiplyScalar(force * 2.0).setY(4.0);
+                }
+
                 _v1.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
                 enemy.knockbackVel.add(_v1);
 

@@ -81,7 +81,7 @@ export class ZombieRenderer {
             const e = enemies[i];
 
             // Only render enemies in render-ready states (migration to CorpseRenderer handles death)
-            if (e.deathState === 'dead') continue;
+            if (e.deathState === 'DEAD') continue;
 
             const instMesh = this.meshes[e.type];
             if (!instMesh || instMesh.count >= this.maxInstances) continue;

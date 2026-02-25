@@ -35,7 +35,7 @@ const App: React.FC = () => {
     const [showTeleportMenu, setShowTeleportMenu] = useState(false);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
-    const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR);
+    const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE);
     const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
@@ -63,6 +63,9 @@ const App: React.FC = () => {
             if (isCamp) {
                 await AssetPreloader.warmupAsync(engine.renderer, 'CORE', null, yieldToMain, engine.camera.threeCamera);
                 await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', null, yieldToMain, engine.camera.threeCamera);
+            } else if (gameState.screen === GameScreen.PROLOGUE) {
+                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', SECTOR_THEMES[0], yieldToMain, engine.camera.threeCamera);
+                await AssetPreloader.warmupAsync(engine.renderer, 0, SECTOR_THEMES[0], yieldToMain, engine.camera.threeCamera);
             } else if (gameState.currentSector !== undefined) {
                 await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
                 await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
@@ -102,6 +105,7 @@ const App: React.FC = () => {
     const [isBossIntroActive, setIsBossIntroActive] = useState(false);
     const [currentMapItems, setCurrentSectorMapItems] = useState<MapItem[]>([]);
     const [fps, setFps] = useState(0);
+    const [debugSystems, setDebugSystems] = useState<{ id: string; enabled: boolean }[]>([]);
 
     // Sector Results
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
@@ -132,7 +136,12 @@ const App: React.FC = () => {
     const handleUpdateHUD = useCallback((data: any) => {
         setHudState(data);
         if (data.fps !== undefined) setFps(data.fps);
-    }, []);
+        // Refresh system list for debug panel at same cadence as HUD (10Hz)
+        if (gameState.debugMode) {
+            const systems = gameCanvasRef.current?.getSystems();
+            if (systems) setDebugSystems(systems);
+        }
+    }, [gameState.debugMode]);
 
     const handleFPSUpdate = useCallback((val: number) => {
         setFps(val);
@@ -376,8 +385,15 @@ const App: React.FC = () => {
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
-            {!isInitialBoot && <DebugDisplay debugMode={gameState.debugMode} debugInfo={gameState.debugMode ? hudState.debugInfo : undefined} />}
-
+            {!isInitialBoot && <DebugDisplay
+                debugMode={gameState.debugMode}
+                debugInfo={gameState.debugMode ? hudState.debugInfo : undefined}
+                systems={gameState.debugMode ? debugSystems : undefined}
+                onToggleSystem={gameState.debugMode ? (id, enabled) => {
+                    gameCanvasRef.current?.setSystemEnabled(id, enabled);
+                    setDebugSystems(prev => prev.map(s => s.id === id ? { ...s, enabled } : s));
+                } : undefined}
+            />}
 
             {gameState.screen === GameScreen.CAMP && (
                 <Camp

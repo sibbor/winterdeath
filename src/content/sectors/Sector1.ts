@@ -202,7 +202,7 @@ export const Sector1: SectorDef = {
         // Home - Police car and family's car
         SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
         const familyCar = SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
-        SectorGenerator.setOnFire(ctx, familyCar, { smoke: true, intensity: 200, distance: 50, onRoof: true });
+        SectorGenerator.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 30, onRoof: true });
 
         // Home: Hedges
         SectorGenerator.createHedge(ctx, [new THREE.Vector3(-19, 0, 8), new THREE.Vector3(-29, 0, 8), new THREE.Vector3(-29, 0, 32), new THREE.Vector3(-17, 0, 40), new THREE.Vector3(11, 0, 40), new THREE.Vector3(23, 0, 33)]);
@@ -247,7 +247,7 @@ export const Sector1: SectorDef = {
             mesh: smu,
             collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) }
         });
-        SectorGenerator.setOnFire(ctx, smu, { smoke: true, intensity: 200, distance: 50, onRoof: true });
+        SectorGenerator.setOnFire(ctx, smu, { smoke: true, intensity: 120, distance: 35, onRoof: true });
 
         // SMU - Containers
         SectorGenerator.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
@@ -260,7 +260,7 @@ export const Sector1: SectorDef = {
             const rotation = Math.random() * Math.PI;
             const carPos = { x: LOCATIONS.POIS.SMU.x + 35, z: LOCATIONS.POIS.SMU.z + (i * 12) - 10 };
             const car = SectorGenerator.spawnVehicle(ctx, carPos.x, carPos.z, rotation, carType[i], carColors[i]);
-            SectorGenerator.setOnFire(ctx, car, { smoke: true, intensity: 200, distance: 50, onRoof: true });
+            SectorGenerator.setOnFire(ctx, car, { smoke: true, intensity: 80, distance: 25, onRoof: true });
         }
 
         // SMU - Stone wall
@@ -318,8 +318,8 @@ export const Sector1: SectorDef = {
         doors.position.set(0, 3, 7.6);
         churchGroup.add(doors);
 
-        SectorGenerator.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 50, onRoof: true });
-        SectorGenerator.setOnFire(ctx, tower, { smoke: true, intensity: 100, distance: 50, onRoof: true });
+        SectorGenerator.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 15, onRoof: true });
+        SectorGenerator.setOnFire(ctx, tower, { smoke: true, intensity: 60, distance: 25, onRoof: true });
 
         // Cafe
         const cafeGroup = new THREE.Group();

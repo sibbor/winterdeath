@@ -7,6 +7,7 @@ import { soundManager } from '../../utils/sound';
 import { VehicleDef } from '../../content/vehicles';
 import { MATERIALS } from '../../utils/assets';
 import { _buoyancyResult } from './WaterSystem';
+import { haptic } from '../../utils/HapticManager';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -310,7 +311,7 @@ export class VehicleMovementSystem implements System {
 
         for (let i = 0; i < eLen; i++) {
             const e = enemies[i];
-            if (e.deathState !== 'alive') continue;
+            if (e.deathState !== 'ALIVE') continue;
 
             _toEnemy.subVectors(e.mesh.position, vehicle.position);
             _toEnemy.y = 0;
@@ -337,19 +338,20 @@ export class VehicleMovementSystem implements System {
             if (speedSq >= SPEED_SQ_SPLATTER) {
                 e.hp = 0;
                 e.lastDamageType = 'vehicle_splatter';
-                e.deathState = 'exploded';
+                e.deathState = 'GIBBED';
                 e.dead = true;
 
                 const forceDir = _v1.copy(_knockDir).multiplyScalar(speed * 2.0).setY(3.0);
-                EnemyManager.explodeEnemy(e, forceDir, {
+                EnemyManager.explodeEnemy(e, {
                     spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: any, v?: any, col?: number, s?: number) =>
                         FXSystem.spawnPart(scene, state.particles, x, y, z, t, c, m, v, col, s),
-                    spawnDecal: (x: number, z: number, s: number, mat?: any) =>
-                        FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat),
-                });
+                    spawnDecal: (x: number, z: number, s: number, mat?: any, type?: string) =>
+                        FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat, type),
+                }, forceDir);
 
                 session.engine.camera.shake(0.4);
                 soundManager.playImpact('flesh');
+                haptic.explosion();
 
             } else if (speedSq >= SPEED_SQ_KNOCKBACK) {
                 e.hp -= baseDamage;

@@ -172,9 +172,10 @@ export class GameSessionLogic {
         const len = systems.length;
         const monitor = PerformanceMonitor.getInstance();
 
-        // High-performance system iteration
+        // High-performance system iteration — skip disabled systems
         for (let i = 0; i < len; i++) {
             const sys = systems[i];
+            if (sys.enabled === false) continue;
             const id = sys.id || `sys_${i}`;
             monitor.begin(id);
             sys.update(this, dt, now);
@@ -217,8 +218,29 @@ export class GameSessionLogic {
     }
 
     addSystem(system: System) {
+        if (system.enabled === undefined) system.enabled = true;
         this.systems.push(system);
         if (system.init) system.init(this);
+    }
+
+    /** Toggle a system on/off by id. Use in debug panel or console. */
+    setSystemEnabled(id: string, enabled: boolean) {
+        for (let i = 0; i < this.systems.length; i++) {
+            if (this.systems[i].id === id) {
+                this.systems[i].enabled = enabled;
+                return;
+            }
+        }
+    }
+
+    /** Returns a snapshot of all registered systems for the debug panel. */
+    getSystems(): { id: string; enabled: boolean }[] {
+        const out: { id: string; enabled: boolean }[] = [];
+        for (let i = 0; i < this.systems.length; i++) {
+            const s = this.systems[i];
+            out.push({ id: s.id, enabled: s.enabled !== false });
+        }
+        return out;
     }
 
     removeSystem(id: string) {

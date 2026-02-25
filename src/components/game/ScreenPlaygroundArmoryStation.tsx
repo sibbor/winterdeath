@@ -38,8 +38,13 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
         soundManager.playUiClick();
         const level = tempWeaponLevels[weapon] || 1;
         const cost = SCRAP_COST_BASE * level;
-        if (tempStats.scrap >= cost) {
-            setTempStats({ ...tempStats, scrap: tempStats.scrap - cost });
+        const currentScrap = (tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap;
+        if (currentScrap >= cost) {
+            if ((tempStats as any).collectedScrap !== undefined) {
+                setTempStats({ ...tempStats, collectedScrap: (tempStats as any).collectedScrap - cost });
+            } else {
+                setTempStats({ ...tempStats, scrap: tempStats.scrap - cost });
+            }
             setTempWeaponLevels({ ...tempWeaponLevels, [weapon]: level + 1 });
         }
     };
@@ -58,7 +63,9 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
     };
 
     const hasChanges = useMemo(() => {
-        if (tempStats.scrap !== stats.scrap) return true;
+        const currentScrap = (tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap;
+        const originalScrap = (stats as any).collectedScrap !== undefined ? (stats as any).collectedScrap : stats.scrap;
+        if (currentScrap !== originalScrap) return true;
         if (tempLoadout.primary !== currentLoadout.primary) return true;
         if (tempLoadout.secondary !== currentLoadout.secondary) return true;
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
@@ -140,14 +147,12 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                     </div>
                 </div>
 
-                {isMobileDevice && (
-                    <div className="flex justify-between items-center bg-yellow-900/10 px-3 py-2 border border-yellow-500/30 shrink-0">
-                        <span className="text-[10px] font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
-                        <div className="flex items-center gap-2">
-                            <span className="text-lg font-black text-white">{tempStats.scrap}</span>
-                        </div>
+                <div className="flex justify-between items-center bg-yellow-900/10 px-3 py-2 border border-yellow-500/30 shrink-0">
+                    <span className="text-[10px] font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg font-black text-white">{(tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap}</span>
                     </div>
-                )}
+                </div>
 
                 {/* Main Content Area - constrained height handled by GameModalLayout's container, but we need inner scroll */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 overflow-y-auto pb-4 pr-1 custom-scrollbar max-h-[60vh]">

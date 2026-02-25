@@ -1,10 +1,9 @@
 import * as THREE from 'three';
-import { Enemy, AIState } from '../../types/enemy';
+import { Enemy, AIState, EnemyDeathState, EnemyEffectType } from '../../types/enemy';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
-import { MATERIALS } from '../../utils/assets';
 import { SpatialGrid } from '../world/SpatialGrid';
-import { WeaponType } from '../../content/weapons';
-import { FXSystem } from '../systems/FXSystem';
+import { WeaponType, WEAPONS } from '../../content/weapons';
+import { haptic } from '../../utils/HapticManager';
 import { soundManager } from '../../utils/sound';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -13,15 +12,7 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
-const _v6 = new THREE.Vector3(); // Dedicated scratchpad for separation force
-const _UP = new THREE.Vector3(0, 1, 0); // Needed for cross-product in bowling physics
-const _color = new THREE.Color();
-const _blackColor = new THREE.Color(0x000000);
-
-// --- DEBUG ASSETS ---
-const _debugRingGeo = new THREE.RingGeometry(0.95, 1.0, 16);
-_debugRingGeo.rotateX(-Math.PI / 2);
-const _debugRingMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+const _v6 = new THREE.Vector3();
 
 /**
  * EnemyAI System
@@ -35,61 +26,70 @@ export const EnemyAI = {
         playerPos: THREE.Vector3,
         collisionGrid: SpatialGrid,
         noiseEvents: any[],
-        allEnemies: Enemy[],
         shakeIntensity: number,
-        debugMode: boolean,
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: string) => void;
-            spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Mesh, vel?: THREE.Vector3, color?: number, scale?: number) => void;
-            spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
             onDamageDealt: (amount: number, enemy: Enemy) => void;
+            onDeath: (e: Enemy, type: string) => void;
+            onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void;
-            onAshStart: (e: Enemy) => void;
         }
     ) => {
-        if (e.deathState === 'dead' || !e.mesh) return;
+        if (e.deathState === 'DEAD' || !e.mesh) return;
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
-        if (e.hp <= 0 && e.deathState === 'alive') {
+        if (e.hp <= 0 && e.deathState === 'ALIVE') {
             e.deathTimer = now;
-            const dmgType = e.lastDamageType;
+            const dmgType = e.lastDamageType || '';
             const isHighImpact = e.lastHitWasHighImpact;
+            const fallForward = Math.random() > 0.5;
 
-            if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER') {
-                e.deathState = 'exploded';
-            }
-            else if (dmgType === WeaponType.REVOLVER || dmgType === WeaponType.SHOTGUN) {
-                if (isHighImpact) {
-                    e.deathState = 'gibbed';
-                } else {
-                    e.deathState = 'shot';
-                    e.fallForward = false;
-                    if (e.deathVel) e.deathVel.copy(e.velocity).multiplyScalar(-0.5).setY(2.5);
+            // [VINTERDÖD] Data-driven death states from Weapon Metadata
+            const weapon = WEAPONS[dmgType];
+
+            if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
+                e.deathState = 'EXPLODED';
+
+                // [VINTERDÖD] Trigger explosion feedback for Bosses and Bombers (non-projectile cause)
+                if (dmgType !== WeaponType.GRENADE) {
+                    soundManager.playExplosion();
+                    haptic.explosion();
                 }
             }
-            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER) {
-                e.deathState = 'burning';
-                callbacks.onAshStart(e);
+            else if (weapon) {
+                // If it's a high-impact weapon (Shotgun/Revolver), only GIB if it was a High Impact hit
+                if (weapon.impactType === 'GIBBED') {
+                    if (isHighImpact) {
+                        e.deathState = 'GIBBED';
+                        // Record for posterity/cleanup
+                        e.mesh.userData.gibbed = true;
+                    } else {
+                        e.deathState = 'SHOT';
+                        e.fallForward = fallForward;
+                        if (e.deathVel) e.deathVel.copy(e.velocity).multiplyScalar(-0.5).setY(2.5);
+                    }
+                } else {
+                    e.deathState = weapon.impactType || 'SHOT';
+                }
             }
-            else if (dmgType === WeaponType.ARC_CANNON) {
-                e.deathState = 'electrified';
+            else if (e.isBurning) {
+                e.deathState = 'BURNED';
             }
             else {
-                e.deathState = 'shot';
+                e.deathState = 'SHOT';
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
                     e.deathVel.copy(_v1).multiplyScalar(5.0).setY(2.0);
                 }
-                e.fallForward = Math.random() > 0.5;
+                e.fallForward = fallForward;
             }
             return;
         }
 
         // --- 2. HANDLE DEATH ANIMATIONS ---
-        if (e.deathState !== 'alive') {
+        if (e.deathState !== 'ALIVE') {
             handleDeathAnimation(e, delta, now, callbacks);
-            if (e.mesh.userData.debugRing) e.mesh.userData.debugRing.visible = false;
             return;
         }
 
@@ -154,7 +154,7 @@ export const EnemyAI = {
             }
 
             if (Math.random() < 0.1) {
-                callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.0, e.mesh.position.z, 'stun_star', 1, undefined, undefined, 0xffff00, 0.3);
+                callbacks.onEffectTick(e, 'STUN');
             }
 
             if (e.stunTimer <= 0) {
@@ -182,7 +182,7 @@ export const EnemyAI = {
         let other: Enemy, odx: number, odz: number, odSq: number, od: number;
         for (let i = 0; i < nearbyEnemies.length; i++) {
             other = nearbyEnemies[i];
-            if (other === e || other.deathState !== 'alive') continue;
+            if (other === e || other.deathState !== 'ALIVE') continue;
 
             odx = e.mesh.position.x - other.mesh.position.x;
             odz = e.mesh.position.z - other.mesh.position.z;
@@ -347,7 +347,11 @@ export const EnemyAI = {
                         callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
                     }
                     e.hp = 0;
-                    e.deathState = 'exploded';
+                    e.deathState = 'EXPLODED';
+                    e.deathVel.set(0, 10.0, 0); // [VINTERDÖD] Pop upward on self-destruct
+
+                    soundManager.playExplosion();
+                    haptic.explosion();
                 }
                 break;
 
@@ -366,135 +370,10 @@ export const EnemyAI = {
 
         if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
         e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
-
-        if (debugMode) {
-            if (!e.mesh.userData.debugRing) {
-                const ring = new THREE.Mesh(_debugRingGeo, _debugRingMat);
-                e.mesh.add(ring);
-                e.mesh.userData.debugRing = ring;
-            }
-            const hitRadius = 0.5 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
-            e.mesh.userData.debugRing.visible = true;
-            e.mesh.userData.debugRing.scale.setScalar(hitRadius);
-            e.mesh.userData.debugRing.position.set(0, -e.mesh.position.y + 0.05, 0);
-        }
     },
 
     // --- EXTERNAL INTERACTIONS FROM OTHER SYSTEMS ---
 
-    applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, now: number) => {
-        let shovedAnyone = false;
-
-        for (let i = 0; i < state.enemies.length; i++) {
-            const enemy = state.enemies[i];
-            if (enemy.deathState === 'alive') {
-                const distSq = enemy.mesh.position.distanceToSquared(playerGroup.position);
-
-                if (distSq < radiusSq) {
-                    shovedAnyone = true;
-
-                    enemy.state = AIState.IDLE;
-                    enemy.stunTimer = 1.5;
-                    enemy.attackCooldown = 2000;
-
-                    const damage = 15;
-                    enemy.hp -= damage;
-                    enemy.lastDamageType = 'melee';
-
-                    if (state.callbacks && state.callbacks.trackStats) {
-                        state.callbacks.trackStats('damage', damage, !!enemy.isBoss);
-                    }
-                    if (state.callbacks && state.callbacks.spawnFloatingText) {
-                        state.callbacks.spawnFloatingText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, damage.toString(), "#ffffff");
-                    }
-
-                    _v1.subVectors(enemy.mesh.position, playerGroup.position);
-                    _v1.y = 0;
-                    if (_v1.lengthSq() < 0.01) _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
-                    _v1.normalize();
-
-                    const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
-                    const force = 25.0 / Math.max(0.5, mass);
-
-                    enemy.knockbackVel.set(_v1.x * force, 6.0, _v1.z * force);
-
-                    if (!enemy.isBoss) {
-                        enemy.mesh.userData.isRagdolling = true;
-                        if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
-                        enemy.mesh.userData.spinVel.set(
-                            (Math.random() - 0.5) * 15,
-                            (Math.random() - 0.5) * 20,
-                            (Math.random() - 0.5) * 15
-                        );
-                    }
-
-                    FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1.5, enemy.mesh.position.z, 'blood', 8);
-                }
-            }
-        }
-
-        if (shovedAnyone) {
-            soundManager.playImpact('flesh');
-        }
-    },
-
-    applyTackle: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
-        const canTackle = enemy.deathState === 'alive' && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
-        if (!canTackle) return;
-
-        if (enemy.state === AIState.BITING) {
-            enemy.state = AIState.IDLE;
-            enemy.attackCooldown = 1500;
-        }
-
-        const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
-        const massInverse = 1.0 / Math.max(0.5, mass);
-        const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse;
-
-        _v1.subVectors(enemy.mesh.position, impactPos);
-        _v1.y = 0;
-        if (_v1.lengthSq() < 0.01) {
-            _v5.copy(moveVec).normalize();
-            _v1.crossVectors(_v5, _UP).normalize();
-        } else {
-            _v1.normalize();
-        }
-
-        if (isDashing) {
-            _v5.copy(moveVec).normalize();
-            const dot = _v1.dot(_v5);
-
-            if (dot > 0.3) {
-                _v3.crossVectors(_v5, _UP).normalize();
-                if (_v1.dot(_v3) < 0) _v3.negate();
-                _v1.lerp(_v3, 0.85).normalize();
-            }
-        }
-
-        const force = (isDashing ? 30.0 : 8.0) * pushMultiplier;
-        const lift = (isDashing ? 30.0 : 2.0) * pushMultiplier;
-
-        enemy.knockbackVel.set(_v1.x * force, lift, _v1.z * force);
-        enemy.state = AIState.IDLE;
-        enemy.lastTackleTime = now;
-
-        if (isDashing) {
-            enemy.stunTimer = 2.0;
-            if (!enemy.isBoss) {
-                enemy.mesh.userData.isRagdolling = true;
-                if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
-                enemy.mesh.userData.spinVel.set(
-                    (Math.random() - 0.5) * 25,
-                    (Math.random() - 0.5) * 30,
-                    (Math.random() - 0.5) * 25
-                );
-            }
-            FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
-            soundManager.playImpact('flesh');
-        } else {
-            enemy.stunTimer = 0.8;
-        }
-    }
 };
 
 // --- HELPERS ---
@@ -544,8 +423,7 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
     if (e.isBurning) {
         if (Math.random() > 0.4) {
-            _v1.set(e.mesh.position.x + (Math.random() - 0.5) * 0.5, e.mesh.position.y + 1.0, e.mesh.position.z + (Math.random() - 0.5) * 0.5);
-            callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'flame', 1);
+            callbacks.onEffectTick(e, 'FLAME');
         }
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
@@ -556,134 +434,14 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
             if (e.afterburnTimer <= 0) e.isBurning = false;
         }
     }
+
+    if (e.stunTimer > 0 && e.lastDamageType === WeaponType.ARC_CANNON) {
+        if (Math.random() < 0.25) {
+            callbacks.onEffectTick(e, 'SPARK');
+        }
+    }
 }
 
 function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: any) {
-    const age = now - e.deathTimer!;
-
-    if (e.deathState === 'burning') {
-        const duration = 1500;
-        const progress = Math.min(1.0, age / duration);
-
-        if (!e.mesh.userData.ashSpawned) {
-            e.mesh.userData.ashSpawned = true;
-            callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'debris', 5, undefined, undefined, 0x333333, 0.5);
-        }
-
-        let body = e.mesh.userData.bodyCache;
-        let colorMats: THREE.Material[] = e.mesh.userData.colorMats;
-
-        if (body === undefined) {
-            body = e.mesh.children.find(c => c.userData.isBody) || null;
-            e.mesh.userData.bodyCache = body;
-
-            colorMats = [];
-            if (body) {
-                body.traverse((c: any) => {
-                    if (c.isMesh && c.material) colorMats.push(c.material);
-                });
-            }
-            e.mesh.userData.colorMats = colorMats;
-        }
-
-        const ash = e.ashPile;
-
-        if (body) {
-            const s = Math.max(0.001, (1.0 - progress) * (e.originalScale || 1.0));
-            body.scale.set(s * (e.widthScale || 1.0), s, s * (e.widthScale || 1.0));
-        }
-
-        if (ash) {
-            ash.visible = true;
-            const startScale = 0.1;
-            const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
-            const targetScale = massScale;
-            const s = startScale + (targetScale - startScale) * progress;
-            ash.scale.setScalar(s);
-        }
-
-        _color.set(e.color).lerp(_blackColor, progress);
-        if (colorMats) {
-            for (let i = 0; i < colorMats.length; i++) {
-                (colorMats[i] as any).color.copy(_color);
-            }
-        }
-
-        if (progress >= 1.0) {
-            if (ash && e.mesh.parent) {
-                const permanentAsh = ash.clone();
-                permanentAsh.applyMatrix4(e.mesh.matrixWorld);
-
-                permanentAsh.quaternion.set(0, 0, 0, 1);
-                permanentAsh.position.copy(e.mesh.position);
-                permanentAsh.position.y = 0.05;
-
-                const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
-                permanentAsh.scale.setScalar(massScale);
-
-                e.mesh.parent.add(permanentAsh);
-            }
-            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-            e.deathState = 'dead';
-        }
-        return;
-    }
-
-    if (e.deathState === 'gibbed') {
-        if (!e.mesh.userData.gibbed) {
-            e.mesh.userData.gibbed = true;
-            e.mesh.visible = false;
-
-            const count = (e.type === 'TANK' || e.type === 'BOSS') ? 12 : 6;
-            const scale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
-
-            callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'blood', 20, undefined, undefined, undefined, scale);
-            callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'gore', count, undefined, undefined, undefined, scale);
-            callbacks.spawnPart(e.mesh.position.x, 1.0, e.mesh.position.z, 'limb', 2, undefined, undefined, undefined, scale);
-
-            let burstScale = 1.0;
-            const dmgType = e.lastDamageType;
-            if (dmgType === WeaponType.GRENADE || dmgType === WeaponType.MOLOTOV) burstScale = 3.0;
-            else if (dmgType === WeaponType.SHOTGUN || dmgType === WeaponType.REVOLVER) burstScale = 2.0;
-
-            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, 2.0 * scale * burstScale, MATERIALS.bloodDecal, 'splatter');
-        }
-        if (now - e.deathTimer! > 100) e.deathState = 'dead';
-        return;
-    }
-
-    if (e.deathState === 'shot' || e.deathState === 'electrified') {
-        if (e.deathState === 'electrified') {
-            if (!e.mesh.userData.electrocuted) {
-                e.mesh.userData.electrocuted = true;
-                e.mesh.userData.deathPosX = e.mesh.position.x;
-                e.mesh.userData.deathPosZ = e.mesh.position.z;
-            }
-
-            if (age < 120) {
-                const t = age / 120;
-                e.mesh.rotation.x = -Math.PI / 2 * t;
-                e.mesh.position.y = Math.max(0.2, (e.mesh.position.y || 1.0) * (1 - t));
-            } else {
-                const baseHeight = 0.2;
-                e.mesh.rotation.x = -Math.PI / 2;
-                e.mesh.position.y = baseHeight;
-
-                const jitter = 0.15;
-                e.mesh.position.x = e.mesh.userData.deathPosX + (Math.random() - 0.5) * jitter;
-                e.mesh.position.z = e.mesh.userData.deathPosZ + (Math.random() - 0.5) * jitter;
-
-                if (Math.random() > 0.4) callbacks.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'spark', 1);
-            }
-            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-        }
-        else {
-            e.deathVel.y -= 35 * delta;
-            e.mesh.position.addScaledVector(e.deathVel, delta);
-            if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
-            const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
-            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
-            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-        }
-    }
+    callbacks.onDeath(e, e.deathState);
 }

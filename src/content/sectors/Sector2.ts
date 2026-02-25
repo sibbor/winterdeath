@@ -9,7 +9,7 @@ import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
 import { soundManager } from '../../utils/sound';
 import { BOSSES, CAMERA_HEIGHT } from '../../content/constants';
-import { FamilySystem } from '../../core/systems/FamilySystem';
+import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 
 const LOCATIONS = {
     SPAWN: {
@@ -340,19 +340,21 @@ export const Sector2: SectorDef = {
                 isThinking: (gameState.thinkingUntil > now)
             };
 
-            FamilySystem.update(
-                familyObj,
-                { position: playerPos } as THREE.Group,
-                gameState,
-                !!sectorState.jordanCinematic && sectorState.jordanCinematic.phase !== 'NONE',
-                now,
-                delta,
-                {
-                    setFoundMemberName: () => { },
-                    startCinematic: (m) => { if ((events as any).startCinematic) (events as any).startCinematic(m); }
-                },
-                index
-            );
+            // Animate the family member body directly (FamilySystem class handles global follow logic)
+            const body = member.userData.cachedBody ||
+                member.children.find((c: any) => c.userData.isBody);
+            member.userData.cachedBody = body;
+            if (body) {
+                PlayerAnimation.update(body, {
+                    isMoving: familyObj.following,
+                    isRushing: false, isRolling: false, rollStartTime: 0,
+                    staminaRatio: 1.0,
+                    isSpeaking: familyObj.isSpeaking || false,
+                    isThinking: familyObj.isThinking || false,
+                    isIdleLong: false, isSwimming: false, isWading: false,
+                    seed: familyObj.seed
+                }, now, delta);
+            }
         }
 
         // --- SCENE-DEPENDENT LOGIC ---
@@ -468,7 +470,18 @@ export const Sector2: SectorDef = {
                         isSpeaking: (gameState.speakingUntil > now),
                         seed: jc.jordan.userData.seed || 0
                     };
-                    FamilySystem.update(familyObj, { position: playerPos } as THREE.Group, gameState, true, now, delta, { setFoundMemberName: () => { }, startCinematic: () => { } });
+                    // Animate Jordan's body while walking
+                    const jordanBody = jc.jordan.userData.cachedBody ||
+                        jc.jordan.children.find((c: any) => c.userData.isBody);
+                    jc.jordan.userData.cachedBody = jordanBody;
+                    if (jordanBody) {
+                        PlayerAnimation.update(jordanBody, {
+                            isMoving: true, isRushing: false, isRolling: false, rollStartTime: 0,
+                            staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
+                            isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
+                            seed: jc.jordan.userData.seed || 0
+                        }, now, delta);
+                    }
 
                     if (jordanPos.distanceTo(walkTarget) < 1.5) jc.phase = 'START_DIALOGUE_2';
                 }

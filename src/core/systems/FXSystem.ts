@@ -46,12 +46,12 @@ const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
 const UNIQUE_MATERIAL_TYPES = [
     'fire', 'flame', 'large_fire', 'large_smoke',
-    'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash', 'splash'
+    'black_smoke', 'debris_trail', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'shockwave', 'flash', 'splash'
 ];
 
 // Fix 2: Set for O(1) physics-type lookup at spawn time (replaces Array.includes in update loop)
 const PHYSICS_TYPES = new Set([
-    'chunk', 'debris', 'glass', 'limb', 'blood', 'gore', 'splash'
+    'debris', 'glass', 'blood', 'gore', 'splash'
 ]);
 
 export const FXSystem = {
@@ -184,8 +184,9 @@ export const FXSystem = {
         const t = req.type;
         const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
             t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' || t === 'large_smoke' ||
-            t === 'debris_trail' || t === 'glass' || t === 'stun_star' ||
-            t === 'chunk' || t === 'gore' || t === 'limb' || t === 'splash' ||
+            t === 'debris_trail' || t === 'glass' || t === 'enemy_effect_stun' ||
+            t === 'enemy_effect_flame' || t === 'enemy_effect_spark' ||
+            t === 'gore' || t === 'splash' ||
             t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke';
 
         const p = FXSystem.getPooledState();
@@ -198,10 +199,10 @@ export const FXSystem = {
         p.color = req.color;
         if (p.color === undefined && isInstanced) {
             const st = t as string;
-            if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame') p.color = 0xff7700;
-            else if (st === 'spark' || st === 'stun_star' || st === 'campfire_spark') p.color = 0xffcc00;
+            if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame') p.color = 0xff7700;
+            else if (st === 'spark' || st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0xffcc00;
             else if (st === 'smoke' || st === 'large_smoke' || st === 'campfire_smoke') p.color = 0x555555;
-            else if (st === 'blood' || st === 'gore' || st === 'limb') p.color = 0x880000;
+            else if (st === 'blood' || st === 'gore') p.color = 0x880000;
             else if (st === 'glass' || st === 'flash') p.color = 0xffffff;
             else if (st === 'splash') p.color = 0x77bbcc;
             else p.color = 0x888888; // Default generic gray
@@ -214,15 +215,20 @@ export const FXSystem = {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.blood;
 
-            if (t === 'gore' || t === 'limb' || t === 'chunk') geo = GEOMETRY.gore;
+            if (t === 'gore') geo = GEOMETRY.gore;
             else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke']; // Fix 7: pre-initialized in preload()
-            else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
-            else if (t === 'spark' || t === 'smoke' || t === 'campfire_spark' || t === 'campfire_smoke') mat = MATERIALS.bullet;
+            else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame' || t === 'enemy_effect_flame') {
+                geo = GEOMETRY.flame;
+                mat = (t === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
+            }
+            else if (t === 'spark' || t === 'smoke' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'enemy_effect_spark') {
+                mat = (t === 'enemy_effect_spark') ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
+            }
             else if (t === 'debris' || t === 'debris_trail') mat = MATERIALS.stone;
             else if (t === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (t === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
             else if (t === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
-            else if (t === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
+            else if (t === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (t === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
 
@@ -238,15 +244,15 @@ export const FXSystem = {
         const s = req.scale || 1.0;
         if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
         else if (t === 'large_smoke') p.mesh.scale.setScalar(4.0 * Math.random() * s);
-        else if (t === 'flame' || t === 'smoke') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
-        else if (t === 'spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
+        else if (t === 'flame' || t === 'smoke' || t === 'enemy_effect_flame') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
+        else if (t === 'spark' || t === 'enemy_effect_spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
         else if (t === 'splash') p.mesh.scale.setScalar((0.5 + Math.random() * 0.7) * s);
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
         if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
         else {
-            const speedScale = (t === 'chunk' || t === 'gore' || t === 'limb') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
-            const isFireFX = (t === 'flame' || t === 'spark' || t === 'smoke');
+            const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
+            const isFireFX = (t === 'flame' || t === 'spark' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark');
             const isLargeFX = (t === 'large_fire' || t === 'large_smoke');
             const vyScale = isLargeFX ? 3.0 : (isFireFX ? 1.8 : 0.8);
             const hzScale = isLargeFX ? 2.0 : (isFireFX ? 1.2 : 1.0);
@@ -278,7 +284,7 @@ export const FXSystem = {
             MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
         }
 
-        const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
+        const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
             if (imesh.parent !== scene) scene.add(imesh);
@@ -499,11 +505,9 @@ export const FXSystem = {
         p.landed = true;
 
         if (p.type === 'blood') {
-            // [VINTERDÖD] 20% chans för små bloddroppar
             if (Math.random() < 0.20) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.5 + Math.random() * 0.3, MATERIALS.bloodDecal);
             FXSystem._killParticle(index, list);
-        } else if (p.type === 'chunk' || p.type === 'limb' || p.type === 'gore') {
-            // [VINTERDÖD] 40% chans för chunks
+        } else if (p.type === 'gore') {
             if (Math.random() < 0.40) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
             p.vel.set(0, 0, 0);
         } else {
@@ -516,15 +520,20 @@ export const FXSystem = {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.blood;
 
-            if (type === 'fire' || type === 'flame' || type === 'large_fire' || type === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
-            else if (type === 'spark' || type === 'smoke' || type === 'campfire_spark' || type === 'campfire_smoke') mat = MATERIALS.bullet;
+            if (type === 'fire' || type === 'flame' || type === 'large_fire' || type === 'campfire_flame' || type === 'enemy_effect_flame') {
+                geo = GEOMETRY.flame;
+                mat = (type === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
+            }
+            else if (type === 'spark' || type === 'smoke' || type === 'campfire_spark' || type === 'campfire_smoke' || type === 'enemy_effect_spark') {
+                mat = (type === 'enemy_effect_spark') ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
+            }
             else if (type === 'debris' || type === 'debris_trail') mat = MATERIALS.stone;
             else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
-            else if (type === 'stun_star') { geo = GEOMETRY.shard; mat = MATERIALS.bullet; }
+            else if (type === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
-            else if (type === 'gore' || type === 'limb' || type === 'chunk') {
+            else if (type === 'gore') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();
                 (mat as any).color.setHex(0xffffff);
@@ -603,16 +612,14 @@ export const FXSystem = {
             req.x = pos.x + (Math.random() - 0.5);
             req.y = pos.y + 1.5 + (Math.random() - 0.5);
             req.z = pos.z + (Math.random() - 0.5);
-            req.type = 'stun_star';
+            req.type = 'enemy_effect_stun';
 
             req.customVel.set(
                 (Math.random() - 0.5) * 2,
                 Math.random() * 2,
                 (Math.random() - 0.5) * 2
             );
-
             req.scale = 0.2;
-            req.color = 0xffff00;
             FXSystem.particleQueue.push(req);
         }
     }

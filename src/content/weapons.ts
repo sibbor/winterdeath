@@ -71,7 +71,7 @@ export interface WeaponStats {
 
   // Death Mapping
   // Maps directly to EnemyAI.deathState
-  impactType: 'shot' | 'gib' | 'exploded' | 'burning' | 'electrified';
+  impactType: 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED';
   statusEffect: StatusEffect;
 }
 
@@ -101,69 +101,69 @@ export const WEAPONS: Record<string, WeaponStats> = {
   [WeaponType.SMG]: {
     name: WeaponType.SMG, displayName: 'weapons.smg', category: WeaponCategory.PRIMARY, behavior: WeaponBehavior.PROJECTILE,
     damage: 12, baseDamage: 12, fireRate: 100, bulletSpeed: 70, magSize: 30, reloadTime: 2000, range: 12, spread: 0.18, color: '#ef4444', icon: ICONS.SMG,
-    piercing: false, pierceDecay: 1.0, impactType: 'shot', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'SHOT', statusEffect: NO_EFFECT
   },
   [WeaponType.SHOTGUN]: {
     name: WeaponType.SHOTGUN, displayName: 'weapons.shotgun', category: WeaponCategory.PRIMARY, behavior: WeaponBehavior.PROJECTILE,
     damage: 15, baseDamage: 15, fireRate: 1000, bulletSpeed: 55, magSize: 6, reloadTime: 3000, range: 8, spread: 0.35, color: '#ef4444', icon: ICONS.SHOTGUN,
-    piercing: false, pierceDecay: 1.0, impactType: 'gib', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'GIBBED', statusEffect: NO_EFFECT
   },
   [WeaponType.RIFLE]: {
     name: WeaponType.RIFLE, displayName: 'weapons.rifle', category: WeaponCategory.PRIMARY, behavior: WeaponBehavior.PROJECTILE,
     damage: 35, baseDamage: 35, fireRate: 200, bulletSpeed: 90, magSize: 25, reloadTime: 2500, range: 20, spread: 0.04, color: '#ef4444', icon: ICONS.RIFLE,
-    piercing: false, pierceDecay: 1.0, impactType: 'shot', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'SHOT', statusEffect: NO_EFFECT
   },
 
   // --- SECONDARY ---
   [WeaponType.PISTOL]: {
     name: WeaponType.PISTOL, displayName: 'weapons.pistol', category: WeaponCategory.SECONDARY, behavior: WeaponBehavior.PROJECTILE,
     damage: 25, baseDamage: 25, fireRate: 400, bulletSpeed: 65, magSize: 12, reloadTime: 1500, range: 15, spread: 0.05, color: '#fbbf24', icon: ICONS.PISTOL,
-    piercing: false, pierceDecay: 1.0, impactType: 'shot', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'SHOT', statusEffect: NO_EFFECT
   },
   [WeaponType.REVOLVER]: {
     name: WeaponType.REVOLVER, displayName: 'weapons.revolver', category: WeaponCategory.SECONDARY, behavior: WeaponBehavior.PROJECTILE,
     damage: 85, baseDamage: 85, fireRate: 850, bulletSpeed: 85, magSize: 6, reloadTime: 2500, range: 25, spread: 0.01, color: '#fbbf24', icon: ICONS.REVOLVER,
-    piercing: true, pierceDecay: 0.7, impactType: 'gib', statusEffect: NO_EFFECT
+    piercing: true, pierceDecay: 0.7, impactType: 'GIBBED', statusEffect: NO_EFFECT
   },
 
   // --- THROWABLE ---
   [WeaponType.GRENADE]: {
     name: WeaponType.GRENADE, displayName: 'weapons.grenade', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
     damage: 180, baseDamage: 180, fireRate: 5, bulletSpeed: 0, magSize: 5, reloadTime: 0, range: 10, spread: 0, color: '#10b981', icon: ICONS.GRENADE,
-    piercing: false, pierceDecay: 1.0, impactType: 'exploded', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'EXPLODED', statusEffect: NO_EFFECT
   },
   [WeaponType.MOLOTOV]: {
     name: WeaponType.MOLOTOV, displayName: 'weapons.molotov', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
     damage: 15, baseDamage: 15, fireRate: 4, bulletSpeed: 0, magSize: 5, reloadTime: 0, range: 12, spread: 0, color: '#10b981', icon: ICONS.MOLOTOV,
-    piercing: true, pierceDecay: 1.0, impactType: 'burning', statusEffect: { type: 'burning', duration: 5.0, damagePerTick: 12 }
+    piercing: true, pierceDecay: 1.0, impactType: 'BURNED', statusEffect: { type: 'burning', duration: 5.0, damagePerTick: 12 }
   },
   [WeaponType.FLASHBANG]: {
     name: WeaponType.FLASHBANG, displayName: 'weapons.flashbang', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
     damage: 0, baseDamage: 0, fireRate: 10, bulletSpeed: 0, magSize: 5, reloadTime: 0, range: 12, spread: 0, color: '#10b981', icon: ICONS.FLASHBANG,
-    piercing: false, pierceDecay: 1.0, impactType: 'shot', statusEffect: { type: 'stun', duration: 3.5 }
+    piercing: false, pierceDecay: 1.0, impactType: 'SHOT', statusEffect: { type: 'stun', duration: 3.5 }
   },
 
   // --- SPECIAL ---
   [WeaponType.MINIGUN]: {
     name: WeaponType.MINIGUN, displayName: 'weapons.minigun', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.PROJECTILE,
     damage: 18, baseDamage: 18, fireRate: 50, bulletSpeed: 75, magSize: 200, reloadTime: 5000, range: 25, spread: 0.18, color: '#3b82f6', icon: ICONS.MINIGUN,
-    piercing: false, pierceDecay: 1.0, impactType: 'shot', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'SHOT', statusEffect: NO_EFFECT
   },
   [WeaponType.FLAMETHROWER]: {
     name: WeaponType.FLAMETHROWER, displayName: 'weapons.flamethrower', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
     damage: 6, baseDamage: 6, fireRate: 35, bulletSpeed: 30, magSize: 100, reloadTime: 4000, range: 10, spread: 0.25, color: '#ff4400', icon: ICONS.FLAMETHROWER,
-    piercing: true, pierceDecay: 1.0, impactType: 'burning', statusEffect: { type: 'burning', duration: 4.5, damagePerTick: 10 }
+    piercing: true, pierceDecay: 1.0, impactType: 'BURNED', statusEffect: { type: 'burning', duration: 4.5, damagePerTick: 10 }
   },
   [WeaponType.ARC_CANNON]: {
     name: WeaponType.ARC_CANNON, displayName: 'weapons.arc_cannon', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
     damage: 14, baseDamage: 14, fireRate: 90, bulletSpeed: 100, magSize: 60, reloadTime: 3500, range: 15, spread: 0.05, color: '#00ffff', icon: ICONS.ARC_CANNON,
-    piercing: true, pierceDecay: 0.5, impactType: 'electrified', statusEffect: { type: 'electrified', duration: 2.5 }
+    piercing: true, pierceDecay: 0.5, impactType: 'ELECTRIFIED', statusEffect: { type: 'electrified', duration: 2.5 }
   },
 
   // --- TOOL ---
   [WeaponType.RADIO]: {
     name: WeaponType.RADIO, displayName: 'weapons.radio', category: WeaponCategory.TOOL, behavior: WeaponBehavior.PROJECTILE,
     damage: 0, baseDamage: 0, fireRate: 0, bulletSpeed: 0, magSize: 0, reloadTime: 0, range: 0, spread: 0, color: '#3b82f6', icon: ICONS.RADIO,
-    piercing: false, pierceDecay: 1.0, impactType: 'shot', statusEffect: NO_EFFECT
+    piercing: false, pierceDecay: 1.0, impactType: 'SHOT', statusEffect: NO_EFFECT
   }
 };

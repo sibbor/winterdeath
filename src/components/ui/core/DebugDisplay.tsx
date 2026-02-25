@@ -4,6 +4,8 @@ import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 interface DebugDisplayProps {
     fps?: number; // Kept for compat but will prioritize PerformanceMonitor
     debugMode: boolean;
+    systems?: { id: string; enabled: boolean }[];
+    onToggleSystem?: (id: string, enabled: boolean) => void;
     debugInfo?: {
         aim?: { x: number; y: number };
         cam?: { x: number; y: number; z: number };
@@ -32,7 +34,7 @@ interface DebugDisplayProps {
     };
 }
 
-const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, debugInfo }) => {
+const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, debugInfo, systems, onToggleSystem }) => {
     const [isMinimized, setIsMinimized] = useState(() => {
         const saved = localStorage.getItem('vinterdod_debug_minimized');
         return saved === 'true';
@@ -129,6 +131,28 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
                                     <span>{(val as number).toFixed(2)}ms</span>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {systems && systems.length > 0 && (
+                    <div>
+                        <div className="text-white/40 uppercase text-[12px] mb-0.5">Systems</div>
+                        <div className="space-y-0.5">
+                            {systems.map(sys => {
+                                const timing = debugInfo?.performance?.cpu?.[sys.id];
+                                return (
+                                    <div
+                                        key={sys.id}
+                                        onClick={(e) => { e.stopPropagation(); onToggleSystem?.(sys.id, !sys.enabled); }}
+                                        className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'
+                                            }`}
+                                    >
+                                        <span className="truncate mr-2">{sys.id}</span>
+                                        <span className="text-white/40">{timing !== undefined ? `${timing.toFixed(2)}ms` : '–'}</span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

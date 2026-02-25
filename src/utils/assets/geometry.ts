@@ -122,6 +122,7 @@ export const GEOMETRY = {
     bullet: new THREE.SphereGeometry(0.15, 8, 8),
     grenade: new THREE.DodecahedronGeometry(0.3),
     molotov: new THREE.CylinderGeometry(0.1, 0.15, 0.5, 8),
+    flashbang: new THREE.CylinderGeometry(0.1, 0.15, 0.5, 8),
     particle: new THREE.BoxGeometry(0.15, 0.15, 0.15),
     gore: new THREE.BoxGeometry(0.25, 0.25, 0.25),
     capsule: new THREE.CapsuleGeometry(1, 1, 4, 8),

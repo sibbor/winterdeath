@@ -1,43 +1,40 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import type { Enemy } from '../types/enemy';
+import { Enemy, AIState, EnemyDeathState, EnemyEffectType } from '../types/enemy';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
 import { soundManager } from '../utils/sound';
-import { haptic } from '../utils/HapticManager';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ZombieRenderer } from './renderers/ZombieRenderer';
 import { CorpseRenderer } from './renderers/CorpseRenderer';
+import { FXSystem } from './systems/FXSystem';
 
 export type { Enemy };
 
 // --- INTERNAL POOLING & SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3(); // Used for burst scale calculation
 const _up = new THREE.Vector3(0, 5, 0);
+const _white = new THREE.Color(0xffffff);
+const _color = new THREE.Color();
 const _syncList: Enemy[] = [];
 const enemyPool: Enemy[] = [];
 
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 
-// --- REUSABLE UPDATE CALLBACKS ---
-const _aiCallbacks = {
+
+// --- REUSABLE UPDATE CALLBACKS --- (Initialized after EnemyManager to allow circular references)
+const _aiCallbacks: any = {
     onPlayerHit: null as any,
     spawnPart: null as any,
     spawnDecal: null as any,
     spawnBubble: null as any,
     onDamageDealt: null as any,
-    playSound: (id: string) => soundManager.playEffect(id),
-    onAshStart: (enemy: Enemy) => {
-        const scene = enemy.mesh.parent as THREE.Scene;
-        if (scene && !enemy.ashPile) {
-            const ash = EnemyManager.createAshPile(enemy);
-            ash.scale.setScalar(0.001);
-            scene.add(ash);
-            enemy.ashPile = ash;
-        }
-    }
+    onDeath: null as any,
+    onEffectTick: null as any,
+    playSound: (id: string) => soundManager.playEffect(id)
 };
 
 export const EnemyManager = {
@@ -93,9 +90,10 @@ export const EnemyManager = {
 
         e.dead = false;
         e.hp = e.maxHp;
-        e.deathState = 'alive';
+        e.deathState = 'ALIVE';
         e.velocity.set(0, 0, 0);
         e.knockbackVel.set(0, 0, 0);
+        e.deathVel.set(0, 0, 0);
         e.deathTimer = 0;
         e.bloodSpawned = false;
         e.lastDamageType = 'standard';
@@ -157,39 +155,257 @@ export const EnemyManager = {
         return ash;
     },
 
-    explodeEnemy: (enemy: Enemy, forceVec: THREE.Vector3, callbacks: any) => {
+    /**
+     * Centralized handling for all high-impact death effects (GIBBED or EXPLODED).
+     */
+    explodeEnemy: (enemy: Enemy, callbacks: any, velocity?: THREE.Vector3, isGibbed: boolean = false) => {
         if (enemy.mesh.userData.exploded) return;
         enemy.mesh.userData.exploded = true;
 
-        const scene = enemy.mesh.parent as THREE.Scene;
-        if (scene) scene.remove(enemy.mesh);
-
+        const enemyScale = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
         const pos = enemy.mesh.position;
-        _v1.copy(forceVec).multiplyScalar(0.5).add(_up);
 
-        // [VINTERDÖD] Bossar exploderar i mycket fler bitar
-        const isBoss = enemy.isBoss;
-        const mult = isBoss ? 3 : 1;
+        // 1. Instant mesh removal
+        if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
-        // [VINTERDÖD] Uppdaterad logik: 10 droppar, 1 stor pöl
-        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', 10 * mult);
-
+        // 2. Calculate burst scale based on weapon type
         let burstScale = 1.0;
-        const dmgType = enemy.lastDamageType ? String(enemy.lastDamageType).toLowerCase() : '';
-        if (dmgType === 'grenade' || dmgType === 'molotov' || dmgType === 'barrel') burstScale = 3.0;
+        const dmgType = String(enemy.lastDamageType || '').toLowerCase();
+        if (dmgType === 'grenade') burstScale = 3.0;
         else if (dmgType === 'shotgun' || dmgType === 'revolver') burstScale = 2.0;
 
-        callbacks.spawnDecal(pos.x, pos.z, (isBoss ? 6.0 : 3.0) * burstScale, MATERIALS.bloodDecal, 'splatter');
+        // 2. Spawn Decal
+        const decalScale = (enemy.isBoss
+            ? 6.0 : enemyScale * burstScale)
+        callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, 'splatter');
 
-        const baseScale = enemy.originalScale || 1.0;
+        // 3. Spawn Particles & Blood
+        const bloodCount = enemy.isBoss ? 12 : 5;
+        const goreCount = enemy.isBoss ? 12 : 5;
 
-        // 5 chunks
-        for (let i = 0; i < 5 * mult; i++) {
-            _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
-            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'chunk', 1, undefined, _v2.clone(), enemy.color, baseScale * (isBoss ? 1.5 : 0.8));
+        callbacks.spawnPart(pos.x, 1, pos.z, 'blood', bloodCount);
+
+        // 4. Velocity handling for death trajectories
+        _v1.set(0, 0, 0);
+        if (velocity) {
+            _v1.copy(velocity);
+        } else if (enemy.deathVel && (enemy.deathVel.x !== 0 || enemy.deathVel.z !== 0)) {
+            _v1.copy(enemy.deathVel);
+        } else {
+            _v1.copy(enemy.velocity).multiplyScalar(0.5).add(_up);
         }
-        soundManager.playExplosion();
-        haptic.explosion();
+        for (let i = 0; i < goreCount; i++) {
+            _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'gore', 1, undefined, _v2, enemy.color, enemyScale * (enemy.isBoss ? 1.5 : 0.8));
+        }
+    },
+
+    handleDeathVisuals: (e: Enemy, type: EnemyDeathState, callbacks: any) => {
+        const now = performance.now();
+        const age = now - (e.deathTimer || now);
+        const delta = 1 / 60;
+
+        if (type === 'EXPLODED') {
+            EnemyManager.explodeEnemy(e, callbacks, e.deathVel);
+            if (age > 100) e.deathState = 'DEAD';
+            return;
+        }
+        else if (type === 'GIBBED') {
+            EnemyManager.explodeEnemy(e, callbacks, e.deathVel, true);
+            if (age > 100) e.deathState = 'DEAD';
+            return;
+        }
+
+        if (type === 'BURNED') {
+            const ash = e.ashPile;
+            if (!ash) {
+                const scene = e.mesh.parent as THREE.Scene;
+                if (scene) {
+                    const newAsh = EnemyManager.createAshPile(e);
+                    scene.add(newAsh);
+                    e.ashPile = newAsh;
+                }
+                return;
+            }
+
+            const progress = Math.min(1.0, age / 1500);
+            e.mesh.scale.setScalar((e.originalScale || 1.0) * (1.0 - progress));
+
+            _color.set(0.2, 0.2, 0.2).lerp(_white, progress);
+            const colorMats = e.mesh.userData.colorMats;
+            if (colorMats) {
+                for (let i = 0; i < colorMats.length; i++) {
+                    (colorMats[i] as any).color.copy(_color);
+                }
+            }
+
+            if (progress >= 1.0) {
+                const scene = e.mesh.parent as THREE.Scene;
+                if (ash && scene) {
+                    const permanentAsh = ash.clone();
+                    permanentAsh.applyMatrix4(e.mesh.matrixWorld);
+                    permanentAsh.quaternion.set(0, 0, 0, 1);
+                    permanentAsh.position.copy(e.mesh.position);
+                    permanentAsh.position.y = 0.05;
+                    const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+                    permanentAsh.scale.setScalar(massScale);
+                    scene.add(permanentAsh);
+                }
+                if (scene) scene.remove(e.mesh);
+                e.deathState = 'DEAD';
+            }
+            return;
+        }
+
+        if (type === 'ELECTRIFIED') {
+            if (!e.mesh.userData.electrocuted) {
+                e.mesh.userData.electrocuted = true;
+                e.mesh.userData.deathPosX = e.mesh.position.x;
+                e.mesh.userData.deathPosZ = e.mesh.position.z;
+            }
+
+            if (age < 120) {
+                const t = age / 120;
+                e.mesh.rotation.x = -Math.PI / 2 * t;
+                e.mesh.position.y = Math.max(0.2, (e.mesh.position.y || 1.0) * (1 - t));
+            } else {
+                const baseHeight = 0.2;
+                e.mesh.rotation.x = -Math.PI / 2;
+                e.mesh.position.y = baseHeight;
+
+                const jitter = 0.15;
+                e.mesh.position.x = e.mesh.userData.deathPosX + (Math.random() - 0.5) * jitter;
+                e.mesh.position.z = e.mesh.userData.deathPosZ + (Math.random() - 0.5) * jitter;
+
+                if (Math.random() > 0.4) callbacks.onEffectTick(e, 'SPARK');
+            }
+            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+            return;
+        }
+
+        if (type === 'SHOT') {
+            e.deathVel.y -= 35 * delta;
+            e.mesh.position.addScaledVector(e.deathVel, delta);
+            if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
+            const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
+            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
+            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+        }
+    },
+
+    applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, now: number) => {
+        let shovedAnyone = false;
+        const enemies = state.enemies;
+
+        for (let i = 0; i < enemies.length; i++) {
+            const enemy = enemies[i];
+            if (enemy.deathState === 'ALIVE') {
+                const distSq = enemy.mesh.position.distanceToSquared(playerGroup.position);
+
+                if (distSq < radiusSq) {
+                    shovedAnyone = true;
+
+                    enemy.state = AIState.IDLE;
+                    enemy.stunTimer = 1.5;
+                    enemy.attackCooldown = 2000;
+
+                    const damage = 5;
+                    enemy.hp -= damage;
+                    enemy.lastDamageType = 'melee';
+
+                    if (state.callbacks?.trackStats) {
+                        state.callbacks.trackStats('damage', damage, !!enemy.isBoss);
+                    }
+                    if (state.callbacks?.spawnFloatingText) {
+                        state.callbacks.spawnFloatingText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, damage.toString(), "#ffffff");
+                    }
+
+                    _v1.subVectors(enemy.mesh.position, playerGroup.position);
+                    _v1.y = 0;
+                    if (_v1.lengthSq() < 0.01) _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
+                    _v1.normalize();
+
+                    const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+                    const force = 25.0 / Math.max(0.5, mass);
+
+                    enemy.knockbackVel.set(_v1.x * force, 6.0, _v1.z * force);
+
+                    if (!enemy.isBoss) {
+                        enemy.mesh.userData.isRagdolling = true;
+                        if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
+                        enemy.mesh.userData.spinVel.set(
+                            (Math.random() - 0.5) * 15,
+                            (Math.random() - 0.5) * 20,
+                            (Math.random() - 0.5) * 15
+                        );
+                    }
+
+                    FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1.5, enemy.mesh.position.z, 'blood', 8);
+                }
+            }
+        }
+
+        if (shovedAnyone) {
+            soundManager.playImpact('flesh');
+        }
+    },
+
+    applyTackle: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
+        const canTackle = enemy.deathState === 'ALIVE' && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
+        if (!canTackle) return;
+
+        if (enemy.state === AIState.BITING) {
+            enemy.state = AIState.IDLE;
+            enemy.attackCooldown = 1500;
+        }
+
+        const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
+        const massInverse = 1.0 / Math.max(0.5, mass);
+        const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse;
+
+        _v2.subVectors(enemy.mesh.position, impactPos);
+        _v2.y = 0;
+        if (_v2.lengthSq() < 0.01) {
+            _v1.set(moveVec.z, 0, -moveVec.x).normalize(); // Approximation of cross product with up
+            _v2.copy(_v1);
+        } else {
+            _v2.normalize();
+        }
+
+        if (isDashing) {
+            _v1.copy(moveVec).normalize();
+            const dot = _v2.dot(_v1);
+
+            if (dot > 0.3) {
+                _v1.set(moveVec.z, 0, -moveVec.x).normalize();
+                if (_v2.dot(_v1) < 0) _v1.negate();
+                _v2.lerp(_v1, 0.85).normalize();
+            }
+        }
+
+        const force = (isDashing ? 30.0 : 8.0) * pushMultiplier;
+        const lift = (isDashing ? 30.0 : 2.0) * pushMultiplier;
+
+        enemy.knockbackVel.set(_v2.x * force, lift, _v2.z * force);
+        enemy.state = AIState.IDLE;
+        enemy.lastTackleTime = now;
+
+        if (isDashing) {
+            enemy.stunTimer = 2.0;
+            if (!enemy.isBoss) {
+                enemy.mesh.userData.isRagdolling = true;
+                if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
+                enemy.mesh.userData.spinVel.set(
+                    (Math.random() - 0.5) * 25,
+                    (Math.random() - 0.5) * 30,
+                    (Math.random() - 0.5) * 25
+                );
+            }
+            FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
+            soundManager.playImpact('flesh');
+        } else {
+            enemy.stunTimer = 0.8;
+        }
     },
 
     update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any) => {
@@ -206,13 +422,13 @@ export const EnemyManager = {
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
-            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, enemies, shakeIntensity, false, _aiCallbacks);
+            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, shakeIntensity, _aiCallbacks);
 
             const s = e.deathState;
-            if (s === 'burning') {
+            if (s === 'BURNED') {
                 e.mesh.visible = true;
             }
-            else if (!e.isBoss && !e.mesh.userData.exploded && (s === 'alive' || s === 'shot' || s === 'electrified')) {
+            else if (!e.isBoss && !e.mesh.userData.exploded && (s === 'ALIVE' || s === 'SHOT' || s === 'ELECTRIFIED')) {
                 e.mesh.visible = false;
                 _syncList.push(e);
             }
@@ -225,7 +441,7 @@ export const EnemyManager = {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
 
-            if (e.deathState === 'alive') continue;
+            if (e.deathState === 'ALIVE') continue;
 
             if (!e.deathTimer) {
                 e.deathTimer = now;
@@ -238,52 +454,44 @@ export const EnemyManager = {
 
             const age = now - e.deathTimer;
 
-            const isElectrified = e.deathState === 'electrified';
+            const isElectrified = e.deathState === 'ELECTRIFIED';
             const cleanupDelay = isElectrified ? 1000 : 2000;
-            const shouldCleanup = (age > cleanupDelay) || (e.deathState === 'dead') || e.mesh.userData.exploded;
+            const shouldCleanup = (age > cleanupDelay) || (e.deathState === 'DEAD') || e.mesh.userData.exploded;
 
             if (shouldCleanup) {
                 let cleanupType = e.deathState;
-                if (cleanupType === 'dead') {
+                if (cleanupType === 'DEAD') {
                     // [VINTERDÖD FIX] Bossar har inget lik ("corpse"), tvinga dem att sprängas så de inte bara försvinner!
-                    if (e.isBoss || e.mesh.userData.exploded) cleanupType = 'exploded';
-                    else if (e.mesh.userData.electrocuted) cleanupType = 'electrified';
-                    else if (e.mesh.userData.gibbed) cleanupType = 'gibbed';
-                    else if (e.mesh.userData.ashSpawned) cleanupType = 'burning';
-                    else cleanupType = 'shot';
+                    if (e.isBoss || e.mesh.userData.exploded) cleanupType = 'EXPLODED';
+                    else if (e.mesh.userData.electrocuted) cleanupType = 'ELECTRIFIED';
+                    else if (e.mesh.userData.gibbed) cleanupType = 'GIBBED';
+                    else if (e.mesh.userData.ashSpawned) cleanupType = 'BURNED';
+                    else cleanupType = 'SHOT';
                 }
 
-                const wasExploded = e.mesh.userData.exploded;
+                // [VINTERDÖD] Always remove mesh at cleanup (final safeguard)
+                if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
 
-                if (!wasExploded) {
-                    switch (cleanupType) {
-                        case 'exploded':
-                            EnemyManager.explodeEnemy(e, _up, callbacks);
-                            break;
-                        case 'gibbed':
-                            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-                            break;
-                        case 'burning':
-                            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
-                            break;
-                        case 'electrified':
-                            scene.remove(e.mesh);
-                            if (!e.isBoss) EnemyManager.createCorpse(e);
-                            if (!e.bloodSpawned) {
-                                callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.2 + Math.random() * 0.5) * (e.originalScale || 1.0), MATERIALS.scorchDecal);
-                                e.bloodSpawned = true;
-                            }
-                            break;
-                        case 'shot':
-                        default:
-                            scene.remove(e.mesh);
-                            if (!e.isBoss) EnemyManager.createCorpse(e);
-                            if (!e.bloodSpawned) {
-                                callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0), MATERIALS.bloodDecal);
-                                e.bloodSpawned = true;
-                            }
-                            break;
-                    }
+                switch (cleanupType) {
+                    case 'EXPLODED':
+                    case 'GIBBED':
+                    case 'BURNED':
+                        break;
+                    case 'ELECTRIFIED':
+                        if (!e.isBoss) EnemyManager.createCorpse(e);
+                        if (!e.bloodSpawned) {
+                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.2 + Math.random() * 0.5) * (e.originalScale || 1.0), MATERIALS.scorchDecal);
+                            e.bloodSpawned = true;
+                        }
+                        break;
+                    case 'SHOT':
+                    default:
+                        if (!e.isBoss) EnemyManager.createCorpse(e);
+                        if (!e.bloodSpawned) {
+                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0), MATERIALS.bloodDecal);
+                            e.bloodSpawned = true;
+                        }
+                        break;
                 }
 
                 const kType = e.type || 'Unknown';
@@ -295,8 +503,9 @@ export const EnemyManager = {
                 if (e.isBoss && e.bossId !== undefined) {
                     callbacks.onBossKilled(e.bossId);
                     callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 500);
-                } else if (Math.random() < 0.15) {
-                    // Regular enemies: 15% chance to drop 1-5 scrap
+                }
+                // Regular enemies: 15% chance to drop 1-5 scrap
+                else if (Math.random() < 0.15) {
                     callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 1 + Math.floor(Math.random() * 5));
                 }
 
@@ -307,9 +516,28 @@ export const EnemyManager = {
                 enemies.pop();
 
                 recycled.dead = true;
-                recycled.deathState = 'dead';
+                recycled.deathState = 'DEAD';
                 if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }
+    }
+};
+// --- INITIALIZE AI CALLBACKS ---
+_aiCallbacks.onDeath = (enemy: Enemy, type: EnemyDeathState) => EnemyManager.handleDeathVisuals(enemy, type, _aiCallbacks);
+_aiCallbacks.onEffectTick = (enemy: Enemy, type: EnemyEffectType) => {
+    const pos = enemy.mesh.position;
+
+    switch (type) {
+        case 'STUN':
+            _aiCallbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'enemy_effect_stun', 1, undefined, undefined, 0xffff00, 0.3);
+            break;
+        case 'FLAME':
+            _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.0, pos.z + (Math.random() - 0.5) * 0.5);
+            _aiCallbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'enemy_effect_flame', 1);
+            break;
+        case 'SPARK':
+            _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.8 + Math.random() * 0.4, pos.z + (Math.random() - 0.5) * 0.4);
+            _aiCallbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'enemy_effect_spark', 1);
+            break;
     }
 };

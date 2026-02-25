@@ -134,14 +134,16 @@ export const AssetPreloader = {
                 }
                 if (isCamp || isSector) {
                     const pointLight = new THREE.PointLight(0xff7722, 40, 90);
-                    pointLight.castShadow = true;
+                    pointLight.castShadow = false; // [VINTERDÖD] Budgeted: Start OFF, LightingSystem manages shadows.
+                    pointLight.shadow.autoUpdate = false;
                     pointLight.shadow.mapSize.set(512, 512);
                     pointLight.shadow.bias = -0.0005;
                     pointLight.shadow.normalBias = 0.02;
                     scene.add(pointLight);
                 }
                 const spotLight = new THREE.SpotLight(0xffffff, 1);
-                spotLight.castShadow = true;
+                spotLight.castShadow = false; // [VINTERDÖD] Budgeted
+                spotLight.shadow.autoUpdate = false;
                 spotLight.shadow.bias = -0.0001;
                 scene.add(spotLight);
             }
@@ -388,7 +390,7 @@ export const AssetPreloader = {
             // FX Particle Instancing — all sectors need fire/smoke/blood shaders pre-compiled
             // Not needed for Camp — no combat effects in hub
             if (isSector || target === 'CORE') {
-                const fxTypes = ['blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'debris', 'glass', 'stun_star', 'chunk', 'gore', 'limb'];
+                const fxTypes = ['blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore'];
                 for (let i = 0; i < fxTypes.length; i++) {
                     const fxMesh = FXSystem._getInstancedMesh(scene, fxTypes[i]);
                     addToWarmup(fxMesh);

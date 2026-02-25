@@ -38,8 +38,8 @@ export class EnemySystem implements System {
         // Callback for EnemyManager.update
         this.updateCallbacks = {
             onPlayerHit: (damage: number, attacker: any, type: string) => this.handlePlayerHit(session, damage, attacker, type),
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number) => this.spawnPart(session, x, y, z, t, c, m, v, col),
-            spawnDecal: (x: number, z: number, s: number, mat: any) => this.spawnDecal(session, x, z, s, mat),
+            spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number, s: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
+            spawnDecal: (x: number, z: number, s: number, mat: any, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
             spawnBubble: (text: string, dur: number) => this.callbacks.spawnBubble(text, dur),
             onDamageDealt: (dotDamage: number, e: any) => {
                 state.damageDealt += dotDamage;
@@ -51,8 +51,8 @@ export class EnemySystem implements System {
 
         // Callback for EnemyManager.cleanupDeadEnemies
         this.cleanupCallbacks = {
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number) => this.spawnPart(session, x, y, z, t, c, m, v, col),
-            spawnDecal: (x: number, z: number, s: number, mat: any) => this.spawnDecal(session, x, z, s, mat),
+            spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number, s: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
+            spawnDecal: (x: number, z: number, s: number, mat: any, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
             spawnScrap: (x: number, z: number, amt: number) => WorldLootSystem.spawnScrapExplosion(scene, state.scrapItems, x, z, amt),
             spawnBubble: this.callbacks.spawnBubble,
             t: this.callbacks.t,
@@ -77,7 +77,7 @@ export class EnemySystem implements System {
                 state.enemies,
                 state.collisionGrid,
                 session.noiseEvents,
-                state.shakeIntensity,
+                state.cameraShake,
                 this.updateCallbacks.onPlayerHit,
                 this.updateCallbacks.spawnPart,
                 this.updateCallbacks.spawnDecal,
@@ -153,15 +153,13 @@ export class EnemySystem implements System {
         if (input.d) _v1.x += 1;
 
         if (_v1.lengthSq() > 0) {
-            // [VINTERDÖD] Kopiera in i state.deathVel. Inga .clone() allokeringar.
             state.deathVel.copy(_v1).normalize().multiplyScalar(15);
         } else {
-            // Anders flyger vi bakåt från attacken
             if (attacker && attacker.mesh) {
                 _v2.copy(attacker.mesh.position);
             } else {
                 _v2.copy(this.playerGroup.position);
-                _v2.z -= 1; // Default fallback direction
+                _v2.z -= 1;
             }
 
             state.deathVel.subVectors(this.playerGroup.position, _v2).normalize().multiplyScalar(12);
@@ -170,12 +168,12 @@ export class EnemySystem implements System {
         state.deathVel.y = 4;
     }
 
-    private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number) {
-        FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color);
+    private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) {
+        FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color, scale);
     }
 
-    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: any) {
-        FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat);
+    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: any, type?: string) {
+        FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat, type);
     }
 
     cleanup(session: GameSessionLogic) {

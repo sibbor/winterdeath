@@ -46,6 +46,7 @@ import { requestWakeLock, releaseWakeLock } from '../utils/device';
 // --- ZERO-GC Scratchpads ---
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
+const _vLightOffset = new THREE.Vector3();
 const _fxCallbacks: any = { spawnPart: null, spawnDecal: null };
 const _animStateScratch: any = { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 };
 const _interactionScreenPosScratch = { x: 0, y: 0 };
@@ -81,6 +82,8 @@ export interface GameSessionHandle {
     triggerInput: (key: string) => void;
     rotateCamera: (dir: number) => void;
     adjustPitch: (dir: number) => void;
+    getSystems: () => { id: string; enabled: boolean }[];
+    setSystemEnabled: (id: string, enabled: boolean) => void;
 }
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
@@ -106,7 +109,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (type) {
                 setActiveModal(type);
                 activeModalRef.current = type;
-                if (document.pointerLockElement) document.exitPointerLock();
+                if (!props.isMobileDevice && document.pointerLockElement) document.exitPointerLock();
             }
         };
         window.addEventListener('open_station', handleOpenStation);
@@ -244,6 +247,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const playerMeshRef = useRef<THREE.Group>(new THREE.Group());
     const familyMemberRef = useRef<any>(null);
     const flashlightRef = useRef<THREE.SpotLight>(null);
+    const skyLightRef = useRef<THREE.DirectionalLight>(null);
     const lockRequestTime = useRef(0);
 
     const triggerContinue = useCallback(() => {
@@ -305,7 +309,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             props.onInteractionStateChange(!!activeModal);
         }
         if (activeModal) {
-            document.exitPointerLock();
+            if (!props.isMobileDevice && document.pointerLockElement) document.exitPointerLock();
             document.body.style.cursor = 'default';
         } else {
             document.body.style.cursor = '';
@@ -694,6 +698,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         },
         adjustPitch: (dir: number) => {
             engineRef.current?.camera.adjustPitch(dir * 2.0);
+        },
+        getSystems: () => {
+            return gameSessionRef.current?.getSystems() ?? [];
+        },
+        setSystemEnabled: (id: string, enabled: boolean) => {
+            gameSessionRef.current?.setSystemEnabled(id, enabled);
         }
     }));
 
@@ -730,6 +740,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = new GameSessionLogic(engine);
         if (stateRef.current) session.init(stateRef.current);
         gameSessionRef.current = session;
+
+        // [DEBUG] Expose session to console for debugging/toggling
+        if (propsRef.current.debugMode) {
+            (window as any).gameSession = session;
+        }
 
         const scene = engine.scene;
         const camera = engine.camera;
@@ -967,14 +982,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     skyLight.name = 'SKY_LIGHT';
                     skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
                     skyLight.castShadow = true;
+                    // Standard 200m coverage centered on player at spawn
                     skyLight.shadow.camera.left = -100;
                     skyLight.shadow.camera.right = 100;
                     skyLight.shadow.camera.top = 100;
                     skyLight.shadow.camera.bottom = -100;
+                    skyLight.shadow.camera.far = 300;
+                    skyLight.shadow.bias = -0.0005;
                     const shadowRes = engine.getSettings().shadowResolution;
-                    skyLight.shadow.mapSize.width = shadowRes;
-                    skyLight.shadow.mapSize.height = shadowRes;
+                    skyLight.shadow.mapSize.width = shadowRes * 2; // Sky light needs more res for 200m area
+                    skyLight.shadow.mapSize.height = shadowRes * 2;
                     scene.add(skyLight);
+                    skyLightRef.current = skyLight;
                 }
 
                 const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
@@ -1013,15 +1032,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 scene.traverse((child) => {
                     if (child.userData && child.userData.effects) {
                         const effects = child.userData.effects as any[];
-                        for (let i = 0; i < effects.length; i++) {
-                            const eff = effects[i];
+                        for (let j = 0; j < effects.length; j++) {
+                            const eff = effects[j];
                             if (eff.type === 'light') {
                                 const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
                                 light.userData.baseIntensity = eff.intensity;
                                 light.userData.isCulled = false;
                                 if (eff.offset) light.position.copy(eff.offset);
                                 child.add(light);
-                                if (eff.flicker) flickeringLights.push({ light, baseIntensity: eff.intensity });
+                                if (eff.flicker) {
+                                    flickeringLights.push({ light, baseInt: eff.intensity, flickerRate: 0.1 });
+                                }
+                                // [VINTERDÖD] Shadow Budgeting: Lights start OFF, LightingSystem enables them surgically.
+                                light.castShadow = false;
+                                light.shadow.autoUpdate = false;
+                                light.shadow.mapSize.set(256, 256);
+                                // [VINTERDÖD] Register point light for culling
+                                ctx.dynamicLights.push(light);
                             }
                         }
                         activeEffects.push(child);
@@ -1118,6 +1145,39 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
+                // [VINTERDÖD] Final Light Registration Audit
+                // Scan scene for any lights NOT yet in dynamicLights and register them.
+                // This catches lights added by BuildingGenerator or other manual scripts.
+                scene.traverse((obj) => {
+                    if ((obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight) && obj.name !== 'flashlight') {
+                        if (!ctx.dynamicLights.includes(obj)) {
+                            ctx.dynamicLights.push(obj);
+                            // Ensure it has isCulled state initialized
+                            if (obj.userData.isCulled === undefined) obj.userData.isCulled = false;
+                            if (obj.userData.baseIntensity === undefined) obj.userData.baseIntensity = obj.intensity;
+                        }
+                    }
+                });
+
+                // [VINTERDÖD] Scene-wide Static Matrix Optimization
+                // With 1400+ objects, Three.js worldMatrix updates are a major bottleneck.
+                // We disable auto-updates for everything generated during setup.
+                scene.traverse((obj) => {
+                    if (
+                        obj.userData?.isPlayer ||
+                        obj.userData?.isEnemy ||
+                        obj.userData?.isProjectile ||
+                        obj.userData?.vehicleDef ||
+                        obj.userData?.isFamilyMember ||
+                        obj.userData?.type === 'family'
+                    ) return;
+
+                    // Static objects only need one update
+                    obj.updateMatrix();
+                    obj.updateMatrixWorld(true);
+                    obj.matrixAutoUpdate = false;
+                });
+
                 session.addSystem(new PlayerMovementSystem(playerGroup));
                 session.addSystem(new VehicleMovementSystem(playerGroup));
                 if (engine.water) {
@@ -1163,6 +1223,44 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         soundManager.stopMusic();
                         if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
                     }
+                }));
+
+                // --- Registered Systems (formerly ad-hoc) ---
+                session.addSystem(new FamilySystem(
+                    playerGroup,
+                    activeFamilyMembers,
+                    cinematicRef,
+                    { setFoundMemberName, startCinematic }
+                ));
+
+                session.addSystem(new LightingSystem(flickeringLights, sectorContextRef, playerGroupRef));
+
+                session.addSystem(new CinematicSystem({
+                    cinematicRef,
+                    camera: engine.camera as any,
+                    playerMeshRef: playerMeshRef as any,
+                    bubbleRef,
+                    activeFamilyMembers,
+                    callbacks: {
+                        setCurrentLine,
+                        setCinematicActive,
+                        endCinematic,
+                        playCinematicLine
+                    }
+                }));
+
+                session.addSystem(new DeathSystem({
+                    playerGroupRef: playerGroupRef as any,
+                    playerMeshRef: playerMeshRef as any,
+                    fmMeshRef: familyMemberRef,
+                    activeFamilyMembers,
+                    deathPhaseRef,
+                    inputRef: () => engine.input.state,
+                    cameraRef: () => engine.camera.threeCamera,
+                    propsRef,
+                    distanceTraveledRef,
+                    fxCallbacks: _fxCallbacks,
+                    setDeathPhase
                 }));
 
                 if (currentSector.initialAim) {
@@ -1260,7 +1358,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             bossIntroTimerRef.current = window.setTimeout(() => {
                 if (isMounted.current) { setBossIntroActive(false); bossIntroRef.current.active = false; }
-            }, 4000);
+            }, 2500);
         };
 
         window.addEventListener('boss-spawn-trigger', spawnBoss);
@@ -1300,6 +1398,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const now = performance.now();
             const input = engine.input.state;
             const delta = dt;
+            const monitor = PerformanceMonitor.getInstance();
+
+            // [VINTERDÖD] Player-locked Shadow Camera
+            // Ensures the skyLight shadow map covers the active area as the player moves.
+            if (skyLightRef.current && playerGroupRef.current) {
+                const sky = skyLightRef.current;
+                const pPos = playerGroupRef.current.position;
+                // Move light and its target to maintain the same relative angle
+                _vLightOffset.set(80, 50, 50); // Original offset from runSetup
+                sky.position.copy(pPos).add(_vLightOffset);
+                sky.target.position.copy(pPos);
+                sky.target.updateMatrixWorld(); // DirectionalLight needs target matrix update
+            }
 
             if (input.e && !prevInputRef.current) {
                 if (stateRef.current.currentInteraction && stateRef.current.currentInteraction.action) {
@@ -1391,6 +1502,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
+                monitor.begin('burning_effects');
                 for (let i = 0; i < burningObjects.length; i++) {
                     const mesh = burningObjects[i];
                     if (!mesh.userData.effects) continue;
@@ -1426,11 +1538,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         }
                     }
                 }
+                monitor.end('burning_effects');
             }
 
             if (state.isDead) {
-                DeathSystem.update(state, { deathPhase: deathPhaseRef, playerGroup: playerGroupRef.current, playerMesh: playerMeshRef.current, fmMesh: familyMemberRef.current?.mesh || null, familyMembers: activeFamilyMembers.current, input: engine.input.state, camera: camera.threeCamera }, setDeathPhase, propsRef.current, now, delta, distanceTraveledRef.current, _fxCallbacks);
-                if (playerGroupRef.current) FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
                 lastDrawCallsRef.current = engine.renderer.info.render.calls;
                 lastTime = now;
                 return;
@@ -1454,61 +1565,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (!propsRef.current.isRunning || propsRef.current.isPaused) {
-                soundManager.stopRadioStatic(); lastTime = now;
+                soundManager.stopRadioStatic();
+                lastTime = now;
                 return;
             }
 
-            frame++;
-
-            if (frame % 15 === 0 && playerGroupRef.current && sectorContextRef.current?.dynamicLights) {
-                const dynamicLights = sectorContextRef.current.dynamicLights;
-                const pPos = playerGroupRef.current.position;
-
-                let lightCount = 0;
-                for (let i = 0; i < dynamicLights.length; i++) {
-                    const light = dynamicLights[i];
-                    if (light.name === 'flashlight') { continue; } // [VINTERDÖD] Låt ficklampan styra sin egen styrka
-
-                    if (!_sortableLightsScratch[lightCount]) {
-                        _sortableLightsScratch.push({ light: null as any, distSq: 0 });
-                    }
-                    _sortableLightsScratch[lightCount].light = light;
-                    _sortableLightsScratch[lightCount].distSq = light.position.distanceToSquared(pPos);
-                    lightCount++;
-                }
-
-                // Fast insertion sort to avoid .sort() GC allocation
-                for (let i = 1; i < lightCount; i++) {
-                    let key = _sortableLightsScratch[i];
-                    let j = i - 1;
-                    while (j >= 0 && _sortableLightsScratch[j].distSq > key.distSq) {
-                        _sortableLightsScratch[j + 1] = _sortableLightsScratch[j];
-                        j = j - 1;
-                    }
-                    _sortableLightsScratch[j + 1] = key;
-                }
-
-                for (let i = 0; i < lightCount; i++) {
-                    const lightInfo = _sortableLightsScratch[i];
-                    const light = lightInfo.light;
-                    const isActive = (i < 32 || lightInfo.distSq < 3600);
-
-                    if (isActive) {
-                        if (light.userData.isCulled) {
-                            // Återställ till sparad styrka
-                            light.intensity = light.userData.baseIntensity !== undefined ? light.userData.baseIntensity : 1;
-                            light.userData.isCulled = false;
-                        }
-                    } else {
-                        if (!light.userData.isCulled) {
-                            // Spara undan aktuell styrka om den förändrats (t.ex av EnvironmentSystem)
-                            if (light.intensity > 0) light.userData.baseIntensity = light.intensity;
-                            light.intensity = 0; // Stäng av via matematik istället för omkompilering
-                            light.userData.isCulled = true;
-                        }
-                    }
-                }
-            }
 
             if (!isCinematic && !isBossIntro) {
                 const currentInput = engine.input.state;
@@ -1578,22 +1639,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
                     _animStateScratch.isWading = state.isWading;
                     _animStateScratch.isSwimming = state.isSwimming;
+
+                    monitor.begin('player_animation');
                     PlayerAnimation.update(playerMeshRef.current, _animStateScratch, now, delta);
+                    monitor.end('player_animation');
                 }
             }
 
-            for (let i = 0; i < activeFamilyMembers.current.length; i++) {
-                const fm = activeFamilyMembers.current[i];
-                if (fm.mesh) {
-                    FamilySystem.update(fm, playerGroupRef.current, state, cinematicRef.current.active, now, delta, { setFoundMemberName, startCinematic }, i);
-                }
-            }
 
             // Environmental systems are now updated centrally by the Engine
+            monitor.begin('footprints');
             FootprintSystem.update(delta);
+            monitor.end('footprints');
 
             if (playerGroupRef.current) {
+                monitor.begin('fx');
                 FXSystem.update(scene, state.particles, state.bloodDecals, delta, frame, now, playerGroupRef.current.position, _fxCallbacks);
+                monitor.end('fx');
             }
 
             // Centraliserad kamerahantering i GameSession:
@@ -1632,7 +1694,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             } else if (isCinematic) {
                 engine.camera.setCinematic(true);
-                CinematicSystem.update(cinematicRef.current, engine.camera as any, playerMeshRef.current, bubbleRef, now, delta, frame, { setCurrentLine, setCinematicActive, endCinematic, playCinematicLine }, activeFamilyMembers.current);
+                // CinematicSystem handles camera + animation in the registered system loop
             } else {
                 // Boss intro etc
                 engine.camera.setCinematic(true);
@@ -1678,7 +1740,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 gameContextRef.current = {
                     scene, enemies: state.enemies, obstacles: state.obstacles, collisionGrid: state.collisionGrid,
                     spawnPart, spawnDecal, spawnFloatingText,
-                    explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, force, _fxCallbacks),
+                    explodeEnemy: (e: Enemy, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, _fxCallbacks, force),
                     addScore: (amt: number) => _gainXpInternal(amt),
                     trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
                         const s = stateRef.current;
@@ -1698,9 +1760,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 session.makeNoise(playerGroupRef.current.position, noiseRadius, 'footstep');
             }
 
+            monitor.begin('projectiles');
             ProjectileSystem.update(delta, now, gameContextRef.current, state.projectiles, state.fireZones);
+            monitor.end('projectiles');
 
+            monitor.begin('triggers');
             TriggerHandler.checkTriggers(playerGroupRef.current.position, state, now, _triggerOptionsScratch);
+            monitor.end('triggers');
 
             for (let i = activeBubbles.current.length - 1; i >= 0; i--) {
                 const b = activeBubbles.current[i];
@@ -1717,7 +1783,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const baseY = window.innerHeight * 0.45;
                 const bubbleHeight = 45;
                 const x = baseX;
-                const y = baseY - (stackIndex * bubbleHeight);
+                const y = baseY - (stackIndex * bubbleHeight + 10);
 
                 b.element.style.left = `${x}px`;
                 b.element.style.top = `${y}px`;
@@ -1738,8 +1804,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 b.element.style.transition = 'top 0.3s ease-out';
             }
 
-            LightingSystem.update(flickeringLights);
-
+            monitor.begin('active_effects');
             if (state.activeEffects) {
                 for (let i = 0; i < state.activeEffects.length; i++) {
                     const obj = state.activeEffects[i];
@@ -1769,6 +1834,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
             }
+            monitor.end('active_effects');
         };
 
         return () => {
@@ -1883,7 +1949,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     onClose={() => {
                         setActiveModal(null);
                         activeModalRef.current = null;
-                        if (containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
+                        if (!props.isMobileDevice && containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
                     }}
                     onSave={(newStats, newLoadout, newLevels) => {
                         stateRef.current.stats = newStats;
@@ -1892,7 +1958,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (props.onUpdateLoadout) props.onUpdateLoadout(newLoadout, newLevels);
                         setActiveModal(null);
                         activeModalRef.current = null;
-                        if (containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
+                        if (!props.isMobileDevice && containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
                         soundManager.playUiConfirm();
                     }}
                     isMobileDevice={props.isMobileDevice}
@@ -1902,6 +1968,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
                     <ScreenPlaygroundEnemyStation
                         onClose={() => setActiveModal(null)}
+                        isMobileDevice={props.isMobileDevice}
                         playerPos={{
                             x: playerGroupRef.current?.position.x || 0,
                             z: playerGroupRef.current?.position.z || 0
@@ -1923,6 +1990,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
                     <ScreenPlaygroundEnvironmentStation
                         onClose={() => setActiveModal(null)}
+                        isMobileDevice={props.isMobileDevice}
                         currentWeather={stateRef.current.weather}
                         onWeatherChange={(w) => {
                             stateRef.current.weather = w;

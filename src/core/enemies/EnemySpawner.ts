@@ -152,7 +152,7 @@ export const EnemySpawner = {
             knockbackVel: new THREE.Vector3(0, 0, 0),
             deathVel: new THREE.Vector3(0, 0, 0),
 
-            deathState: 'alive',
+            deathState: 'ALIVE',
             deathTimer: 0,
             lastHitWasHighImpact: false,
             lastDamageType: '',
@@ -236,7 +236,7 @@ export const EnemySpawner = {
             velocity: new THREE.Vector3(0, 0, 0),
             knockbackVel: new THREE.Vector3(0, 0, 0),
             deathVel: new THREE.Vector3(0, 0, 0),
-            deathState: 'alive',
+            deathState: 'ALIVE',
             lastDamageType: '',
             lastHitWasHighImpact: false,
             deathTimer: 0,

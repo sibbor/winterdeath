@@ -9,9 +9,10 @@ interface ScreenPlaygroundEnemyStationProps {
     onClose: () => void;
     playerPos: { x: number, z: number };
     onSpawnEnemies?: (enemies: any[]) => void;
+    isMobileDevice?: boolean;
 }
 
-export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStationProps> = ({ onClose, playerPos, onSpawnEnemies }) => {
+export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStationProps> = ({ onClose, playerPos, onSpawnEnemies, isMobileDevice }) => {
     const [selectedType, setSelectedType] = useState('WALKER');
     const [count, setCount] = useState(1);
     const [spread, setSpread] = useState(5);
@@ -27,7 +28,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
 
         // Offset center slightly so they don't spawn ON player if 'NEAR'
         if (biome === 'NEAR') {
-            center.z -= 10;
+            center.z -= 20;
         }
 
         EnemyManager.spawnHorde(scene, center, count, false, 0);

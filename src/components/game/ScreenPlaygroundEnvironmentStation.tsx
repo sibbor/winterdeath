@@ -11,9 +11,10 @@ interface ScreenPlaygroundEnvironmentStationProps {
     onWeatherChange: (w: WeatherType) => void;
     currentOverride?: EnvironmentOverride;
     onOverrideChange?: (overrides: EnvironmentOverride) => void;
+    isMobileDevice?: boolean;
 }
 
-export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnvironmentStationProps> = ({ onClose, currentWeather, onWeatherChange, currentOverride, onOverrideChange }) => {
+export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnvironmentStationProps> = ({ onClose, currentWeather, onWeatherChange, currentOverride, onOverrideChange, isMobileDevice }) => {
     // Local state for UI inputs, initialized from props or defaults
     const [bgColor, setBgColor] = useState(currentOverride?.bgColor ? '#' + currentOverride.bgColor.toString(16).padStart(6, '0') : '#000000');
     const [fogColor, setFogColor] = useState(currentOverride?.fogColor ? '#' + currentOverride.fogColor.toString(16).padStart(6, '0') : '#050510');

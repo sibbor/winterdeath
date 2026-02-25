@@ -72,7 +72,7 @@ export class SpatialGrid {
             const e = enemies[i];
 
             // Only index enemies that are actually alive
-            if (e.dead || e.deathState !== 'alive') continue;
+            if (e.dead || e.deathState !== 'ALIVE') continue;
 
             const hitRadius = 1.0 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
 

@@ -168,6 +168,7 @@ export const MATERIALS = {
     bullet: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
     molotov: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
+    flashbang: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     scrap: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
     skin: new THREE.MeshStandardMaterial({ color: 0xffccaa }),
@@ -192,6 +193,9 @@ export const MATERIALS = {
     blood: new THREE.MeshBasicMaterial({ color: 0xaa0000 }),
     gore: new THREE.MeshStandardMaterial({ color: 0x660000, roughness: 0.2 }),
     splash: new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true }),
+    enemy_effect_flame: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),
+    enemy_effect_spark: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
+    enemy_effect_stun: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
 
     // ---- DECALS ----
     bloodDecal: new THREE.MeshBasicMaterial({
@@ -205,7 +209,7 @@ export const MATERIALS = {
         polygonOffsetFactor: -4
     }),
     bloodStainDecal: new THREE.MeshBasicMaterial({
-        color: 0x00ffff,
+        color: 0x440000,
         transparent: true,
         opacity: 0.6,
         side: THREE.DoubleSide,
