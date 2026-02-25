@@ -247,13 +247,7 @@ export class Engine {
         if (this.onUpdate) this.onUpdate(dt);
         monitor.end('logic');
 
-        // 2. Camera Systems Update
-        // Now has access to the final positions from this frame.
-        monitor.begin('camera');
-        this.camera.update(dt, now);
-        monitor.end('camera');
-
-        // 3. Environmental Systems Update
+        // 2. Environmental Systems Update
         monitor.begin('wind');
         this.wind.update(now, dt);
         monitor.end('wind');
@@ -267,7 +261,13 @@ export class Engine {
         this.water.update(dt, now);
         monitor.end('water');
 
-        // 3. Render Pass
+        // 3. Camera Update — runs after all environment systems so thunder/weather
+        // effects applied this frame (shake, FOV changes) are reflected immediately.
+        monitor.begin('camera');
+        this.camera.update(dt, now);
+        monitor.end('camera');
+
+        // 4. Render Pass
         monitor.begin('render');
         if (!this.isRenderingPaused) {
             if (this.onRender) {

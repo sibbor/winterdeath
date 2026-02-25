@@ -12,7 +12,10 @@ export class SpatialGrid {
     private enemyQueryResults: Enemy[] = [];
 
     private seenObstacles = new Set<Obstacle>();
-    private seenEnemyIds = new Set<string>();
+    // Fix 3: Numeric frame counter replaces Set<string> for enemy dedup (no string allocs per query)
+    private _queryFrame: number = 0;
+    // Fix 4: Tracks only populated cells to avoid Map.values() iterator allocation every frame
+    private _touchedCells: Enemy[][] = [];
 
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
@@ -58,11 +61,12 @@ export class SpatialGrid {
     // --- ENEMY MANAGEMENT ---
 
     updateEnemyGrid(enemies: Enemy[]) {
-        // ZERO-GC: Instead of discarding the map and creating new arrays every frame,
-        // we just empty the existing arrays in memory.
-        for (const cell of this.enemyCells.values()) {
-            cell.length = 0;
+        // Fix 4: Clear only cells that were touched last frame, then reset tracking array.
+        // Avoids Map.values() MapIterator allocation that occurred every frame.
+        for (let i = 0; i < this._touchedCells.length; i++) {
+            this._touchedCells[i].length = 0;
         }
+        this._touchedCells.length = 0;
 
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
@@ -70,16 +74,16 @@ export class SpatialGrid {
             // Only index enemies that are actually alive
             if (e.dead || e.deathState !== 'alive') continue;
 
-            // Calculate the enemy's actual radius.
-            // If they stand on the border between two cells, they must be indexed in both!
             const hitRadius = 1.0 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
 
             this.forEachCellInRange(e.mesh.position.x, e.mesh.position.z, hitRadius, (hash) => {
                 let cell = this.enemyCells.get(hash);
                 if (!cell) {
-                    cell = []; // Created only the very first time a cell is visited
+                    cell = [];
                     this.enemyCells.set(hash, cell);
                 }
+                // First insertion into this cell this frame — track it for clearing next frame
+                if (cell.length === 0) this._touchedCells.push(cell);
                 cell.push(e);
             });
         }
@@ -89,18 +93,18 @@ export class SpatialGrid {
      * Optimized Enemy Lookup (Zero-GC)
      */
     getNearbyEnemies(pos: THREE.Vector3, radius: number): Enemy[] {
-        // Reuse the scratchpad
         this.enemyQueryResults.length = 0;
-        this.seenEnemyIds.clear();
+        // Fix 3: Increment frame counter instead of clearing a Set<string>.
+        // Each enemy gets stamped with the current frame number — integer compare, no string allocs.
+        this._queryFrame++;
 
         this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
             const cell = this.enemyCells.get(hash);
             if (cell) {
                 for (let i = 0; i < cell.length; i++) {
                     const e = cell[i];
-                    // Check ID to prevent duplicates if an enemy covers multiple cells
-                    if (!this.seenEnemyIds.has(e.id)) {
-                        this.seenEnemyIds.add(e.id);
+                    if ((e as any)._sqf !== this._queryFrame) {
+                        (e as any)._sqf = this._queryFrame;
                         this.enemyQueryResults.push(e);
                     }
                 }

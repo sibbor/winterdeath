@@ -18,6 +18,7 @@ interface ParticleState {
     type: string;
     isPooled: boolean;
     isInstanced: boolean;
+    isPhysics: boolean; // Fix 2: pre-computed at spawn, replaces per-frame Array.includes()
     landed: boolean;
     inUse: boolean;
     color?: number;
@@ -48,9 +49,17 @@ const UNIQUE_MATERIAL_TYPES = [
     'black_smoke', 'debris_trail', 'stun_star', 'shockwave', 'flash', 'splash'
 ];
 
+// Fix 2: Set for O(1) physics-type lookup at spawn time (replaces Array.includes in update loop)
+const PHYSICS_TYPES = new Set([
+    'chunk', 'debris', 'glass', 'limb', 'blood', 'gore', 'splash'
+]);
+
 export const FXSystem = {
     particleQueue: [] as SpawnRequest[],
     decalQueue: [] as SpawnRequest[],
+    // Fix 1: Head-pointer indices — O(1) dequeue, no array shifting
+    _particleQueueHead: 0,
+    _decalQueueHead: 0,
 
     // Pools
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
@@ -61,6 +70,8 @@ export const FXSystem = {
 
     _instancedMeshes: {} as Record<string, THREE.InstancedMesh>,
     _instancedCounts: {} as Record<string, number>,
+    // Fix 5: Cached key array — replaces for...in on _instancedMeshes every frame
+    _instancedMeshKeys: [] as string[],
     _MAX_INSTANCES: 2000,
 
     // --- POOLING METHODS ---
@@ -129,7 +140,7 @@ export const FXSystem = {
         const p: ParticleState = {
             mesh: null as any, vel: new THREE.Vector3(), rotVel: new THREE.Vector3(),
             life: 0, maxLife: 0, type: '', isPooled: false, isInstanced: false,
-            landed: false, inUse: true, _poolIdx: FXSystem.PARTICLE_STATE_POOL.length
+            isPhysics: false, landed: false, inUse: true, _poolIdx: FXSystem.PARTICLE_STATE_POOL.length
         };
         FXSystem.PARTICLE_STATE_POOL.push(p);
         return p;
@@ -183,6 +194,7 @@ export const FXSystem = {
         p.landed = false;
         p.isPooled = !req.customMesh;
         p.isInstanced = isInstanced;
+        p.isPhysics = PHYSICS_TYPES.has(t); // Fix 2: stamp once, read in hot loop
         p.color = req.color;
         if (p.color === undefined && isInstanced) {
             const st = t as string;
@@ -203,7 +215,7 @@ export const FXSystem = {
             let mat: THREE.Material = MATERIALS.blood;
 
             if (t === 'gore' || t === 'limb' || t === 'chunk') geo = GEOMETRY.gore;
-            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'] || (MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false }));
+            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke']; // Fix 7: pre-initialized in preload()
             else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame') { geo = GEOMETRY.flame; mat = MATERIALS.fire; }
             else if (t === 'spark' || t === 'smoke' || t === 'campfire_spark' || t === 'campfire_smoke') mat = MATERIALS.bullet;
             else if (t === 'debris' || t === 'debris_trail') mat = MATERIALS.stone;
@@ -261,6 +273,11 @@ export const FXSystem = {
     // --- INTERFACE ---
 
     preload: (scene: THREE.Scene) => {
+        // Fix 7: pre-init black_smoke material here, not lazily inside the hot spawn path
+        if (!MATERIALS['_blackSmoke']) {
+            MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
+        }
+
         const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'stun_star', 'chunk', 'gore', 'limb', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
@@ -339,22 +356,31 @@ export const FXSystem = {
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
 
-        // 1. Process Queues (Budgeted)
-        // Increased from 30 to 250 to prevent Molotovs and highly active scenes from delaying particles by multiple seconds.
-        const pLimit = Math.min(FXSystem.particleQueue.length, 250);
-        for (let i = 0; i < pLimit; i++) {
-            const req = FXSystem.particleQueue.shift()!;
+        // 1. Process Queues (Budgeted) — Fix 1: head-pointer instead of O(n) shift()
+        const pEnd = Math.min(FXSystem._particleQueueHead + 250, FXSystem.particleQueue.length);
+        for (let i = FXSystem._particleQueueHead; i < pEnd; i++) {
+            const req = FXSystem.particleQueue[i];
             if (!req.scene) req.scene = scene;
             if (!req.particlesList) req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
             REQUEST_POOL.push(req);
         }
+        FXSystem._particleQueueHead = pEnd;
+        if (FXSystem._particleQueueHead >= FXSystem.particleQueue.length) {
+            FXSystem.particleQueue.length = 0;
+            FXSystem._particleQueueHead = 0;
+        }
 
-        const dLimit = Math.min(FXSystem.decalQueue.length, 10);
-        for (let i = 0; i < dLimit; i++) {
-            const req = FXSystem.decalQueue.shift()!;
+        const dEnd = Math.min(FXSystem._decalQueueHead + 10, FXSystem.decalQueue.length);
+        for (let i = FXSystem._decalQueueHead; i < dEnd; i++) {
+            const req = FXSystem.decalQueue[i];
             FXSystem._spawnDecalImmediate(req);
             DECAL_REQUEST_POOL.push(req);
+        }
+        FXSystem._decalQueueHead = dEnd;
+        if (FXSystem._decalQueueHead >= FXSystem.decalQueue.length) {
+            FXSystem.decalQueue.length = 0;
+            FXSystem._decalQueueHead = 0;
         }
 
         // --- [VINTERDÖD] Animerade dekaler ---
@@ -382,7 +408,8 @@ export const FXSystem = {
 
             if (!p.landed) {
                 p.mesh.position.addScaledVector(p.vel, safeDelta);
-                if (['chunk', 'debris', 'glass', 'limb', 'blood', 'gore', 'splash'].includes(p.type)) {
+                // Fix 2: p.isPhysics stamped once at spawn — no Array.includes() per frame
+                if (p.isPhysics) {
                     p.vel.y -= 25 * safeDelta;
                     if (p.type !== 'blood' && p.type !== 'splash') {
                         p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
@@ -431,8 +458,9 @@ export const FXSystem = {
             t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
         }
 
-        // 4. Finalize Instanced Batches
-        for (const type in FXSystem._instancedMeshes) {
+        // 4. Finalize Instanced Batches — Fix 5: index loop over cached key array, no for...in
+        for (let k = 0; k < FXSystem._instancedMeshKeys.length; k++) {
+            const type = FXSystem._instancedMeshKeys[k];
             const imesh = FXSystem._instancedMeshes[type];
             imesh.count = FXSystem._instancedCounts[type];
             imesh.instanceMatrix.needsUpdate = true;
@@ -503,12 +531,13 @@ export const FXSystem = {
             }
 
             const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
-            imesh.frustumCulled = false; // [VINTERDÖD] Must be false to prevent shader compilation stutter when camera moves
+            imesh.frustumCulled = false; // Must be false to prevent shader compilation stutter when camera moves
             scene.add(imesh);
             FXSystem._instancedMeshes[type] = imesh;
             FXSystem._instancedCounts[type] = 0;
+            FXSystem._instancedMeshKeys.push(type); // Fix 5: track key for fast finalize loop
         } else if (FXSystem._instancedMeshes[type].parent !== scene) {
-            // [VINTERDÖD] Re-attach if we changed scenes
+            // Re-attach if we changed scenes
             scene.add(FXSystem._instancedMeshes[type]);
         }
         return FXSystem._instancedMeshes[type];

@@ -24,6 +24,10 @@ export class WeatherSystem {
     // [VINTERDÖD] Cached physics multiplier to avoid string checks in hot loop
     private swayMult: number = 0.0;
 
+    // Fix 6: Pre-generated random LUT — avoids Math.random() inside the 2000-particle hot loop
+    private _randLUT: Float32Array = new Float32Array(512);
+    private _randIdx: number = 0;
+
     constructor(scene: THREE.Scene, wind: WindSystem, maxCount: number = 2000) {
         this.scene = scene;
         this.wind = wind;
@@ -139,6 +143,10 @@ export class WeatherSystem {
             matrixArray[matIdx + 15] = 1;
         }
         this.instancedMesh.instanceMatrix.needsUpdate = true;
+
+        // Fix 6: Refill random LUT on weather change so wrapping uses fresh values immediately
+        for (let i = 0; i < this._randLUT.length; i++) this._randLUT[i] = Math.random();
+        this._randIdx = 0;
     }
 
     /**
@@ -168,15 +176,19 @@ export class WeatherSystem {
             let y = pos[i3 + 1] + vel[i3 + 1] * dt;
             let z = pos[i3 + 2] + (vel[i3 + 2] + wy) * dt;
 
-            // [VINTERDÖD] Bidirectional Wrap: Teleport particles to opposite side
+            // Fix 6: Wrap uses LUT instead of Math.random() — two reads advance the ring index
             if (y < 0.0) {
                 y = yTop;
-                x = (Math.random() * areaSize) - areaHalf;
-                z = (Math.random() * areaSize) - areaHalf;
+                const r0 = this._randLUT[this._randIdx++ & 511];
+                const r1 = this._randLUT[this._randIdx++ & 511];
+                x = r0 * areaSize - areaHalf;
+                z = r1 * areaSize - areaHalf;
             } else if (y > yTop) {
                 y = 0.0;
-                x = (Math.random() * areaSize) - areaHalf;
-                z = (Math.random() * areaSize) - areaHalf;
+                const r0 = this._randLUT[this._randIdx++ & 511];
+                const r1 = this._randLUT[this._randIdx++ & 511];
+                x = r0 * areaSize - areaHalf;
+                z = r1 * areaSize - areaHalf;
             }
 
             pos[i3 + 0] = x;
@@ -196,7 +208,6 @@ export class WeatherSystem {
     public clear() {
         if (this.instancedMesh) {
             this.scene.remove(this.instancedMesh);
-            // Materials are shared in MATERIALS, so we don't dispose them here
             this.instancedMesh.dispose();
             this.instancedMesh = null;
         }
