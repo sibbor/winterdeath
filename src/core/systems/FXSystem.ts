@@ -18,7 +18,7 @@ interface ParticleState {
     type: string;
     isPooled: boolean;
     isInstanced: boolean;
-    isPhysics: boolean; // Fix 2: pre-computed at spawn, replaces per-frame Array.includes()
+    isPhysics: boolean;
     landed: boolean;
     inUse: boolean;
     color?: number;
@@ -45,11 +45,9 @@ const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
 const UNIQUE_MATERIAL_TYPES = [
-    'fire', 'flame', 'large_fire', 'large_smoke',
-    'black_smoke', 'debris_trail', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'shockwave', 'flash', 'splash'
+    'black_smoke', 'debris_trail', 'shockwave', 'flash', 'splash'
 ];
 
-// Fix 2: Set for O(1) physics-type lookup at spawn time (replaces Array.includes in update loop)
 const PHYSICS_TYPES = new Set([
     'debris', 'glass', 'blood', 'gore', 'splash'
 ]);
@@ -57,7 +55,6 @@ const PHYSICS_TYPES = new Set([
 export const FXSystem = {
     particleQueue: [] as SpawnRequest[],
     decalQueue: [] as SpawnRequest[],
-    // Fix 1: Head-pointer indices — O(1) dequeue, no array shifting
     _particleQueueHead: 0,
     _decalQueueHead: 0,
 
@@ -70,7 +67,6 @@ export const FXSystem = {
 
     _instancedMeshes: {} as Record<string, THREE.InstancedMesh>,
     _instancedCounts: {} as Record<string, number>,
-    // Fix 5: Cached key array — replaces for...in on _instancedMeshes every frame
     _instancedMeshKeys: [] as string[],
     _MAX_INSTANCES: 2000,
 
@@ -163,8 +159,7 @@ export const FXSystem = {
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
 
-        // [VINTERDÖD] Sätt upp animationen!
-        // Lagra det tänkta målet, men börja på skala noll.
+        // Store intended scale but start at zero for animation
         d.userData.targetScale = req.scale || 1.0;
 
         if (req.type === 'splatter') {
@@ -184,7 +179,7 @@ export const FXSystem = {
         const t = req.type;
         const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
             t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' || t === 'large_smoke' ||
-            t === 'debris_trail' || t === 'glass' || t === 'enemy_effect_stun' ||
+            t === 'glass' || t === 'enemy_effect_stun' ||
             t === 'enemy_effect_flame' || t === 'enemy_effect_spark' ||
             t === 'gore' || t === 'splash' ||
             t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke';
@@ -195,8 +190,9 @@ export const FXSystem = {
         p.landed = false;
         p.isPooled = !req.customMesh;
         p.isInstanced = isInstanced;
-        p.isPhysics = PHYSICS_TYPES.has(t); // Fix 2: stamp once, read in hot loop
+        p.isPhysics = PHYSICS_TYPES.has(t);
         p.color = req.color;
+
         if (p.color === undefined && isInstanced) {
             const st = t as string;
             if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame') p.color = 0xff7700;
@@ -216,7 +212,7 @@ export const FXSystem = {
             let mat: THREE.Material = MATERIALS.blood;
 
             if (t === 'gore') geo = GEOMETRY.gore;
-            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke']; // Fix 7: pre-initialized in preload()
+            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'];
             else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame' || t === 'enemy_effect_flame') {
                 geo = GEOMETRY.flame;
                 mat = (t === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
@@ -224,7 +220,7 @@ export const FXSystem = {
             else if (t === 'spark' || t === 'smoke' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'enemy_effect_spark') {
                 mat = (t === 'enemy_effect_spark') ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
             }
-            else if (t === 'debris' || t === 'debris_trail') mat = MATERIALS.stone;
+            else if (t === 'debris') mat = MATERIALS.stone;
             else if (t === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (t === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
             else if (t === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
@@ -244,7 +240,7 @@ export const FXSystem = {
         const s = req.scale || 1.0;
         if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
         else if (t === 'large_smoke') p.mesh.scale.setScalar(4.0 * Math.random() * s);
-        else if (t === 'flame' || t === 'smoke' || t === 'enemy_effect_flame') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
+        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
         else if (t === 'spark' || t === 'enemy_effect_spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
         else if (t === 'splash') p.mesh.scale.setScalar((0.5 + Math.random() * 0.7) * s);
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
@@ -252,7 +248,7 @@ export const FXSystem = {
         if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
         else {
             const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
-            const isFireFX = (t === 'flame' || t === 'spark' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark');
+            const isFireFX = (t === 'flame' || t === 'fire' || t === 'spark' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark');
             const isLargeFX = (t === 'large_fire' || t === 'large_smoke');
             const vyScale = isLargeFX ? 3.0 : (isFireFX ? 1.8 : 0.8);
             const hzScale = isLargeFX ? 2.0 : (isFireFX ? 1.2 : 1.0);
@@ -267,7 +263,7 @@ export const FXSystem = {
         let baseLife = 30;
         if (t === 'blood') baseLife = 120;
         else if (t === 'debris') baseLife = 200;
-        else if (t === 'large_fire' || t === 'large_smoke' || t === 'flame' || t === 'smoke' || t === 'spark') baseLife = 60;
+        else if (t === 'large_fire' || t === 'large_smoke' || t === 'flame' || t === 'fire' || t === 'smoke' || t === 'spark' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') baseLife = 60;
 
         p.life = baseLife + Math.random() * 20;
         p.maxLife = p.life;
@@ -279,12 +275,11 @@ export const FXSystem = {
     // --- INTERFACE ---
 
     preload: (scene: THREE.Scene) => {
-        // Fix 7: pre-init black_smoke material here, not lazily inside the hot spawn path
         if (!MATERIALS['_blackSmoke']) {
             MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
         }
 
-        const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'debris_trail', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
+        const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
             if (imesh.parent !== scene) scene.add(imesh);
@@ -334,23 +329,23 @@ export const FXSystem = {
             FXSystem._textPool.push(pooled);
         }
 
-        // Rensa och rita ny text på befintlig canvas
+        // Clear and draw new text on existing canvas
         pooled.ctx.clearRect(0, 0, 256, 64);
         pooled.ctx.font = 'bold 64px Arial';
         pooled.ctx.fillStyle = 'white';
         pooled.ctx.textAlign = 'center';
         pooled.ctx.textBaseline = 'middle';
 
-        // Tjock svart kontur (Shadow) så den syns mot snön!
+        // Thick black stroke for visibility against snow
         pooled.ctx.strokeStyle = 'black';
         pooled.ctx.lineWidth = 5;
         pooled.ctx.strokeText(text, 128, 32);
         pooled.ctx.fillText(text, 128, 32);
 
-        pooled.texture.needsUpdate = true; // Säger till WebGL att läsa in canvasen igen
+        pooled.texture.needsUpdate = true; // Flag texture for WebGL update
 
         pooled.mesh.position.set(x, y + 1.5, z);
-        pooled.mesh.material.color.set(color); // Färgar den vita texten
+        pooled.mesh.material.color.set(color); // Tint the white text
         pooled.mesh.material.opacity = 1.0;
         pooled.mesh.visible = true;
         pooled.life = 1.5;
@@ -362,7 +357,7 @@ export const FXSystem = {
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
 
-        // 1. Process Queues (Budgeted) — Fix 1: head-pointer instead of O(n) shift()
+        // 1. Process Queues (Budgeted)
         const pEnd = Math.min(FXSystem._particleQueueHead + 250, FXSystem.particleQueue.length);
         for (let i = FXSystem._particleQueueHead; i < pEnd; i++) {
             const req = FXSystem.particleQueue[i];
@@ -389,12 +384,10 @@ export const FXSystem = {
             FXSystem._decalQueueHead = 0;
         }
 
-        // --- [VINTERDÖD] Animerade dekaler ---
-        // Får blodet att "hälla ut" över marken istället för att poppa in direkt.
+        // Animate decals (blood pouring/spreading effect)
         for (let i = 0; i < decalList.length; i++) {
             const d = decalList[i] as any;
             if (d.userData.targetScale && d.scale.x < d.userData.targetScale) {
-                // Skalan växer fram över ca en tredjedels sekund
                 const growthStep = d.userData.targetScale * 3.0 * safeDelta;
                 const newScale = Math.min(d.userData.targetScale, d.scale.x + growthStep);
                 d.scale.setScalar(newScale);
@@ -414,7 +407,6 @@ export const FXSystem = {
 
             if (!p.landed) {
                 p.mesh.position.addScaledVector(p.vel, safeDelta);
-                // Fix 2: p.isPhysics stamped once at spawn — no Array.includes() per frame
                 if (p.isPhysics) {
                     p.vel.y -= 25 * safeDelta;
                     if (p.type !== 'blood' && p.type !== 'splash') {
@@ -464,7 +456,7 @@ export const FXSystem = {
             t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
         }
 
-        // 4. Finalize Instanced Batches — Fix 5: index loop over cached key array, no for...in
+        // 4. Finalize Instanced Batches 
         for (let k = 0; k < FXSystem._instancedMeshKeys.length; k++) {
             const type = FXSystem._instancedMeshKeys[k];
             const imesh = FXSystem._instancedMeshes[type];
@@ -527,7 +519,7 @@ export const FXSystem = {
             else if (type === 'spark' || type === 'smoke' || type === 'campfire_spark' || type === 'campfire_smoke' || type === 'enemy_effect_spark') {
                 mat = (type === 'enemy_effect_spark') ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
             }
-            else if (type === 'debris' || type === 'debris_trail') mat = MATERIALS.stone;
+            else if (type === 'debris') mat = MATERIALS.stone;
             else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
             else if (type === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
@@ -540,13 +532,12 @@ export const FXSystem = {
             }
 
             const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
-            imesh.frustumCulled = false; // Must be false to prevent shader compilation stutter when camera moves
+            imesh.frustumCulled = false;
             scene.add(imesh);
             FXSystem._instancedMeshes[type] = imesh;
             FXSystem._instancedCounts[type] = 0;
-            FXSystem._instancedMeshKeys.push(type); // Fix 5: track key for fast finalize loop
+            FXSystem._instancedMeshKeys.push(type);
         } else if (FXSystem._instancedMeshes[type].parent !== scene) {
-            // Re-attach if we changed scenes
             scene.add(FXSystem._instancedMeshes[type]);
         }
         return FXSystem._instancedMeshes[type];

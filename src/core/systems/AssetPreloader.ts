@@ -264,9 +264,6 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash));
                 addToWarmup(new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog));
                 addToWarmup(new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius));
-                addToWarmup(new THREE.Mesh(GEOMETRY.familyRing, MATERIALS.familyRing));
-                addToWarmup(new THREE.Mesh(GEOMETRY.familyArrow, MATERIALS.familyArrow));
-                addToWarmup(new THREE.Mesh(GEOMETRY.trackerArrow, MATERIALS.trackerArrow));
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard));
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestBig));
                 addToWarmup(new THREE.Mesh(GEOMETRY.rail, MATERIALS.steel));
@@ -390,11 +387,31 @@ export const AssetPreloader = {
             // FX Particle Instancing — all sectors need fire/smoke/blood shaders pre-compiled
             // Not needed for Camp — no combat effects in hub
             if (isSector || target === 'CORE') {
-                const fxTypes = ['blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore'];
+                const fxTypes = [
+                    'blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke',
+                    'debris', 'glass', 'flash', 'splash',
+                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore'
+                ];
                 for (let i = 0; i < fxTypes.length; i++) {
                     const fxMesh = FXSystem._getInstancedMesh(scene, fxTypes[i]);
                     addToWarmup(fxMesh);
                 }
+
+                // Bullet mesh — individual THREE.Mesh (not instanced), fired every shot.
+                // Uses SphereGeometry + MeshBasicMaterial, must be compiled before first shot.
+                addToWarmup(new THREE.Mesh(GEOMETRY.bullet, MATERIALS.bullet));
+
+                // Throwable meshes — MeshStandardMaterial triggers GPU shader compilation on first use.
+                addToWarmup(new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov));
+                addToWarmup(new THREE.Mesh(GEOMETRY.flashbang, MATERIALS.flashbang));
+                addToWarmup(new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade));
+
+                // CorpseRenderer — clones MATERIALS.zombie into a unique MeshStandardMaterial.
+                // The cloned material has the same shader permutation but needs its shadow map variant compiled.
+                const corpseMatWarmup = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
+                corpseMatWarmup.color.setHex(0xffffff);
+                addToWarmup(new THREE.InstancedMesh(GEOMETRY.zombie, corpseMatWarmup, 1));
+                ownedMaterials.push(corpseMatWarmup);
             }
 
             if (yieldToMain) await yieldToMain();

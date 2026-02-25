@@ -104,12 +104,6 @@ export const MATERIALS = {
         flatShading: true,
         side: THREE.DoubleSide
     })),
-    treeLeaves: patchWindMaterial(new THREE.MeshStandardMaterial({
-        color: 0x8DA331, // Yellowish-Green for Birch
-        roughness: 0.9,
-        flatShading: true,
-        side: THREE.DoubleSide
-    })),
     treeTrunk: patchWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x4a3c31, // Flat dark brown
         roughness: 1.0,
@@ -134,16 +128,6 @@ export const MATERIALS = {
         flatShading: true
     })),
 
-    treeStumpTop: new THREE.MeshStandardMaterial({
-        color: 0xbc8f8f,
-        map: DIFFUSE.treeRings,
-        roughness: 0.8
-    }),
-    waterSplash: new THREE.MeshBasicMaterial({
-        color: 0x77bbcc, // Shallow water color
-        transparent: true,
-        opacity: 0.8
-    }),
     stone: new THREE.MeshStandardMaterial({
         color: 0x888888,
         map: DIFFUSE.stone,
@@ -171,16 +155,10 @@ export const MATERIALS = {
     flashbang: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     scrap: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
-    skin: new THREE.MeshStandardMaterial({ color: 0xffccaa }),
-    family: new THREE.MeshStandardMaterial({ color: 0x00aaff, roughness: 0.5 }),
-    familyRing: new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
-    familyArrow: new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.8, depthWrite: false }),
-    trackerArrow: new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
     chestStandard: new THREE.MeshStandardMaterial({ color: 0x5c4033 }),
     chestBig: new THREE.MeshStandardMaterial({ color: 0xffd700 }),
     gun: new THREE.MeshStandardMaterial({ color: 0x222222 }),
 
-    aimCross: new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
     aimReticle: new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),
     landingMarker: new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
     fire: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),

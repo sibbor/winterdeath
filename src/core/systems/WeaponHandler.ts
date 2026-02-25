@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../content/weapons';
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
 import { soundManager } from '../../utils/sound';
-// import { haptic } from '../../utils/HapticManager'; // Keep commented out as in original
+import { haptic } from '../../utils/HapticManager'; // Keep commented out as in original
 import { Engine } from '../engine/Engine';
 import { _buoyancyResult } from './WaterSystem';
 
@@ -62,7 +62,7 @@ export const WeaponHandler = {
             state.reloadEndTime = 0;
             state.throwChargeStart = 0;
             soundManager.playWeaponSwap();
-            //haptic.weaponSwap();
+            haptic.weaponSwap();
         }
     },
 
@@ -104,7 +104,7 @@ export const WeaponHandler = {
                     state.reloadEndTime = 0;
                     state.throwChargeStart = 0;
                     soundManager.playWeaponSwap();
-                    //haptic.weaponSwap();
+                    haptic.weaponSwap();
                 }
             }
             input.scrollDown = input.scrollUp = false;
@@ -122,7 +122,7 @@ export const WeaponHandler = {
             state.isReloading = true;
             state.reloadEndTime = now + wep.reloadTime;
             soundManager.playMagOut();
-            //haptic.reload();
+            haptic.reload();
         }
 
         if (state.isReloading && now > state.reloadEndTime) {
@@ -250,7 +250,7 @@ export const WeaponHandler = {
                     }
 
                     soundManager.playShot(wep.name);
-                    //haptic.gunshot();
+                    haptic.gunshot();
 
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
                     const spread = wep.name === WeaponType.SHOTGUN ? 0.15 : 0;

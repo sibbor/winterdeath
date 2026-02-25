@@ -782,7 +782,6 @@ export const WeaponSounds = {
         else if (weaponId === 'Arc-Cannon') key = 'shot_arc_cannon';
         else if (weaponId === 'Flamethrower') key = 'shot_flamethrower';
 
-
         // Random pitch map
         const pitch = 0.95 + Math.random() * 0.1;
         SoundBank.play(core, key, 1.0, pitch, false, true);
@@ -790,7 +789,7 @@ export const WeaponSounds = {
     playThrowable: (core: SoundCore, weaponId: string) => {
         let key = 'pin_pull';
         if (weaponId === 'Molotov') key = 'ignite';
-        else if (weaponId === 'Grenade' || weaponId === 'Flashbang') key = 'pin_pull'; // Assuming Grenade/Flashbang also use pin_pull for now
+        //else if (weaponId === 'Grenade' || weaponId === 'Flashbang') key = 'pin_pull'; // Assuming Grenade/Flashbang also use pin_pull for now
 
         const pitch = 0.95 + Math.random() * 0.1;
         SoundBank.play(core, key, 0.4, pitch, false, true);
