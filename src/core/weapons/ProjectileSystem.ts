@@ -98,8 +98,24 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             soundManager.playExplosion();
             haptic.explosion();
 
-            // ZERO-GC WARNING: pos.clone() allocates memory. Consider pooling noiseEvents in the future!
-            if (ctx.noiseEvents) ctx.noiseEvents.push({ pos: pos.clone(), radius: 80, time: ctx.now, active: true });
+            // Zero-GC pool implementation for noiseEvents
+            if (ctx.noiseEvents) {
+                let foundEvent = false;
+                for (let i = 0; i < ctx.noiseEvents.length; i++) {
+                    const evt = ctx.noiseEvents[i];
+                    if (!evt.active) {
+                        evt.pos.copy(pos);
+                        evt.radius = 80;
+                        evt.time = ctx.now;
+                        evt.active = true;
+                        foundEvent = true;
+                        break;
+                    }
+                }
+                if (!foundEvent) {
+                    ctx.noiseEvents.push({ pos: pos.clone(), radius: 80, time: ctx.now, active: true });
+                }
+            }
 
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius + 3.0);
             for (let i = 0; i < nearby.length; i++) {
@@ -179,11 +195,13 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = fz.radiusSq;
-            for (const e of direct) {
+            for (let i = 0; i < direct.length; i++) {
+                const e = direct[i];
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
                     e.lastDamageType = WeaponType.MOLOTOV;
                     e.isBurning = true;
                     e.afterburnTimer = 5.0;
+                    e.burnTimer = 0.5;
                 }
             }
         }
@@ -196,7 +214,8 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = radius * radius;
-            for (const e of nearby) {
+            for (let i = 0; i < nearby.length; i++) {
+                const e = nearby[i];
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
                     e.isBlinded = true;
                     e.blindTimer = 4.0;
@@ -509,7 +528,7 @@ export const ProjectileSystem = {
                 const normalizedDist = r / fz.radius; // 0 = center, 1 = edge
                 const flameScale = 2.5 - normalizedDist * 1.8; // center: ~2.5x, edge: ~0.7x
                 const flameY = 0.3 + (1.0 - normalizedDist) * 1.2; // center flames start higher
-                ctx.spawnPart(fx, flameY, fz2, 'flame', 1, undefined, undefined, undefined, flameScale);
+                ctx.spawnPart(fx, flameY, fz2, 'fire', 1, undefined, undefined, undefined, flameScale);
             }
 
             if (fz.life <= 0) {
@@ -521,12 +540,14 @@ export const ProjectileSystem = {
     },
 
     clear: (scene: THREE.Scene, projectiles: Projectile[], fireZones: FireZone[]) => {
-        for (const p of projectiles) {
+        for (let i = 0; i < projectiles.length; i++) {
+            const p = projectiles[i];
             if (p.mesh.parent) scene.remove(p.mesh);
             if (p.marker && p.marker.parent) scene.remove(p.marker);
             p.active = false;
         }
-        for (const f of fireZones) {
+        for (let i = 0; i < fireZones.length; i++) {
+            const f = fireZones[i];
             if (f.mesh.parent) scene.remove(f.mesh);
             f.life = 0;
         }
@@ -546,7 +567,8 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     if (!data) return;
 
     const nearbyObs = ctx.collisionGrid.getNearbyObstacles(projectile.mesh.position, 2.0);
-    for (const obs of nearbyObs) {
+    for (let i = 0; i < nearbyObs.length; i++) {
+        const obs = nearbyObs[i];
         const obsPos = obs.position;
         const rad = obs.radius || 2;
         if (projectile.mesh.position.distanceToSquared(obsPos) < rad * rad) {
@@ -568,7 +590,8 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             nearbyEnemies.sort((a, b) => _v3.distanceToSquared(a.mesh.position) - _v3.distanceToSquared(b.mesh.position));
         }
 
-        for (const enemy of nearbyEnemies) {
+        for (let i = 0; i < nearbyEnemies.length; i++) {
+            const enemy = nearbyEnemies[i];
             if (enemy.deathState !== 'ALIVE' || projectile.hitEntities.has(enemy.id)) continue;
 
             const enemyXZ = _v1.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
@@ -603,7 +626,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
                 const force = (projectile.damage / 3) / Math.max(0.3, mass);
 
-                // [VINTERDÖD] Capture death velocity for high-impact kills
+                // Capture death velocity for high-impact kills
                 if (isKill && isHighImpact) {
                     enemy.deathVel.copy(projectile.vel).normalize().multiplyScalar(force * 2.0).setY(4.0);
                 }
