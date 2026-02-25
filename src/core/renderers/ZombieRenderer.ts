@@ -100,15 +100,11 @@ export class ZombieRenderer {
             this._dummy.matrix.compose(this._dummy.position, this._dummy.quaternion, this._dummy.scale);
             instMesh.setMatrixAt(idx, this._dummy.matrix);
 
-            // [VINTERDÖD] Handle special color overrides (Bosses/Damaged) & Buffer Bleed Fix
-            if (e.isBoss || e.color !== undefined) {
-                this._tempColor.set(e.color || 0xffffff);
-                instMesh.setColorAt(idx, this._tempColor);
-            } else if (instMesh.instanceColor) {
-                // Skriv över med vit färg (0xffffff) för att nollställa till materialets grundfärg
-                this._tempColor.setHex(0xffffff);
-                instMesh.setColorAt(idx, this._tempColor);
-            }
+            // Always write an explicit color to prevent buffer bleed between frames.
+            // instanceColor slots not written this frame retain data from the previous occupant.
+            // Normal enemies use 0xffffff so they multiply through to the material base color.
+            this._tempColor.setHex(e.isBoss || e.color !== undefined ? (e.color || 0xffffff) : 0xffffff);
+            instMesh.setColorAt(idx, this._tempColor);
 
             instMesh.count++;
         }
