@@ -17,7 +17,9 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3(); // Used for burst scale calculation
 const _up = new THREE.Vector3(0, 5, 0);
 const _white = new THREE.Color(0xffffff);
+const _ashColor = new THREE.Color(0x111111);
 const _color = new THREE.Color();
+const _baseColor = new THREE.Color();
 const _syncList: Enemy[] = [];
 const enemyPool: Enemy[] = [];
 
@@ -219,6 +221,7 @@ export const EnemyManager = {
         if (type === 'BURNED') {
             const ash = e.ashPile;
             if (!ash) {
+                e.mesh.userData.ashSpawned = true;
                 const scene = e.mesh.parent as THREE.Scene;
                 if (scene) {
                     const newAsh = EnemyManager.createAshPile(e);
@@ -229,13 +232,20 @@ export const EnemyManager = {
             }
 
             const progress = Math.min(1.0, age / 1500);
-            e.mesh.scale.setScalar((e.originalScale || 1.0) * (1.0 - progress));
 
-            _color.set(0.2, 0.2, 0.2).lerp(_white, progress);
+            // Scale: independently shrink Y (height) and preserve X/Z aspect until the end
+            const s = e.originalScale || 1.0;
+            const w = e.widthScale || 1.0;
+            const shrink = 1.0 - progress;
+            e.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
+
+            // Color: enemy color -> ash gray/black. Use originalColor if stored, else dark default.
+            _baseColor.setHex(e.color || 0x888888);
+            _baseColor.lerp(_ashColor, progress);
             const colorMats = e.mesh.userData.colorMats;
             if (colorMats) {
                 for (let i = 0; i < colorMats.length; i++) {
-                    (colorMats[i] as any).color.copy(_color);
+                    (colorMats[i] as any).color.copy(_baseColor);
                 }
             }
 
@@ -243,12 +253,15 @@ export const EnemyManager = {
                 const scene = e.mesh.parent as THREE.Scene;
                 if (ash && scene) {
                     const permanentAsh = ash.clone();
-                    permanentAsh.applyMatrix4(e.mesh.matrixWorld);
                     permanentAsh.quaternion.set(0, 0, 0, 1);
                     permanentAsh.position.copy(e.mesh.position);
                     permanentAsh.position.y = 0.05;
-                    const massScale = (e.originalScale || 1.0) * (e.widthScale || 1.0);
-                    permanentAsh.scale.setScalar(massScale);
+                    // Scale ash pile proportionally to the enemy's mass
+                    permanentAsh.scale.set(
+                        (1 + Math.random() * 0.3) * s * w,
+                        s,
+                        (1 + Math.random() * 0.3) * s * w
+                    );
                     scene.add(permanentAsh);
                 }
                 if (scene) scene.remove(e.mesh);
