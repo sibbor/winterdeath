@@ -192,7 +192,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1, undefined, undefined, undefined, 8.0);
             soundManager.playExplosion();
-            //haptic.explosion();
+            haptic.explosion();
 
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = radius * radius;
@@ -209,7 +209,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 };
 
 // --- SYSTEM ---
-
 export const ProjectileSystem = {
     _getProjectile: (): Projectile => {
         for (let i = 0; i < PROJECTILE_POOL.length; i++) {
@@ -278,11 +277,19 @@ export const ProjectileSystem = {
         const p = ProjectileSystem._getProjectile();
         p.type = 'throwable';
         p.weapon = weapon;
-
-        p.mesh.geometry = GEOMETRY.grenade;
-        p.mesh.material = weapon === WeaponType.MOLOTOV ? MATERIALS.molotov : MATERIALS.grenade;
         p.mesh.position.copy(origin);
         p.mesh.rotation.set(0, 0, 0);
+
+        if (weapon == WeaponType.MOLOTOV) {
+            p.mesh.geometry = GEOMETRY.molotov;
+            p.mesh.material = MATERIALS.molotov;
+        } else if (weapon == WeaponType.FLASHBANG) {
+            p.mesh.geometry = GEOMETRY.flashbang;
+            p.mesh.material = MATERIALS.flashbang
+        } else {
+            p.mesh.geometry = GEOMETRY.grenade;
+            p.mesh.material = MATERIALS.grenade;
+        }
 
         if (p.mesh.parent !== scene) scene.add(p.mesh);
 
@@ -328,7 +335,8 @@ export const ProjectileSystem = {
             const rangeSq = range * range;
 
             const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
-            for (const e of enemies) {
+            for (let _fi = 0; _fi < enemies.length; _fi++) {
+                const e = enemies[_fi];
                 if (e.deathState !== 'ALIVE') continue;
 
                 _v1.subVectors(e.mesh.position, origin);
@@ -369,7 +377,8 @@ export const ProjectileSystem = {
             let minDist = Infinity;
             const aimThreshold = 0.95;
 
-            for (const e of enemies) {
+            for (let _fi = 0; _fi < enemies.length; _fi++) {
+                const e = enemies[_fi];
                 if (e.deathState !== 'ALIVE') continue;
 
                 _v1.subVectors(e.mesh.position, origin);
@@ -405,7 +414,8 @@ export const ProjectileSystem = {
                     let next = null;
                     let nextDist = Infinity;
 
-                    for (const p of potential) {
+                    for (let _pi = 0; _pi < potential.length; _pi++) {
+                        const p = potential[_pi];
                         if (p.deathState !== 'ALIVE' || _arcCannonHitIds.has(p.id)) continue;
                         const d = p.mesh.position.distanceToSquared(curr.mesh.position);
                         if (d < nextDist) {
@@ -475,7 +485,8 @@ export const ProjectileSystem = {
                 fz._lastDamageTime = now;
                 const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
                 const rSq = fz.radiusSq;
-                for (const e of nearby) {
+                for (let _ni = 0; _ni < nearby.length; _ni++) {
+                    const e = nearby[_ni];
                     if (e.deathState !== 'ALIVE') continue;
                     if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
                         e.lastDamageType = WeaponType.MOLOTOV;
@@ -488,11 +499,17 @@ export const ProjectileSystem = {
                 }
             }
 
-            const flameCount = 4;
+            const flameCount = 6;
             for (let j = 0; j < flameCount; j++) {
                 const r = Math.sqrt(Math.random()) * fz.radius;
                 const theta = Math.random() * Math.PI * 2;
-                ctx.spawnPart(fz.mesh.position.x + r * Math.cos(theta), 0.2, fz.mesh.position.z + r * Math.sin(theta), 'flame', 1);
+                const fx = fz.mesh.position.x + r * Math.cos(theta);
+                const fz2 = fz.mesh.position.z + r * Math.sin(theta);
+                // Flames taller and larger at the center, tapering smaller toward the outer radius
+                const normalizedDist = r / fz.radius; // 0 = center, 1 = edge
+                const flameScale = 2.5 - normalizedDist * 1.8; // center: ~2.5x, edge: ~0.7x
+                const flameY = 0.3 + (1.0 - normalizedDist) * 1.2; // center flames start higher
+                ctx.spawnPart(fx, flameY, fz2, 'flame', 1, undefined, undefined, undefined, flameScale);
             }
 
             if (fz.life <= 0) {
