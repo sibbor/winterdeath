@@ -26,7 +26,6 @@ const enemyPool: Enemy[] = [];
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 
-
 // --- REUSABLE UPDATE CALLBACKS --- (Initialized after EnemyManager to allow circular references)
 const _aiCallbacks: any = {
     onPlayerHit: null as any,
@@ -115,8 +114,15 @@ export const EnemyManager = {
         e.blindTimer = 0;
         e.burnTimer = 0;
         e.isBurning = false;
+
+        // CRITICAL BUG FIX: Thoroughly wipe all potential visual death flags for pooled enemies
         e.mesh.userData.exploded = false;
+        e.mesh.userData.gibbed = false;
+        e.mesh.userData.electrocuted = false;
+        e.mesh.userData.ashSpawned = false;
+        e.mesh.userData.ashPermanent = false;
         e.mesh.userData.baseY = undefined;
+        e.ashPile = undefined;
 
         if (e.indicatorRing) e.indicatorRing.visible = false;
     },
@@ -170,15 +176,14 @@ export const EnemyManager = {
         // 1. Instant mesh removal
         if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
-        // 2. Calculate burst scale based on weapon type
+        // 2. Calculate burst scale based on weapon type (Zero-GC string comparison)
         let burstScale = 1.0;
-        const dmgType = String(enemy.lastDamageType || '').toLowerCase();
-        if (dmgType === 'grenade') burstScale = 3.0;
-        else if (dmgType === 'shotgun' || dmgType === 'revolver') burstScale = 2.0;
+        const dmgType = enemy.lastDamageType || '';
+        if (dmgType === 'GRENADE' || dmgType === 'grenade') burstScale = 3.0;
+        else if (dmgType === 'SHOTGUN' || dmgType === 'shotgun' || dmgType === 'REVOLVER' || dmgType === 'revolver') burstScale = 2.0;
 
         // 2. Spawn Decal
-        const decalScale = (enemy.isBoss
-            ? 6.0 : enemyScale * burstScale)
+        const decalScale = (enemy.isBoss ? 6.0 : enemyScale * burstScale);
         callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, 'splatter');
 
         // 3. Spawn Particles & Blood
@@ -207,24 +212,28 @@ export const EnemyManager = {
         const age = now - (e.deathTimer || now);
         const delta = 1 / 60;
 
+        // Note: We NO LONGER override e.deathState to 'DEAD' inside this function.
+        // It remains 'BURNED', 'SHOT' etc. until the absolute cleanup phase.
+        // This solves the bug where cleanup misidentified corpses.
+
         if (type === 'EXPLODED') {
             EnemyManager.explodeEnemy(e, callbacks, e.deathVel);
-            if (age > 100) e.deathState = 'DEAD';
-            return;
-        }
-        else if (type === 'GIBBED') {
-            EnemyManager.explodeEnemy(e, callbacks, e.deathVel, true);
-            if (age > 100) e.deathState = 'DEAD';
             return;
         }
 
-        if (type === 'BURNED') {
+        else if (type === 'GIBBED') {
+            EnemyManager.explodeEnemy(e, callbacks, e.deathVel, true);
+            return;
+        }
+
+        else if (type === 'BURNED') {
             const ash = e.ashPile;
             if (!ash) {
                 e.mesh.userData.ashSpawned = true;
                 const scene = e.mesh.parent as THREE.Scene;
                 if (scene) {
                     const newAsh = EnemyManager.createAshPile(e);
+                    newAsh.scale.set(0.01, 0.01, 0.01); // Start at zero scale!
                     scene.add(newAsh);
                     e.ashPile = newAsh;
                 }
@@ -232,14 +241,21 @@ export const EnemyManager = {
             }
 
             const progress = Math.min(1.0, age / 1500);
-
-            // Scale: independently shrink Y (height) and preserve X/Z aspect until the end
             const s = e.originalScale || 1.0;
             const w = e.widthScale || 1.0;
+
+            // 1. Shrink enemy
             const shrink = 1.0 - progress;
             e.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
 
-            // Color: enemy color -> ash gray/black. Use originalColor if stored, else dark default.
+            // 2. Grow ash pile from zero to full size
+            ash.scale.set(
+                (1.2 * s * w) * progress,
+                (1.0 * s) * progress,
+                (1.2 * s * w) * progress
+            );
+
+            // 3. Darken enemy color
             _baseColor.setHex(e.color || 0x888888);
             _baseColor.lerp(_ashColor, progress);
             const colorMats = e.mesh.userData.colorMats;
@@ -249,46 +265,45 @@ export const EnemyManager = {
                 }
             }
 
-            if (progress >= 1.0) {
-                const scene = e.mesh.parent as THREE.Scene;
-                if (ash && scene) {
-                    const permanentAsh = ash.clone();
-                    permanentAsh.quaternion.set(0, 0, 0, 1);
-                    permanentAsh.position.copy(e.mesh.position);
-                    permanentAsh.position.y = 0.05;
-                    // Scale ash pile proportionally to the enemy's mass
-                    permanentAsh.scale.set(
-                        (1 + Math.random() * 0.3) * s * w,
-                        s,
-                        (1 + Math.random() * 0.3) * s * w
-                    );
-                    scene.add(permanentAsh);
-                }
-                if (scene) scene.remove(e.mesh);
-                e.deathState = 'DEAD';
+            // 4. Finalize
+            if (progress >= 1.0 && !e.mesh.userData.ashPermanent) {
+                e.mesh.userData.ashPermanent = true;
+                // Ash is already scaled and in the scene, just remove the enemy mesh
+                if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
             }
             return;
         }
 
-        if (type === 'ELECTRIFIED') {
+        else if (type === 'ELECTRIFIED') {
             if (!e.mesh.userData.electrocuted) {
                 e.mesh.userData.electrocuted = true;
                 e.mesh.userData.deathPosX = e.mesh.position.x;
                 e.mesh.userData.deathPosZ = e.mesh.position.z;
+                // Electrocution stiffens the body instantly (falls straight back)
+                e.mesh.userData.fallRot = -Math.PI / 2;
             }
 
-            if (age < 120) {
-                const t = age / 120;
-                e.mesh.rotation.x = -Math.PI / 2 * t;
+            // Fall like a plank
+            if (age < 150) {
+                const t = age / 150;
+                e.mesh.rotation.x = e.mesh.userData.fallRot * t;
                 e.mesh.position.y = Math.max(0.2, (e.mesh.position.y || 1.0) * (1 - t));
             } else {
-                const baseHeight = 0.2;
-                e.mesh.rotation.x = -Math.PI / 2;
-                e.mesh.position.y = baseHeight;
+                e.mesh.rotation.x = e.mesh.userData.fallRot;
+                e.mesh.position.y = 0.2;
 
-                const jitter = 0.15;
-                e.mesh.position.x = e.mesh.userData.deathPosX + (Math.random() - 0.5) * jitter;
-                e.mesh.position.z = e.mesh.userData.deathPosZ + (Math.random() - 0.5) * jitter;
+                // Jittering physics
+                const twitchIntensity = Math.max(0, 1.0 - (age / 1200));
+                if (twitchIntensity > 0) {
+                    const jitterX = (Math.random() - 0.5) * 0.5 * twitchIntensity;
+                    const jitterZ = (Math.random() - 0.5) * 0.5 * twitchIntensity;
+                    e.mesh.position.x = e.mesh.userData.deathPosX + jitterX;
+                    e.mesh.position.z = e.mesh.userData.deathPosZ + jitterZ;
+
+                    // Body cramps
+                    e.mesh.rotation.y += (Math.random() - 0.5) * 0.3 * twitchIntensity;
+                    e.mesh.rotation.z = (Math.random() - 0.5) * 0.3 * twitchIntensity;
+                }
 
                 if (Math.random() > 0.4) callbacks.onEffectTick(e, 'SPARK');
             }
@@ -296,12 +311,20 @@ export const EnemyManager = {
             return;
         }
 
-        if (type === 'SHOT') {
-            e.deathVel.y -= 35 * delta;
+        else if (type === 'SHOT' || type === 'GENERIC') {
+            e.deathVel.y -= 45 * delta;
             e.mesh.position.addScaledVector(e.deathVel, delta);
-            if (e.mesh.position.y <= 0.2) { e.mesh.position.y = 0.2; e.deathVel.set(0, 0, 0); }
+
+            if (e.mesh.position.y > 0.2) {
+                e.mesh.rotation.y += (e.mesh.userData.spinDir || 0) * delta;
+            } else {
+                e.mesh.position.y = 0.2;
+                e.deathVel.set(0, 0, 0);
+            }
+
+            // fallForward = true means faceplant, false means falling backwards
             const targetRot = (Math.PI / 2) * (e.fallForward ? 1 : -1);
-            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
+            e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.25;
             e.mesh.quaternion.setFromEuler(e.mesh.rotation);
         }
     },
@@ -466,30 +489,22 @@ export const EnemyManager = {
             }
 
             const age = now - e.deathTimer;
-
             const isElectrified = e.deathState === 'ELECTRIFIED';
             const cleanupDelay = isElectrified ? 1000 : 2000;
-            const shouldCleanup = (age > cleanupDelay) || (e.deathState === 'DEAD') || e.mesh.userData.exploded;
+            const shouldCleanup = (age > cleanupDelay) || e.mesh.userData.exploded;
 
             if (shouldCleanup) {
-                let cleanupType = e.deathState;
-                if (cleanupType === 'DEAD') {
-                    // [VINTERDÖD FIX] Bossar har inget lik ("corpse"), tvinga dem att sprängas så de inte bara försvinner!
-                    if (e.isBoss || e.mesh.userData.exploded) cleanupType = 'EXPLODED';
-                    else if (e.mesh.userData.electrocuted) cleanupType = 'ELECTRIFIED';
-                    else if (e.mesh.userData.gibbed) cleanupType = 'GIBBED';
-                    else if (e.mesh.userData.ashSpawned) cleanupType = 'BURNED';
-                    else cleanupType = 'SHOT';
-                }
+                // By preserving e.deathState from the AI, we skip guessing and false positives entirely.
+                const cleanupType = e.deathState;
 
-                // [VINTERDÖD] Always remove mesh at cleanup (final safeguard)
+                // Always remove mesh at cleanup (final safeguard)
                 if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
 
                 switch (cleanupType) {
                     case 'EXPLODED':
                     case 'GIBBED':
                     case 'BURNED':
-                        break;
+                        break; // These types DO NOT leave corpses
                     case 'ELECTRIFIED':
                         if (!e.isBoss) EnemyManager.createCorpse(e);
                         if (!e.bloodSpawned) {
@@ -498,6 +513,7 @@ export const EnemyManager = {
                         }
                         break;
                     case 'SHOT':
+                    case 'GENERIC':
                     default:
                         if (!e.isBoss) EnemyManager.createCorpse(e);
                         if (!e.bloodSpawned) {
@@ -535,6 +551,7 @@ export const EnemyManager = {
         }
     }
 };
+
 // --- INITIALIZE AI CALLBACKS ---
 _aiCallbacks.onDeath = (enemy: Enemy, type: EnemyDeathState) => EnemyManager.handleDeathVisuals(enemy, type, _aiCallbacks);
 _aiCallbacks.onEffectTick = (enemy: Enemy, type: EnemyEffectType) => {

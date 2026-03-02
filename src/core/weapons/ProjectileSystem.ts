@@ -124,7 +124,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
 
                 _v2.subVectors(e.mesh.position, pos);
                 const distSq = _v2.lengthSq();
-                const totalRad = radius + (1.0 * e.widthScale * e.originalScale);
+                const totalRad = radius + (1.0 * e.widthScale * (e.originalScale || 1.0));
 
                 if (distSq < totalRad * totalRad) {
                     const actualDmg = Math.max(0, Math.min(e.hp, damage));
@@ -343,9 +343,10 @@ export const ProjectileSystem = {
         if (!data) return;
 
         if (weapon === WeaponType.FLAMETHROWER) {
-            const count = Math.ceil(delta * 0.06);
+            // FIX: Ensure a solid thick stream regardless of delta time.
+            const count = 3;
             for (let i = 0; i < count; i++) {
-                _v1.copy(origin).addScaledVector(direction, 0.5);
+                _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.5);
                 FXSystem.spawnFlame(_v1, direction);
             }
 
@@ -361,10 +362,8 @@ export const ProjectileSystem = {
                 _v1.subVectors(e.mesh.position, origin);
                 const distSq = _v1.lengthSq();
 
-                // Exclude early without expensive Math.sqrt
                 if (distSq > rangeSq) continue;
 
-                // Manual normalize avoids duplicate length computation
                 const dist = Math.sqrt(distSq);
                 _v1.divideScalar(dist);
 
@@ -394,7 +393,7 @@ export const ProjectileSystem = {
 
             let target = null;
             let minDist = Infinity;
-            const aimThreshold = 0.95;
+            const aimThreshold = 0.90; // FIX: Widened cone slightly so it snaps easier
 
             for (let _fi = 0; _fi < enemies.length; _fi++) {
                 const e = enemies[_fi];
@@ -404,7 +403,6 @@ export const ProjectileSystem = {
                 const distSq = _v1.lengthSq();
                 if (distSq > rangeSq) continue;
 
-                // Manual normalize avoids duplicate length computation
                 const dist = Math.sqrt(distSq);
                 _v1.divideScalar(dist);
 
@@ -524,10 +522,10 @@ export const ProjectileSystem = {
                 const theta = Math.random() * Math.PI * 2;
                 const fx = fz.mesh.position.x + r * Math.cos(theta);
                 const fz2 = fz.mesh.position.z + r * Math.sin(theta);
-                // Flames taller and larger at the center, tapering smaller toward the outer radius
-                const normalizedDist = r / fz.radius; // 0 = center, 1 = edge
-                const flameScale = 2.5 - normalizedDist * 1.8; // center: ~2.5x, edge: ~0.7x
-                const flameY = 0.3 + (1.0 - normalizedDist) * 1.2; // center flames start higher
+
+                const normalizedDist = r / fz.radius;
+                const flameScale = 2.5 - normalizedDist * 1.8;
+                const flameY = 0.3 + (1.0 - normalizedDist) * 1.2;
                 ctx.spawnPart(fx, flameY, fz2, 'fire', 1, undefined, undefined, undefined, flameScale);
             }
 
@@ -581,7 +579,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
     if (!destroyBullet) {
         _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
-        // Cached bullet speed saves Math.sqrt here
         const bulletTravelDist = projectile.speed * delta;
         const searchRad = 5.0 + bulletTravelDist;
         const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, searchRad);
@@ -626,7 +623,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
                 const force = (projectile.damage / 3) / Math.max(0.3, mass);
 
-                // Capture death velocity for high-impact kills
                 if (isKill && isHighImpact) {
                     enemy.deathVel.copy(projectile.vel).normalize().multiplyScalar(force * 2.0).setY(4.0);
                 }

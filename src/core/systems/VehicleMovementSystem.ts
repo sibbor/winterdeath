@@ -38,7 +38,6 @@ export class VehicleMovementSystem implements System {
             const len = interactables.length;
             for (let i = 0; i < len; i++) {
                 const obj = interactables[i];
-                // Direct property access check
                 const def = obj.userData?.vehicleDef;
                 if (def) {
                     const isActive = (state.activeVehicle === obj);
@@ -61,6 +60,7 @@ export class VehicleMovementSystem implements System {
             state.vehicleEngineState = 'OFF';
             state.vehicleSpeed = 0;
             soundManager.stopVehicleEngine();
+            soundManager.playVehicleSkid(0);
         }
     }
 
@@ -76,7 +76,7 @@ export class VehicleMovementSystem implements System {
     ) {
         // Clamp delta to prevent physics explosions on lag spikes
         const dt = delta > 0.1 ? 0.1 : delta;
-        const fpsRatio = dt * 60; // Cached for friction calculations
+        const fpsRatio = dt * 60;
 
         const ud = vehicle.userData;
         if (!ud.velocity) {
@@ -100,8 +100,7 @@ export class VehicleMovementSystem implements System {
             angVel.set(0, 0, 0);
         }
 
-        // --- COMPUTE FORWARD & RIGHT VECTORS (Matrix Extraction) ---
-        // Faster than applyQuaternion. Extracted from the object's world matrix.
+        // --- COMPUTE FORWARD & RIGHT VECTORS ---
         const elements = vehicle.matrixWorld.elements;
         _right.set(elements[0], elements[1], elements[2]).normalize();
         _forward.set(elements[8], elements[9], elements[10]).normalize();
@@ -129,14 +128,16 @@ export class VehicleMovementSystem implements System {
             }
         }
 
-        // Fast clamping without Math.max/min
         throttle = throttle > 1 ? 1 : (throttle < -1 ? -1 : throttle);
         steer = steer > 1 ? 1 : (steer < -1 ? -1 : steer);
 
-        // --- ACCELERATION / REVERSE / BRAKING ---
-        const forwardSpeed = vel.dot(_forward);
+        // --- SPEED DECOMPOSITION ---
+        let forwardSpeed = vel.dot(_forward);
+        let currentLatSpeed = vel.dot(_right);
+        let absLatSpeed = currentLatSpeed < 0 ? -currentLatSpeed : currentLatSpeed;
         const maxSpeedMS = def.maxSpeed * KMH_TO_MS;
 
+        // --- ACCELERATION / NORMAL BRAKING ---
         if (throttle !== 0) {
             if (throttle < 0 && forwardSpeed > 1.0) {
                 const decel = def.brakeForce * (throttle * -1) * dt;
@@ -151,9 +152,11 @@ export class VehicleMovementSystem implements System {
                 if (!atLimit) {
                     let tractionMul = 1.0;
                     if (def.drivetrain === 'FWD') {
-                        const latSpd = vel.dot(_right);
-                        const slip = (latSpd < 0 ? -latSpd : latSpd) * 0.05;
+                        const slip = absLatSpeed * 0.05;
                         tractionMul = 1.0 - (slip > 0.5 ? 0.5 : slip);
+                    } else if (def.drivetrain === 'AWD') {
+                        const slip = absLatSpeed * 0.02;
+                        tractionMul = 1.0 - (slip > 0.2 ? 0.2 : slip);
                     }
                     vel.addScaledVector(_forward, def.acceleration * throttle * tractionMul * dt);
                 }
@@ -162,47 +165,60 @@ export class VehicleMovementSystem implements System {
 
         // --- HANDBRAKE ---
         if (handbrake) {
-            const brakeBase = 1.0 - (def.brakeForce * 0.1);
-            const brakeDamp = Math.pow(brakeBase > 0.01 ? brakeBase : 0.01, fpsRatio);
-            vel.multiplyScalar(brakeDamp > 0 ? brakeDamp : 0);
-            angVel.multiplyScalar(Math.pow(0.97, fpsRatio));
+            const handbrakeDecel = def.brakeForce * 0.6 * dt;
+            if (forwardSpeed > 0.1) vel.addScaledVector(_forward, -handbrakeDecel);
+            else if (forwardSpeed < -0.1) vel.addScaledVector(_forward, handbrakeDecel);
         }
 
-        // --- SPEED DECOMPOSITION ---
+        forwardSpeed = vel.dot(_forward);
+        currentLatSpeed = vel.dot(_right);
+        absLatSpeed = currentLatSpeed < 0 ? -currentLatSpeed : currentLatSpeed;
         const speedSq = vel.lengthSq();
         const speed = speedSq > 0 ? Math.sqrt(speedSq) : 0;
         const isReversing = forwardSpeed < -0.5;
 
         // --- STEERING ---
-        if ((steer > 0.1 || steer < -0.1) && speedSq > 1.0) {
+        if ((steer > 0.1 || steer < -0.1) && speedSq > 0.5) {
             const directionalSteer = isReversing ? -steer : steer;
-            const lowSpeedFactor = speed * 0.1; // speed / 10.0
-            const highSpeedFactor = 4.0 / (1.0 + speed);
-            const speedFactor = lowSpeedFactor < highSpeedFactor ? lowSpeedFactor : highSpeedFactor;
 
-            angVel.y -= directionalSteer * def.turnSpeed * speedFactor * dt;
+            // Arcade steering curve
+            let speedFactor = 1.0;
+            if (speed < 6.0) {
+                speedFactor = speed / 6.0; // Rampar upp sväng vid låg fart (bättre kontroll)
+            } else {
+                const speedRatio = speed / (maxSpeedMS > 1 ? maxSpeedMS : 1);
+                speedFactor = 1.0 - (speedRatio * 0.3); // Något stelare vid extremt höga farter
+            }
+
+            // Endast snärtig handbromssväng om vi faktiskt har lite fart! (Dödar donut/beyblade-buggen)
+            const turnMult = (handbrake && speed > 6.0) ? 1.5 : 1.0;
+
+            angVel.y -= directionalSteer * def.turnSpeed * turnMult * speedFactor * dt;
         }
 
-        // --- LATERAL FRICTION (Drift Physics) ---
-        let effLatFriction = def.lateralFriction;
-        if (handbrake) effLatFriction *= 0.3;
-        if (def.drivetrain === 'RWD' && (throttle > 0.5 || throttle < -0.5) && speedSq > 16) {
-            effLatFriction *= 0.85;
+        // --- DRIVETRAIN DRIFT PHYSICS ---
+        let latRetention = def.lateralFriction * def.friction;
+
+        if (handbrake) {
+            // Handbrake overrides drivetrain. Lite grepp kvar (0.95) istället för 0.99.
+            latRetention = 0.95;
+        } else if ((throttle > 0.5 || throttle < -0.5) && speedSq > 20 && absLatSpeed > 2.0) {
+            if (def.drivetrain === 'RWD') latRetention = 0.96;
+            else if (def.drivetrain === 'AWD') latRetention = 0.92;
+            else if (def.drivetrain === 'FWD') latRetention *= 0.85;
         }
 
-        const currentLatSpeed = vel.dot(_right);
         const baseFriction = throttle !== 0 ? 0.998 : def.friction;
-
-        const dampedFwd = vel.dot(_forward) * Math.pow(baseFriction, fpsRatio);
-        const latDamping = effLatFriction * def.friction; // Simplified approximation
-        const dampedLat = currentLatSpeed * Math.pow(latDamping, fpsRatio);
+        const dampedFwd = forwardSpeed * Math.pow(baseFriction, fpsRatio);
+        const dampedLat = currentLatSpeed * Math.pow(latRetention, fpsRatio);
 
         const savedVelY = vel.y;
         vel.copy(_forward).multiplyScalar(dampedFwd);
         vel.addScaledVector(_right, dampedLat);
         vel.y = savedVelY;
 
-        angVel.multiplyScalar(Math.pow(handbrake ? 0.92 : 0.90, fpsRatio));
+        // Snappy styr-återhämtning! Bilen slutar rotera extremt fort när du släpper A/D
+        angVel.multiplyScalar(Math.pow(0.85, fpsRatio));
 
         // --- SUSPENSION ---
         let suspY = 0;
@@ -230,7 +246,7 @@ export class VehicleMovementSystem implements System {
         vehicle.position.addScaledVector(vel, dt);
         vehicle.rotation.y += angVel.y * dt;
 
-        // --- AUDIO & HUD UPDATE ---
+        // --- AUDIO & SMOKE FX ---
         if (input) {
             const speedRatio = speed / (maxSpeedMS > 1.0 ? maxSpeedMS : 1.0);
             const normSpeed = speedRatio < 1.0 ? speedRatio : 1.0;
@@ -242,14 +258,26 @@ export class VehicleMovementSystem implements System {
                 soundManager.updateVehicleEngine(normSpeed);
             }
 
-            // Skidding logic (Only cars/trucks, NOT boats)
-            const latSpeed = currentLatSpeed < 0 ? -currentLatSpeed : currentLatSpeed;
-            const isSkidding = latSpeed > 4.5 || (speedSq > 25 && (angVel.y > 0.8 || angVel.y < -0.8));
+            const isSkidding = absLatSpeed > 4.5 || (speedSq > 25 && (angVel.y > 0.8 || angVel.y < -0.8));
 
-            if (def.category !== 'BOAT' && isSkidding) {
-                soundManager.playVehicleSkid(0.5);
-            } else {
-                soundManager.playVehicleSkid(0);
+            if (def.category !== 'BOAT') {
+                if (isSkidding) {
+                    soundManager.playVehicleSkid(Math.min(1.0, absLatSpeed / 10.0));
+                } else {
+                    soundManager.playVehicleSkid(0);
+                }
+
+                if (speedSq > 4.0) {
+                    if (Math.random() < speedRatio * 0.3) {
+                        _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
+                        FXSystem.spawnPart(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, 'smoke', 1, undefined, undefined, 0xaaaaaa, 0.4);
+                    }
+                    if (isSkidding && Math.random() < 0.6) {
+                        _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
+                        _v1.addScaledVector(_right, currentLatSpeed > 0 ? -0.5 : 0.5);
+                        FXSystem.spawnPart(session.engine.scene, state.particles, vehicle.position.x + _v1.x, 0.2, vehicle.position.z + _v1.z, 'large_smoke', 1, undefined, undefined, 0xcccccc, 0.8 + Math.random() * 0.5);
+                    }
+                }
             }
         }
 
@@ -282,6 +310,7 @@ export class VehicleMovementSystem implements System {
                 state.vehicleSpeed = 0;
                 state.vehicleEngineState = 'OFF';
                 soundManager.stopVehicleEngine();
+                soundManager.playVehicleSkid(0);
                 soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
                 _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
@@ -320,7 +349,6 @@ export class VehicleMovementSystem implements System {
 
             if (distSq > collisionRad * collisionRad) continue;
 
-            // Zero-GC Cooldown stored directly on object
             const lastHit = e.lastVehicleHit || 0;
             if (now - lastHit < HIT_COOLDOWN_MS) continue;
             e.lastVehicleHit = now;
@@ -421,7 +449,5 @@ export class VehicleMovementSystem implements System {
         }
     }
 
-    cleanup() {
-        // Empty since we removed the Map. Maintained interface compatibility.
-    }
+    cleanup() { }
 }

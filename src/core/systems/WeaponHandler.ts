@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../content/weapons';
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
 import { soundManager } from '../../utils/sound';
-import { haptic } from '../../utils/HapticManager'; // Keep commented out as in original
+import { haptic } from '../../utils/HapticManager';
 import { Engine } from '../engine/Engine';
 import { _buoyancyResult } from './WaterSystem';
 

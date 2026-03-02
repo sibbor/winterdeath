@@ -16,7 +16,7 @@ export enum AIState {
 /**
  * Standardized death states for enemies
  */
-export type EnemyDeathState = 'ALIVE' | 'DEAD' | 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED';
+export type EnemyDeathState = 'ALIVE' | 'DEAD' | 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED' | 'GENERIC';
 
 /**
  * Standardized effect types for semantic visual feedback

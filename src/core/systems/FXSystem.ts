@@ -68,7 +68,9 @@ export const FXSystem = {
     _instancedMeshes: {} as Record<string, THREE.InstancedMesh>,
     _instancedCounts: {} as Record<string, number>,
     _instancedMeshKeys: [] as string[],
-    _MAX_INSTANCES: 2000,
+
+    // Increased significantly to handle intense firezones and burning enemies
+    _MAX_INSTANCES: 5000,
 
     // --- POOLING METHODS ---
 
@@ -168,7 +170,7 @@ export const FXSystem = {
             d.scale.setScalar(0.01); // Grow over time
         }
 
-        d.renderOrder = 50;
+        d.renderOrder = 50; // Decals should sit below particles (60)
 
         (req.particlesList as unknown as THREE.Mesh[]).push(d);
     },
@@ -232,13 +234,24 @@ export const FXSystem = {
         }
 
         p.mesh.position.set(req.x, req.y, req.z);
-        p.mesh.renderOrder = 11;
 
-        if (t === 'shockwave') p.mesh.rotation.x = -Math.PI / 2;
-        else if (UNIQUE_MATERIAL_TYPES.includes(t)) p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        // This primarily acts as a fallback for non-instanced meshes.
+        // Instanced meshes get their renderOrder configured during creation.
+        p.mesh.renderOrder = 60;
+
+        // FIX: Give all standard particles a fully randomized 3D rotation!
+        // Prevents 2D flat flames from becoming invisible 0-width lines when viewed top-down.
+        if (t === 'shockwave') {
+            p.mesh.rotation.set(-Math.PI / 2, 0, 0);
+        } else {
+            p.mesh.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
+        }
 
         const s = req.scale || 1.0;
-        if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
+
+        // FIX: Boosted scale for flashes (Arc-Cannon) to make them extremely visible
+        if (t === 'flash') p.mesh.scale.setScalar((1.5 + Math.random() * 1.0) * s);
+        else if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
         else if (t === 'large_smoke') p.mesh.scale.setScalar(4.0 * Math.random() * s);
         else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
         else if (t === 'spark' || t === 'enemy_effect_spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
@@ -329,23 +342,21 @@ export const FXSystem = {
             FXSystem._textPool.push(pooled);
         }
 
-        // Clear and draw new text on existing canvas
         pooled.ctx.clearRect(0, 0, 256, 64);
         pooled.ctx.font = 'bold 64px Arial';
         pooled.ctx.fillStyle = 'white';
         pooled.ctx.textAlign = 'center';
         pooled.ctx.textBaseline = 'middle';
 
-        // Thick black stroke for visibility against snow
         pooled.ctx.strokeStyle = 'black';
         pooled.ctx.lineWidth = 5;
         pooled.ctx.strokeText(text, 128, 32);
         pooled.ctx.fillText(text, 128, 32);
 
-        pooled.texture.needsUpdate = true; // Flag texture for WebGL update
+        pooled.texture.needsUpdate = true;
 
         pooled.mesh.position.set(x, y + 1.5, z);
-        pooled.mesh.material.color.set(color); // Tint the white text
+        pooled.mesh.material.color.set(color);
         pooled.mesh.material.opacity = 1.0;
         pooled.mesh.visible = true;
         pooled.life = 1.5;
@@ -418,7 +429,9 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    if (!p.isInstanced) p.mesh.scale.multiplyScalar(0.95);
+                    // FIX: Graceful, slow fade out. 0.985 means it shrinks by 1.5% per frame.
+                    // This allows flames to live much longer visually before vanishing.
+                    p.mesh.scale.multiplyScalar(0.985);
                 }
             }
 
@@ -533,6 +546,15 @@ export const FXSystem = {
 
             const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
             imesh.frustumCulled = false;
+
+            // Assign a high render order to ensure it renders correctly above decals
+            imesh.renderOrder = 60;
+
+            // Initialize instanceColor attribute to prevent WebGL lazy-allocation spikes
+            if (!imesh.instanceColor) {
+                imesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FXSystem._MAX_INSTANCES * 3), 3);
+            }
+
             scene.add(imesh);
             FXSystem._instancedMeshes[type] = imesh;
             FXSystem._instancedCounts[type] = 0;
@@ -589,7 +611,9 @@ export const FXSystem = {
             req.type = 'flash';
 
             req.customVel.set(0, 0, 0);
-            req.scale = 0.3 + Math.random() * 0.2;
+
+            // Increased scale dramatically to make Arc-Cannon strikes actually pop against snow
+            req.scale = 0.6 + Math.random() * 0.4;
             req.color = 0x00ffff;
             FXSystem.particleQueue.push(req);
         }

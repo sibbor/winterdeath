@@ -41,56 +41,105 @@ export const EnemyAI = {
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
         if (e.hp <= 0 && e.deathState === 'ALIVE') {
             e.deathTimer = now;
+
+            // BUG FIX: RESET FLASH/SCALE STATES BEFORE HANDOFF
+            // Prevent enemies from freezing in their "damage flash" (white and scaled up) 
+            // when handing them over to the DeathSystem.
+            const baseScale = e.originalScale || 1.0;
+            const widthScale = e.widthScale || 1.0;
+            e.mesh.scale.set(baseScale * widthScale, baseScale, baseScale * widthScale);
+
+            // Safely reset color if it was flashed white.
+            // e.mesh is typically a THREE.Group, so we iterate through its children (zero-GC)
+            if (e.color !== undefined) {
+                for (let i = 0; i < e.mesh.children.length; i++) {
+                    const child = e.mesh.children[i] as any;
+                    if (child.isMesh && child.material && child.material.color) {
+                        child.material.color.setHex(e.color);
+                    }
+                }
+            }
+
             const dmgType = e.lastDamageType || '';
             const isHighImpact = e.lastHitWasHighImpact;
             const fallForward = Math.random() > 0.5;
 
-            // [VINTERDÖD] Data-driven death states from Weapon Metadata
+            // Data-driven death states from Weapon Metadata
             const weapon = WEAPONS[dmgType];
 
+            // Normalize weapon impact type (Zero-GC, avoiding .toUpperCase() string allocations)
+            let weaponImpact = 'SHOT';
+            if (weapon && weapon.impactType) {
+                // Cast to string to bypass TypeScript's strict union overlap check
+                const rawImpact = weapon.impactType as string;
+                if (rawImpact === 'gib' || rawImpact === 'GIB' || rawImpact === 'GIBBED') weaponImpact = 'GIBBED';
+                else if (rawImpact === 'burning' || rawImpact === 'BURNING' || rawImpact === 'BURNED') weaponImpact = 'BURNED';
+                else if (rawImpact === 'electrified' || rawImpact === 'ELECTRIFIED') weaponImpact = 'ELECTRIFIED';
+            }
+
+            // 1. Explosions (Grenades, Bombers, Bosses)
             if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
                 e.deathState = 'EXPLODED';
-
-                // [VINTERDÖD] Trigger explosion feedback for Bosses and Bombers (non-projectile cause)
                 if (dmgType !== WeaponType.GRENADE) {
                     soundManager.playExplosion();
                     haptic.explosion();
                 }
             }
-            else if (weapon) {
-                // If it's a high-impact weapon (Shotgun/Revolver), only GIB if it was a High Impact hit
-                if (weapon.impactType === 'GIBBED') {
-                    if (isHighImpact) {
-                        e.deathState = 'GIBBED';
-                        // Record for posterity/cleanup
-                        e.mesh.userData.gibbed = true;
-                    } else {
-                        e.deathState = 'SHOT';
-                        e.fallForward = fallForward;
-                        if (e.deathVel) e.deathVel.copy(e.velocity).multiplyScalar(-0.5).setY(2.5);
-                    }
-                } else {
-                    e.deathState = weapon.impactType || 'SHOT';
-                }
+            // 2. High-Impact Gibbing (Shotgun/Revolver at close range)
+            else if (weaponImpact === 'GIBBED' && isHighImpact) {
+                e.deathState = 'GIBBED';
+                e.mesh.userData.gibbed = true;
             }
-            else if (e.isBurning) {
+            // 3. Fire Deaths (Molotov, Flamethrower, or dying while actively on fire)
+            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === 'BURN') {
                 e.deathState = 'BURNED';
             }
-            else {
+            // 4. Electrocution Deaths (Arc-Cannon)
+            else if (weaponImpact === 'ELECTRIFIED' || dmgType === WeaponType.ARC_CANNON) {
+                e.deathState = 'ELECTRIFIED';
+                e.deathVel.set(0, 0, 0); // Kill all momentum so they stiffen and fall flat
+            }
+            // 5. Standard Weapon Shots (SMG, Rifle, Pistol)
+            else if (weapon) {
                 e.deathState = 'SHOT';
+
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
-                    e.deathVel.copy(_v1).multiplyScalar(5.0).setY(2.0);
+
+                    // How fast was the zombie running straight at us? (Dot product)
+                    const forwardMomentum = e.velocity.dot(_v1.clone().negate());
+
+                    // If they ran fast towards us (> 1.5 m/s), they stumble forward!
+                    e.fallForward = forwardMomentum > 1.5;
+
+                    // Hard brake their run speed (legs die) and apply shot force
+                    e.deathVel.copy(e.velocity).multiplyScalar(0.1);
+                    const impactForce = weapon.damage * 0.15;
+
+                    // Pop them up slightly for some hang time
+                    e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
                 }
-                e.fallForward = fallForward;
+
+                e.mesh.userData.spinDir = (Math.random() - 0.5) * 5.0;
             }
-            return;
+            // 6. Default generic death (Melee, Vehicle ram, etc)
+            else {
+                e.deathState = 'GENERIC';
+                if (e.deathVel) {
+                    _v1.subVectors(e.mesh.position, playerPos).normalize();
+                    const forwardMomentum = e.velocity.dot(_v1.clone().negate());
+                    e.fallForward = forwardMomentum > 1.5;
+
+                    e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
+                }
+                e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
+            }
         }
 
         // --- 2. HANDLE DEATH ANIMATIONS ---
         if (e.deathState !== 'ALIVE') {
             handleDeathAnimation(e, delta, now, callbacks);
-            return;
+            return; // Hand over to DeathSystem, AI loop stops here
         }
 
         // --- 3. POOLING SCALE RECOVERY ---
@@ -348,7 +397,7 @@ export const EnemyAI = {
                     }
                     e.hp = 0;
                     e.deathState = 'EXPLODED';
-                    e.deathVel.set(0, 10.0, 0); // [VINTERDÖD] Pop upward on self-destruct
+                    e.deathVel.set(0, 10.0, 0); // Pop upward on self-destruct
 
                     soundManager.playExplosion();
                     haptic.explosion();
@@ -427,7 +476,7 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
         }
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
-            if (e.burnTimer <= 0) { e.hp -= 6; callbacks.onDamageDealt(6, e); e.burnTimer = 0.5; }
+            if (e.burnTimer <= 0) { e.hp -= 6; e.lastDamageType = 'BURN'; callbacks.onDamageDealt(6, e); e.burnTimer = 0.5; }
         }
         if (e.afterburnTimer > 0) {
             e.afterburnTimer -= delta;

@@ -9,14 +9,14 @@ export class PlayerCombatSystem implements System {
 
     private reloadBar: { bg: THREE.Mesh; fg: THREE.Mesh } | null = null;
 
-    // [VINTERDÖD] Platta primitiver istället för Record<string, boolean>. Snabbare minnesåtkomst.
+    // Flat primitives instead of Record<string, boolean>. Faster memory access.
     private _p1: boolean = false;
     private _p2: boolean = false;
     private _p3: boolean = false;
     private _p4: boolean = false;
     private _p5: boolean = false;
 
-    // [VINTERDÖD] State-diffing för död, hindrar per-frame uppdateringar till GPU
+    // State-diffing for death, prevents per-frame GPU updates
     private _wasDead: boolean = false;
 
     private aimCross: THREE.Group | null = null;
@@ -64,7 +64,7 @@ export class PlayerCombatSystem implements System {
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        // [VINTERDÖD] Direkt allokering av typad array istället för dynamisk push() 
+        // Direct allocation of typed array instead of dynamic push() 
         const indicesCount = 20 * 6; // 20 quads * 6 indices
         const indices = new Uint16Array(indicesCount);
         let idx = 0;
@@ -105,7 +105,7 @@ export class PlayerCombatSystem implements System {
         const disableInput = session.inputDisabled;
 
         if (state.isDead) {
-            // [VINTERDÖD] Kör bara döljandet en enda gång när spelaren dör.
+            // Only hide UI once when the player dies.
             if (!this._wasDead) {
                 if (this.laserSight) this.laserSight.visible = false;
                 if (this.aimCross) this.aimCross.visible = false;
@@ -122,7 +122,7 @@ export class PlayerCombatSystem implements System {
 
         // --- Weapon Slot Switching (Edge Triggered) ---
         if (!disableInput) {
-            // [VINTERDÖD] Platta utvärderingar
+            // Flat evaluations
             if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
             if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
             if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
@@ -130,7 +130,7 @@ export class PlayerCombatSystem implements System {
             if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
         }
 
-        // Uppdatera input-cache med strikt konvertering till boolean
+        // Update input cache with strict boolean conversion
         this._p1 = !!input['1'];
         this._p2 = !!input['2'];
         this._p3 = !!input['3'];
@@ -165,7 +165,7 @@ export class PlayerCombatSystem implements System {
 
         // Sync Laser Sight visibility with state
         if (this.laserSight) {
-            this.laserSight.visible = true; // Eftersom return hanterar döden ovan
+            this.laserSight.visible = true; // Safe since the early return handles death above
         }
     }
 
@@ -182,7 +182,7 @@ export class PlayerCombatSystem implements System {
             (this.reloadBar.fg.material as THREE.Material).dispose();
         }
 
-        // Dispose Reticle [VINTERDÖD] Borttagen stängning (closure) i traverse. 
+        // Dispose Reticle - Removed closure in traverse.
         if (this.aimCross) {
             scene.remove(this.aimCross);
             const children = this.aimCross.children;

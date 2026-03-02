@@ -1495,7 +1495,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
 
             if (frame % 5 === 0) {
-                if (state.health < state.maxHealth * 0.3 && !state.isDead) {
+                if (state.hp < state.maxHp * 0.3 && !state.isDead) {
                     if (now - (state.lastHeartbeat || 0) > 800) {
                         state.lastHeartbeat = now;
                         soundManager.playHeartbeat();

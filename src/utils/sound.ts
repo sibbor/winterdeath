@@ -26,6 +26,7 @@ export class SoundManager {
   private vehicleGain: GainNode | null = null;
   private vehicleSkidOsc: AudioBufferSourceNode | null = null;
   private vehicleSkidGain: GainNode | null = null;
+  private vehicleSkidBuffer: AudioBuffer | null = null;
 
   // Music (ambient loops & boss fight)
   private musicSource: AudioBufferSourceNode | null = null;
@@ -51,6 +52,7 @@ export class SoundManager {
     this.stopCampfire();
     this.stopRadioStatic();
     this.playFlamethrowerEnd();
+    if (this.vehicleSkidGain) this.vehicleSkidGain.gain.value = 0;
   }
 
   setReverb(amount: number) {
@@ -320,7 +322,6 @@ export class SoundManager {
   }
 
   // --- VEHICLE AUDIO ---
-
   playVehicleEngine(type: 'BOAT' | 'CAR') {
     if (this.vehicleOsc) return;
     const key = type === 'BOAT' ? 'vehicle_engine_boat' : 'vehicle_engine_car';
@@ -360,31 +361,53 @@ export class SoundManager {
   }
 
   playVehicleSkid(intensity: number) {
-    if (intensity < 0.1) {
-      if (this.vehicleSkidOsc) {
-        this.vehicleSkidGain?.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.05);
-        const osc = this.vehicleSkidOsc;
-        const gain = this.vehicleSkidGain;
-        this.core.safeTimeout(() => {
-          try { osc.stop(); osc.disconnect(); } catch (e) { }
-          try { gain.disconnect(); } catch (e) { }
-        }, 50);
-        this.vehicleSkidOsc = null;
-        this.vehicleSkidGain = null;
+    if (intensity <= 0.05) {
+      if (this.vehicleSkidGain) {
+        this.vehicleSkidGain.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.1);
       }
       return;
     }
 
     if (!this.vehicleSkidOsc) {
-      const sound = SoundBank.play(this.core, 'vehicle_skid', 0, 1.0, true);
-      if (sound) {
-        this.vehicleSkidOsc = sound.source;
-        this.vehicleSkidGain = sound.gain;
+      const ctx = this.core.ctx;
+      if (!this.vehicleSkidBuffer) {
+        const length = ctx.sampleRate * 0.5; // 0.5s loop
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let lastOut = 0;
+        for (let i = 0; i < length; i++) {
+          const white = Math.random() * 2 - 1;
+          // Mörk filtrering (Brown noise) för ett tungt gummiskrap mot marken
+          lastOut = (lastOut * 0.95 + white * 0.05);
+          data[i] = lastOut * 3.0;
+        }
+        this.vehicleSkidBuffer = buffer;
       }
+
+      const noise = ctx.createBufferSource();
+      noise.buffer = this.vehicleSkidBuffer;
+      noise.loop = true;
+
+      // Lågpassfilter för att rensa bort allt vasst "tv-brus"
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 400; // Väldigt dovt
+
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.core.masterGain);
+      noise.start();
+
+      this.vehicleSkidOsc = noise;
+      this.vehicleSkidGain = gain;
     }
 
     if (this.vehicleSkidGain) {
-      this.vehicleSkidGain.gain.setTargetAtTime(intensity * 0.4, this.core.ctx.currentTime, 0.1);
+      const target = Math.min(0.5, intensity * 0.6);
+      this.vehicleSkidGain.gain.setTargetAtTime(target, this.core.ctx.currentTime, 0.05);
     }
   }
 

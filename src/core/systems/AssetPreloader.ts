@@ -81,21 +81,31 @@ export const AssetPreloader = {
                 if (soundEngine) {
                     // Load only essential sounds — not the full bank — to keep boot fast
                     const essentialSounds = [
-                        'ui_hover', 'ui_click', 'shot_pistol', 'shot_smg', 'shot_rifle',
+                        'ui_hover', 'ui_click', 'ui_confirm', 'ui_chime',
+                        'shot_pistol', 'shot_smg', 'shot_rifle',
                         'shot_shotgun', 'shot_revolver', 'shot_minigun',
-                        'walker_groan', 'walker_death', 'runner_scream', 'tank_roar',
+                        'shot_arc_cannon', 'shot_flamethrower',
+                        'pin_pull', 'ignite', 'explosion',
+                        'walker_groan', 'walker_attack', 'walker_death',
+                        'runner_scream', 'runner_attack', 'runner_death',
+                        'tank_roar', 'tank_smash', 'tank_death',
+                        'bomber_beep', 'step_zombie',
                         'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone', 'impact_wood',
-                        'door_metal_shut', 'fx_heartbeat', 'ui_level_up',
-                        'loot_scrap', 'chest_open', 'ui_chime', 'explosion', 'ignite',
+                        'door_metal_shut', 'door_metal_open', 'heartbeat', 'ui_level_up',
+                        'loot_scrap', 'chest_open',
                         'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
-                        'step', 'step_snow', 'step_metal', 'step_wood', 'step_water',
-                        'owl_hoot', 'bird_ambience'
+                        'step', 'step_snow', 'step_metal', 'step_wood', 'step_water', 'swimming',
+                        'mech_mag_out', 'mech_mag_in', 'mech_empty_click', 'mech_holster',
+                        'owl_hoot', 'bird_ambience', 'ambient_rustle', 'ambient_metal'
                     ];
                     for (let i = 0; i < essentialSounds.length; i++) {
                         SoundBank.get(soundEngine, essentialSounds[i]);
                     }
                     // Warm up essential procedural music
-                    const essentialMusic = ['ambient_wind_loop', 'ambient_forest_loop', 'prologue_sad'];
+                    const essentialMusic = [
+                        'ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop',
+                        'ambient_finale_loop', 'boss_metal', 'prologue_sad'
+                    ];
                     try {
                         const { createMusicBuffer } = await import('../../utils/audio/SoundLib');
                         for (let i = 0; i < essentialMusic.length; i++) {
@@ -155,10 +165,12 @@ export const AssetPreloader = {
                 try {
                     await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
                     ObjectGenerator.createBuilding(10, 10, 10, 0x888888);
+                    ObjectGenerator.createStorefrontBuilding(10, 10, 10);
+                    ObjectGenerator.createGlassStaircase(2, 5, 2);
                     ObjectGenerator.createNeonSign("WARMUP", 0x00ffff, true);
                     ObjectGenerator.createNeonHeart(0xff0000);
 
-                    const bumpMaps = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump'];
+                    const bumpMaps = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'concrete_bump', 'brick_bump', 'bark_rough_bump'];
                     for (let i = 0; i < bumpMaps.length; i++) {
                         const tex = (TEXTURES as any)[bumpMaps[i]];
                         if (tex) renderer.initTexture(tex);
@@ -183,6 +195,13 @@ export const AssetPreloader = {
                     EnvironmentGenerator.createWaterLily();
                     EnvironmentGenerator.createSeaweed();
                     EnvironmentGenerator.createRock(2, 2);
+                    ObjectGenerator.createHedge();
+                    ObjectGenerator.createWheatStalk();
+                    const dummyCtx = (window as any).gameEngine?.sectorContext;
+                    if (dummyCtx) {
+                        ObjectGenerator.createCampfire(dummyCtx, -1000, -1000);
+                        ObjectGenerator.createFire(dummyCtx, -1000, -1000);
+                    }
                 } catch (e) { console.warn("Generator warmup failed", e); }
                 endInternal('asset_warmup_generators');
                 if (yieldToMain) await yieldToMain();
@@ -282,9 +301,15 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createHaybale());
                     addToWarmup(ObjectGenerator.createTimberPile());
                     addToWarmup(ObjectGenerator.createDeadBody('WALKER'));
+                    addToWarmup(ObjectGenerator.createDeadBody('RUNNER'));
+                    addToWarmup(ObjectGenerator.createDeadBody('TANK'));
+                    addToWarmup(ObjectGenerator.createDeadBody('BOMBER'));
                     addToWarmup(ObjectGenerator.createDeadBody('PLAYER'));
+                    addToWarmup(ObjectGenerator.createDeadBody('HUMAN'));
                     addToWarmup(ObjectGenerator.createCaveLamp());
                     addToWarmup(ObjectGenerator.createTerminal('ARMORY'));
+                    addToWarmup(ObjectGenerator.createTerminal('SPAWNER'));
+                    addToWarmup(ObjectGenerator.createTerminal('ENV'));
                     addToWarmup(ObjectGenerator.createRubble(0, 0, 4));
                     addToWarmup(ObjectGenerator.createShelf());
                 } catch (e) { console.warn('[AssetPreloader] Prop warmup failed', e); }

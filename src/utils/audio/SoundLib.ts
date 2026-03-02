@@ -141,15 +141,28 @@ const Generators = {
         }
         return buffer;
     },
-    fx_heartbeat: (ctx: AudioContext) => {
+
+    heartbeat: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.8;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            // Double thump lup-dup
-            const thump1 = Math.sin(2 * Math.PI * 60 * t) * 0.3 * Math.exp(-40 * t);
-            const thump2 = t > 0.2 ? Math.sin(2 * Math.PI * 50 * (t - 0.2)) * 0.25 * Math.exp(-40 * (t - 0.2)) : 0;
+
+            // LUP (first beat)
+            const sub1 = Math.sin(2 * Math.PI * 55 * t) * Math.exp(-30 * t);
+            const mid1 = Math.sin(2 * Math.PI * 120 * t) * 0.5 * Math.exp(-50 * t);
+            const thump1 = (sub1 + mid1) * 0.9;
+
+            // DUP (second beat)
+            let thump2 = 0;
+            if (t > 0.25) {
+                const t2 = t - 0.25;
+                const sub2 = Math.sin(2 * Math.PI * 65 * t2) * Math.exp(-40 * t2);
+                const mid2 = Math.sin(2 * Math.PI * 140 * t2) * 0.5 * Math.exp(-60 * t2);
+                thump2 = (sub2 + mid2) * 0.7;
+            }
+
             data[i] = thump1 + thump2;
         }
         return buffer;
@@ -413,9 +426,6 @@ const Generators = {
         }
         return buffer;
     },
-    vehicle_horn: (ctx: AudioContext) => {
-        return createTone(ctx, 'square', 440, 0.5, 0.3);
-    },
 
     // WILDLIFE
     owl_hoot: (ctx: AudioContext) => {
@@ -633,6 +643,8 @@ export function registerSoundGenerators() {
     SoundBank.register('shot_revolver', Generators.shot_revolver);
     SoundBank.register('shot_shotgun', Generators.shot_shotgun);
     SoundBank.register('shot_minigun', Generators.shot_minigun);
+    SoundBank.register('shot_arc_cannon', (ctx) => Generators.uiChime(ctx));
+    SoundBank.register('shot_flamethrower', Generators.ignite);
 
     // Throawables
     SoundBank.register('pin_pull', Generators.pin_pull);
@@ -672,13 +684,14 @@ export function registerSoundGenerators() {
     SoundBank.register('mech_mag_out', Generators.mech_mag_out);
     SoundBank.register('mech_mag_in', Generators.mech_mag_in);
     SoundBank.register('mech_empty_click', Generators.mech_empty_click);
+    SoundBank.register('mech_holster', Generators.mech_mag_out);
 
     // Wind
     SoundBank.register('ambient_wind', Generators.ambient_wind);
 
     // Feedback
     SoundBank.register('ui_level_up', Generators.ui_level_up);
-    SoundBank.register('fx_heartbeat', Generators.fx_heartbeat);
+    SoundBank.register('heartbeat', Generators.heartbeat);
 
     // Impacts
     SoundBank.register('impact_flesh', Generators.impact_flesh);
@@ -699,7 +712,6 @@ export function registerSoundGenerators() {
     SoundBank.register('vehicle_engine_boat', Generators.vehicle_engine_boat);
     SoundBank.register('vehicle_engine_car', Generators.vehicle_engine_car);
     SoundBank.register('vehicle_skid', Generators.vehicle_skid);
-    SoundBank.register('vehicle_horn', Generators.vehicle_horn);
 
     // Wildlife
     SoundBank.register('owl_hoot', Generators.owl_hoot);
@@ -748,7 +760,7 @@ export const GamePlaySounds = {
     startWind: (core: SoundCore) => {
         return SoundBank.play(core, 'ambient_wind', 0, 1.0, true);
     },
-    playHeartbeat: (core: SoundCore) => SoundBank.play(core, 'fx_heartbeat', 0.3),
+    playHeartbeat: (core: SoundCore) => SoundBank.play(core, 'heartbeat', 0.8),
 
     playFootstep: (core: SoundCore, type: 'step' | 'snow' | 'metal' | 'wood' | 'water' = 'step') => {
         const key = type === 'step' ? 'step' : `step_${type}`;
