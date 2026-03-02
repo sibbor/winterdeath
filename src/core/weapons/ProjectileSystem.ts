@@ -24,7 +24,7 @@ export interface GameContext {
     scene: THREE.Scene;
     enemies: Enemy[];
     collisionGrid: SpatialGrid;
-    spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) => void;
+    spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
     spawnFloatingText: (x: number, y: number, z: number, text: string, color?: string) => void;
     spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
     explodeEnemy: (e: Enemy, force: THREE.Vector3) => void;
@@ -347,7 +347,7 @@ export const ProjectileSystem = {
             const count = 3;
             for (let i = 0; i < count; i++) {
                 _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.5);
-                FXSystem.spawnFlame(_v1, direction);
+                FXSystem.spawnFlame(_v1, direction, true);
             }
 
             const coneAngle = Math.cos(25 * Math.PI / 180);
@@ -526,7 +526,9 @@ export const ProjectileSystem = {
                 const normalizedDist = r / fz.radius;
                 const flameScale = 2.5 - normalizedDist * 1.8;
                 const flameY = 0.3 + (1.0 - normalizedDist) * 1.2;
-                ctx.spawnPart(fx, flameY, fz2, 'fire', 1, undefined, undefined, undefined, flameScale);
+                const colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
+                // (x, y, z, type, count, mesh, vel, color, scale)
+                ctx.spawnPart(fx, flameY, fz2, 'fire', 1, undefined, undefined, colorHex, flameScale);
             }
 
             if (fz.life <= 0) {

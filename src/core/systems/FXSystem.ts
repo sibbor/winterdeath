@@ -34,6 +34,7 @@ interface SpawnRequest {
     customVel: THREE.Vector3;
     color?: number;
     scale?: number;
+    life?: number;
     material?: THREE.Material;
 }
 
@@ -146,7 +147,10 @@ export const FXSystem = {
 
     _getSpawnRequest: (): SpawnRequest => {
         const req = REQUEST_POOL.pop();
-        if (req) return req;
+        if (req) {
+            req.life = undefined;
+            return req;
+        }
         return {
             scene: null as any, particlesList: [],
             x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3()
@@ -278,7 +282,7 @@ export const FXSystem = {
         else if (t === 'debris') baseLife = 200;
         else if (t === 'large_fire' || t === 'large_smoke' || t === 'flame' || t === 'fire' || t === 'smoke' || t === 'spark' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') baseLife = 60;
 
-        p.life = baseLife + Math.random() * 20;
+        p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 20);
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
@@ -309,11 +313,11 @@ export const FXSystem = {
         FXSystem.decalQueue.push(req);
     },
 
-    spawnPart: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number) => {
+    spawnPart: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => {
         for (let i = 0; i < count; i++) {
             let req = FXSystem._getSpawnRequest();
             req.scene = scene; req.particlesList = particlesList; req.x = x; req.y = y; req.z = z;
-            req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale;
+            req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale; req.life = life;
 
             if (customVel) req.customVel.copy(customVel);
             else req.customVel.set(0, 0, 0);
@@ -547,6 +551,15 @@ export const FXSystem = {
             const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
             imesh.frustumCulled = false;
 
+            // [VINTERDÖD] DISABLE SHADOWS FOR ENTIRE PARTICLE SYSTEM
+            if (type === 'debris' || type === 'scrap' || type === 'glass' || type === 'gore') {
+                imesh.castShadow = true;
+                imesh.receiveShadow = true;
+            } else {
+                imesh.castShadow = false;
+                imesh.receiveShadow = false;
+            }
+
             // Assign a high render order to ensure it renders correctly above decals
             imesh.renderOrder = 60;
 
@@ -562,12 +575,18 @@ export const FXSystem = {
         } else if (FXSystem._instancedMeshes[type].parent !== scene) {
             scene.add(FXSystem._instancedMeshes[type]);
         }
+
+        // [VINTERDÖD] CRITICAL FIX: AssetPreloader hides all meshes (visible=false) after compiling shaders
+        // to prevent 1-frame screen flashes. Since these are singletons, we MUST restore their visibility
+        // here when the active combat sector requests them for spawning.
+        FXSystem._instancedMeshes[type].visible = true;
+
         return FXSystem._instancedMeshes[type];
     },
 
     // --- SPECIAL WEAPON EFFECTS ---
 
-    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
+    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3, isFlamethrower: boolean = false) => {
         const spread = 0.15;
         _v1.copy(direction).add(_v2.set(
             (Math.random() - 0.5) * spread,
@@ -575,8 +594,9 @@ export const FXSystem = {
             (Math.random() - 0.5) * spread
         )).normalize();
 
-        const speed = 10 + Math.random() * 5;
-        const scale = 0.5 + Math.random() * 0.5;
+        let speed = 10 + Math.random() * 5;
+        let scale = 0.5 + Math.random() * 0.5;
+        let life: number | undefined = undefined;
 
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
@@ -584,9 +604,20 @@ export const FXSystem = {
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'fire';
 
+        // --- FLAME COLOR RANDOMIZATION ---
+        let colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
+
+        if (isFlamethrower && Math.random() < 0.25) {
+            colorHex = 0x00bfff; // Deep Cyan / Blue flame at the nozzle
+            scale *= 0.7; // Blue cores are smaller
+            life = 8; // Short life (muzzle flash only)
+            speed *= 0.3; // Keep them from shooting out into the stream
+        }
+
         req.customVel.copy(_v1).multiplyScalar(speed);
         req.scale = scale;
-        req.color = 0xff5500;
+        req.color = colorHex;
+        req.life = life;
         FXSystem.particleQueue.push(req);
     },
 

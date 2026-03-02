@@ -7,6 +7,7 @@ import { soundManager } from '../utils/sound';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ZombieRenderer } from './renderers/ZombieRenderer';
 import { CorpseRenderer } from './renderers/CorpseRenderer';
+import { AshRenderer } from './renderers/AshRenderer';
 import { FXSystem } from './systems/FXSystem';
 
 export type { Enemy };
@@ -25,6 +26,7 @@ const enemyPool: Enemy[] = [];
 
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
+let ashRenderer: AshRenderer | null = null;
 
 // --- REUSABLE UPDATE CALLBACKS --- (Initialized after EnemyManager to allow circular references)
 const _aiCallbacks: any = {
@@ -46,14 +48,19 @@ export const EnemyManager = {
         if (!corpseRenderer) corpseRenderer = new CorpseRenderer(scene);
         else corpseRenderer.reAttach(scene);
 
+        if (!ashRenderer) ashRenderer = new AshRenderer(scene);
+        else ashRenderer.reAttach(scene);
+
         enemyPool.length = 0;
     },
 
     clear: () => {
         zombieRenderer?.destroy();
         corpseRenderer?.destroy();
+        ashRenderer?.destroy();
         zombieRenderer = null;
         corpseRenderer = null;
+        ashRenderer = null;
         enemyPool.length = 0;
     },
 
@@ -154,15 +161,6 @@ export const EnemyManager = {
         }
     },
 
-    createAshPile: (enemy: Enemy): THREE.Object3D => {
-        const ash = new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash);
-        ash.position.copy(enemy.mesh.position);
-        ash.position.y = 0.2;
-        const s = enemy.originalScale || 1.0;
-        ash.scale.set((1 + Math.random() * 0.5) * s, 1 * s, (1 + Math.random() * 0.5) * s);
-        return ash;
-    },
-
     /**
      * Centralized handling for all high-impact death effects (GIBBED or EXPLODED).
      */
@@ -201,9 +199,13 @@ export const EnemyManager = {
         } else {
             _v1.copy(enemy.velocity).multiplyScalar(0.5).add(_up);
         }
+
+        // [VINTERDÖD] Cap Boss Gore Scale to prevent massive blue boulders
+        const maxGoreScale = enemy.isBoss ? Math.min(enemyScale * 1.5, 3.0) : enemyScale * 0.8;
+
         for (let i = 0; i < goreCount; i++) {
             _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
-            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'gore', 1, undefined, _v2, enemy.color, enemyScale * (enemy.isBoss ? 1.5 : 0.8));
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'gore', 1, undefined, _v2, enemy.color, maxGoreScale);
         }
     },
 
@@ -227,48 +229,26 @@ export const EnemyManager = {
         }
 
         else if (type === 'BURNED') {
-            const ash = e.ashPile;
-            if (!ash) {
+            if (!e.mesh.userData.ashSpawned) {
                 e.mesh.userData.ashSpawned = true;
-                const scene = e.mesh.parent as THREE.Scene;
-                if (scene) {
-                    const newAsh = EnemyManager.createAshPile(e);
-                    newAsh.scale.set(0.01, 0.01, 0.01); // Start at zero scale!
-                    scene.add(newAsh);
-                    e.ashPile = newAsh;
+
+                // Trigger the instanced ash pile instead of creating a massive mesh tree
+                if (ashRenderer) {
+                    ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale || 1.0, e.widthScale || 1.0, e.color || 0xffffff, now, 1500);
                 }
-                return;
             }
 
             const progress = Math.min(1.0, age / 1500);
             const s = e.originalScale || 1.0;
             const w = e.widthScale || 1.0;
 
-            // 1. Shrink enemy
+            // 1. Shrink enemy mesh
             const shrink = 1.0 - progress;
             e.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
 
-            // 2. Grow ash pile from zero to full size
-            ash.scale.set(
-                (1.2 * s * w) * progress,
-                (1.0 * s) * progress,
-                (1.2 * s * w) * progress
-            );
-
-            // 3. Darken enemy color
-            _baseColor.setHex(e.color || 0x888888);
-            _baseColor.lerp(_ashColor, progress);
-            const colorMats = e.mesh.userData.colorMats;
-            if (colorMats) {
-                for (let i = 0; i < colorMats.length; i++) {
-                    (colorMats[i] as any).color.copy(_baseColor);
-                }
-            }
-
-            // 4. Finalize
+            // 2. Finalize removal
             if (progress >= 1.0 && !e.mesh.userData.ashPermanent) {
                 e.mesh.userData.ashPermanent = true;
-                // Ash is already scaled and in the scene, just remove the enemy mesh
                 if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
             }
             return;
@@ -471,6 +451,7 @@ export const EnemyManager = {
         }
 
         if (zombieRenderer) zombieRenderer.sync(_syncList);
+        if (ashRenderer) ashRenderer.update(Math.max(now, 1));
     },
 
     cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], now: number, state: any, callbacks: any) => {

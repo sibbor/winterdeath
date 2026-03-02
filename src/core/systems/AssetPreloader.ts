@@ -280,7 +280,6 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal));
                 addToWarmup(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodStainDecal));
                 addToWarmup(new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone));
-                addToWarmup(new THREE.Mesh(GEOMETRY.ashPile, MATERIALS.ash));
                 addToWarmup(new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog));
                 addToWarmup(new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius));
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard));
@@ -345,6 +344,9 @@ export const AssetPreloader = {
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.deadWood);
+
+                // [VINTERDÖD] AshRenderer needs InstancedMesh warmup for smooth fading
+                addInstancedWarmup(GEOMETRY.ashPile, MATERIALS.ash);
 
                 // Tree Prototypes (also triggers EnvironmentGenerator caching)
                 const treeTypes: ('PINE' | 'SPRUCE' | 'OAK' | 'DEAD' | 'BIRCH')[] = ['PINE', 'SPRUCE', 'OAK', 'DEAD', 'BIRCH'];
