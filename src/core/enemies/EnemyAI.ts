@@ -79,27 +79,28 @@ export const EnemyAI = {
                 else if (rawImpact === 'electrified' || rawImpact === 'ELECTRIFIED') weaponImpact = 'ELECTRIFIED';
             }
 
-            // 1. Explosions (Grenades, Bombers, Bosses)
-            if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
+            // 1. Electrocution Deaths (Arc-Cannon) - Highest Priority
+            if (weaponImpact === 'ELECTRIFIED' || dmgType === WeaponType.ARC_CANNON) {
+                e.deathState = 'ELECTRIFIED';
+                e.deathVel.set(0, 0, 0); // Kill all momentum so they stiffen and fall flat
+            }
+            // 2. Fire Deaths (Molotov, Flamethrower, or dying while actively on fire)
+            // Priority: Fire takes precedence over self-destruction for regular enemies (e.g. Bombers)
+            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === 'BURN') {
+                e.deathState = 'BURNED';
+            }
+            // 3. Explosions (Grenades, Bombers, Bosses)
+            else if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
                 e.deathState = 'EXPLODED';
                 if (dmgType !== WeaponType.GRENADE) {
                     soundManager.playExplosion();
                     haptic.explosion();
                 }
             }
-            // 2. High-Impact Gibbing (Shotgun/Revolver at close range)
+            // 4. High-Impact Gibbing (Shotgun/Revolver at close range)
             else if (weaponImpact === 'GIBBED' && isHighImpact) {
                 e.deathState = 'GIBBED';
                 e.mesh.userData.gibbed = true;
-            }
-            // 3. Fire Deaths (Molotov, Flamethrower, or dying while actively on fire)
-            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === 'BURN') {
-                e.deathState = 'BURNED';
-            }
-            // 4. Electrocution Deaths (Arc-Cannon)
-            else if (weaponImpact === 'ELECTRIFIED' || dmgType === WeaponType.ARC_CANNON) {
-                e.deathState = 'ELECTRIFIED';
-                e.deathVel.set(0, 0, 0); // Kill all momentum so they stiffen and fall flat
             }
             // 5. Standard Weapon Shots (SMG, Rifle, Pistol)
             else if (weapon) {

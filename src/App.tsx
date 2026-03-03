@@ -37,6 +37,7 @@ const App: React.FC = () => {
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
     const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE);
     const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
+    const [showLoadingOverlay, setShowLoadingOverlay] = useState(isLoadingSector || isLoadingCamp);
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
 
@@ -77,6 +78,7 @@ const App: React.FC = () => {
                 setIsInitialBoot(false);
                 setIsLoadingCamp(false);
                 setIsLoadingSector(false);
+                setTimeout(() => { if (isMounted) setShowLoadingOverlay(false); }, 500);
             }
         };
 
@@ -278,12 +280,14 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
     };
 
-    const handleSelectSector = (sectorIndex: number) => {
+    const handleSelectSector = useCallback((sectorIndex: number) => {
         setGameState(prev => ({ ...prev, currentSector: sectorIndex }));
-    };
+    }, []);
 
-    const handleStartSector = async () => {
+    const handleStartSector = useCallback(async () => {
         setIsLoadingSector(true);
+        setShowLoadingOverlay(true);
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setTeleportTarget(null);
 
         // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
@@ -293,13 +297,12 @@ const App: React.FC = () => {
         const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
         await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
 
-        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setHudState({});
         setCurrentSectorMapItems([]);
         setActiveCollectible(null);
         setIsPaused(false);
         setIsMapOpen(false);
-    };
+    }, [gameState.currentSector]);
 
     const handlePrologueComplete = () => {
         // Transition straight to SECTOR (skipping CAMP as requested)
@@ -417,7 +420,10 @@ const App: React.FC = () => {
                     onResetGame={handleResetGame}
                     onSaveGraphics={handleSaveGraphics}
                     initialGraphics={gameState.graphics}
-                    onCampLoaded={() => setIsLoadingCamp(false)}
+                    onCampLoaded={() => {
+                        setIsLoadingCamp(false);
+                        setTimeout(() => setShowLoadingOverlay(false), 500);
+                    }}
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
                     isRunning={!isLoadingCamp && !isInitialBoot}
@@ -567,12 +573,13 @@ const App: React.FC = () => {
                 </>
             )}
 
-            {(isLoadingSector || isLoadingCamp) && (
+            {(showLoadingOverlay) && (
                 <ScreenLoading
                     sectorIndex={gameState.currentSector}
                     isCamp={isLoadingCamp}
                     isInitialBoot={isInitialBoot}
                     isMobileDevice={isMobileDevice}
+                    isDone={!isLoadingCamp && !isLoadingSector}
                     debugInfo={{
                         fps,
                         sceneChildren: hudState.debugInfo?.sceneChildren,
@@ -629,6 +636,7 @@ const App: React.FC = () => {
                     onReturnCamp={() => {
                         soundManager.playUiConfirm();
                         setIsLoadingCamp(true);
+                        setShowLoadingOverlay(true);
                         setIsDeathScreenActive(false);
 
                         // Yield to browser so it can render the loading screen before we block the thread
@@ -645,6 +653,7 @@ const App: React.FC = () => {
                     onRetry={() => {
                         setIsDeathScreenActive(false);
                         setIsLoadingSector(true);
+                        setShowLoadingOverlay(true);
                         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
                         setSectorStats(null);
                         setDeathDetails(null);

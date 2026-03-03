@@ -25,6 +25,7 @@ export class CinematicSystem implements System {
         setCinematicActive: (active: boolean) => void;
         endCinematic: () => void;
         playCinematicLine: (index: number) => void;
+        setTailPosition: (pos: 'bottom' | 'top' | 'left' | 'right') => void;
     };
     private frame: number = 0;
 
@@ -39,6 +40,7 @@ export class CinematicSystem implements System {
             setCinematicActive: (active: boolean) => void;
             endCinematic: () => void;
             playCinematicLine: (index: number) => void;
+            setTailPosition: (pos: 'bottom' | 'top' | 'left' | 'right') => void;
         };
     }) {
         this.cinematicRef = opts.cinematicRef;
@@ -131,7 +133,10 @@ export class CinematicSystem implements System {
             else if (activeY > screenH - marginY) { activeY = screenH - marginY; tailPos = 'bottom'; }
 
             this.bubbleRef.current.style.transform = `translate3d(${activeX}px, ${activeY}px, 0)`;
-            cinematic.tailPosition = tailPos;
+            if (cinematic.tailPosition !== tailPos) {
+                cinematic.tailPosition = tailPos;
+                this.callbacks.setTailPosition(tailPos);
+            }
         }
 
         // 4. Animation & Sound

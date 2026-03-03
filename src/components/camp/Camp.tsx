@@ -408,8 +408,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         sceneFamilyMembersRef.current = familyMembers;
         sceneActiveMembersRef.current = activeMembers;
 
-        // Signal the loading screen to close after one rAF (shaders compiled)
-        requestAnimationFrame(() => { if (onCampLoaded) onCampLoaded(); });
+        // Signal the loading screen to close after several frames to ensure scene is settled and shaders linked
+        let framesToWait = 3;
+        const checkReady = () => {
+            if (framesToWait > 0) {
+                framesToWait--;
+                requestAnimationFrame(checkReady);
+            } else {
+                if (onCampLoaded) onCampLoaded();
+            }
+        };
+        requestAnimationFrame(checkReady);
 
         // NOTE: No cleanup needed here — interactivity effect owns listeners/callbacks.
     }, [rescuedFamilyIndices, debugMode, textures]); // NOT isRunning

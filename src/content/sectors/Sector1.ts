@@ -445,7 +445,8 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createGuardrail(ctx, guardRailNorthEast, true);
 
-        // TODO: FIX THIS
+        // TODO: Adjust this:
+        // Debris
         const debrisGeo = new THREE.BoxGeometry(0.15, 0.3, 5);
         const debrisPositions = [
             { x: 144, z: 339, ry: 0.2, rz: 0.1 },
@@ -462,7 +463,6 @@ export const Sector1: SectorDef = {
             ctx.scene.add(mesh);
         }
 
-        // TODO: FIX THIS
         // Skid Marks (Sliding from West towards the broken edge)
         // Left Tire
         PathGenerator.createDecalPath(ctx, [
@@ -796,10 +796,84 @@ export const Sector1: SectorDef = {
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
-        if (!sectorState.spawns) {
-            sectorState.spawns = {};
+        const state = gameState;
+        if (!sectorState.spawns) sectorState.spawns = {};
+
+        // --- 1. AMBIENT ZOMBIE SPAWNS ---
+        if (!sectorState.spawns.initial && now - state.startTime > 0) {
+            sectorState.spawns.initial = true;
+            for (let i = 0; i < 3; i++) {
+                if (events.spawnZombie) events.spawnZombie('WALKER', new THREE.Vector3(14, 0, 1));
+            }
         }
 
+        const forestHomeSMU = new THREE.Vector3(70, 0, 50);
+        if (playerPos.distanceTo(forestHomeSMU) < 40 && !sectorState.spawns.forest_home_smu) {
+            sectorState.spawns.forest_home_smu = true;
+            for (let i = 0; i < 6; i++) {
+                const type = Math.random() > 0.7 ? 'RUNNER' : 'WALKER';
+                const offX = (Math.random() - 0.5) * 30;
+                const offZ = (Math.random() - 0.5) * 30;
+                if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(forestHomeSMU.x + offX, 0, forestHomeSMU.z + offZ));
+            }
+        }
+
+        const buildingPOIs = [
+            { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, type: 'MIXED' },
+            { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, type: 'WALKER' },
+            { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, type: 'RUNNER' },
+            { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, type: 'MIXED' },
+            { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: 'WALKER' },
+        ];
+
+        buildingPOIs.forEach(poi => {
+            const dist = playerPos.distanceTo(new THREE.Vector3(poi.pos.x, 0, poi.pos.z));
+            if (dist < 45 && !sectorState.spawns[poi.name]) {
+                sectorState.spawns[poi.name] = true;
+                for (let i = 0; i < poi.count; i++) {
+                    let type = 'WALKER';
+                    if (poi.type === 'MIXED') type = Math.random() > 0.8 ? 'RUNNER' : 'WALKER';
+                    else if (poi.type === 'RUNNER') type = Math.random() > 0.3 ? 'RUNNER' : 'WALKER';
+
+                    const offX = (Math.random() - 0.5) * 20;
+                    const offZ = (Math.random() - 0.5) * 20;
+                    if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(poi.pos.x + offX, 0, poi.pos.z + offZ));
+                }
+            }
+        });
+
+        const townCenterWoods = new THREE.Vector3(145, 0, 240);
+        if (playerPos.distanceTo(townCenterWoods) < 50 && !sectorState.spawns.town_forest) {
+            sectorState.spawns.town_forest = true;
+            for (let i = 0; i < 8; i++) {
+                let type = 'WALKER';
+                const roll = Math.random();
+                if (roll > 0.8) type = 'TANK';
+                else if (roll > 0.9) type = 'BOMBER';
+                else if (roll > 0.7) type = 'RUNNER';
+
+                const offX = (Math.random() - 0.5) * 40;
+                const offZ = (Math.random() - 0.5) * 40;
+                if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(townCenterWoods.x + offX, 0, townCenterWoods.z + offZ));
+            }
+        }
+
+        // --- 2. TRAIN SMOKE ---
+        if (events.spawnPart) {
+            const interval = 80;
+            if (now - (sectorState.lastSmokeTime || 0) > interval) {
+                sectorState.lastSmokeTime = now;
+                const tPos = LOCATIONS.POIS.TRAIN_YARD;
+                const yRot = -0.05;
+                const localX = 6, localY = 7.0, localZ = 0;
+                const wx = tPos.x + (localX * Math.cos(yRot) - localZ * Math.sin(yRot));
+                const wz = tPos.z + (localX * Math.sin(yRot) + localZ * Math.cos(yRot));
+
+                events.spawnPart(wx, localY, wz, 'black_smoke', 1);
+            }
+        }
+
+        // --- 3. BUS EVENT STATE MACHINE ---
         if (sectorState.busEventState === undefined) {
             sectorState.busEventState = 0;
             sectorState.zombiesKilled = 0;
@@ -899,16 +973,9 @@ export const Sector1: SectorDef = {
                 }
             }
 
-            for (let i = 0; i < 30; i++) {
-                if (events.spawnZombie) events.spawnZombie('WALKER', _trainYardPos.clone());
-                totalSpawned++;
-            }
-
-            // TODO: When we're done debugging:
-            //sectorState.zombiesKillTarget = 1;
-            sectorState.zombiesKillTarget = 1;
+            // Adjust Target
+            sectorState.zombiesKillTarget = 1; // TODO: Increase for prod
             sectorState.zombiesKilled = 0;
-
             sectorState.startingKills = gameState.killsInRun;
         }
 
@@ -930,7 +997,7 @@ export const Sector1: SectorDef = {
                     actions: []
                 });
 
-                // CRITICAL FIX: Mark flag for PlayerInteractionSystem
+                // Flag interaction for PlayerInteractionSystem
                 sectorState.busCanBeInteractedWith = true;
 
                 const busObj = (sectorState.ctx as any).busObject;
@@ -948,36 +1015,42 @@ export const Sector1: SectorDef = {
 
             const busObj = (sectorState.ctx as any).busObject;
             if (busObj) {
-                _busOriginalPos.copy(busObj.position);
+                sectorState.originalBusPos = busObj.position.clone();
+                const busPos = busObj.position;
 
+                // Cinematic Camera
                 if (events.setCameraOverride) {
-                    _camOverrideTarget.copy(busObj.position).add(_zoomOffsetTarget);
-                    _camOverrideLookAt.copy(busObj.position).add(_zoomOffsetLook);
+                    _camOverrideTarget.copy(busPos).add(_zoomOffsetTarget);
+                    _camOverrideLookAt.copy(busPos).add(_zoomOffsetLook);
                     events.setCameraOverride({
                         active: true,
                         targetPos: _camOverrideTarget,
                         lookAtPos: _camOverrideLookAt,
-                        endTime: performance.now() + 3000
+                        endTime: performance.now() + 4000
                     });
                 }
 
+                // Spawn red pulsating ring
                 const ringGeo = new THREE.RingGeometry(6, 7, 32);
                 const ringMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
                 const ring = new THREE.Mesh(ringGeo, ringMat);
                 ring.rotation.x = -Math.PI / 2;
-                ring.position.copy(busObj.position);
+                ring.position.copy(busPos);
                 ring.position.y = 1.0;
                 if (events.scene) events.scene.add(ring);
                 sectorState.busRing = ring;
             }
 
             if (events.playTone) events.playTone(880, 'sine', 0.1, 0.2);
+            if (events.setInteraction) events.setInteraction(null);
         }
 
         // State 7: Bomb countdown sequence
         else if (sectorState.busEventState === 7) {
             const elapsed = now - sectorState.busEventTimer;
             const _busObjShake = (sectorState.ctx as any).busObject;
+            const pos = (sectorState as any).originalBusPos || LOCATIONS.TRIGGERS.BUS;
+            _busOriginalPos.copy(pos);
 
             if (elapsed < 3000) {
                 // Beep sequence
@@ -1013,84 +1086,96 @@ export const Sector1: SectorDef = {
                 }
 
                 if (events.playSound) events.playSound('explosion');
-                if (events.cameraShake) events.cameraShake(10);
+                if (events.cameraShake) events.cameraShake(5);
 
-                // Spawn FX burst — fire particles + smoke in concentric rings
+                // --- 1. USE NATIVE GAME ENGINE EXPLOSION (NO CRASHES) ---
                 if (events.spawnPart) {
-                    // Inner ring: fire
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'fire', 10);
-                    // Mid ring: smoke columns
-                    events.spawnPart(_busOriginalPos.x + 4, 2, _busOriginalPos.z, 'smoke', 4);
-                    events.spawnPart(_busOriginalPos.x - 4, 2, _busOriginalPos.z, 'smoke', 4);
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z + 4, 'smoke', 4);
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z - 4, 'smoke', 4);
-                    // Scrap scatter
-                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'scrap', 8);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'flash', 1);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_fire', 15);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 10);
+                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'debris', 30);
+                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'scrap', 15);
                 }
 
-                // Add explosion flash light
-                const flash = new THREE.PointLight(0xff8800, 50, 60);
-                flash.position.set(_busOriginalPos.x, 3.0, _busOriginalPos.z);
-                events.scene.add(flash);
-                sectorState.explosionLight = flash;
-
-                // [VINTERDÖD] Fully remove bus mesh + invisible collider from scene
-                // so the tunnel is clear to enter after the explosion.
+                // --- 2. CLEAR THE TUNNEL PASSAGE ---
                 const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
-                const _busColMesh = (sectorState.ctx as any).busColMesh as THREE.Object3D | null;
                 const _obsArray = sectorState.ctx.obstacles;
-                const _busIdx = (sectorState.ctx as any).busObjectIdx as number | undefined;
 
                 if (_busObj && events.scene) {
                     SectorGenerator.extinguishFire(sectorState.ctx, _busObj);
                     events.scene.remove(_busObj);
                     (sectorState.ctx as any).busObject = null;
                 }
-                if (_busColMesh && events.scene) {
-                    events.scene.remove(_busColMesh);
-                    (sectorState.ctx as any).busColMesh = null;
-                }
 
-                // Swap-and-pop obstacle removal (Zero-GC, no splice)
-                if (_busIdx !== undefined && _obsArray && _busIdx < _obsArray.length) {
-                    _obsArray[_busIdx] = _obsArray[_obsArray.length - 1];
-                    _obsArray.pop();
-                    (sectorState.ctx as any).busObjectIdx = undefined;
-                }
+                if (_obsArray && _busOriginalPos) {
+                    for (let i = 0; i < _obsArray.length; i++) {
+                        const obs = _obsArray[i];
+                        if (obs && obs.collider && obs.collider.type === 'box' &&
+                            Math.abs(obs.position.x - _busOriginalPos.x) < 2.0 &&
+                            Math.abs(obs.position.z - _busOriginalPos.z) < 2.0) {
 
-                // Spawn animated rubble — bias northward (Math.PI = -Z) so pieces
-                // land north of the embankment, away from the tunnel opening.
+                            obs.collider.size.set(0, 0, 0);
+                            obs.radius = 0;
+                            obs.position.setY(-1000);
+                            if (obs.mesh) {
+                                obs.mesh.position.setY(-1000);
+                                if (events.scene) events.scene.remove(obs.mesh);
+                            }
+
+                            _obsArray[i] = _obsArray[_obsArray.length - 1];
+                            _obsArray.pop();
+                            break;
+                        }
+                    }
+                }
+                (sectorState.ctx as any).busObjectIdx = undefined;
+
+                // --- 3. SPAWN ANIMATED RUBBLE BIASED AWAY FROM TUNNEL ---
                 sectorState.busRubble = SectorGenerator.spawnRubble(
                     sectorState.ctx,
                     _busOriginalPos.x,
                     _busOriginalPos.z,
                     20,
                     MATERIALS.busBlue,
-                    Math.PI // directionBias = PI = northward (negative Z)
+                    Math.PI
                 );
 
-                // Per-piece landing flag (Uint8Array = zero-GC, no object allocation)
                 if (sectorState.busRubble) {
+                    sectorState.busRubble.userData.active = true;
                     sectorState.busRubble.userData.hasLanded = new Uint8Array(sectorState.busRubble.count);
+
+                    const data = sectorState.busRubble.userData;
+                    for (let i = 0; i < sectorState.busRubble.count; i++) {
+                        const ix = i * 3;
+
+                        // X = Sprid i sidled
+                        const dirX = (Math.random() - 0.5) * 3.0;
+
+                        // Y = Kasta uppåt
+                        const dirY = 1.0 + Math.random();
+
+                        // Z = NEGATIV RIKTNING (bort från tunnelns Z=344 mot gatan på Z=300)
+                        const dirZ = -(0.5 + Math.random() * 1.5);
+
+                        const force = 15 + Math.random() * 20;
+                        const vec = new THREE.Vector3(dirX, dirY, dirZ).normalize().multiplyScalar(force);
+
+                        data.velocities[ix] = vec.x;
+                        data.velocities[ix + 1] = vec.y;
+                        data.velocities[ix + 2] = vec.z;
+                    }
                 }
                 sectorState.lastMetalImpactTime = 0;
             }
         }
 
-        // State 8: Explosion physics, flash fade, and post-explosion events (Zero-GC)
+        // State 8: Explosion physics and post-explosion events
         else if (sectorState.busEventState === 8) {
             const elapsed = now - sectorState.busEventTimer;
-            const dtSec = dt * 0.001; // Convert ms to seconds for physics calculations
 
-            // Fade out the explosion flash rapidly
-            if (sectorState.explosionLight) {
-                const intensity = Math.max(0, 50 - (elapsed * 0.05));
-                sectorState.explosionLight.intensity = intensity;
-                if (intensity === 0) {
-                    events.scene.remove(sectorState.explosionLight);
-                    sectorState.explosionLight = null;
-                }
-            }
+            // FIX: dt är redan i sekunder, rör inte denna!
+            const dtSec = dt;
 
             let transitionToState9 = false;
 
@@ -1103,39 +1188,30 @@ export const Sector1: SectorDef = {
                 for (let i = 0; i < rubble.count; i++) {
                     const ix = i * 3;
 
-                    // Only calculate physics if the piece is above ground
                     if (data.positions[ix + 1] > 0.5) {
                         stillMoving = true;
 
-                        // Apply gravity
-                        data.velocities[ix + 1] -= 50.0 * dtSec;
+                        data.velocities[ix + 1] -= 50.0 * dtSec; // Gravity
 
-                        // Update position
                         data.positions[ix] += data.velocities[ix] * dtSec;
                         data.positions[ix + 1] += data.velocities[ix + 1] * dtSec;
                         data.positions[ix + 2] += data.velocities[ix + 2] * dtSec;
 
-                        // Floor collision check
                         if (data.positions[ix + 1] <= 0.5) {
                             data.positions[ix + 1] = 0.5;
 
-                            // Apply friction and bounce
                             data.velocities[ix] *= 0.4;
                             data.velocities[ix + 2] *= 0.4;
                             data.velocities[ix + 1] *= -0.3; // Dampened bounce
 
-                            // Reduce spin on impact
                             data.spin[ix] *= 0.2;
                             data.spin[ix + 1] *= 0.2;
                             data.spin[ix + 2] *= 0.2;
 
-                            // Put to sleep if vertical velocity is very low
                             if (Math.abs(data.velocities[ix + 1]) < 1.0) {
                                 data.velocities[ix + 1] = 0;
                             }
 
-                            // Play metal impact sound on first landing only
-                            // Throttle: max 1 sound per 80ms to prevent simultaneous-landing spam
                             if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
                                 data.hasLanded[i] = 1;
                                 if (now - sectorState.lastMetalImpactTime > 80) {
@@ -1145,16 +1221,14 @@ export const Sector1: SectorDef = {
                             }
                         }
 
-                        // Update rotation
                         data.rotations[ix] += data.spin[ix] * dtSec;
                         data.rotations[ix + 1] += data.spin[ix + 1] * dtSec;
                         data.rotations[ix + 2] += data.spin[ix + 2] * dtSec;
 
-                        // Compose matrix (Re-using global scratchpads to avoid GC)
                         _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
                         _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
                         _quat.setFromEuler(_rotation);
-                        _scale.setScalar(data.scales[i]);
+                        _scale.setScalar(data.scales ? data.scales[i] : 1.0);
 
                         _matrix.compose(_position, _quat, _scale);
                         rubble.setMatrixAt(i, _matrix);
@@ -1163,24 +1237,19 @@ export const Sector1: SectorDef = {
 
                 rubble.instanceMatrix.needsUpdate = true;
 
-                // Transition to idle state once all rubble has settled OR time safety is reached
-                if (!stillMoving || elapsed > 2500) {
+                if (!stillMoving || elapsed > 3500) {
                     data.active = false;
                     transitionToState9 = true;
                 }
             } else if (elapsed > 2000) {
-                // Fallback transition if rubble doesn't exist for some reason
                 transitionToState9 = true;
             }
 
-            // Execute the final completion logic once the animation settles
             if (transitionToState9) {
                 sectorState.busEventState = 9;
 
-                // Reset camera override via events
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
-                // Trigger the "Tunnel cleared" speech bubble
                 gameState.triggers.push({
                     id: 'dyn_speech_' + Date.now(),
                     position: playerPos.clone(),
@@ -1192,5 +1261,5 @@ export const Sector1: SectorDef = {
                 });
             }
         }
-    },
+    }
 };

@@ -145,6 +145,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const hasSetPrevPosRef = useRef<boolean>(false);
 
     const [cinematicActive, setCinematicActive] = useState(false);
+    const [bubbleTailPosition, setBubbleTailPosition] = useState<'bottom' | 'top' | 'left' | 'right'>('bottom');
     const [currentLine, setCurrentLine] = useState<any>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [bossIntroActive, setBossIntroActive] = useState(false);
@@ -1203,10 +1204,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     cameraShake: (amount: number) => engine.camera.shake(amount),
                     scene: engine.scene,
                     setCameraOverride: (params: any) => {
+                        cameraOverrideRef.current = params;
                         if (params) {
                             engine.camera.setCinematic(true);
-                            engine.camera.setPosition(params.targetPos.x, params.targetPos.y, params.targetPos.z);
-                            engine.camera.lookAt(params.lookAtPos.x, params.lookAtPos.y, params.lookAtPos.z);
                         } else {
                             engine.camera.setCinematic(false);
                         }
@@ -1245,7 +1245,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         setCurrentLine,
                         setCinematicActive,
                         endCinematic,
-                        playCinematicLine
+                        playCinematicLine,
+                        setTailPosition: (pos) => setBubbleTailPosition(pos)
                     }
                 }));
 
@@ -1299,14 +1300,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             } finally {
                 isBuildingSectorRef.current = false;
                 engine.isRenderingPaused = false;
-                if (isMounted.current) setIsSectorLoading(false);
+
+                // [VINTERDÖD] Buffer frames to prevent background flicker
+                let framesToWait = 3;
+                const checkReady = () => {
+                    if (framesToWait > 0) {
+                        framesToWait--;
+                        requestAnimationFrame(checkReady);
+                    } else {
+                        if (isMounted.current) {
+                            setIsSectorLoading(false);
+                            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
+                        }
+                    }
+                };
+                requestAnimationFrame(checkReady);
             }
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             stateRef.current.mapItems = mapItems;
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
-            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
+            // onSectorLoaded moved inside frame buffer check
             stateRef.current.mapItems = mapItems;
 
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
@@ -1572,7 +1587,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
 
             if (!isCinematic && !isBossIntro) {
-                const currentInput = engine.input.state;
 
                 if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > lastTeleportRef.current) {
                     const tgt = propsRef.current.teleportTarget;
@@ -1606,13 +1620,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     camera.lookAt(playerGroupRef.current.position.x, playerGroupRef.current.position.y, playerGroupRef.current.position.z, true);
                     prevPosRef.current.copy(playerGroupRef.current.position);
                 }
+            }
 
+            if (isCinematic || isBossIntro) {
+                gameSessionRef.current!.inputDisabled = true;
+            } else {
                 gameSessionRef.current!.inputDisabled = !!propsRef.current.disableInput || (!!cameraOverrideRef.current?.active);
-                gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
-                gameSessionRef.current!.debugMode = propsRef.current.debugMode;
-                gameSessionRef.current!.cameraAngle = camera.angle;
-                gameSessionRef.current!.update(delta, propsRef.current.mapId || 0);
+            }
 
+            gameSessionRef.current!.isMobile = !!propsRef.current.isMobileDevice;
+            gameSessionRef.current!.debugMode = propsRef.current.debugMode;
+            gameSessionRef.current!.cameraAngle = camera.angle;
+            gameSessionRef.current!.update(delta, propsRef.current.mapId || 0);
+
+            if (!isCinematic && !isBossIntro) {
                 if (state.hp / state.maxHp <= 0.1 && !state.isDead) {
                     if (now > (lastHeartbeatRef.current || 0) + 800) {
                         soundManager.playHeartbeat();
@@ -1924,15 +1945,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 speakerName={currentLine ? currentLine.speaker : ""}
                 isVisible={cinematicActive && currentLine !== null}
                 domRef={bubbleRef}
-                tailPosition={cinematicRef.current.tailPosition}
+                tailPosition={bubbleTailPosition}
                 isMobileDevice={props.isMobileDevice}
             />
 
             {cinematicActive && (
-                <div className={`absolute ${props.isMobileDevice ? 'bottom-8' : 'bottom-40'} left-1/2 -translate-x-1/2 pointer-events-auto z-50`}>
+                <div className={`absolute ${props.isMobileDevice ? 'bottom-8' : 'bottom-40'} left-1/2 -translate-x-1/2 pointer-events-auto z-[120]`}>
                     <button
-                        onClick={(e) => { soundManager.playUiClick(); endCinematic(); e.stopPropagation(); }}
-                        className="bg-black/80 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg]"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            soundManager.playUiClick();
+                            endCinematic();
+                        }}
+                        className="bg-black/90 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg] shadow-2xl active:scale-95"
                     >
                         <span className="block skew-x-[10deg]">{t('ui.end_dialogue')}</span>
                     </button>

@@ -438,7 +438,7 @@ export const PathGenerator = {
         const pts = curve.getSpacedPoints(segments);
         const v: number[] = [], idx: number[] = [], uv: number[] = [];
 
-        // Lokala vektorer för att undvika GC och state-krockar
+        // Local vectors to avoid GC and state collisions
         const _v1 = new THREE.Vector3();
         const _v2 = new THREE.Vector3();
         const _up = new THREE.Vector3(0, 1, 0);
@@ -449,11 +449,11 @@ export const PathGenerator = {
             else _v1.subVectors(pt, pts[i - 1]).normalize();
             _v2.crossVectors(_v1, _up).normalize();
 
-            // Mjuka backar (30% sluttning på vardera sida)
-            const p1 = pt.clone().addScaledVector(_v2, -width * 0.5).setY(0.1);
+            // Smooth slopes (Base extended by 2 meters outwards on each side)
+            const p1 = pt.clone().addScaledVector(_v2, (-width * 0.5) - 2.0).setY(0.1);
             const p2 = pt.clone().addScaledVector(_v2, -width * 0.2).setY(height);
             const p3 = pt.clone().addScaledVector(_v2, width * 0.2).setY(height);
-            const p4 = pt.clone().addScaledVector(_v2, width * 0.5).setY(0.1);
+            const p4 = pt.clone().addScaledVector(_v2, (width * 0.5) + 2.0).setY(0.1);
 
             v.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, p4.x, p4.y, p4.z);
 
@@ -463,8 +463,8 @@ export const PathGenerator = {
             if (i > 0) {
                 const o = (i - 1) * 4, c = i * 4;
 
-                // KORRIGERAT: Vänd på ordningen av indexen för att skapa 
-                // Counter-Clockwise (CCW) trianglar! Nu pekar backen uppåt mot ljuset.
+                // CORRECTED: Reverse the order of the indices to create 
+                // Counter-Clockwise (CCW) triangles! Now the slope faces upwards towards the light.
                 idx.push(
                     o, o + 1, c,
                     o + 1, c + 1, c,
@@ -474,7 +474,7 @@ export const PathGenerator = {
                     o + 3, c + 3, c + 2
                 );
 
-                // Kollisionen fungerade perfekt
+                // Collision works perfectly
                 const pPrev = pts[i - 1];
                 const pCurr = pts[i];
                 const mid = _v1.addVectors(pPrev, pCurr).multiplyScalar(0.5);
@@ -484,7 +484,8 @@ export const PathGenerator = {
                 SectorGenerator.addObstacle(ctx, {
                     position: mid.clone().setY(height / 2),
                     quaternion: new THREE.Quaternion().setFromAxisAngle(_up, angle),
-                    collider: { type: 'box', size: new THREE.Vector3(width, height, dist) }
+                    // Extended collider width by 4 to account for the +2m extension on both sides
+                    collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) }
                 });
             }
         }
@@ -494,7 +495,7 @@ export const PathGenerator = {
         geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
         geo.setIndex(idx);
 
-        // Dessa tre är viktiga för custom-geometri!
+        // These three are important for custom geometry!
         geo.computeVertexNormals();
         geo.computeBoundingSphere();
         geo.computeBoundingBox();
