@@ -3,7 +3,7 @@ import type React from 'react';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
-import { Engine } from '../engine/Engine';
+import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -118,7 +118,7 @@ export class FamilySystem implements System {
                 _animState.isMoving = fmIsMoving;
                 _animState.isIdleLong = isIdleLong;
 
-                const engine = Engine.getInstance();
+                const engine = WinterEngine.getInstance();
                 if (engine?.water) {
                     engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z);
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;

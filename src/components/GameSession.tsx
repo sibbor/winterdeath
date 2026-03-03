@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useMemo, useState, useImperativeHandle, useCallback } from 'react';
 import * as THREE from 'three';
 import TouchController from './ui/TouchController';
-import { Engine } from '../core/engine/Engine';
+import { WinterEngine } from '../core/engine/WinterEngine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { PlayerStats, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase, GraphicsSettings, GameScreen } from '../types';
 import { SectorContext } from '../types/SectorEnvironment';
@@ -88,7 +88,7 @@ export interface GameSessionHandle {
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
     const propsRef = useRef(props);
-    const engineRef = useRef<Engine | null>(null);
+    const engineRef = useRef<WinterEngine | null>(null);
     const gameSessionRef = useRef<GameSessionLogic | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
@@ -710,7 +710,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     useEffect(() => {
         if (!containerRef.current) return;
 
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
         const currentSetupId = ++setupIdRef.current;
 
         if (playerGroupRef.current) {

@@ -1075,7 +1075,16 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createRubble: (x: number, z: number, count: number, material?: THREE.Material) => {
+    /**
+     * Creates an InstancedMesh of animated bus rubble pieces.
+     * @param x Epicenter X
+     * @param z Epicenter Z
+     * @param count Number of pieces
+     * @param material Optional material override
+     * @param directionBias Center angle (radians) of the half-arc launch direction.
+     *   Default PI = northward (negative Z). The arc spans [bias - PI/2, bias + PI/2].
+     */
+    createRubble: (x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
         const mat = material == null ? MATERIALS.steel : material;
 
         const geometry = new THREE.BoxGeometry(2, 2, 4);
@@ -1099,10 +1108,15 @@ export const ObjectGenerator = {
             positions[ix + 1] = 2.0 + Math.random() * 2.0;
             positions[ix + 2] = z + (Math.random() - 0.5) * 4.0;
 
-            // Explosive outward velocity
-            velocities[ix] = (Math.random() - 0.5) * 35.0;     // X velocity
-            velocities[ix + 1] = 15.0 + Math.random() * 20.0;  // Y velocity (Upwards)
-            velocities[ix + 2] = (Math.random() - 0.5) * 35.0; // Z velocity
+            // Polar-form velocity biased toward directionBias half-arc.
+            // With gravity 50 m/s^2, speed=30 and vy=20: t_air=0.8s, range=30*0.8=24m.
+            // Pieces land 15-25m from bus, scattered in the chosen half-circle arc.
+            const halfArc = Math.PI * 0.5; // 90 degrees each side of bias
+            const angle = (directionBias - halfArc) + Math.random() * (halfArc * 2.0);
+            const speed = 20.0 + Math.random() * 15.0; // 20-35 m/s lateral
+            velocities[ix] = Math.cos(angle) * speed;
+            velocities[ix + 1] = 12.0 + Math.random() * 18.0; // 12-30 m/s upward
+            velocities[ix + 2] = Math.sin(angle) * speed;
 
             // Initial rotation
             rotations[ix] = Math.random() * Math.PI;

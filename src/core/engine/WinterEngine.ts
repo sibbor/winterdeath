@@ -13,11 +13,11 @@ import { PerformanceMonitor } from '../systems/PerformanceMonitor';
  * The Engine class acts as the central hub for the 3D environment.
  * Heavily optimized for high performance, GPU fill-rate protection, and Zero-GC.
  */
-export class Engine {
-    private static instance: Engine | null = null;
+export class WinterEngine {
+    private static instance: WinterEngine | null = null;
 
-    public static getInstance(): Engine {
-        if (!this.instance) this.instance = new Engine();
+    public static getInstance(): WinterEngine {
+        if (!this.instance) this.instance = new WinterEngine();
         return this.instance;
     }
 
@@ -192,7 +192,7 @@ export class Engine {
         this.onUpdate = null;
         this.onRender = null;
 
-        Engine.instance = null;
+        WinterEngine.instance = null;
     }
 
     // --- Scene Management ---

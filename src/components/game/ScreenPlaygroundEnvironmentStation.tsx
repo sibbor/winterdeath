@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../../utils/i18n';
 import GameModalLayout from './GameModalLayout';
-import { Engine } from '../../core/engine/Engine';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import { EnvironmentOverride, WeatherType } from '../../types';
 import { Sector6 } from '../../content/sectors/Sector6';
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { t } from '../../utils/i18n';
 import GameModalLayout from './GameModalLayout';
 import { EnemyManager } from '../../core/EnemyManager';
-import { Engine } from '../../core/engine/Engine';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import * as THREE from 'three';
 
 interface ScreenPlaygroundEnemyStationProps {
@@ -19,7 +19,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
     const [biome, setBiome] = useState<'NEAR' | 'FOREST' | 'FARM' | 'VILLAGE'>('NEAR');
 
     const handleSpawn = () => {
-        const scene = Engine.getInstance().scene;
+        const scene = WinterEngine.getInstance().scene;
         // Determine spawn center
         let center = new THREE.Vector3(playerPos.x, 0, playerPos.z);
         if (biome === 'FOREST') center.set(30, 0, -30); // Approx forest

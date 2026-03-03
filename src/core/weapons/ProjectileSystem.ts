@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import { Enemy } from '../EnemyManager';
-import { Obstacle } from '../world/CollisionResolution';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
 import { haptic } from '../../utils/HapticManager';
-import { WEAPONS, WeaponBehavior, WeaponType } from '../../content/weapons';
+import { WEAPONS, WeaponType } from '../../content/weapons';
 import { FXSystem } from '../systems/FXSystem';
 import { SpatialGrid } from '../world/SpatialGrid';
-import { Engine } from '../engine/Engine';
+import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
 
 // --- INTERFACES ---
@@ -76,7 +75,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                 ctx.spawnPart(pos.x, 0, pos.z, 'debris', 25, undefined, undefined, undefined, 2.0);
             }
 
-            const engine = Engine.getInstance();
+            const engine = WinterEngine.getInstance();
             let inWater = hitWater;
             let waterY = pos.y;
             if (engine && engine.water && !inWater) {
@@ -173,7 +172,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             fz.mesh.position.set(pos.x, 0.24, pos.z);
             fz.mesh.scale.setScalar(fz.radius / 3.5);
 
-            const engine = Engine.getInstance();
+            const engine = WinterEngine.getInstance();
             let inWater = false;
             let waterY = 0;
             if (engine && engine.water) {
@@ -291,7 +290,7 @@ export const ProjectileSystem = {
         projectiles.push(p);
     },
 
-    spawnThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, charge: number) => {
+    spawnThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, target: THREE.Vector3, weapon: string, time: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
@@ -314,14 +313,18 @@ export const ProjectileSystem = {
 
         if (p.mesh.parent !== scene) scene.add(p.mesh);
 
-        const throwDist = 5 + charge * 30;
-        const time = 1.0;
+        // Calculate exact kinematic vector needed to reach target coordinate based on gravitational curve
+        const g = 30.0;
+        p.vel.set(
+            (target.x - origin.x) / time,
+            (target.y - origin.y + 0.5 * g * time * time) / time,
+            (target.z - origin.z) / time
+        );
 
-        p.vel.set((dir.x * throwDist) / time, (0 - origin.y + 0.5 * 30 * time * time) / time, (dir.z * throwDist) / time);
         p.speed = p.vel.length();
         p.origin.copy(origin);
         p.damage = data.damage;
-        p.life = time + 0.5;
+        p.life = time + 0.5; // Slight padding, primarily destroyed via Y-axis intersection
         p.maxRadius = data.range;
 
         if (!p.marker) {
@@ -329,8 +332,8 @@ export const ProjectileSystem = {
             p.marker.rotation.x = -Math.PI / 2;
         }
 
-        _v3.copy(dir).normalize().multiplyScalar(throwDist);
-        p.marker.position.copy(origin).add(_v3).setY(0.1);
+        // Direct position mapping since exact target coordinate is passed from WeaponHandler
+        p.marker.position.copy(target);
         p.marker.scale.setScalar(data.range);
 
         if (p.marker.parent !== scene) scene.add(p.marker);
@@ -679,7 +682,7 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     let hitWater = false;
     let hitY = 0;
 
-    const engine = Engine.getInstance();
+    const engine = WinterEngine.getInstance();
     if (engine && engine.water) {
         engine.water.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
         if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {

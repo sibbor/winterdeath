@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Engine } from '../../core/engine/Engine';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WEATHER } from '../../content/constants';
 import { WeatherType } from '../../types';
 
@@ -35,7 +35,7 @@ const CONST_MAT = {
 
 export const CampEnvironment = {
     initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType): CampEffectsState => {
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
 
         // [VINTERDÖD] Sync persistent systems to the new Camp scene
         engine.wind.setRandomWind(0.02, 0.05);
@@ -208,7 +208,7 @@ export const CampEnvironment = {
     },
 
     updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {
-        const wind = Engine.getInstance().wind.current;
+        const wind = WinterEngine.getInstance().wind.current;
 
         // Update Stars
         if (state.starSystem) {

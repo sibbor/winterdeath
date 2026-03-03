@@ -54,6 +54,9 @@ export const Sector6: SectorDef = {
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
 
+        // [VINTERDÖD] DUMMY COLLECTIBLE FOR TESTING
+        SectorGenerator.spawnCollectible(ctx, 20, 20, 'dummy_badge_test', 'badge');
+
         // --- PLAZA (Center 0,0) ---
         // Circular concrete plaza
         const plazaGeo = new THREE.CylinderGeometry(20, 20, 0.6, 32);

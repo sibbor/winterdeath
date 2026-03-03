@@ -9,7 +9,7 @@ import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
 import { WaterBodyType, WaterStyle, WaterBody } from '../systems/WaterSystem';
-import { Engine } from '../engine/Engine';
+import { WinterEngine } from '../engine/WinterEngine';
 
 // Shared Utilities for Sector Generation
 const _c1 = new THREE.Color();
@@ -102,7 +102,7 @@ export const SectorGenerator = {
     * Uses the new structured lifecycle to standardize generation.
     */
     build: async (ctx: SectorContext, def: any) => {
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
 
         // Clear any water bodies from the previous sector before building the new one
         if (engine?.water) engine.water.clear();
@@ -195,7 +195,7 @@ export const SectorGenerator = {
         ctx.scene.add(mesh);
 
         // Register with engine for cutout uniform management
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
         if (engine && engine.water) {
             engine.water.registerGround(mesh);
         }
@@ -716,7 +716,7 @@ export const SectorGenerator = {
     addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: {
         style?: WaterStyle; shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number;
     }): WaterBody | null => {
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
         if (!engine?.water) return null;
         return engine.water.addWaterBody(type, x, z, width, depth, options);
     },
@@ -844,7 +844,7 @@ export const SectorGenerator = {
             }
         }
 
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
         if (engine?.water) {
             engine.water.populateFlora(floraInstances);
         }
@@ -1079,8 +1079,8 @@ export const SectorGenerator = {
         sectorDef: any,
         zones?: any[]
     ) => {
-        const weatherSystem = Engine.getInstance().weather;
-        const windSystem = Engine.getInstance().wind;
+        const weatherSystem = WinterEngine.getInstance().weather;
+        const windSystem = WinterEngine.getInstance().wind;
         const scene = events.scene;
         if (!playerPos || !weatherSystem || !scene) return;
 
@@ -1198,7 +1198,7 @@ export const SectorGenerator = {
             // Camera-height fog correction: FogExp2 measures 3D distance from camera,
             // so a top-down camera at Y=100 makes the entire ground invisible.
             // Scale density toward 0 as camera height rises above the normal play range.
-            const engine = Engine.getInstance();
+            const engine = WinterEngine.getInstance();
             const camY = engine?.camera?.position?.y ?? 20;
             const FOG_HEIGHT_MIN = 25; // below this, fog is at full density
             const FOG_HEIGHT_MAX = 90; // above this, fog is effectively 0
@@ -1368,8 +1368,8 @@ export const SectorGenerator = {
         return terminal;
     },
 
-    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material) => {
-        const mesh = ObjectGenerator.createRubble(x, z, count, material);
+    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias?: number) => {
+        const mesh = ObjectGenerator.createRubble(x, z, count, material, directionBias);
         ctx.scene.add(mesh);
         return mesh;
     },

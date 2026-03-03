@@ -3,7 +3,7 @@ import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../conte
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
 import { soundManager } from '../../utils/sound';
 import { haptic } from '../../utils/HapticManager';
-import { Engine } from '../engine/Engine';
+import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -286,41 +286,57 @@ export const WeaponHandler = {
             if (input.fire) {
                 if (state.weaponAmmo[state.activeWeapon] > 0) {
                     if (state.throwChargeStart === 0) state.throwChargeStart = now;
-                    const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
+
+                    // Modulo logic: Continually loop from 0 to 1 over 1500ms
+                    const cycleMs = 1500;
+                    const ratio = ((now - state.throwChargeStart) % cycleMs) / cycleMs;
 
                     // ONE SOURCE OF TRUTH: Always aim exactly where the player model is facing.
                     _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                    const dist = Math.max(2, ratio * 25);
+                    const maxDist = (wep as any).maxThrowDistance || 25.0;
+                    const dist = Math.max(2.0, ratio * maxDist);
+
+                    // Exact coordinate tracking
+                    _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin (p0)
+
+                    _v3.copy(playerGroup.position).addScaledVector(_v1, dist);
+                    _v3.y = 0.1; // Target Ground (p1)
+
+                    // Variable time for "floaty" arc on shorter distances
+                    const tMax = 1.0 + (dist / maxDist) * 0.5;
+                    const g = 30;
 
                     // Update UI Crosshair
                     if (aimCrossMesh) {
                         aimCrossMesh.visible = true;
-                        _v2.copy(_v1).multiplyScalar(dist);
-                        aimCrossMesh.position.copy(playerGroup.position).add(_v2);
+                        aimCrossMesh.position.copy(_v3);
                         aimCrossMesh.position.y = 0.2;
                         aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
                     }
 
-                    // Update Trajectory Line
+                    // Update Exact Trajectory Line
                     if (trajectoryLineMesh) {
                         trajectoryLineMesh.visible = true;
-                        const g = 30, tMax = 1.0, startY = playerGroup.position.y + 1.5;
-                        const vx = (_v1.x * dist) / tMax, vz = (_v1.z * dist) / tMax;
+                        const vx = (_v3.x - _v2.x) / tMax;
+                        const vz = (_v3.z - _v2.z) / tMax;
+                        const vy = (_v3.y - _v2.y + 0.5 * g * tMax * tMax) / tMax;
 
                         const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
                         const width = 0.15;
 
                         // Zero-GC caching
-                        const engine = Engine.getInstance();
+                        const engine = WinterEngine.getInstance();
                         const water = engine?.water;
 
                         for (let i = 0; i <= 20; i++) {
                             const t = (i / 20) * tMax;
-                            const tx = playerGroup.position.x + vx * t;
-                            const tz = playerGroup.position.z + vz * t;
+                            const tx = _v2.x + vx * t;
+                            const tz = _v2.z + vz * t;
+                            const ty = _v2.y + vy * t - 0.5 * g * t * t;
+
                             // Velocity in Y at time t (derivative of the parabola)
-                            const vy = (0 - startY + 0.5 * g * tMax * tMax) / tMax - (g * t);
+                            const instVy = vy - (g * t);
 
                             let groundY = 0.1;
                             if (water) {
@@ -331,20 +347,16 @@ export const WeaponHandler = {
                             }
 
                             // Current point in space
-                            _v4.set(
-                                tx,
-                                Math.max(groundY, startY + ((0 - startY + 0.5 * g * tMax * tMax) / tMax) * t - 0.5 * g * t * t),
-                                tz
-                            );
+                            _v4.set(tx, Math.max(groundY, ty), tz);
 
                             // Calculate direction mathematically based on velocity, much more stable
-                            _v3.set(vx, vy, vz).normalize();
+                            _v5.set(vx, instVy, vz).normalize();
 
-                            // Cross product to get the width vector
-                            _v2.crossVectors(_v3, _UP).normalize().multiplyScalar(width);
+                            // Cross product to get the width vector (uses _v1 as scratch to avoid overwriting _v3)
+                            _v1.crossVectors(_v5, _UP).normalize().multiplyScalar(width);
 
-                            posAttr.setXYZ(2 * i, _v4.x - _v2.x, _v4.y, _v4.z - _v2.z);
-                            posAttr.setXYZ(2 * i + 1, _v4.x + _v2.x, _v4.y, _v4.z + _v2.z);
+                            posAttr.setXYZ(2 * i, _v4.x - _v1.x, _v4.y, _v4.z - _v1.z);
+                            posAttr.setXYZ(2 * i + 1, _v4.x + _v1.x, _v4.y, _v4.z + _v1.z);
                         }
                         posAttr.needsUpdate = true;
                         (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
@@ -352,16 +364,27 @@ export const WeaponHandler = {
                     }
                 }
             } else if (state.throwChargeStart > 0) {
-                const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
+                const cycleMs = 1500;
+                const ratio = ((now - state.throwChargeStart) % cycleMs) / cycleMs;
+
                 state.weaponAmmo[state.activeWeapon]--;
                 state.throwablesThrown++;
 
                 // FIRE! Use the exact same direction logic as aiming.
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Use _v4 to avoid overwriting _v1
+                const maxDist = (wep as any).maxThrowDistance || 25.0;
+                const dist = Math.max(2.0, ratio * maxDist);
 
-                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v1, state.activeWeapon, ratio);
+                // Origin and exact Target calculation
+                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
+                _v3.copy(playerGroup.position).addScaledVector(_v1, dist);
+                _v3.y = 0.1;
+
+                const tMax = 1.0 + (dist / maxDist) * 0.5;
+
+                // Provide exact target (_v3) and physics metrics (tMax) to the system
+                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v3, state.activeWeapon, tMax);
 
                 if (state.weaponAmmo[state.activeWeapon] <= 0) state.activeWeapon = loadout.primary;
 

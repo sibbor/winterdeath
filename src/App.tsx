@@ -24,7 +24,7 @@ import { soundManager } from './utils/sound';
 import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
 import { isMobile } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
-import { Engine } from './core/engine/Engine';
+import { WinterEngine } from './core/engine/WinterEngine';
 import { DEFAULT_GRAPHICS, SECTOR_THEMES } from './content/constants';
 
 const App: React.FC = () => {
@@ -44,7 +44,7 @@ const App: React.FC = () => {
     useEffect(() => {
         let isMounted = true;
         const warmup = async () => {
-            const engine = Engine.getInstance();
+            const engine = WinterEngine.getInstance();
             // Start renderer for compilation if not already alive
             if (!engine.renderer) {
                 // Temporary minimal mount for compilation context if needed, 
@@ -288,7 +288,7 @@ const App: React.FC = () => {
 
         // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
         // while the loading screen is visible.
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
         const envConfig = SECTOR_THEMES[gameState.currentSector];
         const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
         await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
@@ -330,6 +330,10 @@ const App: React.FC = () => {
             setGameState(prev => {
                 const collId = activeCollectible as string;
                 if (!prev.stats.collectiblesFound) return prev; // Safety check
+
+                // [VINTERDÖD] Prevent saving dummy test collectibles
+                if (collId === 'dummy_badge_test') return prev;
+
                 if (prev.stats.collectiblesFound.includes(collId)) return prev;
                 return {
                     ...prev,
@@ -635,9 +639,6 @@ const App: React.FC = () => {
                                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
                                 return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
                             });
-                            // [VINTERDÖD] CAMP warmup is cached from boot — resolve loading immediately
-                            // after one React render cycle so Camp DOM can mount before isRunning=true.
-                            setTimeout(() => setIsLoadingCamp(false), 50);
                         }, 50);
                     }}
 

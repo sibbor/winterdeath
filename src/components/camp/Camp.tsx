@@ -9,7 +9,7 @@ import { t } from '../../utils/i18n';
 import { ModelFactory } from '../../utils/assets';
 import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 import { createProceduralTextures } from '../../utils/assets';
-import { Engine, GraphicsSettings } from '../../core/engine/Engine';
+import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
 import { WeatherType } from '../../types';
@@ -69,11 +69,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const [activeModal, setActiveModal] = useState<'armory' | 'sectors' | 'skills' | 'stats' | 'settings' | 'reset_confirm' | 'adventure_log' | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string } | null>(null);
 
-    const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || Engine.getInstance().getSettings());
+    const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
 
 
     // Renderer Ref for live updates
-    const engineRef = useRef<Engine | null>(null);
+    const engineRef = useRef<WinterEngine | null>(null);
 
     // Idle UI State
     const [isIdle, setIsIdle] = useState(false);
@@ -92,17 +92,23 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     const textures = useMemo(() => createProceduralTextures(), []);
 
+    // Refs for scene data shared between build and interactivity effects
+    const sceneInteractablesRef = useRef<THREE.Mesh[]>([]);
+    const sceneOutlinesRef = useRef<Record<string, THREE.Mesh>>({});
+    const sceneFamilyMembersRef = useRef<any[]>([]);
+    const sceneActiveMembersRef = useRef<any[]>([]);
+    const sceneBaseLookAtRef = useRef(new THREE.Vector3(0, 2, -5));
+    const sceneCinematicLookAtRef = useRef(new THREE.Vector3(0, 8, -5));
+
+    useEffect(() => { isIdleRef.current = isIdle; }, [isIdle]);
+    useEffect(() => { activeModalRef.current = activeModal; }, [activeModal]);
+
+
     useEffect(() => {
-        if (!isRunning) return;
-
-        soundManager.resume();
-        soundManager.startCampfire();
-
-        // Signal loaded after a short delay for smooth transition
-        if (onCampLoaded) {
-            onCampLoaded();
+        if (isRunning) {
+            soundManager.resume();
+            soundManager.startCampfire();
         }
-
         return () => soundManager.stopCampfire();
     }, [isRunning]);
 
@@ -113,9 +119,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const idleTimer = setInterval(() => { if (!isIdle && Date.now() - lastInputRef.current > 10000) setIsIdle(true); }, 1000);
         return () => { window.removeEventListener('mousemove', handleInput); window.removeEventListener('mousedown', handleInput); window.removeEventListener('keydown', handleInput); window.removeEventListener('touchstart', handleInput); clearInterval(idleTimer); };
     }, [isIdle]);
-
-    useEffect(() => { isIdleRef.current = isIdle; }, [isIdle]);
-    useEffect(() => { activeModalRef.current = activeModal; }, [activeModal]);
 
     // --- KEYBOARD LISTENERS ---
     useEffect(() => {
@@ -141,9 +144,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
 
     useEffect(() => {
-        if (!containerRef.current || !isRunning) {
-            return;
-        }
+        if (!containerRef.current) return;
         const container = containerRef.current;
         while (container.firstChild) container.removeChild(container.firstChild);
 
@@ -151,7 +152,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const height = container.clientHeight;
 
         // --- ENGINE & RENDERER ---
-        const engine = Engine.getInstance();
+        const engine = WinterEngine.getInstance();
         engine.updateSettings(graphics);
         engine.mount(container);
         engineRef.current = engine;
@@ -258,6 +259,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         };
 
         const onCL = () => {
+            if (!isRunning) return;
             if (activeModalRef.current) return;
             if (hoveredRef.current) {
                 if (hoveredRef.current.startsWith('family_') || hoveredRef.current.startsWith('player_')) {
@@ -284,7 +286,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         engine.onUpdate = (dt: number) => {
             if (!isRunning) return;
-            frameCount++;
             const now = performance.now();
             const monitor = PerformanceMonitor.getInstance();
 
@@ -401,22 +402,191 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             engine.renderer.render(scene, camera.threeCamera);
         };
 
+        // Store scene data for the interactivity effect
+        sceneInteractablesRef.current = interactables;
+        sceneOutlinesRef.current = outlines;
+        sceneFamilyMembersRef.current = familyMembers;
+        sceneActiveMembersRef.current = activeMembers;
+
+        // Signal the loading screen to close after one rAF (shaders compiled)
+        requestAnimationFrame(() => { if (onCampLoaded) onCampLoaded(); });
+
+        // NOTE: No cleanup needed here — interactivity effect owns listeners/callbacks.
+    }, [rescuedFamilyIndices, debugMode, textures]); // NOT isRunning
+
+    // --- INTERACTIVITY EFFECT: Registers loop + events only when running ---
+    useEffect(() => {
+        const engine = engineRef.current;
+        if (!isRunning || !engine || !containerRef.current) return;
+
+        const container = containerRef.current;
+        const scene = engine.scene;
+        const camera = engine.camera;
+        const interactables = sceneInteractablesRef.current;
+        const outlines = sceneOutlinesRef.current;
+        const familyMembers = sceneFamilyMembersRef.current;
+        const activeMembers = sceneActiveMembersRef.current;
+        const BASE_LOOK_AT = sceneBaseLookAtRef.current;
+        const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(-1000, -1000);
+
+        const onMM = (e: MouseEvent) => {
+            if (!containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        };
+
+        const onCL = () => {
+            if (activeModalRef.current) return;
+            if (hoveredRef.current) {
+                if (hoveredRef.current.startsWith('family_') || hoveredRef.current.startsWith('player_')) {
+                    const fmWrapper = familyMembers.find((fm: any) => fm.mesh.userData.id === hoveredRef.current);
+                    if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
+                } else {
+                    soundManager.playUiConfirm(); openModal(hoveredRef.current as any);
+                }
+            }
+        };
+
+        const onResize = () => {
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.set('aspect', width / height);
+            engine.renderer.setSize(width, height);
+        };
+
+        window.addEventListener('mousemove', onMM);
+        window.addEventListener('click', onCL);
+        window.addEventListener('resize', onResize);
+
+        let frameCount = 0;
+        let lastRaycastFrame = 0;
+
+        engine.onUpdate = (dt: number) => {
+            const now = performance.now();
+            const monitor = PerformanceMonitor.getInstance();
+
+            monitor.begin('env_camera');
+            CampEnvironment.updateEffects(scene, envStateRef.current, dt, now, frameCount);
+
+            const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
+            camera.set('lookSpeed', isIdleRef.current ? 0.2 : 3.0);
+            camera.lookAt(targetLookAt.x, targetLookAt.y, targetLookAt.z);
+            camera.update(dt, now);
+            monitor.end('env_camera');
+
+            monitor.begin('family_anim');
+            const talkingMembers = new Set(activeChats.current.map((c: any) => (now >= c.startTime && now <= c.startTime + c.duration) ? c.mesh.uuid : null).filter(Boolean));
+            for (let i = 0; i < familyMembers.length; i++) {
+                const fm = familyMembers[i];
+                const isSpeaking = talkingMembers.has(fm.mesh.uuid) || fm.bounce > 0;
+                if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
+                const body = fm.mesh.children.find((c: any) => c.userData.isBody) as THREE.Mesh;
+                if (body) {
+                    PlayerAnimation.update(body, {
+                        isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
+                        isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
+                    }, now, dt);
+                }
+            }
+            monitor.end('family_anim');
+
+            monitor.begin('chatter');
+            if (now > nextChatterTime.current && activeMembers.length > 1) {
+                const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
+                let delayOffset = 0;
+                for (let i = 0; i < numSpeakers; i++) {
+                    const speaker = familyMembers[Math.floor(Math.random() * familyMembers.length)];
+                    const linesKey = (speaker.name || '').toLowerCase();
+                    let lines = t(`chatter.${linesKey}`) as unknown as string[];
+                    if (!Array.isArray(lines)) lines = CHATTER_LINES[speaker.name] || ["..."];
+                    const text = lines[Math.floor(Math.random() * lines.length)];
+                    const duration = 2000 + text.length * 60;
+                    const el = document.createElement('div');
+                    el.className = 'absolute bg-black/80 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none opacity-0 transition-opacity duration-500 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
+                    el.innerText = text;
+                    if (chatOverlayRef.current) chatOverlayRef.current.appendChild(el);
+                    activeChats.current.push({ id: `chat_${now}_${i}`, mesh: speaker.mesh, text, startTime: now + delayOffset, duration, element: el, playedSound: false });
+                    delayOffset += duration + 500;
+                }
+                nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
+            }
+            monitor.end('chatter');
+
+            monitor.begin('chat_bubbles');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            for (let i = activeChats.current.length - 1; i >= 0; i--) {
+                const chat = activeChats.current[i];
+                const timeAlive = now - chat.startTime;
+                if (timeAlive > chat.duration + 500) {
+                    if (chat.element.parentNode) chat.element.parentNode.removeChild(chat.element);
+                    activeChats.current.splice(i, 1); continue;
+                }
+                if (timeAlive >= 0) {
+                    if (!chat.playedSound) { soundManager.playVoice(chat.mesh.userData.name); chat.playedSound = true; }
+                    chat.element.style.opacity = timeAlive < 500 ? '1' : (timeAlive > chat.duration ? '0' : '1');
+                    const vec = _v1; chat.mesh.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
+                    chat.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`; chat.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`; chat.element.style.transform = 'translate(-50%, -100%)';
+                }
+            }
+            monitor.end('chat_bubbles');
+
+            monitor.begin('raycasting');
+            frameCount++;
+            if (frameCount - lastRaycastFrame >= 3) {
+                lastRaycastFrame = frameCount;
+                raycaster.setFromCamera(mouse, camera.threeCamera);
+                const hits = raycaster.intersectObjects(interactables);
+                let newHover = null, toolTipText = "", tooltipX = 0, tooltipY = 0;
+                if (hits.length > 0) {
+                    let target: any = hits[0].object;
+                    if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
+                    newHover = target.userData.id;
+                    if (newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) {
+                        toolTipText = `${target.userData.name}`;
+                        const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
+                        tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
+                    }
+                }
+                if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
+                setTooltip((newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) ? { text: toolTipText, x: tooltipX, y: tooltipY } : null);
+                const outlineKeys = Object.keys(outlines);
+                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = !activeModalRef.current && (hoveredRef.current === outlineKeys[i]); }
+                for (let i = 0; i < interactables.length; i++) {
+                    const o = interactables[i];
+                    if (o.userData.type === 'family') {
+                        (o.material as THREE.MeshStandardMaterial).emissiveIntensity = (o.userData.id === hoveredRef.current) ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
+                        (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
+                    }
+                }
+            }
+            monitor.end('raycasting');
+
+            lastDrawCallsRef.current = engine.renderer.info.render.calls;
+            monitor.printIfHeavy('Camp Performance', performance.now() - now, 50);
+        };
+
+        engine.onRender = () => {
+            engine.renderer.render(scene, camera.threeCamera);
+        };
+
         return () => {
             window.removeEventListener('mousemove', onMM);
             window.removeEventListener('click', onCL);
             window.removeEventListener('resize', onResize);
-
-            // CRITICAL: Stop the loop by nulling out the engine callbacks
             if (engine.onUpdate) engine.onUpdate = null;
             if (engine.onRender) engine.onRender = null;
-
             const chats = activeChats.current;
             for (let i = 0; i < chats.length; i++) {
                 const c = chats[i];
                 if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
             }
         };
-    }, [rescuedFamilyIndices, debugMode, textures, isRunning]);
+    }, [isRunning]);
 
     const openModal = (id: typeof activeModal) => setActiveModal(id);
     const closeModal = () => { soundManager.playUiClick(); setActiveModal(null); };
@@ -470,7 +640,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     onUpdateGraphics={(newG) => {
                         setGraphics(newG);
                         onSaveGraphics(newG);
-                        Engine.getInstance().updateSettings(newG);
+                        WinterEngine.getInstance().updateSettings(newG);
                     }}
                 />
             )}

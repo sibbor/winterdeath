@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Engine } from './engine/Engine';
+import { WinterEngine } from './engine/WinterEngine';
 import { GameCanvasProps, SectorState, SectorTrigger } from '../types';
 import { WeaponType } from '../content/weapons';
 import { RuntimeState } from './RuntimeState';
@@ -34,7 +34,7 @@ export class GameSessionLogic {
     // Zero-GC: Single array. We reuse objects by toggling the 'active' flag.
     public noiseEvents: NoiseEvent[] = [];
 
-    constructor(public engine: Engine) { }
+    constructor(public engine: WinterEngine) { }
 
     static createInitialState(props: GameCanvasProps): RuntimeState {
         const now = performance.now();

@@ -519,6 +519,7 @@ export const Sector1: SectorDef = {
 
         // Store references for the event logic
         (ctx as any).busObject = bus;
+        (ctx as any).busColMesh = colMesh; // [VINTERDÖD] Needed for proper scene.remove on explosion
         (ctx as any).busObjectIdx = busIdx;
 
         // ----------------------------
@@ -833,7 +834,7 @@ export const Sector1: SectorDef = {
             });
         }
 
-        // State 2: Wait 2s, then pan camera via WINDOW event
+        // State 2: Wait 2s, then pan camera
         else if (sectorState.busEventState === 2 && now - sectorState.busEventTimer > 2000) {
             sectorState.busEventState = 3;
             sectorState.busEventTimer = now;
@@ -976,7 +977,7 @@ export const Sector1: SectorDef = {
         // State 7: Bomb countdown sequence
         else if (sectorState.busEventState === 7) {
             const elapsed = now - sectorState.busEventTimer;
-            const busObj = (sectorState.ctx as any).busObject;
+            const _busObjShake = (sectorState.ctx as any).busObject;
 
             if (elapsed < 3000) {
                 // Beep sequence
@@ -995,10 +996,10 @@ export const Sector1: SectorDef = {
                 }
 
                 // Shake the bus to build tension
-                if (busObj) {
+                if (_busObjShake) {
                     const shakeAmount = 0.05 + (elapsed / 3000) * 0.15;
-                    busObj.position.x = _busOriginalPos.x + (Math.random() - 0.5) * shakeAmount;
-                    busObj.position.z = _busOriginalPos.z + (Math.random() - 0.5) * shakeAmount;
+                    _busObjShake.position.x = _busOriginalPos.x + (Math.random() - 0.5) * shakeAmount;
+                    _busObjShake.position.z = _busOriginalPos.z + (Math.random() - 0.5) * shakeAmount;
                     if (events.cameraShake) events.cameraShake(0.5);
                 }
             } else {
@@ -1033,35 +1034,46 @@ export const Sector1: SectorDef = {
                 events.scene.add(flash);
                 sectorState.explosionLight = flash;
 
-                if (busObj) {
-                    busObj.visible = false;
+                // [VINTERDÖD] Fully remove bus mesh + invisible collider from scene
+                // so the tunnel is clear to enter after the explosion.
+                const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
+                const _busColMesh = (sectorState.ctx as any).busColMesh as THREE.Object3D | null;
+                const _obsArray = sectorState.ctx.obstacles;
+                const _busIdx = (sectorState.ctx as any).busObjectIdx as number | undefined;
 
-                    //  Move the bus collider below ground level instead of zeroing size.
-                    // This prevents potential division-by-zero or infinite loops in SpatialGrid/Raycaster.
-                    const obstacles = (sectorState.ctx as any).obstacles;
-                    const busColliderIdx = (sectorState.ctx as any).busObjectIdx;
-                    if (busColliderIdx !== undefined && obstacles && obstacles[busColliderIdx]) {
-                        obstacles[busColliderIdx].position.y = -1000;
-                    }
-
-                    // Extinguish flames if any
-                    SectorGenerator.extinguishFire(sectorState.ctx, busObj);
-
-                    // Spawn animated rubble — save reference and init landing tracker
-                    sectorState.busRubble = SectorGenerator.spawnRubble(
-                        sectorState.ctx,
-                        _busOriginalPos.x,
-                        _busOriginalPos.z,
-                        15, // Number of rubble pieces
-                        MATERIALS.busBlue
-                    );
-
-                    // Per-piece landing flag (Uint8Array = zero-GC, no object allocation)
-                    if (sectorState.busRubble) {
-                        sectorState.busRubble.userData.hasLanded = new Uint8Array(sectorState.busRubble.count);
-                    }
-                    sectorState.lastMetalImpactTime = 0;
+                if (_busObj && events.scene) {
+                    SectorGenerator.extinguishFire(sectorState.ctx, _busObj);
+                    events.scene.remove(_busObj);
+                    (sectorState.ctx as any).busObject = null;
                 }
+                if (_busColMesh && events.scene) {
+                    events.scene.remove(_busColMesh);
+                    (sectorState.ctx as any).busColMesh = null;
+                }
+
+                // Swap-and-pop obstacle removal (Zero-GC, no splice)
+                if (_busIdx !== undefined && _obsArray && _busIdx < _obsArray.length) {
+                    _obsArray[_busIdx] = _obsArray[_obsArray.length - 1];
+                    _obsArray.pop();
+                    (sectorState.ctx as any).busObjectIdx = undefined;
+                }
+
+                // Spawn animated rubble — bias northward (Math.PI = -Z) so pieces
+                // land north of the embankment, away from the tunnel opening.
+                sectorState.busRubble = SectorGenerator.spawnRubble(
+                    sectorState.ctx,
+                    _busOriginalPos.x,
+                    _busOriginalPos.z,
+                    20,
+                    MATERIALS.busBlue,
+                    Math.PI // directionBias = PI = northward (negative Z)
+                );
+
+                // Per-piece landing flag (Uint8Array = zero-GC, no object allocation)
+                if (sectorState.busRubble) {
+                    sectorState.busRubble.userData.hasLanded = new Uint8Array(sectorState.busRubble.count);
+                }
+                sectorState.lastMetalImpactTime = 0;
             }
         }
 

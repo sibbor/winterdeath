@@ -81,6 +81,16 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
         sector: 4,
         modelType: 'badge',
         reward: { sp: 1 }
+    },
+
+    // Sector 6 (Playground Test)
+    'dummy_badge_test': {
+        id: 'dummy_badge_test',
+        nameKey: 'clues.s4_collectible_2_title',
+        descriptionKey: 'clues.s4_collectible_2_description',
+        sector: 6,
+        modelType: 'badge',
+        reward: { sp: 0 }
     }
 };
 
