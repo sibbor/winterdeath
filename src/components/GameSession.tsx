@@ -1586,8 +1586,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
 
                     playerGroupRef.current.position.set(tgt.x, 0, tgt.z);
-                    spawnPart(tgt.x, 1, tgt.z, 'smoke', 20);
-                    soundManager.playTone(800, 'sine', 0.2, 0.1);
+
+                    // Teleport effect (visuals and sound)
+                    spawnPart(tgt.x, 1, tgt.z, 'flash', 1, undefined, undefined, undefined, 2);
+                    soundManager.playTone(800, 'sine', 0.6, 0.1);
 
                     for (let i = 0; i < activeFamilyMembers.current.length; i++) {
                         const fm = activeFamilyMembers.current[i];

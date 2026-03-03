@@ -12,6 +12,7 @@ export class ZombieRenderer {
     // --- PERFORMANCE SCRATCHPADS ---
     private _dummy = new THREE.Object3D();
     private _tempColor = new THREE.Color();
+    private _white = new THREE.Color(0xffffff);
 
     constructor(scene: THREE.Scene, maxInstances: number = 500) {
         this.scene = scene;
@@ -38,6 +39,10 @@ export class ZombieRenderer {
         this.scene = scene;
         for (let i = 0; i < this._meshList.length; i++) {
             const m = this._meshList[i];
+            // The provided snippet `if (zombieRenderer) zombieRenderer.sync(_syncList, now);`
+            // contains undefined variables (`zombieRenderer`, `_syncList`, `now`) in this context.
+            // To maintain syntactical correctness as per instructions, the original line is kept.
+            // If this change was intended for a different file or context, please clarify.
             if (m.parent !== scene) scene.add(m);
         }
     }
@@ -65,7 +70,7 @@ export class ZombieRenderer {
      * Synchronizes enemy states with hardware instances
      * High-performance loop: Zero new object allocations
      */
-    public sync(enemies: Enemy[]) {
+    public sync(enemies: Enemy[], now: number = performance.now()) {
         // 1. Reset counts using fast loop
         for (let i = 0; i < this._meshList.length; i++) {
             this._meshList[i].count = 0;
@@ -100,10 +105,19 @@ export class ZombieRenderer {
             this._dummy.matrix.compose(this._dummy.position, this._dummy.quaternion, this._dummy.scale);
             instMesh.setMatrixAt(idx, this._dummy.matrix);
 
-            // Always write an explicit color to prevent buffer bleed between frames.
-            // instanceColor slots not written this frame retain data from the previous occupant.
-            // Normal enemies use 0xffffff so they multiply through to the material base color.
-            this._tempColor.setHex(e.isBoss || e.color !== undefined ? (e.color || 0xffffff) : 0xffffff);
+            // --- HIT FLASH LOGIC ---
+            // Calculate color based on hit feedback. Arc-Cannon has a unique cyan-white flash.
+            const timeSinceHit = now - e.hitTime;
+            if (timeSinceHit < 100) {
+                if (e.lastDamageType === 'Arc-Cannon') { // WeaponType.ARC_CANNON
+                    // Lerp between White and Cyan for the electric look
+                    this._tempColor.set(0x00ffff).lerp(this._white, 0.4);
+                } else {
+                    this._tempColor.set(0xffffff); // Standard white flash
+                }
+            } else {
+                this._tempColor.setHex(e.isBoss || e.color !== undefined ? (e.color || 0xffffff) : 0xffffff);
+            }
             instMesh.setColorAt(idx, this._tempColor);
 
             instMesh.count++;

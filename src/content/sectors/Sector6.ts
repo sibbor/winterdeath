@@ -55,7 +55,7 @@ export const Sector6: SectorDef = {
         const { scene } = ctx;
 
         // [VINTERDÖD] DUMMY COLLECTIBLE FOR TESTING
-        SectorGenerator.spawnCollectible(ctx, 20, 20, 'dummy_badge_test', 'badge');
+        SectorGenerator.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge');
 
         // --- PLAZA (Center 0,0) ---
         // Circular concrete plaza
@@ -108,7 +108,7 @@ export const Sector6: SectorDef = {
 
         // Vehicls at the spawn point
         SectorGenerator.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan');
-        SectorGenerator.spawnDriveableVehicle(ctx, 0, 10, Math.PI / 2, 'timber_truck');
+        SectorGenerator.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck');
         SectorGenerator.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus');
         SectorGenerator.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police');
         SectorGenerator.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance');

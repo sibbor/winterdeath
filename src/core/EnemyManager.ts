@@ -444,13 +444,13 @@ export const EnemyManager = {
             if (s === 'BURNED') {
                 e.mesh.visible = true;
             }
-            else if (!e.isBoss && !e.mesh.userData.exploded && (s === 'ALIVE' || s === 'SHOT' || s === 'ELECTRIFIED')) {
+            else if (!e.isBoss && !e.mesh.userData.exploded && s === 'ALIVE') {
                 e.mesh.visible = false;
                 _syncList.push(e);
             }
         }
 
-        if (zombieRenderer) zombieRenderer.sync(_syncList);
+        if (zombieRenderer) zombieRenderer.sync(_syncList, now);
         if (ashRenderer) ashRenderer.update(Math.max(now, 1));
     },
 
@@ -462,6 +462,9 @@ export const EnemyManager = {
 
             if (!e.deathTimer) {
                 e.deathTimer = now;
+                e.mesh.userData.deathPx = e.mesh.position.x;
+                e.mesh.userData.deathPy = e.mesh.position.y;
+                e.mesh.userData.deathPz = e.mesh.position.z;
                 if (!e.mesh.userData.exploded) {
                     if (e.type === 'RUNNER') soundManager.playRunnerDeath();
                     else if (e.type === 'TANK') soundManager.playTankDeath();
@@ -471,8 +474,50 @@ export const EnemyManager = {
 
             const age = now - e.deathTimer;
             const isElectrified = e.deathState === 'ELECTRIFIED';
-            const cleanupDelay = isElectrified ? 1000 : 2000;
+            const cleanupDelay = isElectrified ? 1500 : 2000; // Increased electrified duration
             const shouldCleanup = (age > cleanupDelay) || e.mesh.userData.exploded;
+
+            if (isElectrified && !shouldCleanup && age > 0) {
+                // Electrocution Spasms
+                e.mesh.visible = true;
+
+                // 1. Positional Jitter (High frequency, relative to base)
+                const ux = e.mesh.userData.deathPx ?? e.mesh.position.x;
+                const uy = e.mesh.userData.deathPy ?? e.mesh.position.y;
+                const uz = e.mesh.userData.deathPz ?? e.mesh.position.z;
+
+                e.mesh.position.set(
+                    ux + (Math.random() - 0.5) * 0.25,
+                    uy + (Math.random() - 0.5) * 0.15,
+                    uz + (Math.random() - 0.5) * 0.25
+                );
+
+                // 2. Surging Emissive Intensity (Cyan)
+                e.mesh.traverse((child: any) => {
+                    if (child.isMesh && child.material) {
+                        const mat = child.material as THREE.MeshStandardMaterial;
+                        if (mat.emissive) {
+                            mat.emissive.setHex(0x00ffff);
+                            mat.emissiveIntensity = 0.5 + Math.random() * 3.0;
+                        }
+                    }
+                });
+
+                // 3. Electric Spark Particles
+                if (Math.random() > 0.6) {
+                    callbacks.spawnPart(
+                        e.mesh.position.x + (Math.random() - 0.5) * 1.0,
+                        e.mesh.position.y + Math.random() * 1.8,
+                        e.mesh.position.z + (Math.random() - 0.5) * 1.0,
+                        'electric_flash',
+                        1,
+                        undefined,
+                        undefined,
+                        0x00ffff,
+                        0.4
+                    );
+                }
+            }
 
             if (shouldCleanup) {
                 // By preserving e.deathState from the AI, we skip guessing and false positives entirely.

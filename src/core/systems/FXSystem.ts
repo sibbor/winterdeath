@@ -42,6 +42,12 @@ interface SpawnRequest {
 const _tempColor = new THREE.Color();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
+const _v7 = new THREE.Vector3();
+const _v8 = new THREE.Vector3();
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
@@ -192,7 +198,7 @@ export const FXSystem = {
         const t = req.type;
         const isInstanced = t === 'blood' || t === 'fire' || t === 'large_fire' || t === 'flash' ||
             t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' || t === 'large_smoke' ||
-            t === 'glass' || t === 'enemy_effect_stun' ||
+            t === 'glass' || t === 'enemy_effect_stun' || t === 'electric_flash' ||
             t === 'enemy_effect_flame' || t === 'enemy_effect_spark' ||
             t === 'gore' || t === 'splash' ||
             t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke';
@@ -209,10 +215,11 @@ export const FXSystem = {
         if (p.color === undefined && isInstanced) {
             const st = t as string;
             if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame') p.color = 0xff7700;
-            else if (st === 'spark' || st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0xffcc00;
+            else if (st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0x00ffff; // Cyan for electric effects
+            else if (st === 'spark') p.color = 0xffcc00; // Orange for regular sparks
             else if (st === 'smoke' || st === 'large_smoke' || st === 'campfire_smoke') p.color = 0x555555;
             else if (st === 'blood' || st === 'gore') p.color = 0x880000;
-            else if (st === 'glass' || st === 'flash') p.color = 0xffffff;
+            else if (st === 'glass' || st === 'flash' || st === 'electric_flash') p.color = 0xffffff;
             else if (st === 'splash') p.color = 0x77bbcc;
             else p.color = 0x888888; // Default generic gray
         }
@@ -236,7 +243,10 @@ export const FXSystem = {
             else if (t === 'debris') mat = MATERIALS.stone;
             else if (t === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
             else if (t === 'shockwave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
-            else if (t === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
+            else if (t === 'flash' || t === 'electric_flash') {
+                geo = (t === 'flash') ? GEOMETRY.sphere : GEOMETRY.shard;
+                mat = MATERIALS.flashWhite;
+            }
             else if (t === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (t === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
@@ -245,32 +255,40 @@ export const FXSystem = {
         }
 
         p.mesh.position.set(req.x, req.y, req.z);
-
-        // This primarily acts as a fallback for non-instanced meshes.
-        // Instanced meshes get their renderOrder configured during creation.
         p.mesh.renderOrder = 60;
 
-        // FIX: Give all standard particles a fully randomized 3D rotation!
-        // Prevents 2D flat flames from becoming invisible 0-width lines when viewed top-down.
-        if (t === 'shockwave') {
+        // --- ROTATION & ORIENTATION ---
+        if (t === 'electric_flash') {
+            // Point the shard in the direction of the bolt segment
+            _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
+            p.mesh.lookAt(_v1);
+        } else if (t === 'shockwave') {
             p.mesh.rotation.set(-Math.PI / 2, 0, 0);
         } else {
             p.mesh.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
         }
 
+        // --- SCALING ---
         const s = req.scale || 1.0;
-
-        // FIX: Boosted scale for flashes (Arc-Cannon) to make them extremely visible
         if (t === 'flash') p.mesh.scale.setScalar((1.5 + Math.random() * 1.0) * s);
+        else if (t === 'electric_flash') {
+            const needleLen = (4.0 + Math.random() * 4.0) * s;
+            const thickness = (0.15 + Math.random() * 0.1) * s;
+            p.mesh.scale.set(thickness, thickness, needleLen);
+        }
         else if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
         else if (t === 'large_smoke') p.mesh.scale.setScalar(4.0 * Math.random() * s);
-        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
-        else if (t === 'spark' || t === 'enemy_effect_spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
+        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
+        else if (t === 'spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
         else if (t === 'splash') p.mesh.scale.setScalar((0.5 + Math.random() * 0.7) * s);
         else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
 
-        if (req.customVel.lengthSq() > 0) p.vel.copy(req.customVel);
-        else {
+        // --- VELOCITY ---
+        if (t === 'electric_flash') {
+            p.vel.set(0, 0, 0);
+        } else if (req.customVel.lengthSq() > 0) {
+            p.vel.copy(req.customVel);
+        } else {
             const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
             const isFireFX = (t === 'flame' || t === 'fire' || t === 'spark' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark');
             const isLargeFX = (t === 'large_fire' || t === 'large_smoke');
@@ -284,9 +302,11 @@ export const FXSystem = {
             );
         }
 
+        // --- LIFETIME ---
         let baseLife = 30;
         if (t === 'blood') baseLife = 120;
         else if (t === 'debris') baseLife = 200;
+        else if (t === 'electric_flash') baseLife = 4 + Math.random() * 4; // VERY SNAPPY
         else if (t === 'large_fire' || t === 'large_smoke' || t === 'flame' || t === 'fire' || t === 'smoke' || t === 'spark' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') baseLife = 60;
 
         p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 20);
@@ -309,7 +329,7 @@ export const FXSystem = {
             MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
         }
 
-        const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
+        const types = ['blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
             if (imesh.parent !== scene) scene.add(imesh);
@@ -484,7 +504,7 @@ export const FXSystem = {
             t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
         }
 
-        // 4. Finalize Instanced Batches 
+        // 4. Finalize Instanced Batches
         for (let k = 0; k < FXSystem._instancedMeshKeys.length; k++) {
             const type = FXSystem._instancedMeshKeys[k];
             const imesh = FXSystem._instancedMeshes[type];
@@ -549,7 +569,10 @@ export const FXSystem = {
             }
             else if (type === 'debris') mat = MATERIALS.stone;
             else if (type === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
-            else if (type === 'flash') { geo = GEOMETRY.sphere; mat = MATERIALS.flashWhite; }
+            else if (type === 'flash' || type === 'electric_flash') {
+                geo = (type === 'flash') ? GEOMETRY.sphere : GEOMETRY.shard;
+                mat = MATERIALS.flashWhite;
+            }
             else if (type === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
@@ -648,32 +671,70 @@ export const FXSystem = {
     },
 
     spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
-        const segments = 6;
-        const lerpStep = 1 / segments;
+        // [VINTERDÖD] High-density recursive lightning generator.
+        const spawnSegment = (a: THREE.Vector3, b: THREE.Vector3, depth: number, isBranch: boolean = false) => {
+            if (depth <= 0) return;
 
-        for (let i = 1; i <= segments; i++) {
-            if (i === segments) {
-                _v1.copy(end);
-            } else {
-                _v1.lerpVectors(start, end, i * lerpStep);
-                _v1.x += (Math.random() - 0.5) * 1.5;
-                _v1.y += (Math.random() - 0.5) * 1.5;
-                _v1.z += (Math.random() - 0.5) * 1.5;
+            // Density: More segments = smoother jagged curve
+            const segments = isBranch ? 4 : 10;
+            const jitterScale = isBranch ? 0.8 : 2.0;
+
+            const v_node = isBranch ? _v5 : _v1;
+            const v_prev = isBranch ? _v7 : _v8;
+
+            v_prev.copy(a);
+            for (let i = 1; i <= segments; i++) {
+                const alpha = i / segments;
+                v_node.lerpVectors(a, b, alpha);
+                if (i < segments) {
+                    v_node.x += (Math.random() - 0.5) * jitterScale;
+                    v_node.y += (Math.random() - 0.5) * jitterScale;
+                    v_node.z += (Math.random() - 0.5) * jitterScale;
+                } else {
+                    v_node.copy(b);
+                }
+
+                // --- SPAWN BOLT SHARD ---
+                const req = FXSystem._getSpawnRequest();
+                req.x = v_prev.x; req.y = v_prev.y; req.z = v_prev.z;
+                req.type = 'electric_flash';
+                req.scale = (isBranch ? 0.5 : 1.0) + Math.random() * 0.3;
+                req.color = 0x00ffff; // Cyan
+                req.life = 4 + Math.random() * 4;
+
+                // CRITICAL: Point shard exactly to next node for oriented line look
+                req.customVel.subVectors(v_node, v_prev);
+                FXSystem.particleQueue.push(req);
+
+                // Add blinding white core (snappy)
+                if (Math.random() > 0.2) {
+                    const reqC = FXSystem._getSpawnRequest();
+                    reqC.x = v_prev.x; reqC.y = v_prev.y; reqC.z = v_prev.z;
+                    reqC.type = 'electric_flash';
+                    reqC.scale = req.scale * 0.3;
+                    reqC.color = 0xffffff;
+                    reqC.life = req.life;
+                    reqC.customVel.copy(req.customVel);
+                    FXSystem.particleQueue.push(reqC);
+                }
+
+                // Branching logic: Reaches out significantly
+                if (!isBranch && i > 1 && depth > 1 && Math.random() < 0.25) {
+                    _v3.copy(v_node);
+                    // Branch direction: biased towards main bolt but with deviation
+                    _v4.set(
+                        v_node.x + (Math.random() - 0.5) * 10,
+                        v_node.y + (Math.random() - 0.5) * 10,
+                        v_node.z + (Math.random() - 0.5) * 10
+                    );
+                    spawnSegment(_v3, _v4, 1, true);
+                }
+
+                v_prev.copy(v_node);
             }
+        };
 
-            const req = FXSystem._getSpawnRequest();
-            req.scene = null as any;
-            req.particlesList = null as any;
-            req.x = _v1.x; req.y = _v1.y; req.z = _v1.z;
-            req.type = 'flash';
-
-            req.customVel.set(0, 0, 0);
-
-            // Increased scale dramatically to make Arc-Cannon strikes actually pop against snow
-            req.scale = 0.6 + Math.random() * 0.4;
-            req.color = 0x00ffff;
-            FXSystem.particleQueue.push(req);
-        }
+        spawnSegment(start, end, 2);
     },
 
     spawnStunSparks: (pos: THREE.Vector3) => {

@@ -129,6 +129,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                     const actualDmg = Math.max(0, Math.min(e.hp, damage));
                     e.lastDamageType = WeaponType.GRENADE;
                     e.hp -= damage;
+                    e.hitTime = ctx.now;
                     ctx.trackStats('damage', actualDmg, !!e.isBoss);
                     if (ctx.spawnFloatingText) ctx.spawnFloatingText(e.mesh.position.x, 2, e.mesh.position.z, Math.round(damage).toString(), '#ffaa00');
 
@@ -473,6 +474,8 @@ export const ProjectileSystem = {
 
                     e.hp -= finalDamage;
                     e.lastDamageType = WeaponType.ARC_CANNON;
+                    e.hitTime = ctx.now;
+                    e.lastHitWasHighImpact = false;
                     e.stunTimer = stunDur;
                     ctx.trackStats('damage', finalDamage, !!e.isBoss);
 

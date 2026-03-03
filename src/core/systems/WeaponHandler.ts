@@ -169,6 +169,11 @@ export const WeaponHandler = {
         let wep = WEAPONS[state.activeWeapon];
         if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
 
+        const laser = playerGroup.getObjectByName('laserSight');
+        if (laser) {
+            laser.visible = state.activeWeapon !== WeaponType.ARC_CANNON;
+        }
+
         if (state.activeWeapon === WeaponType.RADIO) {
             state.throwChargeStart = 0;
             if (aimCrossMesh) aimCrossMesh.visible = false;

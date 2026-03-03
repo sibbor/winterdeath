@@ -13,6 +13,8 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3();
+const _white = new THREE.Color(0xffffff);
+const _flashColor = new THREE.Color();
 
 /**
  * EnemyAI System
@@ -414,6 +416,27 @@ export const EnemyAI = {
 
         // --- 9. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
+
+        // Hit Flash Logic (For Bosses/Non-instanced)
+        if (e.isBoss && e.mesh && e.color !== undefined) {
+            const timeSinceHit = now - e.hitTime;
+            if (timeSinceHit < 100) {
+                const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
+                e.mesh.traverse((child: any) => {
+                    if (child.isMesh && child.material && child.material.color) {
+                        if (isArc) _flashColor.set(0x00ffff).lerp(_white, 0.4);
+                        else _flashColor.set(0xffffff);
+                        child.material.color.copy(_flashColor);
+                    }
+                });
+            } else {
+                e.mesh.traverse((child: any) => {
+                    if (child.isMesh && child.material && child.material.color) {
+                        child.material.color.setHex(e.color);
+                    }
+                });
+            }
+        }
 
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
