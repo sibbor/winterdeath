@@ -154,6 +154,6 @@ export const GEOMETRY = {
     ashPile: new THREE.ConeGeometry(0.6, 0.4, 8),
     shard: new THREE.TetrahedronGeometry(0.1, 0),
     shockwave: new THREE.RingGeometry(0.5, 1.5, 32),
-    flame: new THREE.DodecahedronGeometry(0.5),
+    flame: new THREE.TetrahedronGeometry(0.5, 1), // [VINTERDÖD] Reduced poly count from Dodecahedron to fix AdditiveBlending fill rate lag
     splash: createSplashGeo()
 };

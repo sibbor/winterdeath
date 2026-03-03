@@ -133,10 +133,6 @@ export class PlayerMovementSystem implements System {
             if (state.stamina > 0) {
                 state.stamina -= 5 * delta;
                 speed *= 1.75;
-
-                if ((now / 200 | 0) % 2 === 0 && !inWater) {
-                    FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, 0.5, playerGroup.position.z, 'smoke', 1);
-                }
             } else {
                 state.isRushing = false;
             }
@@ -157,12 +153,24 @@ export class PlayerMovementSystem implements System {
             if (state.rollDir.lengthSq() === 0) {
                 state.rollDir.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
             }
+
+            if (!state.rollSmokeSpawned && !inWater) {
+                state.rollSmokeSpawned = true;
+                soundManager.playFootstep('step');
+                FXSystem.spawnPart(
+                    session.engine.scene, state.particles,
+                    playerGroup.position.x, 0.5, playerGroup.position.z,
+                    'large_smoke', 2, undefined, undefined, 0xcccccc, 1.2
+                );
+            }
+
             if (now < state.rollStartTime + 300) {
                 const rollSpeed = speed * 2.5;
                 _v1.copy(state.rollDir).multiplyScalar(rollSpeed * delta);
                 this.performMove(playerGroup, _v1, state, session, now, delta);
             } else {
                 state.isRolling = false;
+                state.rollSmokeSpawned = false;
             }
         } else if (!disableInput) {
             _v6.set(0, 0, 0);
@@ -200,6 +208,13 @@ export class PlayerMovementSystem implements System {
                         }
                     } else {
                         soundManager.playFootstep('step');
+                        if (state.isRushing) {
+                            FXSystem.spawnPart(
+                                session.engine.scene, state.particles,
+                                playerGroup.position.x, 0.2, playerGroup.position.z,
+                                'large_smoke', 1, undefined, undefined, 0xcccccc, 0.8
+                            );
+                        }
                     }
                     state.lastStepTime = now;
                 }

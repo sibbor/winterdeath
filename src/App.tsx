@@ -623,17 +623,22 @@ const App: React.FC = () => {
                     deathDetails={deathDetails}
                     currentSector={gameState.currentSector}
                     onReturnCamp={() => {
-                        setIsDeathScreenActive(false);
-                        setGameState(prev => {
-                            const isCleared = prev.deadBossIndices.includes(prev.currentSector);
-                            // Advance to next sector if cleared and not already at the last one
-                            const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
-                            return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
-                        });
-                        // [VINTERDÖD] CAMP warmup is cached from boot — resolve loading immediately
-                        // after one React render cycle so Camp DOM can mount before isRunning=true.
-                        setTimeout(() => setIsLoadingCamp(false), 50);
                         soundManager.playUiConfirm();
+                        setIsLoadingCamp(true);
+                        setIsDeathScreenActive(false);
+
+                        // Yield to browser so it can render the loading screen before we block the thread
+                        setTimeout(() => {
+                            setGameState(prev => {
+                                const isCleared = prev.deadBossIndices.includes(prev.currentSector);
+                                // Advance to next sector if cleared and not already at the last one
+                                const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
+                                return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
+                            });
+                            // [VINTERDÖD] CAMP warmup is cached from boot — resolve loading immediately
+                            // after one React render cycle so Camp DOM can mount before isRunning=true.
+                            setTimeout(() => setIsLoadingCamp(false), 50);
+                        }, 50);
                     }}
 
                     onRetry={() => {

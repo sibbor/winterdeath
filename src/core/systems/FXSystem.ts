@@ -108,14 +108,16 @@ export const FXSystem = {
     },
 
     _getUniqueMaterial: (baseMat: THREE.Material, type: string): THREE.Material => {
-        if (!FXSystem.MATERIAL_POOL[type]) FXSystem.MATERIAL_POOL[type] = [];
-        if (FXSystem.MATERIAL_POOL[type].length > 0) {
-            const mat = FXSystem.MATERIAL_POOL[type].pop()! as FXMaterial;
+        const poolKey = type + '_' + baseMat.uuid;
+        if (!FXSystem.MATERIAL_POOL[poolKey]) FXSystem.MATERIAL_POOL[poolKey] = [];
+        if (FXSystem.MATERIAL_POOL[poolKey].length > 0) {
+            const mat = FXSystem.MATERIAL_POOL[poolKey].pop()! as FXMaterial;
             if (mat.transparent) mat.opacity = 1.0;
             return mat;
         }
         const clone = baseMat.clone();
         clone.transparent = true;
+        (clone as any)._baseType = poolKey;
         return clone;
     },
 
@@ -123,8 +125,9 @@ export const FXSystem = {
         m.visible = false;
         m.position.set(0, -1000, 0);
         if (UNIQUE_MATERIAL_TYPES.includes(type)) {
-            if (!FXSystem.MATERIAL_POOL[type]) FXSystem.MATERIAL_POOL[type] = [];
-            FXSystem.MATERIAL_POOL[type].push(m.material);
+            const poolKey = (m.material as any)._baseType || type;
+            if (!FXSystem.MATERIAL_POOL[poolKey]) FXSystem.MATERIAL_POOL[poolKey] = [];
+            FXSystem.MATERIAL_POOL[poolKey].push(m.material);
         }
         FXSystem.FREE_MESH_INDICES.push(m.userData.poolIdx);
     },
@@ -174,7 +177,11 @@ export const FXSystem = {
             d.scale.setScalar(0.01); // Grow over time
         }
 
-        d.renderOrder = 50; // Decals should sit below particles (60)
+        if (req.material === MATERIALS.scorchDecal) {
+            d.renderOrder = -1; // Under firezone
+        } else {
+            d.renderOrder = 50; // Decals should sit below particles (60)
+        }
 
         (req.particlesList as unknown as THREE.Mesh[]).push(d);
     },
@@ -295,6 +302,12 @@ export const FXSystem = {
         if (!MATERIALS['_blackSmoke']) {
             MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
         }
+        if (!MATERIALS['flame']) {
+            MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
+        }
+        if (!MATERIALS['large_fire']) {
+            MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
+        }
 
         const types = ['blood', 'fire', 'large_fire', 'flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
         for (let i = 0; i < types.length; i++) {
@@ -401,11 +414,11 @@ export const FXSystem = {
 
         // Animate decals (blood pouring/spreading effect)
         for (let i = 0; i < decalList.length; i++) {
-            const d = decalList[i] as any;
-            if (d.userData.targetScale && d.scale.x < d.userData.targetScale) {
-                const growthStep = d.userData.targetScale * 3.0 * safeDelta;
-                const newScale = Math.min(d.userData.targetScale, d.scale.x + growthStep);
-                d.scale.setScalar(newScale);
+            const m = decalList[i];
+            if (m.userData.targetScale && m.scale.x < m.userData.targetScale) {
+                const growthStep = m.userData.targetScale * 3.0 * safeDelta;
+                const newScale = Math.min(m.userData.targetScale, m.scale.x + growthStep);
+                m.scale.setScalar(newScale);
             }
         }
 
@@ -433,8 +446,6 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    // FIX: Graceful, slow fade out. 0.985 means it shrinks by 1.5% per frame.
-                    // This allows flames to live much longer visually before vanishing.
                     p.mesh.scale.multiplyScalar(0.985);
                 }
             }
@@ -586,7 +597,7 @@ export const FXSystem = {
 
     // --- SPECIAL WEAPON EFFECTS ---
 
-    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3, isFlamethrower: boolean = false) => {
+    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
         const spread = 0.15;
         _v1.copy(direction).add(_v2.set(
             (Math.random() - 0.5) * spread,
@@ -596,7 +607,6 @@ export const FXSystem = {
 
         let speed = 10 + Math.random() * 5;
         let scale = 0.5 + Math.random() * 0.5;
-        let life: number | undefined = undefined;
 
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
@@ -607,17 +617,33 @@ export const FXSystem = {
         // --- FLAME COLOR RANDOMIZATION ---
         let colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
 
-        if (isFlamethrower && Math.random() < 0.25) {
-            colorHex = 0x00bfff; // Deep Cyan / Blue flame at the nozzle
-            scale *= 0.7; // Blue cores are smaller
-            life = 8; // Short life (muzzle flash only)
-            speed *= 0.3; // Keep them from shooting out into the stream
-        }
-
         req.customVel.copy(_v1).multiplyScalar(speed);
         req.scale = scale;
         req.color = colorHex;
-        req.life = life;
+        FXSystem.particleQueue.push(req);
+    },
+
+    spawnMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
+        const spread = 0.2;
+        _v1.copy(direction).add(_v2.set(
+            (Math.random() - 0.5) * spread,
+            (Math.random() - 0.5) * spread,
+            (Math.random() - 0.5) * spread
+        )).normalize();
+
+        let speed = 3 + Math.random() * 2;
+        let scale = 0.3 + Math.random() * 0.3;
+
+        const req = FXSystem._getSpawnRequest();
+        req.scene = null as any;
+        req.particlesList = null as any;
+        req.x = start.x; req.y = start.y; req.z = start.z;
+        req.type = 'fire';
+
+        req.customVel.copy(_v1).multiplyScalar(speed);
+        req.scale = scale;
+        req.color = isCyan ? 0x00bfff : 0xffcc00;
+        req.life = 6 + Math.random() * 4;
         FXSystem.particleQueue.push(req);
     },
 

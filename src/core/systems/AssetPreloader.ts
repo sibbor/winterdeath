@@ -422,6 +422,15 @@ export const AssetPreloader = {
                 for (let i = 0; i < fxTypes.length; i++) {
                     const fxMesh = FXSystem._getInstancedMesh(scene, fxTypes[i]);
                     addToWarmup(fxMesh);
+
+                    // [VINTERDÖD] Restore shadow settings overridden by addToWarmup
+                    if (fxTypes[i] === 'debris' || fxTypes[i] === 'scrap' || fxTypes[i] === 'glass' || fxTypes[i] === 'gore') {
+                        fxMesh.castShadow = true;
+                        fxMesh.receiveShadow = true;
+                    } else {
+                        fxMesh.castShadow = false;
+                        fxMesh.receiveShadow = false;
+                    }
                 }
 
                 // Bullet mesh — individual THREE.Mesh (not instanced), fired every shot.

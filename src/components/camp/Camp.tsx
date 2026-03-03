@@ -258,7 +258,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         };
 
         const onCL = () => {
-            if (activeRef.current) return;
+            if (activeModalRef.current) return;
             if (hoveredRef.current) {
                 if (hoveredRef.current.startsWith('family_') || hoveredRef.current.startsWith('player_')) {
                     const fmWrapper = familyMembers.find(fm => fm.mesh.userData.id === hoveredRef.current);
@@ -380,7 +380,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 setTooltip((newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) ? { text: toolTipText, x: tooltipX, y: tooltipY } : null);
 
                 const outlineKeys = Object.keys(outlines);
-                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = !activeRef.current && (hoveredRef.current === outlineKeys[i]); }
+                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = !activeModalRef.current && (hoveredRef.current === outlineKeys[i]); }
                 for (let i = 0; i < interactables.length; i++) {
                     const o = interactables[i];
                     if (o.userData.type === 'family') {

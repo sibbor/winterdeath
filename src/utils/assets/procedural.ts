@@ -312,8 +312,21 @@ export const createProceduralDiffuse = () => {
         for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(15 * s, (25 + i * 15) * s); ctx.lineTo(49 * s, (25 + i * 15) * s); ctx.stroke(); }
     });
 
+    const scorchAlpha = drawAlpha(128, 128, (ctx, s) => {
+        const w = ctx.canvas.width; const h = ctx.canvas.height;
+        const cx = w / 2; const cy = h / 2;
+        ctx.clearRect(0, 0, w, h);
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, cx);
+        g.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        g.addColorStop(0.3, 'rgba(255, 255, 255, 0.9)');
+        g.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+        g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
+    });
+
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha };
 
     return cachedTextures;
 };

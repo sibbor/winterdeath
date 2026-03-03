@@ -93,7 +93,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                     engine.water.spawnExplosionRipple(pos.x, pos.z, 200.0);
                 }
             } else {
-                ctx.spawnDecal(pos.x, pos.z, 2.5, MATERIALS.scorchDecal);
+                ctx.spawnDecal(pos.x, pos.z, 4.0, MATERIALS.scorchDecal);
             }
             soundManager.playExplosion();
             haptic.explosion();
@@ -191,6 +191,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             } else {
                 if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
                 ctx.addFireZone(fz);
+                ctx.spawnDecal(pos.x, pos.z, fz.radius * 2.0, MATERIALS.scorchDecal);
             }
 
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
@@ -209,6 +210,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
     [WeaponType.FLASHBANG]: {
         onImpact: (pos, radius, ctx) => {
             ctx.spawnPart(pos.x, 2, pos.z, 'flash', 1, undefined, undefined, undefined, 8.0);
+            ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal);
             soundManager.playExplosion();
             haptic.explosion();
 
@@ -343,11 +345,16 @@ export const ProjectileSystem = {
         if (!data) return;
 
         if (weapon === WeaponType.FLAMETHROWER) {
+            // Muzzle flash for flamethrower
+            if (Math.random() < 0.3) {
+                FXSystem.spawnMuzzleFlash(origin, direction, true);
+            }
+
             // FIX: Ensure a solid thick stream regardless of delta time.
             const count = 3;
             for (let i = 0; i < count; i++) {
                 _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.5);
-                FXSystem.spawnFlame(_v1, direction, true);
+                FXSystem.spawnFlame(_v1, direction);
             }
 
             const coneAngle = Math.cos(25 * Math.PI / 180);
