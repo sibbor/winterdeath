@@ -11,18 +11,7 @@ import { SoundBank } from '../../utils/audio/SoundBank';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { FXSystem } from '../systems/FXSystem';
 
-// Camp Environment Configuration (Matches CampEnvironment.ts)
-const CAMP_ENV = {
-    bgColor: 0x161629,
-    fogColor: 0x161629,
-    fogDensity: 0.01,
-    ambientIntensity: 0.4,
-    skyLight: {
-        visible: true,
-        color: 0xaaccff,
-        intensity: 0.4
-    }
-};
+
 
 const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
@@ -51,7 +40,7 @@ export const AssetPreloader = {
         const warmupLogic = async () => {
             const isCamp = target === 'CAMP';
             const isSector = typeof target === 'number';
-            const envConfig = isCamp ? CAMP_ENV : envConfigBase;
+            const envConfig = envConfigBase;
             const warmupTimings: Record<string, number> = {};
             const warmupStartTimes: Record<string, number> = {};
 

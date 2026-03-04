@@ -11,6 +11,7 @@ import ScreenPause from './components/game/ScreenPause';
 import ScreenMap from './components/game/ScreenMap';
 import ScreenTeleport from './components/game/ScreenTeleport';
 import ScreenSectorReport from './components/game/ScreenSectorReport';
+import { CAMP_ENV } from './components/camp/CampEnvironment';
 import ScreenBossKilled from './components/game/ScreenBossKilled';
 import ScreenCollectibleFound from './components/game/ScreenCollectibleFound';
 import ScreenAdventureLog from './components/camp/ScreenAdventureLog';
@@ -53,7 +54,7 @@ const App: React.FC = () => {
             }
 
             const isCamp = gameState.screen === GameScreen.CAMP;
-            const envConfig = isCamp ? null : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
+            const envConfig = isCamp ? CAMP_ENV : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
 
             // [VINTERDÖD] Yield function to prevent "Violation: handler took X ms" 
             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
@@ -62,8 +63,8 @@ const App: React.FC = () => {
             // This saves VRAM and speeds up boot into Camp.
             // We pass the active camera to ensure accurate shader permutation matching.
             if (isCamp) {
-                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', null, yieldToMain, engine.camera.threeCamera);
-                await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', null, yieldToMain, engine.camera.threeCamera);
+                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
+                await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', envConfig, yieldToMain, engine.camera.threeCamera);
             } else if (gameState.screen === GameScreen.PROLOGUE) {
                 await AssetPreloader.warmupAsync(engine.renderer, 'CORE', SECTOR_THEMES[0], yieldToMain, engine.camera.threeCamera);
                 await AssetPreloader.warmupAsync(engine.renderer, 0, SECTOR_THEMES[0], yieldToMain, engine.camera.threeCamera);

@@ -3,7 +3,17 @@ import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WEATHER } from '../../content/constants';
 import { WeatherType } from '../../types';
 
-const fogColor = 0x161629;
+export const CAMP_ENV = {
+    bgColor: 0x161629,
+    fogColor: 0x161629,
+    fogDensity: 0.01,
+    ambientIntensity: 0.4,
+    skyLight: {
+        visible: true,
+        color: 0xaaccff,
+        intensity: 0.4
+    }
+};
 
 interface Textures {
     stone: THREE.Texture;
@@ -43,8 +53,8 @@ export const CampEnvironment = {
         engine.water.reAttach(scene);
 
         // Global Reset (Prevent leaks from Sectors)
-        scene.fog = new THREE.FogExp2(fogColor, 0.01);
-        scene.background = new THREE.Color(fogColor);
+        scene.fog = new THREE.FogExp2(CAMP_ENV.fogColor, CAMP_ENV.fogDensity);
+        scene.background = new THREE.Color(CAMP_ENV.bgColor);
 
         // Constrain weather to visible terrain area (60x60)
         engine.weather.sync(weatherType, WEATHER.PARTICLE_COUNT, 60);
@@ -92,7 +102,7 @@ export const CampEnvironment = {
         scene.add(skyBody);
 
         // Sky Light - With SHADOWS
-        const skyLight = new THREE.DirectionalLight(0xaaccff, 0.4);
+        const skyLight = new THREE.DirectionalLight(CAMP_ENV.skyLight.color, CAMP_ENV.skyLight.intensity);
         skyLight.name = 'SKY_LIGHT';
         // More vertical position to reduce shadow gaps and long silhouettes
         skyLight.position.set(-80, 150, -100);
