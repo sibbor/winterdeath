@@ -57,6 +57,27 @@ async function addProps(ctx: SectorContext) {
     SectorGenerator.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
 
     EnvironmentGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
+
+    // Sparse grass
+    /*
+    const sparseGrass = [
+        new THREE.Vector3(-10, 0, 160),
+        new THREE.Vector3(20, 0, 160),
+        new THREE.Vector3(20, 0, 190),
+        new THREE.Vector3(-10, 0, 190)
+    ];
+    EnvironmentGenerator.fillAreaWithGrass(ctx, sparseGrass, 0.8);
+    */
+
+
+    // Fallen trees near cave
+    /*
+    for (let i = 0; i < 8; i++) {
+        const deadTree = EnvironmentGenerator.createDeadTree('fallen', 0.7 + Math.random() * 0.5);
+        deadTree.position.set(85 + (Math.random() - 0.5) * 30, 0, -70 + (Math.random() - 0.5) * 20);
+        ctx.scene.add(deadTree);
+    }
+    */
 }
 
 function spawnSectorHordes(ctx: SectorContext) {
@@ -114,29 +135,6 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
         new THREE.Vector3(118, 0, -85),
         new THREE.Vector3(135, 0, -90),
     ], 'BoundryWall_RightOfCave');
-
-    // ===== WAR-TORN ENVIRONMENTAL FEATURES =====
-
-    // Sparse grass (war-torn)
-    const sparseGrass = [
-        new THREE.Vector3(-10, 0, 160),
-        new THREE.Vector3(20, 0, 160),
-        new THREE.Vector3(20, 0, 190),
-        new THREE.Vector3(-10, 0, 190)
-    ];
-    EnvironmentGenerator.fillAreaWithGrass(ctx, sparseGrass, 0.8);
-
-    // Battle-damaged forest with many dead trees  
-    EnvironmentGenerator.createDeforestation(ctx, 50, 80, 60, 40, 25);
-
-    // Fallen trees near cave
-    for (let i = 0; i < 8; i++) {
-        const deadTree = EnvironmentGenerator.createDeadTree('fallen', 0.7 + Math.random() * 0.5);
-        deadTree.position.set(85 + (Math.random() - 0.5) * 30, 0, -70 + (Math.random() - 0.5) * 20);
-        ctx.scene.add(deadTree);
-    }
-
-    // ===== END ENVIRONMENTAL FEATURES =====
 }
 
 export const Sector2: SectorDef = {

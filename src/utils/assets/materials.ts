@@ -128,6 +128,12 @@ export const MATERIALS = {
         flatShading: true
     })),
 
+    mountain: new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        flatShading: true,
+        roughness: 0.9,
+        side: THREE.DoubleSide
+    }),
     stone: new THREE.MeshStandardMaterial({
         color: 0x888888,
         map: DIFFUSE.stone,
@@ -231,6 +237,13 @@ export const MATERIALS = {
         roughness: 0.9,
         bumpMap: TEXTURES.concrete_bump,
         bumpScale: 0.1
+    }),
+    concreteDoubleSided: new THREE.MeshStandardMaterial({
+        color: 0x444444,
+        roughness: 0.9,
+        bumpMap: TEXTURES.concrete_bump,
+        bumpScale: 0.1,
+        side: THREE.DoubleSide
     }),
     pipe: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.6, metalness: 0.4 }),
     mast: new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.4, metalness: 0.8, wireframe: true }),

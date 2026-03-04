@@ -4,13 +4,6 @@ import { MATERIALS } from '../../utils/assets/materials';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from './SectorGenerator';
 
-// --- CONFIGURATION ---
-const LOD_DISTANCES = {
-    HIGH: 30,
-    MEDIUM: 60,
-    LOW: 120
-};
-
 // [VINTERDÖD] Pre-allokerade matte-objekt för brutal matris-komposition.
 // Blixtsnabbt jämfört med att använda Object3D.updateMatrix().
 const _pos = new THREE.Vector3();
@@ -408,9 +401,9 @@ export const EnvironmentGenerator = {
         if (!points || points.length < 2) return;
 
         const mountainWidth = 30;
-        const mountainHeightPeak = 10;
-        const segmentsX = 70;
-        const segmentsZ = 30;
+        const mountainHeightPeak = 16; // Ökad grundhöjd för att kompensera för mindre jitter
+        const segmentsX = 40;
+        const segmentsZ = 15;
         const mountainSideBias = 1.0;
 
         const COLORS = {
@@ -422,14 +415,15 @@ export const EnvironmentGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const planeGeo = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsZ);
         const posAttr = planeGeo.getAttribute('position');
-        const vertex = new THREE.Vector3();
+
         const targetPointOnCurve = new THREE.Vector3();
+        const sideDirection = new THREE.Vector3();
 
         for (let i = 0; i <= segmentsX; i++) {
             const t = i / segmentsX;
             curve.getPointAt(t, targetPointOnCurve);
             const tangent = curve.getTangentAt(t).normalize();
-            const sideDirection = new THREE.Vector3(-tangent.z, 0, tangent.x);
+            sideDirection.set(-tangent.z, 0, tangent.x);
 
             for (let j = 0; j <= segmentsZ; j++) {
                 const index = i * (segmentsZ + 1) + j;
@@ -439,6 +433,7 @@ export const EnvironmentGenerator = {
 
                 let baseHeight = 0;
                 const maxDist = mountainWidth * 0.7;
+
                 if (distToRidge < maxDist) {
                     baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
                 }
@@ -447,10 +442,11 @@ export const EnvironmentGenerator = {
                 let xJitter = 0;
                 let zJitter = 0;
 
+                // Drastiskt sänkt jitter. Mindre brus = större, tydligare plana ytor.
                 if (baseHeight > 1.0) {
-                    finalY = Math.max(0, baseHeight + (Math.random() - 0.5) * 12);
-                    xJitter = (Math.random() - 0.5) * 4;
-                    zJitter = (Math.random() - 0.5) * 4;
+                    finalY = Math.max(0, baseHeight + (Math.random() - 0.5) * 3.0);
+                    xJitter = (Math.random() - 0.5) * 1.5;
+                    zJitter = (Math.random() - 0.5) * 1.5;
                 }
 
                 const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
@@ -464,20 +460,26 @@ export const EnvironmentGenerator = {
         if (opening) {
             const openingPos = new THREE.Vector3();
             opening.getWorldPosition(openingPos);
-            const safeZoneRadius = 14;
+
+            const safeZoneRadiusSq = 14 * 14;
             const clearanceHeight = 10;
+            const vertex = new THREE.Vector3();
 
             for (let i = 0; i < posAttr.count; i++) {
                 vertex.fromBufferAttribute(posAttr, i);
-                const dist = Math.sqrt(Math.pow(vertex.x - openingPos.x, 2) + Math.pow(vertex.z - openingPos.z, 2));
-                if (dist < safeZoneRadius && vertex.y < clearanceHeight) {
+
+                const dx = vertex.x - openingPos.x;
+                const dz = vertex.z - openingPos.z;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < safeZoneRadiusSq && vertex.y < clearanceHeight) {
                     posAttr.setY(i, -25);
                 }
             }
         }
 
         posAttr.needsUpdate = true;
-        let mountainGeo = planeGeo.toNonIndexed();
+        const mountainGeo = planeGeo.toNonIndexed();
         mountainGeo.computeVertexNormals();
 
         const count = mountainGeo.getAttribute('position').count;
@@ -486,36 +488,37 @@ export const EnvironmentGenerator = {
         const normalAttr = mountainGeo.getAttribute('normal');
         const normal = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
-        const color = new THREE.Color();
 
         for (let i = 0; i < count; i += 3) {
             const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
             normal.fromBufferAttribute(normalAttr, i);
             const upwardness = normal.dot(up);
 
-            if ((h > mountainHeightPeak * 0.55 && upwardness > 0.65) || (upwardness > 0.9 && h > 10)) {
-                color.copy(COLORS.SNOW);
+            let r, g, b;
+
+            // Justerade snö-tröskeln något baserat på den nya geometrin
+            if ((h > mountainHeightPeak * 0.45 && upwardness > 0.6) || (upwardness > 0.85 && h > 8)) {
+                r = COLORS.SNOW.r;
+                g = COLORS.SNOW.g;
+                b = COLORS.SNOW.b;
             } else {
-                color.copy(Math.random() > 0.5 ? COLORS.ROCK_LIGHT : COLORS.ROCK_DARK);
+                const isLight = Math.random() > 0.5;
+                r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
+                g = isLight ? COLORS.ROCK_LIGHT.g : COLORS.ROCK_DARK.g;
+                b = isLight ? COLORS.ROCK_LIGHT.b : COLORS.ROCK_DARK.b;
             }
 
             for (let j = 0; j < 3; j++) {
                 const idx = (i + j) * 3;
-                colors[idx] = color.r;
-                colors[idx + 1] = color.g;
-                colors[idx + 2] = color.b;
+                colors[idx] = r;
+                colors[idx + 1] = g;
+                colors[idx + 2] = b;
             }
         }
 
         mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        const mountainMat = new THREE.MeshStandardMaterial({
-            vertexColors: true,
-            flatShading: true,
-            roughness: 0.9,
-            side: THREE.DoubleSide
-        });
 
-        const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+        const mountain = new THREE.Mesh(mountainGeo, MATERIALS.mountain);
         ctx.scene.add(mountain);
     },
 
@@ -553,9 +556,14 @@ export const EnvironmentGenerator = {
         const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
         archGeo.translate(0, 0, -tunnelDepth / 2);
 
-        const tunnelMat = MATERIALS.concrete.clone();
-        tunnelMat.side = THREE.DoubleSide;
-        const arch = new THREE.Mesh(archGeo, tunnelMat);
+        // Avoid .clone() for material. Create a static double-sided version instead.
+        if (!MATERIALS.concreteDoubleSided) {
+            // Assuming MATERIALS.concrete is correctly exported and accessible here
+            MATERIALS.concreteDoubleSided = MATERIALS.concrete.clone();
+            MATERIALS.concreteDoubleSided.side = THREE.DoubleSide;
+        }
+
+        const arch = new THREE.Mesh(archGeo, MATERIALS.concreteDoubleSided);
         caveOpeningGroup.add(arch);
 
         return caveOpeningGroup;
@@ -756,6 +764,7 @@ export const EnvironmentGenerator = {
             }
             if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD', 'BIRCH'][Math.floor(Math.random() * 4)];
             if (typeof selectedType !== 'string') selectedType = 'PINE';
+            selectedType = selectedType.toUpperCase();
 
             const variant = i % 3;
             const key = `${selectedType}_${variant}`;
@@ -822,6 +831,7 @@ export const EnvironmentGenerator = {
                 }
                 if (selectedType === 'random') selectedType = ['PINE', 'OAK', 'DEAD', 'BIRCH'][Math.floor(Math.random() * 4)];
                 if (typeof selectedType !== 'string') selectedType = 'PINE';
+                selectedType = selectedType.toUpperCase();
 
                 const variant = i % 3;
                 const key = `${selectedType}_${variant}`;

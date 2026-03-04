@@ -11,7 +11,7 @@ import { SoundBank } from '../../utils/audio/SoundBank';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { FXSystem } from '../systems/FXSystem';
 
-// [VINTERDÖD] Camp Environment Configuration (Matches CampEnvironment.ts)
+// Camp Environment Configuration (Matches CampEnvironment.ts)
 const CAMP_ENV = {
     bgColor: 0x161629,
     fogColor: 0x161629,
@@ -31,7 +31,7 @@ let lastSectorIndex = -1;
 /**
  * AssetPreloader - Service for warming up shaders and textures before they are needed.
  * This prevents the synchronous hitches caused by Three.js compiling shaders on-demand.
- * [VINTERDÖD] Optimized for Zero-GC and 60FPS transitions.
+ * Optimized for Zero-GC.
  */
 export const AssetPreloader = {
 
@@ -144,7 +144,7 @@ export const AssetPreloader = {
                 }
                 if (isCamp || isSector) {
                     const pointLight = new THREE.PointLight(0xff7722, 40, 90);
-                    pointLight.castShadow = false; // [VINTERDÖD] Budgeted: Start OFF, LightingSystem manages shadows.
+                    pointLight.castShadow = false; // Budgeted: Start OFF, LightingSystem manages shadows.
                     pointLight.shadow.autoUpdate = false;
                     pointLight.shadow.mapSize.set(512, 512);
                     pointLight.shadow.bias = -0.0005;
@@ -152,7 +152,7 @@ export const AssetPreloader = {
                     scene.add(pointLight);
                 }
                 const spotLight = new THREE.SpotLight(0xffffff, 1);
-                spotLight.castShadow = false; // [VINTERDÖD] Budgeted
+                spotLight.castShadow = false; // Budgeted
                 spotLight.shadow.autoUpdate = false;
                 spotLight.shadow.bias = -0.0001;
                 scene.add(spotLight);
@@ -208,7 +208,7 @@ export const AssetPreloader = {
             }
 
             // 5. GEOMETRY & MATERIAL BATCHING
-            // [VINTERDÖD] Track all newly allocated objects in separate arrays.
+            // Track all newly allocated objects in separate arrays.
             // NEVER dispose shared MATERIALS.xxx or GEOMETRY.xxx — only our own creations.
             const dummyRoot = new THREE.Group();
             scene.add(dummyRoot);
@@ -268,7 +268,8 @@ export const AssetPreloader = {
                 const matKeys = Object.keys(MATERIALS) as (keyof typeof MATERIALS)[];
                 for (let i = 0; i < matKeys.length; i++) {
                     const k = matKeys[i];
-                    if (['road', 'asphalt', 'concrete'].includes(k as string)) continue;
+                    // Skip materials requiring special geometry
+                    if (['road', 'asphalt', 'concrete', 'mountain', 'concreteDoubleSided'].includes(k as string)) continue;
                     const mat = MATERIALS[k] as THREE.Material;
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, mat));
                     if ((mat as any).map) renderer.initTexture((mat as any).map);
@@ -286,6 +287,25 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestBig));
                 addToWarmup(new THREE.Mesh(GEOMETRY.rail, MATERIALS.steel));
                 addToWarmup(new THREE.Mesh(GEOMETRY.sleeper, MATERIALS.wood));
+
+                // Pre-warm Double Sided Concrete
+                addToWarmup(new THREE.Mesh(GEOMETRY.box, MATERIALS.concreteDoubleSided));
+
+                // Pre-warm Mountain Material
+                // We MUST provide a geometry with a 'color' buffer attribute, otherwise 
+                // WebGL compiles a shader variant without vertex color support, causing stutter later.
+                const dummyMountainGeo = new THREE.BufferGeometry();
+                const dummyPos = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+                const dummyNorm = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]);
+                const dummyCol = new Float32Array([1, 1, 1, 1, 1, 1, 1, 1, 1]);
+
+                dummyMountainGeo.setAttribute('position', new THREE.BufferAttribute(dummyPos, 3));
+                dummyMountainGeo.setAttribute('normal', new THREE.BufferAttribute(dummyNorm, 3));
+                dummyMountainGeo.setAttribute('color', new THREE.BufferAttribute(dummyCol, 3));
+
+                addToWarmup(new THREE.Mesh(dummyMountainGeo, MATERIALS.mountain));
+                // Track for proper disposal after compilation to prevent memory leak
+                ownedGeometries.push(dummyMountainGeo);
 
                 // Composite props — internal sub-materials not in the MATERIALS flat object
                 try {
@@ -345,7 +365,7 @@ export const AssetPreloader = {
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.deadWood);
 
-                // [VINTERDÖD] AshRenderer needs InstancedMesh warmup for smooth fading
+                // AshRenderer needs InstancedMesh warmup for smooth fading
                 addInstancedWarmup(GEOMETRY.ashPile, MATERIALS.ash);
 
                 // Tree Prototypes (also triggers EnvironmentGenerator caching)
@@ -379,7 +399,6 @@ export const AssetPreloader = {
 
                 if (yieldToMain) await yieldToMain();
             }
-
 
             // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
             if (isCamp) {
@@ -417,13 +436,14 @@ export const AssetPreloader = {
                 const fxTypes = [
                     'blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke',
                     'debris', 'glass', 'flash', 'splash',
-                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore'
+                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore',
+                    'campfire_flame', 'campfire_spark', 'campfire_smoke'
                 ];
                 for (let i = 0; i < fxTypes.length; i++) {
                     const fxMesh = FXSystem._getInstancedMesh(scene, fxTypes[i]);
                     addToWarmup(fxMesh);
 
-                    // [VINTERDÖD] Restore shadow settings overridden by addToWarmup
+                    // Restore shadow settings overridden by addToWarmup
                     if (fxTypes[i] === 'debris' || fxTypes[i] === 'scrap' || fxTypes[i] === 'glass' || fxTypes[i] === 'gore') {
                         fxMesh.castShadow = true;
                         fxMesh.receiveShadow = true;
@@ -453,7 +473,7 @@ export const AssetPreloader = {
             if (yieldToMain) await yieldToMain();
 
             // 6. SINGLE FINAL COMPILATION PASS
-            // [VINTERDÖD] All objects compiled together — GPU driver batches shader compilation
+            // All objects compiled together — GPU driver batches shader compilation
             // by hardware limit, which is more efficient than per-object roundtrips.
             beginInternal('asset_warmup_compilation');
             try {
@@ -478,7 +498,7 @@ export const AssetPreloader = {
             } catch (e) { console.warn("Compilation warmup failed", e); }
             endInternal('asset_warmup_compilation');
 
-            // [VINTERDÖD] SAFE VRAM FLUSH — only dispose objects WE created.
+            // SAFE VRAM FLUSH — only dispose objects WE created.
             // Shared MATERIALS.xxx / GEOMETRY.xxx are live runtime assets and must NOT be disposed.
             for (let i = 0; i < ownedGeometries.length; i++) ownedGeometries[i].dispose();
             for (let i = 0; i < ownedMaterials.length; i++) ownedMaterials[i].dispose();

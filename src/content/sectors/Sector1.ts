@@ -608,6 +608,29 @@ export const Sector1: SectorDef = {
             collider: { type: 'box', size: new THREE.Vector3(18, 12, 6) }
         });
 
+        // Train yard - Containers
+        const cColors = [0x1a4a2a, 0x4a2a1a, 0x1a2a4a, 0x8b0000];
+
+        const containersData = [
+            { x: ty.x - 30, z: ty.z - 20, r: 0.1, c: cColors[0] },      // Back left
+            { x: ty.x - 28, z: ty.z - 17, r: 0.2, c: cColors[1] },      // Back left slightly offset
+            { x: ty.x + 35, z: ty.z - 15, r: -0.1, c: cColors[2] },     // Back right
+            { x: ty.x + 40, z: ty.z + 10, r: Math.PI / 2 + 0.05, c: cColors[3] }, // Right side
+            { x: ty.x - 45, z: ty.z + 20, r: Math.PI / 2 - 0.1, c: cColors[0] }  // Left side
+        ];
+
+        for (let i = 0; i < containersData.length; i++) {
+            const data = containersData[i];
+            const container = ObjectGenerator.createContainer(data.c, true);
+            container.position.set(data.x, 0, data.z);
+            container.rotation.y = data.r;
+            scene.add(container);
+            SectorGenerator.addObstacle(ctx, {
+                mesh: container,
+                collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6, 2.4) }
+            });
+        }
+
         // FORESTS
         // Forest: Home -> SMU
         let forestPolygon = [
