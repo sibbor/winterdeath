@@ -24,6 +24,7 @@ import { CameraSystem } from '../core/systems/CameraSystem';
 import { TriggerHandler } from '../core/systems/TriggerHandler';
 import { LightingSystem } from '../core/systems/LightingSystem';
 import { DeathSystem } from '../core/systems/DeathSystem';
+import { OcclusionSystem } from '../core/systems/OcclusionSystem';
 import { AssetPreloader } from '../core/systems/AssetPreloader';
 import { PerformanceMonitor } from '../core/systems/PerformanceMonitor';
 import { PlayerMovementSystem } from '../core/systems/PlayerMovementSystem';
@@ -1233,7 +1234,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     { setFoundMemberName, startCinematic }
                 ));
 
-                session.addSystem(new LightingSystem(flickeringLights, sectorContextRef, playerGroupRef));
+                const lightingSystem = new LightingSystem(flickeringLights, sectorContextRef, playerGroupRef);
+                session.addSystem(lightingSystem);
 
                 session.addSystem(new CinematicSystem({
                     cinematicRef,
@@ -1289,6 +1291,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 });
 
+                // [VINTERDÖD] Zero-GC Shader Fix: Run the Lighting System once before compile!
+                // This dynamically calculates the GPU SHADOW_BUDGET and forces exactly that many 
+                // PointLights to have castShadow=true. When renderer.compile() runs, it permanently 
+                // locks in the shader permutation for NUM_POINT_LIGHT_SHADOWS. This eliminates the 
+                // 6.6s gameplay freeze when entering areas with many lights (e.g., Sector 2 Shelter).
+                lightingSystem.update(session as any, 16, performance.now());
+
                 engine.renderer.compile(scene, camera.threeCamera);
 
                 for (const [obj, count] of originalCounts.entries()) { obj.count = count; }
@@ -1321,11 +1330,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             stateRef.current.mapItems = mapItems;
             if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
-            // onSectorLoaded moved inside frame buffer check
-            stateRef.current.mapItems = mapItems;
 
-            if (propsRef.current.onMapInit) propsRef.current.onMapInit(mapItems);
-            if (propsRef.current.onSectorLoaded) propsRef.current.onSectorLoaded();
 
             // Setup static scratchpad for TriggerHandler
             _triggerOptionsScratch.spawnBubble = spawnBubble;

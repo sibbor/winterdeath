@@ -383,6 +383,10 @@ export const Sector2: SectorDef = {
             const doorL = scene.getObjectByName('s2_shelter_port_left');
             const doorR = scene.getObjectByName('s2_shelter_port_right');
 
+            // Re-enable matrix auto update on the doors so their animated position changes are reflected each frame.
+            if (doorL) doorL.matrixAutoUpdate = true;
+            if (doorR) doorR.matrixAutoUpdate = true;
+
             if (!jc.listenerAdded) {
                 window.addEventListener('spawn_jordan', () => {
                     if (sectorState.jordanCinematic && sectorState.jordanCinematic.phase === 'NONE') {
@@ -411,10 +415,15 @@ export const Sector2: SectorDef = {
                 jc.listenerAdded = true;
             }
 
-            // Door Animation
+            // Shelter doors opening
             if (jc.phase === 'OPENING_DOORS') {
-                const elapsed = now - jc.timer;
-                const openDist = Math.min(10, elapsed * 0.005);
+                // Ensure we use the exact same time source as the event listeners
+                const currentTime = performance.now();
+                const elapsed = currentTime - jc.timer;
+
+                // Clamp values to prevent negative movement if timelines desync
+                const openDist = Math.max(0, Math.min(10, elapsed * 0.005));
+
                 if (doorL) doorL.position.x = -5 - openDist;
                 if (doorR) doorR.position.x = 5 + openDist;
 
@@ -422,9 +431,11 @@ export const Sector2: SectorDef = {
                 if (sectorState.doorObstacleL?.collider) sectorState.doorObstacleL.collider.size.set(0, 0, 0);
                 if (sectorState.doorObstacleR?.collider) sectorState.doorObstacleR.collider.size.set(0, 0, 0);
 
+                // Proceed to next phase after 2 seconds
                 if (elapsed > 2000) {
                     jc.phase = 'JORDAN_WALK';
-                    jc.timer = now;
+                    jc.timer = currentTime; // Sync the timer using the same time source
+
                     if (playerPos) {
                         jc.walkTarget = new THREE.Vector3(playerPos.x, 0, playerPos.z);
                         const toPlayer = new THREE.Vector3().subVectors(playerPos, jordan?.position || new THREE.Vector3(25, 0, -193)).normalize();
@@ -433,9 +444,15 @@ export const Sector2: SectorDef = {
                         jc.walkTarget = new THREE.Vector3(52, 0, -193);
                     }
                 }
-            } else if (jc.doorsClosing) {
-                const elapsed = now - (jc.doorsClosingTimer || now);
-                const closeProgress = Math.min(1, elapsed / 800);
+            }
+            // Shelter doors closing
+            else if (jc.doorsClosing) {
+                const currentTime = performance.now();
+                const elapsed = currentTime - (jc.doorsClosingTimer || currentTime);
+
+                // Ensure progress stays strictly between 0 and 1
+                const closeProgress = Math.max(0, Math.min(1, elapsed / 800));
+
                 if (doorL) doorL.position.x = -15 + (closeProgress * 10);
                 if (doorR) doorR.position.x = 15 - (closeProgress * 10);
 
@@ -446,7 +463,7 @@ export const Sector2: SectorDef = {
 
                 if (elapsed > 500 && jc.phase === 'FINISHED_AFTER_DIALOGUE') {
                     jc.phase = 'COMPLETE';
-                    if (events.setCameraOverride) events.setCameraOverride(null);
+                    if ((events as any).setCameraOverride) (events as any).setCameraOverride(null);
                     window.dispatchEvent(new CustomEvent('show_hud'));
                     window.dispatchEvent(new CustomEvent('boss-spawn-trigger'));
                     window.dispatchEvent(new CustomEvent('family-follow'));

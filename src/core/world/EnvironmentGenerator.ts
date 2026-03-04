@@ -401,15 +401,23 @@ export const EnvironmentGenerator = {
         if (!points || points.length < 2) return;
 
         const mountainWidth = 30;
-        const mountainHeightPeak = 16; // Ökad grundhöjd för att kompensera för mindre jitter
-        const segmentsX = 40;
-        const segmentsZ = 15;
+        const mountainHeightPeak = 16;
+
+        // EXTREMELY LOW POLY: The secret to Dodecahedron-like chunky rocks
+        const segmentsX = 35;
+        const segmentsZ = 6; // Drastically reduced to force massive flat triangles
         const mountainSideBias = 1.0;
 
         const COLORS = {
             SNOW: new THREE.Color(0xffffff),
             ROCK_LIGHT: new THREE.Color(0x888899),
             ROCK_DARK: new THREE.Color(0x444455),
+        };
+
+        // Zero-GC pseudo-random function for consistent deterministic structures
+        const hash = (x: number, y: number) => {
+            let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+            return n - Math.floor(n);
         };
 
         const curve = new THREE.CatmullRomCurve3(points);
@@ -438,41 +446,49 @@ export const EnvironmentGenerator = {
                     baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
                 }
 
-                let finalY = 0;
+                let finalY = baseHeight;
                 let xJitter = 0;
                 let zJitter = 0;
 
-                // Drastiskt sänkt jitter. Mindre brus = större, tydligare plana ytor.
-                if (baseHeight > 1.0) {
-                    finalY = Math.max(0, baseHeight + (Math.random() - 0.5) * 3.0);
-                    xJitter = (Math.random() - 0.5) * 1.5;
-                    zJitter = (Math.random() - 0.5) * 1.5;
+                // CHUNKY ROCK LOGIC:
+                // Only distort the INTERIOR vertices. Edges (j=0 and j=segmentsZ) stay strictly on the path at Y=0.
+                if (j > 0 && j < segmentsZ && baseHeight > 0.5) {
+                    // 1. Terracing: Snap to chunky block intervals
+                    const stepSize = 4.0;
+                    const steppedHeight = Math.floor(baseHeight / stepSize) * stepSize;
+
+                    // 2. Height Block Offset: Add deterministic randomness to the step
+                    finalY = steppedHeight + (hash(i, j) * 3.5);
+
+                    // 3. Facet Distortion: Move interior vertices significantly in X/Z to create large, skewed triangles
+                    const edgeFade = Math.min(1.0, baseHeight / 2.0); // Don't break the outer boundaries
+                    xJitter = (hash(j, i) - 0.5) * 6.0 * edgeFade;
+                    zJitter = (hash(i * 2, j * 2) - 0.5) * 6.0 * edgeFade;
                 }
 
                 const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
                 const finalZ = targetPointOnCurve.z + (sideDirection.z * vOffset) + zJitter;
-                const finalYPos = targetPointOnCurve.y + finalY;
 
-                posAttr.setXYZ(index, finalX, finalYPos, finalZ);
+                posAttr.setXYZ(index, finalX, Math.max(0, finalY), finalZ);
             }
         }
 
+        // --- CAVE OPENING LOGIC ---
+        // Pushes vertices down to form a hole. With massive triangles, this creates a dramatic, jagged cut.
         if (opening) {
             const openingPos = new THREE.Vector3();
             opening.getWorldPosition(openingPos);
 
             const safeZoneRadiusSq = 14 * 14;
-            const clearanceHeight = 10;
+            const clearanceHeight = 12;
             const vertex = new THREE.Vector3();
 
             for (let i = 0; i < posAttr.count; i++) {
                 vertex.fromBufferAttribute(posAttr, i);
-
                 const dx = vertex.x - openingPos.x;
                 const dz = vertex.z - openingPos.z;
-                const distSq = dx * dx + dz * dz;
 
-                if (distSq < safeZoneRadiusSq && vertex.y < clearanceHeight) {
+                if ((dx * dx + dz * dz) < safeZoneRadiusSq && vertex.y < clearanceHeight) {
                     posAttr.setY(i, -25);
                 }
             }
@@ -482,6 +498,8 @@ export const EnvironmentGenerator = {
         const mountainGeo = planeGeo.toNonIndexed();
         mountainGeo.computeVertexNormals();
 
+        // --- FLAT SHADING COLORING ---
+        // By assigning the same color to all 3 vertices of a face, we prevent gradients and enforce the solid low-poly look.
         const count = mountainGeo.getAttribute('position').count;
         const colors = new Float32Array(count * 3);
         const finalPosAttr = mountainGeo.getAttribute('position');
@@ -496,13 +514,13 @@ export const EnvironmentGenerator = {
 
             let r, g, b;
 
-            // Justerade snö-tröskeln något baserat på den nya geometrin
-            if ((h > mountainHeightPeak * 0.45 && upwardness > 0.6) || (upwardness > 0.85 && h > 8)) {
+            // Snow catches on flat surfaces or very high peaks
+            if ((h > mountainHeightPeak * 0.4 && upwardness > 0.6) || (upwardness > 0.85 && h > 6)) {
                 r = COLORS.SNOW.r;
                 g = COLORS.SNOW.g;
                 b = COLORS.SNOW.b;
             } else {
-                const isLight = Math.random() > 0.5;
+                const isLight = hash(i, i) > 0.5;
                 r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
                 g = isLight ? COLORS.ROCK_LIGHT.g : COLORS.ROCK_DARK.g;
                 b = isLight ? COLORS.ROCK_LIGHT.b : COLORS.ROCK_DARK.b;
