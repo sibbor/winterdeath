@@ -264,26 +264,35 @@ export const EnemyAI = {
         switch (e.state) {
             case AIState.IDLE:
                 e.idleTimer -= delta;
-                if (canSeePlayer) { e.state = AIState.CHASE; updateLastSeen(e, playerPos, now); }
-                else if (heardNoise && noisePos) { e.state = AIState.SEARCH; updateLastSeen(e, noisePos, now); e.searchTimer = 5.0; }
-                else if (e.idleTimer <= 0) {
+                if (canSeePlayer) {
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, playerPos, now);
+                } else if (heardNoise && noisePos) {
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, noisePos, now);
+                } else if (e.idleTimer <= 0) {
                     e.state = AIState.WANDER;
                     const angle = Math.random() * Math.PI * 2;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
                     e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
-
-                // TODO - DON'T REMOVE: improve sound before enabling this:
-                //if (Math.random() < 0.005) callbacks.playSound(e.type === 'RUNNER' ? 'runner_scream' : (e.type === 'TANK' ? 'tank_roar' : 'walker_groan'));
                 break;
 
             case AIState.WANDER:
                 e.searchTimer -= delta;
                 _v1.copy(e.mesh.position).addScaledVector(e.velocity, delta);
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
-                if (canSeePlayer) e.state = AIState.CHASE;
-                else if (e.searchTimer <= 0) { e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0; }
+
+                if (canSeePlayer) {
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, playerPos, now);
+                } else if (heardNoise && noisePos) {
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, noisePos, now);
+                } else if (e.searchTimer <= 0) {
+                    e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0;
+                }
 
                 const wanderStepInterval = 1200;
                 if (now > (e.lastStepTime || 0) + wanderStepInterval) {
@@ -292,8 +301,19 @@ export const EnemyAI = {
                 break;
 
             case AIState.CHASE:
-                if (canSeePlayer) updateLastSeen(e, playerPos, now);
-                if ((!canSeePlayer && now - e.lastSeenTime > 5000) || distSq > 2500) { e.state = AIState.SEARCH; e.searchTimer = 5.0; }
+                // Om vi ser spelaren, sikta direkt på dem.
+                // Om vi inte ser dem men HÖR dem, uppdatera målet till ljudkällan så vi fortsätter springa!
+                if (canSeePlayer) {
+                    updateLastSeen(e, playerPos, now);
+                } else if (heardNoise && noisePos) {
+                    updateLastSeen(e, noisePos, now);
+                }
+
+                // Om vi tappat bort spelaren/ljudet för mer än 5 sekunder sedan -> Börja leta.
+                if ((!canSeePlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
+                    e.state = AIState.SEARCH;
+                    e.searchTimer = 5.0;
+                }
                 else {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
                     if (e.type === 'BOMBER' && distSq < 12.0) { e.state = AIState.EXPLODING; e.explosionTimer = 1.5; return; }
@@ -302,27 +322,22 @@ export const EnemyAI = {
 
                     const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
-                        // TODO - DON'T REMOVE: improve sound before enabling this:
-                        //if (e.type === 'TANK') callbacks.playSound('tank_smash');
                         e.lastStepTime = now;
                     }
 
-                    // TODO - DON'T REMOVE: improve sound before enabling this:
-                    //if (Math.random() < 0.01) callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : (e.type === 'TANK' ? 'tank_roar' : 'walker_attack'));
-
-                    const attackRange = e.type === 'TANK' ? 7.0 : 3.8;
-                    if (distSq < attackRange && e.attackCooldown <= 0) {
+                    const attackRangeSq = e.type === 'TANK' ? 9.0 : 4.5;
+                    if (distSq < attackRangeSq && e.attackCooldown <= 0) {
                         if (e.type === 'TANK') {
                             e.attackCooldown = 3000;
                             callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
-                            // TODO - DON'T REMOVE: improve sound before enabling this:
-                            //callbacks.playSound('tank_smash');
                         } else {
                             e.state = AIState.BITING;
                             e.grappleTimer = 2.0;
                             e.attackCooldown = 2000;
-                            // TODO - DON'T REMOVE: improve sound before enabling this:
-                            //callbacks.playSound(e.type === 'RUNNER' ? 'runner_attack' : 'walker_attack');
+
+                            if (e.mesh) {
+                                e.mesh.userData.biteAngle = Math.atan2(e.mesh.position.x - playerPos.x, e.mesh.position.z - playerPos.z);
+                            }
                         }
                     }
                 }
@@ -331,32 +346,27 @@ export const EnemyAI = {
             case AIState.BITING:
                 e.grappleTimer -= delta * (shakeIntensity > 1.0 ? 6.0 : 1.0);
 
-                _v1.subVectors(e.mesh.position, playerPos);
-                _v1.y = 0;
-                if (_v1.lengthSq() < 0.01) _v1.set(0, 0, 1);
-                _v1.normalize();
-                _v2.copy(playerPos).addScaledVector(_v1, 1.2);
+                const biteAngle = e.mesh.userData.biteAngle || 0;
+                const grappleDist = 1.2;
 
-                moveEntity(e, _v2, delta, e.speed * 2.5, collisionGrid, _v6);
+                e.mesh.position.x = playerPos.x + Math.sin(biteAngle) * grappleDist;
+                e.mesh.position.z = playerPos.z + Math.cos(biteAngle) * grappleDist;
 
                 _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                 e.mesh.lookAt(_v5);
 
-                const currentDistSq = e.mesh.position.distanceToSquared(playerPos);
-                if (currentDistSq > 6.25) {
-                    e.state = AIState.CHASE;
-                    e.attackCooldown = 1500;
-                    break;
+                if (now % 500 < 30) {
+                    callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
+                    callbacks.playSound('impact_flesh');
                 }
-                if (currentDistSq < 4.0) {
-                    if (now % 500 < 30) {
-                        callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
-                        callbacks.playSound('impact_flesh');
-                    }
-                }
+
                 if (e.grappleTimer <= 0) {
                     e.state = AIState.CHASE;
                     e.attackCooldown = 1000;
+
+                    _v1.subVectors(e.mesh.position, playerPos).normalize().multiplyScalar(2.5);
+                    if (!e.knockbackVel) e.knockbackVel = new THREE.Vector3();
+                    e.knockbackVel.copy(_v1);
                 }
                 break;
 
@@ -375,9 +385,6 @@ export const EnemyAI = {
                 e.mesh.scale.setScalar(breatheScale);
 
                 e.mesh.visible = true;
-
-                // TODO - DON'T REMOVE: improve sound before enabling this:
-                //if (now % 400 < 30) callbacks.playSound('bomber_beep');
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
@@ -400,7 +407,7 @@ export const EnemyAI = {
                     }
                     e.hp = 0;
                     e.deathState = 'EXPLODED';
-                    e.deathVel.set(0, 10.0, 0); // Pop upward on self-destruct
+                    e.deathVel.set(0, 10.0, 0);
 
                     soundManager.playExplosion();
                     haptic.explosion();
@@ -409,9 +416,22 @@ export const EnemyAI = {
 
             case AIState.SEARCH:
                 e.searchTimer -= delta;
-                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid, _v6);
-                else e.mesh.rotation.y += delta * 2.5;
-                if (canSeePlayer) e.state = AIState.CHASE; else if (e.searchTimer <= 0) e.state = AIState.IDLE;
+                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) {
+                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid, _v6);
+                } else {
+                    e.mesh.rotation.y += delta * 2.5;
+                }
+
+                // Om vi hittar ett nytt spår, kasta oss in i CHASE!
+                if (canSeePlayer) {
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, playerPos, now);
+                } else if (heardNoise && noisePos) {
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, noisePos, now);
+                } else if (e.searchTimer <= 0) {
+                    e.state = AIState.IDLE;
+                }
                 break;
         }
 
@@ -444,9 +464,6 @@ export const EnemyAI = {
         if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
         e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
     },
-
-    // --- EXTERNAL INTERACTIONS FROM OTHER SYSTEMS ---
-
 };
 
 // --- HELPERS ---
