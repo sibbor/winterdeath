@@ -6,6 +6,7 @@ import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
+import { SectorSystem } from '../systems/SectorSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { PerformanceMonitor } from './PerformanceMonitor';
@@ -457,6 +458,18 @@ export const AssetPreloader = {
                 corpseMatWarmup.color.setHex(0xffffff);
                 addToWarmup(new THREE.InstancedMesh(GEOMETRY.zombie, corpseMatWarmup, 1));
                 ownedMaterials.push(corpseMatWarmup);
+
+                // Warm up ONLY the collectibles needed for this specific sector
+                try {
+                    const sector = SectorSystem.getSector(target as number);
+                    if (sector && sector.collectibles) {
+                        for (let i = 0; i < sector.collectibles.length; i++) {
+                            addToWarmup(ModelFactory.createCollectible(sector.collectibles[i].id));
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[AssetPreloader] Failed to warmup sector collectibles', e);
+                }
             }
 
             if (yieldToMain) await yieldToMain();
