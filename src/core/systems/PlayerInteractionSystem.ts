@@ -118,7 +118,6 @@ export class PlayerInteractionSystem implements System {
             // Keep the main group fixed. By zeroing the rotation, local offsets perfectly match world offsets.
             anim.obj.position.copy(anim.startPos);
             anim.obj.rotation.set(0, 0, 0);
-            anim.obj.updateMatrix();
 
             const targetX = (this.playerGroup.position.x - anim.startPos.x) * easeOut;
             const targetZ = (this.playerGroup.position.z - anim.startPos.z) * easeOut;
@@ -143,7 +142,6 @@ export class PlayerInteractionSystem implements System {
                     } else {
                         child.scale.setScalar(Math.max(0.001, fxScale));
                     }
-                    child.updateMatrix();
                 } else if ((child instanceof THREE.Mesh || child instanceof THREE.Group) && !child.name.startsWith('collectible')) {
                     // Skip internal lights explicitly
                     if ((child as any).isLight) continue;
@@ -161,12 +159,14 @@ export class PlayerInteractionSystem implements System {
                     } else {
                         child.scale.setScalar(1.0);
                     }
-                    child.updateMatrix();
                 }
             }
 
-            // Ensure visual updates are pushed down the scene graph
-            anim.obj.updateMatrixWorld(true);
+            // [VINTERDÖD] High-Performance Matrix Sync
+            // We tell Three.js that the parent group needs a world matrix recalculation.
+            // The renderer handles propagating this to the children cleanly during the render phase
+            // without us forcing manual, recursive recursive calls mid-update.
+            anim.obj.matrixWorldNeedsUpdate = true;
 
             // [VINTERDÖD] Se till att partiklarna (smoke/sparks) följer med strålen upp!
             if (anim.obj.userData.effects) {
@@ -418,6 +418,15 @@ export class PlayerInteractionSystem implements System {
             soundManager.playUiPickup();
         }
 
+        // [VINTERDÖD FIX] Wake up the matrix updates for this specific object and its children.
+        // This allows the local position/scale/rotation changes in the animation loop to actually render,
+        // without ruining the performance of the rest of the static world!
+        collectible.matrixAutoUpdate = true;
+        const children = collectible.children;
+        for (let i = 0; i < children.length; i++) {
+            children[i].matrixAutoUpdate = true;
+        }
+
         this.activeAnimations.push({
             obj: collectible,
             startPos: collectible.position.clone(),
@@ -426,7 +435,7 @@ export class PlayerInteractionSystem implements System {
             collectibleId: collectibleId
         });
 
-        // [VINTERDÖD] Spawn initial blow-away burst
+        // Spawn initial blow-away burst
         for (let i = 0; i < 15; i++) {
             _v1.set(
                 (Math.random() - 0.5) * 2,

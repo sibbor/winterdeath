@@ -285,15 +285,26 @@ export const WeaponHandler = {
         // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
         if (wep.behavior === WeaponBehavior.THROWABLE) {
 
-            // Helper function to force the throw and avoid code duplication
+            // Helper function to force the throw and avoid code duplication.
+            // Restored the exact _v3 target calculation logic from the original code!
             const executeThrow = (ratio: number) => {
                 if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
                 state.throwablesThrown = (state.throwablesThrown || 0) + 1;
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
 
-                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v1, state.activeWeapon, ratio);
+                const maxDist = (wep as any).maxThrowDistance || 25.0;
+                const dist = Math.max(2.0, ratio * maxDist);
+
+                // Origin and exact Target calculation restored
+                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
+                _v3.copy(playerGroup.position).addScaledVector(_v1, dist); // Target
+                _v3.y = 0.1;
+
+                const tMax = 1.0 + (dist / maxDist) * 0.5;
+
+                // Provide exact target (_v3) and physics metrics (tMax) to the system
+                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v3, state.activeWeapon, tMax);
 
                 if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {
                     state.activeWeapon = loadout.primary;
@@ -315,17 +326,29 @@ export const WeaponHandler = {
 
                 const chargeTime = 1250;
                 const elapsed = now - state.throwChargeStart;
+
+                // Cap the ratio at 1.0 (max distance) instead of continuous modulo loop
                 const ratio = Math.min(1, elapsed / chargeTime);
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-                const dist = Math.max(2, ratio * 25);
+
+                const maxDist = (wep as any).maxThrowDistance || 25.0;
+                const dist = Math.max(2.0, ratio * maxDist);
+
+                // Origin and exact Target calculation for rendering
+                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
+                _v3.copy(playerGroup.position).addScaledVector(_v1, dist);
+                _v3.y = 0.1;
+
+                const tMax = 1.0 + (dist / maxDist) * 0.5;
+                const g = 30;
 
                 if (aimCrossMesh) {
                     aimCrossMesh.visible = true;
-                    _v2.copy(_v1).multiplyScalar(dist);
-                    aimCrossMesh.position.copy(playerGroup.position).add(_v2);
+                    aimCrossMesh.position.copy(_v3);
                     aimCrossMesh.position.y = 0.2;
 
+                    // Visual feedback pulse when fully charged
                     if (ratio >= 1.0) {
                         aimCrossMesh.scale.setScalar(1.5 + Math.sin(now * 0.01) * 0.1);
                     } else {
@@ -333,43 +356,51 @@ export const WeaponHandler = {
                     }
                 }
 
+                // Advanced Trajectory rendering restored with water buoyancy support
                 if (trajectoryLineMesh) {
                     trajectoryLineMesh.visible = true;
-                    const g = 30, tMax = 1.0, startY = playerGroup.position.y + 1.5;
-                    const vx = (_v1.x * dist) / tMax, vz = (_v1.z * dist) / tMax;
-                    const vy = (0 - startY + 0.5 * g * tMax * tMax) / tMax;
+
+                    const vx = (_v3.x - _v2.x) / tMax;
+                    const vz = (_v3.z - _v2.z) / tMax;
+                    const vy = (_v3.y - _v2.y + 0.5 * g * tMax * tMax) / tMax;
 
                     const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
                     const width = 0.15;
 
+                    const engine = WinterEngine.getInstance();
+                    const water = engine?.water;
+
                     for (let i = 0; i <= 20; i++) {
                         const t = (i / 20) * tMax;
-                        _v4.set(
-                            playerGroup.position.x + vx * t,
-                            Math.max(0.1, startY + vy * t - 0.5 * g * t * t),
-                            playerGroup.position.z + vz * t
-                        );
+                        const tx = _v2.x + vx * t;
+                        const tz = _v2.z + vz * t;
+                        const ty = _v2.y + vy * t - 0.5 * g * t * t;
 
-                        if (i < 20) {
-                            const tNext = ((i + 1) / 20) * tMax;
-                            _v5.set(
-                                playerGroup.position.x + vx * tNext,
-                                Math.max(0.1, startY + vy * tNext - 0.5 * g * tNext * tNext),
-                                playerGroup.position.z + vz * tNext
-                            );
-                            _v3.subVectors(_v5, _v4).normalize();
+                        const instVy = vy - (g * t);
+
+                        let groundY = 0.1;
+                        if (water) {
+                            water.checkBuoyancy(tx, 0.5, tz);
+                            if (_buoyancyResult.inWater) {
+                                groundY = _buoyancyResult.waterLevel + 0.05;
+                            }
                         }
 
-                        _v2.crossVectors(_v3, _UP).normalize().multiplyScalar(width);
+                        _v4.set(tx, Math.max(groundY, ty), tz);
+                        _v5.set(vx, instVy, vz).normalize();
 
-                        posAttr.setXYZ(2 * i, _v4.x - _v2.x, _v4.y, _v4.z - _v2.z);
-                        posAttr.setXYZ(2 * i + 1, _v4.x + _v2.x, _v4.y, _v4.z + _v2.z);
+                        // Uses _v1 as scratch to avoid overwriting _v3
+                        _v1.crossVectors(_v5, _UP).normalize().multiplyScalar(width);
+
+                        posAttr.setXYZ(2 * i, _v4.x - _v1.x, _v4.y, _v4.z - _v1.z);
+                        posAttr.setXYZ(2 * i + 1, _v4.x + _v1.x, _v4.y, _v4.z + _v1.z);
                     }
                     posAttr.needsUpdate = true;
                     (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
+                    (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
                 }
 
-                // Auto-throw logic: Force the throw if the button is held for 3.25 seconds (max charge + 2s)
+                // Auto-throw logic: Force the throw if the button is held for 3.25 seconds
                 if (elapsed >= chargeTime + 2000) {
                     executeThrow(1.0);
                 }

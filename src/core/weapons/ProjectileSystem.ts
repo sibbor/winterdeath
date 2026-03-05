@@ -534,14 +534,14 @@ export const ProjectileSystem = {
                 const r = Math.sqrt(Math.random()) * fz.radius;
                 const theta = Math.random() * Math.PI * 2;
                 const fx = fz.mesh.position.x + r * Math.cos(theta);
-                const fz2 = fz.mesh.position.z + r * Math.sin(theta);
+                const fzZ = fz.mesh.position.z + r * Math.sin(theta);
 
                 const normalizedDist = r / fz.radius;
                 const flameScale = 2.5 - normalizedDist * 1.8;
                 const flameY = 0.3 + (1.0 - normalizedDist) * 1.2;
                 const colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
-                // (x, y, z, type, count, mesh, vel, color, scale)
-                ctx.spawnPart(fx, flameY, fz2, 'fire', 1, undefined, undefined, colorHex, flameScale);
+
+                ctx.spawnPart(fx, flameY, fzZ, 'fire', 1, undefined, undefined, colorHex, flameScale);
             }
 
             if (fz.life <= 0) {
