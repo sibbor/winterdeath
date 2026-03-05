@@ -29,6 +29,7 @@ export const EnemyAI = {
         collisionGrid: SpatialGrid,
         noiseEvents: any[],
         shakeIntensity: number,
+        playerIsDead: boolean,
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: string) => void;
             onDamageDealt: (amount: number, enemy: Enemy) => void;
@@ -44,15 +45,10 @@ export const EnemyAI = {
         if (e.hp <= 0 && e.deathState === 'ALIVE') {
             e.deathTimer = now;
 
-            // BUG FIX: RESET FLASH/SCALE STATES BEFORE HANDOFF
-            // Prevent enemies from freezing in their "damage flash" (white and scaled up) 
-            // when handing them over to the DeathSystem.
             const baseScale = e.originalScale || 1.0;
             const widthScale = e.widthScale || 1.0;
             e.mesh.scale.set(baseScale * widthScale, baseScale, baseScale * widthScale);
 
-            // Safely reset color if it was flashed white.
-            // e.mesh is typically a THREE.Group, so we iterate through its children (zero-GC)
             if (e.color !== undefined) {
                 for (let i = 0; i < e.mesh.children.length; i++) {
                     const child = e.mesh.children[i] as any;
@@ -66,30 +62,23 @@ export const EnemyAI = {
             const isHighImpact = e.lastHitWasHighImpact;
             const fallForward = Math.random() > 0.5;
 
-            // Data-driven death states from Weapon Metadata
             const weapon = WEAPONS[dmgType];
 
-            // Normalize weapon impact type (Zero-GC, avoiding .toUpperCase() string allocations)
             let weaponImpact = 'SHOT';
             if (weapon && weapon.impactType) {
-                // Cast to string to bypass TypeScript's strict union overlap check
                 const rawImpact = weapon.impactType as string;
                 if (rawImpact === 'gib' || rawImpact === 'GIB' || rawImpact === 'GIBBED') weaponImpact = 'GIBBED';
                 else if (rawImpact === 'burning' || rawImpact === 'BURNING' || rawImpact === 'BURNED') weaponImpact = 'BURNED';
                 else if (rawImpact === 'electrified' || rawImpact === 'ELECTRIFIED') weaponImpact = 'ELECTRIFIED';
             }
 
-            // 1. Electrocution Deaths (Arc-Cannon) - Highest Priority
             if (weaponImpact === 'ELECTRIFIED' || dmgType === WeaponType.ARC_CANNON) {
                 e.deathState = 'ELECTRIFIED';
-                e.deathVel.set(0, 0, 0); // Kill all momentum so they stiffen and fall flat
+                e.deathVel.set(0, 0, 0);
             }
-            // 2. Fire Deaths (Molotov, Flamethrower, or dying while actively on fire)
-            // Priority: Fire takes precedence over self-destruction for regular enemies (e.g. Bombers)
             else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === 'BURN') {
                 e.deathState = 'BURNED';
             }
-            // 3. Explosions (Grenades, Bombers, Bosses)
             else if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
                 e.deathState = 'EXPLODED';
                 if (dmgType !== WeaponType.GRENADE) {
@@ -97,42 +86,31 @@ export const EnemyAI = {
                     haptic.explosion();
                 }
             }
-            // 4. High-Impact Gibbing (Shotgun/Revolver at close range)
             else if (weaponImpact === 'GIBBED' && isHighImpact) {
                 e.deathState = 'GIBBED';
                 e.mesh.userData.gibbed = true;
             }
-            // 5. Standard Weapon Shots (SMG, Rifle, Pistol)
             else if (weapon) {
                 e.deathState = 'SHOT';
 
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
-
-                    // How fast was the zombie running straight at us? (Dot product)
                     const forwardMomentum = e.velocity.dot(_v1.clone().negate());
-
-                    // If they ran fast towards us (> 1.5 m/s), they stumble forward!
                     e.fallForward = forwardMomentum > 1.5;
 
-                    // Hard brake their run speed (legs die) and apply shot force
                     e.deathVel.copy(e.velocity).multiplyScalar(0.1);
                     const impactForce = weapon.damage * 0.15;
-
-                    // Pop them up slightly for some hang time
                     e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
                 }
 
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 5.0;
             }
-            // 6. Default generic death (Melee, Vehicle ram, etc)
             else {
                 e.deathState = 'GENERIC';
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
                     const forwardMomentum = e.velocity.dot(_v1.clone().negate());
                     e.fallForward = forwardMomentum > 1.5;
-
                     e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
                 }
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
@@ -142,7 +120,7 @@ export const EnemyAI = {
         // --- 2. HANDLE DEATH ANIMATIONS ---
         if (e.deathState !== 'ALIVE') {
             handleDeathAnimation(e, delta, now, callbacks);
-            return; // Hand over to DeathSystem, AI loop stops here
+            return;
         }
 
         // --- 3. POOLING SCALE RECOVERY ---
@@ -156,9 +134,13 @@ export const EnemyAI = {
         // --- 4. STATUS EFFECTS ---
         handleStatusEffects(e, delta, now, callbacks);
 
+        // Flag for the final Y-update (breathing animation)
+        // If we are knocked back or ragdolling, we want physics to control Y!
+        let isPhysicallyAirborne = false;
+
         // --- 5. MASS-BASED KNOCKBACK PHYSICS ---
-        // This must run BEFORE the stun return so ragdolling enemies actually fly backwards
         if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
+            isPhysicallyAirborne = true;
             const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
             const moveInertia = delta / Math.max(0.5, mass);
 
@@ -178,8 +160,8 @@ export const EnemyAI = {
         if (e.stunTimer && e.stunTimer > 0) {
             e.stunTimer -= delta;
 
-            // --- RAGDOLL PHYSICS ---
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
+                isPhysicallyAirborne = true;
                 e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
                 e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
                 e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
@@ -196,7 +178,6 @@ export const EnemyAI = {
                     e.mesh.quaternion.setFromEuler(e.mesh.rotation);
                 }
             } else {
-                // --- STANDARD STUN (Twitch) ---
                 if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
                 const twitchX = (Math.random() - 0.5) * 0.2;
                 const twitchZ = (Math.random() - 0.5) * 0.2;
@@ -301,15 +282,12 @@ export const EnemyAI = {
                 break;
 
             case AIState.CHASE:
-                // Om vi ser spelaren, sikta direkt på dem.
-                // Om vi inte ser dem men HÖR dem, uppdatera målet till ljudkällan så vi fortsätter springa!
                 if (canSeePlayer) {
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
                     updateLastSeen(e, noisePos, now);
                 }
 
-                // Om vi tappat bort spelaren/ljudet för mer än 5 sekunder sedan -> Börja leta.
                 if ((!canSeePlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
@@ -319,6 +297,12 @@ export const EnemyAI = {
                     if (e.type === 'BOMBER' && distSq < 12.0) {
                         e.state = AIState.EXPLODING;
                         e.explosionTimer = 1.5;
+                        return;
+                    }
+
+                    if (playerIsDead) {
+                        e.state = AIState.SEARCH;
+                        e.searchTimer = 3.0;
                         return;
                     }
 
@@ -359,12 +343,12 @@ export const EnemyAI = {
                 _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                 e.mesh.lookAt(_v5);
 
-                if (now % 500 < 30) {
+                if (now % 500 < 30 && !playerIsDead) {
                     callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
                     callbacks.playSound('impact_flesh');
                 }
 
-                if (e.grappleTimer <= 0) {
+                if (e.grappleTimer <= 0 || playerIsDead) {
                     e.state = AIState.CHASE;
                     e.attackCooldown = 1000;
 
@@ -392,11 +376,8 @@ export const EnemyAI = {
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
 
-                    // [VINTERDÖD FIX] Ringen är ett barn till zombien. Eftersom zombien studsar UPP 
-                    // i luften, måste vi flytta ringen NER exakt lika mycket lokalt så den slickar golvet.
                     e.indicatorRing.position.set(0, -e.mesh.position.y + 0.05, 0);
 
-                    // Reversera zombiens 'breatheScale' så inte varningsringen svajar i storlek
                     const targetRadius = 12.0 + Math.sin(now * 0.01) * 1.0;
                     e.indicatorRing.scale.setScalar(targetRadius / breatheScale);
 
@@ -405,7 +386,6 @@ export const EnemyAI = {
 
                     if (e.indicatorRing.material) {
                         const mat = e.indicatorRing.material as any;
-                        // Vi har nu garanterat att mat är clone:ad och transparent
                         mat.opacity = 0.3 + (1.0 - (e.explosionTimer / 1.5)) * 0.6;
                         mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
                     }
@@ -432,7 +412,6 @@ export const EnemyAI = {
                     e.mesh.rotation.y += delta * 2.5;
                 }
 
-                // Om vi hittar ett nytt spår, kasta oss in i CHASE!
                 if (canSeePlayer) {
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
@@ -448,7 +427,7 @@ export const EnemyAI = {
         // --- 9. FINAL UPDATES ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
 
-        // Hit Flash Logic (For Bosses/Non-instanced)
+        // Hit Flash Logic
         if (e.isBoss && e.mesh && e.color !== undefined) {
             const timeSinceHit = now - e.hitTime;
             if (timeSinceHit < 100) {
@@ -471,8 +450,11 @@ export const EnemyAI = {
 
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
-        if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
-        e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
+        // FIX: Endast "andas" om fienden står på marken!
+        if (!isPhysicallyAirborne && e.state !== AIState.EXPLODING) {
+            if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
+            e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
+        }
     },
 };
 

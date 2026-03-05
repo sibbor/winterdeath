@@ -14,7 +14,7 @@ import { _buoyancyResult } from '../systems/WaterSystem';
 export interface FireZone {
     mesh: THREE.Mesh;
     radius: number;
-    radiusSq: number; // Pre-calculated to save math operations in frame updates
+    radiusSq: number;
     life: number;
     _lastDamageTime?: number;
 }
@@ -31,6 +31,8 @@ export interface GameContext {
     addScore: (amt: number) => void;
     addFireZone: (z: FireZone) => void;
     now: number;
+    playerPos: THREE.Vector3;
+    onPlayerHit: (damage: number, attacker: any, type: string) => void;
     noiseEvents?: { pos: THREE.Vector3, radius: number, time: number, active: boolean }[];
 }
 
@@ -40,7 +42,7 @@ export interface Projectile {
     weapon: string;
     vel: THREE.Vector3;
     origin: THREE.Vector3;
-    speed: number; // Cached to avoid p.vel.length() checks in frame updates
+    speed: number;
     damage: number;
     life: number;
     maxRadius?: number;
@@ -59,6 +61,9 @@ const _v5 = new THREE.Vector3();
 // Dedicated scratchpads for Arc-Cannon continuous fire
 const _arcCannonHitList: Enemy[] = [];
 const _arcCannonHitIds = new Set<string>();
+
+// CONSTANTS (Pre-calculated math to save CPU cycles)
+const FLAMETHROWER_CONE_ANGLE = Math.cos(25 * Math.PI / 180);
 
 // ZERO-GC Pools
 const PROJECTILE_POOL: Projectile[] = [];
@@ -97,7 +102,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             soundManager.playExplosion();
             haptic.explosion();
 
-            // Zero-GC pool implementation for noiseEvents
             if (ctx.noiseEvents) {
                 let foundEvent = false;
                 for (let i = 0; i < ctx.noiseEvents.length; i++) {
@@ -314,7 +318,6 @@ export const ProjectileSystem = {
 
         if (p.mesh.parent !== scene) scene.add(p.mesh);
 
-        // Calculate exact kinematic vector needed to reach target coordinate based on gravitational curve
         const g = 30.0;
         p.vel.set(
             (target.x - origin.x) / time,
@@ -325,7 +328,7 @@ export const ProjectileSystem = {
         p.speed = p.vel.length();
         p.origin.copy(origin);
         p.damage = data.damage;
-        p.life = time + 0.5; // Slight padding, primarily destroyed via Y-axis intersection
+        p.life = time + 0.5;
         p.maxRadius = data.range;
 
         if (!p.marker) {
@@ -333,7 +336,6 @@ export const ProjectileSystem = {
             p.marker.rotation.x = -Math.PI / 2;
         }
 
-        // Direct position mapping since exact target coordinate is passed from WeaponHandler
         p.marker.position.copy(target);
         p.marker.scale.setScalar(data.range);
 
@@ -349,19 +351,16 @@ export const ProjectileSystem = {
         if (!data) return;
 
         if (weapon === WeaponType.FLAMETHROWER) {
-            // Muzzle flash for flamethrower
             if (Math.random() < 0.3) {
                 FXSystem.spawnMuzzleFlash(origin, direction, true);
             }
 
-            // FIX: Ensure a solid thick stream regardless of delta time.
             const count = 3;
             for (let i = 0; i < count; i++) {
                 _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.5);
                 FXSystem.spawnFlame(_v1, direction);
             }
 
-            const coneAngle = Math.cos(25 * Math.PI / 180);
             const range = data.range;
             const rangeSq = range * range;
 
@@ -380,7 +379,8 @@ export const ProjectileSystem = {
 
                 const dot = direction.dot(_v1);
 
-                if (dot > coneAngle) {
+                // FIX: Use pre-calculated cone angle instead of calling Math.cos every check
+                if (dot > FLAMETHROWER_CONE_ANGLE) {
                     e.isBurning = true;
                     e.lastDamageType = WeaponType.FLAMETHROWER;
                     e.burnTimer = 0.5;
@@ -404,7 +404,7 @@ export const ProjectileSystem = {
 
             let target = null;
             let minDist = Infinity;
-            const aimThreshold = 0.90; // FIX: Widened cone slightly so it snaps easier
+            const aimThreshold = 0.90;
 
             for (let _fi = 0; _fi < enemies.length; _fi++) {
                 const e = enemies[_fi];
@@ -500,7 +500,6 @@ export const ProjectileSystem = {
             ctx.addFireZone = (z: FireZone) => fireZones.push(z);
         }
 
-        // Safe backward iteration allows efficient swap-and-pop internally
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
             if (p.type === 'bullet') updateBullet(p, i, delta, ctx, projectiles);
@@ -527,9 +526,19 @@ export const ProjectileSystem = {
                         ctx.trackStats('damage', 15, !!e.isBoss);
                     }
                 }
+
+                if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
+                    ctx.onPlayerHit(10, fz, 'FLAME');
+                }
             }
 
-            const flameCount = 6;
+            // FIX: Framerate-independent particle spawning. 
+            // Yields roughly 360 particles/sec regardless of if screen is 60Hz or 144Hz.
+            const targetFlameCount = 360 * delta;
+            // Handle fractional particles gracefully with probability
+            let flameCount = Math.floor(targetFlameCount);
+            if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
+
             for (let j = 0; j < flameCount; j++) {
                 const r = Math.sqrt(Math.random()) * fz.radius;
                 const theta = Math.random() * Math.PI * 2;
@@ -570,13 +579,10 @@ export const ProjectileSystem = {
 
 // --- INTERNAL HELPERS ---
 function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
-    // Save previous position (X and Z only to prevent vertical tunneling)
     _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
 
-    // Step forward in time
     projectile.mesh.position.addScaledVector(projectile.vel, delta);
 
-    // Save current position (X and Z only)
     _v4.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
     projectile.life -= delta;
 
@@ -584,12 +590,9 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     const data = WEAPONS[projectile.weapon];
     if (!data) return;
 
-    // Vector representing the exact path the bullet traveled this frame
     _v2.subVectors(_v4, _v3);
     const lineLenSq = _v2.lengthSq();
 
-    // 1. SWEPT OBSTACLE CHECK
-    // Use midpoint for the grid query to capture the whole line
     _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
     const bulletTravelDist = projectile.speed * delta;
     const obsSearchRad = 2.0 + bulletTravelDist * 0.5;
@@ -597,13 +600,12 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
     for (let i = 0; i < nearbyObs.length; i++) {
         const obs = nearbyObs[i];
-        _v5.set(obs.position.x, 0, obs.position.z); // Obstacle XZ
+        _v5.set(obs.position.x, 0, obs.position.z);
         const rad = obs.radius || 2.0;
 
-        // Math: Closest point on the line segment to the obstacle
-        _v1.subVectors(_v5, _v3); // Vector from segment start to obstacle
+        _v1.subVectors(_v5, _v3);
         let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v1.dot(_v2) / lineLenSq)) : 0;
-        _v1.copy(_v3).addScaledVector(_v2, t); // _v1 is now the closest point on the line
+        _v1.copy(_v3).addScaledVector(_v2, t);
 
         if (_v1.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
@@ -614,8 +616,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     }
 
     if (!destroyBullet) {
-        // 2. SWEPT ENEMY CHECK
-        _v1.addVectors(_v3, _v4).multiplyScalar(0.5); // Midpoint again
+        _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
         const enemySearchRad = 5.0 + bulletTravelDist * 0.5;
         const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, enemySearchRad);
 
@@ -627,16 +628,14 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             const enemy = nearbyEnemies[i];
             if (enemy.deathState !== 'ALIVE' || projectile.hitEntities.has(enemy.id)) continue;
 
-            _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z); // Enemy XZ
+            _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
             const hitRad = 1.2 * (enemy.widthScale || 1.0) * (enemy.originalScale || 1.0);
 
-            // Math: Closest point on the line segment to the enemy
-            _v1.subVectors(_v5, _v3); // Vector from segment start to enemy
+            _v1.subVectors(_v5, _v3);
             let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v1.dot(_v2) / lineLenSq)) : 0;
-            _v1.copy(_v3).addScaledVector(_v2, t); // _v1 is now the closest point on the line
+            _v1.copy(_v3).addScaledVector(_v2, t);
 
             if (_v1.distanceToSquared(_v5) < hitRad * hitRad) {
-                // HIT!
                 let isHighImpact = false;
                 if (projectile.weapon === WeaponType.SHOTGUN) {
                     const distFromOriginSq = Math.pow(_v1.x - projectile.origin.x, 2) + Math.pow(_v1.z - projectile.origin.z, 2);
@@ -661,7 +660,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                     enemy.deathVel.copy(projectile.vel).normalize().multiplyScalar(force * 2.0).setY(4.0);
                 }
 
-                // Apply knockback using _v5 to safely avoid mutating _v1 (which holds the impact coord)
                 _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
                 enemy.knockbackVel.add(_v5);
 

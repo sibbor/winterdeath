@@ -424,7 +424,8 @@ export const EnemyManager = {
         }
     },
 
-    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any) => {
+    // FIX: Lade till playerIsDead i parameterlistan (argument 8)
+    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, playerIsDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any) => {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
@@ -438,13 +439,20 @@ export const EnemyManager = {
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
-            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, shakeIntensity, _aiCallbacks);
+            // FIX: Nu skickar vi in playerIsDead på rätt plats i EnemyAI
+            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, shakeIntensity, playerIsDead, _aiCallbacks);
 
             const s = e.deathState;
-            if (s === 'BURNED') {
+
+            // FIX: 'BURNED' och 'ELECTRIFIED' manipulerar materialet (krymper/lyser), 
+            // så de måste ritas som individuella vanliga meshar tills de dör helt.
+            if (s === 'BURNED' || s === 'ELECTRIFIED') {
                 e.mesh.visible = true;
             }
-            else if (!e.isBoss && !e.mesh.userData.exploded && s === 'ALIVE') {
+            // ALIVE, SHOT och GENERIC ritas extremt snabbt via vår InstancedMesh.
+            // Genom att ta bort kravet på (s === 'ALIVE') fortsätter de att ritas 
+            // medan de faller omkull!
+            else if (!e.isBoss && !e.mesh.userData.exploded) {
                 e.mesh.visible = false;
                 _syncList.push(e);
             }

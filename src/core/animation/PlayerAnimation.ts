@@ -54,20 +54,23 @@ export const PlayerAnimation = {
             positionY = -0.8 * progress; // Sink into snow/ground
 
         } else if (animState.isRolling) {
-            const progress = (now - animState.rollStartTime) / 300;
+            // FIX: Clamp progress to prevent overshoot if state lingers
+            const progress = Math.min(1.0, Math.max(0, (now - animState.rollStartTime) / 300));
             rotationX = progress * Math.PI * 2;
             const squashFactor = Math.sin(progress * Math.PI);
             scaleY = 1.0 - (squashFactor * 0.4);
             scaleXZ = 1.0 + (squashFactor * 0.4);
             positionY = 0.2;
+
         } else if (animState.isSwimming) {
             // Swimming Animation: Heavy lean, deep bobbing
             const swimSpeed = 0.008;
             const bob = Math.sin(now * swimSpeed);
-            rotationX = 1.3; // Horizontal "swimming" lean
-            positionY = -0.4 + bob * 0.15; // Bobbing in water
+            rotationX = 1.45; // [VINTERDÖD] Flatter "swimming" pose
+            positionY = -0.6 + bob * 0.15; // Bobbing in water (deeper offset for flat pose)
             scaleY = 1.0 + bob * 0.05;
             rotationZ = Math.sin(now * swimSpeed * 0.5) * 0.1;
+
         } else if (animState.isMoving) {
             const moveSpeed = animState.isRushing ? 0.020 : 0.012;
             const wadingFactor = animState.isWading ? 0.6 : 1.0;
@@ -78,6 +81,11 @@ export const PlayerAnimation = {
             scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
             scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
             rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.05;
+
+            // [VINTERDÖD] Wading Bobbing
+            if (animState.isWading) {
+                positionY = Math.abs(bob) * 0.2;
+            }
 
         } else {
             // Stationary behaviors (Breathing, Speaking, Thinking)
@@ -122,8 +130,13 @@ export const PlayerAnimation = {
         mesh.position.y = (baseHeight * scaleY) + positionY;
 
         // --- 4. Optimized Footprints (Zero-GC) ---
-        if ((animState.isMoving || animState.isRushing) && !animState.isSwimming) {
-            const moveFreq = animState.isRushing ? 0.020 : 0.012;
+        // FIX: Ensure footprints don't spawn if dead or rolling
+        if ((animState.isMoving || animState.isRushing) && !animState.isSwimming && !animState.isRolling && !animState.isDead) {
+
+            // FIX: Apply wadingFactor to footprint frequency so it perfectly matches visual bobbing
+            const wadingFactor = animState.isWading ? 0.6 : 1.0;
+            const moveFreq = (animState.isRushing ? 0.020 : 0.012) * wadingFactor;
+
             const sway = Math.cos(now * moveFreq);
             const lastSway = mesh.userData.lastSway || 0;
             const threshold = 0.8;

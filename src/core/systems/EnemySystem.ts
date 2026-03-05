@@ -10,22 +10,25 @@ import { soundManager } from '../../utils/sound';
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
+// --- TYPE DEFINITIONS ---
+interface Callbacks {
+    spawnBubble: (text: string, duration: number) => void;
+    gainXp: (amount: number) => void;
+    t: (key: string) => string;
+    onClueFound: (clue: any) => void;
+    onBossKilled: (id: number) => void;
+}
+
 export class EnemySystem implements System {
     id = 'enemy_system';
 
     // Pre-allocated callback objects to avoid object literal creation in update loop
-    private updateCallbacks: any;
-    private cleanupCallbacks: any;
+    private updateCallbacks: any = null;
+    private cleanupCallbacks: any = null;
 
     constructor(
         private playerGroup: THREE.Group,
-        private callbacks: {
-            spawnBubble: (text: string, duration: number) => void;
-            gainXp: (amount: number) => void;
-            t: (key: string) => string;
-            onClueFound: (clue: any) => void;
-            onBossKilled: (id: number) => void;
-        }
+        private callbacks: Callbacks
     ) { }
 
     /**
@@ -38,8 +41,8 @@ export class EnemySystem implements System {
         // Callback for EnemyManager.update
         this.updateCallbacks = {
             onPlayerHit: (damage: number, attacker: any, type: string) => this.handlePlayerHit(session, damage, attacker, type),
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number, s: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
-            spawnDecal: (x: number, z: number, s: number, mat: any, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
+            spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
+            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
             spawnBubble: (text: string, dur: number) => this.callbacks.spawnBubble(text, dur),
             onDamageDealt: (dotDamage: number, e: any) => {
                 state.damageDealt += dotDamage;
@@ -50,8 +53,8 @@ export class EnemySystem implements System {
 
         // Callback for EnemyManager.cleanupDeadEnemies
         this.cleanupCallbacks = {
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m: any, v: any, col: number, s: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
-            spawnDecal: (x: number, z: number, s: number, mat: any, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
+            spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
+            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
             spawnScrap: (x: number, z: number, amt: number) => WorldLootSystem.spawnScrapExplosion(scene, state.scrapItems, x, z, amt),
             spawnBubble: this.callbacks.spawnBubble,
             t: this.callbacks.t,
@@ -77,6 +80,7 @@ export class EnemySystem implements System {
                 state.collisionGrid,
                 session.noiseEvents,
                 state.cameraShake,
+                state.isDead, // <--- Här är state.isDead tillbaka!
                 this.updateCallbacks.onPlayerHit,
                 this.updateCallbacks.spawnPart,
                 this.updateCallbacks.spawnDecal,
@@ -96,13 +100,13 @@ export class EnemySystem implements System {
     }
 
     /**
-     * Internal handler for when an enemy hits the player
+     * Internal handler for when an enemy or environment hits the player
      */
-    private handlePlayerHit(session: GameSessionLogic, damage: number, attacker: any, type: string) {
+    public handlePlayerHit(session: GameSessionLogic, damage: number, attacker: any, type: string) {
         const state = session.state;
         const now = performance.now();
 
-        if (now < state.invulnerableUntil) return;
+        if (now < state.invulnerableUntil || state.isDead) return;
 
         state.damageTaken += damage;
         state.hp -= damage;
@@ -117,7 +121,7 @@ export class EnemySystem implements System {
         this.spawnPart(session, this.playerGroup.position.x, 1.2, this.playerGroup.position.z, 'blood', 80);
 
         // Check for Player Death
-        if (state.hp <= 0 && !state.isDead) {
+        if (state.hp <= 0) {
             this.executePlayerDeath(session, attacker, type, now);
         }
     }
@@ -153,26 +157,29 @@ export class EnemySystem implements System {
         if (input.d) _v1.x += 1;
 
         if (_v1.lengthSq() > 0) {
+            // Player was moving, fall in that direction
             state.deathVel.copy(_v1).normalize().multiplyScalar(15);
         } else {
+            // Player was standing still, fall away from attacker
             if (attacker && attacker.mesh) {
                 _v2.copy(attacker.mesh.position);
+                state.deathVel.subVectors(this.playerGroup.position, _v2).normalize().multiplyScalar(12);
             } else {
-                _v2.copy(this.playerGroup.position);
-                _v2.z -= 1;
+                // If no attacker or moving, fall backwards
+                state.deathVel.set(0, 0, 12);
             }
-
-            state.deathVel.subVectors(this.playerGroup.position, _v2).normalize().multiplyScalar(12);
         }
 
         state.deathVel.y = 4;
     }
 
-    private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number) {
+    private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) {
+        if (!session.state.particles) return; // Failsafe
         FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color, scale);
     }
 
-    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: any, type?: string) {
+    private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: THREE.Material, type?: string) {
+        if (!session.state.bloodDecals) return; // Failsafe
         FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat, type);
     }
 

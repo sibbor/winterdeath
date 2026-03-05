@@ -61,27 +61,22 @@ export const CharacterModels = {
 
         // Gun (Placerad lite till höger för att matcha hand)
         const gun = new THREE.Mesh(GEOMETRY.box, MATERIALS.gun);
-        gun.position.set(0.3, 1.4, 0.5);
+        gun.position.set(0.3, 0.4, 0.5); // Adjust Y relative to body origin (0 is center of 2.0h capsule)
         gun.scale.set(0.1, 0.4, 1);
-        group.add(gun);
+        body.add(gun);
 
         // Laser sight (Hämtar delade resurser)
         const assets = getLaserAssets();
         const laserSight = new THREE.Mesh(assets.geometry, assets.material);
+        laserSight.position.set(0.3, 0.4, 0.5);
 
-        // Tack vare geometry.translate(0,0,15) kan vi nu sätta lasern
-        // direkt på vapnets mynning. Z: 0.5 gör att den börjar vid mynningen.
-        laserSight.position.set(0.3, 1.4, 0.5);
-
-        // Viktigt för långa objekt i Three.js:
-        // Förhindra att lasern försvinner om spelaren står precis utanför kameran
         laserSight.frustumCulled = false;
         laserSight.renderOrder = 999;
         (laserSight.material as THREE.Material).depthTest = false;
 
         laserSight.userData.isLaserSight = true;
         laserSight.name = 'laserSight';
-        group.add(laserSight);
+        body.add(laserSight);
 
         return group;
     },

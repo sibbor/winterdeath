@@ -1,3 +1,4 @@
+import type React from 'react';
 import * as THREE from 'three';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
@@ -77,14 +78,16 @@ export class DeathSystem implements System {
         const camera = this.cameraRef();
         const props = this.propsRef.current;
 
-        // 1. Phase Management
+        // Extrahera positionen en gång för att spara prestanda och göra koden renare
+        const pgPos = playerGroup ? playerGroup.position : _zeroV;
+
+        // --- 1. Phase Management ---
         if (this.deathPhaseRef.current === 'NONE') {
             this.deathPhaseRef.current = 'ANIMATION';
             this.setDeathPhase('ANIMATION');
             soundManager.playPlayerDeath(PLAYER_CHARACTER.name);
 
-            const pos = playerGroup ? playerGroup.position : _zeroV;
-            const hudData = HudSystem.getHudData(state, pos, fmMesh, input, now, props, this.distanceTraveledRef.current, camera) as any;
+            const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, now, props, this.distanceTraveledRef.current, camera) as any;
             hudData.hp = 0;
             hudData.isDead = true;
             props.onUpdateHUD(hudData);
@@ -101,13 +104,14 @@ export class DeathSystem implements System {
             }
         }
 
-        // 2. Physics & Falling
+        // --- 2. Physics & Falling ---
         if (playerGroup && state.deathVel) {
-            const pgPos = playerGroup.position;
             state.deathVel.y -= 30 * delta;
             pgPos.addScaledVector(state.deathVel, delta);
 
             const isExploded = state.killerType === 'BOMBER_EXPLOSION';
+            const isBurning = state.killerType === 'BURNED' || state.killerType === 'FLAME';
+            const isBiting = state.killerType === 'BITING';
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
@@ -138,33 +142,51 @@ export class DeathSystem implements System {
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'blood', 20);
             }
+
+            // [VINTERDÖD] Specialized Death Visuals
+            if (isBurning && now % 500 < 50) {
+                this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'smoke', 1);
+                this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'spark', 1);
+            }
+
+            if (isBiting && this.deathPhaseRef.current === 'ANIMATION') {
+                // FIX: Sätt positionen absolut istället för med += för att undvika "drift"
+                playerMesh.position.x = Math.sin(now * 0.05) * 0.1;
+                playerMesh.position.z = Math.cos(now * 0.05) * 0.1;
+
+                if (now % 300 < 30) {
+                    this.fxCallbacks.spawnPart(pgPos.x, 0.8, pgPos.z, 'blood', 5);
+                }
+            }
         }
 
-        // 3. Player Animation & Gibbing
+        // --- 3. Player Animation & Gibbing ---
         if (state.killerType === 'BOMBER_EXPLOSION') {
             if (playerMesh) playerMesh.visible = false;
 
             if (!state.playerBloodSpawned) {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
-                this.fxCallbacks.spawnDecal((playerGroup ? playerGroup.position.x : 0), (playerGroup ? playerGroup.position.z : 0), 4.5 * baseScale, MATERIALS.bloodDecal);
-                this.fxCallbacks.spawnPart((playerGroup ? playerGroup.position.x : 0), 1.0, (playerGroup ? playerGroup.position.z : 0), 'blood', 60);
-                this.fxCallbacks.spawnPart((playerGroup ? playerGroup.position.x : 0), 1.5, (playerGroup ? playerGroup.position.z : 0), 'meat', 12);
+
+                // FIX: Återanvänd pgPos istället för ternära if-satser om och om igen
+                this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
+                this.fxCallbacks.spawnPart(pgPos.x, 1.0, pgPos.z, 'blood', 60);
+                this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'meat', 12);
             }
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
-            PlayerAnimation.update(playerMesh as any, _deathAnimState, now, 0.016);
+            // FIX: Använd det korrekta 'delta'-värdet, annars pajar animationen för högfrekvensskärmar!
+            PlayerAnimation.update(playerMesh as any, _deathAnimState, now, delta);
         }
 
-        // 4. Family Grief
+        // --- 4. Family Grief ---
         const fmList = this.activeFamilyMembers.current;
-        const playerPos = playerGroup ? playerGroup.position : _zeroV;
         for (let i = 0; i < fmList.length; i++) {
             const fm = fmList[i];
             if (!fm.mesh) continue;
             fm.following = false;
             fm.isMoving = false;
-            fm.mesh.lookAt(playerPos);
+            fm.mesh.lookAt(pgPos);
 
             const children = fm.mesh.children;
             let body: THREE.Mesh | null = null;
@@ -177,11 +199,9 @@ export class DeathSystem implements System {
             }
         }
 
-        // 5. FX still runs during death
+        // --- 5. FX still runs during death ---
         if (playerGroup) {
-            FXSystem.update(session.engine.scene, state.particles, state.bloodDecals, delta, 0, now, playerGroup.position, this.fxCallbacks);
+            FXSystem.update(session.engine.scene, state.particles, state.bloodDecals, delta, 0, now, pgPos, this.fxCallbacks);
         }
     }
 }
-
-import type React from 'react';

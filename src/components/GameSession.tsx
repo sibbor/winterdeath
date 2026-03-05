@@ -46,7 +46,7 @@ import { requestWakeLock, releaseWakeLock } from '../utils/device';
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _vLightOffset = new THREE.Vector3();
-const _fxCallbacks: any = { spawnPart: null, spawnDecal: null };
+const _fxCallbacks: any = { spawnPart: null, spawnDecal: null, onPlayerHit: null };
 const _animStateScratch: any = { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 };
 const _interactionScreenPosScratch = { x: 0, y: 0 };
 
@@ -1214,7 +1214,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     spawnZombie, spawnHorde,
                 }));
 
-                session.addSystem(new EnemySystem(playerGroup, {
+                const enemySystem = new EnemySystem(playerGroup, {
                     spawnBubble, gainXp, t, onClueFound: propsRef.current.onClueFound,
                     onBossKilled: (id: number) => {
                         if (!stateRef.current.bossesDefeated.includes(id)) stateRef.current.bossesDefeated.push(id);
@@ -1222,7 +1222,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         soundManager.stopMusic();
                         if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
                     }
-                }));
+                });
+                session.addSystem(enemySystem);
+                _fxCallbacks.onPlayerHit = (dmg: number, attacker: any, type: string) => enemySystem.handlePlayerHit(session, dmg, attacker, type);
 
                 // --- Registered Systems (formerly ad-hoc) ---
                 session.addSystem(new FamilySystem(
@@ -1659,6 +1661,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     _animStateScratch.isIdleLong = (now - state.lastActionTime > 20000);
                     _animStateScratch.isWading = state.isWading;
                     _animStateScratch.isSwimming = state.isSwimming;
+                    _animStateScratch.isDead = state.isDead;
+                    _animStateScratch.deathStartTime = state.deathStartTime;
 
                     monitor.begin('player_animation');
                     PlayerAnimation.update(playerMeshRef.current, _animStateScratch, now, delta);
@@ -1768,11 +1772,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (type === 'hit') s.shotsHit += amt;
                     },
                     addFireZone: (z: any) => stateRef.current.fireZones.push(z),
-                    now: now
+                    now: now,
+                    playerPos: playerGroupRef.current.position,
+                    onPlayerHit: (dmg: number, attacker: any, type: string) => {
+                        if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type);
+                    }
                 };
             } else {
                 const ctx = gameContextRef.current;
                 ctx.now = now; ctx.enemies = state.enemies; ctx.obstacles = state.obstacles; ctx.collisionGrid = state.collisionGrid;
+                ctx.playerPos = playerGroupRef.current!.position;
             }
 
             if (state.isMoving && playerGroupRef.current) {
