@@ -75,7 +75,7 @@ export const WeaponHandler = {
             _slotArray.length = 0;
             let currentIdx = -1;
 
-            // Manual checks avoid array allocation: [loadout.primary, loadout.secondary...]
+            // Manual checks avoid array allocation
             const checkSlot = (wepType: WeaponType | null | undefined) => {
                 if (!wepType) return;
                 if (WEAPONS[wepType] && WEAPONS[wepType].category === WeaponCategory.THROWABLE && state.weaponAmmo[wepType] <= 0) return;
@@ -159,7 +159,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
+    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false, cameraAngle: number = 0, camera: THREE.Camera | null = null) => {
         if (state.activeVehicle) {
             return;
         }
@@ -187,24 +187,23 @@ export const WeaponHandler = {
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
                 if (hasAmmo) {
-                    if (now > state.lastShotTime + wep.fireRate) {
-                        state.weaponAmmo[state.activeWeapon]--;
-                        state.lastShotTime = now;
+                    if (!debugMode) {
+                        if (now > state.lastShotTime + wep.fireRate) {
+                            state.weaponAmmo[state.activeWeapon]--;
+                            state.lastShotTime = now;
+                        }
                     }
 
-                    // Calculate Origin/Direction
                     _v1.set(0.3, 1.4, 0.8).applyQuaternion(playerGroup.quaternion);
-                    _v2.copy(playerGroup.position).add(_v1); // Origin
-                    _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize(); // Dir
+                    _v2.copy(playerGroup.position).add(_v1);
+                    _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                    // Sound Loop Management
                     if (state.activeWeapon === WeaponType.FLAMETHROWER) {
                         soundManager.playFlamethrowerStart();
                     }
 
-                    // ZERO-GC: Update pre-allocated context
                     _continuousCtx.scene = scene;
                     _continuousCtx.enemies = state.enemies || [];
                     _continuousCtx.collisionGrid = state.collisionGrid;
@@ -218,7 +217,6 @@ export const WeaponHandler = {
                     _continuousCtx.now = now;
                     _continuousCtx.noiseEvents = state.noiseEvents;
 
-                    // Hand off to ProjectileSystem
                     ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, _continuousCtx);
 
                 } else {
@@ -240,16 +238,15 @@ export const WeaponHandler = {
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
                 if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
                     state.lastShotTime = now;
-                    state.weaponAmmo[state.activeWeapon]--;
+                    if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
                     state.shotsFired++;
 
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
                     _v2.copy(playerGroup.position).add(_v1);
 
-                    // ZERO-GC: Route noise through callback to utilize GameSessionLogic noisePool
                     if (state.callbacks && state.callbacks.makeNoise) {
                         state.callbacks.makeNoise(_v2, 60, 'gunshot');
                     }
@@ -263,7 +260,6 @@ export const WeaponHandler = {
                     for (let i = 0; i < pellets; i++) {
                         _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
 
-                        // Apply spread if it's a shotgun
                         if (spread > 0) {
                             _v3.x += (Math.random() - 0.5) * spread;
                             _v3.y += (Math.random() - 0.5) * spread;
@@ -288,112 +284,102 @@ export const WeaponHandler = {
 
         // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
         if (wep.behavior === WeaponBehavior.THROWABLE) {
-            if (input.fire) {
-                if (state.weaponAmmo[state.activeWeapon] > 0) {
-                    if (state.throwChargeStart === 0) state.throwChargeStart = now;
 
-                    // Modulo logic: Continually loop from 0 to 1 over 1500ms
-                    const cycleMs = 1500;
-                    const ratio = ((now - state.throwChargeStart) % cycleMs) / cycleMs;
+            // Helper function to force the throw and avoid code duplication
+            const executeThrow = (ratio: number) => {
+                if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
+                state.throwablesThrown = (state.throwablesThrown || 0) + 1;
 
-                    // ONE SOURCE OF TRUTH: Always aim exactly where the player model is facing.
-                    _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-
-                    const maxDist = (wep as any).maxThrowDistance || 25.0;
-                    const dist = Math.max(2.0, ratio * maxDist);
-
-                    // Exact coordinate tracking
-                    _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin (p0)
-
-                    _v3.copy(playerGroup.position).addScaledVector(_v1, dist);
-                    _v3.y = 0.1; // Target Ground (p1)
-
-                    // Variable time for "floaty" arc on shorter distances
-                    const tMax = 1.0 + (dist / maxDist) * 0.5;
-                    const g = 30;
-
-                    // Update UI Crosshair
-                    if (aimCrossMesh) {
-                        aimCrossMesh.visible = true;
-                        aimCrossMesh.position.copy(_v3);
-                        aimCrossMesh.position.y = 0.2;
-                        aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
-                    }
-
-                    // Update Exact Trajectory Line
-                    if (trajectoryLineMesh) {
-                        trajectoryLineMesh.visible = true;
-                        const vx = (_v3.x - _v2.x) / tMax;
-                        const vz = (_v3.z - _v2.z) / tMax;
-                        const vy = (_v3.y - _v2.y + 0.5 * g * tMax * tMax) / tMax;
-
-                        const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
-                        const width = 0.15;
-
-                        // Zero-GC caching
-                        const engine = WinterEngine.getInstance();
-                        const water = engine?.water;
-
-                        for (let i = 0; i <= 20; i++) {
-                            const t = (i / 20) * tMax;
-                            const tx = _v2.x + vx * t;
-                            const tz = _v2.z + vz * t;
-                            const ty = _v2.y + vy * t - 0.5 * g * t * t;
-
-                            // Velocity in Y at time t (derivative of the parabola)
-                            const instVy = vy - (g * t);
-
-                            let groundY = 0.1;
-                            if (water) {
-                                water.checkBuoyancy(tx, 0.5, tz);
-                                if (_buoyancyResult.inWater) {
-                                    groundY = _buoyancyResult.waterLevel + 0.05;
-                                }
-                            }
-
-                            // Current point in space
-                            _v4.set(tx, Math.max(groundY, ty), tz);
-
-                            // Calculate direction mathematically based on velocity, much more stable
-                            _v5.set(vx, instVy, vz).normalize();
-
-                            // Cross product to get the width vector (uses _v1 as scratch to avoid overwriting _v3)
-                            _v1.crossVectors(_v5, _UP).normalize().multiplyScalar(width);
-
-                            posAttr.setXYZ(2 * i, _v4.x - _v1.x, _v4.y, _v4.z - _v1.z);
-                            posAttr.setXYZ(2 * i + 1, _v4.x + _v1.x, _v4.y, _v4.z + _v1.z);
-                        }
-                        posAttr.needsUpdate = true;
-                        (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
-                        (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
-                    }
-                }
-            } else if (state.throwChargeStart > 0) {
-                const cycleMs = 1500;
-                const ratio = ((now - state.throwChargeStart) % cycleMs) / cycleMs;
-
-                state.weaponAmmo[state.activeWeapon]--;
-                state.throwablesThrown++;
-
-                // FIRE! Use the exact same direction logic as aiming.
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-
-                const maxDist = (wep as any).maxThrowDistance || 25.0;
-                const dist = Math.max(2.0, ratio * maxDist);
-
-                // Origin and exact Target calculation
                 _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
-                _v3.copy(playerGroup.position).addScaledVector(_v1, dist);
-                _v3.y = 0.1;
 
-                const tMax = 1.0 + (dist / maxDist) * 0.5;
+                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v1, state.activeWeapon, ratio);
 
-                // Provide exact target (_v3) and physics metrics (tMax) to the system
-                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v3, state.activeWeapon, tMax);
-
-                if (state.weaponAmmo[state.activeWeapon] <= 0) state.activeWeapon = loadout.primary;
+                if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {
+                    state.activeWeapon = loadout.primary;
+                }
 
                 state.throwChargeStart = 0;
+                state.lastShotTime = now; // Add a small cooldown before the next throw can be charged
+
+                if (aimCrossMesh) aimCrossMesh.visible = false;
+                if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
+            };
+
+            // We can only start charging if we have ammo, OR debugMode is on, 
+            // AND we haven't thrown a grenade within the last 500ms.
+            const canCharge = (state.weaponAmmo[state.activeWeapon] > 0 || debugMode) && now > (state.lastShotTime || 0) + 500;
+
+            if (input.fire && canCharge) {
+                if (state.throwChargeStart === 0) state.throwChargeStart = now;
+
+                const chargeTime = 1250;
+                const elapsed = now - state.throwChargeStart;
+                const ratio = Math.min(1, elapsed / chargeTime);
+
+                _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                const dist = Math.max(2, ratio * 25);
+
+                if (aimCrossMesh) {
+                    aimCrossMesh.visible = true;
+                    _v2.copy(_v1).multiplyScalar(dist);
+                    aimCrossMesh.position.copy(playerGroup.position).add(_v2);
+                    aimCrossMesh.position.y = 0.2;
+
+                    if (ratio >= 1.0) {
+                        aimCrossMesh.scale.setScalar(1.5 + Math.sin(now * 0.01) * 0.1);
+                    } else {
+                        aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
+                    }
+                }
+
+                if (trajectoryLineMesh) {
+                    trajectoryLineMesh.visible = true;
+                    const g = 30, tMax = 1.0, startY = playerGroup.position.y + 1.5;
+                    const vx = (_v1.x * dist) / tMax, vz = (_v1.z * dist) / tMax;
+                    const vy = (0 - startY + 0.5 * g * tMax * tMax) / tMax;
+
+                    const posAttr = trajectoryLineMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+                    const width = 0.15;
+
+                    for (let i = 0; i <= 20; i++) {
+                        const t = (i / 20) * tMax;
+                        _v4.set(
+                            playerGroup.position.x + vx * t,
+                            Math.max(0.1, startY + vy * t - 0.5 * g * t * t),
+                            playerGroup.position.z + vz * t
+                        );
+
+                        if (i < 20) {
+                            const tNext = ((i + 1) / 20) * tMax;
+                            _v5.set(
+                                playerGroup.position.x + vx * tNext,
+                                Math.max(0.1, startY + vy * tNext - 0.5 * g * tNext * tNext),
+                                playerGroup.position.z + vz * tNext
+                            );
+                            _v3.subVectors(_v5, _v4).normalize();
+                        }
+
+                        _v2.crossVectors(_v3, _UP).normalize().multiplyScalar(width);
+
+                        posAttr.setXYZ(2 * i, _v4.x - _v2.x, _v4.y, _v4.z - _v2.z);
+                        posAttr.setXYZ(2 * i + 1, _v4.x + _v2.x, _v4.y, _v4.z + _v2.z);
+                    }
+                    posAttr.needsUpdate = true;
+                    (trajectoryLineMesh.material as THREE.MeshBasicMaterial).opacity = 0.4 + ratio * 0.6;
+                }
+
+                // Auto-throw logic: Force the throw if the button is held for 3.25 seconds (max charge + 2s)
+                if (elapsed >= chargeTime + 2000) {
+                    executeThrow(1.0);
+                }
+
+            } else if (state.throwChargeStart > 0) {
+                // The player released the mouse button before auto-throw was triggered
+                const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
+                executeThrow(ratio);
+            } else {
+                // Do nothing, ensure UI is hidden
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             }
