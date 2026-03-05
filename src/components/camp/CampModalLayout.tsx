@@ -16,6 +16,7 @@ interface CampModalLayoutProps {
     showCancel?: boolean;
     isSmall?: boolean;
     isMobile?: boolean;
+    debugAction?: { label: string; action: () => void };
 }
 
 const CampModalLayout: React.FC<CampModalLayoutProps> = ({
@@ -30,7 +31,8 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     isSettings = false,
     showCancel = true,
     isSmall = false,
-    isMobile = false
+    isMobile = false,
+    debugAction
 }) => {
     // Reduced mb-8 to mb-4
     const headerStyle = "text-3xl md:text-6xl font-black text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg]";
@@ -42,33 +44,54 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     React.useEffect(() => {
         // FORCE cursor capability
         if (document.pointerLockElement) document.exitPointerLock();
-        // Fallback style injection in case CSS classes fail
         document.body.style.cursor = 'default';
 
-        const handleEsc = (e: KeyboardEvent) => {
+        const handleKeys = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 e.stopPropagation();
                 soundManager.playUiClick();
                 onClose();
+            } else if (e.key === 'Enter') {
+                if (onConfirm && canConfirm) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    soundManager.playUiConfirm();
+                    onConfirm();
+                } else if (!onConfirm && onClose) {
+                    // Fallback: If no confirm action, Enter performs Close
+                    e.stopPropagation();
+                    e.preventDefault();
+                    soundManager.playUiClick();
+                    onClose();
+                }
             }
         };
-        window.addEventListener('keydown', handleEsc);
+
+        window.addEventListener('keydown', handleKeys);
         return () => {
-            window.removeEventListener('keydown', handleEsc);
-            // We do NOT re-lock here blindly, let the parent decide
+            window.removeEventListener('keydown', handleKeys);
             document.body.style.cursor = '';
         };
-    }, [onClose]);
+    }, [onClose, onConfirm, canConfirm]);
 
     return (
         <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50 p-4 md:p-8 backdrop-blur-lg pointer-events-auto cursor-default">
             <div className={`bg-black/95 border-4 border-gray-800 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)] relative`}>
-                {/* Reduced padding p-8 to p-6 */}
+                {/* Header */}
                 <div className="p-4 md:p-6 border-b-2 border-gray-800 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4">
                     <h2 className={`${headerStyle} ${borderColorClass}`}>
                         {title}
                     </h2>
-                    <div className="flex gap-2 md:gap-6">
+                    <div className="flex gap-2 md:gap-6 items-center">
+                        {debugAction && (
+                            <button
+                                onClick={() => { soundManager.playUiClick(); debugAction.action(); }}
+                                className={`px-3 md:px-6 py-1.5 md:py-3 font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black whitespace-nowrap mr-2 md:mr-4 text-[10px] md:text-sm`}
+                            >
+                                <span className="block skew-x-[10deg]">{debugAction.label}</span>
+                            </button>
+                        )}
+
                         {showCancel && (
                             <button
                                 onClick={() => { soundManager.playUiClick(); onClose(); }}
@@ -85,7 +108,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                                         soundManager.playUiConfirm();
                                         onConfirm();
                                     } else {
-                                        soundManager.playUiClick(); // Fail sound?
+                                        soundManager.playUiClick();
                                     }
                                 }}
                                 disabled={!canConfirm}
@@ -102,7 +125,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                     </div>
                 </div>
 
-                {/* Reduced padding p-12 to p-6 */}
+                {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-transparent touch-auto">
                     {children}
                 </div>

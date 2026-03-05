@@ -10,15 +10,6 @@ interface GameUIProps {
     interactionScreenPos?: { x: number, y: number } | null;
     isMobileDevice?: boolean;
     onInteract?: () => void;
-
-    // Legacy Dialogue Props (Can be ignored or cleaned up later)
-    dialogueOpen: boolean;
-    dialogueLine: any;
-    // foundMemberName: string; // REMOVED
-    isLastLine: boolean;
-    onNextDialogue: () => void;
-    onPrevDialogue: () => void;
-    onCloseDialogue: () => void;
 }
 
 const GameUI: React.FC<GameUIProps> = ({

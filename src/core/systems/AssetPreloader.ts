@@ -11,8 +11,7 @@ import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { FXSystem } from '../systems/FXSystem';
-
-
+import { COLLECTIBLES } from '../../content/collectibles';
 
 const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
@@ -364,12 +363,13 @@ export const AssetPreloader = {
                     addToWarmup(EnvironmentGenerator.createTree(treeTypes[i], 1.0, 0));
                 }
 
-                // Player, enemies and family members
+                // Player model
                 addToWarmup(ModelFactory.createPlayer());
                 const flashlight = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
                 flashlight.castShadow = true;
                 addToWarmup(flashlight);
 
+                // Enemy models
                 const zombieKeys = Object.keys(ZOMBIE_TYPES);
                 for (let i = 0; i < zombieKeys.length; i++) {
                     const type = zombieKeys[i];
@@ -383,11 +383,23 @@ export const AssetPreloader = {
                         }
                     });
                 }
+
+                // Family member models
                 for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
                     addToWarmup(ModelFactory.createFamilyMember(FAMILY_MEMBERS[i]));
                 }
 
                 if (yieldToMain) await yieldToMain();
+
+                // Collectibles - Warm up all unique model types for Adventure Log
+                try {
+                    const collectibleTypes = ['phone', 'pacifier', 'axe', 'jacket', 'badge', 'diary', 'ring', 'teddy'];
+                    for (let i = 0; i < collectibleTypes.length; i++) {
+                        addToWarmup(ModelFactory.createCollectible(collectibleTypes[i]));
+                    }
+                } catch (e) {
+                    console.warn('[AssetPreloader] Collectible CORE warmup failed', e);
+                }
             }
 
             // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
@@ -464,7 +476,11 @@ export const AssetPreloader = {
                     const sector = SectorSystem.getSector(target as number);
                     if (sector && sector.collectibles) {
                         for (let i = 0; i < sector.collectibles.length; i++) {
-                            addToWarmup(ModelFactory.createCollectible(sector.collectibles[i].id));
+                            const item = sector.collectibles[i];
+                            const def = COLLECTIBLES[item.id];
+                            if (def) {
+                                addToWarmup(ModelFactory.createCollectible(def.modelType));
+                            }
                         }
                     }
                 } catch (e) {

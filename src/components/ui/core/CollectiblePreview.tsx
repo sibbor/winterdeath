@@ -63,7 +63,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
 
     useEffect(() => {
         if (isVisible && !isLocked) {
-            const timer = setTimeout(() => setIsReady(true), 150);
+            const timer = setTimeout(() => setIsReady(true), 250);
             return () => clearTimeout(timer);
         }
     }, [isVisible, isLocked]);
@@ -83,7 +83,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         const renderer = new THREE.WebGLRenderer({
             antialias: true,
             alpha: true,
-            powerPreference: 'low-power',
+            powerPreference: 'high-performance',
             precision: 'mediump'
         });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -129,7 +129,7 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         const animate = () => {
             if (!isRunning) return;
             animeId = requestAnimationFrame(animate);
-            group.rotation.y += 0.01;
+            group.rotation.y += 0.03;
             renderer.render(scene, camera);
         };
         animate();

@@ -20,7 +20,6 @@ import { HudSystem } from '../core/systems/HudSystem';
 import { PlayerAnimation } from '../core/animation/PlayerAnimation';
 import { CinematicSystem } from '../core/systems/CinematicSystem';
 import { FamilySystem } from '../core/systems/FamilySystem';
-import { CameraSystem } from '../core/systems/CameraSystem';
 import { TriggerHandler } from '../core/systems/TriggerHandler';
 import { LightingSystem } from '../core/systems/LightingSystem';
 import { DeathSystem } from '../core/systems/DeathSystem';
@@ -38,9 +37,8 @@ import { FootprintSystem } from '../core/systems/FootprintSystem';
 import ScreenPlayerDied from './game/ScreenPlayerDied';
 import { ScreenPlaygroundEnemyStation } from './game/ScreenPlaygroundEnemyStation';
 import { ScreenPlaygroundEnvironmentStation } from './game/ScreenPlaygroundEnvironmentStation';
-import ScreenArmory from './camp/ScreenArmory';
 import ScreenPlaygroundArmoryStation from './game/ScreenPlaygroundArmoryStation';
-import CinematicBubble from './game/CinematicBubble';
+import CinematicBubble, { CinematicBubbleHandle } from './game/CinematicBubble';
 import GameUI from './game/GameUI';
 import { requestWakeLock, releaseWakeLock } from '../utils/device';
 
@@ -148,7 +146,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const [cinematicActive, setCinematicActive] = useState(false);
     const [bubbleTailPosition, setBubbleTailPosition] = useState<'bottom' | 'top' | 'left' | 'right'>('bottom');
     const [currentLine, setCurrentLine] = useState<any>(null);
-    const bubbleRef = useRef<HTMLDivElement>(null);
+    const bubbleRef = useRef<CinematicBubbleHandle>(null);
     const [bossIntroActive, setBossIntroActive] = useState(false);
 
     useEffect(() => {
@@ -1920,8 +1918,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 className={`absolute inset-0`}
                 onClick={(e) => {
                     if (cinematicActive && currentLine) {
-                        playCinematicLine(cinematicRef.current.lineIndex + 1);
                         e.stopPropagation();
+                        // Try to finish typing first. If it wasn't typing anymore, proceed to next line.
+                        const wasTyping = bubbleRef.current?.finishTyping();
+                        if (!wasTyping) {
+                            playCinematicLine(cinematicRef.current.lineIndex + 1);
+                        }
                         return;
                     }
                     if (props.isRunning && containerRef.current && deathPhase === 'NONE') {
@@ -1940,30 +1942,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none overflow-hidden z-50" />
 
+            {/* Cinematic Letterboxing */}
+            <div
+                className="absolute top-0 left-0 right-0 bg-black z-40 transition-all duration-700 ease-in-out pointer-events-none"
+                style={{ height: cinematicActive ? '12%' : '0%' }}
+            />
+            <div
+                className="absolute bottom-0 left-0 right-0 bg-black z-40 transition-all duration-700 ease-in-out pointer-events-none"
+                style={{ height: cinematicActive ? '12%' : '0%' }}
+            />
+
             <CinematicBubble
+                ref={bubbleRef}
                 text={currentLine ? t(currentLine.text) : ""}
                 speakerName={currentLine ? currentLine.speaker : ""}
                 isVisible={cinematicActive && currentLine !== null}
-                domRef={bubbleRef}
-                tailPosition={bubbleTailPosition}
                 isMobileDevice={props.isMobileDevice}
             />
-
-            {cinematicActive && (
-                <div className={`absolute ${props.isMobileDevice ? 'bottom-8' : 'bottom-40'} left-1/2 -translate-x-1/2 pointer-events-auto z-[120]`}>
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            soundManager.playUiClick();
-                            endCinematic();
-                        }}
-                        className="bg-black/90 border-2 border-white/50 text-white/70 hover:text-white hover:border-white px-6 py-2 font-bold uppercase text-xs tracking-widest transition-all skew-x-[-10deg] shadow-2xl active:scale-95"
-                    >
-                        <span className="block skew-x-[10deg]">{t('ui.end_dialogue')}</span>
-                    </button>
-                </div>
-            )}
 
             {(deathPhase === 'MESSAGE' || deathPhase === 'CONTINUE') && (
                 <ScreenPlayerDied onContinue={triggerContinue} killerName={getKillerName()} isMobileDevice={props.isMobileDevice} />
@@ -2056,13 +2051,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             }, 100);
                         }
                     }}
-                    dialogueOpen={false}
-                    dialogueLine={null}
-                    foundMemberName={foundMemberName}
-                    isLastLine={false}
-                    onNextDialogue={() => { }}
-                    onPrevDialogue={() => { }}
-                    onCloseDialogue={() => { }}
                 />
             )}
 

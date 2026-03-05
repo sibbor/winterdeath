@@ -1096,6 +1096,10 @@ export const Sector1: SectorDef = {
                     const shakeAmount = 0.05 + (elapsed / 3000) * 0.15;
                     _busObjShake.position.x = _busOriginalPos.x + (Math.random() - 0.5) * shakeAmount;
                     _busObjShake.position.z = _busOriginalPos.z + (Math.random() - 0.5) * shakeAmount;
+
+                    // FIX: Tvinga Three.js att uppdatera matrisen så vi undviker fysik-lagg!
+                    _busObjShake.updateMatrixWorld();
+
                     if (events.cameraShake) events.cameraShake(0.5);
                 }
             } else {

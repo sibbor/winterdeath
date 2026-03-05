@@ -516,10 +516,6 @@ export const en = {
         s4_poi_shed_story: "A small office building with a reinforced door. Nathalie is trapped inside, surrounded by darkness.",
         s4_poi_scrapyard_title: "The Scrapyard",
         s4_poi_scrapyard_story: "A labyrinth of rusted metal and stacked cars. A death trap filled with lurking horrors.",
-
-        // Sector 5
-        s5_poi_villa_title: "Our Home",
-        s5_poi_villa_story: "This is where it all started. The front door is smashed, the car is burnt out, but we made a promise."
     },
     dialogue: {
         // Dialogue: Sector 1

@@ -1,14 +1,16 @@
-
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { getSpeakerColor } from '../../utils/assets';
 
 interface CinematicBubbleProps {
     text: string;
     speakerName: string;
     isVisible: boolean;
-    domRef: React.RefObject<HTMLDivElement>;
-    tailPosition?: 'bottom' | 'top' | 'left' | 'right';
     isMobileDevice?: boolean;
+    onComplete?: () => void;
+}
+
+export interface CinematicBubbleHandle {
+    finishTyping: () => boolean; // Returns true if it was still typing and forced finish, false if already finished
 }
 
 interface TextToken {
@@ -16,10 +18,27 @@ interface TextToken {
     content: string;
 }
 
-const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, isVisible, domRef, tailPosition = 'bottom', isMobileDevice }) => {
+const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ text, speakerName, isVisible, isMobileDevice, onComplete }, ref) => {
     const [visibleCount, setVisibleCount] = useState(0);
     const [opacity, setOpacity] = useState(0);
+    const [isFinished, setIsFinished] = useState(false);
     const timerRef = useRef<number | null>(null);
+
+    useImperativeHandle(ref, () => ({
+        finishTyping: () => {
+            if (!isFinished && isVisible && text) {
+                if (timerRef.current) {
+                    clearInterval(timerRef.current);
+                    timerRef.current = null;
+                }
+                setIsFinished(true);
+                setVisibleCount(fullTextLength);
+                if (onComplete) onComplete();
+                return true;
+            }
+            return false;
+        }
+    }));
 
     // 1. Parse text into tokens (Standard, Action, Italic)
     const tokens = useMemo<TextToken[]>(() => {
@@ -57,12 +76,15 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
                         return prev + 1; // 1 char at a time
                     } else {
                         if (timerRef.current) clearInterval(timerRef.current);
+                        setIsFinished(true);
+                        if (onComplete) onComplete();
                         return prev;
                     }
                 });
             }, 30); // 30ms per character
         } else {
             setOpacity(0);
+            setIsFinished(false);
             if (timerRef.current) clearInterval(timerRef.current);
         }
 
@@ -118,87 +140,54 @@ const CinematicBubble: React.FC<CinematicBubbleProps> = ({ text, speakerName, is
         });
     };
 
-    // Calculate tail styles
-    const getTailStyles = () => {
-        const size = 12;
-        const borderWidth = 2;
-
-        const base = "absolute w-0 h-0 border-solid pointer-events-none";
-        const innerBase = "absolute w-0 h-0 border-solid pointer-events-none z-[1]";
-
-        switch (tailPosition) {
-            case 'top':
-                return {
-                    outer: `${base} left-1/2 -translate-x-1/2 top-[-${size + borderWidth}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-b-[${size + borderWidth}px]`,
-                    inner: `${innerBase} left-1/2 -translate-x-1/2 top-[-${size}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-b-[${size}px]`,
-                    outerStyle: { borderBottomColor: borderColor },
-                    innerStyle: { borderBottomColor: bgColor },
-                    containerTransform: 'translate(-50%, 20px)'
-                };
-            case 'left':
-                return {
-                    outer: `${base} top-1/2 -translate-y-1/2 left-[-${size + borderWidth}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-r-[${size + borderWidth}px]`,
-                    inner: `${innerBase} top-1/2 -translate-y-1/2 left-[-${size}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-r-[${size}px]`,
-                    outerStyle: { borderRightColor: borderColor },
-                    innerStyle: { borderRightColor: bgColor },
-                    containerTransform: 'translate(20px, -50%)'
-                };
-            case 'right':
-                return {
-                    outer: `${base} top-1/2 -translate-y-1/2 right-[-${size + borderWidth}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-l-[${size + borderWidth}px]`,
-                    inner: `${innerBase} top-1/2 -translate-y-1/2 right-[-${size}px] border-t-[${size}px] border-t-transparent border-b-[${size}px] border-b-transparent border-l-[${size}px]`,
-                    outerStyle: { borderLeftColor: borderColor },
-                    innerStyle: { borderLeftColor: bgColor },
-                    containerTransform: 'translate(calc(-100% - 20px), -50%)'
-                };
-            case 'bottom':
-            default:
-                return {
-                    outer: `${base} left-1/2 -translate-x-1/2 bottom-[-${size + borderWidth}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-t-[${size + borderWidth}px]`,
-                    inner: `${innerBase} left-1/2 -translate-x-1/2 bottom-[-${size}px] border-l-[${size}px] border-l-transparent border-r-[${size}px] border-r-transparent border-t-[${size}px]`,
-                    outerStyle: { borderTopColor: borderColor },
-                    innerStyle: { borderTopColor: bgColor },
-                    containerTransform: 'translate(-50%, calc(-100% - 20px))'
-                };
-        }
-    };
-
-    const tail = getTailStyles();
-
+    // Render Cinematic Bottom Bar
     return (
         <div
-            ref={domRef}
-            className="absolute pointer-events-none z-50"
+            className={`fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out`}
             style={{
-                left: 0,
-                top: 0,
+                bottom: isVisible ? 'calc(12% + 25px)' : '-20%',
                 opacity: opacity,
-                transform: `${tail.containerTransform} ${isMobileDevice ? 'scale(0.75)' : 'scale(1)'}`,
-                transformOrigin: 'center center',
-                transition: 'transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease-out'
             }}
         >
-            <div className="relative">
-                <div
-                    className={`px-4 md:px-6 py-3 md:py-4 rounded-2xl shadow-xl max-w-[340px] md:max-w-sm border-2 ${textColor}`}
-                    style={{ backgroundColor: bgColor, borderColor: borderColor }}
-                >
-                    <h4 className="text-lg font-black uppercase tracking-widest opacity-70 mb-1">{speakerName}</h4>
-                    <p className="text-lg font-bold leading-tight font-mono whitespace-pre-wrap">
+            <div
+                className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
+            >
+                {/* Dialogue Text Background */}
+                <div className="bg-[#111]/95 backdrop-blur-md border border-white/10 shadow-2xl p-6 md:p-8 min-h-[120px] relative overflow-hidden">
+                    {/* Subtle Top Gradient Line matching speaker color */}
+                    <div
+                        className="absolute top-0 left-0 w-full h-1 opacity-20"
+                        style={{
+                            background: `linear-gradient(90deg, ${bgColor} 0%, transparent 100%)`
+                        }}
+                    />
+
+                    {/* Content */}
+                    <p className="text-white/90 text-sm md:text-lg font-mono leading-relaxed mt-1" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                        {speakerName && (
+                            <span className="font-bold mr-3 uppercase tracking-wider" style={{ color: bgColor }}>
+                                {speakerName}{text ? ':' : ''}
+                            </span>
+                        )}
                         {renderContent()}
                         {isVisible && visibleCount < fullTextLength && (
-                            <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1 align-middle" />
+                            <span className="inline-block w-2 md:w-3 h-4 md:h-5 bg-white/70 animate-pulse ml-1 align-middle" />
                         )}
                     </p>
-                </div>
 
-                {/* Tail Outer (Border) */}
-                <div className={tail.outer} style={tail.outerStyle} />
-                {/* Tail Inner (Fill) */}
-                <div className={tail.inner} style={tail.innerStyle} />
+                    {/* Progress Indicator */}
+                    {isFinished && isVisible && (
+                        <div className="absolute bottom-3 right-4 flex items-center opacity-50 animate-bounce">
+                            <span className="text-white/50 text-[10px] uppercase tracking-widest mr-2 font-mono">
+                                {isMobileDevice ? 'Tap' : 'Click'}
+                            </span>
+                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white/70" />
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
-};
+});
 
 export default CinematicBubble;

@@ -84,8 +84,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const activeRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
     const activeModalRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
 
-    const nextChatterTime = useRef<number>(Date.now() + 5000);
-    const nextWildlifeTime = useRef<number>(Date.now() + 15000); // Start after 15s
+    const nextChatterTime = useRef<number>(0); // First chatter soon
+    const nextWildlifeTime = useRef<number>(15000); // Start wildlife after 15s
     const activeChats = useRef<Array<{ id: string, mesh: THREE.Object3D, text: string, startTime: number, duration: number, element: HTMLDivElement, playedSound: boolean }>>([]);
 
     const envStateRef = useRef<CampEffectsState | null>(null);
@@ -338,6 +338,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 }
                 nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
             }
+
+            // Wildlife Sounds
+            if (now > nextWildlifeTime.current) {
+                if (Math.random() > 0.5) {
+                    soundManager.playOwlHoot();
+                } else {
+                    soundManager.playBirdAmbience();
+                }
+                // Randomized interval between 30 and 90 seconds
+                nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
+            }
             monitor.end('chatter');
 
             // 4. Chat Bubbles Update (DOM)
@@ -523,6 +534,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 }
                 nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
             }
+
+            // Wildlife Sounds
+            if (now > nextWildlifeTime.current) {
+                if (Math.random() > 0.5) {
+                    soundManager.playOwlHoot();
+                } else {
+                    soundManager.playBirdAmbience();
+                }
+                // Randomized interval between 30 and 90 seconds
+                nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
+            }
             monitor.end('chatter');
 
             monitor.begin('chat_bubbles');
@@ -629,6 +651,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 stats={stats}
                 onClose={closeModal}
                 isMobileDevice={isMobileDevice}
+                debugMode={debugMode}
                 onMarkCollectiblesViewed={(newIds) => {
                     const updated = [...(stats.viewedCollectibles || [])];
                     for (let i = 0; i < newIds.length; i++) {

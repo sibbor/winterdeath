@@ -100,44 +100,7 @@ export class CinematicSystem implements System {
             }
         }
 
-        // 3. Bubble Positioning (3D → 2D)
-        if (this.bubbleRef.current && activeScriptLine && activeSpeakerMesh) {
-            activeSpeakerMesh.getWorldPosition(_v4);
-
-            const isDoor = !isPlayerSpeaking && currentSpeakerName === 'Unknown' &&
-                (activeSpeakerMesh.name.toLowerCase().includes('door') || activeSpeakerMesh.name.toLowerCase().includes('frame'));
-
-            if (isDoor) {
-                _v4.y += 3.5;
-            } else {
-                const scale = activeSpeakerMesh.scale.y || 1.0;
-                const height = (activeSpeakerMesh.userData.geometryHeight || 2.0) * scale;
-                _v4.y += height + 0.5;
-            }
-
-            _v4.project(camera.threeCamera);
-
-            const screenW = window.innerWidth;
-            const screenH = window.innerHeight;
-            let activeX = (_v4.x * 0.5 + 0.5) * screenW;
-            let activeY = (-(_v4.y * 0.5) + 0.5) * screenH;
-
-            const marginX = 200;
-            const marginY = 150;
-            let tailPos: 'bottom' | 'top' | 'left' | 'right' = 'bottom';
-
-            if (isDoor) tailPos = 'left';
-            if (activeX < marginX) { activeX = marginX; tailPos = 'left'; }
-            else if (activeX > screenW - marginX) { activeX = screenW - marginX; tailPos = 'right'; }
-            if (activeY < marginY) { activeY = marginY; tailPos = 'top'; }
-            else if (activeY > screenH - marginY) { activeY = screenH - marginY; tailPos = 'bottom'; }
-
-            this.bubbleRef.current.style.transform = `translate3d(${activeX}px, ${activeY}px, 0)`;
-            if (cinematic.tailPosition !== tailPos) {
-                cinematic.tailPosition = tailPos;
-                this.callbacks.setTailPosition(tailPos);
-            }
-        }
+        // 3. Bubble Positioning (3D → 2D) [REMOVED - Handled statically by UI]
 
         // 4. Animation & Sound
         if (timeInLine < cinematic.typingDuration && frame % 6 === 0) {
