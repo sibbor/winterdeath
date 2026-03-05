@@ -570,8 +570,13 @@ export const ProjectileSystem = {
 
 // --- INTERNAL HELPERS ---
 function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
+    // Save previous position (X and Z only to prevent vertical tunneling)
     _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
+
+    // Step forward in time
     projectile.mesh.position.addScaledVector(projectile.vel, delta);
+
+    // Save current position (X and Z only)
     _v4.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
     projectile.life -= delta;
 
@@ -579,24 +584,40 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     const data = WEAPONS[projectile.weapon];
     if (!data) return;
 
-    const nearbyObs = ctx.collisionGrid.getNearbyObstacles(projectile.mesh.position, 2.0);
+    // Vector representing the exact path the bullet traveled this frame
+    _v2.subVectors(_v4, _v3);
+    const lineLenSq = _v2.lengthSq();
+
+    // 1. SWEPT OBSTACLE CHECK
+    // Use midpoint for the grid query to capture the whole line
+    _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
+    const bulletTravelDist = projectile.speed * delta;
+    const obsSearchRad = 2.0 + bulletTravelDist * 0.5;
+    const nearbyObs = ctx.collisionGrid.getNearbyObstacles(_v1, obsSearchRad);
+
     for (let i = 0; i < nearbyObs.length; i++) {
         const obs = nearbyObs[i];
-        const obsPos = obs.position;
-        const rad = obs.radius || 2;
-        if (projectile.mesh.position.distanceToSquared(obsPos) < rad * rad) {
+        _v5.set(obs.position.x, 0, obs.position.z); // Obstacle XZ
+        const rad = obs.radius || 2.0;
+
+        // Math: Closest point on the line segment to the obstacle
+        _v1.subVectors(_v5, _v3); // Vector from segment start to obstacle
+        let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v1.dot(_v2) / lineLenSq)) : 0;
+        _v1.copy(_v3).addScaledVector(_v2, t); // _v1 is now the closest point on the line
+
+        if (_v1.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
-            ctx.spawnPart(projectile.mesh.position.x, projectile.mesh.position.y, projectile.mesh.position.z, 'smoke', 3);
+            ctx.spawnPart(_v1.x, projectile.mesh.position.y, _v1.z, 'smoke', 3);
             soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
             break;
         }
     }
 
     if (!destroyBullet) {
-        _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
-        const bulletTravelDist = projectile.speed * delta;
-        const searchRad = 5.0 + bulletTravelDist;
-        const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, searchRad);
+        // 2. SWEPT ENEMY CHECK
+        _v1.addVectors(_v3, _v4).multiplyScalar(0.5); // Midpoint again
+        const enemySearchRad = 5.0 + bulletTravelDist * 0.5;
+        const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, enemySearchRad);
 
         if (nearbyEnemies.length > 1) {
             nearbyEnemies.sort((a, b) => _v3.distanceToSquared(a.mesh.position) - _v3.distanceToSquared(b.mesh.position));
@@ -606,22 +627,20 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             const enemy = nearbyEnemies[i];
             if (enemy.deathState !== 'ALIVE' || projectile.hitEntities.has(enemy.id)) continue;
 
-            const enemyXZ = _v1.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
-            const lineVec = _v2.subVectors(_v4, _v3);
-            const startToEnemy = _v5.subVectors(enemyXZ, _v3);
-
-            const lineLenSq = lineVec.lengthSq();
-            let t = lineLenSq > 0 ? Math.max(0, Math.min(1, startToEnemy.dot(lineVec) / lineLenSq)) : 0;
-
-            const closestPointXZ = _v2.copy(_v3).addScaledVector(lineVec, t);
-            const distSq = closestPointXZ.distanceToSquared(enemyXZ);
-
+            _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z); // Enemy XZ
             const hitRad = 1.2 * (enemy.widthScale || 1.0) * (enemy.originalScale || 1.0);
 
-            if (distSq < hitRad * hitRad) {
+            // Math: Closest point on the line segment to the enemy
+            _v1.subVectors(_v5, _v3); // Vector from segment start to enemy
+            let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v1.dot(_v2) / lineLenSq)) : 0;
+            _v1.copy(_v3).addScaledVector(_v2, t); // _v1 is now the closest point on the line
+
+            if (_v1.distanceToSquared(_v5) < hitRad * hitRad) {
+                // HIT!
                 let isHighImpact = false;
                 if (projectile.weapon === WeaponType.SHOTGUN) {
-                    if (closestPointXZ.distanceToSquared(projectile.origin) < 144.0) isHighImpact = true;
+                    const distFromOriginSq = Math.pow(_v1.x - projectile.origin.x, 2) + Math.pow(_v1.z - projectile.origin.z, 2);
+                    if (distFromOriginSq < 144.0) isHighImpact = true;
                 } else if (projectile.weapon === WeaponType.REVOLVER) {
                     if (projectile.damage >= data.baseDamage * 0.5) isHighImpact = true;
                 }
@@ -642,8 +661,9 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                     enemy.deathVel.copy(projectile.vel).normalize().multiplyScalar(force * 2.0).setY(4.0);
                 }
 
-                _v1.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
-                enemy.knockbackVel.add(_v1);
+                // Apply knockback using _v5 to safely avoid mutating _v1 (which holds the impact coord)
+                _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
+                enemy.knockbackVel.add(_v5);
 
                 if (ctx.spawnFloatingText) {
                     ctx.spawnFloatingText(enemy.mesh.position.x, 3.0, enemy.mesh.position.z, Math.round(projectile.damage).toString(), isHighImpact ? '#ff0000' : '#ffffff');
@@ -652,7 +672,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 ctx.trackStats('hit', 1);
                 ctx.trackStats('damage', actualDmg, !!enemy.isBoss);
 
-                ctx.spawnPart(closestPointXZ.x, projectile.mesh.position.y, closestPointXZ.z, 'blood', 40);
+                ctx.spawnPart(_v1.x, projectile.mesh.position.y, _v1.z, 'blood', 40);
                 soundManager.playImpact('flesh');
 
                 if (data.piercing) {
