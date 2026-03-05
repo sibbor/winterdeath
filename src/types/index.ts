@@ -129,7 +129,7 @@ export interface Vector2 {
   y: number;
 }
 
-export type TriggerType = 'COLLECTIBLE' | 'THOUGHTS' | 'SPEECH' | 'POI' | 'EVENT';
+export type TriggerType = 'COLLECTIBLE' | 'THOUGHT' | 'SPEAK' | 'POI' | 'EVENT';
 
 export type TriggerActionType =
   | 'SPAWN_ENEMY'

@@ -112,14 +112,20 @@ export const TriggerHandler = {
                     trig.lastTriggerTime = now;
 
                     // Log discovery for Adventure Log
-                    if (trig.type === 'POI') {
-                        if (!state.visitedPOIs) state.visitedPOIs = [];
-                        if (trig.id && !state.visitedPOIs.includes(trig.id)) {
-                            state.visitedPOIs.push(trig.id);
-                        }
-                    } else if (trig.type === 'THOUGHTS' || trig.type === 'SPEECH' || !trig.type) {
-                        if (trig.id && !callbacks.collectedCluesRef.current.includes(trig.id)) {
-                            callbacks.collectedCluesRef.current.push(trig.id);
+                    if (trig.id) {
+                        if (trig.type === 'POI') {
+                            if (!state.visitedPOIs) state.visitedPOIs = [];
+                            if (!state.visitedPOIs.includes(trig.id)) {
+                                state.visitedPOIs.push(trig.id);
+                            }
+                        } else if (
+                            trig.type === 'THOUGHT' ||
+                            trig.type === 'SPEAK' ||
+                            !trig.type
+                        ) {
+                            if (!callbacks.collectedCluesRef.current.includes(trig.id)) {
+                                callbacks.collectedCluesRef.current.push(trig.id);
+                            }
                         }
                     }
                 }
@@ -144,9 +150,9 @@ export const TriggerHandler = {
                     // Dynamic duration based on readability speed
                     const duration = 2000 + translatedText.length * 50;
 
-                    if (trig.type === 'SPEECH') {
+                    if (trig.type === 'SPEAK') {
                         soundManager.playVoice(PLAYER_CHARACTER.name);
-                        callbacks.onTrigger('SPEECH', duration);
+                        callbacks.onTrigger('SPEAK', duration);
                     } else {
                         soundManager.playUiHover();
                         callbacks.onTrigger(trig.type || 'INFO', duration);

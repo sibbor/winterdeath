@@ -247,172 +247,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         }
         scene.add(familyGroup);
 
-        // --- INTERACTION HANDLING ---
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2(-1000, -1000);
-
-        const onMM = (e: MouseEvent) => {
-            if (!containerRef.current) return;
-            const rect = containerRef.current.getBoundingClientRect();
-            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-        };
-
-        const onCL = () => {
-            if (!isRunning) return;
-            if (activeModalRef.current) return;
-            if (hoveredRef.current) {
-                if (hoveredRef.current.startsWith('family_') || hoveredRef.current.startsWith('player_')) {
-                    const fmWrapper = familyMembers.find(fm => fm.mesh.userData.id === hoveredRef.current);
-                    if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
-                } else {
-                    soundManager.playUiConfirm(); openModal(hoveredRef.current as any);
-                }
-            }
-        };
-
-        window.addEventListener('mousemove', onMM); window.addEventListener('click', onCL);
-        const onResize = () => {
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-            camera.set('aspect', width / height);
-            engine.renderer.setSize(width, height);
-        };
-        window.addEventListener('resize', onResize);
-
-        // --- ENGINE LOOP INTEGRATION ---
-        let frameCount = 0;
-        let lastRaycastFrame = 0;
-
-        engine.onUpdate = (dt: number) => {
-            if (!isRunning) return;
-            const now = performance.now();
-            const monitor = PerformanceMonitor.getInstance();
-
-            // 1. Environment & Camera
-            monitor.begin('env_camera');
-            CampEnvironment.updateEffects(scene, envStateRef.current, dt, now, frameCount);
-
-            const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
-            camera.set('lookSpeed', isIdleRef.current ? 0.2 : 3.0);
-            camera.lookAt(targetLookAt.x, targetLookAt.y, targetLookAt.z);
-            camera.update(dt, now);
-            monitor.end('env_camera');
-
-            // 2. Family Animations
-            monitor.begin('family_anim');
-            const talkingMembers = new Set(activeChats.current.map(c => (now >= c.startTime && now <= c.startTime + c.duration) ? c.mesh.uuid : null).filter(Boolean));
-            for (let i = 0; i < familyMembers.length; i++) {
-                const fm = familyMembers[i];
-                const isSpeaking = talkingMembers.has(fm.mesh.uuid) || fm.bounce > 0;
-                if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
-                const body = fm.mesh.children.find((c: any) => c.userData.isBody) as THREE.Mesh;
-                if (body) {
-                    PlayerAnimation.update(body, {
-                        isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
-                        isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
-                    }, now, dt);
-                }
-            }
-            monitor.end('family_anim');
-
-            // 3. Chatter System
-            monitor.begin('chatter');
-            if (now > nextChatterTime.current && activeMembers.length > 1) {
-                const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
-                let delayOffset = 0;
-                for (let i = 0; i < numSpeakers; i++) {
-                    const speaker = familyMembers[Math.floor(Math.random() * familyMembers.length)];
-                    const linesKey = (speaker.name || '').toLowerCase();
-                    let lines = t(`chatter.${linesKey}`) as unknown as string[];
-                    if (!Array.isArray(lines)) lines = CHATTER_LINES[speaker.name] || ["..."];
-
-                    const text = lines[Math.floor(Math.random() * lines.length)];
-                    const duration = 2000 + text.length * 60;
-                    const el = document.createElement('div');
-                    el.className = 'absolute bg-black/80 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none opacity-0 transition-opacity duration-500 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
-                    el.innerText = text;
-                    if (chatOverlayRef.current) chatOverlayRef.current.appendChild(el);
-                    activeChats.current.push({ id: `chat_${now}_${i}`, mesh: speaker.mesh, text, startTime: now + delayOffset, duration, element: el, playedSound: false });
-                    delayOffset += duration + 500;
-                }
-                nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
-            }
-
-            // Wildlife Sounds
-            if (now > nextWildlifeTime.current) {
-                if (Math.random() > 0.5) {
-                    soundManager.playOwlHoot();
-                } else {
-                    soundManager.playBirdAmbience();
-                }
-                // Randomized interval between 30 and 90 seconds
-                nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
-            }
-            monitor.end('chatter');
-
-            // 4. Chat Bubbles Update (DOM)
-            monitor.begin('chat_bubbles');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-            for (let i = activeChats.current.length - 1; i >= 0; i--) {
-                const chat = activeChats.current[i];
-                const timeAlive = now - chat.startTime;
-                if (timeAlive > chat.duration + 500) {
-                    if (chat.element.parentNode) chat.element.parentNode.removeChild(chat.element);
-                    activeChats.current.splice(i, 1); continue;
-                }
-                if (timeAlive >= 0) {
-                    if (!chat.playedSound) { soundManager.playVoice(chat.mesh.userData.name); chat.playedSound = true; }
-                    chat.element.style.opacity = timeAlive < 500 ? '1' : (timeAlive > chat.duration ? '0' : '1');
-                    const vec = _v1; chat.mesh.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
-                    chat.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`; chat.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`; chat.element.style.transform = 'translate(-50%, -100%)';
-                }
-            }
-            monitor.end('chat_bubbles');
-
-            // 5. Interactive Raycasting (Every 3rd frame or on move)
-            monitor.begin('raycasting');
-            if (frameCount - lastRaycastFrame >= 3) {
-                lastRaycastFrame = frameCount;
-                raycaster.setFromCamera(mouse, camera.threeCamera);
-                const hits = raycaster.intersectObjects(interactables);
-                let newHover = null, toolTipText = "", tooltipX = 0, tooltipY = 0;
-                if (hits.length > 0) {
-                    let target: any = hits[0].object;
-                    if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
-                    newHover = target.userData.id;
-                    if (newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) {
-                        toolTipText = `${target.userData.name}`;
-                        const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
-                        tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
-                    }
-                }
-                if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
-                setTooltip((newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) ? { text: toolTipText, x: tooltipX, y: tooltipY } : null);
-
-                const outlineKeys = Object.keys(outlines);
-                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = !activeModalRef.current && (hoveredRef.current === outlineKeys[i]); }
-                for (let i = 0; i < interactables.length; i++) {
-                    const o = interactables[i];
-                    if (o.userData.type === 'family') {
-                        (o.material as THREE.MeshStandardMaterial).emissiveIntensity = (o.userData.id === hoveredRef.current) ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
-                        (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
-                    }
-                }
-            }
-            monitor.end('raycasting');
-
-            lastDrawCallsRef.current = engine.renderer.info.render.calls;
-            const totalTime = performance.now() - now;
-            monitor.printIfHeavy('Camp Performance', totalTime, 50);
-        };
-
-        engine.onRender = () => {
-            if (!isRunning) return;
-            engine.renderer.render(scene, camera.threeCamera);
-        };
-
         // Store scene data for the interactivity effect
         sceneInteractablesRef.current = interactables;
         sceneOutlinesRef.current = outlines;
@@ -431,8 +265,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         };
         requestAnimationFrame(checkReady);
 
-        // NOTE: No cleanup needed here — interactivity effect owns listeners/callbacks.
-    }, [rescuedFamilyIndices, debugMode, textures]); // NOT isRunning
+        return () => {
+            // Scene cleanup not strictly required here as it's shared,
+            // but we ensure listeners are handled by the interactivity effect.
+        };
+    }, [rescuedFamilyIndices, debugMode, textures]);
+    // NOT isRunning
 
     // --- INTERACTIVITY EFFECT: Registers loop + events only when running ---
     useEffect(() => {
@@ -466,9 +304,29 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     const fmWrapper = familyMembers.find((fm: any) => fm.mesh.userData.id === hoveredRef.current);
                     if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
                 } else {
-                    soundManager.playUiConfirm(); openModal(hoveredRef.current as any);
+                    soundManager.playUiConfirm();
+                    openModal(hoveredRef.current as any);
                 }
             }
+        };
+
+        const onTS = (e: TouchEvent) => {
+            if (!containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            const touch = e.touches[0];
+            mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
+
+            // Force raycast update for touch
+            raycaster.setFromCamera(mouse, camera.threeCamera);
+            const hits = raycaster.intersectObjects(interactables);
+            if (hits.length > 0) {
+                let target: any = hits[0].object;
+                if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
+                hoveredRef.current = target.userData.id;
+            }
+
+            onCL();
         };
 
         const onResize = () => {
@@ -480,6 +338,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         window.addEventListener('mousemove', onMM);
         window.addEventListener('click', onCL);
+        window.addEventListener('touchstart', onTS, { passive: false });
         window.addEventListener('resize', onResize);
 
         let frameCount = 0;
@@ -608,9 +467,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         return () => {
             window.removeEventListener('mousemove', onMM);
             window.removeEventListener('click', onCL);
+            window.removeEventListener('touchstart', onTS);
             window.removeEventListener('resize', onResize);
-            if (engine.onUpdate) engine.onUpdate = null;
-            if (engine.onRender) engine.onRender = null;
+            engine.onUpdate = null;
+            engine.onRender = null;
             const chats = activeChats.current;
             for (let i = 0; i < chats.length; i++) {
                 const c = chats[i];

@@ -68,11 +68,18 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 break;
             }
             case 'clues': {
-                stats.cluesFound = ['s1_collectible_1', 's1_collectible_2', 's2_collectible_1', 's2_collectible_2', 's3_collectible_1', 's3_collectible_2', 's4_collectible_1', 's4_collectible_2'];
+                stats.cluesFound = [
+                    's1_start_tracks', 's1_blood_stains', 's1_they_must_be_scared', 's1_still_tracking', 's1_town_center',
+                    's2_start', 's2_campfire', 's2_combat', 's3_forest_noise', 's4_noise'
+                ];
                 break;
             }
             case 'poi': {
-                stats.visitedPOIs = ['s1_poi_building_on_fire', 's1_poi_church', 's1_poi_cafe', 's1_poi_pizzeria', 's1_poi_grocery', 's1_poi_gym', 's1_poi_train_yard', 's2_poi_campfire', 's2_poi_train_tunnel', 's2_poi_cave_entrance', 's2_poi_mountain_vault', 's3_poi_farm', 's3_poi_farmhouse', 's3_poi_barn', 's3_poi_mast', 's4_poi_shed', 's4_poi_scrapyard', 's5_poi_villa'];
+                stats.visitedPOIs = [
+                    's1_poi_building_on_fire', 's1_poi_church', 's1_poi_cafe', 's1_poi_pizzeria', 's1_poi_grocery', 's1_poi_gym', 's1_poi_train_yard',
+                    's2_poi_campfire', 's2_poi_train_tunnel', 's2_poi_cave_entrance', 's2_poi_mountain_vault',
+                    's3_poi_farm', 's3_poi_farmhouse', 's3_poi_barn', 's3_poi_mast', 's4_poi_shed', 's4_poi_scrapyard'
+                ];
                 break;
             }
         }
@@ -132,7 +139,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
                 const isSeen = (stats.seenEnemies || []).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
@@ -186,7 +193,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
     const sectors = [0, 1, 2, 3]; // Sectors with bosses
 
     return (
-        <div className="space-y-16 pb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-12">
             {sectors.map(sectorIndex => {
                 const boss = BOSSES[sectorIndex];
                 if (!boss) return null;
@@ -200,58 +207,50 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                 const sectorName = theme ? t(theme.name) : `Sector ${sectorIndex + 1}`;
 
                 return (
-                    <div key={sectorIndex} className="space-y-6">
-                        <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-black uppercase tracking-tighter text-zinc-500">
-                                {sectorName}
-                            </h3>
-                        </div>
-
-                        <Card isLocked={!isUnlocked} color={isUnlocked ? itemColor : '#4b5563'}>
-                            <div className="flex flex-col md:flex-row gap-8">
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start mb-6 border-b-2 border-gray-800 pb-4">
-                                        <h3 className="text-4xl font-black uppercase tracking-tighter" style={{ color: isUnlocked ? itemColor : '#4b5563' }}>
-                                            {isUnlocked ? t(boss.name) : t('ui.unknown_threat')}
-                                        </h3>
-                                        {isDefeated && <span className="text-xs bg-emerald-900/40 text-emerald-400 px-4 py-1.5 rounded border border-emerald-900 font-black uppercase tracking-widest">Eliminated</span>}
-                                    </div>
-
-                                    {isUnlocked ? (
-                                        <div className="flex flex-col gap-6">
-                                            <div className="grid grid-cols-3 gap-6 bg-black/40 p-6 rounded border border-gray-800">
-                                                <div className="text-center">
-                                                    <div className="text-gray-500 text-xs font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
-                                                    <div className="text-4xl font-black text-white">{boss.hp}</div>
-                                                </div>
-                                                <div className="text-center border-x border-gray-800">
-                                                    <div className="text-gray-500 text-xs font-black uppercase tracking-widest mb-1">{t('ui.damage')}</div>
-                                                    <div className="text-4xl font-black text-white">{boss.damage}</div>
-                                                </div>
-                                                <div className="text-center">
-                                                    <div className="text-gray-500 text-xs font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
-                                                    <div className="text-4xl font-black text-white">{boss.speed.toFixed(1)}</div>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-4">
-                                                <p className="text-gray-400 text-base leading-relaxed">{getBossDescription(boss.name)}</p>
-                                                {isDefeated && (
-                                                    <div className="bg-zinc-900/60 p-6 border-l-4 border-emerald-600 italic font-serif text-lg leading-relaxed text-zinc-200">
-                                                        "{t(boss.deathStory)}"
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="h-32 flex flex-col items-center justify-center text-gray-700 font-black text-sm uppercase tracking-[0.4em]">
-                                            <span className="text-4xl mb-4 grayscale opacity-10">💀</span>
-                                            [ DATA ENCRYPTED ]
-                                        </div>
-                                    )}
+                    <Card key={sectorIndex} isLocked={!isUnlocked} color={isUnlocked ? itemColor : '#4b5563'}>
+                        <div className="flex flex-col h-full">
+                            <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
+                                <div className="flex flex-col">
+                                    <h3 className="text-3xl font-black uppercase tracking-tighter" style={{ color: isUnlocked ? itemColor : '#4b5563' }}>
+                                        {isUnlocked ? t(boss.name) : t('ui.unknown_threat')}
+                                    </h3>
+                                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">{sectorName}</span>
                                 </div>
                             </div>
-                        </Card>
-                    </div>
+
+                            {isUnlocked ? (
+                                <div className="flex flex-col gap-6 flex-1">
+                                    <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
+                                        <div className="text-center">
+                                            <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
+                                            <div className="text-2xl font-black text-white">{boss.hp}</div>
+                                        </div>
+                                        <div className="text-center border-x border-gray-800">
+                                            <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.damage')}</div>
+                                            <div className="text-2xl font-black text-white">{boss.damage}</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
+                                            <div className="text-2xl font-black text-white">{boss.speed.toFixed(1)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(boss.name)}</p>
+                                        {isDefeated && (
+                                            <div className="bg-zinc-900/60 p-4 border-l-4 border-emerald-600 italic font-serif text-base leading-relaxed text-zinc-200">
+                                                "{t(boss.deathStory)}"
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-48 flex flex-col items-center justify-center text-gray-700 font-black text-sm uppercase tracking-[0.4em]">
+                                    <span className="text-4xl mb-4 grayscale opacity-10">💀</span>
+                                    [ DATA LOCKED ]
+                                </div>
+                            )}
+                        </div>
+                    </Card>
                 );
             })}
         </div>
@@ -312,14 +311,16 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                 const theme = SECTOR_THEMES[sectorId - 1];
                 const sectorName = theme ? t(theme.name) : `Sector ${sectorId}`;
 
-                // Filter clues for this sector, excluding collectibles/POI strings
+                // Filter clues for this sector from cluesFound
+                // Clues shouldn't include collectibles, POI story keys, or event tags
                 const sectorClues = cluesFound.filter(id =>
                     id.startsWith(`s${sectorId}_`) &&
                     !id.includes('_collectible_') &&
                     !id.includes('_poi_') &&
                     !id.includes('_event_') &&
                     !id.endsWith('_title') &&
-                    !id.endsWith('_description')
+                    !id.endsWith('_description') &&
+                    !id.endsWith('_story')
                 );
 
                 if (sectorClues.length === 0) return null;
@@ -334,9 +335,10 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {sectorClues.map((clueId) => {
-                                const isThought = !clueId.includes('dialogue') && !clueId.includes('speech');
-                                const type = isThought ? 'THOUGHT' : 'SPEECH';
-                                const typeColor = isThought ? '#3b82f6' : '#eab308';
+                                // Default detection of thought vs speech
+                                const isSpeech = clueId.includes('dialogue') || clueId.includes('speech') || clueId.includes('speak') || clueId.includes('talk');
+                                const type = isSpeech ? 'SPEAK' : 'THOUGHT';
+                                const typeColor = isSpeech ? '#eab308' : '#3b82f6';
 
                                 return (
                                     <Card key={clueId} isLocked={false} color={typeColor}>
@@ -463,7 +465,7 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobile?: b
                     {isFound ? t(item.nameKey) : '???'}
                 </h4>
                 <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                    {isFound ? t(item.descriptionKey) : 'Data encrypted. Item location unknown.'}
+                    {isFound ? t(item.descriptionKey) : 'Data locked. Item location unknown.'}
                 </p>
                 {isFound && !isExpanded && !isMobile && (
                     <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>
