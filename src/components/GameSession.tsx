@@ -1561,12 +1561,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 monitor.end('burning_effects');
             }
 
-            if (state.isDead) {
-                lastDrawCallsRef.current = engine.renderer.info.render.calls;
-                lastTime = now;
-                return;
-            }
-
             if (state.bossDefeatedTime > 0) {
                 if (now - state.bossDefeatedTime < 10000) {
                     state.invulnerableUntil = now + 10000;

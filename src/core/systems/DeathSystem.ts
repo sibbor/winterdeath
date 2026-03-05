@@ -107,6 +107,8 @@ export class DeathSystem implements System {
             state.deathVel.y -= 30 * delta;
             pgPos.addScaledVector(state.deathVel, delta);
 
+            const isExploded = state.killerType === 'BOMBER_EXPLOSION';
+
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
                 state.deathVel.y = 0;
@@ -118,7 +120,7 @@ export class DeathSystem implements System {
                     state.hasLastTrailPos = true;
                 }
 
-                if (pgPos.distanceToSquared(state.lastTrailPos) > 2.25) {
+                if (!isExploded && pgPos.distanceToSquared(state.lastTrailPos) > 2.25) {
                     const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                     this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, (0.8 + Math.random() * 0.4) * baseScale, MATERIALS.bloodDecal);
                     state.lastTrailPos.copy(pgPos);
@@ -130,7 +132,7 @@ export class DeathSystem implements System {
                 _v2.set(state.deathVel.x, 0, state.deathVel.z);
                 _v1.copy(pgPos).sub(_v2);
                 playerGroup.lookAt(_v1);
-            } else if (!state.playerBloodSpawned && now - state.deathStartTime > 350) {
+            } else if (!isExploded && !state.playerBloodSpawned && now - state.deathStartTime > 350) {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 2.5 * baseScale, MATERIALS.bloodDecal);
@@ -138,8 +140,18 @@ export class DeathSystem implements System {
             }
         }
 
-        // 3. Player Animation
-        if (playerMesh) {
+        // 3. Player Animation & Gibbing
+        if (state.killerType === 'BOMBER_EXPLOSION') {
+            if (playerMesh) playerMesh.visible = false;
+
+            if (!state.playerBloodSpawned) {
+                state.playerBloodSpawned = true;
+                const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
+                this.fxCallbacks.spawnDecal((playerGroup ? playerGroup.position.x : 0), (playerGroup ? playerGroup.position.z : 0), 4.5 * baseScale, MATERIALS.bloodDecal);
+                this.fxCallbacks.spawnPart((playerGroup ? playerGroup.position.x : 0), 1.0, (playerGroup ? playerGroup.position.z : 0), 'blood', 60);
+                this.fxCallbacks.spawnPart((playerGroup ? playerGroup.position.x : 0), 1.5, (playerGroup ? playerGroup.position.z : 0), 'meat', 12);
+            }
+        } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
             PlayerAnimation.update(playerMesh as any, _deathAnimState, now, 0.016);
         }

@@ -35,6 +35,9 @@ export const TriggerHandler = {
         const triggers = state.triggers;
         if (!triggers) return;
 
+        // Wait for GameSession runSetup to finish populating the trigger scratchpad
+        if (!callbacks || !callbacks.onAction) return;
+
         const tLen = triggers.length;
         for (let i = 0; i < tLen; i++) {
             const trig = triggers[i];

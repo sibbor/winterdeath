@@ -27,7 +27,7 @@ const LOCATIONS = {
     POIS: {
         CAVE_ENTRANCE: { x: 100, z: -70 },
         TUNNEL: { x: 165, z: -54 },
-        CAMPFIRE: { x: -1, z: 13 },
+        CAMPFIRE: { x: 0, z: 12 },
         TRAIN_TUNNEL: { x: 170, z: -50 },
         BOSS_ROOM: { x: 61, z: -193 }
     },
@@ -274,14 +274,15 @@ export const Sector2: SectorDef = {
 
         triggers.push(
             { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHTS', content: "clues.s2_start", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'POI', content: "clues.s2_campfire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEECH', content: "clues.s2_combat", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'POI', content: "clues.s2_train_tunnel", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEECH', content: "clues.s2_cave_lights", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: 'POI', content: "clues.s2_cave_watch_out", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEECH', content: "clues.s2_cave_loot_more", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            // { id: 's2_cave_knock_shelter_port', position: { x: 35, z: -193 }, radius: 10, type: 'EVENT', content: '', triggered: false, actions: [] },
+            //TODO: add POI for the shelter doors
+            // { id: 's2_poi_cave_knock_shelter_port', position: { x: 35, z: -193 }, radius: 10, type: 'POI', content: '', triggered: false, actions: [] },
+            { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'POI', content: "clues.s2_campfire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'POI', content: "clues.s2_train_tunnel", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: 'POI', content: "clues.s2_cave_watch_out", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'POI', content: "clues.s2_cave_shelter_port_room", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
         );
 

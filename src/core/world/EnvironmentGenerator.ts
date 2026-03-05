@@ -404,27 +404,33 @@ export const EnvironmentGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
 
-        // Ett block varannan meter längs linjen för att bygga en helt solid vägg
+        // One block every two meters along the line to build a completely solid wall
         const steps = Math.floor(length / 2.0);
 
         const openingPos = new THREE.Vector3();
         if (opening) opening.getWorldPosition(openingPos);
-        const caveClearanceRadiusSq = 14 * 14;
 
-        // Deterministisk pseudo-random (Zero-GC) för att berget alltid ser likadant ut
+        // The clearance radius around the cave opening
+        const caveClearanceRadiusSq = 16 * 16;
+
+        // Deterministic pseudo-random (Zero-GC) so the mountain always looks the same
         const hash = (x: number) => {
             let n = Math.sin(x * 12.9898) * 43758.5453;
             return n - Math.floor(n);
         };
 
-        // Hjälpfunktion: Skapar och orienterar ett klippblock
-        const addRockBlock = (pos: THREE.Vector3, scale: THREE.Vector3, rot: THREE.Euler, type: 'dodeca' | 'icosa' = 'dodeca') => {
-            // Grott-logik: Om vi är för nära dörren, avbryt! (Borrar ut ett naturligt hål)
-            if (opening) {
+        // Added 'isPortal' flag so our manual portal blocks bypass the aggressive deletion
+        const addRockBlock = (pos: THREE.Vector3, scale: THREE.Vector3, rot: THREE.Euler, type: 'dodeca' | 'icosa' = 'dodeca', isPortal: boolean = false) => {
+            if (opening && !isPortal) {
                 const dx = pos.x - openingPos.x;
                 const dz = pos.z - openingPos.z;
-                if ((dx * dx + dz * dz) < caveClearanceRadiusSq && pos.y < 12) {
-                    return;
+
+                // Account for the physical size of the rock to prevent it bleeding into cave rooms
+                const rockRadius = Math.max(scale.x, scale.z);
+                const requiredClearance = 20 + rockRadius;
+
+                if ((dx * dx + dz * dz) < (requiredClearance * requiredClearance)) {
+                    return; // Delete any procedural rock that gets too close to the interior
                 }
             }
 
@@ -440,15 +446,14 @@ export const EnvironmentGenerator = {
             const t = i / steps;
             const pt = curve.getPointAt(t);
             const tangent = curve.getTangentAt(t).normalize();
-
-            // Originalets inåtriktade normal (tangent.z, 0, -tangent.x).
             const inwardDir = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
 
-            // 1. SKYDDSVÄGGEN (Närmast linjen)
+            // 1. THE SHIELD WALL (Closest to the line)
+            // Forms the playable boundary. Kept low to not block the camera.
             if (i % 2 === 0) {
                 const scale = new THREE.Vector3(
                     4 + hash(i) * 2,
-                    8 + hash(i + 1) * 6,
+                    6 + hash(i + 1) * 4,  // Max Y scale = 10
                     4 + hash(i + 2) * 2
                 );
                 const maxRadius = Math.max(scale.x, scale.z);
@@ -460,59 +465,60 @@ export const EnvironmentGenerator = {
                 addRockBlock(pos, scale, new THREE.Euler(hash(i), hash(i + 1) * Math.PI, hash(i + 2)));
             }
 
-            // 2. MELLANLAGRET (Bredare block bakom skyddsväggen)
+            // 2. THE MIDDLE LAYER (Adds thickness)
+            // Wider, but strictly capped in height to form a plateau.
             if (i % 3 === 0) {
                 const scale = new THREE.Vector3(
                     8 + hash(i + 3) * 4,
-                    14 + hash(i + 4) * 8,
+                    8 + hash(i + 4) * 4, // Max Y scale = 12
                     8 + hash(i + 5) * 4
                 );
                 const maxRadius = Math.max(scale.x, scale.z);
-                const safeOffset = 6.0 + maxRadius;
+                const safeOffset = 7.0 + maxRadius;
 
                 const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
-                pos.y = scale.y * 0.45;
+                pos.y = scale.y * 0.3; // Push deeper into the ground
 
                 addRockBlock(pos, scale, new THREE.Euler(hash(i + 3), hash(i + 4) * Math.PI, hash(i + 5)));
             }
 
-            // 3. BERGSTOPPARNA (Ikosaedrar)
+            // 3. THE BACK FILLER (Replaced Peaks with wide Plateau blocks)
+            // By making these wide but low, we block the void without blocking the top-down camera.
             if (i % 5 === 0) {
                 const scale = new THREE.Vector3(
-                    12 + hash(i + 6) * 6,
-                    30 + hash(i + 7) * 15,
-                    12 + hash(i + 8) * 6
+                    14 + hash(i + 6) * 6,
+                    8 + hash(i + 7) * 4, // Low height! Max 12. No more spikes blocking the view.
+                    14 + hash(i + 8) * 6
                 );
                 const maxRadius = Math.max(scale.x, scale.z);
-                const safeOffset = 15.0 + maxRadius;
+                // Reduce depth slightly so it doesn't reach the cave rooms behind the wall
+                const safeOffset = 12.0 + maxRadius;
 
                 const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
-                pos.y = scale.y * 0.45;
+                pos.y = scale.y * 0.2;
 
+                // Using Dodecahedron instead of Icosahedron to keep the top flatter
                 const rot = new THREE.Euler(hash(i + 6) * 0.4, hash(i + 7) * Math.PI, hash(i + 8) * 0.4);
-                addRockBlock(pos, scale, rot, 'icosa');
+                addRockBlock(pos, scale, rot, 'dodeca');
             }
         }
 
-        // --- SKULPTERA GROTTANS PORTAL MANUELLT ---
+        // --- SCULPT THE CAVE PORTAL MANUALLY ---
         if (opening) {
-            // Vänster och höger baspelare 
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-11, 5, -2)), new THREE.Vector3(7, 12, 9), new THREE.Euler(0.1, 0.4, -0.1));
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(11, 5, -2)), new THREE.Vector3(7, 12, 9), new THREE.Euler(-0.1, -0.4, 0.1));
+            // Base pillars (Kept shallow at Z = -2 so they don't block inner view)
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-10, 5, -2)), new THREE.Vector3(6, 10, 8), new THREE.Euler(0.1, 0.4, -0.1), 'dodeca', true);
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(10, 5, -2)), new THREE.Vector3(6, 10, 8), new THREE.Euler(-0.1, -0.4, 0.1), 'dodeca', true);
 
-            // Valvbågen (Taket av flera mindre, lutande block)
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-7, 12, -3)), new THREE.Vector3(6, 7, 8), new THREE.Euler(0.2, 0.2, -0.4)); // Vänster inre
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(7, 12, -3)), new THREE.Vector3(6, 7, 8), new THREE.Euler(0.2, -0.2, 0.4)); // Höger inre
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 14, -3)), new THREE.Vector3(8, 6, 9), new THREE.Euler(0.1, 0, 0)); // Slutsten (Keystone) i mitten
+            // The arch inner roof (Lowered Y significantly so camera sees over it)
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-6, 10, -3)), new THREE.Vector3(6, 6, 8), new THREE.Euler(0.2, 0.2, -0.4), 'dodeca', true);
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(6, 10, -3)), new THREE.Vector3(6, 6, 8), new THREE.Euler(0.2, -0.2, 0.4), 'dodeca', true);
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 12, -3)), new THREE.Vector3(8, 6, 9), new THREE.Euler(0.1, 0, 0), 'dodeca', true);
 
-            // Fyllning/Panna ovanför valvet för att bygga ihop det med berget
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-6, 18, -6)), new THREE.Vector3(10, 10, 10), new THREE.Euler(-0.2, 0.3, -0.1));
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(6, 18, -6)), new THREE.Vector3(10, 10, 10), new THREE.Euler(-0.1, -0.4, 0.2));
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 22, -8)), new THREE.Vector3(14, 12, 12), new THREE.Euler(0, 0.1, 0));
-
-            // Stödväggar ut på sidorna för att rama in ingången bättre
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-15, 15, -5)), new THREE.Vector3(9, 11, 10), new THREE.Euler(0.3, 0.5, -0.3));
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(15, 15, -5)), new THREE.Vector3(9, 11, 10), new THREE.Euler(0.2, -0.5, 0.3));
+            // Filling/Forehead above the arch
+            // Kept shallow (Z = -4) and very low height to act as a front facade only
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-6, 14, -4)), new THREE.Vector3(10, 6, 8), new THREE.Euler(-0.2, 0.3, -0.1), 'dodeca', true);
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(6, 14, -4)), new THREE.Vector3(10, 6, 8), new THREE.Euler(-0.1, -0.4, 0.2), 'dodeca', true);
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 16, -4)), new THREE.Vector3(12, 6, 8), new THREE.Euler(0, 0.1, 0), 'dodeca', true);
         }
 
         if (geometries.length === 0) return;
@@ -522,7 +528,7 @@ export const EnvironmentGenerator = {
         mountainGeo = mountainGeo.toNonIndexed();
         mountainGeo.computeVertexNormals();
 
-        // --- FÄRGSÄTTNING (Low Poly Flat Shading) ---
+        // --- COLORING (Low Poly Flat Shading) ---
         const count = mountainGeo.getAttribute('position').count;
         const colors = new Float32Array(count * 3);
         const finalPosAttr = mountainGeo.getAttribute('position');
@@ -543,8 +549,8 @@ export const EnvironmentGenerator = {
 
             let r, g, b;
 
-            // Snöfång
-            if ((upwardness > 0.65 && h > 8) || h > 28) {
+            // Adjusted snow heights for the new low plateau (snow appears lower down now)
+            if ((upwardness > 0.65 && h > 6) || h > 12) {
                 r = COLORS.SNOW.r;
                 g = COLORS.SNOW.g;
                 b = COLORS.SNOW.b;
@@ -759,9 +765,10 @@ export const EnvironmentGenerator = {
 
         // Create the tunnel (depth 8 to anchor it deeply into the mountain)
         const tunnelDepth = 8;
-        const extrudeSettings = { depth: tunnelDepth, steps: 1, bevelEnabled: false };
-        const portalGeo = new THREE.ExtrudeGeometry(portalShape, extrudeSettings);
-        portalGeo.translate(0, 0, -tunnelDepth / 2);
+        const extrudeSettings = { depth: tunnelDepth, steps: 2, bevelEnabled: false };
+        const portalGeoExtruded = new THREE.ExtrudeGeometry(portalShape, extrudeSettings);
+        portalGeoExtruded.translate(0, 0, -tunnelDepth / 2);
+        const portalGeo = portalGeoExtruded.index ? portalGeoExtruded.toNonIndexed() : portalGeoExtruded;
 
         // Setup flat-shaded concrete material
         if (!MATERIALS.concreteDoubleSided) {

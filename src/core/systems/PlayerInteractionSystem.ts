@@ -118,6 +118,7 @@ export class PlayerInteractionSystem implements System {
             // Keep the main group fixed. By zeroing the rotation, local offsets perfectly match world offsets.
             anim.obj.position.copy(anim.startPos);
             anim.obj.rotation.set(0, 0, 0);
+            anim.obj.updateMatrix();
 
             const targetX = (this.playerGroup.position.x - anim.startPos.x) * easeOut;
             const targetZ = (this.playerGroup.position.z - anim.startPos.z) * easeOut;
@@ -125,7 +126,10 @@ export class PlayerInteractionSystem implements System {
             const fxTargetY = anim.progress * 15.0; // Shoot up 15 meters
 
             // Iterate over all parts to separate behavior
-            anim.obj.children.forEach(child => {
+            const children = anim.obj.children;
+            const childLen = children.length;
+            for (let j = 0; j < childLen; j++) {
+                const child = children[j];
                 if (child.name === 'collectibleRing' || child.name === 'collectibleBeam' || child.name === 'collectibleInnerRing') {
                     // Start relative positions + new vertical offset
                     if (child.name === 'collectibleRing') child.position.set(0, 0.05 + fxTargetY, 0);
@@ -139,9 +143,10 @@ export class PlayerInteractionSystem implements System {
                     } else {
                         child.scale.setScalar(Math.max(0.001, fxScale));
                     }
+                    child.updateMatrix();
                 } else if ((child instanceof THREE.Mesh || child instanceof THREE.Group) && !child.name.startsWith('collectible')) {
                     // Skip internal lights explicitly
-                    if ((child as any).isLight) return;
+                    if ((child as any).isLight) continue;
 
                     // This is the actual collectible item! Let it geometrically fly to the player.
                     child.position.x = targetX;
@@ -156,12 +161,19 @@ export class PlayerInteractionSystem implements System {
                     } else {
                         child.scale.setScalar(1.0);
                     }
+                    child.updateMatrix();
                 }
-            });
+            }
+
+            // Ensure visual updates are pushed down the scene graph
+            anim.obj.updateMatrixWorld(true);
 
             // [VINTERDÖD] Se till att partiklarna (smoke/sparks) följer med strålen upp!
             if (anim.obj.userData.effects) {
-                anim.obj.userData.effects.forEach((eff: any) => {
+                const effects = anim.obj.userData.effects;
+                const effLen = effects.length;
+                for (let k = 0; k < effLen; k++) {
+                    const eff = effects[k];
                     if (!eff.originalOffset) {
                         eff.originalOffset = eff.offset ? eff.offset.clone() : new THREE.Vector3();
                     }
@@ -169,18 +181,24 @@ export class PlayerInteractionSystem implements System {
 
                     eff.offset.copy(eff.originalOffset);
                     eff.offset.y += fxTargetY;
-                });
+                }
             }
 
             if (anim.progress >= 1) {
                 // Traverse and hide to avoid removing from scene (keeps GPU state stable)
-                anim.obj.traverse((child) => {
-                    if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight || child instanceof THREE.DirectionalLight) {
-                        child.intensity = 0;
-                    } else if (child instanceof THREE.Mesh) {
-                        child.visible = false;
+                const stack = [anim.obj as THREE.Object3D];
+                while (stack.length > 0) {
+                    const node = stack.pop()!;
+                    if (node instanceof THREE.PointLight || node instanceof THREE.SpotLight || node instanceof THREE.DirectionalLight) {
+                        node.intensity = 0;
+                    } else if (node instanceof THREE.Mesh) {
+                        node.visible = false;
                     }
-                });
+                    const children = node.children;
+                    for (let j = 0; j < children.length; j++) {
+                        stack.push(children[j]);
+                    }
+                }
 
                 // Cleanup emitters to prevent "left behind" particles
                 anim.obj.userData.effects = [];

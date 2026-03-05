@@ -45,8 +45,7 @@ export class EnemySystem implements System {
                 state.damageDealt += dotDamage;
                 if (e.isBoss) state.bossDamageDealt += dotDamage;
                 this.callbacks.gainXp(Math.ceil(dotDamage));
-            },
-            onAshStart: (e: any) => EnemyManager.createAshPile(e)
+            }
         };
 
         // Callback for EnemyManager.cleanupDeadEnemies
@@ -134,12 +133,13 @@ export class EnemySystem implements System {
 
         // Resolve killer name using localization keys
         if (attacker && attacker.isBoss && attacker.bossId !== undefined) {
-            state.killerType = attacker.type;
+            state.killerType = type === 'BOMBER_EXPLOSION' ? type : attacker.type;
             state.killerName = this.callbacks.t(`bosses.${attacker.bossId}.name`);
         } else if (attacker) {
-            state.killerType = attacker.type;
+            state.killerType = type === 'BOMBER_EXPLOSION' ? type : attacker.type;
             state.killerName = this.callbacks.t(`enemies.${attacker.type}.name`);
         } else {
+            state.killerType = type;
             state.killerName = this.callbacks.t('ui.unknown_threat');
         }
 
