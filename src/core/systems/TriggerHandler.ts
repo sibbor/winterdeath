@@ -107,6 +107,18 @@ export const TriggerHandler = {
                 if (isFirstEntry) {
                     trig.triggered = true;
                     trig.lastTriggerTime = now;
+
+                    // Log discovery for Adventure Log
+                    if (trig.type === 'POI') {
+                        if (!state.visitedPOIs) state.visitedPOIs = [];
+                        if (trig.id && !state.visitedPOIs.includes(trig.id)) {
+                            state.visitedPOIs.push(trig.id);
+                        }
+                    } else if (trig.type === 'THOUGHTS' || trig.type === 'SPEECH' || !trig.type) {
+                        if (trig.id && !callbacks.collectedCluesRef.current.includes(trig.id)) {
+                            callbacks.collectedCluesRef.current.push(trig.id);
+                        }
+                    }
                 }
 
                 // Fire Actions

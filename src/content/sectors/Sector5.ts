@@ -81,15 +81,26 @@ export const Sector5: SectorDef = {
         const { triggers } = ctx;
 
         // --- FIND PETS EVENT ---
-        triggers.push({
-            id: 'found_pets',
-            position: { x: 0, z: 15 }, // Inside Villa
-            radius: 8,
-            type: 'EVENT',
-            content: '',
-            triggered: false,
-            actions: [{ type: 'START_CINEMATIC' }]
-        });
+        triggers.push(
+            {
+                id: 'found_pets',
+                position: { x: 0, z: 15 }, // Inside Villa
+                radius: 8,
+                type: 'EVENT',
+                content: '',
+                triggered: false,
+                actions: [{ type: 'START_CINEMATIC' }]
+            },
+            {
+                id: 's5_poi_villa',
+                position: { x: 0, z: 15 },
+                radius: 20,
+                type: 'POI',
+                content: '',
+                triggered: false,
+                actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }]
+            }
+        );
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {

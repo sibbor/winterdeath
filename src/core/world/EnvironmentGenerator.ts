@@ -400,112 +400,141 @@ export const EnvironmentGenerator = {
     createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
         if (!points || points.length < 2) return;
 
-        const mountainWidth = 30;
-        const mountainHeightPeak = 16;
+        const geometries: THREE.BufferGeometry[] = [];
+        const curve = new THREE.CatmullRomCurve3(points);
+        const length = curve.getLength();
 
-        // EXTREMELY LOW POLY: The secret to Dodecahedron-like chunky rocks
-        const segmentsX = 35;
-        const segmentsZ = 6; // Drastically reduced to force massive flat triangles
-        const mountainSideBias = 1.0;
+        // Ett block varannan meter längs linjen för att bygga en helt solid vägg
+        const steps = Math.floor(length / 2.0);
 
-        const COLORS = {
-            SNOW: new THREE.Color(0xffffff),
-            ROCK_LIGHT: new THREE.Color(0x888899),
-            ROCK_DARK: new THREE.Color(0x444455),
-        };
+        const openingPos = new THREE.Vector3();
+        if (opening) opening.getWorldPosition(openingPos);
+        const caveClearanceRadiusSq = 14 * 14;
 
-        // Zero-GC pseudo-random function for consistent deterministic structures
-        const hash = (x: number, y: number) => {
-            let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+        // Deterministisk pseudo-random (Zero-GC) för att berget alltid ser likadant ut
+        const hash = (x: number) => {
+            let n = Math.sin(x * 12.9898) * 43758.5453;
             return n - Math.floor(n);
         };
 
-        const curve = new THREE.CatmullRomCurve3(points);
-        const planeGeo = new THREE.PlaneGeometry(1, 1, segmentsX, segmentsZ);
-        const posAttr = planeGeo.getAttribute('position');
+        // Hjälpfunktion: Skapar och orienterar ett klippblock
+        const addRockBlock = (pos: THREE.Vector3, scale: THREE.Vector3, rot: THREE.Euler, type: 'dodeca' | 'icosa' = 'dodeca') => {
+            // Grott-logik: Om vi är för nära dörren, avbryt! (Borrar ut ett naturligt hål)
+            if (opening) {
+                const dx = pos.x - openingPos.x;
+                const dz = pos.z - openingPos.z;
+                if ((dx * dx + dz * dz) < caveClearanceRadiusSq && pos.y < 12) {
+                    return;
+                }
+            }
 
-        const targetPointOnCurve = new THREE.Vector3();
-        const sideDirection = new THREE.Vector3();
+            const geo = type === 'icosa' ? new THREE.IcosahedronGeometry(1, 0) : new THREE.DodecahedronGeometry(1, 0);
+            const matrix = new THREE.Matrix4();
+            const quat = new THREE.Quaternion().setFromEuler(rot);
+            matrix.compose(pos, quat, scale);
+            geo.applyMatrix4(matrix);
+            geometries.push(geo);
+        };
 
-        for (let i = 0; i <= segmentsX; i++) {
-            const t = i / segmentsX;
-            curve.getPointAt(t, targetPointOnCurve);
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const pt = curve.getPointAt(t);
             const tangent = curve.getTangentAt(t).normalize();
-            sideDirection.set(-tangent.z, 0, tangent.x);
 
-            for (let j = 0; j <= segmentsZ; j++) {
-                const index = i * (segmentsZ + 1) + j;
-                const vFactor = j / segmentsZ;
-                const vOffset = (vFactor - mountainSideBias) * mountainWidth;
-                const distToRidge = Math.abs(vFactor - 0.4) * mountainWidth;
+            // Originalets inåtriktade normal (tangent.z, 0, -tangent.x).
+            const inwardDir = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
 
-                let baseHeight = 0;
-                const maxDist = mountainWidth * 0.7;
+            // 1. SKYDDSVÄGGEN (Närmast linjen)
+            if (i % 2 === 0) {
+                const scale = new THREE.Vector3(
+                    4 + hash(i) * 2,
+                    8 + hash(i + 1) * 6,
+                    4 + hash(i + 2) * 2
+                );
+                const maxRadius = Math.max(scale.x, scale.z);
+                const safeOffset = maxRadius + 0.5;
 
-                if (distToRidge < maxDist) {
-                    baseHeight = Math.cos((distToRidge / maxDist) * (Math.PI / 2)) * mountainHeightPeak;
-                }
+                const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
+                pos.y = scale.y * 0.4;
 
-                let finalY = baseHeight;
-                let xJitter = 0;
-                let zJitter = 0;
+                addRockBlock(pos, scale, new THREE.Euler(hash(i), hash(i + 1) * Math.PI, hash(i + 2)));
+            }
 
-                // CHUNKY ROCK LOGIC:
-                // Only distort the INTERIOR vertices. Edges (j=0 and j=segmentsZ) stay strictly on the path at Y=0.
-                if (j > 0 && j < segmentsZ && baseHeight > 0.5) {
-                    // 1. Terracing: Snap to chunky block intervals
-                    const stepSize = 4.0;
-                    const steppedHeight = Math.floor(baseHeight / stepSize) * stepSize;
+            // 2. MELLANLAGRET (Bredare block bakom skyddsväggen)
+            if (i % 3 === 0) {
+                const scale = new THREE.Vector3(
+                    8 + hash(i + 3) * 4,
+                    14 + hash(i + 4) * 8,
+                    8 + hash(i + 5) * 4
+                );
+                const maxRadius = Math.max(scale.x, scale.z);
+                const safeOffset = 6.0 + maxRadius;
 
-                    // 2. Height Block Offset: Add deterministic randomness to the step
-                    finalY = steppedHeight + (hash(i, j) * 3.5);
+                const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
+                pos.y = scale.y * 0.45;
 
-                    // 3. Facet Distortion: Move interior vertices significantly in X/Z to create large, skewed triangles
-                    const edgeFade = Math.min(1.0, baseHeight / 2.0); // Don't break the outer boundaries
-                    xJitter = (hash(j, i) - 0.5) * 6.0 * edgeFade;
-                    zJitter = (hash(i * 2, j * 2) - 0.5) * 6.0 * edgeFade;
-                }
+                addRockBlock(pos, scale, new THREE.Euler(hash(i + 3), hash(i + 4) * Math.PI, hash(i + 5)));
+            }
 
-                const finalX = targetPointOnCurve.x + (sideDirection.x * vOffset) + xJitter;
-                const finalZ = targetPointOnCurve.z + (sideDirection.z * vOffset) + zJitter;
+            // 3. BERGSTOPPARNA (Ikosaedrar)
+            if (i % 5 === 0) {
+                const scale = new THREE.Vector3(
+                    12 + hash(i + 6) * 6,
+                    30 + hash(i + 7) * 15,
+                    12 + hash(i + 8) * 6
+                );
+                const maxRadius = Math.max(scale.x, scale.z);
+                const safeOffset = 15.0 + maxRadius;
 
-                posAttr.setXYZ(index, finalX, Math.max(0, finalY), finalZ);
+                const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
+                pos.y = scale.y * 0.45;
+
+                const rot = new THREE.Euler(hash(i + 6) * 0.4, hash(i + 7) * Math.PI, hash(i + 8) * 0.4);
+                addRockBlock(pos, scale, rot, 'icosa');
             }
         }
 
-        // --- CAVE OPENING LOGIC ---
-        // Pushes vertices down to form a hole. With massive triangles, this creates a dramatic, jagged cut.
+        // --- SKULPTERA GROTTANS PORTAL MANUELLT ---
         if (opening) {
-            const openingPos = new THREE.Vector3();
-            opening.getWorldPosition(openingPos);
+            // Vänster och höger baspelare 
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-11, 5, -2)), new THREE.Vector3(7, 12, 9), new THREE.Euler(0.1, 0.4, -0.1));
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(11, 5, -2)), new THREE.Vector3(7, 12, 9), new THREE.Euler(-0.1, -0.4, 0.1));
 
-            const safeZoneRadiusSq = 14 * 14;
-            const clearanceHeight = 12;
-            const vertex = new THREE.Vector3();
+            // Valvbågen (Taket av flera mindre, lutande block)
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-7, 12, -3)), new THREE.Vector3(6, 7, 8), new THREE.Euler(0.2, 0.2, -0.4)); // Vänster inre
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(7, 12, -3)), new THREE.Vector3(6, 7, 8), new THREE.Euler(0.2, -0.2, 0.4)); // Höger inre
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 14, -3)), new THREE.Vector3(8, 6, 9), new THREE.Euler(0.1, 0, 0)); // Slutsten (Keystone) i mitten
 
-            for (let i = 0; i < posAttr.count; i++) {
-                vertex.fromBufferAttribute(posAttr, i);
-                const dx = vertex.x - openingPos.x;
-                const dz = vertex.z - openingPos.z;
+            // Fyllning/Panna ovanför valvet för att bygga ihop det med berget
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-6, 18, -6)), new THREE.Vector3(10, 10, 10), new THREE.Euler(-0.2, 0.3, -0.1));
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(6, 18, -6)), new THREE.Vector3(10, 10, 10), new THREE.Euler(-0.1, -0.4, 0.2));
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 22, -8)), new THREE.Vector3(14, 12, 12), new THREE.Euler(0, 0.1, 0));
 
-                if ((dx * dx + dz * dz) < safeZoneRadiusSq && vertex.y < clearanceHeight) {
-                    posAttr.setY(i, -25);
-                }
-            }
+            // Stödväggar ut på sidorna för att rama in ingången bättre
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(-15, 15, -5)), new THREE.Vector3(9, 11, 10), new THREE.Euler(0.3, 0.5, -0.3));
+            addRockBlock(openingPos.clone().add(new THREE.Vector3(15, 15, -5)), new THREE.Vector3(9, 11, 10), new THREE.Euler(0.2, -0.5, 0.3));
         }
 
-        posAttr.needsUpdate = true;
-        const mountainGeo = planeGeo.toNonIndexed();
+        if (geometries.length === 0) return;
+
+        let mountainGeo = BufferGeometryUtils.mergeGeometries(geometries);
+        if (!mountainGeo) return;
+        mountainGeo = mountainGeo.toNonIndexed();
         mountainGeo.computeVertexNormals();
 
-        // --- FLAT SHADING COLORING ---
-        // By assigning the same color to all 3 vertices of a face, we prevent gradients and enforce the solid low-poly look.
+        // --- FÄRGSÄTTNING (Low Poly Flat Shading) ---
         const count = mountainGeo.getAttribute('position').count;
         const colors = new Float32Array(count * 3);
         const finalPosAttr = mountainGeo.getAttribute('position');
         const normalAttr = mountainGeo.getAttribute('normal');
         const normal = new THREE.Vector3();
         const up = new THREE.Vector3(0, 1, 0);
+
+        const COLORS = {
+            SNOW: new THREE.Color(0xffffff),
+            ROCK_LIGHT: new THREE.Color(0x888899),
+            ROCK_DARK: new THREE.Color(0x444455),
+        };
 
         for (let i = 0; i < count; i += 3) {
             const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
@@ -514,13 +543,13 @@ export const EnvironmentGenerator = {
 
             let r, g, b;
 
-            // Snow catches on flat surfaces or very high peaks
-            if ((h > mountainHeightPeak * 0.4 && upwardness > 0.6) || (upwardness > 0.85 && h > 6)) {
+            // Snöfång
+            if ((upwardness > 0.65 && h > 8) || h > 28) {
                 r = COLORS.SNOW.r;
                 g = COLORS.SNOW.g;
                 b = COLORS.SNOW.b;
             } else {
-                const isLight = hash(i, i) > 0.5;
+                const isLight = (normal.x * 0.5 + normal.z * 0.8) > 0;
                 r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
                 g = isLight ? COLORS.ROCK_LIGHT.g : COLORS.ROCK_DARK.g;
                 b = isLight ? COLORS.ROCK_LIGHT.b : COLORS.ROCK_DARK.b;
@@ -537,52 +566,244 @@ export const EnvironmentGenerator = {
         mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const mountain = new THREE.Mesh(mountainGeo, MATERIALS.mountain);
+        mountain.castShadow = true;
+        mountain.receiveShadow = true;
         ctx.scene.add(mountain);
     },
 
     createMountainOpening: () => {
-        const tunnelWidthOuter = 16;
-        const tunnelHeightWalls = 5;
-        const tunnelArchRise = 2;
-        const tunnelThickness = 3;
-        const tunnelDepth = 5;
-
-        const halfWidthO = tunnelWidthOuter / 2;
-        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
         const caveOpeningGroup = new THREE.Group();
+        const tunnelDepth = 10;
 
-        const archShape = new THREE.Shape();
-        archShape.moveTo(-halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
-        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
-        archShape.lineTo(halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, 0);
+        // 1. SKAPA DEN UTHUGGNA STENTUNNELN
+        // Oregelbundna mått för att få en mer organisk/grottlik form
+        const outW = 10;
+        const inW = 6.5;
+        const wallH = 6.5;
+        const peakH = 12;
+        const peakInH = 9;
+        const topW = 4;
+        const topInW = 2.5;
 
-        const halfWidthI = halfWidthO - tunnelThickness;
-        const wallHeightI = tunnelHeightWalls;
-        const controlPointY_I = controlPointY_O - tunnelThickness;
+        const portalShape = new THREE.Shape();
+        portalShape.moveTo(-outW, 0);
+        portalShape.lineTo(-outW - 0.5, wallH); // Lite inbuktning
+        portalShape.lineTo(-topW, peakH + 0.5);
+        portalShape.lineTo(topW, peakH);
+        portalShape.lineTo(outW + 0.8, wallH);
+        portalShape.lineTo(outW, 0);
+        portalShape.lineTo(-outW, 0);
 
         const holePath = new THREE.Path();
-        holePath.moveTo(halfWidthI, 0);
-        holePath.lineTo(halfWidthI, wallHeightI);
-        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
-        holePath.lineTo(-halfWidthI, 0);
-        holePath.lineTo(halfWidthI, 0);
+        holePath.moveTo(inW, 0);
+        holePath.lineTo(inW - 0.5, wallH - 0.5);
+        holePath.lineTo(topInW, peakInH);
+        holePath.lineTo(-topInW, peakInH - 0.5);
+        holePath.lineTo(-inW + 0.5, wallH - 0.5);
+        holePath.lineTo(-inW, 0);
+        holePath.lineTo(inW, 0);
+        portalShape.holes.push(holePath);
 
-        archShape.holes.push(holePath);
+        const extrudeSettings = { depth: tunnelDepth, steps: 2, bevelEnabled: false };
+        const portalGeoExtruded = new THREE.ExtrudeGeometry(portalShape, extrudeSettings);
+        portalGeoExtruded.translate(0, 0, -tunnelDepth / 2);
 
-        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
-        archGeo.translate(0, 0, -tunnelDepth / 2);
+        const portalGeo = portalGeoExtruded.toNonIndexed();
 
-        // Avoid .clone() for material. Create a static double-sided version instead.
-        if (!MATERIALS.concreteDoubleSided) {
-            // Assuming MATERIALS.concrete is correctly exported and accessible here
-            MATERIALS.concreteDoubleSided = MATERIALS.concrete.clone();
-            MATERIALS.concreteDoubleSided.side = THREE.DoubleSide;
+        // Jitter: Skapa en ruffig, uthuggen yta inuti tunneln
+        const posAttr = portalGeo.getAttribute('position');
+        for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            const y = posAttr.getY(i);
+
+            // Jittra bara insidan (hålet) för att bevara de raka ytterväggarna mot det stora berget
+            if (Math.abs(x) < outW - 1.0 && y < peakH - 1.0) {
+                posAttr.setX(i, x + (Math.random() - 0.5) * 0.7);
+                posAttr.setY(i, y + (Math.random() - 0.5) * 0.7);
+            }
+        }
+        portalGeo.computeVertexNormals();
+
+        // Färglägg tunneln exakt som berget för en sömlös övergång
+        const count = portalGeo.getAttribute('position').count;
+        const colors = new Float32Array(count * 3);
+        const normalAttr = portalGeo.getAttribute('normal');
+        const normal = new THREE.Vector3();
+
+        const COLORS = {
+            ROCK_LIGHT: new THREE.Color(0x888899),
+            ROCK_DARK: new THREE.Color(0x444455),
+        };
+
+        for (let i = 0; i < count; i += 3) {
+            normal.fromBufferAttribute(normalAttr, i);
+            // Samma belysningslogik som berget (Flat Shading look)
+            const isLight = (normal.x * 0.5 + normal.z * 0.8) > 0;
+            const r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
+            const g = isLight ? COLORS.ROCK_LIGHT.g : COLORS.ROCK_DARK.g;
+            const b = isLight ? COLORS.ROCK_LIGHT.b : COLORS.ROCK_DARK.b;
+
+            for (let j = 0; j < 3; j++) {
+                colors[(i + j) * 3] = r;
+                colors[(i + j) * 3 + 1] = g;
+                colors[(i + j) * 3 + 2] = b;
+            }
+        }
+        portalGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const portal = new THREE.Mesh(portalGeo, MATERIALS.mountain);
+        portal.castShadow = true;
+        portal.receiveShadow = true;
+        caveOpeningGroup.add(portal);
+
+        // 2. TRÄBALKAR (Classic Mine Shaft)
+        const logRadius = 0.5;
+        const postHeight = wallH - 0.5;
+        const framePositionsZ = [3.5, 0, -3.5]; // Placera tre ramar inuti tunneln
+
+        // Välj trämaterial (vi använder treeTrunk som ser ut som runda stockar)
+        const woodMat = MATERIALS.treeTrunk || MATERIALS.deadWood;
+
+        framePositionsZ.forEach((fz) => {
+            // Vänster pelare
+            const postL = new THREE.Mesh(new THREE.CylinderGeometry(logRadius, logRadius, postHeight, 6), woodMat);
+            postL.position.set(-inW + 1.0, postHeight / 2, fz);
+            postL.rotation.y = Math.random() * Math.PI;
+            postL.rotation.z = (Math.random() - 0.5) * 0.05; // Luta pyttelite för organisk känsla
+            postL.castShadow = true;
+            caveOpeningGroup.add(postL);
+
+            // Höger pelare
+            const postR = new THREE.Mesh(new THREE.CylinderGeometry(logRadius, logRadius, postHeight, 6), woodMat);
+            postR.position.set(inW - 1.0, postHeight / 2, fz);
+            postR.rotation.y = Math.random() * Math.PI;
+            postR.rotation.z = (Math.random() - 0.5) * 0.05;
+            postR.castShadow = true;
+            caveOpeningGroup.add(postR);
+
+            // Tvärbalk (Tak)
+            const beamLen = (inW - 1.0) * 2 + 1.5;
+            const topBeam = new THREE.Mesh(new THREE.CylinderGeometry(logRadius, logRadius, beamLen, 6), woodMat);
+            topBeam.position.set(0, postHeight + logRadius - 0.2, fz);
+            topBeam.rotation.z = Math.PI / 2;
+            topBeam.rotation.x = Math.random() * Math.PI;
+            topBeam.castShadow = true;
+            caveOpeningGroup.add(topBeam);
+
+            // Diagonal-strävor (Klassiska gruv-hörn)
+            const diagL = new THREE.Mesh(new THREE.CylinderGeometry(logRadius * 0.7, logRadius * 0.7, 2.5, 5), woodMat);
+            diagL.position.set(-inW + 2.2, postHeight - 0.8, fz);
+            diagL.rotation.z = -Math.PI / 4;
+            diagL.castShadow = true;
+            caveOpeningGroup.add(diagL);
+
+            const diagR = new THREE.Mesh(new THREE.CylinderGeometry(logRadius * 0.7, logRadius * 0.7, 2.5, 5), woodMat);
+            diagR.position.set(inW - 2.2, postHeight - 0.8, fz);
+            diagR.rotation.z = Math.PI / 4;
+            diagR.castShadow = true;
+            caveOpeningGroup.add(diagR);
+        });
+
+        // Tvärgående takstockar som "håller upp" berget i taket
+        // Vi loopar över Z-axeln (tunnelns djup) och lägger stockarna längs X-axeln
+        const plankLength = (inW - 1.2) * 2;
+        for (let z = -tunnelDepth / 2 + 0.5; z <= tunnelDepth / 2 - 0.5; z += 1.2) {
+            const plank = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, plankLength, 5), woodMat);
+            // Placeras strax ovanför de stora bärande ramarna
+            plank.position.set(0, postHeight + logRadius * 2 - 0.2, z);
+
+            // Rotera 90 grader runt Z för att lägga dem tvärs över tunneln (X-axeln)
+            plank.rotation.z = Math.PI / 2;
+            // Lite organisk vridning så de inte ligger onaturligt perfekt
+            plank.rotation.x = (Math.random() - 0.5) * 0.2;
+
+            plank.castShadow = true;
+            caveOpeningGroup.add(plank);
         }
 
-        const arch = new THREE.Mesh(archGeo, MATERIALS.concreteDoubleSided);
-        caveOpeningGroup.add(arch);
+        return caveOpeningGroup;
+    },
+
+    createMountainOpeningInConrete: () => {
+        const caveOpeningGroup = new THREE.Group();
+
+        // 1. Brutalist, faceted concrete portal (matches low-poly mountains perfectly)
+        const portalShape = new THREE.Shape();
+        const outW = 8.5;  // Half-width outer
+        const inW = 6;     // Half-width inner
+        const wallH = 6;   // Straight wall height
+        const peakH = 10;  // Total height outer
+        const peakInH = 8; // Total height inner
+        const topW = 4;    // Half-width flat top outer
+        const topInW = 2.5;// Half-width flat top inner
+
+        // Outer contour (Faceted arch instead of smooth curve)
+        portalShape.moveTo(-outW, 0);
+        portalShape.lineTo(-outW, wallH);
+        portalShape.lineTo(-topW, peakH);
+        portalShape.lineTo(topW, peakH);
+        portalShape.lineTo(outW, wallH);
+        portalShape.lineTo(outW, 0);
+        portalShape.lineTo(-outW, 0);
+
+        // Inner hole contour (Faceted design)
+        const holePath = new THREE.Path();
+        holePath.moveTo(inW, 0);
+        holePath.lineTo(inW, wallH - 0.5);
+        holePath.lineTo(topInW, peakInH);
+        holePath.lineTo(-topInW, peakInH);
+        holePath.lineTo(-inW, wallH - 0.5);
+        holePath.lineTo(-inW, 0);
+        holePath.lineTo(inW, 0);
+        portalShape.holes.push(holePath);
+
+        // Create the tunnel (depth 8 to anchor it deeply into the mountain)
+        const tunnelDepth = 8;
+        const extrudeSettings = { depth: tunnelDepth, steps: 1, bevelEnabled: false };
+        const portalGeo = new THREE.ExtrudeGeometry(portalShape, extrudeSettings);
+        portalGeo.translate(0, 0, -tunnelDepth / 2);
+
+        // Setup flat-shaded concrete material
+        if (!MATERIALS.concreteDoubleSided) {
+            MATERIALS.concreteDoubleSided = MATERIALS.concrete.clone();
+            MATERIALS.concreteDoubleSided.side = THREE.DoubleSide;
+            MATERIALS.concreteDoubleSided.flatShading = true;
+        }
+
+        const portal = new THREE.Mesh(portalGeo, MATERIALS.concreteDoubleSided);
+        portal.castShadow = true;
+        portal.receiveShadow = true;
+        caveOpeningGroup.add(portal);
+
+        // 2. Reinforcement beams / Industrial bunker feel
+        // Using steel material for structural details
+        const ribMat = MATERIALS.steel || MATERIALS.concreteDoubleSided;
+
+        // Left support beam
+        const ribL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, tunnelDepth + 1), ribMat);
+        ribL.position.set(-topInW - 1.0, peakInH - 0.5, 0);
+        ribL.rotation.z = 0.75;
+        ribL.castShadow = true;
+        caveOpeningGroup.add(ribL);
+
+        // Right support beam
+        const ribR = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, tunnelDepth + 1), ribMat);
+        ribR.position.set(topInW + 1.0, peakInH - 0.5, 0);
+        ribR.rotation.z = -0.75;
+        ribR.castShadow = true;
+        caveOpeningGroup.add(ribR);
+
+        // Top support beam
+        const ribTop = new THREE.Mesh(new THREE.BoxGeometry(topInW * 2 + 2, 1.2, tunnelDepth + 1), ribMat);
+        ribTop.position.set(0, peakInH - 0.2, 0);
+        ribTop.castShadow = true;
+        caveOpeningGroup.add(ribTop);
+
+        // Floor threshold to ground the portal
+        const threshold = new THREE.Mesh(new THREE.BoxGeometry(outW * 2 + 2, 0.5, tunnelDepth + 2), MATERIALS.concreteDoubleSided);
+        threshold.position.set(0, 0.25, 0);
+        threshold.receiveShadow = true;
+        caveOpeningGroup.add(threshold);
 
         return caveOpeningGroup;
     },

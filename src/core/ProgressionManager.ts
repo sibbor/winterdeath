@@ -18,6 +18,7 @@ export const aggregateStats = (
     // Ensure lists exist
     s.collectiblesFound = s.collectiblesFound || [];
     s.cluesFound = s.cluesFound || [];
+    s.visitedPOIs = s.visitedPOIs || [];
     s.killsByType = { ...(s.killsByType || {}) };
 
     // 1. Sector Completion Progress
@@ -56,6 +57,11 @@ export const aggregateStats = (
         const clueIds = sectorStats.cluesFound.map((c: any) => c.id || c).filter((id: any) => typeof id === 'string');
         const newUniqueClues = clueIds.filter((id: string) => !s.cluesFound.includes(id));
         s.cluesFound = [...s.cluesFound, ...newUniqueClues];
+    }
+
+    if (sectorStats.visitedPOIs && sectorStats.visitedPOIs.length > 0) {
+        const newUniquePOIs = sectorStats.visitedPOIs.filter((id: string) => !s.visitedPOIs.includes(id));
+        s.visitedPOIs = [...s.visitedPOIs, ...newUniquePOIs];
     }
 
     // SP for Collectibles

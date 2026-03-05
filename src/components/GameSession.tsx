@@ -1793,6 +1793,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             monitor.end('projectiles');
 
             monitor.begin('triggers');
+            _triggerOptionsScratch.t = t;
             TriggerHandler.checkTriggers(playerGroupRef.current.position, state, now, _triggerOptionsScratch);
             monitor.end('triggers');
 

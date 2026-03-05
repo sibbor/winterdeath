@@ -82,8 +82,8 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} />}
                     {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} />}
                     {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobile={isMobileDevice} />}
-                    {activeTab === 'clues' && <CluesTab stats={stats} color={themeColor} />}
-                    {activeTab === 'poi' && <PoiTab stats={stats} />}
+                    {activeTab === 'clues' && <CluesTab stats={stats} color={'#eab308'} />}
+                    {activeTab === 'poi' && <PoiTab stats={stats} color={'#3b82f6'} />}
                 </div>
             </div>
         </CampModalLayout>
@@ -219,33 +219,126 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
 const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
     const clues = stats.cluesFound || [];
 
+    // All possible clues mapped by sector.
+    const allClues = {
+        1: ['s1_collectible_1', 's1_collectible_2'],
+        2: ['s2_collectible_1', 's2_collectible_2'],
+        3: ['s3_collectible_1', 's3_collectible_2'],
+        4: ['s4_collectible_1', 's4_collectible_2'],
+        5: []
+    };
+
     return (
-        <div className="space-y-4">
-            {clues.length === 0 && (
-                <div className="text-center py-20 text-gray-500 font-mono uppercase tracking-widest">No intel gathered.</div>
-            )}
-            {clues.map((clueId, idx) => (
-                <div key={idx} className="bg-black/40 border-l-4 p-4 hover:bg-black/60 transition-colors" style={{ borderColor: color }}>
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-lg font-bold uppercase tracking-wider text-white">Intel Fragment #{idx + 1}</h3>
-                        <span className="text-xs font-mono text-gray-600">ID: {clueId}</span>
-                    </div>
-                    <p className="text-sm text-gray-400 font-mono">
-                        [ Decrypted Data Segment {idx + 1}-{clueId.substring(0, 4)}... ]
-                    </p>
-                </div>
-            ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {Object.entries(allClues).map(([sectorStr, sectorClues]) => {
+                const sectorId = parseInt(sectorStr);
+                if (sectorClues.length === 0) return null;
+
+                return sectorClues.map((clueId) => {
+                    const isFound = clues.includes(clueId);
+
+                    return (
+                        <Card key={clueId} isLocked={!isFound} color={color}>
+                            <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-2">
+                                <div className="flex flex-col">
+                                    <h3 className="text-xl font-black uppercase tracking-tighter" style={{ color: isFound ? color : '#4b5563' }}>
+                                        {isFound ? t(`clues.${clueId}_title`) : 'Unknown Intel'}
+                                    </h3>
+                                    <span className="text-xs text-gray-500 uppercase tracking-widest">{t(SECTOR_THEMES[sectorId - 1]?.name || 'Unknown Sector')}</span>
+                                </div>
+                            </div>
+                            {isFound ? (
+                                <p className="text-sm text-gray-300 italic leading-relaxed border-l-2 pl-3" style={{ borderColor: color }}>
+                                    {t(`clues.${clueId}_description`)}
+                                </p>
+                            ) : (
+                                <div className="h-24 flex items-center justify-center text-gray-600 font-mono text-xs uppercase tracking-widest text-center px-4">
+                                    [ ENCRYPTED DATA CORRUPTION ]
+                                </div>
+                            )}
+                        </Card>
+                    );
+                });
+            })}
         </div>
     );
 };
 
-const PoiTab: React.FC<{ stats: PlayerStats }> = ({ stats }) => (
-    <div className="flex flex-col items-center justify-center h-full opacity-50">
-        <div className="text-6xl mb-4 grayscale opacity-20">📍</div>
-        <h3 className="text-xl font-bold text-gray-500 uppercase tracking-widest mb-2">{t('ui.wip')}</h3>
-        <p className="text-gray-600 font-mono">Travel logs empty or unreadable.</p>
-    </div>
-);
+// --- POI TAB ---
+const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
+    const visited = stats.visitedPOIs || [];
+
+    // All POIs in the game, segmented by sector
+    const allPOIs = {
+        1: [
+            's1_poi_building_on_fire',
+            's1_poi_church',
+            's1_poi_cafe',
+            's1_poi_pizzeria',
+            's1_poi_grocery',
+            's1_poi_gym',
+            's1_poi_train_yard'
+        ],
+        2: [
+            's2_poi_campfire',
+            's2_poi_train_tunnel',
+            's2_poi_cave_entrance',
+            's2_poi_mountain_vault'
+        ],
+        3: [
+            's3_poi_farm',
+            's3_poi_farmhouse',
+            's3_poi_barn',
+            's3_poi_mast'
+        ],
+        4: [
+            's4_poi_shed',
+            's4_poi_scrapyard'
+        ],
+        5: [
+            's5_poi_villa'
+        ]
+    };
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {Object.entries(allPOIs).map(([sectorStr, sectorPOIs]) => {
+                const sectorId = parseInt(sectorStr);
+                if (sectorPOIs.length === 0) return null;
+
+                return sectorPOIs.map((poiId) => {
+                    const isFound = visited.includes(poiId);
+
+                    return (
+                        <Card key={poiId} isLocked={!isFound} color={color}>
+                            <div className="flex justify-between items-start mb-4 border-b border-gray-800 pb-2">
+                                <div className="flex flex-col w-full">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xl font-black uppercase tracking-tighter" style={{ color: isFound ? color : '#4b5563' }}>
+                                            {isFound ? t(`poi.${poiId}_title`) : 'Undiscovered Location'}
+                                        </h3>
+                                        {isFound && <span className="text-xs bg-yellow-900/40 text-yellow-400 px-2 py-0.5 rounded border border-yellow-900 font-bold tracking-wider">VISITED</span>}
+                                    </div>
+                                    <span className="text-xs text-gray-500 uppercase tracking-widest mt-1">{t(SECTOR_THEMES[sectorId - 1]?.name || 'Unknown Sector')}</span>
+                                </div>
+                            </div>
+                            {isFound ? (
+                                <p className="text-sm text-gray-300 italic leading-relaxed border-l-2 pl-3" style={{ borderColor: color }}>
+                                    {t(`poi.${poiId}_story`)}
+                                </p>
+                            ) : (
+                                <div className="h-24 flex flex-col items-center justify-center text-gray-600 font-mono text-xs uppercase tracking-widest">
+                                    <span className="mb-2 text-2xl grayscale opacity-20">📍</span>
+                                    [ CLASSIFIED COORDINATES ]
+                                </div>
+                            )}
+                        </Card>
+                    );
+                });
+            })}
+        </div>
+    );
+};
 
 const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string }> = ({ children, isLocked, color = '#6b7280' }) => (
     <div className={`p-6 border-2 relative overflow-hidden transition-all bg-black/60 ${isLocked ? 'border-gray-800' : ''}`}

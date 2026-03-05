@@ -475,6 +475,52 @@ export const en = {
         s4_noise: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?",
         s4_shed: "The office building. It's the only place with a reinforced door. She has to be in there."
     },
+    poi: {
+        s1_poi_building_on_fire_title: "Burning Building",
+        s1_poi_building_on_fire_story: "The old campus building is engulfed in flames. Not sure if it was zombies or survivors that started it, but it's a grim beacon in the night.",
+        s1_poi_church_title: "Village Church",
+        s1_poi_church_story: "Even the house of God couldn't protect them. The doors are smashed open and the pews are stained with blood.",
+        s1_poi_cafe_title: "Local Café",
+        s1_poi_cafe_story: "We used to come here on Sundays. Now the windows are shattered and the smell of coffee has been replaced by rot.",
+        s1_poi_pizzeria_title: "Pizzeria",
+        s1_poi_pizzeria_story: "The local pizza place. The ovens are cold, but something else might be cooking in the dark.",
+        s1_poi_grocery_title: "Grocery Store",
+        s1_poi_grocery_story: "Completely looted. The shelves are bare, but someone might have left scrap or ammo behind in the panic.",
+        s1_poi_gym_title: "Fitness Center",
+        s1_poi_gym_story: "A place for building strength. Ironically, the strongest ones here now are the dead.",
+        s1_poi_train_yard_title: "Gånghester Station",
+        s1_poi_train_yard_story: "The old railway station. There was a massive explosion here, blocking the tunnel out of town.",
+
+        // Sector 2
+        s2_poi_campfire_title: "Abandoned Campfire",
+        s2_poi_campfire_story: "Someone was here recently. The embers are still warm. They must have left in a hurry.",
+        s2_poi_train_tunnel_title: "Blocked Tunnel",
+        s2_poi_train_tunnel_story: "The tunnel that connects the mountain. It's completely sealed with rubble and debris.",
+        s2_poi_cave_entrance_title: "Mountain Cave Entrance",
+        s2_poi_cave_entrance_story: "A dark maw leading into the earth. It smells of damp stone and stale air.",
+        s2_poi_mountain_vault_title: "The Mountain Vault",
+        s2_poi_mountain_vault_story: "An old Cold War shelter. The massive steel doors are closed tight. My youngest son is in there.",
+
+        // Sector 3
+        s3_poi_farm_title: "Egg Farm",
+        s3_poi_farm_story: "We used to buy our eggs here. Now the yard is crawling with the undead.",
+        s3_poi_farmhouse_title: "Burning Farmhouse",
+        s3_poi_farmhouse_story: "The main farmhouse is completely engulfed in flames. A grim beacon in the cold winter night.",
+        s3_poi_barn_title: "The Old Barn",
+        s3_poi_barn_story: "The barn is on fire. Any animals that were inside are long gone.",
+        s3_poi_mast_title: "Häglareds Mast",
+        s3_poi_mast_story: "The large communication tower. Esmeralda went up there to fix the signal.",
+
+        // Sector 4
+        s4_poi_shed_title: "Reinforced Shed",
+        s4_poi_shed_story: "A small office building with a reinforced door. Nathalie is trapped inside, surrounded by darkness.",
+        s4_poi_scrapyard_title: "The Scrapyard",
+        s4_poi_scrapyard_story: "A labyrinth of rusted metal and stacked cars. A death trap filled with lurking horrors.",
+
+        // Sector 5
+        s5_poi_villa_title: "Our Home",
+        s5_poi_villa_story: "This is where it all started. The front door is smashed, the car is burnt out, but we made a promise."
+    },
     dialogue: {
         // Dialogue: Sector 1
         "0_0": "LOKE!!",

@@ -185,7 +185,7 @@ export const MATERIALS = {
     bloodDecal: new THREE.MeshBasicMaterial({
         color: 0x660000,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.7,
         side: THREE.DoubleSide,
         depthWrite: false,
         depthTest: true,
@@ -195,7 +195,7 @@ export const MATERIALS = {
     bloodStainDecal: new THREE.MeshBasicMaterial({
         color: 0x440000,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.5,
         side: THREE.DoubleSide,
         depthWrite: false,
         depthTest: true,
@@ -205,7 +205,7 @@ export const MATERIALS = {
     scorchDecal: new THREE.MeshBasicMaterial({
         color: 0x111111,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.7,
         map: DIFFUSE.scorchAlpha,
         side: THREE.DoubleSide,
         depthWrite: false,
@@ -216,7 +216,7 @@ export const MATERIALS = {
     footprintDecal: new THREE.MeshBasicMaterial({
         color: 0x000000,
         transparent: true,
-        opacity: 0.8,
+        opacity: 0.7,
         map: DIFFUSE.footprint,
         side: THREE.DoubleSide,
         depthWrite: false,

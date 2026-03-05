@@ -465,6 +465,22 @@ export const sv = {
         s4_noise: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?",
         s4_shed: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne."
     },
+    poi: {
+        s1_poi_building_on_fire_title: "Brinnande Byggnad",
+        s1_poi_building_on_fire_story: "Den gamla SMU-gården står i lågor. Oklart om det var zombier eller överlevande som startade elden, men det är en dyster fyr i natten.",
+        s1_poi_church_title: "Byns Kyrka",
+        s1_poi_church_story: "Inte ens Guds hus kunde skydda dem. Dörrarna är uppbrutna och kyrkbänkarna är fläckade av blod.",
+        s1_poi_cafe_title: "Lokala Kaféet",
+        s1_poi_cafe_story: "Vi brukade komma hit på söndagar. Nu är fönstren krossade och doften av kaffe har ersatts av ruttet kött.",
+        s1_poi_pizzeria_title: "Pizzerian",
+        s1_poi_pizzeria_story: "Den lokala pizzerian. Ugnarna är kalla, men något annat kanske tillagas i mörkret.",
+        s1_poi_grocery_title: "Mataffären",
+        s1_poi_grocery_story: "Helt plundrad. Hyllorna gapar tomma, men någon kan ha lämnat skrot eller ammunition bakom sig i paniken.",
+        s1_poi_gym_title: "Gymmet",
+        s1_poi_gym_story: "En plats för att bygga styrka. Ironiskt nog är de starkaste här nu de döda.",
+        s1_poi_train_yard_title: "Gånghester Station",
+        s1_poi_train_yard_story: "Den gamla järnvägsstationen. Det skedde en massiv explosion här, vilket blockerar tunneln ut ur staden."
+    },
     // DON'T AUTO-TRANSLATE EXISTING ENTIRES IN 'dialogue', BUT CREATE NON-EXISTING ONES
     dialogue: {
         // Dialogue: Sector 1
