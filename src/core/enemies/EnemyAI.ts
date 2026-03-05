@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { Enemy, AIState, EnemyDeathState, EnemyEffectType } from '../../types/enemy';
-import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
+import { Enemy, AIState, EnemyEffectType } from '../../types/enemy';
+import { applyCollisionResolution } from '../world/CollisionResolution';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType, WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
@@ -316,7 +316,11 @@ export const EnemyAI = {
                 }
                 else {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
-                    if (e.type === 'BOMBER' && distSq < 12.0) { e.state = AIState.EXPLODING; e.explosionTimer = 1.5; return; }
+                    if (e.type === 'BOMBER' && distSq < 12.0) {
+                        e.state = AIState.EXPLODING;
+                        e.explosionTimer = 1.5;
+                        return;
+                    }
 
                     moveEntity(e, target, delta, e.speed, collisionGrid, _v6);
 
@@ -378,7 +382,6 @@ export const EnemyAI = {
                 const bounceHeight = 0.3 + progress * 0.2;
 
                 const sineVal = Math.abs(Math.sin(now * 0.001 * speed));
-
                 e.mesh.position.y = (e.mesh.userData.baseY || 0) + sineVal * bounceHeight;
 
                 const breatheScale = 1.0 + sineVal * 0.4;
@@ -388,15 +391,22 @@ export const EnemyAI = {
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
-                    e.indicatorRing.position.set(0, 0.1 - (sineVal * bounceHeight), 0);
 
-                    e.indicatorRing.scale.setScalar(12.0 + Math.sin(now * 0.01) * 1.0);
+                    // [VINTERDÖD FIX] Ringen är ett barn till zombien. Eftersom zombien studsar UPP 
+                    // i luften, måste vi flytta ringen NER exakt lika mycket lokalt så den slickar golvet.
+                    e.indicatorRing.position.set(0, -e.mesh.position.y + 0.05, 0);
+
+                    // Reversera zombiens 'breatheScale' så inte varningsringen svajar i storlek
+                    const targetRadius = 12.0 + Math.sin(now * 0.01) * 1.0;
+                    e.indicatorRing.scale.setScalar(targetRadius / breatheScale);
+
                     const flashSpeed = (1.6 - e.explosionTimer) * 30;
                     const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
 
                     if (e.indicatorRing.material) {
                         const mat = e.indicatorRing.material as any;
-                        mat.opacity = 0.4 + (1.0 - (e.explosionTimer / 1.5)) * 0.6;
+                        // Vi har nu garanterat att mat är clone:ad och transparent
+                        mat.opacity = 0.3 + (1.0 - (e.explosionTimer / 1.5)) * 0.6;
                         mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
                     }
                 }

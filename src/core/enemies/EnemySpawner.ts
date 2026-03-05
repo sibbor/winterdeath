@@ -48,12 +48,16 @@ export const EnemySpawner = {
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
 
-        // Special logic for specific types (e.g., Bomber rings)
+        // [VINTERDÖD FIX] Ringen ska ALLTID vara dold när zombien spawnar.
+        // Den aktiveras enbart inuti AIState.EXPLODING i EnemyAI.
         if (e.indicatorRing) {
-            e.indicatorRing.visible = (typeKey === 'BOMBER');
+            e.indicatorRing.visible = false;
         } else if (typeKey === 'BOMBER' && e.mesh) {
-            // Failsafe: Add ring if it doesn't exist on this recycled mesh
-            const ring = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+            // Unikt, transparent material för varje ring för att slippa färg-krockar
+            const ringMat = MATERIALS.blastRadius.clone() as THREE.MeshBasicMaterial;
+            ringMat.transparent = true;
+
+            const ring = new THREE.Mesh(GEOMETRY.blastRadius, ringMat);
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(0, 0.1, 0);
             ring.scale.setScalar(5.0);
@@ -63,10 +67,7 @@ export const EnemySpawner = {
         }
     },
 
-    /**
-     * Spawns a brand new enemy unit. 
-     * Note: EnemyManager calls this only when the pool is empty.
-     */
+    /** Spawn a new enemy from the pool. */
     spawn: (
         scene: THREE.Scene,
         playerPos: THREE.Vector3,
@@ -75,10 +76,8 @@ export const EnemySpawner = {
         bossSpawned: boolean = false,
         enemyCount: number = 0
     ): Enemy | null => {
-        // 1. PERFORMANCE CAP
         if (enemyCount >= 100) return null;
 
-        // 2. COORDINATE CALCULATION
         let x: number, z: number;
         if (forcedPos) {
             x = forcedPos.x + (Math.random() - 0.5) * 4;
@@ -90,19 +89,16 @@ export const EnemySpawner = {
             z = playerPos.z + Math.sin(angle) * dist;
         }
 
-        // 3. TYPE SELECTION
         const typeKey = forcedType?.toUpperCase() || EnemySpawner.determineType(enemyCount, bossSpawned);
         const typeData = (ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER;
 
-        // 4. VISUAL INITIALIZATION
         const g = ModelFactory.createZombie(typeKey, typeData);
         g.position.set(x, 0, z);
         g.visible = true;
 
-        const ashPile = g.getObjectByName('AshPile'); // New linkage
+        const ashPile = g.getObjectByName('AshPile');
         scene.add(g);
 
-        // 5. ENTITY CONSTRUCTION
         const enemy: Enemy = {
             id: `z_${Date.now()}_${Math.random()}`,
             mesh: g,
@@ -161,17 +157,17 @@ export const EnemySpawner = {
             lastKnockback: 0
         };
 
-        // Apply scale based on construction stats
         const s = enemy.originalScale;
         const w = enemy.widthScale;
         g.scale.set(s * w, s, s * w);
-
-        // Link for collision lookups
         g.userData.entity = enemy;
 
-        // 6. SPECIAL TYPE ADD-ONS
         if (typeKey === 'BOMBER') {
-            const ring = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+            // [VINTERDÖD FIX] Klona materialet så ringarna inte synkar färg/opacitet med varandra
+            const ringMat = MATERIALS.blastRadius.clone() as THREE.MeshBasicMaterial;
+            ringMat.transparent = true;
+
+            const ring = new THREE.Mesh(GEOMETRY.blastRadius, ringMat);
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(0, 0.1, 0);
             ring.scale.setScalar(5.0);
