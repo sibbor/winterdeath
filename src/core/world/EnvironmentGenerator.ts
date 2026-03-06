@@ -538,8 +538,10 @@ export const EnvironmentGenerator = {
 
         const COLORS = {
             SNOW: new THREE.Color(0xffffff),
-            ROCK_LIGHT: new THREE.Color(0x888899),
-            ROCK_DARK: new THREE.Color(0x444455),
+            // Light faces: near-white so the stone texture shows through at full brightness
+            ROCK_LIGHT: new THREE.Color(0xddddee),
+            // Dark faces: medium gray — still darker, but not so dark the texture disappears
+            ROCK_DARK: new THREE.Color(0x888899),
         };
 
         for (let i = 0; i < count; i += 3) {
@@ -637,8 +639,10 @@ export const EnvironmentGenerator = {
         const normal = new THREE.Vector3();
 
         const COLORS = {
-            ROCK_LIGHT: new THREE.Color(0x888899),
-            ROCK_DARK: new THREE.Color(0x444455),
+            // Light faces: near-white so texture reads clearly
+            ROCK_LIGHT: new THREE.Color(0xddddee),
+            // Dark faces: medium gray for shadowed faces
+            ROCK_DARK: new THREE.Color(0x888899),
         };
 
         for (let i = 0; i < count; i += 3) {

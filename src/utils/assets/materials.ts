@@ -128,12 +128,26 @@ export const MATERIALS = {
         flatShading: true
     })),
 
-    mountain: new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        flatShading: true,
-        roughness: 0.9,
-        side: THREE.DoubleSide
-    }),
+    mountain: (() => {
+        // Clone so the repeat settings don't affect MATERIALS.stone
+        const mountainMap = DIFFUSE.stone.clone();
+        mountainMap.wrapS = mountainMap.wrapT = THREE.RepeatWrapping;
+        mountainMap.repeat.set(12, 12); // Large rock face tiling
+        mountainMap.needsUpdate = true;
+        const mountainBump = TEXTURES.stone_bump.clone();
+        mountainBump.wrapS = mountainBump.wrapT = THREE.RepeatWrapping;
+        mountainBump.repeat.set(12, 12);
+        mountainBump.needsUpdate = true;
+        return new THREE.MeshStandardMaterial({
+            vertexColors: true,   // Vertex colors tint/modulate the texture
+            map: mountainMap,
+            bumpMap: mountainBump,
+            bumpScale: 0.3,
+            flatShading: true,
+            roughness: 0.95,
+            side: THREE.DoubleSide
+        });
+    })(),
     stone: new THREE.MeshStandardMaterial({
         color: 0x888888,
         map: DIFFUSE.stone,
