@@ -22,6 +22,8 @@ const _animState = {
     isIdleLong: false,
     isWading: false,
     isSwimming: false,
+    isDead: false,
+    deathStartTime: 0,
     seed: 0
 };
 
@@ -54,6 +56,28 @@ export class FamilySystem implements System {
     update(_session: GameSessionLogic, delta: number, now: number) {
         const members = this.activeFamilyMembers.current;
         const isCinematicActive = this.isCinematicRef.current.active;
+        const state = _session.state;
+
+        // --- Mirror player speed for the follow movement ---
+        // Base speed matches PlayerMovementSystem: 15 * stats.speed
+        // (stats is not typed on RuntimeState but is set dynamically via the armory station)
+        const speedMultiplier = (_session.state as any).stats?.speed ?? 1.0;
+        let followSpeed = 15 * speedMultiplier;
+
+        // Apply the same modifiers as the player
+        if (state.isSwimming) {
+            followSpeed *= 0.35;
+        } else if (state.isWading) {
+            followSpeed *= 0.6;
+        } else if (state.isRushing) {
+            followSpeed *= 1.75;
+        } else if (state.isRolling) {
+            followSpeed *= 2.5;
+        }
+
+        // Family members slightly trail behind — apply a small lag so they
+        // feel like they're catching up, not teleporting. Clamp to 1.2× player speed max.
+        const maxFollowSpeed = followSpeed * 1.25;
 
         for (let i = 0; i < members.length; i++) {
             const familyMember = members[i];
@@ -76,10 +100,12 @@ export class FamilySystem implements System {
 
             // --- 2. Following Logic ---
             let fmIsMoving = false;
+            let fmIsRushing = false;
 
             if (familyMember.following && !isCinematicActive) {
                 _v1.copy(this.playerGroup.position);
 
+                // Stagger positions so they don't all overlap
                 if (i > 0) {
                     const sign = i % 2 === 0 ? 1 : -1;
                     const dist = 2.0 + i * 1.2;
@@ -90,10 +116,17 @@ export class FamilySystem implements System {
 
                 if (distSq > 4.0) {
                     fmIsMoving = true;
+                    // If they're far behind, let them move faster to catch up
+                    const catchUpBoost = distSq > 25.0 ? 1.4 : 1.0;
+                    const actualSpeed = Math.min(maxFollowSpeed, followSpeed * catchUpBoost);
+
                     _v3.subVectors(_v1, fm.position).normalize();
-                    fm.position.addScaledVector(_v3, 13.3 * delta);
+                    fm.position.addScaledVector(_v3, actualSpeed * delta);
                     fm.lookAt(this.playerGroup.position);
                     userData.lastMoveTime = now;
+
+                    // Mirror rush animation if player is rushing and family is moving fast
+                    fmIsRushing = state.isRushing || state.isRolling;
                 }
             }
 
@@ -116,6 +149,9 @@ export class FamilySystem implements System {
 
                 _animState.seed = familyMember.seed;
                 _animState.isMoving = fmIsMoving;
+                _animState.isRushing = fmIsRushing;
+                _animState.isRolling = false; // Family members don't dodge-roll
+                _animState.staminaRatio = state.stamina / Math.max(1, state.maxStamina);
                 _animState.isIdleLong = isIdleLong;
 
                 const engine = WinterEngine.getInstance();
