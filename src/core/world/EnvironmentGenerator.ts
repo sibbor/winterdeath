@@ -4,8 +4,8 @@ import { MATERIALS } from '../../utils/assets/materials';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from './SectorGenerator';
 
-// [VINTERDÖD] Pre-allokerade matte-objekt för brutal matris-komposition.
-// Blixtsnabbt jämfört med att använda Object3D.updateMatrix().
+// Pre-allocated math objects for fast matrix composition.
+// Blazing fast compared to using Object3D.updateMatrix().
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
@@ -40,7 +40,7 @@ const bakeGeo = (geo: THREE.BufferGeometry, pos: THREE.Vector3, rot: THREE.Euler
     return geo;
 };
 
-// [VINTERDÖD] Zero-GC polygon check. Tar in råa nummer istället för att kräva en "new Vector3".
+// Zero-GC polygon check. Takes raw numbers instead of requiring a "new Vector3".
 const isPointInPolygon = (px: number, pz: number, polygon: THREE.Vector3[]) => {
     let inside = false;
     const len = polygon.length;
@@ -55,7 +55,7 @@ const isPointInPolygon = (px: number, pz: number, polygon: THREE.Vector3[]) => {
 };
 
 // --- PROTOTYPE GENERATORS ---
-// (Prototyperna genereras bara en gång vid uppstart, så här är allokeringar helt OK)
+// (Prototypes are only generated once at startup, so allocations here are fine)
 
 const generatePinePrototype = (seed: number, hasSnow: boolean = false): TreePrototype => {
     const trunkGeos: THREE.BufferGeometry[] = [];
@@ -311,21 +311,17 @@ const generateBirchPrototype = (seed: number): TreePrototype => {
 export const EnvironmentGenerator = {
     createWaterLily: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        // Lily pad geometry (slightly curved cylinder/disc)
         const padGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
         const pad = new THREE.Mesh(padGeo, MATERIALS.waterLily);
         pad.scale.set(1, 1, 0.8);
         group.add(pad);
 
-        // Hanging Stem Geometry
         const stemLength = 1.5;
         const stemGeo = new THREE.CylinderGeometry(0.03, 0.03, stemLength, 4);
         stemGeo.translate(0, -stemLength / 2, 0);
-        // Use seaweed material so it gets the underwater sway shader
         const stem = new THREE.Mesh(stemGeo, MATERIALS.seaweed);
         group.add(stem);
 
-        // Flower
         if (Math.random() > 0.6) {
             const flowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
             const flower = new THREE.Mesh(flowerGeo, MATERIALS.waterLilyFlower);
@@ -336,32 +332,17 @@ export const EnvironmentGenerator = {
 
         group.scale.setScalar(scale);
         group.userData.material = 'PLANT';
-        group.userData.isBall = true; // Use this to allow water pushing logic
-        group.userData.mass = 0.5; // Very light
-        group.userData.floatOffset = 0.06; // Keep it visibly floating on top
-
-        // Add stem connecting lily pad to the procedural lake bed
-        /*
-        const stemLen = currentDepth + 0.5; // Slightly longer for wave bobbing
-        const stemGeo = new THREE.CylinderGeometry(0.04, 0.04, stemLen, 4);
-        stemGeo.translate(0, -stemLen / 2, 0); // Origin at top
-        const stemMat = MATERIALS.seaweed;
-        const stem = new THREE.Mesh(stemGeo, stemMat);
-        stem.userData.material = 'LEAVES';
-        group.add(stem); // Attach to lily so it bobs with it!
-        */
+        group.userData.isBall = true;
+        group.userData.mass = 0.5;
+        group.userData.floatOffset = 0.06;
 
         return group;
     },
 
     createSeaweed: (width: number = 1.0, height: number = 2.0) => {
         const group = new THREE.Group();
-
-        // [VINTERDÖD] Seaweed geo - more segments for better bending
         const geo = new THREE.PlaneGeometry(0.3 * width, height * 1.5, 2, 4);
         geo.translate(0, height * 0.75, 0);
-
-        // Apply wind patch so seaweed sways like grass/vines
         const mat = MATERIALS.seaweed;
 
         const strands = 3 + Math.floor(Math.random() * 3);
@@ -369,14 +350,12 @@ export const EnvironmentGenerator = {
             const mesh = new THREE.Mesh(geo, mat);
             mesh.rotation.y = Math.random() * Math.PI;
             mesh.position.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
-            // Different phase offsets for wind
             mesh.userData.windPhaseX = Math.random() * Math.PI * 2;
             mesh.userData.windPhaseZ = Math.random() * Math.PI * 2;
             group.add(mesh);
         }
 
         group.userData.material = 'LEAVES';
-        // Add slightly wider non-visible collider
         group.userData.size = new THREE.Vector3(width * 0.8, height * 1.5, width * 0.8);
         return group;
     },
@@ -397,40 +376,54 @@ export const EnvironmentGenerator = {
         return EnvironmentGenerator.initNaturePrototypes(yieldToMain);
     },
 
-    createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
+    // NEW: Fully dynamic mountain generation supporting custom depths, heights, and embedded rotated caves!
+    createMountain: (ctx: SectorContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
         if (!points || points.length < 2) return;
 
         const geometries: THREE.BufferGeometry[] = [];
         const curve = new THREE.CatmullRomCurve3(points);
         const length = curve.getLength();
 
-        // One block every two meters along the line to build a completely solid wall
+        // Base resolution of the mountain curve
         const steps = Math.floor(length / 2.0);
 
-        const openingPos = new THREE.Vector3();
-        if (opening) opening.getWorldPosition(openingPos);
+        // Dynamically calculate how many outward layers we need based on the depth parameter
+        const numLayers = Math.max(1, Math.ceil(depth / 6));
+        const layerThickness = depth / numLayers;
 
-        // The clearance radius around the cave opening
-        const caveClearanceRadiusSq = 16 * 16;
+        // Auto-generate and orient the cave opening if requested
+        let openingPos = new THREE.Vector3();
+        let openingDir = new THREE.Vector3(0, 0, 1);
 
-        // Deterministic pseudo-random (Zero-GC) so the mountain always looks the same
+        if (caveConfig) {
+            // Tunnel punches all the way through the depth
+            const opening = EnvironmentGenerator.createMountainOpening(depth + 5);
+            opening.position.copy(caveConfig.position);
+            openingPos.copy(caveConfig.position);
+
+            if (caveConfig.rotation !== undefined) {
+                opening.rotation.y = caveConfig.rotation;
+                openingDir.set(Math.sin(caveConfig.rotation), 0, Math.cos(caveConfig.rotation)).normalize();
+            }
+            ctx.scene.add(opening);
+        }
+
+        // Deterministic pseudo-random (Zero-GC)
         const hash = (x: number) => {
             let n = Math.sin(x * 12.9898) * 43758.5453;
             return n - Math.floor(n);
         };
 
-        // Added 'isPortal' flag so our manual portal blocks bypass the aggressive deletion
         const addRockBlock = (pos: THREE.Vector3, scale: THREE.Vector3, rot: THREE.Euler, type: 'dodeca' | 'icosa' = 'dodeca', isPortal: boolean = false) => {
-            if (opening && !isPortal) {
-                const dx = pos.x - openingPos.x;
-                const dz = pos.z - openingPos.z;
+            if (caveConfig && !isPortal) {
+                // Clear an elongated capsule space for the tunnel through the mountain
+                const tunnelCenter = openingPos.clone().add(openingDir.clone().multiplyScalar(depth * 0.4));
+                const distSq = pos.distanceToSquared(tunnelCenter);
+                const maxRadius = Math.max(scale.x, scale.z);
+                const safeDist = (depth * 0.4) + maxRadius + 5; // Generous clearing for the tunnel
 
-                // Account for the physical size of the rock to prevent it bleeding into cave rooms
-                const rockRadius = Math.max(scale.x, scale.z);
-                const requiredClearance = 20 + rockRadius;
-
-                if ((dx * dx + dz * dz) < (requiredClearance * requiredClearance)) {
-                    return; // Delete any procedural rock that gets too close to the interior
+                if (distSq < safeDist * safeDist) {
+                    return; // Delete procedural rock that bleeds into the tunnel
                 }
             }
 
@@ -442,83 +435,63 @@ export const EnvironmentGenerator = {
             geometries.push(geo);
         };
 
+        // Procedural rock generation
         for (let i = 0; i <= steps; i++) {
             const t = i / steps;
             const pt = curve.getPointAt(t);
             const tangent = curve.getTangentAt(t).normalize();
             const inwardDir = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
 
-            // 1. THE SHIELD WALL (Closest to the line)
-            // Forms the playable boundary. Kept low to not block the camera.
-            if (i % 2 === 0) {
-                const scale = new THREE.Vector3(
-                    4 + hash(i) * 2,
-                    6 + hash(i + 1) * 4,  // Max Y scale = 10
-                    4 + hash(i + 2) * 2
-                );
+            for (let layer = 0; layer < numLayers; layer++) {
+                // Sparsity: Keep the front wall solid, but spread out the background layers to save polygons
+                if (layer > 0 && i % (layer + 1) !== 0) continue;
+
+                // Scale height up smoothly from the front face (40% height) to the back (100% height)
+                const layerHeightFactor = numLayers === 1 ? 1 : layer / (numLayers - 1);
+                const currentHeight = height * (0.4 + 0.6 * layerHeightFactor);
+
+                const scaleX = 4 + hash(i + layer) * 4;
+                const scaleZ = 4 + hash(i + layer + 1) * 4;
+                const scaleY = currentHeight * (0.7 + 0.3 * hash(i + layer + 2));
+                const scale = new THREE.Vector3(scaleX, scaleY, scaleZ);
+
                 const maxRadius = Math.max(scale.x, scale.z);
-                const safeOffset = maxRadius + 0.5;
+                const safeOffset = (layer * layerThickness) + maxRadius * 0.5;
 
                 const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
-                pos.y = scale.y * 0.4;
+                pos.y = scale.y * 0.3; // Push deep into ground
 
-                addRockBlock(pos, scale, new THREE.Euler(hash(i), hash(i + 1) * Math.PI, hash(i + 2)));
-            }
+                const rot = new THREE.Euler(hash(i) * 0.4, hash(i + 1) * Math.PI, hash(i + 2) * 0.4);
 
-            // 2. THE MIDDLE LAYER (Adds thickness)
-            // Wider, but strictly capped in height to form a plateau.
-            if (i % 3 === 0) {
-                const scale = new THREE.Vector3(
-                    8 + hash(i + 3) * 4,
-                    8 + hash(i + 4) * 4, // Max Y scale = 12
-                    8 + hash(i + 5) * 4
-                );
-                const maxRadius = Math.max(scale.x, scale.z);
-                const safeOffset = 7.0 + maxRadius;
-
-                const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
-                pos.y = scale.y * 0.3; // Push deeper into the ground
-
-                addRockBlock(pos, scale, new THREE.Euler(hash(i + 3), hash(i + 4) * Math.PI, hash(i + 5)));
-            }
-
-            // 3. THE BACK FILLER (Replaced Peaks with wide Plateau blocks)
-            // By making these wide but low, we block the void without blocking the top-down camera.
-            if (i % 5 === 0) {
-                const scale = new THREE.Vector3(
-                    14 + hash(i + 6) * 6,
-                    8 + hash(i + 7) * 4, // Low height! Max 12. No more spikes blocking the view.
-                    14 + hash(i + 8) * 6
-                );
-                const maxRadius = Math.max(scale.x, scale.z);
-                // Reduce depth slightly so it doesn't reach the cave rooms behind the wall
-                const safeOffset = 12.0 + maxRadius;
-
-                const pos = pt.clone().add(inwardDir.clone().multiplyScalar(safeOffset));
-                pos.y = scale.y * 0.2;
-
-                // Using Dodecahedron instead of Icosahedron to keep the top flatter
-                const rot = new THREE.Euler(hash(i + 6) * 0.4, hash(i + 7) * Math.PI, hash(i + 8) * 0.4);
-                addRockBlock(pos, scale, rot, 'dodeca');
+                // Front looks sharper (icosa), back forms smooth plateaus (dodeca)
+                addRockBlock(pos, scale, rot, layer === 0 ? 'icosa' : 'dodeca');
             }
         }
 
         // --- SCULPT THE CAVE PORTAL MANUALLY ---
-        if (opening) {
-            // Base pillars (Kept shallow at Z = -2 so they don't block inner view)
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-10, 5, -2)), new THREE.Vector3(6, 10, 8), new THREE.Euler(0.1, 0.4, -0.1), 'dodeca', true);
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(10, 5, -2)), new THREE.Vector3(6, 10, 8), new THREE.Euler(-0.1, -0.4, 0.1), 'dodeca', true);
+        // Dynamically rotates the custom facade stones to match the caveConfig rotation
+        if (caveConfig) {
+            const placePortalRock = (localPos: THREE.Vector3, scale: THREE.Vector3, localRot: THREE.Euler) => {
+                const rotatedPos = localPos.clone();
+                if (caveConfig.rotation) rotatedPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), caveConfig.rotation);
+                const worldPos = openingPos.clone().add(rotatedPos);
+                const worldRot = new THREE.Euler(localRot.x, localRot.y + (caveConfig.rotation || 0), localRot.z);
+                addRockBlock(worldPos, scale, worldRot, 'dodeca', true);
+            };
 
-            // The arch inner roof (Lowered Y significantly so camera sees over it)
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-6, 10, -3)), new THREE.Vector3(6, 6, 8), new THREE.Euler(0.2, 0.2, -0.4), 'dodeca', true);
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(6, 10, -3)), new THREE.Vector3(6, 6, 8), new THREE.Euler(0.2, -0.2, 0.4), 'dodeca', true);
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 12, -3)), new THREE.Vector3(8, 6, 9), new THREE.Euler(0.1, 0, 0), 'dodeca', true);
+            // Base pillars
+            placePortalRock(new THREE.Vector3(-10, 5, -2), new THREE.Vector3(6, 10, 8), new THREE.Euler(0.1, 0.4, -0.1));
+            placePortalRock(new THREE.Vector3(10, 5, -2), new THREE.Vector3(6, 10, 8), new THREE.Euler(-0.1, -0.4, 0.1));
+
+            // The arch inner roof 
+            placePortalRock(new THREE.Vector3(-6, 10, -3), new THREE.Vector3(6, 6, 8), new THREE.Euler(0.2, 0.2, -0.4));
+            placePortalRock(new THREE.Vector3(6, 10, -3), new THREE.Vector3(6, 6, 8), new THREE.Euler(0.2, -0.2, 0.4));
+            placePortalRock(new THREE.Vector3(0, 12, -3), new THREE.Vector3(8, 6, 9), new THREE.Euler(0.1, 0, 0));
 
             // Filling/Forehead above the arch
-            // Kept shallow (Z = -4) and very low height to act as a front facade only
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(-6, 14, -4)), new THREE.Vector3(10, 6, 8), new THREE.Euler(-0.2, 0.3, -0.1), 'dodeca', true);
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(6, 14, -4)), new THREE.Vector3(10, 6, 8), new THREE.Euler(-0.1, -0.4, 0.2), 'dodeca', true);
-            addRockBlock(openingPos.clone().add(new THREE.Vector3(0, 16, -4)), new THREE.Vector3(12, 6, 8), new THREE.Euler(0, 0.1, 0), 'dodeca', true);
+            placePortalRock(new THREE.Vector3(-6, 14, -4), new THREE.Vector3(10, 6, 8), new THREE.Euler(-0.2, 0.3, -0.1));
+            placePortalRock(new THREE.Vector3(6, 14, -4), new THREE.Vector3(10, 6, 8), new THREE.Euler(-0.1, -0.4, 0.2));
+            placePortalRock(new THREE.Vector3(0, 16, -4), new THREE.Vector3(12, 6, 8), new THREE.Euler(0, 0.1, 0));
         }
 
         if (geometries.length === 0) return;
@@ -538,24 +511,22 @@ export const EnvironmentGenerator = {
 
         const COLORS = {
             SNOW: new THREE.Color(0xffffff),
-            // Light faces: near-white so the stone texture shows through at full brightness
             ROCK_LIGHT: new THREE.Color(0xddddee),
-            // Dark faces: medium gray — still darker, but not so dark the texture disappears
             ROCK_DARK: new THREE.Color(0x888899),
         };
 
         for (let i = 0; i < count; i += 3) {
-            const h = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
+            const hAvg = (finalPosAttr.getY(i) + finalPosAttr.getY(i + 1) + finalPosAttr.getY(i + 2)) / 3;
             normal.fromBufferAttribute(normalAttr, i);
             const upwardness = normal.dot(up);
 
             let r, g, b;
 
-            // Adjusted snow heights for the new low plateau (snow appears lower down now)
-            if ((upwardness > 0.65 && h > 6) || h > 12) {
-                r = COLORS.SNOW.r;
-                g = COLORS.SNOW.g;
-                b = COLORS.SNOW.b;
+            // Adjust snow threshold dynamically based on the passed height parameter
+            const snowThreshold = height * 0.6;
+
+            if ((upwardness > 0.65 && hAvg > snowThreshold / 2) || hAvg > snowThreshold) {
+                r = COLORS.SNOW.r; g = COLORS.SNOW.g; b = COLORS.SNOW.b;
             } else {
                 const isLight = (normal.x * 0.5 + normal.z * 0.8) > 0;
                 r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
@@ -565,9 +536,7 @@ export const EnvironmentGenerator = {
 
             for (let j = 0; j < 3; j++) {
                 const idx = (i + j) * 3;
-                colors[idx] = r;
-                colors[idx + 1] = g;
-                colors[idx + 2] = b;
+                colors[idx] = r; colors[idx + 1] = g; colors[idx + 2] = b;
             }
         }
 
@@ -579,12 +548,11 @@ export const EnvironmentGenerator = {
         ctx.scene.add(mountain);
     },
 
-    createMountainOpening: () => {
+    // NEW: Accept dynamic depth for the tunnel and frames
+    createMountainOpening: (tunnelDepth: number = 10) => {
         const caveOpeningGroup = new THREE.Group();
-        const tunnelDepth = 10;
 
-        // 1. SKAPA DEN UTHUGGNA STENTUNNELN
-        // Oregelbundna mått för att få en mer organisk/grottlik form
+        // 1. CREATE THE CARVED STONE TUNNEL
         const outW = 10;
         const inW = 6.5;
         const wallH = 6.5;
@@ -595,7 +563,7 @@ export const EnvironmentGenerator = {
 
         const portalShape = new THREE.Shape();
         portalShape.moveTo(-outW, 0);
-        portalShape.lineTo(-outW - 0.5, wallH); // Lite inbuktning
+        portalShape.lineTo(-outW - 0.5, wallH);
         portalShape.lineTo(-topW, peakH + 0.5);
         portalShape.lineTo(topW, peakH);
         portalShape.lineTo(outW + 0.8, wallH);
@@ -618,13 +586,11 @@ export const EnvironmentGenerator = {
 
         const portalGeo = portalGeoExtruded.toNonIndexed();
 
-        // Jitter: Skapa en ruffig, uthuggen yta inuti tunneln
+        // Jitter
         const posAttr = portalGeo.getAttribute('position');
         for (let i = 0; i < posAttr.count; i++) {
             const x = posAttr.getX(i);
             const y = posAttr.getY(i);
-
-            // Jittra bara insidan (hålet) för att bevara de raka ytterväggarna mot det stora berget
             if (Math.abs(x) < outW - 1.0 && y < peakH - 1.0) {
                 posAttr.setX(i, x + (Math.random() - 0.5) * 0.7);
                 posAttr.setY(i, y + (Math.random() - 0.5) * 0.7);
@@ -632,31 +598,25 @@ export const EnvironmentGenerator = {
         }
         portalGeo.computeVertexNormals();
 
-        // Färglägg tunneln exakt som berget för en sömlös övergång
         const count = portalGeo.getAttribute('position').count;
         const colors = new Float32Array(count * 3);
         const normalAttr = portalGeo.getAttribute('normal');
         const normal = new THREE.Vector3();
 
         const COLORS = {
-            // Light faces: near-white so texture reads clearly
             ROCK_LIGHT: new THREE.Color(0xddddee),
-            // Dark faces: medium gray for shadowed faces
             ROCK_DARK: new THREE.Color(0x888899),
         };
 
         for (let i = 0; i < count; i += 3) {
             normal.fromBufferAttribute(normalAttr, i);
-            // Samma belysningslogik som berget (Flat Shading look)
             const isLight = (normal.x * 0.5 + normal.z * 0.8) > 0;
             const r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
             const g = isLight ? COLORS.ROCK_LIGHT.g : COLORS.ROCK_DARK.g;
             const b = isLight ? COLORS.ROCK_LIGHT.b : COLORS.ROCK_DARK.b;
 
             for (let j = 0; j < 3; j++) {
-                colors[(i + j) * 3] = r;
-                colors[(i + j) * 3 + 1] = g;
-                colors[(i + j) * 3 + 2] = b;
+                colors[(i + j) * 3] = r; colors[(i + j) * 3 + 1] = g; colors[(i + j) * 3 + 2] = b;
             }
         }
         portalGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -666,24 +626,25 @@ export const EnvironmentGenerator = {
         portal.receiveShadow = true;
         caveOpeningGroup.add(portal);
 
-        // 2. TRÄBALKAR (Classic Mine Shaft)
+        // 2. WOODEN BEAMS (Classic Mine Shaft)
         const logRadius = 0.5;
         const postHeight = wallH - 0.5;
-        const framePositionsZ = [3.5, 0, -3.5]; // Placera tre ramar inuti tunneln
-
-        // Välj trämaterial (vi använder treeTrunk som ser ut som runda stockar)
         const woodMat = MATERIALS.treeTrunk || MATERIALS.deadWood;
 
+        // Dynamically place support frames along the entire depth of the tunnel!
+        const framePositionsZ: number[] = [];
+        for (let z = -tunnelDepth / 2 + 1.5; z <= tunnelDepth / 2 - 1.5; z += 3.5) {
+            framePositionsZ.push(z);
+        }
+
         framePositionsZ.forEach((fz) => {
-            // Vänster pelare
             const postL = new THREE.Mesh(new THREE.CylinderGeometry(logRadius, logRadius, postHeight, 6), woodMat);
             postL.position.set(-inW + 1.0, postHeight / 2, fz);
             postL.rotation.y = Math.random() * Math.PI;
-            postL.rotation.z = (Math.random() - 0.5) * 0.05; // Luta pyttelite för organisk känsla
+            postL.rotation.z = (Math.random() - 0.5) * 0.05;
             postL.castShadow = true;
             caveOpeningGroup.add(postL);
 
-            // Höger pelare
             const postR = new THREE.Mesh(new THREE.CylinderGeometry(logRadius, logRadius, postHeight, 6), woodMat);
             postR.position.set(inW - 1.0, postHeight / 2, fz);
             postR.rotation.y = Math.random() * Math.PI;
@@ -691,7 +652,6 @@ export const EnvironmentGenerator = {
             postR.castShadow = true;
             caveOpeningGroup.add(postR);
 
-            // Tvärbalk (Tak)
             const beamLen = (inW - 1.0) * 2 + 1.5;
             const topBeam = new THREE.Mesh(new THREE.CylinderGeometry(logRadius, logRadius, beamLen, 6), woodMat);
             topBeam.position.set(0, postHeight + logRadius - 0.2, fz);
@@ -700,7 +660,6 @@ export const EnvironmentGenerator = {
             topBeam.castShadow = true;
             caveOpeningGroup.add(topBeam);
 
-            // Diagonal-strävor (Klassiska gruv-hörn)
             const diagL = new THREE.Mesh(new THREE.CylinderGeometry(logRadius * 0.7, logRadius * 0.7, 2.5, 5), woodMat);
             diagL.position.set(-inW + 2.2, postHeight - 0.8, fz);
             diagL.rotation.z = -Math.PI / 4;
@@ -714,19 +673,13 @@ export const EnvironmentGenerator = {
             caveOpeningGroup.add(diagR);
         });
 
-        // Tvärgående takstockar som "håller upp" berget i taket
-        // Vi loopar över Z-axeln (tunnelns djup) och lägger stockarna längs X-axeln
+        // Transverse roof logs covering the entire tunnel length
         const plankLength = (inW - 1.2) * 2;
         for (let z = -tunnelDepth / 2 + 0.5; z <= tunnelDepth / 2 - 0.5; z += 1.2) {
             const plank = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, plankLength, 5), woodMat);
-            // Placeras strax ovanför de stora bärande ramarna
             plank.position.set(0, postHeight + logRadius * 2 - 0.2, z);
-
-            // Rotera 90 grader runt Z för att lägga dem tvärs över tunneln (X-axeln)
             plank.rotation.z = Math.PI / 2;
-            // Lite organisk vridning så de inte ligger onaturligt perfekt
             plank.rotation.x = (Math.random() - 0.5) * 0.2;
-
             plank.castShadow = true;
             caveOpeningGroup.add(plank);
         }
@@ -976,6 +929,41 @@ export const EnvironmentGenerator = {
         ctx.scene.add(mesh);
     },
 
+    addInstancedSunflowers: (ctx: SectorContext, matrices: THREE.Matrix4[]) => {
+        if (matrices.length === 0) return;
+
+        const count = matrices.length;
+
+        const stemGeo = new THREE.CylinderGeometry(0.05, 0.05, 3.0, 4);
+        stemGeo.translate(0, 1.5, 0);
+        const stemInstanced = new THREE.InstancedMesh(stemGeo, new THREE.MeshStandardMaterial({ color: 0x228B22 }), count);
+        stemInstanced.userData.windAffected = true;
+
+        const headGeo = new THREE.SphereGeometry(0.4, 8, 8);
+        headGeo.scale(1, 1, 0.2);
+        headGeo.translate(0, 3.0, 0.05);
+        const headInstanced = new THREE.InstancedMesh(headGeo, new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 }), count);
+        headInstanced.userData.windAffected = true;
+
+        const centerGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 8);
+        centerGeo.rotateX(Math.PI / 2);
+        centerGeo.translate(0, 3.0, 0.1);
+        const centerInstanced = new THREE.InstancedMesh(centerGeo, new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 }), count);
+        centerInstanced.userData.windAffected = true;
+
+        for (let i = 0; i < count; i++) {
+            stemInstanced.setMatrixAt(i, matrices[i]);
+            headInstanced.setMatrixAt(i, matrices[i]);
+            centerInstanced.setMatrixAt(i, matrices[i]);
+        }
+
+        stemInstanced.instanceMatrix.needsUpdate = true;
+        headInstanced.instanceMatrix.needsUpdate = true;
+        centerInstanced.instanceMatrix.needsUpdate = true;
+
+        ctx.scene.add(stemInstanced, headInstanced, centerInstanced);
+    },
+
     createForest: (ctx: SectorContext,
         region: { x: number, z: number, w: number, d: number } | THREE.Vector3[],
         countOrSpacing: number,
@@ -999,7 +987,6 @@ export const EnvironmentGenerator = {
             const leanX = (Math.random() - 0.5) * 0.1;
             const leanZ = (Math.random() - 0.5) * 0.1;
 
-            // [VINTERDÖD] Zero-GC matrisbyggande utan Object3D.
             _pos.set(x, 0, z);
             _euler.set(leanX, Math.random() * PI2, leanZ);
             _quat.setFromEuler(_euler);
@@ -1024,7 +1011,7 @@ export const EnvironmentGenerator = {
 
             SectorGenerator.addObstacle(ctx, {
                 position: new THREE.Vector3(x, 0, z),
-                quaternion: new THREE.Quaternion(), // Trädens colliders står alltid upprätt
+                quaternion: new THREE.Quaternion(),
                 collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
                 id: `tree_${i}`
             });
@@ -1041,7 +1028,6 @@ export const EnvironmentGenerator = {
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
         const polyLen = polygon.length;
 
-        // [VINTERDÖD] Bort med forEach!
         for (let i = 0; i < polyLen; i++) {
             const p = polygon[i];
             if (p.x < minX) minX = p.x;
@@ -1061,7 +1047,6 @@ export const EnvironmentGenerator = {
             const x = minX + Math.random() * width;
             const z = minZ + Math.random() * depth;
 
-            // [VINTERDÖD] Skicka nummer, inte ett nytt objekt.
             if (isPointInPolygon(x, z, polygon)) {
                 const scale = 0.8 + Math.random() * 0.6;
                 const leanX = (Math.random() - 0.5) * 0.1;
@@ -1175,7 +1160,9 @@ export const EnvironmentGenerator = {
 
     fillAreaWithFlowers: (ctx: SectorContext,
         region: { x: number, z: number, w: number, d: number } | THREE.Vector3[],
-        countOrDensity: number) => {
+        countOrDensity: number,
+        type: 'flower' | 'sunflower' = 'flower') => {
+
         let area: { x: number, z: number, w: number, d: number };
         let count = 0;
 
@@ -1216,7 +1203,11 @@ export const EnvironmentGenerator = {
             matrices.push(mat);
         }
 
-        EnvironmentGenerator.addInstancedGrass(ctx, matrices, true);
+        if (type === 'sunflower') {
+            EnvironmentGenerator.addInstancedSunflowers(ctx, matrices);
+        } else {
+            EnvironmentGenerator.addInstancedGrass(ctx, matrices, true);
+        }
     },
 
     fillAreaWithGrass: (ctx: SectorContext, region: { x: number, z: number, w: number, d: number } | THREE.Vector3[], density: number = 2.0) => {

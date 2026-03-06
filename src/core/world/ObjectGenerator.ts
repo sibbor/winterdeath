@@ -332,6 +332,42 @@ export const ObjectGenerator = {
         return group;
     },
 
+    createScarecrow(x: number, z: number) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+
+        // Wood material for post and arms
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+
+        // Vertical post
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.5), postMat);
+        post.position.y = 1.25;
+        group.add(post);
+
+        // Horizontal arms
+        const arms = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.8), postMat);
+        arms.rotation.z = Math.PI / 2;
+        arms.position.y = 1.8;
+        group.add(arms);
+
+        // Burlap sack head
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xeadbaf, roughness: 1.0 }));
+        head.position.y = 2.4;
+        group.add(head);
+
+        // Flannel/Shirt body
+        const shirt = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.0), new THREE.MeshStandardMaterial({ color: 0x6b8e23, roughness: 0.8 }));
+        shirt.position.y = 1.6;
+        group.add(shirt);
+
+        // Farmer hat
+        const hat = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.5), new THREE.MeshStandardMaterial({ color: 0x4a3c31, roughness: 1.0 }));
+        hat.position.y = 2.75;
+        group.add(hat);
+
+        return group;
+    },
+
     createBoat(): THREE.Mesh {
         // Lazy load & tint specifically for the boat hull
         if (!boatMat) {

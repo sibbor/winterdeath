@@ -320,6 +320,7 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createTerminal('ENV'));
                     addToWarmup(ObjectGenerator.createRubble(0, 0, 4));
                     addToWarmup(ObjectGenerator.createShelf());
+                    addToWarmup(ObjectGenerator.createScarecrow(0, 0)); // Sector 3
                 } catch (e) { console.warn('[AssetPreloader] Prop warmup failed', e); }
 
                 if (yieldToMain) await yieldToMain();
@@ -356,6 +357,16 @@ export const AssetPreloader = {
 
                 // AshRenderer needs InstancedMesh warmup for smooth fading
                 addInstancedWarmup(GEOMETRY.ashPile, MATERIALS.ash);
+
+                // Sunflowers (Sector 3) — inline materials created in addInstancedSunflowers.
+                // We must warm up each instanced mesh type separately.
+                const sunflowerStemMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+                const sunflowerHeadMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 });
+                const sunflowerCenterMat = new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 });
+                ownedMaterials.push(sunflowerStemMat, sunflowerHeadMat, sunflowerCenterMat);
+                addInstancedWarmup(GEOMETRY.stone, sunflowerStemMat);   // Dummy geo — shader only needs the material permutation
+                addInstancedWarmup(GEOMETRY.stone, sunflowerHeadMat);
+                addInstancedWarmup(GEOMETRY.stone, sunflowerCenterMat);
 
                 // Tree Prototypes (also triggers EnvironmentGenerator caching)
                 const treeTypes: ('PINE' | 'SPRUCE' | 'OAK' | 'DEAD' | 'BIRCH')[] = ['PINE', 'SPRUCE', 'OAK', 'DEAD', 'BIRCH'];

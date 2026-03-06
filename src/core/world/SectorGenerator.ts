@@ -203,7 +203,7 @@ export const SectorGenerator = {
         if (ctx.yield) await ctx.yield();
     },
 
-    // NEW Helper for quick lightweight box obstacles
+    // Helper for quick lightweight box obstacles
     spawnCollisionBox: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number = 0) => {
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
         SectorGenerator.addObstacle(ctx, {
@@ -223,7 +223,6 @@ export const SectorGenerator = {
         if (w < 10 || d < 10) return;
 
         const createWall = (x: number, z: number, sx: number, sz: number) => {
-            // Removed Dummy Mesh creation
             SectorGenerator.addObstacle(ctx, {
                 position: new THREE.Vector3(x, h / 2, z),
                 collider: {
@@ -469,14 +468,11 @@ export const SectorGenerator = {
 
         EffectManager.attachEffect(object, 'fire', finalOpts)
 
-        // [VINTERDÖD] Store reference to the light for direct removal later
         const effects = object.userData.effects;
         if (effects) {
             const lightEffect = effects.find((e: any) => e.type === 'light');
             if (lightEffect) {
                 // The actual light will be created by the LightingSystem in GameSession.tsx
-                // or similar, but we want to ensure we can find it.
-                // For now, we rely on the proximity check but we'll make it better.
             }
         }
 
@@ -596,6 +592,13 @@ export const SectorGenerator = {
         });
 
         return building;
+    },
+
+    createScarecrow(ctx: SectorContext, x: number, y: number) {
+        const scarecrow = ObjectGenerator.createScarecrow(x, y);
+
+        ctx.scene.add(scarecrow);
+        SectorGenerator.addObstacle(ctx, { mesh: scarecrow, collider: { type: 'sphere', radius: 0.5 } });
     },
 
     spawnVehicle: (ctx: SectorContext, x: number, z: number, rotation: number,
@@ -993,7 +996,7 @@ export const SectorGenerator = {
     spawnVehicleStack(ctx: SectorContext, x: number, z: number, rotation: number, stackIndex: number, addSnow?: boolean) {
         const maxJitter = 15;
         const posJitter = 0.25;
-        const toRad = (deg) => deg * (Math.PI / 180);
+        const toRad = (deg: number) => deg * (Math.PI / 180);
 
         const vehicleStack = new THREE.Group();
         vehicleStack.position.set(x, 0, z);
@@ -1247,6 +1250,13 @@ export const SectorGenerator = {
         await EnvironmentGenerator.fillWheatField(ctx, polygon, density);
     },
 
+    fillAreaWithFlowers: async (ctx: SectorContext, region: { x: number, z: number, w: number, d: number } | THREE.Vector3[], density: number = 2.0, type: 'flower' | 'sunflower' = 'flower') => {
+        if (ctx.debugMode && Array.isArray(region)) {
+            SectorGenerator.visualizePolygon(ctx, region, 0xff00ff);
+        }
+        await EnvironmentGenerator.fillAreaWithFlowers(ctx, region, density, type);
+    },
+
     createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
         if (ctx.debugMode) {
             SectorGenerator.visualizePath(ctx, polygon, 0xff0000);
@@ -1254,16 +1264,16 @@ export const SectorGenerator = {
         PathGenerator.createBoundry(ctx, polygon, name);
     },
 
-    // [VINTERDÖD] Facade methods pointing to EnvironmentGenerator
-    createMountain: (ctx: SectorContext, points: THREE.Vector3[], opening?: THREE.Group) => {
+    // Facade methods pointing to EnvironmentGenerator
+    createMountain: (ctx: SectorContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
         if (ctx.debugMode) {
             SectorGenerator.visualizePath(ctx, points, 0xffffff);
         }
-        EnvironmentGenerator.createMountain(ctx, points, opening);
+        EnvironmentGenerator.createMountain(ctx, points, depth, height, caveConfig);
     },
 
-    createMountainOpening: () => {
-        return EnvironmentGenerator.createMountainOpening();
+    createMountainOpening: (tunnelDepth: number = 10) => {
+        return EnvironmentGenerator.createMountainOpening(tunnelDepth);
     },
 
     createForest: (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {

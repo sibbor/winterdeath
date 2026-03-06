@@ -32,3 +32,4 @@ Thumbs.db
 # Build and test artifacts
 test-output.css
 coverage
+src/content/sectors/Sector3_backup.ts

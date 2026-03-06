@@ -228,33 +228,28 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                         <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
                         <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
                     </div>
-                    <div>
-                        <div className="">
-                            <div className="flex gap-4">
-                                <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
-                                    <span className="text-[10px] text-blue-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
+                    <div className="mt-3">
+                        <div className="flex gap-4">
+                            <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
+                                <span className="text-[10px] text-blue-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
+                                <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
+                                    {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                </span>
+                            </div>
+                            {!isMobileDevice && (
+                                <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
+                                    <span className="text-[10px] text-gray-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
                                     <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
-                                        {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                        {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
                                     </span>
                                 </div>
-                                {!isMobileDevice && (
-                                    <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
-                                        <span className="text-[10px] text-gray-400 font-black uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
-                                        <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
-                                            {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-mono italic">
-                                {isMobileDevice ? t('ui.long_press_to_teleport') : t('ui.click_to_teleport')}
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>
             }
         >
-            <div className="w-full relative bg-black/40 h-[60vh]">
+            <div className="w-full relative bg-black/40 flex-1 min-h-0">
                 <MapCanvas
                     bounds={bounds}
                     groupedEntities={groupedEntities}

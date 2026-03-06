@@ -235,11 +235,13 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(200, 0, -14)
         ];
 
-        const caveOpening = SectorGenerator.createMountainOpening();
-        caveOpening.position.x = LOCATIONS.POIS.CAVE_ENTRANCE.x;
-        caveOpening.position.z = LOCATIONS.POIS.CAVE_ENTRANCE.z - 2;
-        scene.add(caveOpening);
-        SectorGenerator.createMountain(ctx, mountainPoints, caveOpening);
+        SectorGenerator.createMountain(ctx, mountainPoints, 20, 20,
+            {
+                position: new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0,
+                    LOCATIONS.POIS.CAVE_ENTRANCE.z - 2),
+                rotation: 0
+            }
+        );
 
         // Train Tunnel
         const trainTunnel = ObjectGenerator.createTrainTunnel([
