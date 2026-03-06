@@ -56,11 +56,12 @@ export const CharacterModels = {
         );
         body.position.y = 1.0;
         body.castShadow = true;
-        body.userData = { isBody: true, baseY: 1.0, baseScale: 1.0 };
+        body.userData = { isBody: true, isPlayer: true, baseY: 1.0, baseScale: 1.0 };
         group.add(body);
 
         // Gun (Placerad lite till höger för att matcha hand)
         const gun = new THREE.Mesh(GEOMETRY.box, MATERIALS.gun);
+        gun.name = 'gun';
         gun.position.set(0.3, 0.4, 0.5); // Adjust Y relative to body origin (0 is center of 2.0h capsule)
         gun.scale.set(0.1, 0.4, 1);
         body.add(gun);

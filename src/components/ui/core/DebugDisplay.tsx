@@ -41,6 +41,10 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
     });
 
     const [fps, setFps] = useState(0);
+    const [consoleLogging, setConsoleLogging] = useState(() => {
+        const saved = localStorage.getItem('vinterdod_debug_console_logging');
+        return saved !== 'false'; // Default to true
+    });
 
     // Update FPS from PerformanceMonitor for consistency
     useEffect(() => {
@@ -49,6 +53,12 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
         }, 500); // 2Hz UI update is plenty for FPS
         return () => clearInterval(interval);
     }, []);
+
+    // Sync console logging state to PerformanceMonitor
+    useEffect(() => {
+        PerformanceMonitor.getInstance().consoleLoggingEnabled = consoleLogging;
+        localStorage.setItem('vinterdod_debug_console_logging', String(consoleLogging));
+    }, [consoleLogging]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
         if (!debugMode) return;
@@ -166,6 +176,18 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
                         </div>
                     </div>
                 )}
+
+                <div className="pt-2 border-t border-white/10 mt-2">
+                    <div
+                        onClick={(e) => { e.stopPropagation(); setConsoleLogging(!consoleLogging); }}
+                        className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
+                    >
+                        <span className="text-white/60">Console Logging</span>
+                        <span className={`font-bold ${consoleLogging ? 'text-green-400' : 'text-red-400'}`}>
+                            {consoleLogging ? 'ENABLED' : 'DISABLED'}
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
     );

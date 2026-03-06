@@ -17,9 +17,15 @@ const _white = new THREE.Color(0xffffff);
 const _flashColor = new THREE.Color();
 
 /**
- * EnemyAI System
- * Handles behavioral logic, mass-based physics, and context-sensitive death transitions.
+ * Helper to log state changes.
  */
+function logStateChange(e: Enemy, newState: AIState, reason?: string) {
+    if (e.state !== newState) {
+        const reasonStr = reason ? ` (${reason})` : '';
+        console.log(`[AI] ${e.type}_${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]}${reasonStr}`);
+    }
+}
+
 export const EnemyAI = {
     updateEnemy: (
         e: Enemy,
@@ -43,6 +49,7 @@ export const EnemyAI = {
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
         if (e.hp <= 0 && e.deathState === 'ALIVE') {
+            console.log(`[AI] ${e.type}_${e.id} triggered DEATH by ${e.lastDamageType}`);
             e.deathTimer = now;
 
             const baseScale = e.originalScale || 1.0;
@@ -134,12 +141,15 @@ export const EnemyAI = {
         // --- 4. STATUS EFFECTS ---
         handleStatusEffects(e, delta, now, callbacks);
 
-        // Flag for the final Y-update (breathing animation)
-        // If we are knocked back or ragdolling, we want physics to control Y!
         let isPhysicallyAirborne = false;
 
         // --- 5. MASS-BASED KNOCKBACK PHYSICS ---
         if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
+            if (!e.mesh.userData.wasKnockedBack) {
+                console.log(`[AI] ${e.type}_${e.id} knocked back`);
+                e.mesh.userData.wasKnockedBack = true;
+            }
+
             isPhysicallyAirborne = true;
             const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
             const moveInertia = delta / Math.max(0.5, mass);
@@ -154,10 +164,16 @@ export const EnemyAI = {
                 e.mesh.position.y = 0;
                 e.knockbackVel.set(0, 0, 0);
             }
+        } else {
+            e.mesh.userData.wasKnockedBack = false;
         }
 
         // --- 6. STUNS & RAGDOLLS (Early Returns) ---
         if (e.stunTimer && e.stunTimer > 0) {
+            if (!e.mesh.userData.wasStunned) {
+                console.log(`[AI] ${e.type}_${e.id} stunned for ${e.stunTimer.toFixed(2)}s`);
+                e.mesh.userData.wasStunned = true;
+            }
             e.stunTimer -= delta;
 
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
@@ -191,6 +207,7 @@ export const EnemyAI = {
             }
 
             if (e.stunTimer <= 0) {
+                logStateChange(e, AIState.CHASE, "recovered from stun");
                 e.state = AIState.CHASE;
                 e.mesh.userData.isRagdolling = false;
                 e.mesh.rotation.x = 0;
@@ -198,6 +215,8 @@ export const EnemyAI = {
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
             }
             return;
+        } else {
+            e.mesh.userData.wasStunned = false;
         }
 
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
@@ -209,22 +228,31 @@ export const EnemyAI = {
         const canSeePlayer = distSq < 900;
 
         _v6.set(0, 0, 0);
-        const separationRadiusSq = 1.0;
-        const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, 1.5);
 
-        let other: Enemy, odx: number, odz: number, odSq: number, od: number;
-        for (let i = 0; i < nearbyEnemies.length; i++) {
-            other = nearbyEnemies[i];
-            if (other === e || other.deathState !== 'ALIVE') continue;
+        // Mjuk linjär separation.
+        const separationRadius = 1.5;
+        const separationRadiusSq = separationRadius * separationRadius;
 
-            odx = e.mesh.position.x - other.mesh.position.x;
-            odz = e.mesh.position.z - other.mesh.position.z;
-            odSq = odx * odx + odz * odz;
+        if (e.state !== AIState.BITING) {
+            const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, separationRadius);
+            for (let i = 0; i < nearbyEnemies.length; i++) {
+                const other = nearbyEnemies[i];
+                if (other === e || other.deathState !== 'ALIVE') continue;
 
-            if (odSq < separationRadiusSq && odSq > 0.001) {
-                od = Math.sqrt(odSq);
-                _v6.x += (odx / od) / od;
-                _v6.z += (odz / od) / od;
+                const odx = e.mesh.position.x - other.mesh.position.x;
+                const odz = e.mesh.position.z - other.mesh.position.z;
+                const odSq = odx * odx + odz * odz;
+
+                if (odSq < separationRadiusSq && odSq > 0.001) {
+                    const od = Math.sqrt(odSq);
+                    const pushStrength = (separationRadius - od) / separationRadius;
+                    _v6.x += (odx / od) * pushStrength * 1.5;
+                    _v6.z += (odz / od) * pushStrength * 1.5;
+                }
+            }
+
+            if (_v6.lengthSq() > 9.0) {
+                _v6.normalize().multiplyScalar(3.0);
             }
         }
 
@@ -246,12 +274,15 @@ export const EnemyAI = {
             case AIState.IDLE:
                 e.idleTimer -= delta;
                 if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE, "saw player");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE, "heard noise");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.idleTimer <= 0) {
+                    logStateChange(e, AIState.WANDER, "idle timer expired");
                     e.state = AIState.WANDER;
                     const angle = Math.random() * Math.PI * 2;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
@@ -266,12 +297,15 @@ export const EnemyAI = {
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
                 if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE, "saw player while wandering");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE, "heard noise while wandering");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
+                    logStateChange(e, AIState.IDLE, "finished wandering");
                     e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0;
                 }
 
@@ -289,18 +323,21 @@ export const EnemyAI = {
                 }
 
                 if ((!canSeePlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
+                    logStateChange(e, AIState.SEARCH, "lost sight of player");
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
                 }
                 else {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
                     if (e.type === 'BOMBER' && distSq < 12.0) {
+                        logStateChange(e, AIState.EXPLODING, "in range for detonation");
                         e.state = AIState.EXPLODING;
                         e.explosionTimer = 1.5;
                         return;
                     }
 
                     if (playerIsDead) {
+                        logStateChange(e, AIState.SEARCH, "player is dead");
                         e.state = AIState.SEARCH;
                         e.searchTimer = 3.0;
                         return;
@@ -313,48 +350,59 @@ export const EnemyAI = {
                         e.lastStepTime = now;
                     }
 
-                    const attackRangeSq = e.type === 'TANK' ? 9.0 : 4.5;
+                    const attackRangeSq = e.type === 'TANK' ? 12.0 : 6.5;
                     if (distSq < attackRangeSq && e.attackCooldown <= 0) {
                         if (e.type === 'TANK') {
+                            logStateChange(e, AIState.BITING, "TANK_SMASH trigger");
                             e.attackCooldown = 3000;
                             callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
                         } else {
+                            logStateChange(e, AIState.BITING, "in range to bite");
                             e.state = AIState.BITING;
-                            e.grappleTimer = 2.0;
-                            e.attackCooldown = 2000;
-
-                            if (e.mesh) {
-                                e.mesh.userData.biteAngle = Math.atan2(e.mesh.position.x - playerPos.x, e.mesh.position.z - playerPos.z);
-                            }
+                            e.grappleTimer = 0.8; // FIX: Mycket snabbare bett (var 1.5s)
+                            e.attackCooldown = 1500;
+                            e.mesh.userData.hasBittenThisCycle = false;
                         }
                     }
                 }
                 break;
 
             case AIState.BITING:
-                e.grappleTimer -= delta * (shakeIntensity > 1.0 ? 6.0 : 1.0);
+                e.grappleTimer -= delta;
 
-                const biteAngle = e.mesh.userData.biteAngle || 0;
-                const grappleDist = 1.2;
-
-                e.mesh.position.x = playerPos.x + Math.sin(biteAngle) * grappleDist;
-                e.mesh.position.z = playerPos.z + Math.cos(biteAngle) * grappleDist;
+                // _v6 (separation från andra) är nu 0.0, den låser på dig.
+                if (e.grappleTimer > 0.4) {
+                    // Trycker sig framåt aggressivt
+                    if (distSq > 1.5) {
+                        moveEntity(e, playerPos, delta, e.speed * 3.0, collisionGrid, _v6);
+                    }
+                }
 
                 _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                 e.mesh.lookAt(_v5);
 
-                if (now % 500 < 30 && !playerIsDead) {
-                    callbacks.onPlayerHit(e.damage * 0.2, e, 'BITING');
-                    callbacks.playSound('impact_flesh');
+                // FIX: Kapseln lutar framåt (headbutt/hugg) för tydlig visuell varning!
+                if (e.grappleTimer > 0.4) {
+                    e.mesh.rotateX(-0.5);
+                }
+
+                // Dela ut skada mitt i hugget
+                if (e.grappleTimer <= 0.4 && !e.mesh.userData.hasBittenThisCycle) {
+                    if (distSq < 10.0 && !playerIsDead) {
+                        console.log(`[AI] ${e.type}_${e.id} successfully bit player for ${e.damage} dmg`);
+                        callbacks.onPlayerHit(e.damage, e, 'BITING');
+                        callbacks.playSound('impact_flesh');
+                    } else {
+                        console.log(`[AI] ${e.type}_${e.id} missed bite (distSq: ${distSq.toFixed(2)})`);
+                    }
+                    e.mesh.userData.hasBittenThisCycle = true;
                 }
 
                 if (e.grappleTimer <= 0 || playerIsDead) {
+                    logStateChange(e, AIState.CHASE, "finished biting");
                     e.state = AIState.CHASE;
-                    e.attackCooldown = 1000;
-
-                    _v1.subVectors(e.mesh.position, playerPos).normalize().multiplyScalar(2.5);
-                    if (!e.knockbackVel) e.knockbackVel = new THREE.Vector3();
-                    e.knockbackVel.copy(_v1);
+                    e.attackCooldown = 1000; // FIX: Reducerad cooldown, de blir mycket aggressivare!
+                    e.mesh.userData.hasBittenThisCycle = false;
                 }
                 break;
 
@@ -392,6 +440,7 @@ export const EnemyAI = {
                 }
 
                 if (e.explosionTimer <= 0) {
+                    console.log(`[AI] ${e.type}_${e.id} detontated!`);
                     if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
                         callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
                     }
@@ -413,12 +462,15 @@ export const EnemyAI = {
                 }
 
                 if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE, "found player while searching");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE, "heard noise while searching");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
+                    logStateChange(e, AIState.IDLE, "gave up search");
                     e.state = AIState.IDLE;
                 }
                 break;
@@ -450,7 +502,6 @@ export const EnemyAI = {
 
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
-        // FIX: Endast "andas" om fienden står på marken!
         if (!isPhysicallyAirborne && e.state !== AIState.EXPLODING) {
             if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
             e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;

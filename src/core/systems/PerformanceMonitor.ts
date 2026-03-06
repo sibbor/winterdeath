@@ -14,6 +14,7 @@ export class PerformanceMonitor {
     private timings: Record<string, number> = {};
     private startTimes: Record<string, number> = {};
     private _lastFrameTotal: number = 0;
+    private _consoleLoggingEnabled: boolean = true;
 
     // FPS Tracking
     private _fps: number = 0;
@@ -103,6 +104,14 @@ export class PerformanceMonitor {
         return this._fps;
     }
 
+    public get consoleLoggingEnabled(): boolean {
+        return this._consoleLoggingEnabled;
+    }
+
+    public set consoleLoggingEnabled(value: boolean) {
+        this._consoleLoggingEnabled = value;
+    }
+
     public getTimings(): Record<string, number> {
 
         return this.timings;
@@ -136,7 +145,9 @@ export class PerformanceMonitor {
                 formatted['⚠️ GC Event Possible'] = `Heap dropped by ${this.gcDroppedMB.toFixed(2)} MB between frames`;
             }
 
-            console.warn(`[${context}] Frame took ${totalTime.toFixed(2)}ms:`, formatted);
+            if (this._consoleLoggingEnabled) {
+                console.warn(`[${context}] Frame took ${totalTime.toFixed(2)}ms:`, formatted);
+            }
         }
     }
 }

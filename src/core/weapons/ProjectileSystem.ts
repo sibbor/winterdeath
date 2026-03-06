@@ -379,7 +379,6 @@ export const ProjectileSystem = {
 
                 const dot = direction.dot(_v1);
 
-                // FIX: Use pre-calculated cone angle instead of calling Math.cos every check
                 if (dot > FLAMETHROWER_CONE_ANGLE) {
                     e.isBurning = true;
                     e.lastDamageType = WeaponType.FLAMETHROWER;
@@ -532,10 +531,7 @@ export const ProjectileSystem = {
                 }
             }
 
-            // FIX: Framerate-independent particle spawning. 
-            // Yields roughly 360 particles/sec regardless of if screen is 60Hz or 144Hz.
             const targetFlameCount = 360 * delta;
-            // Handle fractional particles gracefully with probability
             let flameCount = Math.floor(targetFlameCount);
             if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
 
@@ -600,6 +596,12 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
     for (let i = 0; i < nearbyObs.length; i++) {
         const obs = nearbyObs[i];
+
+        // FIX 1: Ignorera spelarens egen collider! Annars sprängs skotten direkt i pipan.
+        if (Math.abs(obs.position.x - ctx.playerPos.x) < 0.5 && Math.abs(obs.position.z - ctx.playerPos.z) < 0.5) {
+            continue;
+        }
+
         _v5.set(obs.position.x, 0, obs.position.z);
         const rad = obs.radius || 2.0;
 

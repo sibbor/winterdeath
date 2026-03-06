@@ -214,9 +214,11 @@ export const Sector3: SectorDef = {
         });
 
         // ===== DENSE FOREST VEGETATION =====
-        const meadow = [new THREE.Vector3(-50, 0, -50), new THREE.Vector3(50, 0, -50), new THREE.Vector3(50, 0, 50), new THREE.Vector3(-50, 0, 50)];
-        await EnvironmentGenerator.fillAreaWithGrass(ctx, meadow, 2.8);
-        const flowers = [new THREE.Vector3(-30, 0, 180), new THREE.Vector3(0, 0, 180), new THREE.Vector3(0, 0, 210), new THREE.Vector3(-30, 0, 210)];
+        const flowers = [
+            new THREE.Vector3(-30, 0, 50),
+            new THREE.Vector3(0, 0, 50),
+            new THREE.Vector3(0, 0, 80),
+            new THREE.Vector3(-30, 0, 80)];
         await EnvironmentGenerator.fillAreaWithFlowers(ctx, flowers, 0.9);
         // ===== END =====
     },

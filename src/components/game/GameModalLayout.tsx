@@ -5,14 +5,15 @@ interface GameModalLayoutProps {
     title: string | React.ReactNode;
     children: React.ReactNode;
     footer?: React.ReactNode;
-    titleColorClass?: string; // e.g. text-red-600
-    maxWidthClass?: string; // e.g. max-w-4xl
+    titleColorClass?: string;
+    maxWidthClass?: string;
     transparent?: boolean;
-    blurClass?: string; // e.g. backdrop-blur-xl
+    blurClass?: string;
     isMobile?: boolean;
-    onClose?: () => void; // Added for ESC handling
+    onClose?: () => void;
+    onConfirm?: () => void; // Called when ENTER is pressed
     showCloseButton?: boolean;
-    heightClass?: string; // e.g. h-[80vh]
+    heightClass?: string;
 }
 
 import { soundManager } from '../../utils/sound';
@@ -29,6 +30,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     isMobile = false,
     transparent,
     onClose,
+    onConfirm,
     showCloseButton = true
 }) => {
     const borderColorClass = titleColorClass.replace('text-', 'border-').replace('white', 'gray-800'); // Simple derivation
@@ -37,18 +39,22 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
         // FORCE cursor capability
         if (document.pointerLockElement) document.exitPointerLock();
 
-        const handleEsc = (e: KeyboardEvent) => {
+        const handleKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && onClose) {
                 e.stopPropagation();
                 soundManager.playUiClick();
                 onClose();
+            } else if (e.key === 'Enter' && onConfirm) {
+                e.stopPropagation();
+                soundManager.playUiConfirm();
+                onConfirm();
             }
         };
-        window.addEventListener('keydown', handleEsc);
+        window.addEventListener('keydown', handleKey);
         return () => {
-            window.removeEventListener('keydown', handleEsc);
+            window.removeEventListener('keydown', handleKey);
         };
-    }, [onClose]);
+    }, [onClose, onConfirm]);
 
     return (
         <div className={`absolute inset-0 flex items-center justify-center z-[100] p-4 md:p-8 pointer-events-auto touch-auto ${transparent ? '' : 'bg-black/30 backdrop-blur-lg'}`}>

@@ -67,7 +67,7 @@ export const PlayerAnimation = {
             const swimSpeed = 0.008;
             const bob = Math.sin(now * swimSpeed);
             rotationX = 1.45; // [VINTERDÖD] Flatter "swimming" pose
-            positionY = -0.6 + bob * 0.15; // Bobbing in water (deeper offset for flat pose)
+            positionY = -0.7 + bob * 0.15; // Bobbing in water (slightly deeper for better immersion)
             scaleY = 1.0 + bob * 0.05;
             rotationZ = Math.sin(now * swimSpeed * 0.5) * 0.1;
 
@@ -128,6 +128,22 @@ export const PlayerAnimation = {
 
         // Adjust pivot to keep feet on ground despite scaling
         mesh.position.y = (baseHeight * scaleY) + positionY;
+
+        // --- 4. Equipment Aim Adjustment (Zero-GC) ---
+        // If swimming, the body is tilted forward. We need to tilt the gun/laser BACK to aim straight.
+        const children = mesh.children;
+        const cLen = children.length;
+        for (let i = 0; i < cLen; i++) {
+            const child = children[i] as THREE.Object3D;
+            if (child.name === 'gun' || child.userData.isLaserSight) {
+                if (animState.isSwimming) {
+                    // Counter-rotate the tilt (1.45) to aim forward (0.0 approx)
+                    child.rotation.x = -1.45;
+                } else {
+                    child.rotation.x = 0;
+                }
+            }
+        }
 
         // --- 4. Optimized Footprints (Zero-GC) ---
         // FIX: Ensure footprints don't spawn if dead or rolling

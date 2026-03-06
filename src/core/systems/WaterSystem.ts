@@ -282,7 +282,12 @@ export class WaterSystem {
         this.surfaces.push(surface);
         this.scene.add(surface.mesh);
 
-        const body = new WaterBody(type, surface, { ...preset, style, shape });
+        const body = new WaterBody(type, surface, {
+            ...preset,
+            style,
+            shape,
+            maxDepth: options?.maxDepth ?? preset.maxDepth
+        });
         this.waterBodies.push(body);
         this.updateGroundUniforms();
         return body;

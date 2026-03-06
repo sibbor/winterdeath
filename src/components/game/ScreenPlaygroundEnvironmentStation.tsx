@@ -116,8 +116,10 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
             title={t('ui.environment_control')}
             titleColorClass="text-cyan-500"
             onClose={onClose}
+            onConfirm={handleApply}
             footer={footer}
             transparent={true}
+            showCloseButton={false}
         >
             <div className="flex flex-col gap-6 p-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
                 {/* GLOBAL SETTINGS */}

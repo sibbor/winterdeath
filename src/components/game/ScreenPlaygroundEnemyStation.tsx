@@ -22,27 +22,25 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
         const scene = WinterEngine.getInstance().scene;
         // Determine spawn center
         let center = new THREE.Vector3(playerPos.x, 0, playerPos.z);
-        if (biome === 'FOREST') center.set(30, 0, -30); // Approx forest
-        if (biome === 'FARM') center.set(-30, 0, -30); // Approx farm
-        if (biome === 'VILLAGE') center.set(0, 0, -100); // Village
+        if (biome === 'FOREST') center.set(30, 0, -30);
+        if (biome === 'FARM') center.set(-30, 0, -30);
+        if (biome === 'VILLAGE') center.set(0, 0, -100);
 
-        // Offset center slightly so they don't spawn ON player if 'NEAR'
+        // Offset so they don't spawn on top of player
         if (biome === 'NEAR') {
             center.z -= 20;
         }
 
-        EnemyManager.spawnHorde(scene, center, count, false, 0);
-        // Note: EnemyManager.spawnHorde currently hardcodes logic or uses available enemies. 
-        // Ideally we'd pass the type into spawnHorde or loop spawn() manually.
-        // For precise control let's loop manual spawn:
+        // FIX: Only call spawn() directly with the selected type.
+        // Removed the extra EnemyManager.spawnHorde() call that was causing
+        // doubled and mixed-type spawns.
         const spawned: any[] = [];
         for (let i = 0; i < count; i++) {
-            const offset = new THREE.Vector3(
-                (Math.random() - 0.5) * spread,
+            const spawnPos = new THREE.Vector3(
+                center.x + (Math.random() - 0.5) * spread,
                 0,
-                (Math.random() - 0.5) * spread
+                center.z + (Math.random() - 0.5) * spread
             );
-            const spawnPos = center.clone().add(offset);
             const newEnemy = EnemyManager.spawn(scene, new THREE.Vector3(playerPos.x, 0, playerPos.z), selectedType, spawnPos);
             if (newEnemy) spawned.push(newEnemy);
         }
@@ -73,8 +71,10 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
             title={t('ui.enemy_spawner')}
             titleColorClass="text-red-500"
             onClose={onClose}
+            onConfirm={handleSpawn}
             footer={footer}
             transparent={true}
+            showCloseButton={false}
         >
             <div className="flex flex-col gap-6 p-4">
                 {/* Type Selection */}
@@ -106,7 +106,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                     />
                 </div>
 
-                {/* Biome/Video */}
+                {/* Biome/Location */}
                 <div className="flex flex-col gap-2">
                     <label className="text-gray-400 uppercase text-sm">{t('ui.spawn_location')}</label>
                     <div className="grid grid-cols-2 gap-2">
@@ -125,5 +125,3 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
         </GameModalLayout>
     );
 };
-
-

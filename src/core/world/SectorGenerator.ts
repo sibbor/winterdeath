@@ -714,7 +714,7 @@ export const SectorGenerator = {
      * Returns a WaterBody that can have floating props and splash sources registered.
      */
     addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: {
-        style?: WaterStyle; shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number;
+        style?: WaterStyle; shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number;
     }): WaterBody | null => {
         const engine = WinterEngine.getInstance();
         if (!engine?.water) return null;
@@ -795,7 +795,7 @@ export const SectorGenerator = {
      * High-level helper to spawn Water + Recessed Bed in one go.
      */
     addLake: (ctx: SectorContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
-        const water = SectorGenerator.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle' });
+        const water = SectorGenerator.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle', maxDepth: floorDepth });
         SectorGenerator.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, 'circle');
 
         // Spawn lake bed props

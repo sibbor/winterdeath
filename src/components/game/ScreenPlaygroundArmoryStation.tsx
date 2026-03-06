@@ -115,10 +115,12 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             title={t('stations.armory')}
             titleColorClass="text-yellow-500"
             onClose={onClose}
+            onConfirm={handleConfirm}
             isMobile={isMobileDevice}
             maxWidthClass="max-w-7xl"
             footer={footerButtons}
             transparent={true}
+            showCloseButton={false}
         >
             <div className={`flex flex-col h-full overflow-hidden ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
                 {/* Tabs bar - Ensure horizontal scroll on mobile */}

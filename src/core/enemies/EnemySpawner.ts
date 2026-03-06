@@ -76,12 +76,16 @@ export const EnemySpawner = {
         bossSpawned: boolean = false,
         enemyCount: number = 0
     ): Enemy | null => {
-        if (enemyCount >= 100) return null;
+        if (enemyCount >= 100) {
+            console.warn(`[Spawner] Ignorerar spawn-förfrågan! Maxgräns nådd (100).`);
+            return null;
+        }
 
         let x: number, z: number;
         if (forcedPos) {
-            x = forcedPos.x + (Math.random() - 0.5) * 4;
-            z = forcedPos.z + (Math.random() - 0.5) * 4;
+            // FIX: Sprid ut dem mycket mer om de force-spawnas, annars exploderar fysiken!
+            x = forcedPos.x + (Math.random() - 0.5) * 8;
+            z = forcedPos.z + (Math.random() - 0.5) * 8;
         } else {
             const angle = Math.random() * Math.PI * 2;
             const dist = 45 + Math.random() * 30;
@@ -100,7 +104,7 @@ export const EnemySpawner = {
         scene.add(g);
 
         const enemy: Enemy = {
-            id: `z_${Date.now()}_${Math.random()}`,
+            id: `z_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
             mesh: g,
             type: typeKey,
             hp: typeData.hp,
@@ -176,6 +180,7 @@ export const EnemySpawner = {
             enemy.indicatorRing = ring;
         }
 
+        console.log(`[Spawner] Spawns ${typeKey}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
         return enemy;
     },
 
@@ -201,7 +206,7 @@ export const EnemySpawner = {
             maxHp: bossData.hp,
             speed: bossData.speed,
             damage: bossData.damage,
-            score: 1000,
+            score: 3000,
             color: bossData.color,
             originalScale: scale,
             widthScale: widthMod,
@@ -242,6 +247,7 @@ export const EnemySpawner = {
         };
 
         g.userData.entity = enemy;
+        console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
         return enemy;
     },
 
@@ -255,14 +261,20 @@ export const EnemySpawner = {
         bossSpawned: boolean,
         currentCount: number
     ): Enemy[] => {
+        console.log(`[Spawner] Initierar spawnHorde med ${count} fiender!`);
         const horde: Enemy[] = [];
-        for (let i = 0; i < count; i++) {
-            _v1.set(
-                startPos.x + (Math.random() - 0.5) * 10,
-                0,
-                startPos.z + (Math.random() - 0.5) * 10
-            );
+        const goldenAngle = 137.5 * (Math.PI / 180); // 2.3999 radianer
+        const spacing = 1.5; // Varje zombie får 1.5 meters radie
 
+        for (let i = 0; i < count; i++) {
+            const radius = Math.sqrt(i) * spacing; // Roten ur ger en jämn densitet!
+            const theta = i * goldenAngle;
+
+            _v1.set(
+                startPos.x + Math.cos(theta) * radius,
+                0,
+                startPos.z + Math.sin(theta) * radius
+            );
             const enemy = EnemySpawner.spawn(scene, startPos, undefined, _v1, bossSpawned, currentCount + i);
             if (enemy) horde.push(enemy);
         }

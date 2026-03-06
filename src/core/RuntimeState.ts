@@ -74,6 +74,7 @@ export interface RuntimeState {
     isInteractionOpen: boolean;
     bossSpawned: boolean;
     lastDamageTime: number;
+    lastBiteTime: number;  // <--- HÄR ÄR FIXEN!
     lastStaminaUseTime: number;
     noiseLevel: number;
     speakBounce: number;
@@ -104,6 +105,8 @@ export interface RuntimeState {
     framesSinceHudUpdate: number;
     lastFpsUpdate: number;
     isMoving: boolean;
+    isWading: boolean;
+    isSwimming: boolean;
 
     // --- INTERACTION ---
     interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;

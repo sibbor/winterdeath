@@ -22,7 +22,6 @@ interface Callbacks {
 export class EnemySystem implements System {
     id = 'enemy_system';
 
-    // Pre-allocated callback objects to avoid object literal creation in update loop
     private updateCallbacks: any = null;
     private cleanupCallbacks: any = null;
 
@@ -31,14 +30,10 @@ export class EnemySystem implements System {
         private callbacks: Callbacks
     ) { }
 
-    /**
-     * Initializes stable references for callbacks to prevent GC spikes
-     */
     init(session: GameSessionLogic) {
         const state = session.state;
         const scene = session.engine.scene;
 
-        // Callback for EnemyManager.update
         this.updateCallbacks = {
             onPlayerHit: (damage: number, attacker: any, type: string) => this.handlePlayerHit(session, damage, attacker, type),
             spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
@@ -51,7 +46,6 @@ export class EnemySystem implements System {
             }
         };
 
-        // Callback for EnemyManager.cleanupDeadEnemies
         this.cleanupCallbacks = {
             spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
             spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
@@ -67,10 +61,8 @@ export class EnemySystem implements System {
         const state = session.state;
         const scene = session.engine.scene;
 
-        // Ensure init has been called (safety for system management)
         if (!this.updateCallbacks) this.init(session);
 
-        // 1. Process Main AI and Combat Logic
         if (!state.bossIntroActive) {
             EnemyManager.update(
                 dt,
@@ -80,7 +72,7 @@ export class EnemySystem implements System {
                 state.collisionGrid,
                 session.noiseEvents,
                 state.cameraShake,
-                state.isDead, // <--- Här är state.isDead tillbaka!
+                state.isDead,
                 this.updateCallbacks.onPlayerHit,
                 this.updateCallbacks.spawnPart,
                 this.updateCallbacks.spawnDecal,
@@ -89,7 +81,6 @@ export class EnemySystem implements System {
             );
         }
 
-        // 2. Process Removal of Dead Entities and Loot Spawning
         EnemyManager.cleanupDeadEnemies(
             scene,
             state.enemies,
@@ -99,17 +90,29 @@ export class EnemySystem implements System {
         );
     }
 
-    /**
-     * Internal handler for when an enemy or environment hits the player
-     */
     public handlePlayerHit(session: GameSessionLogic, damage: number, attacker: any, type: string) {
         const state = session.state;
         const now = performance.now();
 
-        if (now < state.invulnerableUntil || state.isDead) return;
+        if (state.isDead) return;
+
+        const isBite = type === 'BITING';
+
+        // Om det är en stor krock/explosion gäller vanliga I-frames (ex 400ms)
+        if (!isBite && now < (state.invulnerableUntil || 0)) return;
+
+        // Om det är ett bett, sänker vi skyddet till 50ms! 
+        // Detta gör att upp till 20 zombies KAN bita dig på en sekund om du blir helt omringad.
+        if (isBite && now < (state.lastBiteTime || 0) + 50) return;
 
         state.damageTaken += damage;
         state.hp -= damage;
+
+        if (isBite) {
+            state.lastBiteTime = now;
+        } else {
+            state.invulnerableUntil = now + 400;
+        }
 
         soundManager.playDamageGrunt();
         state.hurtShake = 1.0;
@@ -117,25 +120,19 @@ export class EnemySystem implements System {
 
         if (type === 'Boss') state.bossDamageTaken += damage;
 
-        // Spawn player blood spray (Zero-GC position access)
         this.spawnPart(session, this.playerGroup.position.x, 1.2, this.playerGroup.position.z, 'blood', 80);
 
-        // Check for Player Death
         if (state.hp <= 0) {
             this.executePlayerDeath(session, attacker, type, now);
         }
     }
 
-    /**
-     * Optimized death sequence to prevent frame drops during state transition
-     */
     private executePlayerDeath(session: GameSessionLogic, attacker: any, type: string, now: number) {
         const state = session.state;
         state.isDead = true;
         state.deathStartTime = now;
         state.killerType = type;
 
-        // Resolve killer name using localization keys
         if (attacker && attacker.isBoss && attacker.bossId !== undefined) {
             state.killerType = type === 'BOMBER_EXPLOSION' ? type : attacker.type;
             state.killerName = this.callbacks.t(`bosses.${attacker.bossId}.name`);
@@ -147,7 +144,6 @@ export class EnemySystem implements System {
             state.killerName = this.callbacks.t('ui.unknown_threat');
         }
 
-        // --- Calculate death velocity (Zero-GC) ---
         const input = session.engine.input.state;
         _v1.set(0, 0, 0);
 
@@ -157,15 +153,12 @@ export class EnemySystem implements System {
         if (input.d) _v1.x += 1;
 
         if (_v1.lengthSq() > 0) {
-            // Player was moving, fall in that direction
             state.deathVel.copy(_v1).normalize().multiplyScalar(15);
         } else {
-            // Player was standing still, fall away from attacker
             if (attacker && attacker.mesh) {
                 _v2.copy(attacker.mesh.position);
                 state.deathVel.subVectors(this.playerGroup.position, _v2).normalize().multiplyScalar(12);
             } else {
-                // If no attacker or moving, fall backwards
                 state.deathVel.set(0, 0, 12);
             }
         }
@@ -174,17 +167,16 @@ export class EnemySystem implements System {
     }
 
     private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) {
-        if (!session.state.particles) return; // Failsafe
+        if (!session.state.particles) return;
         FXSystem.spawnPart(session.engine.scene, session.state.particles, x, y, z, type, count, mesh, vel, color, scale);
     }
 
     private spawnDecal(session: GameSessionLogic, x: number, z: number, scale: number, mat?: THREE.Material, type?: string) {
-        if (!session.state.bloodDecals) return; // Failsafe
+        if (!session.state.bloodDecals) return;
         FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat, type);
     }
 
     cleanup(session: GameSessionLogic) {
-        // Clear references to prevent leaks
         this.updateCallbacks = null;
         this.cleanupCallbacks = null;
     }

@@ -370,58 +370,52 @@ export const EnemyManager = {
         const canTackle = enemy.deathState === 'ALIVE' && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
+        // BARA DASH ska kunna avbryta en attack och stunna fienden!
+        if (!isDashing) {
+            // Om spelaren bara går in i fienden, gör vi en mjuk fysisk knuff men låter AI:n fortsätta attackera
+            const push = (enemy.isBoss ? 1.0 : 4.0) / (enemy.originalScale * enemy.originalScale);
+            _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize().multiplyScalar(push);
+            enemy.knockbackVel.add(_v2);
+            enemy.lastTackleTime = now;
+            return; // <- VIKTIGT: Returnera här så vi inte byter state till IDLE och stunnar dem
+        }
+
+        // --- DASH LOGIC ---
         if (enemy.state === AIState.BITING) {
             enemy.state = AIState.IDLE;
             enemy.attackCooldown = 1500;
         }
 
         const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
-        const massInverse = 1.0 / Math.max(0.5, mass);
-        const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) * massInverse;
+        const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) / Math.max(0.5, mass);
 
-        _v2.subVectors(enemy.mesh.position, impactPos);
-        _v2.y = 0;
-        if (_v2.lengthSq() < 0.01) {
-            _v1.set(moveVec.z, 0, -moveVec.x).normalize(); // Approximation of cross product with up
-            _v2.copy(_v1);
-        } else {
-            _v2.normalize();
+        _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize();
+        _v1.copy(moveVec).normalize();
+        if (_v2.dot(_v1) > 0.3) {
+            _v1.set(moveVec.z, 0, -moveVec.x).normalize();
+            if (_v2.dot(_v1) < 0) _v1.negate();
+            _v2.lerp(_v1, 0.85).normalize();
         }
 
-        if (isDashing) {
-            _v1.copy(moveVec).normalize();
-            const dot = _v2.dot(_v1);
-
-            if (dot > 0.3) {
-                _v1.set(moveVec.z, 0, -moveVec.x).normalize();
-                if (_v2.dot(_v1) < 0) _v1.negate();
-                _v2.lerp(_v1, 0.85).normalize();
-            }
-        }
-
-        const force = (isDashing ? 30.0 : 8.0) * pushMultiplier;
-        const lift = (isDashing ? 30.0 : 2.0) * pushMultiplier;
+        const force = 30.0 * pushMultiplier;
+        const lift = 30.0 * pushMultiplier;
 
         enemy.knockbackVel.set(_v2.x * force, lift, _v2.z * force);
         enemy.state = AIState.IDLE;
         enemy.lastTackleTime = now;
+        enemy.stunTimer = 2.0;
 
-        if (isDashing) {
-            enemy.stunTimer = 2.0;
-            if (!enemy.isBoss) {
-                enemy.mesh.userData.isRagdolling = true;
-                if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
-                enemy.mesh.userData.spinVel.set(
-                    (Math.random() - 0.5) * 25,
-                    (Math.random() - 0.5) * 30,
-                    (Math.random() - 0.5) * 25
-                );
-            }
-            FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
-            soundManager.playImpact('flesh');
-        } else {
-            enemy.stunTimer = 0.8;
+        if (!enemy.isBoss) {
+            enemy.mesh.userData.isRagdolling = true;
+            if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
+            enemy.mesh.userData.spinVel.set(
+                (Math.random() - 0.5) * 25,
+                (Math.random() - 0.5) * 30,
+                (Math.random() - 0.5) * 25
+            );
         }
+        FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
+        soundManager.playImpact('flesh');
     },
 
     // FIX: Lade till playerIsDead i parameterlistan (argument 8)

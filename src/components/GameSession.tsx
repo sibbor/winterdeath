@@ -47,7 +47,7 @@ const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _vLightOffset = new THREE.Vector3();
 const _fxCallbacks: any = { spawnPart: null, spawnDecal: null, onPlayerHit: null };
-const _animStateScratch: any = { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, seed: 0 };
+const _animStateScratch: any = { isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0, isSpeaking: false, isThinking: false, isIdleLong: false, isWading: false, isSwimming: false, isDead: false, deathStartTime: 0, seed: 0 };
 const _interactionScreenPosScratch = { x: 0, y: 0 };
 
 // Pre-allocated array for lights sorting to avoid GC
@@ -109,6 +109,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 setActiveModal(type);
                 activeModalRef.current = type;
                 if (!props.isMobileDevice && document.pointerLockElement) document.exitPointerLock();
+                // Disable player input systems while station is open
+                const s = gameSessionRef.current;
+                if (s) {
+                    s.setSystemEnabled('player_combat', false);
+                    s.setSystemEnabled('player_movement', false);
+                    s.setSystemEnabled('player_interaction', false);
+                }
             }
         };
         window.addEventListener('open_station', handleOpenStation);
@@ -1059,7 +1066,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const playerGroup = ModelFactory.createPlayer();
                 playerGroupRef.current = playerGroup;
 
-                const bodyMesh = playerGroup.children.find(c => c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
+                const bodyMesh = playerGroup.children.find(c => c.userData.isBody || c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
                 playerMeshRef.current = bodyMesh as THREE.Group;
 
                 const pSpawn = { ...currentSector.playerSpawn };
@@ -1981,6 +1988,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     onClose={() => {
                         setActiveModal(null);
                         activeModalRef.current = null;
+                        const s = gameSessionRef.current;
+                        if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
                         if (!props.isMobileDevice && containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
                     }}
                     onSave={(newStats, newLoadout, newLevels) => {
@@ -1990,6 +1999,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (props.onUpdateLoadout) props.onUpdateLoadout(newLoadout, newLevels);
                         setActiveModal(null);
                         activeModalRef.current = null;
+                        const s = gameSessionRef.current;
+                        if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
                         if (!props.isMobileDevice && containerRef.current) engineRef.current?.input.requestPointerLock(containerRef.current);
                         soundManager.playUiConfirm();
                     }}
@@ -1999,7 +2010,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             {activeModal === 'spawner' && (
                 <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
                     <ScreenPlaygroundEnemyStation
-                        onClose={() => setActiveModal(null)}
+                        onClose={() => {
+                            setActiveModal(null);
+                            activeModalRef.current = null;
+                            const s = gameSessionRef.current;
+                            if (s) {
+                                s.setSystemEnabled('player_combat', true);
+                                s.setSystemEnabled('player_movement', true);
+                                s.setSystemEnabled('player_interaction', true);
+                            }
+                        }}
                         isMobileDevice={props.isMobileDevice}
                         playerPos={{
                             x: playerGroupRef.current?.position.x || 0,
@@ -2021,7 +2041,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             {activeModal === 'environment' && (
                 <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
                     <ScreenPlaygroundEnvironmentStation
-                        onClose={() => setActiveModal(null)}
+                        onClose={() => {
+                            setActiveModal(null);
+                            activeModalRef.current = null;
+                            const s = gameSessionRef.current;
+                            if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
+                        }}
                         isMobileDevice={props.isMobileDevice}
                         currentWeather={stateRef.current.weather}
                         onWeatherChange={(w) => {

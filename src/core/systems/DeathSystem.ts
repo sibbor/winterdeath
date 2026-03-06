@@ -111,7 +111,7 @@ export class DeathSystem implements System {
 
             const isExploded = state.killerType === 'BOMBER_EXPLOSION';
             const isBurning = state.killerType === 'BURNED' || state.killerType === 'FLAME';
-            const isBiting = state.killerType === 'BITING';
+            const isBiting = state.killerType === 'BITING' || state.killerType === 'Walker' || state.killerType === 'Zombie';
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;

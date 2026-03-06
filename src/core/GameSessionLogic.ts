@@ -124,6 +124,8 @@ export class GameSessionLogic {
             framesSinceHudUpdate: 0,
             lastFpsUpdate: 0,
             isMoving: false,
+            isWading: false,
+            isSwimming: false,
 
             // --- COLLECTIBLES ---
             sessionCollectiblesFound: [],
