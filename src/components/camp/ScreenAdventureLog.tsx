@@ -455,7 +455,7 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobile?: b
     return (
         <div className="flex flex-col h-full cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
             {/* 3D Preview Area */}
-            <div className={`w-full bg-black/40 relative border-b border-zinc-800/50 ${isMobile ? 'h-24' : 'aspect-square'}`}>
+            <div className={`w-full bg-zinc-900 relative border-b border-zinc-800/50 ${isMobile ? 'h-24' : 'aspect-square'}`}>
                 <CollectiblePreview type={item.modelType} isLocked={!isFound} />
             </div>
 
