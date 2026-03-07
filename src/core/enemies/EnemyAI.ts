@@ -5,6 +5,10 @@ import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType, WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
 import { soundManager } from '../../utils/sound';
+import { WaterSystem, _buoyancyResult } from '../systems/WaterSystem';
+
+// Water ripple throttle timer (Zero-GC shared across all enemies — good enough for per-frame checks)
+const _waterCheckResult = { flatDepth: 0 };
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -43,7 +47,9 @@ export const EnemyAI = {
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void;
-        }
+            spawnPart?: (x: number, y: number, z: number, type: string, count: number) => void;
+        },
+        water?: WaterSystem
     ) => {
         if (e.deathState === 'DEAD' || !e.mesh) return;
 
@@ -160,13 +166,109 @@ export const EnemyAI = {
             const friction = 1.0 + (mass * 2.0);
             e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
 
+            // Track peak airborne height for fall damage
+            if (e.mesh.position.y > e.fallStartY) {
+                e.fallStartY = e.mesh.position.y;
+            }
+            e.isAirborne = true;
+
             if (e.mesh.position.y <= 0) {
+                const peakY = e.fallStartY;
+                e.isAirborne = false;
+                e.fallStartY = 0;
+
+                if (water) {
+                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+                }
+
+                if (_buoyancyResult.inWater) {
+                    // Landed in water — no fall damage, resolve water state below
+                    water?.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
+                } else if (peakY > 1.5) {
+                    // Landed on ground — apply fall damage
+                    const fallDamage = Math.min(e.maxHp * 0.6, peakY * 8);
+                    e.hp -= fallDamage;
+                    callbacks.spawnPart?.(
+                        e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20
+                    );
+                    if (e.hp <= 0 && e.deathState === 'ALIVE') {
+                        e.deathState = 'FALL';
+                    }
+                }
+
                 e.mesh.position.y = 0;
                 e.knockbackVel.set(0, 0, 0);
             }
         } else {
             e.mesh.userData.wasKnockedBack = false;
+            if (e.isAirborne) {
+                e.isAirborne = false;
+                e.fallStartY = 0;
+            }
         }
+
+        // --- 5b. WATER STATE EVALUATION ---
+        // Runs every frame for alive enemies (cheap 2D bounds check inside checkBuoyancy)
+        if (water) {
+            water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+            if (_buoyancyResult.inWater) {
+                _waterCheckResult.flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
+                e.isInWater = true;
+                e.isWading = _waterCheckResult.flatDepth > 0.4 && _waterCheckResult.flatDepth <= 1.25;
+                e.isDrowning = _waterCheckResult.flatDepth > 1.25;
+            } else {
+                e.isInWater = false;
+                e.isWading = false;
+                e.isDrowning = false;
+                // Smoothly return to ground level when leaving water
+                if (e.mesh.position.y < 0) {
+                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, 0, 8 * delta);
+                    if (e.mesh.position.y > -0.01) e.mesh.position.y = 0;
+                }
+            }
+        }
+
+        // --- 5c. DROWNING — overrides all normal AI ---
+        if (e.isDrowning && e.deathState === 'ALIVE') {
+            e.drownTimer += delta;
+
+            // Sink to the lake floor depth
+            if (water) {
+                const targetY = _buoyancyResult.groundY;
+                e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 3 * delta);
+            }
+
+            // Panic jitter — violent flailing (delta-scaled for FPS-independence)
+            const dj = delta * 60;
+            e.mesh.position.x += (Math.random() - 0.5) * 0.18 * dj;
+            e.mesh.position.z += (Math.random() - 0.5) * 0.18 * dj;
+            e.mesh.rotation.x += (Math.random() - 0.5) * 0.3 * dj;
+            e.mesh.rotation.z += (Math.random() - 0.5) * 0.3 * dj;
+
+            // Splash particles + ripples throttled at ~150ms
+            e.drownDmgTimer += delta;
+            if (e.drownDmgTimer >= 0.15) {
+                e.drownDmgTimer = 0;
+                water?.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9);
+                callbacks.spawnPart?.(
+                    e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z,
+                    'splash', 2
+                );
+                // 25% maxHp per second — ticked at 150ms = 3.75% per tick
+                const tickDmg = e.maxHp * 0.25 * 0.15;
+                e.hp -= tickDmg;
+                if (callbacks.onDamageDealt) callbacks.onDamageDealt(tickDmg, e);
+
+                if (e.hp <= 0 && e.deathState === 'ALIVE') {
+                    e.deathState = 'DROWNED';
+                    e.velocity.set(0, 0, 0);
+                    e.knockbackVel.set(0, 0, 0);
+                }
+            }
+
+            return; // Drowning skips all normal AI
+        }
+
 
         // --- 6. STUNS & RAGDOLLS (Early Returns) ---
         if (e.stunTimer && e.stunTimer > 0) {
@@ -195,11 +297,10 @@ export const EnemyAI = {
                 }
             } else {
                 if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
-                const twitchX = (Math.random() - 0.5) * 0.2;
-                const twitchZ = (Math.random() - 0.5) * 0.2;
-                e.mesh.position.x += twitchX;
-                e.mesh.position.z += twitchZ;
-                e.mesh.rotation.y += (Math.random() - 0.5) * 0.5;
+                const jitterScale = delta * 60; // FPS-independent: same magnitude per second at any Hz
+                e.mesh.position.x += (Math.random() - 0.5) * 0.2 * jitterScale;
+                e.mesh.position.z += (Math.random() - 0.5) * 0.2 * jitterScale;
+                e.mesh.rotation.y += (Math.random() - 0.5) * 0.5 * jitterScale;
             }
 
             if (Math.random() < 0.1) {
@@ -343,7 +444,9 @@ export const EnemyAI = {
                         return;
                     }
 
-                    moveEntity(e, target, delta, e.speed, collisionGrid, _v6);
+                    // Apply water wading slowdown (same 40% as the player)
+                    const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
+                    moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6);
 
                     const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {

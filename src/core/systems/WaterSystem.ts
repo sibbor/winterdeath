@@ -582,17 +582,20 @@ export class WaterSystem {
         const pos = this.playerGroup!.position;
         this.checkBuoyancy(pos.x, pos.y, pos.z);
         if (_buoyancyResult.inWater) {
-            this.stepTimer += dt;
-            const isMoving = pos.distanceToSquared(this.lastPlayerPos) > 0.001;
+            const distSq = pos.distanceToSquared(this.lastPlayerPos);
+            const isMoving = distSq > 0.001;
 
-            // Ripples for both moving and IDLE players
             if (isMoving) {
-                if (this.stepTimer > 0.12) {
+                // Distance-based: spawn a ripple every ~0.7 units of movement.
+                // FPS-independent — the ripple always anchors to the current position.
+                if (distSq > 0.5) {
                     this.spawnRipple(pos.x, pos.z, 0.7);
-                    this.stepTimer = 0;
+                    // lastPlayerPos is copied at the end of this function,
+                    // so the next check resets from the current position.
                 }
             } else {
-                // Gentle rhythmic idle pulses
+                // Gentle rhythmic idle pulse — time-based is fine when not moving
+                this.stepTimer += dt;
                 if (this.stepTimer > 0.4) {
                     this.spawnRipple(pos.x, pos.z, 0.5);
                     this.stepTimer = 0;

@@ -79,12 +79,28 @@ export class FamilySystem implements System {
         // feel like they're catching up, not teleporting. Clamp to 1.2× player speed max.
         const maxFollowSpeed = followSpeed * 1.25;
 
+        // --- Hide family members while player is driving — they clip through the vehicle ---
+        const inVehicle = !!(state as any).activeVehicle;
+        if (inVehicle) {
+            for (let i = 0; i < members.length; i++) {
+                const fm = members[i]?.mesh;
+                if (!fm) continue;
+                if (fm.visible) fm.visible = false;
+                const ring = members[i].ring;
+                if (ring && ring.visible) ring.visible = false;
+            }
+            return;
+        }
+
         for (let i = 0; i < members.length; i++) {
             const familyMember = members[i];
             if (!familyMember.mesh) continue;
 
             const fm = familyMember.mesh;
             const userData = fm.userData;
+
+            // Restore visibility after exiting a vehicle
+            if (!fm.visible) fm.visible = true;
 
             // --- 1. Ring Pulse Visual ---
             const ring = familyMember.ring;
@@ -159,6 +175,33 @@ export class FamilySystem implements System {
                     engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z);
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;
                     _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
+
+                    // Match player Y logic: swim at surface, wade on ground, lerp from water to land
+                    if (_buoyancyResult.inWater) {
+                        const swimY = _buoyancyResult.waterLevel - 0.35;
+                        const targetY = _animState.isSwimming ? swimY : _buoyancyResult.groundY;
+                        fm.position.y = THREE.MathUtils.lerp(fm.position.y, targetY, 4 * delta);
+
+                        // Distance-based ripple — FPS-independent, always anchors to current position
+                        if (_animState.isSwimming || _animState.isWading) {
+                            const rx = userData.lastRippleX ?? fm.position.x + 99;
+                            const rz = userData.lastRippleZ ?? fm.position.z + 99;
+                            const dx = fm.position.x - rx;
+                            const dz = fm.position.z - rz;
+                            if (dx * dx + dz * dz > 0.5) {
+                                engine.water.spawnRipple(fm.position.x, fm.position.z, _animState.isSwimming ? 0.8 : 0.5);
+                                userData.lastRippleX = fm.position.x;
+                                userData.lastRippleZ = fm.position.z;
+                            }
+                        }
+                    } else {
+                        _animState.isSwimming = false;
+                        _animState.isWading = false;
+                        if (fm.position.y !== 0) {
+                            fm.position.y = THREE.MathUtils.lerp(fm.position.y, 0, 15 * delta);
+                            if (Math.abs(fm.position.y) < 0.01) fm.position.y = 0;
+                        }
+                    }
                 } else {
                     _animState.isSwimming = false;
                     _animState.isWading = false;

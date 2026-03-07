@@ -466,7 +466,10 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    p.mesh.scale.multiplyScalar(0.985);
+                    // FPS-independent scale decay: Math.pow(r, delta*60) gives the same
+                    // per-second result (r^60) at any refresh rate. Without this,
+                    // smoke/fire shrinks 3× faster at 144 Hz than at 60 Hz.
+                    p.mesh.scale.multiplyScalar(Math.pow(0.985, safeDelta * 60));
                 }
             }
 

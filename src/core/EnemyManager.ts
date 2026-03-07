@@ -9,6 +9,7 @@ import { ZombieRenderer } from './renderers/ZombieRenderer';
 import { CorpseRenderer } from './renderers/CorpseRenderer';
 import { AshRenderer } from './renderers/AshRenderer';
 import { FXSystem } from './systems/FXSystem';
+import { WaterSystem } from './systems/WaterSystem';
 
 export type { Enemy };
 
@@ -121,6 +122,11 @@ export const EnemyManager = {
         e.blindTimer = 0;
         e.burnTimer = 0;
         e.isBurning = false;
+
+        // Reset water and airborne states
+        e.isInWater = false; e.isWading = false; e.isDrowning = false;
+        e.drownTimer = 0; e.drownDmgTimer = 0;
+        e.isAirborne = false; e.fallStartY = 0;
 
         // CRITICAL BUG FIX: Thoroughly wipe all potential visual death flags for pooled enemies
         e.mesh.userData.exploded = false;
@@ -418,8 +424,8 @@ export const EnemyManager = {
         soundManager.playImpact('flesh');
     },
 
-    // FIX: Lade till playerIsDead i parameterlistan (argument 8)
-    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, playerIsDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any) => {
+    // Update loop — water ref is threaded so EnemyAI can call checkBuoyancy without importing WinterEngine
+    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, playerIsDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any, water?: WaterSystem) => {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
@@ -433,19 +439,15 @@ export const EnemyManager = {
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
-            // FIX: Nu skickar vi in playerIsDead på rätt plats i EnemyAI
-            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, shakeIntensity, playerIsDead, _aiCallbacks);
+            EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, shakeIntensity, playerIsDead, _aiCallbacks, water);
 
             const s = e.deathState;
 
-            // FIX: 'BURNED' och 'ELECTRIFIED' manipulerar materialet (krymper/lyser), 
-            // så de måste ritas som individuella vanliga meshar tills de dör helt.
-            if (s === 'BURNED' || s === 'ELECTRIFIED') {
+            // BURNED and ELECTRIFIED manipulate the material so they stay as individual meshes
+            if (s === 'BURNED' || s === 'ELECTRIFIED' || s === 'DROWNED') {
                 e.mesh.visible = true;
             }
-            // ALIVE, SHOT och GENERIC ritas extremt snabbt via vår InstancedMesh.
-            // Genom att ta bort kravet på (s === 'ALIVE') fortsätter de att ritas 
-            // medan de faller omkull!
+            // ALIVE, SHOT, FALL, GENERIC — rendered via InstancedMesh while falling
             else if (!e.isBoss && !e.mesh.userData.exploded) {
                 e.mesh.visible = false;
                 _syncList.push(e);
@@ -456,7 +458,7 @@ export const EnemyManager = {
         if (ashRenderer) ashRenderer.update(Math.max(now, 1));
     },
 
-    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], now: number, state: any, callbacks: any) => {
+    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], now: number, state: any, callbacks: any, delta: number = 1 / 60) => {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
 
@@ -483,15 +485,16 @@ export const EnemyManager = {
                 // Electrocution Spasms
                 e.mesh.visible = true;
 
-                // 1. Positional Jitter (High frequency, relative to base)
+                // 1. Positional Jitter — scaled by delta for FPS-independence
                 const ux = e.mesh.userData.deathPx ?? e.mesh.position.x;
                 const uy = e.mesh.userData.deathPy ?? e.mesh.position.y;
                 const uz = e.mesh.userData.deathPz ?? e.mesh.position.z;
+                const jitter = Math.min(delta, 0.05) * 60; // cap spike frames
 
                 e.mesh.position.set(
-                    ux + (Math.random() - 0.5) * 0.25,
-                    uy + (Math.random() - 0.5) * 0.15,
-                    uz + (Math.random() - 0.5) * 0.25
+                    ux + (Math.random() - 0.5) * 0.25 * jitter,
+                    uy + (Math.random() - 0.5) * 0.15 * jitter,
+                    uz + (Math.random() - 0.5) * 0.25 * jitter
                 );
 
                 // 2. Surging Emissive Intensity (Cyan)
@@ -533,6 +536,42 @@ export const EnemyManager = {
                     case 'GIBBED':
                     case 'BURNED':
                         break; // These types DO NOT leave corpses
+                    case 'DROWNED':
+                        // Body floats face-down on the water surface — registered as a floatingProp
+                        if (!e.isBoss) {
+                            // Temporarily strip the circular entity ref before clone.
+                            // Three.js Object3D.copy() calls JSON.stringify(userData) internally,
+                            // which would crash on the enemy→mesh→userData.entity→enemy circle.
+                            const savedEntity = e.mesh.userData.entity;
+                            e.mesh.userData.entity = undefined;
+
+                            const floatBody = e.mesh.clone();
+
+                            // Restore on the original (the float body inherits undefined, which is fine)
+                            e.mesh.userData.entity = savedEntity;
+
+                            floatBody.rotation.x = -Math.PI / 2; // Lie face-down
+                            floatBody.position.copy(e.mesh.position);
+                            floatBody.position.y = 0.3; // Flush with water surface
+                            floatBody.userData.velocity = new THREE.Vector3();
+                            floatBody.userData.floatOffset = 0.0;
+                            floatBody.userData.mass = 75;
+                            if (callbacks.registerFloatingCorpse) {
+                                callbacks.registerFloatingCorpse(floatBody, e.mesh.position);
+                            } else {
+                                if (e.mesh.parent) e.mesh.parent.add(floatBody);
+                            }
+                        }
+                        // No blood decal for drowned enemies
+                        break;
+                    case 'FALL':
+                        // Same visual as SHOT — corpse + blood pool
+                        if (!e.isBoss) EnemyManager.createCorpse(e);
+                        if (!e.bloodSpawned) {
+                            callbacks.spawnDecal(e.mesh.position.x, e.mesh.position.z, (1.5 + Math.random() * 2.5) * (e.originalScale || 1.0), MATERIALS.bloodDecal);
+                            e.bloodSpawned = true;
+                        }
+                        break;
                     case 'ELECTRIFIED':
                         if (!e.isBoss) EnemyManager.createCorpse(e);
                         if (!e.bloodSpawned) {

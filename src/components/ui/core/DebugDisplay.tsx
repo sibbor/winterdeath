@@ -43,14 +43,30 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
     const [fps, setFps] = useState(0);
     const [consoleLogging, setConsoleLogging] = useState(() => {
         const saved = localStorage.getItem('vinterdod_debug_console_logging');
-        return saved !== 'false'; // Default to true
+        return saved !== 'false';
     });
+    const [systemsExpanded, setSystemsExpanded] = useState(true);
 
-    // Update FPS from PerformanceMonitor for consistency
+    // Update FPS and renderer/GC stats from PerformanceMonitor
+    const [rendererStats, setRendererStats] = useState(() => PerformanceMonitor.getInstance().getRendererStats());
+    const [gcInfo, setGcInfo] = useState(() => PerformanceMonitor.getInstance().getGcInfo());
+    // Track when GC was last detected so its message lingers for 2 s
+    const [gcLastDetectedAt, setGcLastDetectedAt] = useState(0);
+    const [gcLastDropMB, setGcLastDropMB] = useState(0);
+
     useEffect(() => {
         const interval = setInterval(() => {
+            const now = performance.now();
             setFps(PerformanceMonitor.getInstance().getFps());
-        }, 500); // 2Hz UI update is plenty for FPS
+            const rs = PerformanceMonitor.getInstance().getRendererStats();
+            setRendererStats(rs);
+            const gc = PerformanceMonitor.getInstance().getGcInfo();
+            setGcInfo(gc);
+            if (gc.detected) {
+                setGcLastDetectedAt(now);
+                setGcLastDropMB(gc.droppedMB);
+            }
+        }, 500);
         return () => clearInterval(interval);
     }, []);
 
@@ -96,99 +112,116 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
     return (
         <div
             onClick={toggleMinimized}
-            className="fixed top-1/2 -translate-y-1/2 right-4 w-52 bg-black/80 backdrop-blur-md border border-white/10 p-3 rounded-lg shadow-2xl z-[9999] font-mono text-[10px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/30 transition-all overflow-hidden"
+            className="fixed top-0 bottom-0 right-0 w-56 bg-black/85 backdrop-blur-md border-l border-white/10 shadow-2xl z-[9999] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden"
         >
-            <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
-                <span className="font-bold text-white uppercase tracking-wider">Debug Monitor</span>
-                <span className="bg-green-500 text-black px-1 rounded font-bold">{Math.round(fps)} FPS</span>
-            </div>
+            {/* Static top section — never scrolls */}
+            <div className="p-3 shrink-0 space-y-2">
+                <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+                    <span className="font-bold text-white uppercase tracking-wider">Debug Monitor</span>
+                    <span className="bg-green-500 text-black px-1 rounded font-bold">{Math.round(fps)} FPS</span>
+                </div>
 
-            <div className="space-y-2">
-                <div>
-                    <div className="text-white/40 uppercase text-[12px] mb-0.5">Player Position</div>
-                    <div className="flex justify-between">
-                        <span>X: {debugInfo?.coords?.x?.toFixed(1) ?? '0.0'}</span>
-                        <span>Z: {debugInfo?.coords?.z?.toFixed(1) ?? '0.0'}</span>
-                    </div>
+                <div className="flex items-center justify-between">
+                    <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Player</div>
+                    <span className="text-white tabular-nums">
+                        {debugInfo?.coords?.x?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}
+                    </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                    <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Camera</div>
+                    <span className="text-white tabular-nums">
+                        {debugInfo?.camera?.x?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.z?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}
+                    </span>
                 </div>
 
                 <div>
-                    <div className="text-white/40 uppercase text-[12px] mb-0.5">Camera</div>
-                    <div className="flex justify-between">
-                        <span>X: {debugInfo?.camera?.x?.toFixed(1) ?? '0.0'}</span>
-                        <span>Y: {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}</span>
-                        <span>Z: {debugInfo?.camera?.z?.toFixed(1) ?? '0.0'}</span>
+                    <div className="text-white/40 uppercase text-[10px] mb-0.5">Renderer</div>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                        <div>Calls: <span className="text-white">{rendererStats.drawCalls}</span></div>
+                        <div>Tris: <span className="text-white">{(rendererStats.triangles / 1000).toFixed(1)}k</span></div>
+                        <div>Shaders: <span className="text-white">{rendererStats.shaderPrograms}</span></div>
+                        <div>Recomp: <span className={rendererStats.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white'}>{rendererStats.shaderRecompiles}</span></div>
+                        <div>Tex: <span className="text-white">{rendererStats.textures}</span></div>
+                        <div>Geo: <span className="text-white">{rendererStats.geometries}</span></div>
+                    </div>
+                    {/* GC row — always visible; yellow lingers 2 s after detection */}
+                    <div className="mt-1 flex items-center justify-between">
+                        <span className="text-white/40">GC</span>
+                        <span className={(performance.now() - gcLastDetectedAt) < 2000 ? 'text-yellow-400 font-bold' : 'text-white/20'}>
+                            {(performance.now() - gcLastDetectedAt) < 2000 ? `⚠️ ~${gcLastDropMB.toFixed(1)}MB freed` : '—'}
+                        </span>
                     </div>
                 </div>
 
-                <div>
-                    <div className="text-white/40 uppercase text-[12px] mb-0.5">World State</div>
-                    <div className="grid grid-cols-2 gap-1">
-                        <div>Enemies: <span className="text-white">{debugInfo?.enemies ?? 0}</span></div>
-                        <div>Mode: <span className="text-white truncate">{debugInfo?.modes ?? 'N/A'}</span></div>
-                        <div>Objects: <span className="text-white">{debugInfo?.objects ?? 0}</span></div>
-                        <div>Draw Calls: <span className="text-white">{debugInfo?.drawCalls ?? 0}</span></div>
-                    </div>
-                </div>
-
-                {debugInfo?.performance?.cpu && (
+                {gcInfo.heapUsedMB > 0 && (
                     <div>
-                        <div className="text-white/40 uppercase text-[12px] mb-0.5">CPU Timings</div>
-                        <div className="space-y-0.5 max-h-24 overflow-y-auto pr-1 custom-scrollbar">
-                            {Object.entries(debugInfo.performance.cpu).map(([key, val]) => (
-                                <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
-                                    <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
-                                    <span>{(val as number).toFixed(2)}ms</span>
-                                </div>
-                            ))}
+                        <div className="text-white/40 uppercase text-[10px] mb-0.5">World / Memory</div>
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                            <div>Enemies: <span className="text-white">{debugInfo?.enemies ?? 0}</span></div>
+                            <div>Obj: <span className="text-white">{debugInfo?.objects ?? 0}</span></div>
+                            <div>Heap: <span className="text-white">{gcInfo.heapUsedMB}MB</span></div>
+                            <div className="text-white/40">/ {gcInfo.heapLimitMB}MB</div>
                         </div>
                     </div>
                 )}
 
                 {systems && systems.length > 0 && (
                     <div>
-                        <div className="text-white/40 uppercase text-[12px] mb-0.5">Systems</div>
-                        <div className="space-y-0.5">
-                            {systems.map(sys => {
-                                const timing = debugInfo?.performance?.cpu?.[sys.id];
-                                return (
-                                    <div
-                                        key={sys.id}
-                                        onClick={(e) => { e.stopPropagation(); onToggleSystem?.(sys.id, !sys.enabled); }}
-                                        className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'
-                                            }`}
-                                    >
-                                        <span className="truncate mr-2">{sys.id}</span>
-                                        <span className="text-white/40">{timing !== undefined ? `${timing.toFixed(2)}ms` : '–'}</span>
-                                    </div>
-                                );
-                            })}
+                        <div
+                            onClick={(e) => { e.stopPropagation(); setSystemsExpanded(v => !v); }}
+                            className="flex items-center justify-between text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white/70 select-none"
+                        >
+                            <span>Systems</span>
+                            <span className="text-[8px]">{systemsExpanded ? '▾' : '▸'}</span>
                         </div>
+                        {systemsExpanded && (
+                            <div className="space-y-0.5">
+                                {systems.map(sys => {
+                                    const timing = debugInfo?.performance?.cpu?.[sys.id];
+                                    return (
+                                        <div
+                                            key={sys.id}
+                                            onClick={(e) => { e.stopPropagation(); onToggleSystem?.(sys.id, !sys.enabled); }}
+                                            className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}
+                                        >
+                                            <span className="truncate mr-2">{sys.id}</span>
+                                            <span className="text-white/40">{timing !== undefined ? `${timing.toFixed(2)}ms` : '–'}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {debugInfo?.performance?.memory && (
-                    <div>
-                        <div className="text-white/40 uppercase text-[12px] mb-0.5">Memory (RAM)</div>
-                        <div className="flex justify-between">
-                            <span>Used: {debugInfo.performance.memory.heapUsed}MB</span>
-                            <span className="text-white/40">/ {debugInfo.performance.memory.heapLimit}MB</span>
-                        </div>
-                    </div>
-                )}
-
-                <div className="pt-2 border-t border-white/10 mt-2">
+                <div className="border-t border-white/10 pt-1">
                     <div
                         onClick={(e) => { e.stopPropagation(); setConsoleLogging(!consoleLogging); }}
                         className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
                     >
                         <span className="text-white/60">Console Logging</span>
                         <span className={`font-bold ${consoleLogging ? 'text-green-400' : 'text-red-400'}`}>
-                            {consoleLogging ? 'ENABLED' : 'DISABLED'}
+                            {consoleLogging ? 'ON' : 'OFF'}
                         </span>
                     </div>
                 </div>
             </div>
+
+            {/* CPU Timings — pinned at bottom, fills remaining height, inner list scrolls */}
+            {debugInfo?.performance?.cpu && (
+                <div className="flex flex-col flex-1 min-h-0 border-t border-white/10 p-3">
+                    <div className="text-white/40 uppercase text-[10px] mb-1 shrink-0">CPU Timings</div>
+                    <div className="overflow-y-auto flex-1 space-y-0.5 pr-1">
+                        {Object.entries(debugInfo.performance.cpu).map(([key, val]) => (
+                            <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
+                                <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
+                                <span>{(val as number).toFixed(2)}ms</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

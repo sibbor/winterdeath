@@ -16,7 +16,7 @@ export enum AIState {
 /**
  * Standardized death states for enemies
  */
-export type EnemyDeathState = 'ALIVE' | 'DEAD' | 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED' | 'GENERIC';
+export type EnemyDeathState = 'ALIVE' | 'DEAD' | 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED' | 'GENERIC' | 'DROWNED' | 'FALL';
 
 /**
  * Standardized effect types for semantic visual feedback
@@ -119,4 +119,15 @@ export interface Enemy {
     bloodSpawned: boolean;         // Boolean to ensure only one blood pool is spawned
     lastKnockback: number;         // Timestamp of the last force application
     deathState: EnemyDeathState;   // Type of death
+
+    // --- WATER STATE ---
+    isInWater: boolean;    // Inside any water body bounds
+    isWading: boolean;     // Shallow water (flatDepth 0.4-1.25) — slowed but alive
+    isDrowning: boolean;   // Deep water (flatDepth > 1.25) — panicking and taking damage
+    drownTimer: number;    // Seconds spent in drowning state
+    drownDmgTimer: number; // Throttle timer for per-frame damage ticks
+
+    // --- AIRBORNE / FALL DAMAGE ---
+    isAirborne: boolean;   // True while enemy is launched into the air
+    fallStartY: number;    // Peak Y reached while airborne (for fall damage calculation)
 }

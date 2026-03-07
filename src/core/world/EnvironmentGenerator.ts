@@ -498,7 +498,7 @@ export const EnvironmentGenerator = {
 
         let mountainGeo = BufferGeometryUtils.mergeGeometries(geometries);
         if (!mountainGeo) return;
-        mountainGeo = mountainGeo.toNonIndexed();
+        mountainGeo = mountainGeo.index ? mountainGeo.toNonIndexed() : mountainGeo;
         mountainGeo.computeVertexNormals();
 
         // --- COLORING (Low Poly Flat Shading) ---

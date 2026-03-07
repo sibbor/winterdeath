@@ -289,18 +289,11 @@ export class WinterEngine {
         }
         monitor.end('render');
 
-        const totalTime = performance.now() - frameStart;
+        // Feed renderer stats into the monitor — used both for heavy-frame logs and DebugDisplay live view
+        monitor.setRendererStats(this.renderer.info);
 
-        // Output heavy frames via the new PerformanceMonitor
-        if (totalTime > 50) {
-            const extraStats = {
-                drawCalls: this.renderer.info.render.calls,
-                triangles: this.renderer.info.render.triangles,
-                geometries: this.renderer.info.memory.geometries,
-                textures: this.renderer.info.memory.textures
-            };
-            monitor.printIfHeavy('Game Engine Performance', totalTime, 50, extraStats);
-        }
+        const totalTime = performance.now() - frameStart;
+        monitor.printIfHeavy('Game Engine Performance', totalTime, 50);
     };
 
     /**

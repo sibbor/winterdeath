@@ -26,6 +26,17 @@ export class PerformanceMonitor {
     private lastHeapSize: number = 0;
     private gcDetected: boolean = false;
     private gcDroppedMB: number = 0;
+    private heapUsedMB: number = 0;
+    private heapLimitMB: number = 0;
+
+    // Renderer Stat Tracking (set externally from WinterEngine after each render)
+    private _drawCalls: number = 0;
+    private _triangles: number = 0;
+    private _textures: number = 0;
+    private _geometries: number = 0;
+    private _shaderPrograms: number = 0;
+    private _lastShaderPrograms: number = 0;
+    private _shaderRecompileCount: number = 0; // Cumulative new programs this session
 
     /**
      * Clears tracking data for a new frame.
@@ -52,8 +63,9 @@ export class PerformanceMonitor {
         const mem = (performance as any).memory;
         if (mem) {
             const currentHeap = mem.usedJSHeapSize;
+            this.heapUsedMB = +(currentHeap / 1048576).toFixed(1);
+            this.heapLimitMB = +(mem.jsHeapSizeLimit / 1048576).toFixed(0);
             if (this.lastHeapSize > 0) {
-                // If the heap shrunk by at least 1MB, a GC event likely occurred
                 const diff = this.lastHeapSize - currentHeap;
                 if (diff > 1048576) {
                     this.gcDetected = true;
@@ -65,6 +77,48 @@ export class PerformanceMonitor {
             }
             this.lastHeapSize = currentHeap;
         }
+    }
+
+    /**
+     * Called from WinterEngine immediately after renderer.render().
+     * Reads renderer.info — Zero-GC, just primitive copies.
+     */
+    public setRendererStats(rendererInfo: { render: { calls: number; triangles: number }; memory: { textures: number; geometries: number }; programs: any[] | null | undefined }): void {
+        this._drawCalls = rendererInfo.render.calls;
+        this._triangles = rendererInfo.render.triangles;
+        this._textures = rendererInfo.memory.textures;
+        this._geometries = rendererInfo.memory.geometries;
+
+        const programCount = rendererInfo.programs?.length ?? 0;
+        if (programCount > this._lastShaderPrograms && this._lastShaderPrograms > 0) {
+            // New shader(s) compiled this frame
+            this._shaderRecompileCount += programCount - this._lastShaderPrograms;
+            if (this._consoleLoggingEnabled) {
+                console.warn(`[SHADER] New program compiled — total: ${programCount} (+${programCount - this._lastShaderPrograms})`);
+            }
+        }
+        this._lastShaderPrograms = programCount;
+        this._shaderPrograms = programCount;
+    }
+
+    public getRendererStats() {
+        return {
+            drawCalls: this._drawCalls,
+            triangles: this._triangles,
+            textures: this._textures,
+            geometries: this._geometries,
+            shaderPrograms: this._shaderPrograms,
+            shaderRecompiles: this._shaderRecompileCount,
+        };
+    }
+
+    public getGcInfo() {
+        return {
+            detected: this.gcDetected,
+            droppedMB: this.gcDroppedMB,
+            heapUsedMB: this.heapUsedMB,
+            heapLimitMB: this.heapLimitMB,
+        };
     }
 
     /**
@@ -119,14 +173,14 @@ export class PerformanceMonitor {
 
     /**
      * Prints a standardized Heavy Frame output to the console if total time exceeds threshold.
-     * Extracts debug stats out of the WebGL parameter if provided.
+     * Automatically includes renderer stats and GC info collected this frame.
      */
     public printIfHeavy(context: 'Game Engine Performance' | 'Camp Performance', totalTime: number, threshold: number = 50, extraStats?: Record<string, any>) {
         this._lastFrameTotal = totalTime;
         if (totalTime > threshold) {
             const formatted: Record<string, string> = {};
 
-            // Format standard properties
+            // CPU timing breakdown
             for (const key in this.timings) {
                 if (this.timings[key] > 0) {
                     formatted[key] = this.timings[key].toFixed(2) + 'ms';
@@ -134,15 +188,24 @@ export class PerformanceMonitor {
             }
             formatted.total = totalTime.toFixed(2) + 'ms';
 
-            // Add extra stats (draw calls, triangles, logic iterations)
+            // Auto-include renderer stats (set by setRendererStats each frame)
+            formatted['drawCalls'] = String(this._drawCalls);
+            formatted['triangles'] = (this._triangles / 1000).toFixed(1) + 'k';
+            formatted['shaderPrograms'] = String(this._shaderPrograms);
+            if (this._shaderRecompileCount > 0) {
+                formatted['⚠️ Shader Recompiles'] = String(this._shaderRecompileCount) + ' total this session';
+            }
+
+            // GC event flag
+            if (this.gcDetected) {
+                formatted['⚠️ GC Event Possible'] = `Heap dropped by ${this.gcDroppedMB.toFixed(2)} MB between frames`;
+            }
+
+            // Any caller-provided extra stats
             if (extraStats) {
                 for (const key in extraStats) {
                     formatted[key] = extraStats[key];
                 }
-            }
-
-            if (this.gcDetected) {
-                formatted['⚠️ GC Event Possible'] = `Heap dropped by ${this.gcDroppedMB.toFixed(2)} MB between frames`;
             }
 
             if (this._consoleLoggingEnabled) {

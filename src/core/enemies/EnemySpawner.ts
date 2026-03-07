@@ -158,7 +158,12 @@ export const EnemySpawner = {
             lastDamageType: '',
             fallForward: Math.random() > 0.5,
             bloodSpawned: false,
-            lastKnockback: 0
+            lastKnockback: 0,
+            // Water states
+            isInWater: false, isWading: false, isDrowning: false,
+            drownTimer: 0, drownDmgTimer: 0,
+            // Airborne / fall damage
+            isAirborne: false, fallStartY: 0,
         };
 
         const s = enemy.originalScale;
@@ -243,7 +248,12 @@ export const EnemySpawner = {
             deathTimer: 0,
             fallForward: false,
             bloodSpawned: false,
-            lastKnockback: 0
+            lastKnockback: 0,
+            // Water states
+            isInWater: false, isWading: false, isDrowning: false,
+            drownTimer: 0, drownDmgTimer: 0,
+            // Airborne / fall damage
+            isAirborne: false, fallStartY: 0,
         };
 
         g.userData.entity = enemy;
