@@ -1317,8 +1317,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 isBuildingSectorRef.current = false;
                 engine.isRenderingPaused = false;
 
-                // [VINTERDÖD] Buffer frames to prevent background flicker
-                let framesToWait = 3;
+                // [VINTERDÖD] Buffer frames to prevent background flicker and ensure shaders/particles are ready
+                let framesToWait = 10;
                 const checkReady = () => {
                     if (framesToWait > 0) {
                         framesToWait--;
@@ -1908,6 +1908,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             ProjectileSystem.clear(scene, stateRef.current.projectiles, stateRef.current.fireZones);
             session.dispose();
             EnemyManager.clear();
+            FXSystem.reset();
         };
     }, [props.currentSector, props.startAtCheckpoint, textures]);
 
