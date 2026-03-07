@@ -431,7 +431,8 @@ const App: React.FC = () => {
                     }}
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
-                    isRunning={!isLoadingCamp && !isInitialBoot}
+                    // [VINTERDÖD] Allow simulation to run behind the loading screen so particles are moving on Frame 1
+                    isRunning={!isInitialBoot}
                 />
             )}
 
@@ -648,7 +649,7 @@ const App: React.FC = () => {
                         FXSystem.reset();
 
                         // Yield to browser so it can render the loading screen before we block the thread
-                        // Increased from 50ms to 150ms to ensure the loading screen is painted on slower machines
+                        // Increased to 150ms to ensure the loading screen is painted on slower machines
                         setTimeout(() => {
                             setGameState(prev => {
                                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
@@ -656,7 +657,7 @@ const App: React.FC = () => {
                                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
                                 return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
                             });
-                        }, 50);
+                        }, 150);
                     }}
 
                     onRetry={() => {
@@ -664,7 +665,6 @@ const App: React.FC = () => {
                         setIsLoadingSector(true);
                         setShowLoadingOverlay(true);
 
-                        // [VINTERDÖD] Clear FX before retry
                         FXSystem.reset();
 
                         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
