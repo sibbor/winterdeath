@@ -7,6 +7,7 @@ interface GameModalLayoutProps {
     footer?: React.ReactNode;
     titleColorClass?: string;
     maxWidthClass?: string;
+    contentClass?: string;   // Override the content wrapper classes
     transparent?: boolean;
     blurClass?: string;
     isMobile?: boolean;
@@ -27,6 +28,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     maxWidthClass = "max-w-xl",
     heightClass = "max-h-[90vh] md:max-h-none",
     blurClass = "backdrop-blur-md",
+    contentClass = "px-4 md:px-16 pb-8 md:pb-12 overflow-y-auto",
     isMobile = false,
     transparent,
     onClose,
@@ -88,7 +90,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className="px-4 md:px-16 pb-8 md:pb-12 relative z-10 overflow-y-auto">
+                <div className={`relative z-10 ${contentClass}`}>
                     {children}
                 </div>
 

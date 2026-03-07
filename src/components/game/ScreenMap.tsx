@@ -217,6 +217,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
             onClose={onClose}
             maxWidthClass="max-w-6xl"
             heightClass="h-[80vh]"
+            contentClass="flex-1 flex flex-col min-h-0 overflow-hidden p-0"
             titleColorClass="text-blue-500"
             footer={
                 <div className="gap-3">
@@ -249,7 +250,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                 </div>
             }
         >
-            <div className="w-full relative bg-black/40 flex-1 min-h-0">
+            <div className="w-full relative bg-black/40 h-full min-h-0">
                 <MapCanvas
                     bounds={bounds}
                     groupedEntities={groupedEntities}
