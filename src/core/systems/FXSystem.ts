@@ -60,10 +60,24 @@ const PHYSICS_TYPES = new Set([
 ]);
 
 export const FXSystem = {
-    particleQueue: [] as SpawnRequest[],
+    essentialQueue: [] as SpawnRequest[],
+    ambientQueue: [] as SpawnRequest[],
     decalQueue: [] as SpawnRequest[],
-    _particleQueueHead: 0,
+    _essentialQueueHead: 0,
+    _ambientQueueHead: 0,
     _decalQueueHead: 0,
+
+    reset: () => {
+        FXSystem.essentialQueue.length = 0;
+        FXSystem.ambientQueue.length = 0;
+        FXSystem.decalQueue.length = 0;
+        FXSystem._essentialQueueHead = 0;
+        FXSystem._ambientQueueHead = 0;
+        FXSystem._decalQueueHead = 0;
+        // Also clear REQUEST_POOLS to be safe
+        REQUEST_POOL.length = 0;
+        DECAL_REQUEST_POOL.length = 0;
+    },
 
     // Pools
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
@@ -347,6 +361,9 @@ export const FXSystem = {
     },
 
     spawnPart: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => {
+        const isEssential = type === 'flash' || type === 'electric_flash' || type === 'spark' || type === 'splash' ||
+            type === 'impact' || type === 'enemy_effect_stun' || type.includes('muzzle');
+
         for (let i = 0; i < count; i++) {
             let req = FXSystem._getSpawnRequest();
             req.scene = scene; req.particlesList = particlesList; req.x = x; req.y = y; req.z = z;
@@ -355,7 +372,11 @@ export const FXSystem = {
             if (customVel) req.customVel.copy(customVel);
             else req.customVel.set(0, 0, 0);
 
-            FXSystem.particleQueue.push(req);
+            if (isEssential) {
+                FXSystem.essentialQueue.push(req);
+            } else {
+                FXSystem.ambientQueue.push(req);
+            }
         }
     },
 
@@ -406,18 +427,31 @@ export const FXSystem = {
         const safeDelta = Math.min(delta, 0.1);
 
         // 1. Process Queues (Budgeted)
-        const pEnd = Math.min(FXSystem._particleQueueHead + 250, FXSystem.particleQueue.length);
-        for (let i = FXSystem._particleQueueHead; i < pEnd; i++) {
-            const req = FXSystem.particleQueue[i];
+        // ESSENTIAL QUEUE: Drained completely every frame to ensure immediate feedback
+        for (let i = FXSystem._essentialQueueHead; i < FXSystem.essentialQueue.length; i++) {
+            const req = FXSystem.essentialQueue[i];
             if (!req.scene) req.scene = scene;
             if (!req.particlesList) req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
             REQUEST_POOL.push(req);
         }
-        FXSystem._particleQueueHead = pEnd;
-        if (FXSystem._particleQueueHead >= FXSystem.particleQueue.length) {
-            FXSystem.particleQueue.length = 0;
-            FXSystem._particleQueueHead = 0;
+        FXSystem.essentialQueue.length = 0;
+        FXSystem._essentialQueueHead = 0;
+
+        // AMBIENT QUEUE: Processed with a budget to maintain performance
+        const AMBIENT_BUDGET = 250;
+        const pEnd = Math.min(FXSystem._ambientQueueHead + AMBIENT_BUDGET, FXSystem.ambientQueue.length);
+        for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
+            const req = FXSystem.ambientQueue[i];
+            if (!req.scene) req.scene = scene;
+            if (!req.particlesList) req.particlesList = particlesList;
+            FXSystem._spawnPartImmediate(req);
+            REQUEST_POOL.push(req);
+        }
+        FXSystem._ambientQueueHead = pEnd;
+        if (FXSystem._ambientQueueHead >= FXSystem.ambientQueue.length) {
+            FXSystem.ambientQueue.length = 0;
+            FXSystem._ambientQueueHead = 0;
         }
 
         const dEnd = Math.min(FXSystem._decalQueueHead + 10, FXSystem.decalQueue.length);
@@ -646,7 +680,7 @@ export const FXSystem = {
         req.customVel.copy(_v1).multiplyScalar(speed);
         req.scale = scale;
         req.color = colorHex;
-        FXSystem.particleQueue.push(req);
+        FXSystem.essentialQueue.push(req);
     },
 
     spawnMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
@@ -670,7 +704,7 @@ export const FXSystem = {
         req.scale = scale;
         req.color = isCyan ? 0x00bfff : 0xffcc00;
         req.life = 6 + Math.random() * 4;
-        FXSystem.particleQueue.push(req);
+        FXSystem.essentialQueue.push(req);
     },
 
     spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
@@ -707,7 +741,7 @@ export const FXSystem = {
 
                 // CRITICAL: Point shard exactly to next node for oriented line look
                 req.customVel.subVectors(v_node, v_prev);
-                FXSystem.particleQueue.push(req);
+                FXSystem.essentialQueue.push(req);
 
                 // Add blinding white core (snappy)
                 if (Math.random() > 0.2) {
@@ -718,7 +752,7 @@ export const FXSystem = {
                     reqC.color = 0xffffff;
                     reqC.life = req.life;
                     reqC.customVel.copy(req.customVel);
-                    FXSystem.particleQueue.push(reqC);
+                    FXSystem.essentialQueue.push(reqC);
                 }
 
                 // Branching logic: Reaches out significantly
@@ -756,7 +790,7 @@ export const FXSystem = {
                 (Math.random() - 0.5) * 2
             );
             req.scale = 0.2;
-            FXSystem.particleQueue.push(req);
+            FXSystem.essentialQueue.push(req);
         }
     }
 };

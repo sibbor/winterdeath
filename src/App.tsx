@@ -26,6 +26,7 @@ import { getCollectibleById, getCollectiblesBySector } from './content/collectib
 import { isMobile } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
 import { WinterEngine } from './core/engine/WinterEngine';
+import { FXSystem } from './core/systems/FXSystem';
 import { DEFAULT_GRAPHICS, SECTOR_THEMES } from './content/constants';
 
 const App: React.FC = () => {
@@ -290,6 +291,9 @@ const App: React.FC = () => {
         setShowLoadingOverlay(true);
         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setTeleportTarget(null);
+
+        // [VINTERDÖD] Clear FX baggage before entering new sector
+        FXSystem.reset();
 
         // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
         // while the loading screen is visible.
@@ -640,7 +644,11 @@ const App: React.FC = () => {
                         setShowLoadingOverlay(true);
                         setIsDeathScreenActive(false);
 
+                        // [VINTERDÖD] Purge FX queues to prevent sector-blood appearing in Camp
+                        FXSystem.reset();
+
                         // Yield to browser so it can render the loading screen before we block the thread
+                        // Increased from 50ms to 150ms to ensure the loading screen is painted on slower machines
                         setTimeout(() => {
                             setGameState(prev => {
                                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
@@ -655,6 +663,10 @@ const App: React.FC = () => {
                         setIsDeathScreenActive(false);
                         setIsLoadingSector(true);
                         setShowLoadingOverlay(true);
+
+                        // [VINTERDÖD] Clear FX before retry
+                        FXSystem.reset();
+
                         setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
                         setSectorStats(null);
                         setDeathDetails(null);

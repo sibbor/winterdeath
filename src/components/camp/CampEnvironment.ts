@@ -86,11 +86,19 @@ export const CampEnvironment = {
             smokes.push({ mesh: sm, life: 0, speed: 0 });
         }
 
-        return {
+        const state: CampEffectsState = {
             particles: { flames, sparkles, smokes },
             starSystem,
             fireLight
         };
+
+        // [VINTERDÖD] Pre-warm the simulation so the fire is already "blazing" on frame 1
+        // 120 frames = ~2 seconds of simulation
+        for (let i = 0; i < 120; i++) {
+            CampEnvironment.updateEffects(scene, state, 0.016, i * 0.016, i);
+        }
+
+        return state;
     },
 
     setupSky: (scene: THREE.Scene, textures: Textures) => {
