@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
+import { soundManager } from '../../utils/sound';
 
 // --- TYPES & INTERFACES ---
 
@@ -586,6 +587,7 @@ export const FXSystem = {
             FXSystem._killParticle(index, list);
         } else if (p.type === 'gore') {
             if (Math.random() < 0.40) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
+            soundManager.playImpact('flesh');
             p.vel.set(0, 0, 0);
         } else {
             FXSystem._killParticle(index, list);
@@ -613,6 +615,7 @@ export const FXSystem = {
             else if (type === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
+            else if (type === 'blood_splat') { geo = GEOMETRY.bloodSplat; mat = MATERIALS.bloodSplat; }
             else if (type === 'gore') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();

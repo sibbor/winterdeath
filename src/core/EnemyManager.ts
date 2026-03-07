@@ -195,6 +195,7 @@ export const EnemyManager = {
         const goreCount = enemy.isBoss ? 12 : 5;
 
         callbacks.spawnPart(pos.x, 1, pos.z, 'blood', bloodCount);
+        callbacks.spawnPart(pos.x, 1, pos.z, 'blood_splat', 3, undefined, undefined, undefined, 2.0);
 
         // 4. Velocity handling for death trajectories
         _v1.set(0, 0, 0);

@@ -79,7 +79,7 @@ export const AssetPreloader = {
                         'runner_scream', 'runner_attack', 'runner_death',
                         'tank_roar', 'tank_smash', 'tank_death',
                         'bomber_beep', 'step_zombie',
-                        'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone', 'impact_wood',
+                        'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone', 'impact_wood', 'blood_splat',
                         'door_metal_shut', 'door_metal_open', 'heartbeat', 'ui_level_up',
                         'loot_scrap', 'chest_open',
                         'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
@@ -267,6 +267,7 @@ export const AssetPreloader = {
 
                 // Geometry-specific — unique vertex attributes or blend modes not covered by GEOMETRY.box
                 addToWarmup(new THREE.Mesh(GEOMETRY.splash, MATERIALS.splash));
+                addToWarmup(new THREE.Mesh(GEOMETRY.bloodSplat, MATERIALS.bloodSplat));
                 addToWarmup(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal));
                 addToWarmup(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodStainDecal));
                 addToWarmup(new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone));
