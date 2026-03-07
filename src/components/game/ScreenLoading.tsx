@@ -44,8 +44,12 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
         requestAnimationFrame(() => setIsVisible(true));
     }, [tips]);
 
+    // [VINTERDÖD] Sticky "done" state to prevent "double-fade" flickers if flags overlap momentarily
+    const [isActuallyDone, setIsActuallyDone] = useState(false);
+    if (isDone && !isActuallyDone) setIsActuallyDone(true);
+
     // Handle fade out visibility
-    const finalOpacity = (isVisible && !isDone) ? 'opacity-100' : 'opacity-0';
+    const finalOpacity = (isVisible && !isActuallyDone) ? 'opacity-100' : 'opacity-0';
 
     return (
         <div

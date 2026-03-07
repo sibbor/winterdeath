@@ -427,7 +427,10 @@ const App: React.FC = () => {
                     initialGraphics={gameState.graphics}
                     onCampLoaded={() => {
                         setIsLoadingCamp(false);
-                        setTimeout(() => setShowLoadingOverlay(false), 500);
+                        // [VINTERDÖD] Guard against flicker by ensuring state is stable before fade
+                        requestAnimationFrame(() => {
+                            setTimeout(() => setShowLoadingOverlay(false), 500);
+                        });
                     }}
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
@@ -467,7 +470,13 @@ const App: React.FC = () => {
                         rescuedFamilyIndices={gameState.rescuedFamilyIndices}
                         bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
 
-                        onSectorLoaded={() => setIsLoadingSector(false)}
+                        onSectorLoaded={() => {
+                            setIsLoadingSector(false);
+                            // [VINTERDÖD] Properly unmount the loading screen for sectors to match Camp behavior
+                            requestAnimationFrame(() => {
+                                setTimeout(() => setShowLoadingOverlay(false), 500);
+                            });
+                        }}
                         startAtCheckpoint={false}
                         onCheckpointReached={() => { }}
 
