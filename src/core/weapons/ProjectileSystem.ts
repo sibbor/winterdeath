@@ -672,8 +672,9 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 ctx.trackStats('hit', 1);
                 ctx.trackStats('damage', actualDmg, !!enemy.isBoss);
 
+                const headY = enemy.mesh.position.y + (enemy.originalScale || 1.0) * 1.8;
                 ctx.spawnPart(_v1.x, projectile.mesh.position.y, _v1.z, 'blood', 40);
-                ctx.spawnPart(_v1.x, projectile.mesh.position.y, _v1.z, 'blood_splat', 1, undefined, undefined, undefined, 1.2);
+                ctx.spawnPart(_v1.x, headY, _v1.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
                 soundManager.playImpact('flesh');
 
                 if (data.piercing) {

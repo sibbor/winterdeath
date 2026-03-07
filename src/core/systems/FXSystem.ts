@@ -304,7 +304,7 @@ export const FXSystem = {
         } else if (req.customVel.lengthSq() > 0) {
             p.vel.copy(req.customVel);
         } else {
-            const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' ? 12.0 : 1.0);
+            const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' || t === 'blood_splat' ? 12.0 : 1.0);
             const isFireFX = (t === 'flame' || t === 'fire' || t === 'spark' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark');
             const isLargeFX = (t === 'large_fire' || t === 'large_smoke');
             const vyScale = isLargeFX ? 3.0 : (isFireFX ? 1.8 : 0.8);
@@ -312,7 +312,7 @@ export const FXSystem = {
 
             p.vel.set(
                 (Math.random() - 0.5) * speedScale * hzScale,
-                Math.random() * speedScale * (t === 'splash' ? 1.5 : vyScale),
+                Math.random() * speedScale * (t === 'splash' || t === 'blood_splat' ? 1.5 : vyScale),
                 (Math.random() - 0.5) * speedScale * hzScale
             );
         }

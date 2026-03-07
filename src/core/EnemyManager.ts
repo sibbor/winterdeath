@@ -193,9 +193,10 @@ export const EnemyManager = {
         // 3. Spawn Particles & Blood
         const bloodCount = enemy.isBoss ? 12 : 5;
         const goreCount = enemy.isBoss ? 12 : 5;
+        const enemyTopY = pos.y + (enemy.originalScale || 1.0) * 1.8;
 
         callbacks.spawnPart(pos.x, 1, pos.z, 'blood', bloodCount);
-        callbacks.spawnPart(pos.x, 1, pos.z, 'blood_splat', 3, undefined, undefined, undefined, 2.0);
+        callbacks.spawnPart(pos.x, enemyTopY, pos.z, 'blood_splat', 3, undefined, undefined, undefined, 4.0);
 
         // 4. Velocity handling for death trajectories
         _v1.set(0, 0, 0);
@@ -207,12 +208,13 @@ export const EnemyManager = {
             _v1.copy(enemy.velocity).multiplyScalar(0.5).add(_up);
         }
 
-        // [VINTERDÖD] Cap Boss Gore Scale to prevent massive blue boulders
-        const maxGoreScale = enemy.isBoss ? Math.min(enemyScale * 1.5, 3.0) : enemyScale * 0.8;
+        // [VINTERDÖD] Gore Scale based on mass (Scale^2 for visual weight)
+        const massScale = (enemy.originalScale || 1.0) * (enemy.originalScale || 1.0);
+        const goreScale = enemy.isBoss ? Math.min(massScale * 1.5, 4.5) : massScale * 2.2;
 
         for (let i = 0; i < goreCount; i++) {
             _v2.set(_v1.x + (Math.random() - 0.5) * 12, _v1.y + Math.random() * 6, _v1.z + (Math.random() - 0.5) * 10);
-            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'gore', 1, undefined, _v2, enemy.color, maxGoreScale);
+            callbacks.spawnPart(pos.x, pos.y + 1, pos.z, 'gore', 1, undefined, _v2, enemy.color, goreScale);
         }
     },
 
