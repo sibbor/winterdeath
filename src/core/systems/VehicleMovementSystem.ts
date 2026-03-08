@@ -17,12 +17,50 @@ const _toEnemy = new THREE.Vector3();
 const _knockDir = new THREE.Vector3();
 const _dismountDir = new THREE.Vector3();
 
+// --- FAKE BRAKE GLOW (Zero-GC / Procedural Texture) ---
+function createBrakeGlowTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 512, 512);
+
+    const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 250);
+
+    gradient.addColorStop(0, 'rgba(255, 30, 0, 1.0)');   // Vit/orange/het kärna
+    gradient.addColorStop(0.2, 'rgba(180, 0, 0, 0.5)');  // Intensivt röd
+    gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.1)');   // Svagt rött sken
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');        // Exakt svart/transparent i kanten
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    return tex;
+}
+
+const _fakeBrakeGlowGeo = new THREE.PlaneGeometry(8, 8);
+_fakeBrakeGlowGeo.rotateX(-Math.PI / 2); // Lägg platt på marken
+
+const _fakeBrakeGlowMat = new THREE.MeshBasicMaterial({
+    map: createBrakeGlowTexture(),
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0.8,
+    fog: false
+});
+
 // Constants
 const HIT_COOLDOWN_MS = 350;
 const SPEED_SQ_PUSH = 4.0;
 const SPEED_SQ_KNOCKBACK = 36.0;
 const SPEED_SQ_SPLATTER = 144.0;
-const KMH_TO_MS = 1.0 / 3.6; // Multiplication is faster than division
+const KMH_TO_MS = 1.0 / 3.6;
 
 export class VehicleMovementSystem implements System {
     id = 'vehicle_movement';
@@ -74,7 +112,6 @@ export class VehicleMovementSystem implements System {
         now: number,
         def: VehicleDef
     ) {
-        // Clamp delta to prevent physics explosions on lag spikes
         const dt = delta > 0.1 ? 0.1 : delta;
         const fpsRatio = dt * 60;
 
@@ -103,10 +140,9 @@ export class VehicleMovementSystem implements System {
             const laserSight = playerGroup.getObjectByName('laserSight');
             if (laserSight) laserSight.visible = false;
 
-            // HEADLIGHT HIJACK: Find player flashlight and move it to the car
+            // HEADLIGHT HIJACK
             const flashlight = playerGroup.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
             if (flashlight) {
-                // Cache original settings once
                 if (!flashlight.userData.orig) {
                     flashlight.userData.orig = {
                         parent: flashlight.parent,
@@ -119,24 +155,20 @@ export class VehicleMovementSystem implements System {
                     };
                 }
 
-                // Move light and its target to the vehicle root
                 vehicle.add(flashlight);
                 vehicle.add(flashlight.target);
 
-                // Position perfectly centered at the front grille
-                flashlight.position.set(0, 0.65, def.size.z);
+                // JUSTERING: Flytta fram lampan 0.6m utanför fysiklådan så den inte kastar skugga av sin egen kofångare
+                flashlight.position.set(0, 0.65, def.size.z + 0.6);
                 flashlight.target.position.set(0, 0.5, def.size.z + 20);
 
-                // Boost specs to act as car headlights
-                flashlight.angle = Math.PI / 2.5; // Wider beam
-                flashlight.intensity = flashlight.userData.orig.intensity * 2.0; // Brighter
+                flashlight.angle = Math.PI / 2.5;
+                flashlight.intensity = flashlight.userData.orig.intensity * 2.0;
                 flashlight.distance = 80;
 
-                // Force it ON and sync state
                 flashlight.visible = true;
                 state.flashlightOn = true;
 
-                // Force matrix update to avoid 1 frame of light lagging behind
                 flashlight.updateMatrixWorld();
                 flashlight.target.updateMatrixWorld();
             }
@@ -228,16 +260,14 @@ export class VehicleMovementSystem implements System {
         if ((steer > 0.1 || steer < -0.1) && speedSq > 0.5) {
             const directionalSteer = isReversing ? -steer : steer;
 
-            // Arcade steering curve
             let speedFactor = 1.0;
             if (speed < 6.0) {
-                speedFactor = speed / 6.0; // Ramps up turn at low speeds (better control)
+                speedFactor = speed / 6.0;
             } else {
                 const speedRatio = speed / (maxSpeedMS > 1 ? maxSpeedMS : 1);
-                speedFactor = 1.0 - (speedRatio * 0.3); // Slightly stiffer at extreme speeds
+                speedFactor = 1.0 - (speedRatio * 0.3);
             }
 
-            // Only snappy handbrake turn if we actually have some speed! (Kills the donut/beyblade bug)
             const turnMult = (handbrake && speed > 6.0) ? 1.5 : 1.0;
 
             angVel.y -= directionalSteer * def.turnSpeed * turnMult * speedFactor * dt;
@@ -247,7 +277,6 @@ export class VehicleMovementSystem implements System {
         let latRetention = def.lateralFriction * def.friction;
 
         if (handbrake) {
-            // Handbrake overrides drivetrain. Keep a little grip (0.95) instead of 0.99.
             latRetention = 0.95;
         } else if ((throttle > 0.5 || throttle < -0.5) && speedSq > 20 && absLatSpeed > 2.0) {
             if (def.drivetrain === 'RWD') latRetention = 0.96;
@@ -264,7 +293,6 @@ export class VehicleMovementSystem implements System {
         vel.addScaledVector(_right, dampedLat);
         vel.y = savedVelY;
 
-        // Snappy steer recovery! Stops rotation fast when letting go of A/D
         angVel.multiplyScalar(Math.pow(0.85, fpsRatio));
 
         // --- SUSPENSION ---
@@ -303,22 +331,38 @@ export class VehicleMovementSystem implements System {
             }
 
             if (lights.brake) {
-                // Pumped up the intensity drastically to ensure it penetrates tone-mapping
-                const brakeIntensity = isBraking ? 50.0 : (isEngineOn ? 4.0 : 0.0);
+                const brakeIntensity = isBraking ? 20.0 : (isEngineOn ? 2.0 : 0.0);
+                const brakeColor = isBraking ? 0xff3333 : 0x660000;
 
-                // Fallback: If you are using an older VehicleGenerator array structure
                 if (Array.isArray(lights.brake)) {
                     for (let i = 0; i < lights.brake.length; i++) {
                         if (lights.brake[i].mesh) {
-                            (lights.brake[i].mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = brakeIntensity;
+                            const mat = lights.brake[i].mesh.material as THREE.MeshStandardMaterial;
+                            mat.emissiveIntensity = brakeIntensity;
+                            mat.emissive.setHex(brakeColor);
                         }
                     }
                 } else if (lights.brake.material) {
                     lights.brake.material.emissiveIntensity = brakeIntensity;
+                    lights.brake.material.emissive.setHex(brakeColor);
+                }
+
+                // FEJKAT Belysnings-Glow
+                if (isEngineOn && !lights.brake.fakeGlow) {
+                    const glowMesh = new THREE.Mesh(_fakeBrakeGlowGeo, _fakeBrakeGlowMat);
+                    // JUSTERING: Flytta bak ljuspölen så att centrum hamnar exakt under/bakom baklyktorna (-def.size.z - 0.5)
+                    glowMesh.position.set(0, 0.1, -def.size.z - 0.5);
+                    glowMesh.visible = false;
+                    vehicle.add(glowMesh);
+                    lights.brake.fakeGlow = glowMesh;
+                }
+
+                if (lights.brake.fakeGlow) {
+                    lights.brake.fakeGlow.visible = isBraking;
                 }
             }
 
-            // Sirens (blinks rapidly based on timestamp 'now')
+            // Sirens
             if (lights.siren) {
                 if (isEngineOn) {
                     const blinkSpeed = 0.015;
@@ -375,12 +419,10 @@ export class VehicleMovementSystem implements System {
             playerGroup.position.copy(vehicle.position);
             playerGroup.quaternion.copy(vehicle.quaternion);
 
-            // Apply player specific offset to seat them correctly inside
             playerGroup.position.x += def.seatOffset.x;
             playerGroup.position.y += def.seatOffset.y + suspY;
             playerGroup.position.z += def.seatOffset.z;
 
-            // Zero out local Y rotation so player faces forward in the car
             const childLen = playerGroup.children.length;
             for (let i = 0; i < childLen; i++) {
                 const child = playerGroup.children[i];
@@ -398,13 +440,11 @@ export class VehicleMovementSystem implements System {
                 soundManager.playVehicleSkid(0);
                 soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
-                // Move player to dismount point
                 _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
                     .applyQuaternion(vehicle.quaternion);
                 playerGroup.position.add(_dismountDir);
                 playerGroup.position.y = 0;
 
-                // Show laser sight again
                 const laserSight = playerGroup.getObjectByName('laserSight');
                 if (laserSight) laserSight.visible = true;
 
@@ -413,25 +453,25 @@ export class VehicleMovementSystem implements System {
                 if (flashlight && flashlight.userData.orig) {
                     const orig = flashlight.userData.orig;
 
-                    // Attach back to its original parent (usually playerGroup)
                     if (orig.parent) {
                         orig.parent.add(flashlight);
                         orig.parent.add(flashlight.target);
                     }
 
-                    // Restore original properties
                     flashlight.position.copy(orig.position);
                     flashlight.target.position.copy(orig.targetPos);
                     flashlight.angle = orig.angle;
                     flashlight.intensity = orig.intensity;
                     flashlight.distance = orig.distance;
                     flashlight.penumbra = orig.penumbra;
-
-                    // Read current game state in case the player toggled the flashlight via hotkey while driving
                     flashlight.visible = !!state.flashlightOn;
 
                     flashlight.updateMatrixWorld();
                     flashlight.target.updateMatrixWorld();
+                }
+
+                if (lights?.brake?.fakeGlow) {
+                    lights.brake.fakeGlow.visible = false;
                 }
             }
         }
@@ -553,17 +593,15 @@ export class VehicleMovementSystem implements System {
 
                 _toEnemy.normalize();
 
-                // Push vehicle away from obstacle
                 vehicle.position.addScaledVector(_toEnemy, overlap * 0.6);
 
-                // Calculate impact on velocity based on normalized vector
                 const impactDot = vel.dot(_toEnemy);
                 if (impactDot < 0) {
                     vel.addScaledVector(_toEnemy, -impactDot * 1.2);
                 }
 
                 vehicle.userData.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
-                vel.multiplyScalar(0.85); // General friction penalty on hit
+                vel.multiplyScalar(0.85);
             }
         }
     }
