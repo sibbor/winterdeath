@@ -171,7 +171,7 @@ export const WeaponHandler = {
 
         const laser = playerGroup.getObjectByName('laserSight');
         if (laser) {
-            laser.visible = !state.activeVehicle && state.activeWeapon !== WeaponType.ARC_CANNON && state.activeWeapon !== WeaponType.FLAMETHROWER;
+            laser.visible = state.activeWeapon !== WeaponType.ARC_CANNON && state.activeWeapon !== WeaponType.FLAMETHROWER;
         }
 
         if (state.activeWeapon === WeaponType.RADIO) {

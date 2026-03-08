@@ -89,7 +89,7 @@ export class VehicleMovementSystem implements System {
         const vel = ud.velocity as THREE.Vector3;
         const angVel = ud.angularVelocity as THREE.Vector3;
 
-        // --- START ENGINE & HIJACK FLASHLIGHT ---
+        // --- START ENGINE ---
         if (input && state.vehicleEngineState === 'OFF') {
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
@@ -98,6 +98,10 @@ export class VehicleMovementSystem implements System {
             soundManager.playVehicleEngine(category);
             vel.set(0, 0, 0);
             angVel.set(0, 0, 0);
+
+            // Hide laser sight while in vehicle
+            const laserSight = playerGroup.getObjectByName('laserSight');
+            if (laserSight) laserSight.visible = false;
 
             // HEADLIGHT HIJACK: Find player flashlight and move it to the car
             const flashlight = playerGroup.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
@@ -299,8 +303,19 @@ export class VehicleMovementSystem implements System {
             }
 
             if (lights.brake) {
-                // If braking -> intense red. If just engine on -> weak red (taillight). Else off.
-                lights.brake.material.emissiveIntensity = isBraking ? 20.0 : (isEngineOn ? 2.0 : 0.0);
+                // Pumped up the intensity drastically to ensure it penetrates tone-mapping
+                const brakeIntensity = isBraking ? 50.0 : (isEngineOn ? 4.0 : 0.0);
+
+                // Fallback: If you are using an older VehicleGenerator array structure
+                if (Array.isArray(lights.brake)) {
+                    for (let i = 0; i < lights.brake.length; i++) {
+                        if (lights.brake[i].mesh) {
+                            (lights.brake[i].mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = brakeIntensity;
+                        }
+                    }
+                } else if (lights.brake.material) {
+                    lights.brake.material.emissiveIntensity = brakeIntensity;
+                }
             }
 
             // Sirens (blinks rapidly based on timestamp 'now')
@@ -388,6 +403,10 @@ export class VehicleMovementSystem implements System {
                     .applyQuaternion(vehicle.quaternion);
                 playerGroup.position.add(_dismountDir);
                 playerGroup.position.y = 0;
+
+                // Show laser sight again
+                const laserSight = playerGroup.getObjectByName('laserSight');
+                if (laserSight) laserSight.visible = true;
 
                 // --- RESTORE FLASHLIGHT TO PLAYER ---
                 const flashlight = vehicle.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
