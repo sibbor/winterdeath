@@ -340,8 +340,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 {/* Bottom Interface */}
                 <div className={`flex justify-between items-end relative w-full transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                     {/* Left Stats Panel (Split Bars with Gap) */}
-                    {/* Left Stats Panel (Split Bars with Gap) - HIDDEN ON MOBILE (Moved to Top Left) */}
-                    <div className={`w-80 flex flex-col gap-1 relative ${isShaking ? 'translate-x-1 translate-y-1' : ''}`}>
+                    {/* Left Stats Panel (Split Bars with Gap) - HIDDEN ON MOBILE (Moved to Top Left) / HIDDEN WHEN DRIVING */}
+                    <div className={`w-80 flex flex-col gap-1 relative ${isShaking ? 'translate-x-1 translate-y-1' : ''} ${isDriving ? 'opacity-0' : 'opacity-100'}`}>
 
                         {/* Background Plate (Slightly larger than bars) */}
                         <div className="absolute -top-2 -bottom-2 -left-4 -right-2 bg-black/80 skew-x-[-10deg] z-0 shadow-lg" />
@@ -372,11 +372,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                 </div>
                                 {/* Pedals */}
                                 <div className="flex gap-4 mt-2">
-                                    <div className={`px-4 py-1 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState < 0 ? 'bg-red-600/30 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
-                                        <span className="text-[10px] font-black uppercase tracking-widest block skew-x-[10deg]">BRK</span>
-                                    </div>
                                     <div className={`px-4 py-1 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState > 0 ? 'bg-emerald-600/30 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] text-emerald-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
-                                        <span className="text-[10px] font-black uppercase tracking-widest block skew-x-[10deg]">GAS</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest block skew-x-[10deg]">{t('ui.gas')}</span>
+                                    </div>
+                                    <div className={`px-4 py-1 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState < 0 ? 'bg-red-600/30 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)] text-red-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
+                                        <span className="text-[10px] font-black uppercase tracking-widest block skew-x-[10deg]">{t('ui.brake')}</span>
                                     </div>
                                 </div>
                             </div>

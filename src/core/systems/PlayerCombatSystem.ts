@@ -165,7 +165,7 @@ export class PlayerCombatSystem implements System {
 
         // Sync Laser Sight visibility with state
         if (this.laserSight) {
-            this.laserSight.visible = true; // Safe since the early return handles death above
+            this.laserSight.visible = !state.activeVehicle;
         }
     }
 

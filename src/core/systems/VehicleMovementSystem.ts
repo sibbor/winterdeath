@@ -300,7 +300,7 @@ export class VehicleMovementSystem implements System {
 
             if (lights.brake) {
                 // If braking -> intense red. If just engine on -> weak red (taillight). Else off.
-                lights.brake.material.emissiveIntensity = isBraking ? 10.0 : (isEngineOn ? 2.0 : 0.0);
+                lights.brake.material.emissiveIntensity = isBraking ? 20.0 : (isEngineOn ? 2.0 : 0.0);
             }
 
             // Sirens (blinks rapidly based on timestamp 'now')

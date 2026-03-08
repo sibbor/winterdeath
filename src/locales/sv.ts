@@ -137,6 +137,8 @@ export const sv = {
         drive_boat: "KÖR BÅTEN",
         enter_vehicle: "GÅ IN I FORDON",
         exit_vehicle: "GÅ UR FORDON",
+        gas: "GAS",
+        brake: "BROMS",
         clue_found_title: "LEDTRÅD HITTAD",
         skill_point: "FÄRDIGHETSPOÄNG",
         available_pts: "POÄNG",

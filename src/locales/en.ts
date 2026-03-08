@@ -143,6 +143,8 @@ export const en = {
         drive_boat: "DRIVE BOAT",
         enter_vehicle: "ENTER VEHICLE",
         exit_vehicle: "EXIT VEHICLE",
+        gas: "GAS",
+        brake: "BRAKE",
         clue_found_title: "CLUE FOUND",
         skill_point: "SKILL POINT",
         collectible_discovered: "COLLECTIBLE DISCOVERED",
