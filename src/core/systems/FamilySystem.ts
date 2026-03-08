@@ -7,7 +7,7 @@ import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3(); // Target Position
+const _v1 = new THREE.Vector3(); // Target Position / Offset
 const _v3 = new THREE.Vector3(); // Direction
 
 // Single reusable animation state — avoids per-frame object allocation
@@ -59,12 +59,9 @@ export class FamilySystem implements System {
         const state = _session.state;
 
         // --- Mirror player speed for the follow movement ---
-        // Base speed matches PlayerMovementSystem: 15 * stats.speed
-        // (stats is not typed on RuntimeState but is set dynamically via the armory station)
         const speedMultiplier = (_session.state as any).stats?.speed ?? 1.0;
         let followSpeed = 15 * speedMultiplier;
 
-        // Apply the same modifiers as the player
         if (state.isSwimming) {
             followSpeed *= 0.35;
         } else if (state.isWading) {
@@ -75,22 +72,9 @@ export class FamilySystem implements System {
             followSpeed *= 2.5;
         }
 
-        // Family members slightly trail behind — apply a small lag so they
-        // feel like they're catching up, not teleporting. Clamp to 1.2× player speed max.
         const maxFollowSpeed = followSpeed * 1.25;
-
-        // --- Hide family members while player is driving — they clip through the vehicle ---
-        const inVehicle = !!(state as any).activeVehicle;
-        if (inVehicle) {
-            for (let i = 0; i < members.length; i++) {
-                const fm = members[i]?.mesh;
-                if (!fm) continue;
-                if (fm.visible) fm.visible = false;
-                const ring = members[i].ring;
-                if (ring && ring.visible) ring.visible = false;
-            }
-            return;
-        }
+        const activeVehicle = (state as any).activeVehicle;
+        const inVehicle = !!activeVehicle;
 
         for (let i = 0; i < members.length; i++) {
             const familyMember = members[i];
@@ -99,8 +83,94 @@ export class FamilySystem implements System {
             const fm = familyMember.mesh;
             const userData = fm.userData;
 
-            // Restore visibility after exiting a vehicle
+            // Ensure they are always visible (whether in car or outside)
             if (!fm.visible) fm.visible = true;
+
+            // --- 0. VEHICLE RIDING LOGIC ---
+            if (inVehicle) {
+                const def = activeVehicle.userData.vehicleDef;
+                const suspY = activeVehicle.userData.suspY || 0;
+
+                // Hide the interaction ring while riding
+                if (familyMember.ring && familyMember.ring.visible) {
+                    familyMember.ring.visible = false;
+                }
+
+                // Determine dynamic passenger seat offsets for the whole family
+                let pX = 0, pY = 0, pZ = 0;
+
+                // Get driver offset as base reference
+                const dX = def?.seatOffset?.x || -0.4;
+                const dY = def?.seatOffset?.y || 0.6;
+                const dZ = def?.seatOffset?.z || 0.0;
+
+                // Specific seat mapping (Assuming Spelaren/Robert is driving)
+                if (i === 0) {
+                    // Nathalie (Adult) - Front Passenger
+                    pX = -dX; pY = dY; pZ = dZ;
+                } else if (i === 1) {
+                    // Loke (Child 1) - Back Left
+                    pX = dX; pY = dY; pZ = dZ - 1.2;
+                } else if (i === 2) {
+                    // Esmeralda (Child 2) - Back Middle
+                    pX = 0; pY = dY; pZ = dZ - 1.2;
+                } else if (i === 3) {
+                    // Jordan (Child 3) - Back Right
+                    pX = -dX; pY = dY; pZ = dZ - 1.2;
+                } else if (i === 4) {
+                    // Cat 1 - Trunk Left
+                    pX = dX * 0.8; pY = dY + 0.1; pZ = dZ - 2.2;
+                } else if (i === 5) {
+                    // Cat 2 - Trunk Right
+                    pX = -dX * 0.8; pY = dY + 0.1; pZ = dZ - 2.2;
+                } else {
+                    // Fallback if more members
+                    pX = 0; pY = dY + 0.1; pZ = dZ - 2.2;
+                }
+
+                // Apply vehicle rotation to the local offset
+                _v1.set(pX, pY + suspY, pZ);
+                _v1.applyQuaternion(activeVehicle.quaternion);
+
+                // Lock position and rotation to the vehicle
+                fm.position.copy(activeVehicle.position).add(_v1);
+                fm.quaternion.copy(activeVehicle.quaternion);
+
+                // Force Idle Animation
+                let body = userData.cachedBody;
+                if (!body) {
+                    body = fm.children.find((c: any) => c.userData.isBody);
+                    if (body) userData.cachedBody = body;
+                }
+                if (body) {
+                    _animState.seed = familyMember.seed;
+                    _animState.isMoving = false;
+                    _animState.isRushing = false;
+                    _animState.isRolling = false;
+                    _animState.isSwimming = false;
+                    _animState.isWading = false;
+                    _animState.isIdleLong = false;
+                    PlayerAnimation.update(body, _animState, now, delta);
+                }
+
+                userData.wasInVehicle = true;
+                continue; // Skip the rest of the loop (following logic)
+            }
+
+            // --- 0.5 VEHICLE EXIT LOGIC ---
+            if (userData.wasInVehicle) {
+                userData.wasInVehicle = false;
+
+                // Smooth dismount: Spread the 6 family members out so they don't clip
+                const spreadX = (i % 2 === 0 ? 1 : -1) * (1.5 + (i * 0.4));
+                const spreadZ = (Math.random() - 0.5) * 2.0;
+
+                fm.position.copy(this.playerGroup.position);
+                fm.position.x += spreadX;
+                fm.position.z += spreadZ;
+                fm.position.y = 0; // Reset to ground level
+                fm.rotation.set(0, 0, 0); // Reset rotation so they don't lean
+            }
 
             // --- 1. Ring Pulse Visual ---
             const ring = familyMember.ring;
@@ -121,27 +191,31 @@ export class FamilySystem implements System {
             if (familyMember.following && !isCinematicActive) {
                 _v1.copy(this.playerGroup.position);
 
-                // Stagger positions so they don't all overlap
+                // Stagger positions for a group of 6
                 if (i > 0) {
                     const sign = i % 2 === 0 ? 1 : -1;
-                    const dist = 2.0 + i * 1.2;
+                    const dist = 1.5 + i * 0.8; // Wider spread for large families
                     _v1.x += sign * dist;
                 }
 
                 const distSq = fm.position.distanceToSquared(_v1);
 
-                if (distSq > 4.0) {
+                if (distSq > 4.0) { // 2.0m threshold
                     fmIsMoving = true;
-                    // If they're far behind, let them move faster to catch up
-                    const catchUpBoost = distSq > 25.0 ? 1.4 : 1.0;
-                    const actualSpeed = Math.min(maxFollowSpeed, followSpeed * catchUpBoost);
 
-                    _v3.subVectors(_v1, fm.position).normalize();
-                    fm.position.addScaledVector(_v3, actualSpeed * delta);
-                    fm.lookAt(this.playerGroup.position);
+                    // Teleport catch-up if they get stuck incredibly far behind
+                    if (distSq > 900.0) {
+                        fm.position.copy(_v1);
+                    } else {
+                        // If they're far behind, let them move faster to catch up
+                        const catchUpBoost = distSq > 25.0 ? 1.4 : 1.0;
+                        const actualSpeed = Math.min(maxFollowSpeed, followSpeed * catchUpBoost);
+
+                        _v3.subVectors(_v1, fm.position).normalize();
+                        fm.position.addScaledVector(_v3, actualSpeed * delta);
+                        fm.lookAt(this.playerGroup.position);
+                    }
                     userData.lastMoveTime = now;
-
-                    // Mirror rush animation if player is rushing and family is moving fast
                     fmIsRushing = state.isRushing || state.isRolling;
                 }
             }
@@ -176,13 +250,11 @@ export class FamilySystem implements System {
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;
                     _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
 
-                    // Match player Y logic: swim at surface, wade on ground, lerp from water to land
                     if (_buoyancyResult.inWater) {
                         const swimY = _buoyancyResult.waterLevel - 0.35;
                         const targetY = _animState.isSwimming ? swimY : _buoyancyResult.groundY;
                         fm.position.y = THREE.MathUtils.lerp(fm.position.y, targetY, 4 * delta);
 
-                        // Distance-based ripple — FPS-independent, always anchors to current position
                         if (_animState.isSwimming || _animState.isWading) {
                             const rx = userData.lastRippleX ?? fm.position.x + 99;
                             const rz = userData.lastRippleZ ?? fm.position.z + 99;

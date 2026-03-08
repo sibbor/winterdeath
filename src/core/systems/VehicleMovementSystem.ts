@@ -89,7 +89,7 @@ export class VehicleMovementSystem implements System {
         const vel = ud.velocity as THREE.Vector3;
         const angVel = ud.angularVelocity as THREE.Vector3;
 
-        // --- AUDIO ENGINE ---
+        // --- START ENGINE & HIJACK FLASHLIGHT ---
         if (input && state.vehicleEngineState === 'OFF') {
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
@@ -98,6 +98,44 @@ export class VehicleMovementSystem implements System {
             soundManager.playVehicleEngine(category);
             vel.set(0, 0, 0);
             angVel.set(0, 0, 0);
+
+            // HEADLIGHT HIJACK: Find player flashlight and move it to the car
+            const flashlight = playerGroup.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
+            if (flashlight) {
+                // Cache original settings once
+                if (!flashlight.userData.orig) {
+                    flashlight.userData.orig = {
+                        parent: flashlight.parent,
+                        position: flashlight.position.clone(),
+                        targetPos: flashlight.target.position.clone(),
+                        angle: flashlight.angle,
+                        intensity: flashlight.intensity,
+                        distance: flashlight.distance,
+                        penumbra: flashlight.penumbra
+                    };
+                }
+
+                // Move light and its target to the vehicle root
+                vehicle.add(flashlight);
+                vehicle.add(flashlight.target);
+
+                // Position perfectly centered at the front grille
+                flashlight.position.set(0, 0.65, def.size.z);
+                flashlight.target.position.set(0, 0.5, def.size.z + 20);
+
+                // Boost specs to act as car headlights
+                flashlight.angle = Math.PI / 2.5; // Wider beam
+                flashlight.intensity = flashlight.userData.orig.intensity * 2.0; // Brighter
+                flashlight.distance = 80;
+
+                // Force it ON and sync state
+                flashlight.visible = true;
+                state.flashlightOn = true;
+
+                // Force matrix update to avoid 1 frame of light lagging behind
+                flashlight.updateMatrixWorld();
+                flashlight.target.updateMatrixWorld();
+            }
         }
 
         // --- COMPUTE FORWARD & RIGHT VECTORS ---
@@ -252,7 +290,6 @@ export class VehicleMovementSystem implements System {
         vehicle.rotation.y += angVel.y * dt;
 
         // --- LIGHTING SYSTEM (STEP 2) ---
-        // Fast access to cached materials we created in VehicleGenerator
         const lights = ud.lights;
         if (lights) {
             const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
@@ -267,7 +304,6 @@ export class VehicleMovementSystem implements System {
             }
 
             // Sirens (blinks rapidly based on timestamp 'now')
-            // Using fast sine/cosine to alternate blue/red without creating timers
             if (lights.siren) {
                 if (isEngineOn) {
                     const blinkSpeed = 0.015;
@@ -319,21 +355,21 @@ export class VehicleMovementSystem implements System {
         this.handleEnemyCollisions(vehicle, vel, def, session, now);
         this.handleObstacleCollisions(vehicle, vel, def, session);
 
-        // --- SYNC PLAYER TO VEHICLE ---
+        // --- SYNC PLAYER TO VEHICLE & DISMOUNT LOGIC ---
         if (input) {
             playerGroup.position.copy(vehicle.position);
             playerGroup.quaternion.copy(vehicle.quaternion);
 
+            // Apply player specific offset to seat them correctly inside
             playerGroup.position.x += def.seatOffset.x;
             playerGroup.position.y += def.seatOffset.y + suspY;
             playerGroup.position.z += def.seatOffset.z;
 
+            // Zero out local Y rotation so player faces forward in the car
             const childLen = playerGroup.children.length;
             for (let i = 0; i < childLen; i++) {
                 const child = playerGroup.children[i];
-                if (child.rotation) {
-                    child.rotation.y = 0;
-                }
+                if (child.rotation) child.rotation.y = 0;
             }
 
             // --- DISMOUNT ---
@@ -347,10 +383,37 @@ export class VehicleMovementSystem implements System {
                 soundManager.playVehicleSkid(0);
                 soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
+                // Move player to dismount point
                 _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
                     .applyQuaternion(vehicle.quaternion);
                 playerGroup.position.add(_dismountDir);
                 playerGroup.position.y = 0;
+
+                // --- RESTORE FLASHLIGHT TO PLAYER ---
+                const flashlight = vehicle.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
+                if (flashlight && flashlight.userData.orig) {
+                    const orig = flashlight.userData.orig;
+
+                    // Attach back to its original parent (usually playerGroup)
+                    if (orig.parent) {
+                        orig.parent.add(flashlight);
+                        orig.parent.add(flashlight.target);
+                    }
+
+                    // Restore original properties
+                    flashlight.position.copy(orig.position);
+                    flashlight.target.position.copy(orig.targetPos);
+                    flashlight.angle = orig.angle;
+                    flashlight.intensity = orig.intensity;
+                    flashlight.distance = orig.distance;
+                    flashlight.penumbra = orig.penumbra;
+
+                    // Read current game state in case the player toggled the flashlight via hotkey while driving
+                    flashlight.visible = !!state.flashlightOn;
+
+                    flashlight.updateMatrixWorld();
+                    flashlight.target.updateMatrixWorld();
+                }
             }
         }
     }
