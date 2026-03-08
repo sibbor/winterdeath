@@ -14,6 +14,7 @@ import { CampWorld } from './CampWorld';
 import { CampEnvironment, CampEffectsState } from './CampEnvironment';
 import { WeatherType } from '../../types';
 import { PerformanceMonitor } from '../../core/systems/PerformanceMonitor';
+import { AssetPreloader } from '../../core/systems/AssetPreloader';
 
 // [VINTERDÖD] Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
@@ -67,7 +68,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
     const [activeModal, setActiveModal] = useState<'armory' | 'sectors' | 'skills' | 'stats' | 'settings' | 'reset_confirm' | 'adventure_log' | null>(null);
-    const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string } | null>(null);
+    const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string, subText?: string } | null>(null);
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
 
@@ -247,7 +248,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         }
         scene.add(familyGroup);
 
-        // Store scene data for the interactivity effect
+        // Store scene data for the interactivity loop
         sceneInteractablesRef.current = interactables;
         sceneOutlinesRef.current = outlines;
         sceneFamilyMembersRef.current = familyMembers;
@@ -266,52 +267,47 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         requestAnimationFrame(checkReady);
 
         return () => {
-            // Scene cleanup not strictly required here as it's shared,
-            // but we ensure listeners are handled by the interactivity effect.
+            // Scene cleanup handled by engine
         };
     }, [rescuedFamilyIndices, debugMode, textures]);
     // NOT isRunning
 
-    // --- INTERACTIVITY EFFECT: Registers loop + events only when running ---
+    // --- INTERACTIVITY EFFECT: Registers loop + events ---
     useEffect(() => {
         const engine = engineRef.current;
-        if (!isRunning || !engine || !containerRef.current) return;
+        if (!engine || !containerRef.current) return;
 
         const container = containerRef.current;
         const scene = engine.scene;
         const camera = engine.camera;
-        const interactables = sceneInteractablesRef.current;
-        const outlines = sceneOutlinesRef.current;
-        const familyMembers = sceneFamilyMembersRef.current;
-        const activeMembers = sceneActiveMembersRef.current;
-        const BASE_LOOK_AT = sceneBaseLookAtRef.current;
-        const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2(-1000, -1000);
 
         const onMM = (e: MouseEvent) => {
-            if (!containerRef.current) return;
+            if (!isRunning || !containerRef.current) return;
             const rect = containerRef.current.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         };
 
         const onCL = () => {
-            if (activeModalRef.current) return;
-            if (hoveredRef.current) {
-                if (hoveredRef.current.startsWith('family_') || hoveredRef.current.startsWith('player_')) {
-                    const fmWrapper = familyMembers.find((fm: any) => fm.mesh.userData.id === hoveredRef.current);
+            if (!isRunning || activeModalRef.current) return;
+            const hovered = hoveredRef.current;
+            if (hovered) {
+                if (hovered.startsWith('family_') || hovered.startsWith('player_')) {
+                    const familyMembers = sceneFamilyMembersRef.current;
+                    const fmWrapper = familyMembers.find((fm: any) => fm.mesh.userData.id === hovered);
                     if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
                 } else {
                     soundManager.playUiConfirm();
-                    openModal(hoveredRef.current as any);
+                    openModal(hovered as any);
                 }
             }
         };
 
         const onTS = (e: TouchEvent) => {
-            if (!containerRef.current) return;
+            if (!isRunning || !containerRef.current) return;
             const rect = containerRef.current.getBoundingClientRect();
             const touch = e.touches[0];
             mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
@@ -319,7 +315,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             // Force raycast update for touch
             raycaster.setFromCamera(mouse, camera.threeCamera);
-            const hits = raycaster.intersectObjects(interactables);
+            const hits = raycaster.intersectObjects(sceneInteractablesRef.current);
             if (hits.length > 0) {
                 let target: any = hits[0].object;
                 if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
@@ -351,11 +347,20 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             monitor.begin('env_camera');
             CampEnvironment.updateEffects(scene, envStateRef.current, dt, now, frameCount);
 
+            const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
+            const BASE_LOOK_AT = sceneBaseLookAtRef.current;
             const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
             camera.set('lookSpeed', isIdleRef.current ? 0.2 : 3.0);
             camera.lookAt(targetLookAt.x, targetLookAt.y, targetLookAt.z);
             camera.update(dt, now);
             monitor.end('env_camera');
+
+            frameCount++;
+
+            // Access scene data directly via .current inside the loop
+            const familyMembers = sceneFamilyMembersRef.current;
+            const interactables = sceneInteractablesRef.current;
+            const outlines = sceneOutlinesRef.current;
 
             monitor.begin('family_anim');
             const talkingMembers = new Set(activeChats.current.map((c: any) => (now >= c.startTime && now <= c.startTime + c.duration) ? c.mesh.uuid : null).filter(Boolean));
@@ -374,7 +379,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             monitor.end('family_anim');
 
             monitor.begin('chatter');
-            if (now > nextChatterTime.current && activeMembers.length > 1) {
+            // Gated chatter by isRunning to avoid noise during loading
+            if (isRunning && now > nextChatterTime.current && sceneActiveMembersRef.current.length > 1) {
                 const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
                 let delayOffset = 0;
                 for (let i = 0; i < numSpeakers; i++) {
@@ -404,48 +410,74 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 // Randomized interval between 30 and 90 seconds
                 nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
             }
-            monitor.end('chatter');
 
-            monitor.begin('chat_bubbles');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
+            // Chat movement & opacity logic
             for (let i = activeChats.current.length - 1; i >= 0; i--) {
-                const chat = activeChats.current[i];
-                const timeAlive = now - chat.startTime;
-                if (timeAlive > chat.duration + 500) {
-                    if (chat.element.parentNode) chat.element.parentNode.removeChild(chat.element);
-                    activeChats.current.splice(i, 1); continue;
-                }
-                if (timeAlive >= 0) {
-                    if (!chat.playedSound) { soundManager.playVoice(chat.mesh.userData.name); chat.playedSound = true; }
-                    chat.element.style.opacity = timeAlive < 500 ? '1' : (timeAlive > chat.duration ? '0' : '1');
-                    const vec = _v1; chat.mesh.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
-                    chat.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`; chat.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`; chat.element.style.transform = 'translate(-50%, -100%)';
+                const c = activeChats.current[i];
+                if (now > c.startTime + c.duration) {
+                    if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
+                    activeChats.current.splice(i, 1);
+                } else if (now >= c.startTime) {
+                    // Only play chatter sound if running
+                    if (!c.playedSound) { c.playedSound = true; if (isRunning) soundManager.playUiConfirm(); }
+                    c.element.style.opacity = now < c.startTime + 500 ? String((now - c.startTime) / 500) : (now > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - now) / 500) : '1');
+                    const vec = _v1; c.mesh.getWorldPosition(vec); vec.y += 2.2; vec.project(camera.threeCamera);
+                    const width = container.clientWidth, height = container.clientHeight;
+                    c.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`;
+                    c.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`;
+                    c.element.style.transform = 'translate(-50%, -100%)';
                 }
             }
-            monitor.end('chat_bubbles');
+            monitor.end('chatter');
 
             monitor.begin('raycasting');
-            frameCount++;
-            if (frameCount - lastRaycastFrame >= 3) {
-                lastRaycastFrame = frameCount;
+            if (isRunning && !activeModalRef.current) {
+                // [VINTERDÖD] CRITICAL: Ensure world matrices are up-to-date before raycasting 
+                // to avoid missing hits on the first few frames or after movements.
+                scene.updateMatrixWorld();
+
                 raycaster.setFromCamera(mouse, camera.threeCamera);
                 const hits = raycaster.intersectObjects(interactables);
-                let newHover = null, toolTipText = "", tooltipX = 0, tooltipY = 0;
+                let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
+                const width = container.clientWidth, height = container.clientHeight;
+
                 if (hits.length > 0) {
                     let target: any = hits[0].object;
+                    // Support finding parent ID if the mesh itself doesn't have it (fallback)
                     if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
+
                     newHover = target.userData.id;
-                    if (newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) {
-                        toolTipText = `${target.userData.name}`;
+                    if (newHover) {
+                        const isMember = newHover.startsWith('family_') || newHover.startsWith('player_');
+                        if (isMember) {
+                            toolTipText = `${target.userData.name}`;
+                        } else {
+                            // Map 'armory'/'sectors'/... to localized station names
+                            toolTipText = t(`stations.${target.userData.name || newHover}`);
+
+                            // [VINTERDÖD] Calculate Dynamic Stat Subtext
+                            if (newHover === 'armory') {
+                                toolTipSubText = `${t(WEAPONS[currentLoadout.primary].displayName)} | ${t(WEAPONS[currentLoadout.secondary].displayName)} | ${t(WEAPONS[currentLoadout.throwable].displayName)} | ${t(WEAPONS[currentLoadout.special].displayName)}`;
+                            } else if (newHover === 'skills') {
+                                toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.maxHp} | ${t('camp_tooltips.adrenaline')}: ${stats.maxStamina} | ${t('camp_tooltips.reflexes')}: ${Math.round(stats.speed * 100)}`;
+                            } else if (newHover === 'adventure_log') {
+                                toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesFound?.length || 0} | ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} | ${t('camp_tooltips.poi')}: ${stats.visitedPOIs?.length || 0} | ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} | ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
+                            } else if (newHover === 'sectors') {
+                                toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} | ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
+                            }
+                        }
+
                         const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
                         tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
                     }
                 }
                 if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
-                setTooltip((newHover && (newHover.startsWith('family_') || newHover.startsWith('player_'))) ? { text: toolTipText, x: tooltipX, y: tooltipY } : null);
+                setTooltip(newHover ? { text: toolTipText, subText: toolTipSubText, x: tooltipX, y: tooltipY } : null);
+
                 const outlineKeys = Object.keys(outlines);
                 for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = !activeModalRef.current && (hoveredRef.current === outlineKeys[i]); }
+
+                // Pulsating emissive for hovered family
                 for (let i = 0; i < interactables.length; i++) {
                     const o = interactables[i];
                     if (o.userData.type === 'family') {
@@ -453,6 +485,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                         (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
                     }
                 }
+            } else {
+                setTooltip(null);
+                setHoveredStation(null);
             }
             monitor.end('raycasting');
 
@@ -488,8 +523,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none z-40 overflow-hidden" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 40 }} />
 
             {tooltip && tooltip.text && (
-                <div className="absolute pointer-events-none z-50 bg-black/90 border-2 border-black px-4 py-2 text-white font-bold uppercase tracking-wider text-sm -translate-x-1/2 -translate-y-full" style={{ left: tooltip.x, top: tooltip.y }}>
-                    {tooltip.text} <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-black"></div>
+                <div className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2" style={{ left: tooltip.x, top: tooltip.y }}>
+                    <div className="bg-black/90 border-2 border-black px-4 py-1 text-white font-black uppercase tracking-wider text-lg md:text-xl shadow-2xl">
+                        {tooltip.text}
+                    </div>
+                    {tooltip.subText && (
+                        <div className="bg-black/80 border-x-2 border-b-2 border-black px-3 py-1 text-slate-400 font-bold uppercase text-[10px] md:text-xs whitespace-nowrap shadow-xl">
+                            {tooltip.subText}
+                        </div>
+                    )}
+                    <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-black mt-[-1px]"></div>
                 </div>
             )}
 
@@ -532,7 +575,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     onUpdateGraphics={(newG) => {
                         setGraphics(newG);
                         onSaveGraphics(newG);
-                        WinterEngine.getInstance().updateSettings(newG);
                     }}
                 />
             )}

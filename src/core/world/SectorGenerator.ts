@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { ObjectGenerator } from './ObjectGenerator';
+import { VehicleGenerator } from './VehicleGenerator';
 import { EnvironmentGenerator } from './EnvironmentGenerator';
 import { PathGenerator } from './PathGenerator';
 import { EffectManager } from '../systems/EffectManager';
@@ -605,7 +606,7 @@ export const SectorGenerator = {
         type: 'station wagon' | 'sedan' | 'police' | 'ambulance' | 'suv' | 'minivan' | 'pickup' | 'bus' | 'tractor' | 'timber_truck' = 'station wagon',
         colorOverride?: number, addSnow?: boolean) => {
 
-        const vehicle = ObjectGenerator.createVehicle(type, 1.0, colorOverride, addSnow);
+        const vehicle = VehicleGenerator.createVehicle(type, colorOverride, addSnow);
 
         // Measure unrotated local bounds
         const box = new THREE.Box3().setFromObject(vehicle);
@@ -627,9 +628,9 @@ export const SectorGenerator = {
     },
 
     /**
-         * Spawn a driveable vehicle with full physics data from the VEHICLES database.
-         * Replaces manual userData setup — just pass the VehicleType and position.
-         */
+     * Spawn a driveable vehicle with full physics data from the VEHICLES database.
+     * Replaces manual userData setup — just pass the VehicleType and position.
+     */
     spawnDriveableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number,
         vehicleType: VehicleType, colorOverride?: number, addSnow?: boolean) => {
 
@@ -642,16 +643,26 @@ export const SectorGenerator = {
         // Create a root container. This aligns physics and logic to standard forward (Z-axis).
         const vehicleRoot = new THREE.Group();
 
-        // Use ObjectGenerator for visual mesh
+        // Use VehicleGenerator for visual mesh
         let visualMesh: THREE.Object3D;
         if (vehicleType === 'boat') {
-            visualMesh = ObjectGenerator.createBoat();
+            visualMesh = VehicleGenerator.createBoat();
         } else {
             const visualType = vehicleType === 'station_wagon' ? 'station wagon' : vehicleType;
-            visualMesh = ObjectGenerator.createVehicle(visualType, 1.0, colorOverride, addSnow);
+            visualMesh = VehicleGenerator.createVehicle(visualType, colorOverride, addSnow);
         }
         // Add visual representation to the root node
         vehicleRoot.add(visualMesh);
+
+        if (visualMesh.userData.lights) {
+            vehicleRoot.userData.lights = visualMesh.userData.lights;
+        }
+        if (visualMesh.userData.sirenOn !== undefined) {
+            vehicleRoot.userData.sirenOn = visualMesh.userData.sirenOn;
+        }
+        if (visualMesh.userData.material) {
+            vehicleRoot.userData.material = visualMesh.userData.material;
+        }
 
         const spawnY = vehicleType === 'boat' ? 1.0 : 0.5;
         vehicleRoot.position.set(x, spawnY, z);
@@ -953,24 +964,6 @@ export const SectorGenerator = {
         return pole;
     },
 
-    spawnCrashedCar: (ctx: SectorContext, x: number, z: number, rotation: number, color?: number) => {
-        const car = ObjectGenerator.createCrashedCar(color);
-        car.position.set(x, 0, z);
-        car.rotation.y = rotation;
-        ctx.scene.add(car);
-
-        // Add Collision
-        const box = new THREE.Box3().setFromObject(car);
-        const size = box.getSize(new THREE.Vector3());
-        SectorGenerator.addObstacle(ctx, {
-            mesh: car,
-            position: car.position,
-            collider: { type: 'box', size: size }
-        });
-
-        return car;
-    },
-
     spawnContainerStack: (ctx: SectorContext, x: number, z: number, rotation: number, stackHeight: number = 2, colorOverride?: number, addSnow: boolean = true) => {
         const group = new THREE.Group();
         group.position.set(x, 0, z);
@@ -1005,7 +998,7 @@ export const SectorGenerator = {
         let currentY = 0;
 
         for (let i = 0; i < stackIndex; i++) {
-            const vehicle = ObjectGenerator.createVehicle(undefined, 1.0, undefined);
+            const vehicle = VehicleGenerator.createVehicle(undefined, 1.0, undefined);
             const box = new THREE.Box3().setFromObject(vehicle);
             const size = box.getSize(new THREE.Vector3());
             const vehicleHeight = size.y;

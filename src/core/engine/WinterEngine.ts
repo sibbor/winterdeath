@@ -184,6 +184,9 @@ export class WinterEngine {
             this.container.removeChild(this.renderer.domElement);
         }
 
+        // [VINTERDÖD] Aggressive Cleanup before renderer disposal
+        this.clearActiveScene(true);
+
         this.renderer.dispose();
 
         // [VINTERDÖD] Aggressive Garbage Collection flagging
@@ -193,6 +196,62 @@ export class WinterEngine {
         this.onRender = null;
 
         WinterEngine.instance = null;
+    }
+
+    /**
+     * Aggressively disposes of all objects in the current scene.
+     * @param includingPersistent If true, even systemic meshes (weather/water) are disposed.
+     */
+    public clearActiveScene(includingPersistent: boolean = false) {
+        const monitor = PerformanceMonitor.getInstance();
+        monitor.begin('cleanup');
+
+        const disposableObjects: THREE.Object3D[] = [];
+
+        // 1. Collect all children
+        this.scene.children.forEach(child => {
+            // Skip persistent systems unless explicitly requested
+            const isPersistent = child.userData.isPersistent ||
+                child.name.includes('Weather') ||
+                child.name.includes('Water');
+
+            if (!isPersistent || includingPersistent) {
+                disposableObjects.push(child);
+            }
+        });
+
+        // 2. Dispose of Geometries and Materials
+        for (let i = 0; i < disposableObjects.length; i++) {
+            const obj = disposableObjects[i];
+
+            obj.traverse((child: any) => {
+                if (child.isMesh || child.isLine || child.isPoints || child.isSprite) {
+                    if (child.geometry) child.geometry.dispose();
+
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach((m: any) => m.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                }
+
+                // Dispose of textures in material if they are unique
+                // (In Vinterdöd, most textures are shared in AssetLoader/MATERIALS, 
+                // so we usually DON'T dispose them here unless they are dynamic.)
+            });
+
+            this.scene.remove(obj);
+        }
+
+        // 3. Clear light pools if they are being used
+        // (Handled by specific systems, but we clear the scene here)
+
+        monitor.end('cleanup');
+        if (monitor.consoleLoggingEnabled) {
+            console.log(`[WinterEngine] Scene Cleanup Complete. Disposed ${disposableObjects.length} root objects.`);
+        }
     }
 
     // --- Scene Management ---

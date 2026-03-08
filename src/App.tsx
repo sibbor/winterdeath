@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, GameScreen, PlayerStats, SectorStats, SectorTrigger, MapItem } from './types';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './core/ProgressionManager';
@@ -25,7 +24,7 @@ import { soundManager } from './utils/sound';
 import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
 import { isMobile } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
-import { WinterEngine } from './core/engine/WinterEngine';
+import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
 import { FXSystem } from './core/systems/FXSystem';
 import { DEFAULT_GRAPHICS, SECTOR_THEMES } from './content/constants';
 
@@ -43,52 +42,83 @@ const App: React.FC = () => {
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
 
+    const triggerLoadingTransition = useCallback(async (
+        type: 'CAMP' | 'SECTOR' | 'PROLOGUE',
+        task: () => Promise<void> | void,
+        skipCleanup: boolean = false
+    ) => {
+        console.log(`[App] triggerLoadingTransition (type: ${type}, skipCleanup: ${skipCleanup})`);
+
+        // 1. Instant UI Feedback
+        if (type === 'CAMP') setIsLoadingCamp(true);
+        else setIsLoadingSector(true);
+        setShowLoadingOverlay(true);
+
+        // 2. Double-Buffer Wait: Let the browser paint the loading screen before we block the thread
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        // 3. Global Resource Cleanup
+        const engine = WinterEngine.getInstance();
+        if (engine.scene && !skipCleanup) engine.clearActiveScene(false);
+        if (!skipCleanup) FXSystem.reset();
+
+        // 4. Run Task (Includes State Update + Warmup)
+        // This is awaited to ensure the "Loaded" signal from the component 
+        // respects the full transition duration.
+        await task();
+    }, []);
+
     // [VINTERDÖD] Boot Warmup: Pre-compiles shaders to prevent startup stalls
+    const isWarmedUpRef = useRef(false);
     useEffect(() => {
         let isMounted = true;
-        const warmup = async () => {
-            const engine = WinterEngine.getInstance();
-            // Start renderer for compilation if not already alive
-            if (!engine.renderer) {
-                // Temporary minimal mount for compilation context if needed, 
-                // but Engine.getInstance() usually initializes it.
-            }
+        if (isWarmedUpRef.current) return;
+        isWarmedUpRef.current = true;
 
+        const warmup = async () => {
+            console.log("[App] Boot Warmup Started...");
+            const engine = WinterEngine.getInstance();
             const isCamp = gameState.screen === GameScreen.CAMP;
             const envConfig = isCamp ? CAMP_ENV : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
-
-            // [VINTERDÖD] Yield function to prevent "Violation: handler took X ms" 
             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
-            // [VINTERDÖD] MODULAR WARMUP: Load CORE basics first, then active scene requirements.
-            // This saves VRAM and speeds up boot into Camp.
-            // We pass the active camera to ensure accurate shader permutation matching.
-            if (isCamp) {
-                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
-                await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', envConfig, yieldToMain, engine.camera.threeCamera);
-            } else if (gameState.screen === GameScreen.PROLOGUE) {
-                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', SECTOR_THEMES[0], yieldToMain, engine.camera.threeCamera);
-                await AssetPreloader.warmupAsync(engine.renderer, 0, SECTOR_THEMES[0], yieldToMain, engine.camera.threeCamera);
-            } else if (gameState.currentSector !== undefined) {
-                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
-                await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
-            } else {
-                await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
-            }
+            // Use the centralized transition to show the screen first
+            await triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
+                // Determine module to warmup
+                const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
 
-            if (isMounted) {
+                try {
+                    // 0. Synchronize renderer with saved settings before warmup
+                    engine.updateSettings(gameState.graphics);
+
+                    // 1. Core sets the baseline
+                    await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
+
+                    // 2. Module specific
+                    if (isCamp) {
+                        await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', envConfig, yieldToMain, engine.camera.threeCamera);
+                    } else {
+                        await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+                    }
+                } catch (e) {
+                    console.error("[App] Warmup Error:", e);
+                }
+
+                // [VINTERDÖD] CRITICAL: We MUST set isInitialBoot to false even if the component re-rendered.
+                // Re-rendering during warmup (due to setIsLoadingCamp in triggerLoadingTransition) 
+                // was causing the 'isMounted' check in the previous closure to fail, leaving 
+                // the game stuck in 'InitialBoot' mode (no interaction, no debug overlay).
                 setIsInitialBoot(false);
-                setIsLoadingCamp(false);
-                setIsLoadingSector(false);
-                setTimeout(() => { if (isMounted) setShowLoadingOverlay(false); }, 500);
-            }
+                setGameState(prev => ({ ...prev }));
+                console.log("[App] Boot Warmup Complete. isInitialBoot -> false");
+            }, true);
         };
 
         if (isInitialBoot) {
             warmup();
         }
 
-        return () => { isMounted = false; };
+        return () => { };
     }, []);
 
     useEffect(() => {
@@ -136,6 +166,7 @@ const App: React.FC = () => {
         setActiveCollectible,
         requestPointerLock: () => gameCanvasRef.current?.requestPointerLock()
     });
+
 
     const handleUpdateHUD = useCallback((data: any) => {
         setHudState(data);
@@ -211,13 +242,6 @@ const App: React.FC = () => {
         // 4. Update Sector Stats for Report Screen
         stats.spEarned = newStats.skillPoints - prevSp;
 
-        // Fix: Ensure we show ALL found collectibles (current + previous), filtered by current sector
-        // We actually want to show the specific collectibles found in this sector (Total).
-        // Since `aggregateStats` already merged them into `newStats`, we can just use `newStats` for the report's knowledge
-        // BUT `ScreenSectorReport` expects `SectorStats`.
-        // Let's override `collectiblesFound` in the `stats` object passed to the report with the GLOBAL list for this sector.
-        // ScreenSectorReport filters them by sector anyway? No, it takes the list as is.
-
         // Filter global found list to only include those from the current sector
         const sectorCollectibles = getCollectiblesBySector(gameState.currentSector + 1).map(c => c.id);
         stats.collectiblesFound = newStats.collectiblesFound.filter(id => sectorCollectibles.includes(id));
@@ -274,8 +298,36 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, stats: newStats }));
     };
 
-    const handleSaveGraphics = (graphics: any) => {
-        setGameState(prev => ({ ...prev, graphics }));
+    const handleSaveGraphics = (newG: GraphicsSettings) => {
+        const oldG = gameState.graphics;
+        const needsReWarm = newG.antialias !== oldG.antialias ||
+            newG.shadows !== oldG.shadows ||
+            newG.shadowMapType !== oldG.shadowMapType;
+
+        setGameState(prev => ({ ...prev, graphics: newG }));
+        WinterEngine.getInstance().updateSettings(newG);
+
+        if (needsReWarm) {
+            console.log(`[App] Graphical settings changed (AA/Shadows). Screen: ${gameState.screen}. Re-warming...`);
+            AssetPreloader.reset();
+
+            const engine = WinterEngine.getInstance();
+            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+            // Determine what to re-warm based on current screen
+            const isCamp = gameState.screen === GameScreen.CAMP;
+            const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
+            const envConfig = isCamp ? CAMP_ENV : SECTOR_THEMES[sectorIndex];
+
+            // Trigger re-warm in background
+            AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera).then(() => {
+                if (isCamp) {
+                    AssetPreloader.warmupAsync(engine.renderer, 'CAMP', envConfig, yieldToMain, engine.camera.threeCamera);
+                } else {
+                    AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+                }
+            });
+        }
     };
 
     const handleSaveLoadout = (loadout: any, levels: any) => {
@@ -287,35 +339,32 @@ const App: React.FC = () => {
     }, []);
 
     const handleStartSector = useCallback(async () => {
-        setIsLoadingSector(true);
-        setShowLoadingOverlay(true);
-        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-        setTeleportTarget(null);
-
-        // [VINTERDÖD] Clear FX baggage before entering new sector
-        FXSystem.reset();
-
-        // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
-        // while the loading screen is visible.
+        const sectorIndex = gameState.currentSector;
+        const envConfig = SECTOR_THEMES[sectorIndex];
         const engine = WinterEngine.getInstance();
-        const envConfig = SECTOR_THEMES[gameState.currentSector];
         const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-        await AssetPreloader.warmupAsync(engine.renderer, gameState.currentSector, envConfig, yieldToMain, engine.camera.threeCamera);
 
-        setHudState({});
-        setCurrentSectorMapItems([]);
-        setActiveCollectible(null);
-        setIsPaused(false);
-        setIsMapOpen(false);
-    }, [gameState.currentSector]);
+        await triggerLoadingTransition('SECTOR', async () => {
+            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+            setTeleportTarget(null);
+            setHudState({});
+            setCurrentSectorMapItems([]);
+            setActiveCollectible(null);
+            setIsPaused(false);
+            setIsMapOpen(false);
+
+            // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
+            // MUST be inside the transition task to block the loading overlay fade-out.
+            await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+        });
+    }, [gameState.currentSector, triggerLoadingTransition]);
 
     const handlePrologueComplete = () => {
         // Transition straight to SECTOR (skipping CAMP as requested)
-        // GameSession is already mounted in background, so switching screen makes it visible instantly
         setGameState(prev => ({
             ...prev,
-            screen: GameScreen.SECTOR, // Was CAMP
-            currentSector: 0, // Ensure we are on Sector 1
+            screen: GameScreen.SECTOR,
+            currentSector: 0,
             stats: {
                 ...prev.stats,
                 prologueSeen: true
@@ -333,15 +382,11 @@ const App: React.FC = () => {
 
     const handleCollectibleClose = useCallback(() => {
         if (gameCanvasRef.current) gameCanvasRef.current.requestPointerLock();
-        // Removed .catch() as requestPointerLock might be void or we don't care about the promise result here safely
         if (activeCollectible) {
             setGameState(prev => {
                 const collId = activeCollectible as string;
                 if (!prev.stats.collectiblesFound) return prev; // Safety check
-
-                // [VINTERDÖD] Prevent saving dummy test collectibles
                 if (collId === 'dummy_badge_test') return prev;
-
                 if (prev.stats.collectiblesFound.includes(collId)) return prev;
                 return {
                     ...prev,
@@ -397,18 +442,9 @@ const App: React.FC = () => {
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
-            {!isInitialBoot && <DebugDisplay
-                debugMode={gameState.debugMode}
-                debugInfo={gameState.debugMode ? hudState.debugInfo : undefined}
-                systems={gameState.debugMode ? debugSystems : undefined}
-                onToggleSystem={gameState.debugMode ? (id, enabled) => {
-                    gameCanvasRef.current?.setSystemEnabled(id, enabled);
-                    setDebugSystems(prev => prev.map(s => s.id === id ? { ...s, enabled } : s));
-                } : undefined}
-            />}
-
             {gameState.screen === GameScreen.CAMP && (
                 <Camp
+                    key="camp-main"
                     stats={gameState.stats}
                     currentLoadout={gameState.loadout}
                     weaponLevels={gameState.weaponLevels}
@@ -427,24 +463,16 @@ const App: React.FC = () => {
                     initialGraphics={gameState.graphics}
                     onCampLoaded={() => {
                         setIsLoadingCamp(false);
-                        // [VINTERDÖD] Guard against flicker by ensuring state is stable before fade
                         requestAnimationFrame(() => {
                             setTimeout(() => setShowLoadingOverlay(false), 500);
                         });
                     }}
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
-                    // [VINTERDÖD] Allow simulation to run behind the loading screen so particles are moving on Frame 1
                     isRunning={!isInitialBoot}
                 />
             )}
 
-            {/* 
-                Use Concurrent Rendering:
-                Render GameSession if screen IS SECTOR OR PROLOGUE.
-                If Prologue, isRunning is FALSE (paused loop), but Mount effect still runs (Generation).
-                This preloads the world behind the Prologue screen.
-            */}
             {(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE) && (
                 <>
                     <GameSession
@@ -452,34 +480,28 @@ const App: React.FC = () => {
                         stats={gameState.stats}
                         loadout={gameState.loadout}
                         weaponLevels={gameState.weaponLevels}
-                        currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector} // Force Map 0 during pre-load
+                        currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
                         debugMode={gameState.debugMode}
-                        // Only run loop if actually playing Sector
                         isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeCollectible && !isLoadingSector && !isAdventureLogOpen}
                         isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeCollectible || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || isAdventureLogOpen}
                         disableInput={!!activeCollectible || isLoadingSector || isAdventureLogOpen}
-
                         onUpdateHUD={handleUpdateHUD}
                         onDie={handleDie}
                         onSectorEnded={handleSectorEnded}
                         onPauseToggle={setIsPaused}
                         onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
                         triggerEndSector={false}
-
                         familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
                         rescuedFamilyIndices={gameState.rescuedFamilyIndices}
                         bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
-
                         onSectorLoaded={() => {
                             setIsLoadingSector(false);
-                            // [VINTERDÖD] Properly unmount the loading screen for sectors to match Camp behavior
                             requestAnimationFrame(() => {
                                 setTimeout(() => setShowLoadingOverlay(false), 500);
                             });
                         }}
                         startAtCheckpoint={false}
                         onCheckpointReached={() => { }}
-
                         teleportTarget={teleportTarget}
                         onCollectibleFound={setActiveCollectible}
                         onClueFound={handleClueFound}
@@ -490,7 +512,6 @@ const App: React.FC = () => {
                         onDeathStateChange={setIsDeathScreenActive}
                         onBossIntroStateChange={setIsBossIntroActive}
                         onMapInit={setCurrentSectorMapItems}
-
                         onUpdateLoadout={(loadout, levels) => {
                             setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
                         }}
@@ -498,10 +519,7 @@ const App: React.FC = () => {
                             setGameState(prev => {
                                 const newOverrides = { ...(prev.environmentOverrides || {}) };
                                 newOverrides[prev.currentSector] = overrides;
-                                return {
-                                    ...prev,
-                                    environmentOverrides: newOverrides
-                                };
+                                return { ...prev, environmentOverrides: newOverrides };
                             });
                         }}
                         environmentOverrides={gameState.environmentOverrides}
@@ -510,7 +528,6 @@ const App: React.FC = () => {
                         weather={gameState.weather}
                     />
 
-                    {/* Hide HUD if hudState.isHidden or during dialogues/intro (but allow GameHUD to handle its own visibility for Boss Intro) */}
                     {!isMapOpen && !showTeleportMenu && !activeCollectible && !hudState.isHidden && !isDialogueOpen && (
                         isMobileDevice ? (
                             <MobileGameHUD
@@ -525,9 +542,7 @@ const App: React.FC = () => {
                                 isMobileDevice={true}
                                 onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
                                 onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
-                                onSelectWeapon={(slot) => {
-                                    gameCanvasRef.current?.triggerInput(slot as any);
-                                }}
+                                onSelectWeapon={(slot) => { gameCanvasRef.current?.triggerInput(slot as any); }}
                                 onRotateCamera={(dir) => gameCanvasRef.current?.rotateCamera(dir)}
                             />
                         ) : (
@@ -542,9 +557,7 @@ const App: React.FC = () => {
                                 throttleState={hudState.throttleState}
                                 onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
                                 onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
-                                onSelectWeapon={(slot) => {
-                                    gameCanvasRef.current?.triggerInput(slot as any);
-                                }}
+                                onSelectWeapon={(slot) => { gameCanvasRef.current?.triggerInput(slot as any); }}
                             />
                         )
                     )}
@@ -588,7 +601,17 @@ const App: React.FC = () => {
                 </>
             )}
 
-            {(showLoadingOverlay) && (
+            {!isInitialBoot && <DebugDisplay
+                debugMode={gameState.debugMode}
+                debugInfo={gameState.debugMode ? hudState.debugInfo : undefined}
+                systems={gameState.debugMode ? debugSystems : undefined}
+                onToggleSystem={gameState.debugMode ? (id, enabled) => {
+                    gameCanvasRef.current?.setSystemEnabled(id, enabled);
+                    setDebugSystems(prev => prev.map(s => s.id === id ? { ...s, enabled } : s));
+                } : undefined}
+            />}
+
+            {showLoadingOverlay && (
                 <ScreenLoading
                     sectorIndex={gameState.currentSector}
                     isCamp={isLoadingCamp}
@@ -603,7 +626,6 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Map Screen (Overlay for Sector) */}
             {isMapOpen && (
                 <ScreenMap
                     items={currentMapItems}
@@ -616,17 +638,11 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Teleport Menu (Overlay) */}
             {showTeleportMenu && (
                 <ScreenTeleport
                     initialCoords={teleportInitialCoords}
                     onJump={handleTeleportJump}
-                    onCancel={() => {
-                        // Return to Map Screen
-                        setShowTeleportMenu(false);
-                        setTeleportInitialCoords(null);
-                        setIsMapOpen(true);
-                    }}
+                    onCancel={() => { setShowTeleportMenu(false); setTeleportInitialCoords(null); setIsMapOpen(true); }}
                     isMobileDevice={isMobileDevice}
                 />
             )}
@@ -635,10 +651,7 @@ const App: React.FC = () => {
                 <ScreenBossKilled
                     sectorIndex={gameState.currentSector}
                     stats={sectorStats || undefined}
-                    onProceed={() => {
-                        soundManager.playUiConfirm();
-                        setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
-                    }}
+                    onProceed={() => { soundManager.playUiConfirm(); setGameState(prev => ({ ...prev, screen: GameScreen.RECAP })); }}
                     isMobileDevice={isMobileDevice}
                 />
             )}
@@ -650,40 +663,40 @@ const App: React.FC = () => {
                     currentSector={gameState.currentSector}
                     onReturnCamp={() => {
                         soundManager.playUiConfirm();
-                        setIsLoadingCamp(true);
-                        setShowLoadingOverlay(true);
-                        setIsDeathScreenActive(false);
-
-                        // [VINTERDÖD] Purge FX queues to prevent sector-blood appearing in Camp
-                        FXSystem.reset();
-
-                        // Yield to browser so it can render the loading screen before we block the thread
-                        // Increased to 150ms to ensure the loading screen is painted on slower machines
-                        setTimeout(() => {
+                        triggerLoadingTransition('CAMP', async () => {
+                            setIsDeathScreenActive(false);
                             setGameState(prev => {
                                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
-                                // Advance to next sector if cleared and not already at the last one
                                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
                                 return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
                             });
-                        }, 150);
+
+                            // [VINTERDÖD] Warmup Camp assets during transition
+                            const engine = WinterEngine.getInstance();
+                            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+                            await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', CAMP_ENV, yieldToMain, engine.camera.threeCamera);
+                        });
                     }}
-
                     onRetry={() => {
-                        setIsDeathScreenActive(false);
-                        setIsLoadingSector(true);
-                        setShowLoadingOverlay(true);
-
-                        FXSystem.reset();
-
-                        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-                        setSectorStats(null);
-                        setDeathDetails(null);
-                        setHudState({});
-                        setCurrentSectorMapItems([]);
-                        setActiveCollectible(null);
-                        setIsPaused(false);
                         soundManager.playUiConfirm();
+                        triggerLoadingTransition('SECTOR', async () => {
+                            setIsDeathScreenActive(false);
+                            const nextState = { screen: GameScreen.SECTOR };
+                            setGameState(prev => ({ ...prev, ...nextState }));
+                            setSectorStats(null);
+                            setDeathDetails(null);
+                            setHudState({});
+                            setCurrentSectorMapItems([]);
+                            setActiveCollectible(null);
+                            setIsPaused(false);
+
+                            // [VINTERDÖD] Warmup Sector assets during transition
+                            const sectorIndex = gameState.currentSector;
+                            const envConfig = SECTOR_THEMES[sectorIndex];
+                            const engine = WinterEngine.getInstance();
+                            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+                            await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+                        });
                     }}
                     isMobileDevice={isMobileDevice}
                 />

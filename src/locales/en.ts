@@ -223,6 +223,19 @@ export const en = {
         sky_light_settings: "SKY LIGHT SETTINGS",
         fog_settings: "FOG SETTINGS",
     },
+    camp_tooltips: {
+        equipped: "EQUIPPED",
+        vitality: "Vitality",
+        adrenaline: "Adrenaline",
+        reflexes: "Reflexes",
+        collectibles: "Collectibles",
+        clues: "Clues",
+        poi: "POI",
+        enemies: "Enemies",
+        bosses: "Bosses",
+        finished_sectors: "Finished Sectors",
+        selected_sector: "Selected Sector"
+    },
     categories: {
         primary: "PRIMARY",
         secondary: "SECONDARY",

@@ -1,11 +1,15 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse } from '../../utils/assets';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
-import { createWaterMaterial } from '../../utils/assets/materials_water';
-import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES } from '../../content/constants';
+import { WaterStyleConfig, createWaterMaterial, patchWaterVegetationMaterial } from '../../utils/assets/materials_water';
+import { WaterSystem } from './WaterSystem';
+import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
+import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
+import { CampWorld, stationMaterials } from '../../components/camp/CampWorld';
+import { CampEnvironment, CAMP_ENV, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampEnvironment';
 import { SectorSystem } from '../systems/SectorSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
@@ -115,30 +119,98 @@ export const AssetPreloader = {
                 warmupCamera.lookAt(0, 0, 0);
             }
 
+            // --- WARMUP HELPERS (Defined early for use in all sections) ---
+            const dummyRoot = new THREE.Group();
+            scene.add(dummyRoot);
+            const ownedGeometries: THREE.BufferGeometry[] = [];
+            const ownedMaterials: THREE.Material[] = [];
+
+            const addToWarmup = (obj: THREE.Object3D, instancing: boolean = true) => {
+                obj.visible = false;
+                obj.traverse((child) => {
+                    if ((child as any).isMesh) {
+                        const mesh = child as THREE.Mesh;
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+
+                        // Alpha-tested materials need a depth material warmed up too
+                        if (mesh.material && (mesh.material as any).alphaTest > 0) {
+                            if (!mesh.customDepthMaterial) {
+                                const depthMat = new THREE.MeshDepthMaterial({
+                                    depthPacking: THREE.RGBADepthPacking,
+                                    map: (mesh.material as any).map,
+                                    alphaTest: (mesh.material as any).alphaTest
+                                });
+                                mesh.customDepthMaterial = depthMat;
+                                ownedMaterials.push(depthMat);
+                            }
+                        }
+
+                        // InstancedMesh shader differs from regular Mesh — warm up both
+                        if (instancing && !(mesh as any).isInstancedMesh) {
+                            const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
+                            iMesh.castShadow = true;
+                            iMesh.receiveShadow = true;
+                            iMesh.visible = false;
+                            if (mesh.customDepthMaterial) {
+                                const depthClone = mesh.customDepthMaterial.clone();
+                                iMesh.customDepthMaterial = depthClone;
+                                ownedMaterials.push(depthClone);
+                            }
+                            dummyRoot.add(iMesh);
+                        }
+                    }
+                });
+                dummyRoot.add(obj);
+            };
+
+            const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
+                const mesh = new THREE.InstancedMesh(geo, mat, 1);
+                mesh.setMatrixAt(0, new THREE.Matrix4());
+                mesh.visible = false;
+                dummyRoot.add(mesh);
+            };
+
             // 3. SHADER PERMUTATION SETUP (Fog, Lighting, Shadows)
             beginInternal('asset_warmup_permutations');
             if (envConfig) {
                 const fogCol = new THREE.Color(envConfig.fogColor || envConfig.bgColor);
                 scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity);
                 scene.background = fogCol;
-                if (envConfig.ambientIntensity !== undefined) {
+                // [VINTERDÖD] AmbientLight is only for Sectors. Camp uses Hemi + Dir + Point only.
+                if (envConfig.ambientIntensity !== undefined && !isCamp) {
                     scene.add(new THREE.AmbientLight(0xffffff, envConfig.ambientIntensity));
                 }
                 scene.add(new THREE.HemisphereLight(0x444455, 0x111115, 0.6));
-                if (envConfig.skyLight?.visible) {
-                    const dirLight = new THREE.DirectionalLight(envConfig.skyLight.color, envConfig.skyLight.intensity);
-                    dirLight.castShadow = true;
-                    dirLight.shadow.mapSize.set(1024, 1024);
-                    scene.add(dirLight);
-                }
+                // [VINTERDÖD] Lighting Parity: Match bias and normalBias from CampEnvironment.ts
                 if (isCamp || isSector) {
+                    const skyLightRef = envConfig.skyLight || { color: 0xaaccff, intensity: 0.4 };
+                    const dirLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
+                    dirLight.position.set(-80, 150, -100);
+                    dirLight.castShadow = true;
+                    dirLight.shadow.mapSize.width = 1024;
+                    dirLight.shadow.mapSize.height = 1024;
+                    dirLight.shadow.bias = isCamp ? -0.0002 : -0.001;
+                    scene.add(dirLight);
+
                     const pointLight = new THREE.PointLight(0xff7722, 40, 90);
-                    pointLight.castShadow = false; // Budgeted: Start OFF, LightingSystem manages shadows.
-                    pointLight.shadow.autoUpdate = false;
-                    pointLight.shadow.mapSize.set(512, 512);
+                    pointLight.position.set(0, 3, 0);
+                    pointLight.castShadow = true;
+                    pointLight.shadow.mapSize.width = 512;
+                    pointLight.shadow.mapSize.height = 512;
                     pointLight.shadow.bias = -0.0005;
                     pointLight.shadow.normalBias = 0.02;
                     scene.add(pointLight);
+
+                    // [VINTERDÖD] Flashlight Parity (SpotLight)
+                    // Used in Sectors; matches flashlight setup in GameSession.tsx
+                    const flash = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
+                    flash.position.set(0, 3.5, 0.5);
+                    flash.castShadow = true;
+                    flash.shadow.mapSize.set(512, 512);
+                    flash.shadow.bias = -0.0001;
+                    scene.add(flash);
+                    scene.add(flash.target);
                 }
                 const spotLight = new THREE.SpotLight(0xffffff, 1);
                 spotLight.castShadow = false; // Budgeted
@@ -166,13 +238,6 @@ export const AssetPreloader = {
                         if (yieldToMain) await yieldToMain();
                     }
 
-                    // Warm up all vehicle types — stutter guard for first vehicle encounter
-                    const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
-                    for (let i = 0; i < vehicleTypes.length; i++) {
-                        ObjectGenerator.createVehicle(vehicleTypes[i]);
-                    }
-                    ObjectGenerator.createBoat();
-
                     // Water surface shaders — critical for any lake/river biome
                     const dummyRipples: THREE.Vector4[] = [];
                     const dummyObjects: THREE.Vector4[] = [];
@@ -199,57 +264,7 @@ export const AssetPreloader = {
             // 5. GEOMETRY & MATERIAL BATCHING
             // Track all newly allocated objects in separate arrays.
             // NEVER dispose shared MATERIALS.xxx or GEOMETRY.xxx — only our own creations.
-            const dummyRoot = new THREE.Group();
-            scene.add(dummyRoot);
-            const ownedGeometries: THREE.BufferGeometry[] = [];
-            const ownedMaterials: THREE.Material[] = [];
-
-            const addToWarmup = (obj: THREE.Object3D) => {
-                obj.visible = false;
-                obj.traverse((child) => {
-                    if ((child as any).isMesh) {
-                        const mesh = child as THREE.Mesh;
-                        mesh.castShadow = true;
-                        mesh.receiveShadow = true;
-
-                        // Alpha-tested materials need a depth material warmed up too
-                        if (mesh.material && (mesh.material as any).alphaTest > 0) {
-                            if (!mesh.customDepthMaterial) {
-                                const depthMat = new THREE.MeshDepthMaterial({
-                                    depthPacking: THREE.RGBADepthPacking,
-                                    map: (mesh.material as any).map,
-                                    alphaTest: (mesh.material as any).alphaTest
-                                });
-                                mesh.customDepthMaterial = depthMat;
-                                ownedMaterials.push(depthMat);
-                            }
-                        }
-
-                        // InstancedMesh shader differs from regular Mesh — warm up both
-                        if (!(mesh as any).isInstancedMesh) {
-                            const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
-                            iMesh.castShadow = true;
-                            iMesh.receiveShadow = true;
-                            iMesh.visible = false;
-                            if (mesh.customDepthMaterial) {
-                                const depthClone = mesh.customDepthMaterial.clone();
-                                iMesh.customDepthMaterial = depthClone;
-                                ownedMaterials.push(depthClone);
-                            }
-                            dummyRoot.add(iMesh);
-                        }
-                    }
-                });
-                dummyRoot.add(obj);
-            };
-
-            // Helper for InstancedMesh-only warmup (weather, dense foliage, etc.)
-            const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
-                const mesh = new THREE.InstancedMesh(geo, mat, 1);
-                mesh.setMatrixAt(0, new THREE.Matrix4());
-                mesh.visible = false;
-                dummyRoot.add(mesh);
-            };
+            // (Note: Helpers and roots were already declared at top)
 
             // All shared MATERIALS, GEOMETRY, vegetation, weather, UI — CORE only.
             // SECTOR_N and CAMP have their own dedicated sections below.
@@ -305,7 +320,6 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createFence());
                     addToWarmup(ObjectGenerator.createMeshFence());
                     addToWarmup(ObjectGenerator.createContainer());
-                    addToWarmup(ObjectGenerator.createCrashedCar());
                     addToWarmup(ObjectGenerator.createElectricPole());
                     addToWarmup(ObjectGenerator.createHaybale());
                     addToWarmup(ObjectGenerator.createTimberPile());
@@ -333,24 +347,8 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker));
                 addToWarmup(new THREE.Mesh(GEOMETRY.sphere, MATERIALS.flashWhite));
 
-                // Weather Particles — WeatherSystem uses InstancedMesh (different shader permutation)
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow);
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain);
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash);
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember);
-
-                // Wind-patched Vegetation — InstancedMesh uses a different shader than regular Mesh
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.hedge);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.grass);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.flower);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.wheat);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeSilhouette);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeFirNeedles);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesOak);
                 addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.waterLily);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.waterLilyFlower);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.seaweed);
+
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
@@ -414,34 +412,212 @@ export const AssetPreloader = {
                 }
             }
 
+            // Dynamic Environmental Warmup (Runs for every module to ensure environment-specific shaders are compiled)
+            // [VINTERDÖD] CORE: Systems (Weather, Wind)
+            // Always warm these up in CORE block to satisfy user requirements.
+            if (target === 'CORE' || isSector || isCamp) {
+                // Weather Particles (InstancedMesh + MeshStandardMaterial + Fog)
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow);
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain);
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash);
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember);
+
+                // Wind-active vegetation (Basic & Instanced permutations)
+                const windMats = [MATERIALS.grass, MATERIALS.flower, MATERIALS.treeTrunkBirch, MATERIALS.treeTrunk];
+                for (let i = 0; i < windMats.length; i++) {
+                    const m = windMats[i];
+                    addToWarmup(new THREE.Mesh(GEOMETRY.box, m)); // Standard mesh
+                }
+
+                // [VINTERDÖD] WaterSystem Parity (CORE block)
+                // Common aquatic materials
+                const waterMats = [MATERIALS.waterLily, MATERIALS.waterLilyFlower, MATERIALS.seaweed];
+                for (let i = 0; i < waterMats.length; i++) {
+                    addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
+                }
+
+                // ShaderMaterial primary water surfaces (Nordic and Ice)
+                const dummyVec4: THREE.Vector4[] = Array(16).fill(null).map(() => new THREE.Vector4());
+                const waterNordic = createWaterMaterial('nordic', 20, 20, dummyVec4, dummyVec4, 'rect');
+                const waterIce = createWaterMaterial('ice', 20, 20, dummyVec4, dummyVec4, 'rect');
+                ownedMaterials.push(waterNordic, waterIce);
+
+                addToWarmup(new THREE.Mesh(GEOMETRY.box, waterNordic), false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.box, waterIce), false);
+            }
+
+            if (isSector) {
+                // Aquatic Flora (Real geometries used in WaterSystem)
+                const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
+                const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
+                const lilyFlowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
+                const seaweedGeo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
+                ownedGeometries.push(lilyPadGeo, lilyStemGeo, lilyFlowerGeo, seaweedGeo);
+
+                addInstancedWarmup(lilyPadGeo, MATERIALS.waterLily);
+                addInstancedWarmup(lilyFlowerGeo, MATERIALS.waterLilyFlower);
+                addInstancedWarmup(seaweedGeo, MATERIALS.seaweed);
+                addInstancedWarmup(lilyStemGeo, MATERIALS.seaweed);
+
+                // Vehicle Warmup - All types to ensure shader compilation matches environment
+                const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
+                for (let i = 0; i < vehicleTypes.length; i++) {
+                    const v = VehicleGenerator.createVehicle(vehicleTypes[i]);
+                    // Track geometries for disposal
+                    v.traverse((child) => {
+                        if ((child as THREE.Mesh).isMesh) {
+                            ownedGeometries.push((child as THREE.Mesh).geometry);
+                        }
+                    });
+                    addToWarmup(v);
+                }
+
+                // Boat - Warm up with shadows to match VehicleMovementSystem/ObjectGenerator
+                const boat = VehicleGenerator.createBoat();
+                ownedGeometries.push(boat.geometry);
+                addToWarmup(boat);
+
+                // Water Surfaces - nordic and ice styles
+                const dummyRipples = new Array(16).fill(0).map(() => new THREE.Vector4(0, 0, -1000, 0));
+                const dummyObjects = new Array(8).fill(0).map(() => new THREE.Vector4(0, 0, 0, 0));
+                const nordicWater = createWaterMaterial('nordic', 10, 10, dummyRipples, dummyObjects, 'circle');
+                const iceWater = createWaterMaterial('ice', 10, 10, dummyRipples, dummyObjects, 'rect');
+                ownedMaterials.push(nordicWater, iceWater);
+
+                const waterSurfaceGeo = new THREE.PlaneGeometry(10, 10, 16, 16);
+                waterSurfaceGeo.rotateX(-Math.PI / 2);
+                ownedGeometries.push(waterSurfaceGeo);
+
+                // Water surface mesh itself DOES NOT cast shadows
+                const nwMesh = new THREE.Mesh(waterSurfaceGeo, nordicWater);
+                const iwMesh = new THREE.Mesh(waterSurfaceGeo, iceWater);
+                nwMesh.visible = false; iwMesh.visible = false;
+                dummyRoot.add(nwMesh, iwMesh);
+            }
+
             // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
             if (isCamp) {
-                const campMats = [
-                    new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 }),
-                    new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 }),
-                    new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false })
+                // 1. STATIONS & CANVASES
+                // [VINTERDÖD] Pre-generate station canvases and geometries to avoid hits during load.
+                CampWorld.warmupStationAssets(renderer);
+
+                // Use the exported geometries for warmup meshes
+                const barrelGeo = (CampWorld as any).stationGeometries.barrel;
+                const mapGeo = (CampWorld as any).stationGeometries.map_plane;
+                const noteGeo = (CampWorld as any).stationGeometries.note_plane;
+
+                if (barrelGeo) {
+                    const barrel = new THREE.Mesh(barrelGeo, stationMaterials.metal);
+                    addToWarmup(barrel, false); // Stations never instance in Camp
+                    ownedGeometries.push(barrelGeo);
+                }
+                if (mapGeo) {
+                    const map = new THREE.Mesh(mapGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
+                    addToWarmup(map, false);
+                    ownedGeometries.push(mapGeo);
+                }
+                if (noteGeo) {
+                    const note = new THREE.Mesh(noteGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
+                    addToWarmup(note, false);
+                    ownedGeometries.push(noteGeo);
+                }
+
+                // 2. CELESTIAL BODIES (Moon, Stars, Halo)
+                try {
+                    // Moon Body
+                    const moonGeo = new THREE.SphereGeometry(15, 32, 32);
+                    const moonMat = new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false });
+                    ownedGeometries.push(moonGeo);
+                    ownedMaterials.push(moonMat);
+                    addToWarmup(new THREE.Mesh(moonGeo, moonMat), false); // Moon is unique
+
+                    // Moon Halo (Sprite shader is unique)
+                    const haloMat = new THREE.SpriteMaterial({ color: 0xffffee, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false });
+                    ownedMaterials.push(haloMat);
+                    const halo = new THREE.Sprite(haloMat);
+                    dummyRoot.add(halo);
+
+                    // Star System (ShaderMaterial + Points is a unique pipeline)
+                    // [VINTERDÖD] MUST match the vertex/fragment shader in CampEnvironment.ts exactly.
+                    const starMat = new THREE.ShaderMaterial({
+                        uniforms: { uTime: { value: 0 } },
+                        vertexShader: `
+                            attribute float size; attribute float phase; attribute float twinkleSpeed; varying float vAlpha; uniform float uTime;
+                            void main() {
+                                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
+                                float alpha = 0.8 + 0.2 * sin(phase);
+                                if (twinkleSpeed > 0.0) alpha = 0.9 + 0.1 * sin(uTime * twinkleSpeed + phase);
+                                vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
+                            }
+                        `,
+                        fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
+                        transparent: true, depthWrite: false
+                    });
+                    const starGeo = new THREE.BufferGeometry();
+                    starGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3));
+                    starGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array([1]), 1));
+                    starGeo.setAttribute('phase', new THREE.BufferAttribute(new Float32Array([0]), 1));
+                    starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(new Float32Array([0]), 1));
+                    ownedMaterials.push(starMat);
+                    ownedGeometries.push(starGeo);
+                    const stars = new THREE.Points(starGeo, starMat);
+                    dummyRoot.add(stars);
+                } catch (e) { console.warn("Sky warmup failed", e); }
+
+                if (yieldToMain) await yieldToMain();
+
+                // 2. STATIONS (Geometries & Materials)
+                // [VINTERDÖD] Do NOT push stationMaterials to ownedMaterials — they are live singletons!
+                const campGeos = [
+                    new THREE.CircleGeometry(1.8, 16),      // Ash
+                    new THREE.CylinderGeometry(0.15, 0.15, 2.2), // Logs
+                    new THREE.CylinderGeometry(0.03, 0.03, 1.2), // Barrels/Wires
+                    new THREE.SphereGeometry(0.12, 8, 8),   // Bottles (round)
+                    new THREE.BoxGeometry(0.15, 0.4, 0.15),  // Bottles (square)
+                    new THREE.PlaneGeometry(2.0, 1.4),      // Map
+                    new THREE.PlaneGeometry(0.4, 0.5),      // Notes
+                    CAMP_GEO.flame,                          // [VINTERDÖD] EXACT Parity
+                    CAMP_GEO.spark,
+                    CAMP_GEO.smoke
                 ];
-                for (let i = 0; i < campMats.length; i++) {
-                    ownedMaterials.push(campMats[i]);
-                    addToWarmup(new THREE.Mesh(GEOMETRY.box, campMats[i]));
+
+                for (let i = 0; i < campGeos.length; i++) {
+                    const geo = campGeos[i];
+                    // [VINTERDÖD] Track only the ones WE allocated here
+                    if (geo !== CAMP_GEO.flame && geo !== CAMP_GEO.spark && geo !== CAMP_GEO.smoke) {
+                        ownedGeometries.push(geo);
+                    }
+                    addToWarmup(new THREE.Mesh(geo, stationMaterials.warmWood), false);
+                    addToWarmup(new THREE.Mesh(geo, stationMaterials.medkitRed), false);
+
+                    // [VINTERDÖD] Campfire Particle Parity
+                    addToWarmup(new THREE.Mesh(geo, CAMP_MAT.flame), false);
+                    addToWarmup(new THREE.Mesh(geo, CAMP_MAT.spark), false);
+                    addToWarmup(new THREE.Mesh(geo, CAMP_MAT.smoke), false);
                 }
-                const campGeoList = [
-                    new THREE.CircleGeometry(1.8, 16),
-                    new THREE.CylinderGeometry(0.15, 0.15, 2.2),
-                    new THREE.DodecahedronGeometry(0.4)
-                ];
-                for (let i = 0; i < campGeoList.length; i++) {
-                    ownedGeometries.push(campGeoList[i]);
-                    addToWarmup(new THREE.Mesh(campGeoList[i], MATERIALS.asphalt));
-                }
-                const lineColors = [0xffff00, 0x00ff00, 0xff0000];
-                for (let i = 0; i < lineColors.length; i++) {
-                    const edgesGeo = new THREE.EdgesGeometry(GEOMETRY.box);
-                    const lineMat = new THREE.LineBasicMaterial({ color: lineColors[i] });
-                    ownedGeometries.push(edgesGeo);
-                    ownedMaterials.push(lineMat);
-                    addToWarmup(new THREE.LineSegments(edgesGeo, lineMat));
-                }
+
+                // Silhouette Trees (InstancedMesh variant)
+                addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeSilhouette);
+                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeSilhouette);
+
+                if (yieldToMain) await yieldToMain();
+
+                // 3. GROUND PLANE (Cloned material with tiling)
+                // The Camp uses a persistent 120x120 ground plane.
+                const groundMat = MATERIALS.dirt.clone();
+                if (groundMat.map) groundMat.map.repeat.set(60, 60);
+                if (groundMat.bumpMap) groundMat.bumpMap.repeat.set(60, 60);
+                ownedMaterials.push(groundMat);
+                const groundGeo = new THREE.PlaneGeometry(120, 120);
+                groundGeo.rotateX(-Math.PI / 2);
+                ownedGeometries.push(groundGeo);
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.receiveShadow = true;
+                addToWarmup(ground, false); // Ground is unique
+
+                // [VINTERDÖD] Player Model Parity (Camp uses roughness: 0.5)
+                const campPlayer = ModelFactory.createFamilyMember(PLAYER_CHARACTER);
+                addToWarmup(campPlayer);
             }
 
             // FX Particle Instancing — all sectors need fire/smoke/blood shaders pre-compiled
@@ -450,20 +626,25 @@ export const AssetPreloader = {
                 const fxTypes = [
                     'blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke',
                     'debris', 'glass', 'flash', 'splash',
-                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore',
+                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat',
                     'campfire_flame', 'campfire_spark', 'campfire_smoke'
                 ];
                 for (let i = 0; i < fxTypes.length; i++) {
-                    const fxMesh = FXSystem._getInstancedMesh(scene, fxTypes[i]);
-                    addToWarmup(fxMesh);
+                    // [VINTERDÖD] CRITICAL: Pass 'null' for the scene to get the real mesh reference 
+                    // without accidentally stealing it into the warmup scene via scene.add().
+                    const realIMesh = FXSystem._getInstancedMesh(null as any, fxTypes[i]);
 
-                    // Restore shadow settings overridden by addToWarmup
+                    const dummyIMesh = new THREE.InstancedMesh(realIMesh.geometry, realIMesh.material, 1);
+                    dummyIMesh.visible = false;
+                    dummyRoot.add(dummyIMesh);
+
+                    // Restore shadow settings on the dummy to match the real mesh's shader requirements
                     if (fxTypes[i] === 'debris' || fxTypes[i] === 'scrap' || fxTypes[i] === 'glass' || fxTypes[i] === 'gore') {
-                        fxMesh.castShadow = true;
-                        fxMesh.receiveShadow = true;
+                        dummyIMesh.castShadow = true;
+                        dummyIMesh.receiveShadow = true;
                     } else {
-                        fxMesh.castShadow = false;
-                        fxMesh.receiveShadow = false;
+                        dummyIMesh.castShadow = false;
+                        dummyIMesh.receiveShadow = false;
                     }
                 }
 
@@ -557,5 +738,17 @@ export const AssetPreloader = {
         lastSectorIndex = -1;
     },
     getLastSectorIndex: () => lastSectorIndex,
-    setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; }
+    setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; },
+
+    /**
+     * Explicitly unmarks a sector as warmed up.
+     * Use this when transitioning away from a sector to allow it to be re-cleaned and re-warmed.
+     */
+    releaseSectorAssets: (index: number) => {
+        const moduleKey = `SECTOR_${index}`;
+        if (warmedModules.has(moduleKey)) {
+            warmedModules.delete(moduleKey);
+            console.log(`[AssetPreloader] Module [${moduleKey}] released.`);
+        }
+    }
 };

@@ -216,6 +216,19 @@ export const sv = {
         sky_light_settings: "HIMMELSLJUS",
         fog_settings: "DIMINSTÄLLNINGAR",
     },
+    camp_tooltips: {
+        equipped: "VALD UTRUSTNING",
+        vitality: "Vitalitet",
+        adrenaline: "Adrenalin",
+        reflexes: "Reflexer",
+        collectibles: "Samlarobjekt",
+        clues: "Ledtrådar",
+        poi: "POI",
+        enemies: "Fiender",
+        bosses: "Bossar",
+        finished_sectors: "Klarade Sektorer",
+        selected_sector: "Vald Sektor"
+    },
     categories: {
         primary: "PRIMÄR",
         secondary: "SEKUNDÄR",

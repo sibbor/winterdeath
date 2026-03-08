@@ -26,23 +26,16 @@ const getSharedTextures = () => {
 // Prevents massive GPU memory leaks and stuttering by reusing materials
 // instead of creating 'new THREE.Material' inside generator functions.
 let fenceMat: THREE.MeshStandardMaterial | null = null;
-let boatMat: THREE.MeshStandardMaterial | null = null;
 
 const LOCAL_MATS = {
     litWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 5 }),
     darkWindow: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 }),
     upWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 }),
-    vehicleWindow: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 }),
-    vehicleTire: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }),
-    sirenBase: new THREE.MeshStandardMaterial({ color: 0x111111 }),
-    sirenBlue: new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 20 }),
-    sirenRed: new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 20 }),
     caveLampBulb: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 20 }),
     caveLampCage: new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true })
 };
 
 // Dynamic caches for colored objects
-const vehicleBodyCache: Record<number, THREE.MeshStandardMaterial> = {};
 const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
 
 
@@ -368,196 +361,6 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createBoat(): THREE.Mesh {
-        // Lazy load & tint specifically for the boat hull
-        if (!boatMat) {
-            boatMat = MATERIALS.wood.clone();
-            boatMat.color.setHex(0x5a3d2b);
-            boatMat.roughness = 0.85;
-            boatMat.metalness = 0.0;
-            boatMat.flatShading = true;
-            boatMat.needsUpdate = true;
-        }
-
-        const parts: THREE.BufferGeometry[] = [];
-
-        const addPart = (w: number, h: number, d: number, tx: number, ty: number, tz: number, rx = 0, ry = 0, rz = 0) => {
-            const geo = new THREE.BoxGeometry(w, h, d);
-            geo.rotateY(ry);
-            geo.rotateX(rx);
-            geo.rotateZ(rz);
-            geo.translate(tx, ty, tz);
-            parts.push(geo);
-        };
-
-        const hullLength = 6.5;
-
-        addPart(0.15, 0.3, hullLength + 0.5, 0, -0.2, 0);
-        addPart(0.9, 0.08, hullLength, 0.4, -0.05, 0, 0, 0, 0.15);
-        addPart(0.9, 0.08, hullLength, -0.4, -0.05, 0, 0, 0, -0.15);
-        addPart(0.1, 0.7, hullLength + 0.2, 0.85, 0.3, 0, 0, 0, -0.4);
-        addPart(0.1, 0.7, hullLength + 0.2, -0.85, 0.3, 0, 0, 0, 0.4);
-        addPart(0.1, 0.6, hullLength + 0.4, 1.1, 0.7, 0, 0, 0, -0.25);
-        addPart(0.1, 0.6, hullLength + 0.4, -1.1, 0.7, 0, 0, 0, 0.25);
-
-        const bowZ = 1.0 + hullLength / 2;
-        addPart(0.1, 0.7, 2.5, 0.5, 0.35, bowZ, 0, -0.6, -0.3);
-        addPart(0.1, 0.7, 2.5, -0.5, 0.35, bowZ, 0, 0.6, 0.3);
-        addPart(0.1, 0.6, 2.8, 0.6, 0.75, bowZ - 0.1, 0, -0.55, -0.2);
-        addPart(0.1, 0.6, 2.8, -0.6, 0.75, bowZ - 0.1, 0, 0.55, 0.2);
-        addPart(0.2, 1.2, 0.25, 0, 0.4, bowZ, 0.1, 0, 0);
-
-        addPart(2.4, 1.0, 0.15, 0, 0.5, hullLength / 2 + 0.1, -0.2, 0, 0);
-        addPart(1.2, 0.05, 4.0, 0, 0.05, 0.5);
-        addPart(2.2, 0.08, 0.6, 0, 0.6, 1.8);
-        addPart(2.3, 0.08, 0.7, 0, 0.6, -0.5);
-        addPart(1.5, 0.08, 0.5, 0, 0.65, -2.8);
-        addPart(0.15, 0.05, hullLength + 2.5, 1.25, 1.0, -0.5, 0, 0, -0.25);
-        addPart(0.15, 0.05, hullLength + 2.5, -1.25, 1.0, -0.5, 0, 0, 0.25);
-        addPart(2.5, 0.05, 0.15, 0, 0.95, hullLength / 2 + 0.15, -0.2, 0, 0);
-
-        const mergedGeometry = BufferGeometryUtils.mergeGeometries(parts, false);
-        for (let i = 0; i < parts.length; i++) parts[i].dispose();
-
-        const boatMesh = new THREE.Mesh(mergedGeometry, boatMat);
-        boatMesh.castShadow = true;
-        boatMesh.receiveShadow = true;
-
-        // Visual front (+Z) needs to point opposite to match vehicles' physical forward
-        boatMesh.rotateY(Math.PI * 4);
-
-        return boatMesh;
-    },
-
-    createVehicle: (type = 'station wagon', scale = 1.0, colorOverride?: number, addSnow = true) => {
-        const vehicleBody = new THREE.Group();
-
-        const isBrokenGlass = Math.random() > 0.5;
-        const isDoorOpen = Math.random() > 0.7;
-        const doorAngle = (Math.random() * 0.6) + 0.2;
-
-        const colors = [0x7c2e2e, 0x3e4c5e, 0x8c8c7a, 0x4a5c4a, 0x8b5a2b, 0x5d4037];
-        let bodyColor = colorOverride ?? colors[Math.floor(Math.random() * colors.length)];
-
-        const specs: Record<string, any> = {
-            'station wagon': { c: [4.6, 0.7, 1.8], k: [2.8, 0.65, 1.6], ko: [-0.4, 1.25], hasTrunk: false },
-            'sedan': { c: [4.5, 0.7, 1.8], k: [2.2, 0.65, 1.6], ko: [-0.1, 1.25], hasTrunk: true },
-            'police': { c: [4.6, 0.7, 1.8], k: [2.8, 0.65, 1.6], ko: [-0.4, 1.25], isEmergency: true, body: 0xffffff },
-            'ambulance': { c: [5.2, 1.0, 2.2], k: [3.8, 1.2, 2.0], ko: [0, 1.9], isEmergency: true, body: 0xeeeeee },
-            'bus': { c: [12.0, 2.5, 3.5], k: [9.0, 1.8, 2.4], ko: [0, 2.5], isLarge: true, body: 0x009ddb },
-            'tractor': { c: [2.5, 0.8, 1.8], k: [1.2, 1.5, 1.4], ko: [0.5, 1.5], isAgricultural: true, body: 0xcc2222 },
-            'timber_truck': { c: [12.0, 0.8, 2.6], k: [2.5, 1.8, 2.4], ko: [4.0, 1.5], isLarge: true, body: 0x4a5c4a }
-        };
-
-        const s = specs[type] || specs['station wagon'];
-        if (s.body) bodyColor = s.body;
-
-        // Fetch from cache instead of cloning
-        if (!vehicleBodyCache[bodyColor]) {
-            const mat = MATERIALS.vehicleBody.clone();
-            mat.color.setHex(bodyColor);
-            vehicleBodyCache[bodyColor] = mat;
-        }
-        const matBody = vehicleBodyCache[bodyColor];
-
-        // Chassis
-        const chassis = new THREE.Mesh(new THREE.BoxGeometry(s.c[0], s.c[1], s.c[2]), matBody);
-        chassis.position.y = s.c[1] / 2 + 0.3;
-        chassis.castShadow = true;
-        vehicleBody.add(chassis);
-
-        // Cabin
-        const cabin = new THREE.Mesh(new THREE.BoxGeometry(s.k[0], s.k[1], s.k[2] * 0.95), matBody);
-        cabin.position.set(s.ko[0], s.ko[1], 0);
-        cabin.castShadow = true;
-        vehicleBody.add(cabin);
-
-        // Windshield
-        if (!isBrokenGlass || Math.random() > 0.5) {
-            const frontWindow = new THREE.Mesh(new THREE.BoxGeometry(0.05, s.k[1] * 0.8, s.k[2] * 0.9), LOCAL_MATS.vehicleWindow);
-            frontWindow.position.set(s.ko[0] + s.k[0] / 2 + 0.01, s.ko[1], 0);
-            vehicleBody.add(frontWindow);
-        }
-
-        // Bus Specifics
-        if (type === 'bus') {
-            const windowStrip = new THREE.Mesh(new THREE.BoxGeometry(s.c[0] * 0.85, s.c[1] * 0.35, s.c[2] + 0.02), LOCAL_MATS.vehicleWindow);
-            windowStrip.position.set(0, s.c[1] / 2 + 0.2, 0);
-            vehicleBody.add(windowStrip);
-
-            const sign = createSignMesh("159", 2.0, 0.6, '#ffaa00', '#000000');
-            sign.position.set(s.c[0] / 2 + 0.05, s.c[1] - 0.2, 0);
-            sign.rotation.y = Math.PI / 2;
-            vehicleBody.add(sign);
-        }
-
-        // Door (Open logic)
-        const doorGeo = new THREE.BoxGeometry(s.k[0] * 0.4, s.k[1], 0.05);
-        const leftDoor = new THREE.Mesh(doorGeo, matBody);
-        leftDoor.position.set(s.k[0] * 0.2, 0, 0);
-        const doorGroup = new THREE.Group();
-        doorGroup.add(leftDoor);
-        doorGroup.position.set(s.ko[0] + s.k[0] * 0.1, s.ko[1], s.c[2] / 2);
-        if (isDoorOpen) doorGroup.rotation.y = doorAngle;
-        vehicleBody.add(doorGroup);
-
-        // Sirens
-        if (s.isEmergency) {
-            const sirenBase = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, s.k[2] * 0.8), LOCAL_MATS.sirenBase);
-            sirenBase.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.05, 0);
-            vehicleBody.add(sirenBase);
-
-            const blueLight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.3), LOCAL_MATS.sirenBlue);
-            blueLight.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.15, s.k[2] * 0.2);
-            vehicleBody.add(blueLight);
-
-            const redLight = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.3), LOCAL_MATS.sirenRed);
-            redLight.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.15, -s.k[2] * 0.2);
-            vehicleBody.add(redLight);
-
-            const light = new THREE.PointLight(0x0044ff, 5, 10);
-            light.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.5, 0);
-            vehicleBody.add(light);
-        }
-
-        // Snow layer
-        if (addSnow) {
-            const snowRoof = new THREE.Mesh(new THREE.BoxGeometry(s.k[0] * 1.05, 0.1, s.k[2] * 1.05), MATERIALS.snow);
-            snowRoof.position.set(s.ko[0], s.ko[1] + s.k[1] / 2 + 0.05, 0);
-            vehicleBody.add(snowRoof);
-
-            if (!s.isLarge && !s.isAgricultural) {
-                const hoodSnow = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, s.c[2] * 0.9), MATERIALS.snow);
-                hoodSnow.position.set(s.c[0] / 2 - 0.6, chassis.position.y + s.c[1] / 2 + 0.01, 0);
-                vehicleBody.add(hoodSnow);
-            }
-        }
-
-        // Specials
-        if (type === 'tractor') {
-            const frontWheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.4, 12);
-            const rearWheelGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.6, 12);
-
-            const fwL = new THREE.Mesh(frontWheelGeo, LOCAL_MATS.vehicleTire); fwL.position.set(1.0, 0.4, 0.7); vehicleBody.add(fwL);
-            const fwR = new THREE.Mesh(frontWheelGeo, LOCAL_MATS.vehicleTire); fwR.position.set(1.0, 0.4, -0.7); vehicleBody.add(fwR);
-            const rwL = new THREE.Mesh(rearWheelGeo, LOCAL_MATS.vehicleTire); rwL.position.set(-0.5, 1.2, 1.0); vehicleBody.add(rwL);
-            const rwR = new THREE.Mesh(rearWheelGeo, LOCAL_MATS.vehicleTire); rwR.position.set(-0.5, 1.2, -1.0); vehicleBody.add(rwR);
-        }
-
-        if (type === 'timber_truck') {
-            const logs = ObjectGenerator.createTimberPile(1.0);
-            logs.position.set(chassis.position.x - 1.8, chassis.position.y + 0.4, 0);
-            logs.rotation.set(0, Math.PI * 0.5, 0);
-            logs.scale.set(1, 1, 1.3);
-            vehicleBody.add(logs);
-        }
-
-        vehicleBody.scale.set(scale, scale, scale);
-        vehicleBody.userData.material = 'METAL';
-        vehicleBody.rotateY(Math.PI * 1.5);
-
-        return vehicleBody;
-    },
 
     createFire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
         const group = new THREE.Group();
@@ -830,28 +633,6 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = 'WOOD';
-        return group;
-    },
-
-    createCrashedCar: (color: number = 0x888888) => {
-        const group = ObjectGenerator.createVehicle('sedan', 1.0, color, false);
-        group.rotation.set(Math.PI / 12, 0, Math.PI / 8);
-
-        const createSpot = (x: number) => {
-            const light = new THREE.SpotLight(0xffffff, 20, 40, Math.PI / 6, 0.5);
-            light.position.set(x, 0.5, 1.5);
-            light.target.position.set(x, -1, 10);
-            group.add(light);
-            group.add(light.target);
-        };
-        createSpot(-0.8);
-        createSpot(0.8);
-
-        const scorch = new THREE.Mesh(new THREE.CircleGeometry(2, 16), MATERIALS.scorchDecal);
-        scorch.rotation.x = -Math.PI / 2;
-        scorch.position.y = -0.4;
-        group.add(scorch);
-
         return group;
     },
 

@@ -138,13 +138,17 @@ export class VehicleMovementSystem implements System {
         const maxSpeedMS = def.maxSpeed * KMH_TO_MS;
 
         // --- ACCELERATION / NORMAL BRAKING ---
+        let isBraking = false;
+
         if (throttle !== 0) {
             if (throttle < 0 && forwardSpeed > 1.0) {
                 const decel = def.brakeForce * (throttle * -1) * dt;
                 vel.addScaledVector(_forward, -decel);
+                isBraking = true;
             } else if (throttle > 0 && forwardSpeed < -1.0) {
                 const decel = def.brakeForce * throttle * dt;
                 vel.addScaledVector(_forward, decel);
+                isBraking = true;
             } else {
                 const maxReverseMS = maxSpeedMS * def.reverseSpeedFraction;
                 const atLimit = throttle > 0 ? (forwardSpeed >= maxSpeedMS) : (forwardSpeed <= -maxReverseMS);
@@ -165,6 +169,7 @@ export class VehicleMovementSystem implements System {
 
         // --- HANDBRAKE ---
         if (handbrake) {
+            isBraking = true;
             const handbrakeDecel = def.brakeForce * 0.6 * dt;
             if (forwardSpeed > 0.1) vel.addScaledVector(_forward, -handbrakeDecel);
             else if (forwardSpeed < -0.1) vel.addScaledVector(_forward, handbrakeDecel);
@@ -184,13 +189,13 @@ export class VehicleMovementSystem implements System {
             // Arcade steering curve
             let speedFactor = 1.0;
             if (speed < 6.0) {
-                speedFactor = speed / 6.0; // Rampar upp sväng vid låg fart (bättre kontroll)
+                speedFactor = speed / 6.0; // Ramps up turn at low speeds (better control)
             } else {
                 const speedRatio = speed / (maxSpeedMS > 1 ? maxSpeedMS : 1);
-                speedFactor = 1.0 - (speedRatio * 0.3); // Något stelare vid extremt höga farter
+                speedFactor = 1.0 - (speedRatio * 0.3); // Slightly stiffer at extreme speeds
             }
 
-            // Endast snärtig handbromssväng om vi faktiskt har lite fart! (Dödar donut/beyblade-buggen)
+            // Only snappy handbrake turn if we actually have some speed! (Kills the donut/beyblade bug)
             const turnMult = (handbrake && speed > 6.0) ? 1.5 : 1.0;
 
             angVel.y -= directionalSteer * def.turnSpeed * turnMult * speedFactor * dt;
@@ -200,7 +205,7 @@ export class VehicleMovementSystem implements System {
         let latRetention = def.lateralFriction * def.friction;
 
         if (handbrake) {
-            // Handbrake overrides drivetrain. Lite grepp kvar (0.95) istället för 0.99.
+            // Handbrake overrides drivetrain. Keep a little grip (0.95) instead of 0.99.
             latRetention = 0.95;
         } else if ((throttle > 0.5 || throttle < -0.5) && speedSq > 20 && absLatSpeed > 2.0) {
             if (def.drivetrain === 'RWD') latRetention = 0.96;
@@ -217,7 +222,7 @@ export class VehicleMovementSystem implements System {
         vel.addScaledVector(_right, dampedLat);
         vel.y = savedVelY;
 
-        // Snappy styr-återhämtning! Bilen slutar rotera extremt fort när du släpper A/D
+        // Snappy steer recovery! Stops rotation fast when letting go of A/D
         angVel.multiplyScalar(Math.pow(0.85, fpsRatio));
 
         // --- SUSPENSION ---
@@ -245,6 +250,35 @@ export class VehicleMovementSystem implements System {
         // --- APPLY TRANSFORMS ---
         vehicle.position.addScaledVector(vel, dt);
         vehicle.rotation.y += angVel.y * dt;
+
+        // --- LIGHTING SYSTEM (STEP 2) ---
+        // Fast access to cached materials we created in VehicleGenerator
+        const lights = ud.lights;
+        if (lights) {
+            const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
+
+            if (lights.headlights) {
+                lights.headlights.material.emissiveIntensity = isEngineOn ? 5.0 : 0.0;
+            }
+
+            if (lights.brake) {
+                // If braking -> intense red. If just engine on -> weak red (taillight). Else off.
+                lights.brake.material.emissiveIntensity = isBraking ? 10.0 : (isEngineOn ? 2.0 : 0.0);
+            }
+
+            // Sirens (blinks rapidly based on timestamp 'now')
+            // Using fast sine/cosine to alternate blue/red without creating timers
+            if (lights.siren) {
+                if (isEngineOn) {
+                    const blinkSpeed = 0.015;
+                    lights.siren.materialBlue.emissiveIntensity = Math.sin(now * blinkSpeed) > 0 ? 20.0 : 0.0;
+                    lights.siren.materialRed.emissiveIntensity = Math.cos(now * blinkSpeed) > 0 ? 20.0 : 0.0;
+                } else {
+                    lights.siren.materialBlue.emissiveIntensity = 0.0;
+                    lights.siren.materialRed.emissiveIntensity = 0.0;
+                }
+            }
+        }
 
         // --- AUDIO & SMOKE FX ---
         if (input) {
@@ -435,16 +469,19 @@ export class VehicleMovementSystem implements System {
                 const dist = Math.sqrt(distSq);
                 const overlap = combinedRad - dist;
 
-                _toEnemy.normalize().multiplyScalar(overlap * 0.6);
-                vehicle.position.add(_toEnemy);
+                _toEnemy.normalize();
 
-                const impactDot = vel.dot(_toEnemy.normalize());
+                // Push vehicle away from obstacle
+                vehicle.position.addScaledVector(_toEnemy, overlap * 0.6);
+
+                // Calculate impact on velocity based on normalized vector
+                const impactDot = vel.dot(_toEnemy);
                 if (impactDot < 0) {
                     vel.addScaledVector(_toEnemy, -impactDot * 1.2);
                 }
 
                 vehicle.userData.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
-                vel.multiplyScalar(0.85);
+                vel.multiplyScalar(0.85); // General friction penalty on hit
             }
         }
     }

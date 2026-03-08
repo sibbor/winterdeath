@@ -75,7 +75,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     }, [onClose, onConfirm, canConfirm]);
 
     return (
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-50 p-4 md:p-8 backdrop-blur-lg pointer-events-auto cursor-default">
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-[80] p-4 md:p-8 backdrop-blur-lg pointer-events-auto cursor-default">
             <div className={`bg-black/95 border-4 border-gray-800 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)] relative`}>
                 {/* Header */}
                 <div className="p-4 md:p-6 border-b-2 border-gray-800 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4">

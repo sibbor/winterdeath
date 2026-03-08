@@ -4,6 +4,7 @@ import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
+import { VehicleGenerator } from '../../core/world/VehicleGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
@@ -200,6 +201,11 @@ export const Sector1: SectorDef = {
         SectorGenerator.spawnBuilding(ctx, LOCATIONS.BUILDINGS.HOME.x - 2, LOCATIONS.BUILDINGS.HOME.z + 10, 20, 7, 25, 0, 0xffffff, true, true, 1.0);
 
         // Home - Police car and family's car
+        VehicleGenerator.createPoliceCar().position.set(LOCATIONS.VEHICLES.POLICE_CAR.x, 0, LOCATIONS.VEHICLES.POLICE_CAR.z);
+        // We'll use SectorGenerator for high-level spawn tasks that include obstacles,
+        // but for specific event-anchored vehicles like Sector1 bus or family car,
+        // direct generator usage is often cleaner for custom setup.
+
         SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
         const familyCar = SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
         SectorGenerator.setOnFire(ctx, familyCar, { smoke: true, intensity: 100, distance: 30, onRoof: true });
@@ -484,7 +490,7 @@ export const Sector1: SectorDef = {
         ObjectGenerator.createTunnel(ctx, tunnelPos, 9, 3.5, 21, 0, 2.5, 0.5);
 
         // Bus (tunnel blocker)
-        const bus = ObjectGenerator.createVehicle('bus', 1, 0x009ddb, false);
+        const bus = VehicleGenerator.createBus(0x009ddb, false);
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, 1.8, LOCATIONS.TRIGGERS.BUS.z);
         bus.rotation.set(-Math.PI / 2, 0, 0);
         bus.updateMatrixWorld();

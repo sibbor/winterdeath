@@ -642,12 +642,14 @@ export const FXSystem = {
                 imesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FXSystem._MAX_INSTANCES * 3), 3);
             }
 
-            scene.add(imesh);
             FXSystem._instancedMeshes[type] = imesh;
             FXSystem._instancedCounts[type] = 0;
             FXSystem._instancedMeshKeys.push(type);
-        } else if (FXSystem._instancedMeshes[type].parent !== scene) {
-            scene.add(FXSystem._instancedMeshes[type]);
+        }
+
+        const mesh = FXSystem._instancedMeshes[type];
+        if (scene && mesh.parent !== scene) {
+            scene.add(mesh);
         }
 
         // [VINTERDÖD] CRITICAL FIX: AssetPreloader hides all meshes (visible=false) after compiling shaders

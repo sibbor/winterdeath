@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
+import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 
 interface Textures {
@@ -12,8 +12,56 @@ interface Textures {
 }
 
 // --- PERSISTENT CACHE ---
-const stationTextures: Record<string, THREE.CanvasTexture> = {};
-const stationGeometries: Record<string, THREE.BufferGeometry> = {};
+export const stationTextures: Record<string, THREE.CanvasTexture> = {};
+export const stationGeometries: Record<string, THREE.BufferGeometry> = {};
+export const stationMaterials: Record<string, THREE.MeshStandardMaterial> = {
+    warmWood: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 }),
+    darkerWood: new THREE.MeshStandardMaterial({ color: 0x5A3210, roughness: 0.9 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 }),
+    ammoGreen: new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 }),
+    medkitRed: new THREE.MeshStandardMaterial({ color: 0xcc0000 })
+};
+
+// Map and paper texture
+const getCachedCanvasTexture = (width: number, height: number, type: 'map' | 'note') => {
+    const key = `${type}_${width}x${height}`;
+    if (stationTextures[key]) return stationTextures[key];
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = type === 'map' ? '#e3d5b8' : '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = '#332211'; ctx.lineWidth = 2;
+
+    if (type === 'map') {
+        for (let i = 0; i < 8; i++) {
+            ctx.beginPath();
+            ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 30, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(width / 2 - 20, height / 2 - 20); ctx.lineTo(width / 2 + 20, height / 2 + 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(width / 2 + 20, height / 2 - 20); ctx.lineTo(width / 2 - 20, height / 2 + 20); ctx.stroke();
+    } else {
+        ctx.strokeStyle = '#777777';
+        for (let i = 1; i < 6; i++) {
+            ctx.beginPath(); ctx.moveTo(10, i * 20); ctx.lineTo(width - 10, i * 20); ctx.stroke();
+        }
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    stationTextures[key] = tex;
+    return tex;
+};
+
+// --- Helper: Create outline ---
+const createOutline = (geo: THREE.BufferGeometry, color: number) => {
+    const edges = new THREE.EdgesGeometry(geo);
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
+    line.visible = false;
+    return line;
+};
 
 // Separate function to avoid circular dependency issues in object literal
 const setupTrees = async (scene: THREE.Scene) => {
@@ -101,51 +149,7 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     const interactables: THREE.Mesh[] = [];
     const outlines: Record<string, THREE.LineSegments> = {};
 
-    // --- Helper: Create outline ---
-    const createOutline = (geo: THREE.BufferGeometry, color: number) => {
-        const edges = new THREE.EdgesGeometry(geo);
-        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
-        line.visible = false;
-        return line;
-    };
-
-    // Map and paper texture
-    const getCachedCanvasTexture = (width: number, height: number, type: 'map' | 'note') => {
-        const key = `${type}_${width}x${height}`;
-        if (stationTextures[key]) return stationTextures[key];
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = type === 'map' ? '#e3d5b8' : '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.strokeStyle = '#332211'; ctx.lineWidth = 2;
-
-        if (type === 'map') {
-            for (let i = 0; i < 8; i++) {
-                ctx.beginPath();
-                ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 30, 0, Math.PI * 2);
-                ctx.stroke();
-            }
-            ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 5;
-            ctx.beginPath(); ctx.moveTo(width / 2 - 20, height / 2 - 20); ctx.lineTo(width / 2 + 20, height / 2 + 20); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(width / 2 + 20, height / 2 - 20); ctx.lineTo(width / 2 - 20, height / 2 + 20); ctx.stroke();
-        } else {
-            ctx.strokeStyle = '#777777';
-            for (let i = 1; i < 6; i++) {
-                ctx.beginPath(); ctx.moveTo(10, i * 20); ctx.lineTo(width - 10, i * 20); ctx.stroke();
-            }
-        }
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.needsUpdate = true;
-        stationTextures[key] = tex;
-        return tex;
-    };
-
-    const warmWoodMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
-    const darkerWoodMat = new THREE.MeshStandardMaterial({ color: 0x5A3210, roughness: 0.9 });
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 });
-    const ammoGreenMat = new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 });
+    const { warmWood: warmWoodMat, darkerWood: darkerWoodMat, metal: metalMat, ammoGreen: ammoGreenMat } = stationMaterials;
 
     // =========================================
     // 1. STATION: ARMORY
@@ -340,9 +344,9 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     // =========================================
 
     // 1. Armory
-    const rackInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), new THREE.MeshBasicMaterial({ visible: false }));
+    const rackInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
     rackInteract.position.y = 2;
-    rackInteract.userData = { id: 'armory' };
+    rackInteract.userData = { id: 'armory', name: 'armory' };
     rackGroup.add(rackInteract);
     interactables.push(rackInteract);
 
@@ -352,9 +356,9 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     outlines['armory'] = rackOutline;
 
     // 2. Adventure Log (Desk)
-    const logInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.5, 1.5), new THREE.MeshBasicMaterial({ visible: false }));
+    const logInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.5, 1.5), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
     logInteract.position.y = 0.75;
-    logInteract.userData = { id: 'adventure_log' };
+    logInteract.userData = { id: 'adventure_log', name: 'adventure_log' };
     deskGroup.add(logInteract);
     interactables.push(logInteract);
 
@@ -364,9 +368,9 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     outlines['adventure_log'] = logOutline;
 
     // 3. Sectors (Map Board)
-    const mapInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 1), new THREE.MeshBasicMaterial({ visible: false }));
+    const mapInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 1), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
     mapInteract.position.y = 2;
-    mapInteract.userData = { id: 'sectors' };
+    mapInteract.userData = { id: 'sectors', name: 'sectors' };
     mapGroup.add(mapInteract);
     interactables.push(mapInteract);
 
@@ -376,9 +380,9 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
     outlines['sectors'] = mapOutline;
 
     // 4. Skills (Medicine Cabinet)
-    const skillInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2), new THREE.MeshBasicMaterial({ visible: false }));
+    const skillInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
     skillInteract.position.y = 2.5;
-    skillInteract.userData = { id: 'skills' };
+    skillInteract.userData = { id: 'skills', name: 'skills' };
     medGroup.add(skillInteract);
     interactables.push(skillInteract);
 
@@ -398,16 +402,14 @@ const setupStations = (scene: THREE.Scene, textures: Textures, stationsPos: { id
 export const CampWorld = {
     setupTerrain: (scene: THREE.Scene, textures: Textures) => {
         // Ground - Optimized to visible camera frustum area only
-        // Camera at (0, 10, 22) looking at (0, 2, -5)
-        // Visible ground area is approximately 60x60 units
         const groundMat = MATERIALS.dirt.clone();
         if (groundMat.map) {
-            groundMat.map.repeat.set(60, 60); // Increased for larger plane
+            groundMat.map.repeat.set(60, 60);
         }
         if (groundMat.bumpMap) {
-            groundMat.bumpMap.repeat.set(60, 60); // Increased for larger plane
+            groundMat.bumpMap.repeat.set(60, 60);
         }
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat); // Increased from 60 to 120
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
@@ -415,6 +417,25 @@ export const CampWorld = {
         setupTrees(scene);
     },
 
+    stationTextures,
+    stationGeometries,
     setupTrees,
-    setupStations
+    setupStations,
+
+    /**
+     * [VINTERDÖD] Pre-generates all station canvases and geometries to avoid hits during load.
+     * These are stored in the persistent stationTextures/stationGeometries caches.
+     */
+    warmupStationAssets: (renderer: THREE.WebGLRenderer) => {
+        const t1 = getCachedCanvasTexture(256, 256, 'map');
+        const t2 = getCachedCanvasTexture(128, 128, 'note');
+        if (renderer) {
+            renderer.initTexture(t1);
+            renderer.initTexture(t2);
+        }
+
+        if (!stationGeometries.barrel) stationGeometries.barrel = new THREE.CylinderGeometry(0.03, 0.03, 1.2);
+        if (!stationGeometries.map_plane) stationGeometries.map_plane = new THREE.PlaneGeometry(2.0, 1.4);
+        if (!stationGeometries.note_plane) stationGeometries.note_plane = new THREE.PlaneGeometry(0.4, 0.5);
+    }
 };

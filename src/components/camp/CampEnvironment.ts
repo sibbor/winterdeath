@@ -31,13 +31,13 @@ export interface CampEffectsState {
     fireLight: THREE.PointLight;
 }
 
-const CONST_GEO = {
+export const CONST_GEO = {
     flame: new THREE.DodecahedronGeometry(0.6),
     spark: new THREE.BoxGeometry(0.05, 0.05, 0.05),
     smoke: new THREE.DodecahedronGeometry(0.6)
 };
 
-const CONST_MAT = {
+export const CONST_MAT = {
     flame: new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.8 }),
     spark: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
     smoke: new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.3 })
@@ -92,9 +92,9 @@ export const CampEnvironment = {
             fireLight
         };
 
-        // [VINTERDÖD] Pre-warm the simulation so the fire is already "blazing" on frame 1
-        // 120 frames = ~2 seconds of simulation
-        for (let i = 0; i < 120; i++) {
+        // [VINTERDÖD] Pre-warm the simulation so the fire is already "blazing" on frame 1.
+        // further reduce to 12 frames to minimize the react-mount-hit, it's enough to see the fire is active
+        for (let i = 0; i < 12; i++) {
             CampEnvironment.updateEffects(scene, state, 0.016, i * 0.016, i);
         }
 
