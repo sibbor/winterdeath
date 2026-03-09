@@ -11,9 +11,42 @@ export { SECTOR_THEMES } from './sectors/sector_themes';
 export const SCRAP_COST_BASE = 50;
 export const LEVEL_CAP = 20;
 export const CAMERA_HEIGHT = 50;
-
 export const WEATHER = {
     PARTICLE_COUNT: 400
+};
+
+// Flashlight
+export const FLASHLIGHT = {
+    name: 'flashlight',
+    color: 0xffffee,
+    intensity: 250.0,
+    distance: 60,
+    angle: Math.PI / 3,
+    penumbra: 0.6,
+    decay: 1.0,
+    position: { x: 0, y: 3.5, z: 0.5 },
+    targetPosition: { x: 0, y: 0, z: 10 },
+    castShadows: true,
+    cameraNear: 1,
+    cameraFar: 40,
+    shadowBias: -0.0001
+};
+
+// Vehicle Headlight
+export const VEHICLE_HEADLIGHT = {
+    name: 'vehicleLight',
+    color: 0xffeedd,
+    intensity: 250.0,
+    distance: 100,
+    angle: Math.PI / 2.5,
+    penumbra: 0.3,
+    decay: 1.0,
+    position: { x: 0, y: 3.5, z: 0.5 },
+    targetPosition: { x: 0, y: 0, z: 10 },
+    castShadows: true,
+    cameraNear: 1,
+    cameraFar: 80,
+    shadowBias: -0.0001
 };
 
 export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';

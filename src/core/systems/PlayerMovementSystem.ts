@@ -256,7 +256,7 @@ export class PlayerMovementSystem implements System {
 
                     if (distSq < hitRadiusSq) {
                         // EnemyManager handles the knockback
-                        EnemyManager.applyTackle(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
+                        EnemyManager.applyKnockback(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
 
                         // Om vi INTE dashar, hantera mjuk kollision så vi inte går igenom dem
                         if (!isDashing) {

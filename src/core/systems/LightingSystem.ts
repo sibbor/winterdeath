@@ -94,7 +94,7 @@ export class LightingSystem implements System {
             let lightCount = 0;
             for (let i = 0; i < dynamicLights.length; i++) {
                 const light = dynamicLights[i] as THREE.PointLight;
-                if (light.name === 'flashlight') continue;
+                if (light.name === 'flashlight' || light.name === 'vehicleLight') continue;
 
                 if (!_sortableLightsScratch[lightCount]) {
                     _sortableLightsScratch.push({ light: null as any, distSq: 0 });

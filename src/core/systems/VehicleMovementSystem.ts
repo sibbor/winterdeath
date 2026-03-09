@@ -5,9 +5,8 @@ import { FXSystem } from './FXSystem';
 import { EnemyManager } from '../EnemyManager';
 import { soundManager } from '../../utils/sound';
 import { VehicleDef } from '../../content/vehicles';
-import { MATERIALS } from '../../utils/assets';
 import { _buoyancyResult } from './WaterSystem';
-import { haptic } from '../../utils/HapticManager';
+import { FLASHLIGHT, VEHICLE_HEADLIGHT } from '@/src/content/constants';
 
 // --- PERFORMANCE SCRATCHPADS ---
 // Pre-allocated vectors to prevent Garbage Collection (GC) during loops
@@ -138,36 +137,18 @@ export class VehicleMovementSystem implements System {
             vel.set(0, 0, 0);
             angVel.set(0, 0, 0);
 
-            // Hide laser sight while in vehicle
+            // Hide player visuals
             const laserSight = playerGroup.getObjectByName('laserSight');
-            if (laserSight) laserSight.visible = false;
+            if (laserSight) laserSight.visible = false; // LaserSight kastar inga tunga skuggor, så visible går bra här
 
-            // HEADLIGHT HIJACK (Optimized for bouncing with the chassis)
-            const flashlight = playerGroup.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
-            if (flashlight) {
-                // Save original state so we can restore it upon exit
-                if (!flashlight.userData.orig) {
-                    flashlight.userData.orig = {
-                        parent: flashlight.parent,
-                        position: flashlight.position.clone(),
-                        targetPos: flashlight.target.position.clone(),
-                        angle: flashlight.angle,
-                        intensity: flashlight.intensity,
-                        distance: flashlight.distance,
-                        penumbra: flashlight.penumbra
-                    };
-                }
+            // Göm ficklampan via INTENSITY för att slippa shader-kompilering!
+            const playerLight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
+            if (playerLight) playerLight.intensity = 0;
 
-                // Move the light to the CHASSIS so it bounces with the car's suspension
-                const chassis = vehicle.children[0]?.userData?.chassis || vehicle;
-                chassis.add(flashlight);
-                chassis.add(flashlight.target);
-
-                flashlight.angle = Math.PI / 2.5;
-                flashlight.intensity = flashlight.userData.orig.intensity * 2.0;
-                flashlight.distance = 80;
-                flashlight.visible = true;
-                state.flashlightOn = true;
+            // Turn ON vehicle visuals via INTENSITY
+            const vehicleLight = vehicle.getObjectByName(VEHICLE_HEADLIGHT.name) as THREE.SpotLight;
+            if (vehicleLight && state.flashlightOn) {
+                vehicleLight.intensity = VEHICLE_HEADLIGHT.intensity;
             }
         }
 
@@ -379,28 +360,10 @@ export class VehicleMovementSystem implements System {
         const lights = ud.lights;
         const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
 
-        // FORCE FLASHLIGHT TO THE GRILLE (Zero-GC)
-        if (isEngineOn) {
-            const chassis = vehicle.children[0]?.userData?.chassis || vehicle;
-            const flashlight = chassis.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
-
-            if (flashlight) {
-                // Default to math-based center if explicit visual meshes aren't found
-                let frontZ = def.size.z / 2;
-                let lightY = def.size.y * 0.4;
-
-                // Read the EXACT local position from the visual headlight mesh
-                if (lights?.headlights?.meshes?.[0]) {
-                    frontZ = lights.headlights.meshes[0].position.z;
-                    lightY = lights.headlights.meshes[0].position.y;
-                }
-
-                // Lock it 0.2 units immediately in front of the grille every frame
-                // This prevents the player's loop from overriding the position
-                flashlight.position.set(0, lightY, frontZ + 0.2);
-                flashlight.target.position.set(0, lightY, frontZ + 20);
-                flashlight.target.updateMatrixWorld();
-            }
+        // Toggle Headlight State (Using 'f' key handled in GameSession)
+        const vehicleLight = vehicle.getObjectByName('vehicleLight');
+        if (vehicleLight) {
+            vehicleLight.visible = isEngineOn && state.flashlightOn;
         }
 
         if (lights) {
@@ -535,32 +498,18 @@ export class VehicleMovementSystem implements System {
                 playerGroup.position.add(_dismountDir);
                 playerGroup.position.y = 0;
 
+                // Restore Player visuals
                 const laserSight = playerGroup.getObjectByName('laserSight');
                 if (laserSight) laserSight.visible = true;
 
-                // --- RESTORE FLASHLIGHT TO PLAYER ---
-                const chassis = vehicle.children[0]?.userData?.chassis || vehicle;
-                const flashlight = chassis.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
+                // Tänd spelarens lampa om den var på
+                const playerLight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
+                if (playerLight) playerLight.intensity = state.flashlightOn ? FLASHLIGHT.intensity : 0;
 
-                if (flashlight && flashlight.userData.orig) {
-                    const orig = flashlight.userData.orig;
+                // Släck bilens lampa
+                const vehicleLight = vehicle.getObjectByName(VEHICLE_HEADLIGHT.name) as THREE.SpotLight;
+                if (vehicleLight) vehicleLight.intensity = 0;
 
-                    if (orig.parent) {
-                        orig.parent.add(flashlight);
-                        orig.parent.add(flashlight.target);
-                    }
-
-                    // Reset to original properties saved during mount
-                    flashlight.position.copy(orig.position);
-                    flashlight.target.position.copy(orig.targetPos);
-                    flashlight.angle = orig.angle;
-                    flashlight.intensity = orig.intensity;
-                    flashlight.distance = orig.distance;
-                    flashlight.penumbra = orig.penumbra;
-                    flashlight.visible = !!state.flashlightOn;
-                }
-
-                // Hide brake light decal
                 if (lights?.brake?.fakeGlow) {
                     lights.brake.fakeGlow.visible = false;
                 }
@@ -579,7 +528,6 @@ export class VehicleMovementSystem implements System {
         if (speedSq < SPEED_SQ_PUSH) return;
 
         const state = session.state;
-        const scene = session.engine.scene;
 
         // Hit radius is slightly larger than the physical box to catch enemies early
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5 + 1.0;
@@ -602,86 +550,19 @@ export class VehicleMovementSystem implements System {
             if (now - lastHit < HIT_COOLDOWN_MS) continue;
             e.lastVehicleHit = now;
 
-            const speed = Math.sqrt(speedSq);
-            const speedKmh = speed * 3.6; // Convert m/s to km/h for threshold checks
-
-            // Calculate Mass Ratio (Vehicle Mass vs Enemy Mass)
-            // e.g., Car (1400kg = 1.4) vs Zombie (1.0) -> Ratio 1.4
-            const massRatio = (def.mass * 0.001) / (e.bodyMass || 1.0);
-
-            // Momentum-based Damage
-            const baseDamage = speedKmh * massRatio * def.collisionDamageMultiplier * 2.0;
+            const speedMS = Math.sqrt(speedSq);
 
             _knockDir.copy(_toEnemy).normalize();
             if (_knockDir.lengthSq() < 0.01) _knockDir.copy(_forward);
 
-            // Apply damage
-            e.hp -= baseDamage;
-            e.hitTime = now;
+            // Delegera logiken för skada/animation till EnemyManager!
+            if (typeof (EnemyManager as any).applyVehicleHit === 'function') {
+                const isHeavyHit = (EnemyManager as any).applyVehicleHit(e, _knockDir, speedMS, def, state, session, now);
 
-            // --- FATAL HIT ---
-            if (e.hp <= 0) {
-                e.dead = true;
-
-                // 1. GIBBED (>= 80 km/h) - High speed splatter
-                if (speedKmh >= 80) {
-                    e.deathState = 'GIBBED';
-                    e.lastDamageType = 'vehicle_splatter';
-
-                    const forceDir = _v1.copy(_knockDir).multiplyScalar(speed * 1.5).setY(3.0);
-                    EnemyManager.explodeEnemy(e, {
-                        spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: any, v?: any, col?: number, s?: number) =>
-                            FXSystem.spawnPart(scene, state.particles, x, y, z, t, c, m, v, col, s),
-                        spawnDecal: (x: number, z: number, s: number, mat?: any, type?: string) =>
-                            FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat, type),
-                    }, forceDir);
-
-                    session.engine.camera.shake(0.4);
-                    soundManager.playImpact('flesh');
-                    haptic.explosion();
-
-                    // 2. FALL (20 - 79 km/h) - Airborne ragdoll effect
-                } else if (speedKmh >= 20) {
-                    e.deathState = 'FALL';
-                    e.lastDamageType = 'vehicle_ram';
-
-                    // Force depends on speed and relative mass
-                    const pushForce = speed * 0.8 * massRatio;
-                    const upForce = speed * 0.6 * massRatio;
-
-                    // Set deathVel so EnemyManager.processDeathAnimation handles the physics arc
-                    e.deathVel.copy(_knockDir).multiplyScalar(pushForce);
-                    e.deathVel.y = Math.max(4.0, upForce); // Minimum upward kick
-
-                    FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1, e.mesh.position.z, 'blood', 20);
-                    FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
-                        1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
-
-                    session.engine.camera.shake(0.2);
-                    soundManager.playImpact('flesh');
-
-                    // Car hits heavy object -> small vertical bounce feedback on chassis
+                // Om det var en tung krock som krävde lite tryck, guppa bilens chassi
+                if (isHeavyHit) {
                     vehicle.userData.suspVelY += 2.0;
-
-                    // 3. GENERIC (< 20 km/h) - Low speed death, falls over
-                } else {
-                    e.deathState = 'GENERIC';
-                    e.lastDamageType = 'vehicle_push';
-
-                    // Slight backwards tumble
-                    e.deathVel.copy(_knockDir).multiplyScalar(speed * massRatio * 0.2);
-                    e.deathVel.y = 2.0;
                 }
-
-                // --- SURVIVED HIT (Knockback) ---
-            } else {
-                e.lastDamageType = 'vehicle_push';
-
-                const pushForce = speed * 0.5 * massRatio;
-                _knockDir.multiplyScalar(pushForce).setY(2.0);
-                e.knockbackVel.add(_knockDir);
-
-                e.slowTimer = 0.5;
             }
         }
     }

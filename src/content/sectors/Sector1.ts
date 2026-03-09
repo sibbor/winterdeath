@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
-import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
+import { MATERIALS, createTextSprite } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/VehicleGenerator';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
-import { t } from '../../utils/i18n';
 import { CAMERA_HEIGHT } from '../constants';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 

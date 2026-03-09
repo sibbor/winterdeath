@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
-import { PLAYER_CHARACTER } from '../../../content/constants';
+import { PLAYER_CHARACTER, FLASHLIGHT } from '../../../content/constants';
 
 // --- SHARED RESOURCES (Skapas bara en gång) ---
 let cachedLaserAssets: { geometry: THREE.BufferGeometry, material: THREE.Material } | null = null;
@@ -46,6 +46,26 @@ const getLaserAssets = () => {
 };
 
 export const CharacterModels = {
+
+    createFlashlight: (): THREE.SpotLight => {
+        const flashlight = new THREE.SpotLight(
+            FLASHLIGHT.color,
+            FLASHLIGHT.intensity,
+            FLASHLIGHT.distance,
+            FLASHLIGHT.angle,
+            FLASHLIGHT.penumbra,
+            FLASHLIGHT.decay);
+        flashlight.name = FLASHLIGHT.name;
+        flashlight.position.set(FLASHLIGHT.position.x, FLASHLIGHT.position.y, FLASHLIGHT.position.z);
+        flashlight.target.position.set(FLASHLIGHT.targetPosition.x, FLASHLIGHT.targetPosition.y, FLASHLIGHT.targetPosition.z);
+        flashlight.castShadow = FLASHLIGHT.castShadows;
+        flashlight.shadow.camera.near = FLASHLIGHT.cameraNear;
+        flashlight.shadow.camera.far = FLASHLIGHT.cameraFar;
+        flashlight.shadow.bias = FLASHLIGHT.shadowBias;
+
+        return flashlight;
+    },
+
     createPlayer: (): THREE.Group => {
         const group = new THREE.Group();
         group.userData = { isPlayer: true };

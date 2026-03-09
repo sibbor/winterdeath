@@ -430,7 +430,7 @@ export const EnemyManager = {
         }
     },
 
-    applyTackle: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
+    applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
         const canTackle = enemy.deathState === 'ALIVE' && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
@@ -477,6 +477,97 @@ export const EnemyManager = {
         }
         FXSystem.spawnPart(scene, state.particles, enemy.mesh.position.x, 1, enemy.mesh.position.z, 'hit', 12);
         soundManager.playImpact('flesh');
+    },
+
+    // --- NY FORDONS-KOLLISION ---
+    applyVehicleHit: (
+        e: Enemy,
+        knockDir: THREE.Vector3,
+        speedMS: number,
+        vehicleDef: any,
+        state: any,
+        session: any,
+        now: number
+    ): boolean => {
+        const speedKmh = speedMS * 3.6;
+        const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+        const massRatio = (vehicleDef.mass * 0.001) / (mass || 1.0);
+
+        // Momentum-baserad skada
+        const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;
+
+        e.hp -= baseDamage;
+        e.hitTime = now;
+
+        const scene = session.engine.scene;
+
+        // --- FATAL HIT ---
+        if (e.hp <= 0) {
+            e.dead = true;
+
+            // 1. GIBBED (>= 80 km/h) - High speed splatter
+            if (speedKmh >= 80) {
+                e.deathState = 'GIBBED';
+                e.lastDamageType = 'vehicle_splatter';
+
+                // Tvingar fram lite uppåt-kraft och mycket framåt-kraft för gibbningen
+                const forceDir = _v1.copy(knockDir).multiplyScalar(speedMS * 1.5).setY(3.0);
+
+                EnemyManager.explodeEnemy(e, _aiCallbacks, forceDir, true);
+
+                session.engine.camera.shake(0.4);
+                soundManager.playImpact('flesh');
+
+                return true; // Tung träff
+
+                // 2. FALL (20 - 79 km/h) - Airborne ragdoll effect
+            } else if (speedKmh >= 20) {
+                e.deathState = 'FALL';
+                e.lastDamageType = 'vehicle_ram';
+
+                // Båge genom luften
+                const pushForce = speedMS * 0.8 * massRatio;
+                const upForce = speedMS * 0.6 * massRatio;
+
+                e.deathVel.copy(knockDir).multiplyScalar(pushForce);
+                e.deathVel.y = Math.max(4.0, upForce);
+
+                FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1, e.mesh.position.z, 'blood', 20);
+                FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
+                    1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
+
+                session.engine.camera.shake(0.2);
+                soundManager.playImpact('flesh');
+
+                return true; // Tung träff
+
+                // 3. GENERIC (< 20 km/h) - Low speed death, falls over
+            } else {
+                e.deathState = 'GENERIC';
+                e.lastDamageType = 'vehicle_push';
+
+                e.deathVel.copy(knockDir).multiplyScalar(speedMS * massRatio * 0.2);
+                e.deathVel.y = 2.0;
+
+                return false; // Lätt träff
+            }
+
+            // --- SURVIVED HIT (Knockback) ---
+        } else {
+            e.lastDamageType = 'vehicle_push';
+
+            // Skapa en velocity-vektor som representerar bilens smäll för att skicka till knockback-systemet
+            _v1.copy(knockDir).multiplyScalar(speedMS);
+
+            // _v2 används normalt för impactPos i applyKnockback, vi lånar bilens position (som _knockDir pekar från)
+            // men vi räknar baklänges från zombien för att få en exakt point-of-impact.
+            _v2.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
+
+            EnemyManager.applyKnockback(e, _v2, _v1, true, state, scene, now);
+
+            e.slowTimer = 0.5;
+            return false;
+        }
     },
 
     update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, playerIsDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any, water?: WaterSystem) => {

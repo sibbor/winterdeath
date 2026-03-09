@@ -21,7 +21,6 @@ export class PerformanceMonitor {
     private _frameCount: number = 0;
     private _lastFpsUpdate: number = 0;
 
-
     // GC Tracking
     private lastHeapSize: number = 0;
     private gcDetected: boolean = false;
@@ -37,6 +36,7 @@ export class PerformanceMonitor {
     private _shaderPrograms: number = 0;
     private _lastShaderPrograms: number = 0;
     private _shaderRecompileCount: number = 0; // Cumulative new programs this session
+    private _knownPrograms = new Set<string>(); // Tracks unique shader permutations
 
     /**
      * Clears tracking data for a new frame.
@@ -82,6 +82,7 @@ export class PerformanceMonitor {
     /**
      * Called from WinterEngine immediately after renderer.render().
      * Reads renderer.info — Zero-GC, just primitive copies.
+     * Also tracks and logs exactly WHICH shaders were compiled if a spike happens.
      */
     public setRendererStats(rendererInfo: { render: { calls: number; triangles: number }; memory: { textures: number; geometries: number }; programs: any[] | null | undefined }): void {
         this._drawCalls = rendererInfo.render.calls;
@@ -89,14 +90,36 @@ export class PerformanceMonitor {
         this._textures = rendererInfo.memory.textures;
         this._geometries = rendererInfo.memory.geometries;
 
-        const programCount = rendererInfo.programs?.length ?? 0;
+        const currentPrograms = rendererInfo.programs || [];
+        const programCount = currentPrograms.length;
+
         if (programCount > this._lastShaderPrograms && this._lastShaderPrograms > 0) {
-            // New shader(s) compiled this frame
-            this._shaderRecompileCount += programCount - this._lastShaderPrograms;
+            const diff = programCount - this._lastShaderPrograms;
+            this._shaderRecompileCount += diff;
+
             if (this._consoleLoggingEnabled) {
-                console.warn(`[SHADER] New program compiled — total: ${programCount} (+${programCount - this._lastShaderPrograms})`);
+                console.warn(`[SHADER] New program compiled — total: ${programCount} (+${diff})`);
+
+                // Identify exactly what caused the recompile by checking against our known set
+                const newPrograms = currentPrograms.filter(p => !this._knownPrograms.has(p.cacheKey || p.id));
+                newPrograms.forEach(p => {
+                    const matType = p.name || 'UnknownMaterial';
+                    // cacheKey contains all the WebGL #defines (lights, fog, instancing, etc)
+                    const keyString = String(p.cacheKey);
+                    // Slice to 120 chars to avoid flooding the console, but keep enough to spot differences
+                    const permPreview = keyString.length > 120 ? keyString.substring(0, 120) + '...' : keyString;
+
+                    console.log(`   -> Type: ${matType} | Key: ${permPreview}`);
+                });
             }
         }
+
+        // Add all current programs to known set so we don't log them again
+        for (let i = 0; i < currentPrograms.length; i++) {
+            const key = currentPrograms[i].cacheKey || currentPrograms[i].id;
+            if (key) this._knownPrograms.add(key);
+        }
+
         this._lastShaderPrograms = programCount;
         this._shaderPrograms = programCount;
     }
@@ -167,7 +190,6 @@ export class PerformanceMonitor {
     }
 
     public getTimings(): Record<string, number> {
-
         return this.timings;
     }
 

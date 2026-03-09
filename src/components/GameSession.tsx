@@ -3,9 +3,9 @@ import * as THREE from 'three';
 import TouchController from './ui/TouchController';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
-import { PlayerStats, CinematicLine, NotificationState, SectorTrigger, MapItem, SectorState, SectorStats, TriggerAction, Obstacle, GameCanvasProps, DeathPhase, GraphicsSettings, GameScreen } from '../types';
+import { SectorTrigger, MapItem, SectorStats, TriggerAction, GameCanvasProps, DeathPhase, GameScreen } from '../types';
 import { SectorContext } from '../types/SectorEnvironment';
-import { BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT } from '../content/constants';
+import { BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT, FLASHLIGHT, VEHICLE_HEADLIGHT } from '../content/constants';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { haptic } from '../utils/HapticManager';
@@ -23,7 +23,6 @@ import { FamilySystem } from '../core/systems/FamilySystem';
 import { TriggerHandler } from '../core/systems/TriggerHandler';
 import { LightingSystem } from '../core/systems/LightingSystem';
 import { DeathSystem } from '../core/systems/DeathSystem';
-import { OcclusionSystem } from '../core/systems/OcclusionSystem';
 import { AssetPreloader } from '../core/systems/AssetPreloader';
 import { PerformanceMonitor } from '../core/systems/PerformanceMonitor';
 import { PlayerMovementSystem } from '../core/systems/PlayerMovementSystem';
@@ -385,10 +384,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const key = e.key;
 
             if (key.toLowerCase() === 'f') {
-                if (flashlightRef.current) {
-                    const isOn = flashlightRef.current.intensity > 0;
-                    flashlightRef.current.intensity = isOn ? 0 : 400;
-                    soundManager.playUiClick();
+                const s = stateRef.current;
+                s.flashlightOn = !s.flashlightOn;
+
+                soundManager.playUiClick();
+
+                if (s.activeVehicle) {
+                    const vLight = s.activeVehicle.getObjectByName('vehicleLight') as THREE.SpotLight;
+                    if (vLight) vLight.intensity = s.flashlightOn ? VEHICLE_HEADLIGHT.intensity : 0;
+                } else {
+                    flashlightRef.current.intensity = s.flashlightOn ? FLASHLIGHT.intensity : 0;
                 }
             }
 
@@ -1069,25 +1074,24 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const bodyMesh = playerGroup.children.find(c => c.userData.isBody || c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
                 playerMeshRef.current = bodyMesh as THREE.Group;
 
-                const pSpawn = { ...currentSector.playerSpawn };
-                playerGroup.position.set(pSpawn.x, 0, pSpawn.z);
-                if (pSpawn.y) playerGroup.position.y = pSpawn.y;
-                if (pSpawn.rot) playerGroup.rotation.y = pSpawn.rot;
+                // Player spawn
+                const playerSpawn = { ...currentSector.playerSpawn };
+                playerGroup.position.set(playerSpawn.x, 0, playerSpawn.z);
+                if (playerSpawn.y) playerGroup.position.y = playerSpawn.y;
+                if (playerSpawn.rot) playerGroup.rotation.y = playerSpawn.rot;
 
-                const flashlight = new THREE.SpotLight(0xffffee, 400, 60, Math.PI / 3, 0.6, 1);
-                flashlight.name = 'flashlight';
-                flashlight.position.set(0, 3.5, 0.5);
-                flashlight.target.position.set(0, 0, 10);
-                flashlight.castShadow = true;
-                flashlight.shadow.camera.near = 1;
-                flashlight.shadow.camera.far = 40;
-                flashlight.shadow.bias = -0.0001;
+                // Player's flashlight
+                const flashlight = ModelFactory.createFlashlight();
                 playerGroup.add(flashlight);
                 playerGroup.add(flashlight.target);
                 flashlightRef.current = flashlight;
 
+                // Tvinga state att matcha (slå på den från start)
+                stateRef.current.flashlightOn = true;
+
                 scene.add(playerGroup);
 
+                // Camera
                 const envCameraZ = currentSector.environment.cameraOffsetZ;
                 const envCameraY = currentSector.environment.cameraHeight || CAMERA_HEIGHT;
 
@@ -1106,7 +1110,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             const fmData = FAMILY_MEMBERS[theme.familyMemberId];
                             if (fmData) {
                                 const mesh = ModelFactory.createFamilyMember(fmData);
-                                mesh.position.set(pSpawn.x + (Math.random() - 0.5) * 5, 0, pSpawn.z + 5 + Math.random() * 5);
+                                mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
                                 const markerGroup = new THREE.Group();
                                 markerGroup.position.y = 0.2;
                                 const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
@@ -1152,11 +1156,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // [VINTERDÖD] Final Light Registration Audit
+                // Final Light Registration Audit
                 // Scan scene for any lights NOT yet in dynamicLights and register them.
-                // This catches lights added by BuildingGenerator or other manual scripts.
                 scene.traverse((obj) => {
-                    if ((obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight) && obj.name !== 'flashlight') {
+                    if ((obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight)) {
+                        if (obj.name === FLASHLIGHT.name || obj.name === VEHICLE_HEADLIGHT.name) return;
+
                         if (!ctx.dynamicLights.includes(obj)) {
                             ctx.dynamicLights.push(obj);
                             // Ensure it has isCulled state initialized
