@@ -63,6 +63,29 @@ export const AssetPreloader = {
                 for (let i = 0; i < texs.length; i++) renderer.initTexture(texs[i]);
                 endInternal('asset_warmup_procedural');
                 if (yieldToMain) await yieldToMain();
+
+                // --- HTML UI ICON PRELOAD ---
+                beginInternal('asset_warmup_ui_images');
+                const uiIcons = [
+                    'pistol.png', 'revolver.png', 'smg.png', 'shotgun.png',
+                    'rifle.png', 'minigun.png', 'flamethrower.png', 'arc_cannon.png',
+                    'grenade.png', 'molotov.png', 'flashbang.png', 'radio.png'
+                ];
+
+                // Force the browser to fetch the images and put them in RAM/Cache
+                await Promise.all(uiIcons.map(file => new Promise<void>(resolve => {
+                    const img = new Image();
+                    img.onload = () => resolve();
+                    // If an image is missing, log a warning but let the game continue loading
+                    img.onerror = () => {
+                        console.warn(`[AssetPreloader] missing UI icon: ${file}`);
+                        resolve();
+                    };
+                    img.src = `/assets/icons/weapons/${file}`;
+                })));
+
+                endInternal('asset_warmup_ui_images');
+                if (yieldToMain) await yieldToMain();
             }
 
             // 1. AUDIO SYSTEM WARMUP (CORE only, targeted essential sounds)
@@ -201,11 +224,20 @@ export const AssetPreloader = {
                     pointLight.shadow.normalBias = 0.02;
                     scene.add(pointLight);
                 }
-                const spotLight = new THREE.SpotLight(0xffffff, 1);
-                spotLight.castShadow = false; // Budgeted
-                spotLight.shadow.autoUpdate = false;
-                spotLight.shadow.bias = -0.0001;
-                scene.add(spotLight);
+
+                if (isSector) {
+                    // Flashlight Parity (SpotLight)
+                    // Used in Sectors; matches flashlight setup in GameSession.tsx
+                    const flashlight = ModelFactory.createFlashlight();
+                    addToWarmup(flashlight);
+                    scene.add(flashlight);
+
+                    const spotLight = new THREE.SpotLight(0xffffff, 1);
+                    spotLight.castShadow = false; // Budgeted
+                    spotLight.shadow.autoUpdate = false;
+                    spotLight.shadow.bias = -0.0001;
+                    scene.add(spotLight);
+                }
             }
             endInternal('asset_warmup_permutations');
 
@@ -423,11 +455,17 @@ export const AssetPreloader = {
             }
 
             if (isSector) {
-                // Flashlight
-                // Used in Sectors; matches flashlight setup in GameSession.tsx
-                const flashlight = ModelFactory.createFlashlight();
-                addToWarmup(flashlight);
-                scene.add(flashlight);
+                // Aquatic Flora (Real geometries used in WaterSystem)
+                const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
+                const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
+                const lilyFlowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
+                const seaweedGeo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
+                ownedGeometries.push(lilyPadGeo, lilyStemGeo, lilyFlowerGeo, seaweedGeo);
+
+                addInstancedWarmup(lilyPadGeo, MATERIALS.waterLily);
+                addInstancedWarmup(lilyFlowerGeo, MATERIALS.waterLilyFlower);
+                addInstancedWarmup(seaweedGeo, MATERIALS.seaweed);
+                addInstancedWarmup(lilyStemGeo, MATERIALS.seaweed);
 
                 // Vehicle Warmup - All types to ensure shader compilation matches environment
                 const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
@@ -478,7 +516,7 @@ export const AssetPreloader = {
                     }
                 });
 
-                addToWarmup(boat)
+                addToWarmup(boat);
 
                 // Water Surfaces - nordic and ice styles
                 const dummyRipples = new Array(16).fill(0).map(() => new THREE.Vector4(0, 0, -1000, 0));
@@ -496,18 +534,6 @@ export const AssetPreloader = {
                 const iwMesh = new THREE.Mesh(waterSurfaceGeo, iceWater);
                 nwMesh.visible = false; iwMesh.visible = false;
                 dummyRoot.add(nwMesh, iwMesh);
-
-                // Aquatic Flora (Real geometries used in WaterSystem)
-                const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
-                const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
-                const lilyFlowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
-                const seaweedGeo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
-                ownedGeometries.push(lilyPadGeo, lilyStemGeo, lilyFlowerGeo, seaweedGeo);
-
-                addInstancedWarmup(lilyPadGeo, MATERIALS.waterLily);
-                addInstancedWarmup(lilyFlowerGeo, MATERIALS.waterLilyFlower);
-                addInstancedWarmup(seaweedGeo, MATERIALS.seaweed);
-                addInstancedWarmup(lilyStemGeo, MATERIALS.seaweed);
             }
 
             // Camp-specific materials/geometry (allocated fresh — tracked for disposal)

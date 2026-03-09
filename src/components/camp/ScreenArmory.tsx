@@ -157,7 +157,13 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                     className={`${isMobileDevice ? 'w-32 h-full' : 'w-full h-40'} border-r md:border-r-0 md:border-b flex items-center justify-center relative shrink-0 bg-black/40`}
                                     style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
                                 >
-                                    <div className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} transition-transform group-hover:scale-110 duration-500`} dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                                    <div className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} transition-transform group-hover:scale-110 duration-500 flex items-center justify-center`}>
+                                        {weapon.iconIsPng ? (
+                                            <img src={weapon.icon} alt="" className="w-full h-full object-contain" />
+                                        ) : (
+                                            <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                                        )}
+                                    </div>
 
                                     <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
                                         {t('ui.lvl')} {level}

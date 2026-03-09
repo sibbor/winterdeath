@@ -109,7 +109,16 @@ export class PerformanceMonitor {
                     // Slice to 120 chars to avoid flooding the console, but keep enough to spot differences
                     const permPreview = keyString.length > 120 ? keyString.substring(0, 120) + '...' : keyString;
 
-                    console.log(`   -> Type: ${matType} | Key: ${permPreview}`);
+                    // Leta i hela scenen efter materialet som just skapades!
+                    let foundObjectName = "Okänd (Förmodligen en Sprite/Partikel)";
+                    if ((window as any).gameEngine && (window as any).gameEngine.scene) {
+                        (window as any).gameEngine.scene.traverse((obj: any) => {
+                            if (obj.material && (obj.material.id === p.id || String(p.cacheKey) === obj.material.customProgramCacheKey?.())) {
+                                foundObjectName = obj.name || obj.type || "Namnlöst Objekt";
+                            }
+                        });
+                    }
+                    console.log(`   -> Type: ${matType} | Key: ${permPreview} | Belongs to: ${foundObjectName}`);
                 });
             }
         }

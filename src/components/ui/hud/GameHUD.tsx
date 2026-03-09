@@ -195,12 +195,18 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 className={`w-24 h-24 border-2 flex flex-col items-center justify-center relative transition-all overflow-hidden skew-x-[-10deg] ${isActive ? 'bg-zinc-950 text-white shadow-lg z-10 scale-105' : 'bg-black/90 text-zinc-600'} ${isDisabled ? 'opacity-40 grayscale' : ''}`}
                 style={{ borderColor: borderColor }}
             >
-                <div className="w-12 h-12 skew-x-[10deg]" dangerouslySetInnerHTML={{ __html: wData.icon }}
+                <div className="w-12 h-12 skew-x-[10deg] flex items-center justify-center"
                     style={{
                         filter: isActive ? 'drop-shadow(0 0 2px rgba(255,255,255,0.8))' : 'opacity(0.5)',
                         transform: isActive ? 'scale(1.1)' : 'scale(1.0)'
                     }}
-                />
+                >
+                    {wData.iconIsPng ? (
+                        <img src={wData.icon} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                        <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: wData.icon }} />
+                    )}
+                </div>
 
                 <span className="text-[9px] uppercase font-black text-center w-full px-1 skew-x-[10deg] tracking-wider mb-3 leading-none whitespace-normal">{t(wData.displayName)}</span>
 
