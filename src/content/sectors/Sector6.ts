@@ -107,11 +107,12 @@ export const Sector6: SectorDef = {
         };
 
         // Vehicls at the spawn point
-        SectorGenerator.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan');
-        SectorGenerator.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck');
-        SectorGenerator.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus');
-        SectorGenerator.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police');
-        SectorGenerator.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance');
+        SectorGenerator.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
+        SectorGenerator.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
+        SectorGenerator.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
+        SectorGenerator.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police', undefined, false);
+        SectorGenerator.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance', undefined, false);
+
 
         // --- BIOME GENERATION ---
         // Iterate through ZONES to generate content

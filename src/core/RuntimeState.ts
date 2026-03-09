@@ -74,7 +74,7 @@ export interface RuntimeState {
     isInteractionOpen: boolean;
     bossSpawned: boolean;
     lastDamageTime: number;
-    lastBiteTime: number;  // <--- HÄR ÄR FIXEN!
+    lastBiteTime: number;
     lastStaminaUseTime: number;
     noiseLevel: number;
     speakBounce: number;
@@ -99,7 +99,7 @@ export interface RuntimeState {
 
     // --- ZERO-GC VECTORS (Replaced nulls with flags) ---
     deathVel: THREE.Vector3;
-    hasLastTrailPos: boolean; // Nyckel för att slippa null
+    hasLastTrailPos: boolean;
     lastTrailPos: THREE.Vector3;
 
     framesSinceHudUpdate: number;

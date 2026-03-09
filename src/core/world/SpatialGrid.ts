@@ -39,6 +39,23 @@ export class SpatialGrid {
         });
     }
 
+    // Allow obstacles to move in the grid (Zero-GC)
+    updateObstacle(obstacle: Obstacle) {
+        if (!obstacle || !obstacle.position) return;
+
+        // Find the obstacle
+        for (const cell of this.obstacleCells.values()) {
+            const index = cell.indexOf(obstacle);
+            if (index !== -1) {
+                cell[index] = cell[cell.length - 1];
+                cell.pop();
+            }
+        }
+
+        // Re-add it to it's new position
+        this.addObstacle(obstacle);
+    }
+
     getNearbyObstacles(pos: THREE.Vector3, radius: number): Obstacle[] {
         this.obstacleQueryResults.length = 0;
         this.seenObstacles.clear();

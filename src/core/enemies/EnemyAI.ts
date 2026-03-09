@@ -7,7 +7,6 @@ import { haptic } from '../../utils/HapticManager';
 import { soundManager } from '../../utils/sound';
 import { WaterSystem, _buoyancyResult } from '../systems/WaterSystem';
 
-// Water ripple throttle timer (Zero-GC shared across all enemies — good enough for per-frame checks)
 const _waterCheckResult = { flatDepth: 0 };
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -20,9 +19,6 @@ const _v6 = new THREE.Vector3();
 const _white = new THREE.Color(0xffffff);
 const _flashColor = new THREE.Color();
 
-/**
- * Helper to log state changes.
- */
 function logStateChange(e: Enemy, newState: AIState, reason?: string) {
     if (e.state !== newState) {
         const reasonStr = reason ? ` (${reason})` : '';
@@ -43,7 +39,6 @@ export const EnemyAI = {
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: string) => void;
             onDamageDealt: (amount: number, enemy: Enemy) => void;
-            onDeath: (e: Enemy, type: string) => void;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void;
@@ -52,6 +47,24 @@ export const EnemyAI = {
         water?: WaterSystem
     ) => {
         if (e.deathState === 'DEAD' || !e.mesh) return;
+
+        // --- 0. DISTANCE CULLING (AI SLEEP) ---
+        const dx = playerPos.x - e.mesh.position.x;
+        const dz = playerPos.z - e.mesh.position.z;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq > 10000 &&
+            e.deathState === 'ALIVE' &&
+            !e.isBurning &&
+            !e.isDrowning &&
+            (!e.knockbackVel || e.knockbackVel.lengthSq() < 0.1) &&
+            (!e.stunTimer || e.stunTimer <= 0)
+        ) {
+            if (e.state === AIState.CHASE || e.state === AIState.SEARCH) {
+                e.state = AIState.IDLE;
+            }
+            return;
+        }
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
         if (e.hp <= 0 && e.deathState === 'ALIVE') {
@@ -62,20 +75,9 @@ export const EnemyAI = {
             const widthScale = e.widthScale || 1.0;
             e.mesh.scale.set(baseScale * widthScale, baseScale, baseScale * widthScale);
 
-            if (e.color !== undefined) {
-                for (let i = 0; i < e.mesh.children.length; i++) {
-                    const child = e.mesh.children[i] as any;
-                    if (child.isMesh && child.material && child.material.color) {
-                        child.material.color.setHex(e.color);
-                    }
-                }
-            }
-
             const dmgType = e.lastDamageType || '';
             const isHighImpact = e.lastHitWasHighImpact;
-            const fallForward = Math.random() > 0.5;
-
-            const weapon = WEAPONS[dmgType];
+            const weapon = WEAPONS[dmgType as WeaponType];
 
             let weaponImpact = 'SHOT';
             if (weapon && weapon.impactType) {
@@ -128,15 +130,14 @@ export const EnemyAI = {
                 }
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
             }
+
+            return; // Hand over control to EnemyManager
         }
 
-        // --- 2. HANDLE DEATH ANIMATIONS ---
-        if (e.deathState !== 'ALIVE') {
-            handleDeathAnimation(e, delta, now, callbacks);
-            return;
-        }
+        // AI only processes ALIVE enemies from here on
+        if (e.deathState !== 'ALIVE') return;
 
-        // --- 3. POOLING SCALE RECOVERY ---
+        // --- 2. POOLING SCALE RECOVERY ---
         const targetScaleY = e.originalScale || 1.0;
         if (Math.abs(e.mesh.scale.y - targetScaleY) > 0.05) {
             const w = e.widthScale || 1.0;
@@ -144,15 +145,14 @@ export const EnemyAI = {
             e.mesh.visible = true;
         }
 
-        // --- 4. STATUS EFFECTS ---
+        // --- 3. STATUS EFFECTS ---
         handleStatusEffects(e, delta, now, callbacks);
 
         let isPhysicallyAirborne = false;
 
-        // --- 5. MASS-BASED KNOCKBACK PHYSICS ---
+        // --- 4. MASS-BASED KNOCKBACK PHYSICS ---
         if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
             if (!e.mesh.userData.wasKnockedBack) {
-                console.log(`[AI] ${e.type}_${e.id} knocked back`);
                 e.mesh.userData.wasKnockedBack = true;
             }
 
@@ -166,7 +166,6 @@ export const EnemyAI = {
             const friction = 1.0 + (mass * 2.0);
             e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
 
-            // Track peak airborne height for fall damage
             if (e.mesh.position.y > e.fallStartY) {
                 e.fallStartY = e.mesh.position.y;
             }
@@ -177,20 +176,14 @@ export const EnemyAI = {
                 e.isAirborne = false;
                 e.fallStartY = 0;
 
-                if (water) {
-                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
-                }
+                if (water) water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
 
                 if (_buoyancyResult.inWater) {
-                    // Landed in water — no fall damage, resolve water state below
                     water?.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
                 } else if (peakY > 1.5) {
-                    // Landed on ground — apply fall damage
                     const fallDamage = Math.min(e.maxHp * 0.6, peakY * 8);
                     e.hp -= fallDamage;
-                    callbacks.spawnPart?.(
-                        e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20
-                    );
+                    callbacks.spawnPart?.(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
                     if (e.hp <= 0 && e.deathState === 'ALIVE') {
                         e.deathState = 'FALL';
                     }
@@ -207,8 +200,7 @@ export const EnemyAI = {
             }
         }
 
-        // --- 5b. WATER STATE EVALUATION ---
-        // Runs every frame for alive enemies (cheap 2D bounds check inside checkBuoyancy)
+        // --- 5. WATER STATE EVALUATION ---
         if (water) {
             water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
             if (_buoyancyResult.inWater) {
@@ -220,7 +212,6 @@ export const EnemyAI = {
                 e.isInWater = false;
                 e.isWading = false;
                 e.isDrowning = false;
-                // Smoothly return to ground level when leaving water
                 if (e.mesh.position.y < 0) {
                     e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, 0, 8 * delta);
                     if (e.mesh.position.y > -0.01) e.mesh.position.y = 0;
@@ -228,33 +219,27 @@ export const EnemyAI = {
             }
         }
 
-        // --- 5c. DROWNING — overrides all normal AI ---
+        // --- 6. DROWNING ---
         if (e.isDrowning && e.deathState === 'ALIVE') {
             e.drownTimer += delta;
 
-            // Sink to the lake floor depth
             if (water) {
                 const targetY = _buoyancyResult.groundY;
                 e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 3 * delta);
             }
 
-            // Panic jitter — violent flailing (delta-scaled for FPS-independence)
             const dj = delta * 60;
             e.mesh.position.x += (Math.random() - 0.5) * 0.18 * dj;
             e.mesh.position.z += (Math.random() - 0.5) * 0.18 * dj;
             e.mesh.rotation.x += (Math.random() - 0.5) * 0.3 * dj;
             e.mesh.rotation.z += (Math.random() - 0.5) * 0.3 * dj;
 
-            // Splash particles + ripples throttled at ~150ms
             e.drownDmgTimer += delta;
             if (e.drownDmgTimer >= 0.15) {
                 e.drownDmgTimer = 0;
                 water?.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9);
-                callbacks.spawnPart?.(
-                    e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z,
-                    'splash', 2
-                );
-                // 25% maxHp per second — ticked at 150ms = 3.75% per tick
+                callbacks.spawnPart?.(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 2);
+
                 const tickDmg = e.maxHp * 0.25 * 0.15;
                 e.hp -= tickDmg;
                 if (callbacks.onDamageDealt) callbacks.onDamageDealt(tickDmg, e);
@@ -265,17 +250,12 @@ export const EnemyAI = {
                     e.knockbackVel.set(0, 0, 0);
                 }
             }
-
-            return; // Drowning skips all normal AI
+            return;
         }
 
-
-        // --- 6. STUNS & RAGDOLLS (Early Returns) ---
+        // --- 7. STUNS & RAGDOLLS ---
         if (e.stunTimer && e.stunTimer > 0) {
-            if (!e.mesh.userData.wasStunned) {
-                console.log(`[AI] ${e.type}_${e.id} stunned for ${e.stunTimer.toFixed(2)}s`);
-                e.mesh.userData.wasStunned = true;
-            }
+            if (!e.mesh.userData.wasStunned) e.mesh.userData.wasStunned = true;
             e.stunTimer -= delta;
 
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
@@ -297,18 +277,15 @@ export const EnemyAI = {
                 }
             } else {
                 if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
-                const jitterScale = delta * 60; // FPS-independent: same magnitude per second at any Hz
+                const jitterScale = delta * 60;
                 e.mesh.position.x += (Math.random() - 0.5) * 0.2 * jitterScale;
                 e.mesh.position.z += (Math.random() - 0.5) * 0.2 * jitterScale;
                 e.mesh.rotation.y += (Math.random() - 0.5) * 0.5 * jitterScale;
             }
 
-            if (Math.random() < 0.1) {
-                callbacks.onEffectTick(e, 'STUN');
-            }
+            if (Math.random() < 0.1) callbacks.onEffectTick(e, 'STUN');
 
             if (e.stunTimer <= 0) {
-                logStateChange(e, AIState.CHASE, "recovered from stun");
                 e.state = AIState.CHASE;
                 e.mesh.userData.isRagdolling = false;
                 e.mesh.rotation.x = 0;
@@ -322,15 +299,10 @@ export const EnemyAI = {
 
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
-        // --- 7. SENSORS & SEPARATION ---
-        const dx = playerPos.x - e.mesh.position.x;
-        const dz = playerPos.z - e.mesh.position.z;
-        const distSq = dx * dx + dz * dz;
+        // --- 8. SENSORS & SEPARATION ---
         const canSeePlayer = distSq < 900;
-
         _v6.set(0, 0, 0);
 
-        // Mjuk linjär separation.
         const separationRadius = 1.5;
         const separationRadiusSq = separationRadius * separationRadius;
 
@@ -351,10 +323,7 @@ export const EnemyAI = {
                     _v6.z += (odz / od) * pushStrength * 1.5;
                 }
             }
-
-            if (_v6.lengthSq() > 9.0) {
-                _v6.normalize().multiplyScalar(3.0);
-            }
+            if (_v6.lengthSq() > 9.0) _v6.normalize().multiplyScalar(3.0);
         }
 
         let heardNoise = false;
@@ -363,27 +332,23 @@ export const EnemyAI = {
             for (let i = 0; i < noiseEvents.length; i++) {
                 const n = noiseEvents[i];
                 if (!n.active) continue;
-
                 if (e.mesh.position.distanceToSquared(n.pos) < (n.radius * n.radius)) {
                     heardNoise = true; noisePos = n.pos; break;
                 }
             }
         }
 
-        // --- 8. STATE MACHINE ---
+        // --- 9. STATE MACHINE ---
         switch (e.state) {
             case AIState.IDLE:
                 e.idleTimer -= delta;
                 if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE, "saw player");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE, "heard noise");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.idleTimer <= 0) {
-                    logStateChange(e, AIState.WANDER, "idle timer expired");
                     e.state = AIState.WANDER;
                     const angle = Math.random() * Math.PI * 2;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
@@ -398,15 +363,12 @@ export const EnemyAI = {
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
                 if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE, "saw player while wandering");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE, "heard noise while wandering");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
-                    logStateChange(e, AIState.IDLE, "finished wandering");
                     e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0;
                 }
 
@@ -424,27 +386,23 @@ export const EnemyAI = {
                 }
 
                 if ((!canSeePlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
-                    logStateChange(e, AIState.SEARCH, "lost sight of player");
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
                 }
                 else {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
                     if (e.type === 'BOMBER' && distSq < 12.0) {
-                        logStateChange(e, AIState.EXPLODING, "in range for detonation");
                         e.state = AIState.EXPLODING;
                         e.explosionTimer = 1.5;
                         return;
                     }
 
                     if (playerIsDead) {
-                        logStateChange(e, AIState.SEARCH, "player is dead");
                         e.state = AIState.SEARCH;
                         e.searchTimer = 3.0;
                         return;
                     }
 
-                    // Apply water wading slowdown (same 40% as the player)
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
                     moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6);
 
@@ -456,13 +414,11 @@ export const EnemyAI = {
                     const attackRangeSq = e.type === 'TANK' ? 12.0 : 6.5;
                     if (distSq < attackRangeSq && e.attackCooldown <= 0) {
                         if (e.type === 'TANK') {
-                            logStateChange(e, AIState.BITING, "TANK_SMASH trigger");
                             e.attackCooldown = 3000;
                             callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
                         } else {
-                            logStateChange(e, AIState.BITING, "in range to bite");
                             e.state = AIState.BITING;
-                            e.grappleTimer = 0.8; // FIX: Mycket snabbare bett (var 1.5s)
+                            e.grappleTimer = 0.8;
                             e.attackCooldown = 1500;
                             e.mesh.userData.hasBittenThisCycle = false;
                         }
@@ -473,38 +429,26 @@ export const EnemyAI = {
             case AIState.BITING:
                 e.grappleTimer -= delta;
 
-                // _v6 (separation från andra) är nu 0.0, den låser på dig.
                 if (e.grappleTimer > 0.4) {
-                    // Trycker sig framåt aggressivt
-                    if (distSq > 1.5) {
-                        moveEntity(e, playerPos, delta, e.speed * 3.0, collisionGrid, _v6);
-                    }
+                    if (distSq > 1.5) moveEntity(e, playerPos, delta, e.speed * 3.0, collisionGrid, _v6);
                 }
 
                 _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                 e.mesh.lookAt(_v5);
 
-                // FIX: Kapseln lutar framåt (headbutt/hugg) för tydlig visuell varning!
-                if (e.grappleTimer > 0.4) {
-                    e.mesh.rotateX(-0.5);
-                }
+                if (e.grappleTimer > 0.4) e.mesh.rotateX(-0.5);
 
-                // Dela ut skada mitt i hugget
                 if (e.grappleTimer <= 0.4 && !e.mesh.userData.hasBittenThisCycle) {
                     if (distSq < 10.0 && !playerIsDead) {
-                        console.log(`[AI] ${e.type}_${e.id} successfully bit player for ${e.damage} dmg`);
                         callbacks.onPlayerHit(e.damage, e, 'BITING');
                         callbacks.playSound('impact_flesh');
-                    } else {
-                        console.log(`[AI] ${e.type}_${e.id} missed bite (distSq: ${distSq.toFixed(2)})`);
                     }
                     e.mesh.userData.hasBittenThisCycle = true;
                 }
 
                 if (e.grappleTimer <= 0 || playerIsDead) {
-                    logStateChange(e, AIState.CHASE, "finished biting");
                     e.state = AIState.CHASE;
-                    e.attackCooldown = 1000; // FIX: Reducerad cooldown, de blir mycket aggressivare!
+                    e.attackCooldown = 1000;
                     e.mesh.userData.hasBittenThisCycle = false;
                 }
                 break;
@@ -526,7 +470,6 @@ export const EnemyAI = {
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
-
                     e.indicatorRing.position.set(0, -e.mesh.position.y + 0.05, 0);
 
                     const targetRadius = 12.0 + Math.sin(now * 0.01) * 1.0;
@@ -543,7 +486,6 @@ export const EnemyAI = {
                 }
 
                 if (e.explosionTimer <= 0) {
-                    console.log(`[AI] ${e.type}_${e.id} detontated!`);
                     if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
                         callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
                     }
@@ -565,41 +507,66 @@ export const EnemyAI = {
                 }
 
                 if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE, "found player while searching");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE, "heard noise while searching");
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
-                    logStateChange(e, AIState.IDLE, "gave up search");
                     e.state = AIState.IDLE;
                 }
                 break;
         }
 
-        // --- 9. FINAL UPDATES ---
+        // --- 10. ZERO-GC HIT FLASH (Bosses use Emissive, Normal Zombies use Color for Instancing) ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
 
-        // Hit Flash Logic
         if (e.isBoss && e.mesh && e.color !== undefined) {
             const timeSinceHit = now - e.hitTime;
             if (timeSinceHit < 100) {
-                const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
-                e.mesh.traverse((child: any) => {
-                    if (child.isMesh && child.material && child.material.color) {
-                        if (isArc) _flashColor.set(0x00ffff).lerp(_white, 0.4);
-                        else _flashColor.set(0xffffff);
-                        child.material.color.copy(_flashColor);
-                    }
-                });
+                if (!e.mesh.userData.isFlashing) {
+                    e.mesh.userData.isFlashing = true;
+                    const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
+
+                    if (isArc) _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4);
+                    else _flashColor.setHex(0xffffff);
+
+                    e.mesh.traverse((c: any) => {
+                        if (c.isMesh && c.material && c.material.emissive) {
+                            c.material.emissive.copy(_flashColor);
+                            c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
+                        }
+                    });
+                }
             } else {
-                e.mesh.traverse((child: any) => {
-                    if (child.isMesh && child.material && child.material.color) {
-                        child.material.color.setHex(e.color);
+                if (e.mesh.userData.isFlashing) {
+                    e.mesh.userData.isFlashing = false;
+                    e.mesh.traverse((c: any) => {
+                        if (c.isMesh && c.material && c.material.emissive) {
+                            c.material.emissive.setHex(0x000000);
+                            c.material.emissiveIntensity = 0.0;
+                        }
+                    });
+                }
+            }
+        } else if (!e.isBoss && e.color !== undefined) {
+            const timeSinceHit = now - e.hitTime;
+            if (timeSinceHit < 100) {
+                if (!e.mesh.userData.isFlashing) {
+                    e.mesh.userData.isFlashing = true;
+                    e.mesh.userData.originalColor = e.color;
+                    const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
+                    if (isArc) {
+                        e.color = _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4).getHex();
+                    } else {
+                        e.color = 0xffffff;
                     }
-                });
+                }
+            } else {
+                if (e.mesh.userData.isFlashing) {
+                    e.mesh.userData.isFlashing = false;
+                    e.color = e.mesh.userData.originalColor || 0xffffff;
+                }
             }
         }
 
@@ -609,7 +576,7 @@ export const EnemyAI = {
             if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
             e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
         }
-    },
+    }
 };
 
 // --- HELPERS ---
@@ -658,12 +625,16 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
 
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
     if (e.isBurning) {
-        if (Math.random() > 0.4) {
-            callbacks.onEffectTick(e, 'FLAME');
-        }
+        if (Math.random() > 0.4) callbacks.onEffectTick(e, 'FLAME');
+
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
-            if (e.burnTimer <= 0) { e.hp -= 6; e.lastDamageType = 'BURN'; callbacks.onDamageDealt(6, e); e.burnTimer = 0.5; }
+            if (e.burnTimer <= 0) {
+                e.hp -= 6;
+                e.lastDamageType = 'BURN';
+                if (callbacks.onDamageDealt) callbacks.onDamageDealt(6, e);
+                e.burnTimer = 0.5;
+            }
         }
         if (e.afterburnTimer > 0) {
             e.afterburnTimer -= delta;
@@ -672,12 +643,6 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
     }
 
     if (e.stunTimer > 0 && e.lastDamageType === WeaponType.ARC_CANNON) {
-        if (Math.random() < 0.25) {
-            callbacks.onEffectTick(e, 'SPARK');
-        }
+        if (Math.random() < 0.25) callbacks.onEffectTick(e, 'SPARK');
     }
-}
-
-function handleDeathAnimation(e: Enemy, delta: number, now: number, callbacks: any) {
-    callbacks.onDeath(e, e.deathState);
 }

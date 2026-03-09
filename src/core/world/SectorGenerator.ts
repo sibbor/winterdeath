@@ -531,14 +531,13 @@ export const SectorGenerator = {
         timber.rotation.y = rotation;
         ctx.scene.add(timber);
 
-        // FIX: Use UNSCALED local dimensions + Center Offset
-        // The mesh.matrixWorld handles the scale/rotation.
-        // Base size: ~2.5m wide, ~1.5m high, ~6.0m long
         const baseSize = new THREE.Vector3(2.5, 1.5, 6.0);
         const baseCenter = new THREE.Vector3(0, 0.75, 0);
 
         const obs = {
             mesh: timber,
+            position: timber.position,
+            quaternion: timber.quaternion, // FIX
             collider: {
                 type: 'box' as const,
                 size: baseSize,
@@ -584,8 +583,8 @@ export const SectorGenerator = {
         // Collision
         SectorGenerator.addObstacle(ctx, {
             mesh: building,
-            position: building.position, // Explicitly pass position
-            quaternion: building.quaternion, // Explicitly pass quaternion
+            position: building.position,
+            quaternion: building.quaternion, // FIX
             collider: {
                 type: 'box' as const,
                 size: (building.userData.size as THREE.Vector3).clone(),
@@ -620,7 +619,12 @@ export const SectorGenerator = {
         SectorGenerator.addObstacle(ctx, {
             mesh: vehicle,
             position: vehicle.position,
-            collider: { type: 'box', size: size },
+            quaternion: vehicle.quaternion, // FIX
+            collider: {
+                type: 'box',
+                size: size,
+                center: new THREE.Vector3(0, size.y / 2, 0)
+            },
             type: `Vehicle_${type}` // Debug Label
         });
 
@@ -661,7 +665,7 @@ export const SectorGenerator = {
             vehicleRoot.userData.material = visualMesh.userData.material;
         }
 
-        const spawnY = vehicleType === 'boat' ? 1.0 : 0.5;
+        const spawnY = vehicleType === 'boat' ? 1.5 : 0.0;
         vehicleRoot.position.set(x, spawnY, z);
         vehicleRoot.rotation.y = rotation;
 
@@ -680,28 +684,35 @@ export const SectorGenerator = {
         vehicleRoot.userData.suspY = 0;
         vehicleRoot.userData.suspVelY = 0;
 
-        // Använd de nya exakta dimensionerna (ingen multiplikation nödvändig längre)
+        // Använd de nya exakta dimensionerna
         const interactionRad = Math.max(def.size.x, def.size.z) * 0.5 + 2.0;
         vehicleRoot.userData.interactionRadius = interactionRad;
         vehicleRoot.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
 
+        // Obstacle
+        const obs = {
+            mesh: vehicleRoot,
+            position: vehicleRoot.position,
+            quaternion: vehicleRoot.quaternion,
+            collider: {
+                type: 'box' as const,
+                size: new THREE.Vector3(def.size.x, def.size.y, def.size.z),
+                center: new THREE.Vector3(0, def.size.y / 2, 0)
+            },
+            type: `Vehicle_${vehicleType}`
+        };
+
+        SectorGenerator.addObstacle(ctx, obs);
+
+        vehicleRoot.userData.obstacleRef = obs;
+
         ctx.scene.add(vehicleRoot);
 
+        // Interactables
         if (!ctx.interactables) {
             ctx.interactables = [];
         }
         ctx.interactables.push(vehicleRoot);
-
-        SectorGenerator.addObstacle(ctx, {
-            mesh: vehicleRoot,
-            position: vehicleRoot.position,
-            collider: {
-                type: 'box',
-                // Nu skickar vi bara in exakta dimensioner
-                size: new THREE.Vector3(def.size.x, def.size.y, def.size.z)
-            },
-            type: `Vehicle_${vehicleType}`
-        });
 
         return vehicleRoot;
     },
@@ -868,7 +879,12 @@ export const SectorGenerator = {
         SectorGenerator.addObstacle(ctx, {
             mesh: container,
             position: container.position,
-            collider: { type: 'box', size: new THREE.Vector3(8.0, 3.0, 2.5) }
+            quaternion: container.quaternion, // FIX
+            collider: {
+                type: 'box',
+                size: new THREE.Vector3(8.0, 3.0, 2.5),
+                center: new THREE.Vector3(0, 1.5, 0)
+            }
         });
 
         return container;
@@ -918,6 +934,7 @@ export const SectorGenerator = {
         SectorGenerator.addObstacle(ctx, {
             mesh: building,
             position: building.position,
+            quaternion: building.quaternion, // FIX
             collider: { type: 'box', size: size.clone() }
         });
 
@@ -941,6 +958,7 @@ export const SectorGenerator = {
         SectorGenerator.addObstacle(ctx, {
             mesh: stairs,
             position: stairs.position,
+            quaternion: stairs.quaternion, // FIX
             collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
         });
 
@@ -972,6 +990,7 @@ export const SectorGenerator = {
         SectorGenerator.addObstacle(ctx, {
             mesh: group,
             position: group.position,
+            quaternion: group.quaternion, // FIX
             collider: { type: 'box', size: new THREE.Vector3(6.0, 2.6 * stackHeight, 2.4) }
         });
 
@@ -1015,6 +1034,7 @@ export const SectorGenerator = {
         SectorGenerator.addObstacle(ctx, {
             mesh: vehicleStack,
             position: vehicleStack.position,
+            quaternion: vehicleStack.quaternion, // FIX
             collider: { type: 'box' as const, size: size }
         });
     },

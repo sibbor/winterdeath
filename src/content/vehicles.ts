@@ -32,11 +32,11 @@ export interface VehicleDef {
     // Collision Damage
     collisionDamageMultiplier: number; // Scales speed-based damage to enemies
 
-    // Dimensions (Full Size, NOT half-extents anymore to prevent confusion)
+    // Dimensions (Full Size) - UPPKALA 1.5X FÖR ATT MATCHA VISUALS
     // NOTE: X = Width, Y = Height, Z = Length (Forward)
     size: { x: number; y: number; z: number };
 
-    // Player positioning
+    // Player positioning - UPPKALA 1.5X
     seatOffset: { x: number; y: number; z: number };
     dismountOffset: { x: number; y: number; z: number };
 }
@@ -60,9 +60,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 6.0,
         suspensionDamping: 0.6,
         collisionDamageMultiplier: 1.0,
-        size: { x: 2.0, y: 1.8, z: 4.8 }, // Width: 2m, Length: 4.8m
-        seatOffset: { x: -0.4, y: 1.0, z: -0.4 }, // Left driver side
-        dismountOffset: { x: -2.0, y: 0, z: 0 } // Exit left
+        size: { x: 3.0, y: 2.7, z: 7.2 },
+        seatOffset: { x: 0.6, y: 1.5, z: -0.6 }, // PLUS X = Vänster sida
+        dismountOffset: { x: 3.0, y: 0, z: 0 }   // PLUS X = Kliver ut vänster
     },
 
     sedan: {
@@ -81,9 +81,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 8.0,
         suspensionDamping: 0.7,
         collisionDamageMultiplier: 1.0,
-        size: { x: 2.0, y: 1.8, z: 4.7 },
-        seatOffset: { x: -0.4, y: 1.0, z: -0.4 },
-        dismountOffset: { x: -2.0, y: 0, z: 0 }
+        size: { x: 3.0, y: 2.7, z: 7.05 },
+        seatOffset: { x: 0.6, y: 1.5, z: -0.6 },
+        dismountOffset: { x: 3.0, y: 0, z: 0 }
     },
 
     police: {
@@ -102,9 +102,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 10.0,
         suspensionDamping: 0.8,
         collisionDamageMultiplier: 1.2,
-        size: { x: 2.0, y: 1.8, z: 4.8 },
-        seatOffset: { x: -0.4, y: 1.0, z: -0.4 },
-        dismountOffset: { x: -2.0, y: 0, z: 0 }
+        size: { x: 3.0, y: 2.7, z: 7.2 },
+        seatOffset: { x: 0.6, y: 1.5, z: -0.6 },
+        dismountOffset: { x: 3.0, y: 0, z: 0 }
     },
 
     ambulance: {
@@ -123,9 +123,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 5.0,
         suspensionDamping: 0.5,
         collisionDamageMultiplier: 1.5,
-        size: { x: 2.4, y: 2.6, z: 5.6 },
-        seatOffset: { x: -0.6, y: 1.3, z: 1.2 }, // Higher up, closer to front
-        dismountOffset: { x: -2.5, y: 0, z: 1.0 }
+        size: { x: 3.6, y: 3.9, z: 8.4 },
+        seatOffset: { x: 0.9, y: 1.95, z: 1.8 },
+        dismountOffset: { x: 3.75, y: 0, z: 1.5 }
     },
 
     bus: {
@@ -144,9 +144,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 4.0,
         suspensionDamping: 0.4,
         collisionDamageMultiplier: 2.5,
-        size: { x: 3.5, y: 3.5, z: 12.0 },
-        seatOffset: { x: -0.8, y: 1.8, z: 5.0 }, // Front left
-        dismountOffset: { x: -3.0, y: 0, z: 5.0 }
+        size: { x: 5.25, y: 5.25, z: 18.0 },
+        seatOffset: { x: 1.2, y: 2.7, z: 7.5 },
+        dismountOffset: { x: 4.5, y: 0, z: 7.5 }
     },
 
     tractor: {
@@ -165,9 +165,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 3.0,
         suspensionDamping: 0.3,
         collisionDamageMultiplier: 1.8,
-        size: { x: 2.5, y: 2.5, z: 3.5 },
-        seatOffset: { x: 0, y: 1.5, z: -0.5 }, // Central seating
-        dismountOffset: { x: -2.0, y: 0, z: -0.5 }
+        size: { x: 3.75, y: 3.75, z: 5.25 },
+        seatOffset: { x: 0.4, y: 2.25, z: -0.75 },
+        dismountOffset: { x: 3.0, y: 0, z: -0.75 }
     },
 
     timber_truck: {
@@ -186,9 +186,9 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         suspensionStiffness: 3.0,
         suspensionDamping: 0.3,
         collisionDamageMultiplier: 3.0,
-        size: { x: 3.0, y: 3.5, z: 13.0 }, // Massive length
-        seatOffset: { x: -0.8, y: 1.8, z: 4.0 },
-        dismountOffset: { x: -2.5, y: 0, z: 4.0 }
+        size: { x: 4.5, y: 5.25, z: 19.5 },
+        seatOffset: { x: 1.2, y: 2.7, z: 6.0 },
+        dismountOffset: { x: 3.75, y: 0, z: 6.0 }
     },
 
     boat: {
@@ -205,8 +205,8 @@ export const VEHICLES: Record<VehicleType, VehicleDef> = {
         lateralFriction: 0.45,
         drivetrain: 'RWD',
         collisionDamageMultiplier: 0.3,
-        size: { x: 2.5, y: 1.5, z: 6.5 },
-        seatOffset: { x: 0, y: 0.5, z: -1.0 }, // Sitting towards the back engine
-        dismountOffset: { x: -2.0, y: 0, z: 0 }
+        size: { x: 3.75, y: 2.25, z: 9.75 },
+        seatOffset: { x: 0, y: 0.75, z: -1.5 },
+        dismountOffset: { x: 3.0, y: 0, z: 0 }
     }
 };

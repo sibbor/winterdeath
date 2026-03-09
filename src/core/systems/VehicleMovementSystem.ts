@@ -10,6 +10,7 @@ import { _buoyancyResult } from './WaterSystem';
 import { haptic } from '../../utils/HapticManager';
 
 // --- PERFORMANCE SCRATCHPADS ---
+// Pre-allocated vectors to prevent Garbage Collection (GC) during loops
 const _v1 = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -18,6 +19,7 @@ const _knockDir = new THREE.Vector3();
 const _dismountDir = new THREE.Vector3();
 
 // --- FAKE BRAKE GLOW (Zero-GC / Procedural Texture) ---
+// Generates a soft, glowing gradient texture dynamically on load
 function createBrakeGlowTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -29,10 +31,10 @@ function createBrakeGlowTexture() {
 
     const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 250);
 
-    gradient.addColorStop(0, 'rgba(255, 30, 0, 1.0)');   // Vit/orange/het kärna
-    gradient.addColorStop(0.2, 'rgba(180, 0, 0, 0.5)');  // Intensivt röd
-    gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.1)');   // Svagt rött sken
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');        // Exakt svart/transparent i kanten
+    gradient.addColorStop(0, 'rgba(255, 30, 0, 1.0)');   // White/orange/hot core
+    gradient.addColorStop(0.2, 'rgba(180, 0, 0, 0.5)');  // Intense red
+    gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.1)');   // Faint red glow
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');        // Exact black/transparent at the edge
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 512, 512);
@@ -43,23 +45,22 @@ function createBrakeGlowTexture() {
     return tex;
 }
 
+// Plane geometry for the brake light cast on the snow
 const _fakeBrakeGlowGeo = new THREE.PlaneGeometry(8, 8);
-_fakeBrakeGlowGeo.rotateX(-Math.PI / 2); // Lägg platt på marken
+_fakeBrakeGlowGeo.rotateX(-Math.PI / 2); // Lay flat on the ground
 
 const _fakeBrakeGlowMat = new THREE.MeshBasicMaterial({
     map: createBrakeGlowTexture(),
     transparent: true,
     blending: THREE.AdditiveBlending,
-    depthWrite: false,
+    depthWrite: false, // Prevents Z-fighting with the ground
     opacity: 0.8,
     fog: false
 });
 
 // Constants
 const HIT_COOLDOWN_MS = 350;
-const SPEED_SQ_PUSH = 4.0;
-const SPEED_SQ_KNOCKBACK = 36.0;
-const SPEED_SQ_SPLATTER = 144.0;
+const SPEED_SQ_PUSH = 1.0; // Lowered to allow pushing enemies even at very slow speeds
 const KMH_TO_MS = 1.0 / 3.6;
 
 export class VehicleMovementSystem implements System {
@@ -93,7 +94,7 @@ export class VehicleMovementSystem implements System {
             }
         }
 
-        // Ensure engine sounds/state are reset if no vehicle is active
+        // Ensure engine sounds/state are reset if no vehicle is currently active
         if (!state.activeVehicle && state.vehicleEngineState !== 'OFF') {
             state.vehicleEngineState = 'OFF';
             state.vehicleSpeed = 0;
@@ -127,6 +128,7 @@ export class VehicleMovementSystem implements System {
         const angVel = ud.angularVelocity as THREE.Vector3;
 
         // --- START ENGINE ---
+        // Triggered when player assumes control
         if (input && state.vehicleEngineState === 'OFF') {
             state.vehicleEngineState = 'RUNNING';
             state.activeVehicleType = def.type;
@@ -140,9 +142,10 @@ export class VehicleMovementSystem implements System {
             const laserSight = playerGroup.getObjectByName('laserSight');
             if (laserSight) laserSight.visible = false;
 
-            // HEADLIGHT HIJACK
+            // HEADLIGHT HIJACK (Optimized for bouncing with the chassis)
             const flashlight = playerGroup.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
             if (flashlight) {
+                // Save original state so we can restore it upon exit
                 if (!flashlight.userData.orig) {
                     flashlight.userData.orig = {
                         parent: flashlight.parent,
@@ -155,26 +158,21 @@ export class VehicleMovementSystem implements System {
                     };
                 }
 
-                vehicle.add(flashlight);
-                vehicle.add(flashlight.target);
-
-                // JUSTERING: Flytta fram lampan 0.6m utanför fysiklådan så den inte kastar skugga av sin egen kofångare
-                flashlight.position.set(0, 0.65, def.size.z + 0.6);
-                flashlight.target.position.set(0, 0.5, def.size.z + 20);
+                // Move the light to the CHASSIS so it bounces with the car's suspension
+                const chassis = vehicle.children[0]?.userData?.chassis || vehicle;
+                chassis.add(flashlight);
+                chassis.add(flashlight.target);
 
                 flashlight.angle = Math.PI / 2.5;
                 flashlight.intensity = flashlight.userData.orig.intensity * 2.0;
                 flashlight.distance = 80;
-
                 flashlight.visible = true;
                 state.flashlightOn = true;
-
-                flashlight.updateMatrixWorld();
-                flashlight.target.updateMatrixWorld();
             }
         }
 
         // --- COMPUTE FORWARD & RIGHT VECTORS ---
+        // Extracted directly from the world matrix (Zero-GC)
         const elements = vehicle.matrixWorld.elements;
         _right.set(elements[0], elements[1], elements[2]).normalize();
         _forward.set(elements[8], elements[9], elements[10]).normalize();
@@ -191,9 +189,11 @@ export class VehicleMovementSystem implements System {
             if (input.d) steer += 1;
             if (input.space) handbrake = true;
 
+            // Gamepad support
             if (input.joystickMove) throttle += input.joystickMove.y * -1;
             if (input.joystickAim) steer += input.joystickAim.x;
 
+            // Boat specific logic: Lose power if not in water
             if (def.category === 'BOAT' && session.engine.water) {
                 session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z);
                 if (!_buoyancyResult.inWater || vehicle.position.y < _buoyancyResult.waterLevel - 2.0) {
@@ -216,19 +216,23 @@ export class VehicleMovementSystem implements System {
 
         if (throttle !== 0) {
             if (throttle < 0 && forwardSpeed > 1.0) {
+                // Braking while moving forward
                 const decel = def.brakeForce * (throttle * -1) * dt;
                 vel.addScaledVector(_forward, -decel);
                 isBraking = true;
             } else if (throttle > 0 && forwardSpeed < -1.0) {
+                // Braking while reversing
                 const decel = def.brakeForce * throttle * dt;
                 vel.addScaledVector(_forward, decel);
                 isBraking = true;
             } else {
+                // Accelerating
                 const maxReverseMS = maxSpeedMS * def.reverseSpeedFraction;
                 const atLimit = throttle > 0 ? (forwardSpeed >= maxSpeedMS) : (forwardSpeed <= -maxReverseMS);
 
                 if (!atLimit) {
                     let tractionMul = 1.0;
+                    // Traction loss based on drivetrain
                     if (def.drivetrain === 'FWD') {
                         const slip = absLatSpeed * 0.05;
                         tractionMul = 1.0 - (slip > 0.5 ? 0.5 : slip);
@@ -249,6 +253,7 @@ export class VehicleMovementSystem implements System {
             else if (forwardSpeed < -0.1) vel.addScaledVector(_forward, handbrakeDecel);
         }
 
+        // Recalculate after acceleration changes
         forwardSpeed = vel.dot(_forward);
         currentLatSpeed = vel.dot(_right);
         absLatSpeed = currentLatSpeed < 0 ? -currentLatSpeed : currentLatSpeed;
@@ -288,11 +293,13 @@ export class VehicleMovementSystem implements System {
         const dampedFwd = forwardSpeed * Math.pow(baseFriction, fpsRatio);
         const dampedLat = currentLatSpeed * Math.pow(latRetention, fpsRatio);
 
+        // Retain gravity (y) but overwrite XZ plane velocities
         const savedVelY = vel.y;
         vel.copy(_forward).multiplyScalar(dampedFwd);
         vel.addScaledVector(_right, dampedLat);
         vel.y = savedVelY;
 
+        // Dampen angular velocity (auto-center steering feel)
         angVel.multiplyScalar(Math.pow(0.85, fpsRatio));
 
         // --- SUSPENSION ---
@@ -303,10 +310,12 @@ export class VehicleMovementSystem implements System {
             suspY = ud.suspY as number;
             suspVelY = ud.suspVelY as number;
 
+            // Hooke's Law (Spring Force)
             suspVelY -= suspY * def.suspensionStiffness * dt;
             suspVelY *= (1.0 - def.suspensionDamping * dt);
             suspY += suspVelY * dt;
 
+            // Clamp to prevent wild bouncing
             if (suspY > 0.3) { suspY = 0.3; suspVelY = 0; }
             else if (suspY < -0.3) { suspY = -0.3; suspVelY = 0; }
 
@@ -317,15 +326,84 @@ export class VehicleMovementSystem implements System {
             ud.suspVelY = 0;
         }
 
+        // VISUAL SUSPENSION (Pitch & Roll)
+        // Find the visual mesh inside the root and apply the bounce only to the chassis
+        if (vehicle.children.length > 0) {
+            const visualMesh = vehicle.children[0];
+            if (visualMesh.userData.chassis) {
+                const chassis = visualMesh.userData.chassis;
+
+                // 1. Vertical bounce from collisions and bumps
+                chassis.position.y = suspY;
+
+                // 2. Calculate G-forces forward/backward (Pitch)
+                const prevFwdSpeed = ud.prevFwdSpeed || 0;
+                const fwdAccel = (forwardSpeed - prevFwdSpeed) / dt; // Rate of speed change
+                ud.prevFwdSpeed = forwardSpeed;
+
+                // If fwdAccel is negative (braking) -> targetPitch is positive (nose dips down)
+                // If fwdAccel is positive (accelerating) -> targetPitch is negative (nose lifts up)
+                // Max tilt is +/- 0.04 radians
+                const targetPitch = THREE.MathUtils.clamp(fwdAccel * 0.003, -0.04, 0.04);
+
+                // 3. Calculate lateral forces (Roll from steering and drifting)
+                // currentLatSpeed indicates how fast the car moves sideways
+                // Max tilt is +/- 0.06 radians
+                const targetRoll = THREE.MathUtils.clamp(-currentLatSpeed * 0.015, -0.06, 0.06);
+
+                // Apply using a smooth Lerp (Zero-GC) to prevent jitter
+                chassis.rotation.x = THREE.MathUtils.lerp(chassis.rotation.x, targetPitch, dt * 8);
+                chassis.rotation.z = THREE.MathUtils.lerp(chassis.rotation.z, targetRoll, dt * 8);
+            }
+        }
+
         // --- APPLY TRANSFORMS ---
         vehicle.position.addScaledVector(vel, dt);
         vehicle.rotation.y += angVel.y * dt;
 
-        // --- LIGHTING SYSTEM (STEP 2) ---
-        const lights = ud.lights;
-        if (lights) {
-            const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
+        // Force the 3D engine to update the vehicle's World Matrix immediately.
+        // This is critical because the Box-Collider reads quaternion & matrixWorld to calculate its corners!
+        vehicle.updateMatrixWorld(true);
 
+        // Update the spatial grid so the hitbox travels with the vehicle in real-time!
+        // The obstacleRef is attached when the vehicle spawns in SectorGenerator
+        const obs = ud.obstacleRef;
+        if (obs && (speedSq > 0 || angVel.lengthSq() > 0.01)) {
+            const grid = state.collisionGrid;
+            if (grid && typeof grid.updateObstacle === 'function') {
+                grid.updateObstacle(obs);
+            }
+        }
+
+        // --- LIGHTING SYSTEM ---
+        const lights = ud.lights;
+        const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
+
+        // FORCE FLASHLIGHT TO THE GRILLE (Zero-GC)
+        if (isEngineOn) {
+            const chassis = vehicle.children[0]?.userData?.chassis || vehicle;
+            const flashlight = chassis.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
+
+            if (flashlight) {
+                // Default to math-based center if explicit visual meshes aren't found
+                let frontZ = def.size.z / 2;
+                let lightY = def.size.y * 0.4;
+
+                // Read the EXACT local position from the visual headlight mesh
+                if (lights?.headlights?.meshes?.[0]) {
+                    frontZ = lights.headlights.meshes[0].position.z;
+                    lightY = lights.headlights.meshes[0].position.y;
+                }
+
+                // Lock it 0.2 units immediately in front of the grille every frame
+                // This prevents the player's loop from overriding the position
+                flashlight.position.set(0, lightY, frontZ + 0.2);
+                flashlight.target.position.set(0, lightY, frontZ + 20);
+                flashlight.target.updateMatrixWorld();
+            }
+        }
+
+        if (lights) {
             if (lights.headlights) {
                 lights.headlights.material.emissiveIntensity = isEngineOn ? 5.0 : 0.0;
             }
@@ -347,11 +425,18 @@ export class VehicleMovementSystem implements System {
                     lights.brake.material.emissive.setHex(brakeColor);
                 }
 
-                // FEJKAT Belysnings-Glow
+                // Brake lights floor decal
                 if (isEngineOn && !lights.brake.fakeGlow) {
+                    // Read the EXACT position from the car's brake light mesh
+                    let rearZ = -(def.size.z / 2);
+                    if (lights.brake.meshes?.[0]) {
+                        rearZ = lights.brake.meshes[0].position.z;
+                    }
+
                     const glowMesh = new THREE.Mesh(_fakeBrakeGlowGeo, _fakeBrakeGlowMat);
-                    // JUSTERING: Flytta bak ljuspölen så att centrum hamnar exakt under/bakom baklyktorna (-def.size.z - 0.5)
-                    glowMesh.position.set(0, 0.1, -def.size.z - 0.5);
+
+                    // Place the decal on the ground (y=0.1), exactly 0.2 units behind the bumper
+                    glowMesh.position.set(0, 0.1, rearZ - 0.2);
                     glowMesh.visible = false;
                     vehicle.add(glowMesh);
                     lights.brake.fakeGlow = glowMesh;
@@ -396,6 +481,7 @@ export class VehicleMovementSystem implements System {
                     soundManager.playVehicleSkid(0);
                 }
 
+                // Exhaust smoke
                 if (speedSq > 4.0) {
                     if (Math.random() < speedRatio * 0.3) {
                         _v1.copy(_forward).multiplyScalar(-def.size.z * 0.45);
@@ -419,9 +505,12 @@ export class VehicleMovementSystem implements System {
             playerGroup.position.copy(vehicle.position);
             playerGroup.quaternion.copy(vehicle.quaternion);
 
-            playerGroup.position.x += def.seatOffset.x;
-            playerGroup.position.y += def.seatOffset.y + suspY;
-            playerGroup.position.z += def.seatOffset.z;
+            // Calculate seat offset LOCALLY based on the vehicle's current rotation
+            const chassisSuspY = vehicle.children[0]?.userData?.chassis?.position.y || 0;
+
+            _v1.set(def.seatOffset.x, def.seatOffset.y + chassisSuspY, def.seatOffset.z);
+            _v1.applyQuaternion(vehicle.quaternion); // Make the seat offset rotate with the car
+            playerGroup.position.add(_v1);
 
             const childLen = playerGroup.children.length;
             for (let i = 0; i < childLen; i++) {
@@ -440,6 +529,7 @@ export class VehicleMovementSystem implements System {
                 soundManager.playVehicleSkid(0);
                 soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
 
+                // Determine exit position relative to car rotation
                 _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
                     .applyQuaternion(vehicle.quaternion);
                 playerGroup.position.add(_dismountDir);
@@ -449,7 +539,9 @@ export class VehicleMovementSystem implements System {
                 if (laserSight) laserSight.visible = true;
 
                 // --- RESTORE FLASHLIGHT TO PLAYER ---
-                const flashlight = vehicle.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
+                const chassis = vehicle.children[0]?.userData?.chassis || vehicle;
+                const flashlight = chassis.getObjectByProperty('isSpotLight', true) as THREE.SpotLight;
+
                 if (flashlight && flashlight.userData.orig) {
                     const orig = flashlight.userData.orig;
 
@@ -458,6 +550,7 @@ export class VehicleMovementSystem implements System {
                         orig.parent.add(flashlight.target);
                     }
 
+                    // Reset to original properties saved during mount
                     flashlight.position.copy(orig.position);
                     flashlight.target.position.copy(orig.targetPos);
                     flashlight.angle = orig.angle;
@@ -465,11 +558,9 @@ export class VehicleMovementSystem implements System {
                     flashlight.distance = orig.distance;
                     flashlight.penumbra = orig.penumbra;
                     flashlight.visible = !!state.flashlightOn;
-
-                    flashlight.updateMatrixWorld();
-                    flashlight.target.updateMatrixWorld();
                 }
 
+                // Hide brake light decal
                 if (lights?.brake?.fakeGlow) {
                     lights.brake.fakeGlow.visible = false;
                 }
@@ -489,6 +580,8 @@ export class VehicleMovementSystem implements System {
 
         const state = session.state;
         const scene = session.engine.scene;
+
+        // Hit radius is slightly larger than the physical box to catch enemies early
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5 + 1.0;
 
         const enemies = state.collisionGrid.getNearbyEnemies(vehicle.position, hitRadius);
@@ -510,55 +603,82 @@ export class VehicleMovementSystem implements System {
             e.lastVehicleHit = now;
 
             const speed = Math.sqrt(speedSq);
-            const maxSpeedMS = def.maxSpeed * KMH_TO_MS;
-            const baseDamage = speed * def.mass * def.collisionDamageMultiplier * 0.01;
+            const speedKmh = speed * 3.6; // Convert m/s to km/h for threshold checks
 
-            const speedRatio = speed / (maxSpeedMS > 1 ? maxSpeedMS : 1);
-            const knockForce = (def.mass * 0.001) * speedRatio * def.collisionDamageMultiplier * 8.0;
+            // Calculate Mass Ratio (Vehicle Mass vs Enemy Mass)
+            // e.g., Car (1400kg = 1.4) vs Zombie (1.0) -> Ratio 1.4
+            const massRatio = (def.mass * 0.001) / (e.bodyMass || 1.0);
+
+            // Momentum-based Damage
+            const baseDamage = speedKmh * massRatio * def.collisionDamageMultiplier * 2.0;
 
             _knockDir.copy(_toEnemy).normalize();
             if (_knockDir.lengthSq() < 0.01) _knockDir.copy(_forward);
 
-            if (speedSq >= SPEED_SQ_SPLATTER) {
-                e.hp = 0;
-                e.lastDamageType = 'vehicle_splatter';
-                e.deathState = 'GIBBED';
+            // Apply damage
+            e.hp -= baseDamage;
+            e.hitTime = now;
+
+            // --- FATAL HIT ---
+            if (e.hp <= 0) {
                 e.dead = true;
 
-                const forceDir = _v1.copy(_knockDir).multiplyScalar(speed * 2.0).setY(3.0);
-                EnemyManager.explodeEnemy(e, {
-                    spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: any, v?: any, col?: number, s?: number) =>
-                        FXSystem.spawnPart(scene, state.particles, x, y, z, t, c, m, v, col, s),
-                    spawnDecal: (x: number, z: number, s: number, mat?: any, type?: string) =>
-                        FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat, type),
-                }, forceDir);
+                // 1. GIBBED (>= 80 km/h) - High speed splatter
+                if (speedKmh >= 80) {
+                    e.deathState = 'GIBBED';
+                    e.lastDamageType = 'vehicle_splatter';
 
-                session.engine.camera.shake(0.4);
-                soundManager.playImpact('flesh');
-                haptic.explosion();
+                    const forceDir = _v1.copy(_knockDir).multiplyScalar(speed * 1.5).setY(3.0);
+                    EnemyManager.explodeEnemy(e, {
+                        spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: any, v?: any, col?: number, s?: number) =>
+                            FXSystem.spawnPart(scene, state.particles, x, y, z, t, c, m, v, col, s),
+                        spawnDecal: (x: number, z: number, s: number, mat?: any, type?: string) =>
+                            FXSystem.spawnDecal(scene, state.bloodDecals, x, z, s, mat, type),
+                    }, forceDir);
 
-            } else if (speedSq >= SPEED_SQ_KNOCKBACK) {
-                e.hp -= baseDamage;
-                e.lastDamageType = 'vehicle_ram';
-                e.hitTime = now;
+                    session.engine.camera.shake(0.4);
+                    soundManager.playImpact('flesh');
+                    haptic.explosion();
 
-                _knockDir.multiplyScalar(knockForce).setY(2.0);
-                e.knockbackVel.add(_knockDir);
+                    // 2. FALL (20 - 79 km/h) - Airborne ragdoll effect
+                } else if (speedKmh >= 20) {
+                    e.deathState = 'FALL';
+                    e.lastDamageType = 'vehicle_ram';
 
-                FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1, e.mesh.position.z, 'blood', 20);
-                FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
-                    1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
+                    // Force depends on speed and relative mass
+                    const pushForce = speed * 0.8 * massRatio;
+                    const upForce = speed * 0.6 * massRatio;
 
-                session.engine.camera.shake(0.2);
-                soundManager.playImpact('flesh');
+                    // Set deathVel so EnemyManager.processDeathAnimation handles the physics arc
+                    e.deathVel.copy(_knockDir).multiplyScalar(pushForce);
+                    e.deathVel.y = Math.max(4.0, upForce); // Minimum upward kick
 
-                vehicle.userData.suspVelY += 3.0;
+                    FXSystem.spawnPart(scene, state.particles, e.mesh.position.x, 1, e.mesh.position.z, 'blood', 20);
+                    FXSystem.spawnDecal(scene, state.bloodDecals, e.mesh.position.x, e.mesh.position.z,
+                        1.0 + Math.random() * 1.5, MATERIALS.bloodDecal);
 
+                    session.engine.camera.shake(0.2);
+                    soundManager.playImpact('flesh');
+
+                    // Car hits heavy object -> small vertical bounce feedback on chassis
+                    vehicle.userData.suspVelY += 2.0;
+
+                    // 3. GENERIC (< 20 km/h) - Low speed death, falls over
+                } else {
+                    e.deathState = 'GENERIC';
+                    e.lastDamageType = 'vehicle_push';
+
+                    // Slight backwards tumble
+                    e.deathVel.copy(_knockDir).multiplyScalar(speed * massRatio * 0.2);
+                    e.deathVel.y = 2.0;
+                }
+
+                // --- SURVIVED HIT (Knockback) ---
             } else {
-                e.hp -= baseDamage * 0.3;
                 e.lastDamageType = 'vehicle_push';
 
-                _knockDir.multiplyScalar(knockForce * 0.3);
+                const pushForce = speed * 0.5 * massRatio;
+                _knockDir.multiplyScalar(pushForce).setY(2.0);
                 e.knockbackVel.add(_knockDir);
 
                 e.slowTimer = 0.5;
@@ -587,6 +707,7 @@ export class VehicleMovementSystem implements System {
             const distSq = _toEnemy.lengthSq();
             const combinedRad = hitRadius + (obs.radius || 2.0);
 
+            // Simple radial check for bouncing against rigid environment objects
             if (distSq < combinedRad * combinedRad && distSq > 0.01) {
                 const dist = Math.sqrt(distSq);
                 const overlap = combinedRad - dist;
@@ -600,6 +721,7 @@ export class VehicleMovementSystem implements System {
                     vel.addScaledVector(_toEnemy, -impactDot * 1.2);
                 }
 
+                // Small vertical bounce feedback upon collision
                 vehicle.userData.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
                 vel.multiplyScalar(0.85);
             }

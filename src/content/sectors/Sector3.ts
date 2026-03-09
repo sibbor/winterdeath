@@ -131,7 +131,7 @@ export const Sector3: SectorDef = {
         SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, 'RUNNER', Math.random() * Math.PI);
         SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
 
-        SectorGenerator.spawnVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
+        SectorGenerator.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
         SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
         SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
         SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
@@ -140,8 +140,7 @@ export const Sector3: SectorDef = {
         SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
 
         SectorGenerator.spawnTimberPile(ctx, 122, -92, 0, 2.0);
-        SectorGenerator.spawnVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
-        SectorGenerator.spawnCrashedCar(ctx, 160, -85, -Math.PI / 4, 0xcc2222);
+        SectorGenerator.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
 
         const farmHouse = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
         SectorGenerator.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });

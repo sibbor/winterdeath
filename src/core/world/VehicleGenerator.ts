@@ -7,7 +7,12 @@ import { VEHICLES, VehicleType } from '../../content/vehicles';
  * VehicleGenerator
  * Dedicated generator for all driveable and static vehicles.
  * Optimized for Zero-GC, shared geometries, and fake emissive lighting.
+ * Features separated chassis and root groups for realistic suspension.
  */
+
+// --- GLOBAL SCALE MULTIPLIER ---
+// 1.5x gör fordonen betydligt mer proportionerliga gentemot spelaren
+const S = 1.5;
 
 // --- SHARED GEOMETRIES FOR ZERO-GC ---
 const SHARED_GEOMETRIES = {
@@ -47,14 +52,14 @@ export const VehicleGenerator = {
         if (!cachedBoatGeo) {
             const parts: THREE.BufferGeometry[] = [];
             const addPart = (w: number, h: number, d: number, tx: number, ty: number, tz: number, rx = 0, ry = 0, rz = 0) => {
-                const geo = new THREE.BoxGeometry(w, h, d);
+                const geo = new THREE.BoxGeometry(w * S, h * S, d * S);
                 geo.rotateY(ry); geo.rotateX(rx); geo.rotateZ(rz);
-                geo.translate(tx, ty, tz);
+                geo.translate(tx * S, ty * S, tz * S);
                 parts.push(geo);
             };
 
             const hullLength = 6.5;
-            addPart(0.15, 0.3, hullLength + 0.5, 0, -0.2, 0);
+            addPart(0.15, 0.3, hullLength + 0.5, 0, -0.2, 0); // Köl (Z är längden)
             addPart(0.9, 0.08, hullLength, 0.4, -0.05, 0, 0, 0, 0.15);
             addPart(0.9, 0.08, hullLength, -0.4, -0.05, 0, 0, 0, -0.15);
             addPart(0.1, 0.7, hullLength + 0.2, 0.85, 0.3, 0, 0, 0, -0.4);
@@ -67,7 +72,7 @@ export const VehicleGenerator = {
             addPart(0.1, 0.7, 2.5, -0.5, 0.35, bowZ, 0, 0.6, 0.3);
             addPart(0.2, 1.2, 0.25, 0, 0.4, bowZ, 0.1, 0, 0);
 
-            addPart(2.4, 1.0, 0.15, 0, 0.5, hullLength / 2 + 0.1, -0.2, 0, 0);
+            addPart(2.4, 1.0, 0.15, 0, 0.5, -(hullLength / 2 + 0.1), -0.2, 0, 0); // Akter
             addPart(1.2, 0.05, 4.0, 0, 0.05, 0.5);
             addPart(2.2, 0.08, 0.6, 0, 0.6, 1.8);
             addPart(2.3, 0.08, 0.7, 0, 0.6, -0.5);
@@ -80,227 +85,306 @@ export const VehicleGenerator = {
         const boatMesh = new THREE.Mesh(cachedBoatGeo, boatMat);
         boatMesh.castShadow = true;
         boatMesh.receiveShadow = true;
-        // Båten pekar nu längs Z-axeln från start
-        boatMesh.rotateY(Math.PI / 2);
+
+        // OBS! Ingen rotateY(Math.PI / 2) här. Båten byggs exakt längs med Z från start.
 
         return boatMesh;
     },
 
-    // Notera: X är Bredd, Y är Höjd, Z är Längd framåt/bakåt.
-    // Positiva Z = framåt i världen (där grillen och headlights är).
-    // Negativa Z = bakåt (där brake lights är).
+    // Notera nu: X är Bredd, Y är Höjd, Z är Längd framåt/bakåt.
+    // Däcken sätts på Y = radien. Detta garanterar att botten på däcket alltid är Y = 0.
 
     createStationWagon: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0x7c2e2e);
 
-        VehicleGenerator._addPart(group, 1.8, 0.7, 4.6, 0, 0.65, 0, mat); // Chassis
-        VehicleGenerator._addPart(group, 1.6, 0.65, 2.8, 0, 1.25, -0.4, mat); // Cabin
+        const cW = 1.8 * S; const cH = 0.7 * S; const cD = 4.6 * S;
+        const groundClearance = 0.3 * S;
+        const chassisY = groundClearance + (cH / 2); // Exakt botten-nivå för karossen
 
-        VehicleGenerator._addWindow(group, 1.4, 0.5, 0.05, 0, 1.25, 1.0);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.2, 0.82, 1.25, 0.2);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.2, -0.82, 1.25, 0.2);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.0, 0.82, 1.25, -1.2);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.0, -0.82, 1.25, -1.2);
-        VehicleGenerator._addWindow(group, 1.4, 0.5, 0.05, 0, 1.25, -1.8);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
+        VehicleGenerator._addPart(chassis, 1.6 * S, 0.65 * S, 2.8 * S, 0, chassisY + (cH / 2) + 0.325 * S, -0.4 * S, mat);
 
-        VehicleGenerator._addTires(group, 4, 0.35, 0.4, 0.95, 1.5, -1.5);
-        VehicleGenerator._addLights(group, 0.7, 0.65, 2.3);
-        VehicleGenerator._addBrakeLights(group, 0.7, 0.65, -2.3);
+        const cabY = chassisY + (cH / 2) + 0.325 * S;
 
-        if (addSnow) VehicleGenerator._addSnow(group, 1.7, 0.1, 3.0, 0, 1.6, -0.4);
+        VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, 1.4 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.2 * S, 0.81 * S, cabY, 0.2 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.2 * S, -0.81 * S, cabY, 0.2 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.0 * S, 0.81 * S, cabY, -1.0 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.0 * S, -0.81 * S, cabY, -1.0 * S);
+        VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, -1.4 * S);
 
-        return VehicleGenerator._finalize(group);
+        VehicleGenerator._addTires(root, 4, 0.35 * S, 0.4 * S, 0.95 * S, 1.5 * S, -1.5 * S);
+
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
+        VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
+
+        if (addSnow) VehicleGenerator._addSnow(chassis, cW, 0.1 * S, cD, 0, chassisY + (cH / 2), -0.4 * S);
+
+        return VehicleGenerator._finalize(root);
     },
 
     createSedan: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0x3e4c5e);
 
-        VehicleGenerator._addPart(group, 1.8, 0.7, 4.5, 0, 0.65, 0, mat);
-        VehicleGenerator._addPart(group, 1.6, 0.65, 2.2, 0, 1.25, -0.1, mat);
+        const cW = 1.8 * S; const cH = 0.7 * S; const cD = 4.5 * S;
+        const groundClearance = 0.3 * S;
+        const chassisY = groundClearance + (cH / 2);
 
-        VehicleGenerator._addWindow(group, 1.4, 0.5, 0.05, 0, 1.25, 1.0);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.0, 0.82, 1.25, 0.1);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.0, -0.82, 1.25, 0.1);
-        VehicleGenerator._addWindow(group, 1.4, 0.5, 0.05, 0, 1.25, -1.2);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
+        VehicleGenerator._addPart(chassis, 1.6 * S, 0.65 * S, 2.2 * S, 0, chassisY + (cH / 2) + 0.325 * S, -0.1 * S, mat);
 
-        VehicleGenerator._addTires(group, 4, 0.35, 0.4, 0.95, 1.4, -1.4);
-        VehicleGenerator._addLights(group, 0.7, 0.65, 2.25);
-        VehicleGenerator._addBrakeLights(group, 0.7, 0.65, -2.25);
+        const cabY = chassisY + (cH / 2) + 0.325 * S;
 
-        if (addSnow) VehicleGenerator._addSnow(group, 1.7, 0.1, 2.4, 0, 1.6, -0.1);
+        VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, 1.1 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.0 * S, 0.81 * S, cabY, 0.1 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.0 * S, -0.81 * S, cabY, 0.1 * S);
+        VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, -1.2 * S);
 
-        return VehicleGenerator._finalize(group);
+        VehicleGenerator._addTires(root, 4, 0.35 * S, 0.4 * S, 0.95 * S, 1.4 * S, -1.4 * S);
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
+        VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
+
+        if (addSnow) VehicleGenerator._addSnow(chassis, cW, 0.1 * S, cD, 0, chassisY + (cH / 2), -0.1 * S);
+
+        return VehicleGenerator._finalize(root);
     },
 
     createPoliceCar: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VehicleGenerator._getVehicleMaterial(0xffffff);
 
-        VehicleGenerator._addPart(group, 1.8, 0.7, 4.6, 0, 0.65, 0, mat);
-        VehicleGenerator._addPart(group, 1.6, 0.65, 2.8, 0, 1.25, -0.4, mat);
+        const cW = 1.8 * S; const cH = 0.7 * S; const cD = 4.6 * S;
+        const groundClearance = 0.3 * S;
+        const chassisY = groundClearance + (cH / 2);
 
-        const signPolis = createSignMesh("POLIS", 1.8, 0.4, '#000000', '#ffff00');
-        signPolis.position.set(0.82, 1.25, -0.4);
-        signPolis.rotation.y = Math.PI / 2;
-        group.add(signPolis);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
+        VehicleGenerator._addPart(chassis, 1.6 * S, 0.65 * S, 2.8 * S, 0, chassisY + (cH / 2) + 0.325 * S, -0.4 * S, mat);
+
+        const cabY = chassisY + (cH / 2) + 0.325 * S;
+
+        // POLICE SIGN FIX: Exakt på dörrarna (sidorna), roterade rätt
+        const signPolis = createSignMesh("POLIS", 1.8 * S, 0.4 * S, '#000000', '#ffff00');
+        signPolis.position.set(-0.91 * S, chassisY, 0);
+        signPolis.rotation.y = -Math.PI / 2;
+        chassis.add(signPolis);
 
         const signPolisR = signPolis.clone();
-        signPolisR.position.x = -0.82;
-        signPolisR.rotation.y = -Math.PI / 2;
-        group.add(signPolisR);
+        signPolisR.position.x = 0.91 * S;
+        signPolisR.rotation.y = Math.PI / 2;
+        chassis.add(signPolisR);
 
-        VehicleGenerator._addWindow(group, 1.4, 0.5, 0.05, 0, 1.25, 1.0);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.2, 0.82, 1.25, 0.2);
-        VehicleGenerator._addWindow(group, 0.05, 0.45, 1.2, -0.82, 1.25, 0.2);
-        VehicleGenerator._addWindow(group, 1.4, 0.5, 0.05, 0, 1.25, -1.8);
+        VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, 1.0 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.2 * S, 0.81 * S, cabY, 0.2 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.45 * S, 1.2 * S, -0.81 * S, cabY, 0.2 * S);
+        VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, -1.8 * S);
 
-        VehicleGenerator._addTires(group, 4, 0.35, 0.4, 0.95, 1.5, -1.5);
-        VehicleGenerator._addSirens(group, 0, 1.6, 1.6, true);
-        VehicleGenerator._addLights(group, 0.7, 0.65, 2.3);
-        VehicleGenerator._addBrakeLights(group, 0.7, 0.65, -2.3);
+        VehicleGenerator._addTires(root, 4, 0.35 * S, 0.4 * S, 0.95 * S, 1.5 * S, -1.5 * S);
 
-        if (addSnow) VehicleGenerator._addSnow(group, 1.7, 0.1, 3.0, 0, 1.6, -0.4);
+        // SIREN FIX: På taket!
+        const roofY = cabY + (0.65 * S / 2);
+        VehicleGenerator._addSirens(chassis, root, 0, roofY, -0.4 * S, true);
 
-        return VehicleGenerator._finalize(group);
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
+        VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
+
+        if (addSnow) VehicleGenerator._addSnow(chassis, cW, 0.1 * S, cD, 0, chassisY + (cH / 2), -0.4 * S);
+
+        return VehicleGenerator._finalize(root);
     },
 
     createAmbulance: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VEHICLE_MATS.ambulanceYellow;
 
-        VehicleGenerator._addPart(group, 2.2, 1.0, 5.2, 0, 0.8, 0, mat);
-        VehicleGenerator._addPart(group, 2.0, 1.2, 3.8, 0, 1.9, 0, mat);
+        const cW = 2.2 * S; const cH = 1.0 * S; const cD = 5.2 * S;
+        const groundClearance = 0.4 * S;
+        const chassisY = groundClearance + (cH / 2);
 
-        const cross = createSignMesh("✚", 0.4, 0.4, '#ff0000', '#ffffff');
-        cross.position.set(1.02, 1.9, 0);
-        cross.rotation.y = Math.PI / 2;
-        group.add(cross);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat); // Lower body
+
+        // Förlängt skåp som går ända bak till dörrarna
+        const cabH = 1.4 * S; const cabD = 3.8 * S;
+        const cabY = chassisY + (cH / 2) + (cabH / 2);
+        VehicleGenerator._addPart(chassis, 2.0 * S, cabH, cabD, 0, cabY, -0.7 * S, mat);
+
+        const cross = createSignMesh("✚", 0.5 * S, 0.5 * S, '#ff0000', '#ffffff');
+        cross.position.set(-1.01 * S, cabY, -0.7 * S);
+        cross.rotation.y = -Math.PI / 2;
+        chassis.add(cross);
 
         const crossR = cross.clone();
-        crossR.position.x = -1.02;
-        crossR.rotation.y = -Math.PI / 2;
-        group.add(crossR);
+        crossR.position.x = 1.01 * S;
+        crossR.rotation.y = Math.PI / 2;
+        chassis.add(crossR);
 
-        VehicleGenerator._addWindow(group, 1.8, 0.7, 0.05, 0, 1.9, 1.9);
-        VehicleGenerator._addWindow(group, 0.05, 0.6, 1.0, 1.02, 1.9, 1.2);
-        VehicleGenerator._addWindow(group, 0.05, 0.6, 1.0, -1.02, 1.9, 1.2);
-        VehicleGenerator._addWindow(group, 0.05, 0.8, 1.5, 1.02, 1.9, -1.0);
-        VehicleGenerator._addWindow(group, 0.05, 0.8, 1.5, -1.02, 1.9, -1.0);
+        VehicleGenerator._addWindow(chassis, 1.8 * S, 0.7 * S, 0.05 * S, 0, cabY, 1.2 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.6 * S, 1.0 * S, 1.01 * S, cabY, 0.5 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.6 * S, 1.0 * S, -1.01 * S, cabY, 0.5 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.8 * S, 1.5 * S, 1.01 * S, cabY, -1.5 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 0.8 * S, 1.5 * S, -1.01 * S, cabY, -1.5 * S);
 
-        VehicleGenerator._addPart(group, 0.95, 1.2, 0.05, 0.5, 1.9, -2.6, mat);
-        VehicleGenerator._addPart(group, 0.95, 1.2, 0.05, -0.5, 1.9, -2.6, mat);
+        // Bakdörrar
+        VehicleGenerator._addPart(chassis, 0.95 * S, 1.2 * S, 0.05 * S, 0.5 * S, cabY, -2.6 * S, mat);
+        VehicleGenerator._addPart(chassis, 0.95 * S, 1.2 * S, 0.05 * S, -0.5 * S, cabY, -2.6 * S, mat);
 
-        VehicleGenerator._addTires(group, 4, 0.45, 0.5, 1.15, 1.8, -1.8);
-        VehicleGenerator._addSirens(group, 0, 2.5, 2.0, true);
-        VehicleGenerator._addLights(group, 0.8, 0.8, 2.6);
-        VehicleGenerator._addBrakeLights(group, 0.8, 0.8, -2.6);
+        VehicleGenerator._addTires(root, 4, 0.45 * S, 0.5 * S, 1.15 * S, 1.6 * S, -1.8 * S);
 
-        return VehicleGenerator._finalize(group);
+        const roofY = cabY + (cabH / 2);
+        VehicleGenerator._addSirens(chassis, root, 0, roofY, 1.0 * S, true);
+
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
+        VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
+
+        return VehicleGenerator._finalize(root);
     },
 
     createBus: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0x009ddb);
 
-        VehicleGenerator._addPart(group, 3.5, 2.5, 12.0, 0, 1.55, 0, mat);
+        const cW = 3.5 * S; const cH = 2.5 * S; const cD = 12.0 * S;
+        const groundClearance = 0.5 * S;
+        const chassisY = groundClearance + (cH / 2);
 
-        const frontSign = createSignMesh("159 DALSJÖFORS", 2.0, 0.6, '#ffaa00', '#000000');
-        frontSign.position.set(0, 2.5, 6.01);
-        group.add(frontSign);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
 
-        VehicleGenerator._addWindow(group, 2.0, 1.2, 0.05, 0, 1.5, 6.0);
+        const frontSign = createSignMesh("159 DALSJÖFORS", 2.0 * S, 0.5 * S, '#ffaa00', '#000000');
+        frontSign.position.set(0, chassisY + 1.0 * S, (cD / 2) + 0.01);
+        chassis.add(frontSign);
 
-        for (let i = 0; i < 5; i++) {
-            const zPos = 4.0 - i * 2.0;
-            VehicleGenerator._addWindow(group, 0.05, 1.0, 1.5, 1.76, 1.8, zPos);
-            VehicleGenerator._addWindow(group, 0.05, 1.0, 1.5, -1.76, 1.8, zPos);
+        VehicleGenerator._addWindow(chassis, 3.1 * S, 1.2 * S, 0.05 * S, 0, chassisY + 0.1 * S, cD / 2);
+
+        for (let i = 0; i < 6; i++) {
+            const zPos = 4.0 * S - i * 2.0 * S;
+            VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.5 * S, (cW / 2) + 0.01, chassisY + 0.2 * S, zPos);
+            VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.5 * S, -(cW / 2) - 0.01, chassisY + 0.2 * S, zPos);
         }
 
-        const backSign = createSignMesh("159", 0.8, 0.4, '#ffaa00', '#000000');
-        backSign.position.set(0, 2.5, -6.01);
+        const backSign = createSignMesh("159", 0.8 * S, 0.4 * S, '#ffaa00', '#000000');
+        backSign.position.set(0, chassisY + 1.0 * S, -(cD / 2) - 0.01);
         backSign.rotation.y = Math.PI;
-        group.add(backSign);
+        chassis.add(backSign);
 
-        VehicleGenerator._addWindow(group, 2.0, 0.8, 0.05, 0, 1.5, -6.0);
+        // Nedsänkt bakruta
+        VehicleGenerator._addWindow(chassis, 3.1 * S, 0.8 * S, 0.05 * S, 0, chassisY - 0.2 * S, -(cD / 2));
 
-        const addT = (tx: number, tz: number) => {
-            const m = new THREE.Mesh(SHARED_GEOMETRIES.tire16, VEHICLE_MATS.tire);
-            m.rotation.z = Math.PI / 2; // Rättad däckrotation för framåtvänd bil
-            m.scale.set(0.65, 0.6, 0.65);
-            m.position.set(tx, 0.65, tz);
-            m.castShadow = true;
-            group.add(m);
-        };
-        addT(1.55, 4.5); addT(-1.55, 4.5);
-        addT(1.85, -4.5); addT(1.25, -4.5);
-        addT(-1.85, -4.5); addT(-1.25, -4.5);
+        VehicleGenerator._addTires(root, 6, 0.65 * S, 0.6 * S, 1.55 * S, 4.5 * S, -4.5 * S, -2.5 * S);
 
-        VehicleGenerator._addLights(group, 1.2, 0.8, 6.01);
-        VehicleGenerator._addBrakeLights(group, 1.2, 0.8, -6.01);
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
+        VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
 
-        if (addSnow) VehicleGenerator._addSnow(group, 3.5, 0.15, 12.0, 0, 2.85, 0);
+        if (addSnow) VehicleGenerator._addSnow(chassis, cW, 0.15 * S, cD, 0, chassisY + (cH / 2), 0);
 
-        return VehicleGenerator._finalize(group);
+        return VehicleGenerator._finalize(root);
     },
 
     createTractor: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0xcc2222);
 
-        VehicleGenerator._addPart(group, 1.8, 0.8, 2.5, 0, 0.7, 0, mat);
-        VehicleGenerator._addPart(group, 1.4, 1.5, 1.2, 0, 1.5, -0.5, mat);
+        const cW = 1.4 * S; const cH = 0.8 * S; const cD = 1.5 * S;
+        const groundClearance = 0.6 * S;
+        const bonnetY = groundClearance + (cH / 2);
 
-        VehicleGenerator._addWindow(group, 1.2, 1.0, 0.05, 0, 1.5, 0.1);
-        VehicleGenerator._addWindow(group, 0.05, 1.0, 0.8, 0.72, 1.5, -0.5);
-        VehicleGenerator._addWindow(group, 0.05, 1.0, 0.8, -0.72, 1.5, -0.5);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, bonnetY, 0.5 * S, mat); // Bonnet
 
-        const addT = (isFront: boolean, tx: number, ty: number, tz: number) => {
+        const cabH = 1.8 * S;
+        const cabY = groundClearance + (cabH / 2) + 0.2 * S;
+        VehicleGenerator._addPart(chassis, 1.8 * S, cabH, 1.2 * S, 0, cabY, -0.65 * S, mat); // Cab 
+
+        VehicleGenerator._addWindow(chassis, 1.6 * S, 1.0 * S, 0.05 * S, 0, cabY, -0.05 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 0.8 * S, 0.9 * S, cabY, -0.65 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 0.8 * S, -0.9 * S, cabY, -0.65 * S);
+
+        const addT = (isFront: boolean, tx: number, tz: number) => {
             const geo = isFront ? SHARED_GEOMETRIES.tire12 : SHARED_GEOMETRIES.tire16;
             const m = new THREE.Mesh(geo, VEHICLE_MATS.tire);
             m.rotation.z = Math.PI / 2;
-            if (isFront) {
-                m.scale.set(0.45, 0.45, 0.45);
-            } else {
-                m.scale.set(1.25, 0.7, 1.25);
-            }
-            m.position.set(tx, ty, tz);
+            const r = (isFront ? 0.45 : 0.8) * S;
+            const w = (isFront ? 0.45 : 0.7) * S;
+            m.scale.set(r, w, r);
+            m.position.set(tx * S, r, tz * S); // Perfekt på marken
             m.castShadow = true;
-            group.add(m);
+            root.add(m);
         };
 
-        addT(true, 0.85, 0.45, 1.1); addT(true, -0.85, 0.45, 1.1);
-        addT(false, 1.1, 1.25, -0.8); addT(false, -1.1, 1.25, -0.8);
+        addT(true, 0.85, 1.4); addT(true, -0.85, 1.4);
+        addT(false, 1.1, -0.8); addT(false, -1.1, -0.8);
 
-        VehicleGenerator._addLights(group, 0.6, 0.8, 1.25);
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, bonnetY, 0.5 * S);
 
-        return VehicleGenerator._finalize(group);
+        return VehicleGenerator._finalize(root);
     },
 
     createTimberTruck: (colorOverride?: number, addSnow: boolean = true) => {
-        const group = new THREE.Group();
+        const root = new THREE.Group();
+        const chassis = new THREE.Group();
+        root.add(chassis);
+        root.userData.chassis = chassis;
+
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0x4a5c4a);
 
-        VehicleGenerator._addPart(group, 2.6, 0.8, 12.0, 0, 0.7, 0, mat);
-        VehicleGenerator._addPart(group, 2.4, 1.8, 2.5, 0, 1.5, 4.0, mat);
+        const cW = 2.6 * S; const cH = 0.8 * S; const cD = 12.0 * S;
+        const groundClearance = 0.6 * S;
+        const chassisY = groundClearance + (cH / 2);
 
-        VehicleGenerator._addWindow(group, 2.0, 1.0, 0.05, 0, 1.8, 5.25);
-        VehicleGenerator._addWindow(group, 0.05, 1.0, 1.2, 1.22, 1.8, 4.0);
-        VehicleGenerator._addWindow(group, 0.05, 1.0, 1.2, -1.22, 1.8, 4.0);
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat); // Main bed
 
-        VehicleGenerator._addTires(group, 6, 0.55, 0.5, 1.3, 5.0, -3.0, -4.5);
-        VehicleGenerator._addLights(group, 0.9, 0.7, 6.0);
-        VehicleGenerator._addBrakeLights(group, 0.9, 0.7, -6.0);
+        const cabH = 1.8 * S;
+        const cabY = chassisY + (cH / 2) + (cabH / 2);
+        VehicleGenerator._addPart(chassis, 2.4 * S, cabH, 2.5 * S, 0, cabY, 4.7 * S, mat); // Cab front
+
+        VehicleGenerator._addWindow(chassis, 2.0 * S, 1.0 * S, 0.05 * S, 0, cabY + 0.1 * S, 5.96 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.2 * S, 1.21 * S, cabY + 0.1 * S, 4.7 * S);
+        VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.2 * S, -1.21 * S, cabY + 0.1 * S, 4.7 * S);
+
+        VehicleGenerator._addTires(root, 6, 0.6 * S, 0.6 * S, 1.3 * S, 4.5 * S, -4.5 * S, -3.0 * S);
+
+        VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
+        VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
 
         import('./ObjectGenerator').then(({ ObjectGenerator }) => {
             const logs = ObjectGenerator.createTimberPile(1.0);
-            logs.position.set(0, 1.1, -1.8);
-            logs.scale.set(1.3, 1, 1);
-            group.add(logs);
+
+            // 1. Positionera uppe på flaket
+            logs.position.set(0, chassisY + (cH / 2) + 0.2 * S, -1.5 * S);
+
+            // 2. Rotera HELA högen 90 grader (Y-axeln) så de vilar längs med lastbilen
+            logs.rotation.set(0, Math.PI / 2, 0);
+
+            // 3. Skala upp högen! Extra mycket på Z (längden) så de fyller upp hela flaket
+            logs.scale.set(1.5 * S, 1.5 * S, 2.6 * S);
+
+            chassis.add(logs);
         });
 
-        return VehicleGenerator._finalize(group);
+        return VehicleGenerator._finalize(root);
     },
 
     createVehicle: (type: string = 'station wagon', colorOverride?: number, addSnow: boolean = true): THREE.Group => {
@@ -345,8 +429,9 @@ export const VehicleGenerator = {
     _addTires: (group: THREE.Group, count: number, radius: number, width: number, x: number, z: number, rearZ: number, midZ?: number) => {
         const addT = (tx: number, tz: number) => {
             const m = new THREE.Mesh(SHARED_GEOMETRIES.tire16, VEHICLE_MATS.tire);
-            m.rotation.z = Math.PI / 2; // Däck rullar längs Z nu
+            m.rotation.z = Math.PI / 2; // Rullar längs Z
             m.scale.set(radius, width, radius);
+            // Eftersom vi sätter y = radius är botten av däcket garanterat på y=0
             m.position.set(tx, radius, tz);
             m.castShadow = true;
             group.add(m);
@@ -358,76 +443,82 @@ export const VehicleGenerator = {
         }
     },
 
-    _addLights: (group: THREE.Group, xOff: number, y: number, z: number) => {
+    _addLights: (chassis: THREE.Group, root: THREE.Group, cW: number, cH: number, cD: number, yCenter: number, zOffset: number = 0) => {
         const mat = VEHICLE_MATS.headlight.clone();
+
+        const xOffset = (cW / 2) - (0.2 * S);
+        const yPos = yCenter + (cH / 2) - (0.15 * S);
+        const zPos = (cD / 2) + zOffset;
 
         const createL = (xPos: number) => {
             const glow = new THREE.Mesh(SHARED_GEOMETRIES.sphere, mat);
-            glow.scale.setScalar(0.15);
-            glow.position.set(xPos, y, z);
-            group.add(glow);
+            glow.scale.setScalar(0.15 * S);
+            glow.position.set(xPos, yPos, zPos);
+            chassis.add(glow);
             return glow;
         };
 
-        const left = createL(-xOff);
-        const right = createL(xOff);
+        const left = createL(-xOffset);
+        const right = createL(xOffset);
 
-        if (!group.userData.lights) group.userData.lights = {};
-        group.userData.lights.headlights = { material: mat, meshes: [left, right] };
+        if (!root.userData.lights) root.userData.lights = {};
+        root.userData.lights.headlights = { material: mat, meshes: [left, right] };
     },
 
-    _addBrakeLights: (group: THREE.Group, xOff: number, y: number, z: number) => {
+    _addBrakeLights: (chassis: THREE.Group, root: THREE.Group, cW: number, cH: number, cD: number, yCenter: number) => {
         const mat = VEHICLE_MATS.brakeLight.clone();
+
+        const xOffset = (cW / 2) - (0.3 * S);
+        const yPos = yCenter + (cH / 2) - (0.15 * S);
+        const zPos = -(cD / 2 + 0.01);
 
         const createL = (xPos: number) => {
             const glow = new THREE.Mesh(SHARED_GEOMETRIES.box, mat);
-            glow.scale.set(0.4, 0.2, 0.1); // Bredare på X nu
-            glow.position.set(xPos, y, z);
-            group.add(glow);
+            glow.scale.set(0.4 * S, 0.2 * S, 0.01);
+            glow.position.set(xPos, yPos, zPos);
+            chassis.add(glow);
             return glow;
         };
 
-        const left = createL(-xOff);
-        const right = createL(xOff);
+        const left = createL(-xOffset);
+        const right = createL(xOffset);
 
-        if (!group.userData.lights) group.userData.lights = {};
-        group.userData.lights.brake = { material: mat, meshes: [left, right] };
+        if (!root.userData.lights) root.userData.lights = {};
+        root.userData.lights.brake = { material: mat, meshes: [left, right] };
     },
 
-    _addSirens: (group: THREE.Group, x: number, y: number, z: number, enableBlinking: boolean = false) => {
+    _addSirens: (chassis: THREE.Group, root: THREE.Group, x: number, y: number, z: number, enableBlinking: boolean = false) => {
         const matBlue = VEHICLE_MATS.sirenBlue.clone();
         const matRed = VEHICLE_MATS.sirenRed.clone();
 
-        VehicleGenerator._addPart(group, 0.8, 0.15, 0.4, x, y + 0.05, z, VEHICLE_MATS.sirenBase);
+        VehicleGenerator._addPart(chassis, 0.8 * S, 0.15 * S, 0.4 * S, x, y + 0.05 * S, z, VEHICLE_MATS.sirenBase);
 
         const blue = new THREE.Mesh(SHARED_GEOMETRIES.box, matBlue);
-        blue.scale.set(0.3, 0.1, 0.15);
-        blue.position.set(x + 0.2, y + 0.15, z);
-        group.add(blue);
+        blue.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
+        blue.position.set(x + 0.2 * S, y + 0.15 * S, z);
+        chassis.add(blue);
 
         const red = new THREE.Mesh(SHARED_GEOMETRIES.box, matRed);
-        red.scale.set(0.3, 0.1, 0.15);
-        red.position.set(x - 0.2, y + 0.15, z);
-        group.add(red);
+        red.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
+        red.position.set(x - 0.2 * S, y + 0.15 * S, z);
+        chassis.add(red);
 
         if (enableBlinking) {
-            group.userData.sirenOn = false;
-            if (!group.userData.lights) group.userData.lights = {};
-            group.userData.lights.siren = { materialBlue: matBlue, materialRed: matRed, blueMesh: blue, redMesh: red };
+            root.userData.sirenOn = false;
+            if (!root.userData.lights) root.userData.lights = {};
+            root.userData.lights.siren = { materialBlue: matBlue, materialRed: matRed, blueMesh: blue, redMesh: red };
         }
     },
 
     _addSnow: (group: THREE.Group, w: number, h: number, d: number, x: number, y: number, z: number = 0) => {
         const snow = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.snow);
-        snow.scale.set(w * 1.05, 0.1, d * 1.05);
+        snow.scale.set(w * 1.05, h, d * 1.05);
         snow.position.set(x, y, z);
         group.add(snow);
     },
 
-    _finalize: (group: THREE.Group) => {
-        group.userData.material = 'METAL';
-        // group.rotateY(Math.PI * 1.5); <--- BORTTAGEN! 
-        // Bilen pekar nu i standard Z-riktning för att synka perfekt med fysiklådan
-        return group;
+    _finalize: (root: THREE.Group) => {
+        root.userData.material = 'METAL';
+        return root;
     }
 };
