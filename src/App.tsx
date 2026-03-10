@@ -10,7 +10,7 @@ import ScreenPause from './components/game/ScreenPause';
 import ScreenMap from './components/game/ScreenMap';
 import ScreenTeleport from './components/game/ScreenTeleport';
 import ScreenSectorReport from './components/game/ScreenSectorReport';
-import { CAMP_ENV } from './components/camp/CampEnvironment';
+import { CAMP_SCENE } from './components/camp/CampWorld';
 import ScreenBossKilled from './components/game/ScreenBossKilled';
 import ScreenCollectibleFound from './components/game/ScreenCollectibleFound';
 import ScreenAdventureLog from './components/camp/ScreenAdventureLog';
@@ -79,7 +79,7 @@ const App: React.FC = () => {
             console.log("[App] Boot Warmup Started...");
             const engine = WinterEngine.getInstance();
             const isCamp = gameState.screen === GameScreen.CAMP;
-            const envConfig = isCamp ? CAMP_ENV : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
+            const envConfig = isCamp ? CAMP_SCENE : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
             // Use the centralized transition to show the screen first
@@ -317,7 +317,7 @@ const App: React.FC = () => {
             // Determine what to re-warm based on current screen
             const isCamp = gameState.screen === GameScreen.CAMP;
             const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
-            const envConfig = isCamp ? CAMP_ENV : SECTOR_THEMES[sectorIndex];
+            const envConfig = isCamp ? CAMP_SCENE : SECTOR_THEMES[sectorIndex];
 
             // Trigger re-warm in background
             AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera).then(() => {
@@ -674,7 +674,7 @@ const App: React.FC = () => {
                             // [VINTERDÖD] Warmup Camp assets during transition
                             const engine = WinterEngine.getInstance();
                             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-                            await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', CAMP_ENV, yieldToMain, engine.camera.threeCamera);
+                            await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', CAMP_SCENE, yieldToMain, engine.camera.threeCamera);
                         });
                     }}
                     onRetry={() => {

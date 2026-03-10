@@ -8,11 +8,11 @@ export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
 export { SECTOR_THEMES } from './sectors/sector_themes';
 
-export const SCRAP_COST_BASE = 50;
-export const LEVEL_CAP = 20;
 export const CAMERA_HEIGHT = 50;
 export const WEATHER = {
-    PARTICLE_COUNT: 400
+    PARTICLE_COUNT: 400,
+    WIND_MIN: 0.02,
+    WIND_MAX: 0.05
 };
 
 // Flashlight
@@ -59,7 +59,6 @@ export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMap
     VERYHIGH: { shadows: true, shadowMapType: 3, shadowResolution: 4096, weatherCount: 1600 }  // VSMShadowMap
 };
 
-
 export const DEFAULT_GRAPHICS: GraphicsSettings = {
     pixelRatio: 0.75,
     antialias: false,
@@ -69,6 +68,9 @@ export const DEFAULT_GRAPHICS: GraphicsSettings = {
     weatherCount: 250,
     textureQuality: 1.0
 };
+
+export const SCRAP_COST_BASE = 50;
+export const LEVEL_CAP = 20;
 
 export const INITIAL_STATS: PlayerStats = {
     level: 1,

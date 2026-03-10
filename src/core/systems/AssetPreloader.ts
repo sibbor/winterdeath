@@ -7,8 +7,7 @@ import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
-import { CampWorld, stationMaterials } from '../../components/camp/CampWorld';
-import { CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampEnvironment';
+import { CAMP_SCENE, CampWorld, stationMaterials, stationTextures, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
 import { SectorSystem } from '../systems/SectorSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
@@ -19,6 +18,12 @@ import { COLLECTIBLES } from '../../content/collectibles';
 const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
 let lastSectorIndex = -1;
+
+/**
+ * [VINTERDÖD] Storage for UI icons where the black background has been programmatically removed.
+ * Use this exported object in React components: <img src={TRANSPARENT_UI_ICONS['smg.png']} />
+ */
+export const TRANSPARENT_UI_ICONS: Record<string, string> = {};
 
 /**
  * AssetPreloader - Service for warming up shaders and textures before they are needed.
@@ -64,7 +69,7 @@ export const AssetPreloader = {
                 endInternal('asset_warmup_procedural');
                 if (yieldToMain) await yieldToMain();
 
-                // --- HTML UI ICON PRELOAD ---
+                // --- [VINTERDÖD] HTML UI ICON PROCESSING (REMOVE BLACK BACKGROUND) ---
                 beginInternal('asset_warmup_ui_images');
                 const uiIcons = [
                     'pistol.png', 'revolver.png', 'smg.png', 'shotgun.png',
@@ -72,15 +77,74 @@ export const AssetPreloader = {
                     'grenade.png', 'molotov.png', 'flashbang.png', 'radio.png'
                 ];
 
-                // Force the browser to fetch the images and put them in RAM/Cache
+                // Process all icons in parallel
                 await Promise.all(uiIcons.map(file => new Promise<void>(resolve => {
                     const img = new Image();
-                    img.onload = () => resolve();
-                    // If an image is missing, log a warning but let the game continue loading
-                    img.onerror = () => {
-                        console.warn(`[AssetPreloader] missing UI icon: ${file}`);
+
+                    // We need crossOrigin if images are on a different domain, usually good practice
+                    img.crossOrigin = 'Anonymous';
+
+                    img.onload = () => {
+                        // Create a temporary canvas to process pixel data
+                        const canvas = document.createElement('canvas');
+                        // Use 'willReadFrequently' to optimize getImageData calls
+                        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                        if (!ctx) {
+                            console.error('[AssetPreloader] Failed to get canvas context for image processing');
+                            resolve();
+                            return;
+                        }
+
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+
+                        // Draw original image
+                        ctx.drawImage(img, 0, 0);
+
+                        // Get all pixel data (RGBA)
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+
+                        // Loop through every pixel (4 bytes per pixel: R, G, B, A)
+                        for (let i = 0; i < data.length; i += 4) {
+                            const r = data[i];
+                            const g = data[i + 1];
+                            const b = data[i + 2];
+
+                            // Calculate luminance to detect dark/black pixels
+                            // Standard ITU-R BT.709 coefficients for luma
+                            const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+                            // Threshold: If pixel is dark (dark grey to black), make it fully transparent
+                            if (luminance < 60) { // Threshold adjusted to catch mörkgrå
+                                data[i + 3] = 0; // Set Alpha to 0 (Transparent)
+                            } else {
+                                // For non-transparent pixels, make them pure white to ensure consistency
+                                // and set alpha proportional to luma for soft edges (anti-aliasing parity)
+                                data[i] = 255;   // R
+                                data[i + 1] = 255; // G
+                                data[i + 2] = 255; // B
+                                data[i + 3] = luminance; // Set Alpha based on luma for smoother edges
+                            }
+                        }
+
+                        // Put modified data back to canvas
+                        ctx.putImageData(imageData, 0, 0);
+
+                        // Store as Base64 Data-URL in the exported object
+                        TRANSPARENT_UI_ICONS[file] = canvas.toDataURL('image/png');
                         resolve();
                     };
+
+                    // Handle missing files gracefully
+                    img.onerror = () => {
+                        console.warn(`[AssetPreloader] Saknar eller kunde inte ladda UI-ikon för processering: ${file}`);
+                        // Put empty string or placeholder to avoid undefined errors in React
+                        TRANSPARENT_UI_ICONS[file] = '';
+                        resolve();
+                    };
+
+                    // Trigger load
                     img.src = `/assets/icons/weapons/${file}`;
                 })));
 
@@ -194,25 +258,24 @@ export const AssetPreloader = {
             };
 
             // 3. SHADER PERMUTATION SETUP (Fog, Lighting, Shadows)
+            // 3. SHADER PERMUTATION SETUP (Fog, Lighting, Shadows)
             beginInternal('asset_warmup_permutations');
             if (envConfig) {
                 const fogCol = new THREE.Color(envConfig.fogColor || envConfig.bgColor);
                 scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity);
                 scene.background = fogCol;
-                // [VINTERDÖD] AmbientLight is only for Sectors. Camp uses Hemi + Dir + Point only.
-                if (envConfig.ambientIntensity !== undefined && !isCamp) {
-                    scene.add(new THREE.AmbientLight(0xffffff, envConfig.ambientIntensity));
-                }
+
+                // HemisphereLight delas av både Camp och Sector
                 scene.add(new THREE.HemisphereLight(0x444455, 0x111115, 0.6));
-                // [VINTERDÖD] Lighting Parity: Match bias and normalBias from CampEnvironment.ts
-                if (isCamp || isSector) {
-                    const skyLightRef = envConfig.skyLight || { color: 0xaaccff, intensity: 0.4 };
-                    const dirLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
+
+                if (isCamp) {
+                    // [VINTERDÖD] Exakt ljusrigg för Camp (Måne + Lägereld)
+                    const dirLight = new THREE.DirectionalLight(0xaaccff, 0.4);
                     dirLight.position.set(-80, 150, -100);
                     dirLight.castShadow = true;
                     dirLight.shadow.mapSize.width = 1024;
                     dirLight.shadow.mapSize.height = 1024;
-                    dirLight.shadow.bias = isCamp ? -0.0002 : -0.001;
+                    dirLight.shadow.bias = -0.0002;
                     scene.add(dirLight);
 
                     const pointLight = new THREE.PointLight(0xff7722, 40, 90);
@@ -226,14 +289,28 @@ export const AssetPreloader = {
                 }
 
                 if (isSector) {
+                    // [VINTERDÖD] Exakt ljusrigg för Sektorer (Miljö-sol/måne + Spelarlampor)
+                    if (envConfig.ambientIntensity !== undefined) {
+                        scene.add(new THREE.AmbientLight(0xffffff, envConfig.ambientIntensity));
+                    }
+
+                    const skyLightRef = envConfig.skyLight || { color: 0xaaccff, intensity: 0.4 };
+                    const dirLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
+                    dirLight.position.set(-80, 150, -100);
+                    dirLight.castShadow = true;
+                    dirLight.shadow.mapSize.width = 1024;
+                    dirLight.shadow.mapSize.height = 1024;
+                    dirLight.shadow.bias = -0.001;
+                    scene.add(dirLight);
+
                     // Flashlight Parity (SpotLight)
-                    // Used in Sectors; matches flashlight setup in GameSession.tsx
                     const flashlight = ModelFactory.createFlashlight();
                     addToWarmup(flashlight);
                     scene.add(flashlight);
 
+                    // Generisk fall-back spotlight utan skuggor
                     const spotLight = new THREE.SpotLight(0xffffff, 1);
-                    spotLight.castShadow = false; // Budgeted
+                    spotLight.castShadow = false;
                     spotLight.shadow.autoUpdate = false;
                     spotLight.shadow.bias = -0.0001;
                     scene.add(spotLight);
@@ -455,17 +532,11 @@ export const AssetPreloader = {
             }
 
             if (isSector) {
-                // Aquatic Flora (Real geometries used in WaterSystem)
-                const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
-                const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
-                const lilyFlowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
-                const seaweedGeo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
-                ownedGeometries.push(lilyPadGeo, lilyStemGeo, lilyFlowerGeo, seaweedGeo);
-
-                addInstancedWarmup(lilyPadGeo, MATERIALS.waterLily);
-                addInstancedWarmup(lilyFlowerGeo, MATERIALS.waterLilyFlower);
-                addInstancedWarmup(seaweedGeo, MATERIALS.seaweed);
-                addInstancedWarmup(lilyStemGeo, MATERIALS.seaweed);
+                // Flashlight Parity (SpotLight)
+                // Used in Sectors; matches flashlight setup in GameSession.tsx
+                const flashlight = ModelFactory.createFlashlight();
+                addToWarmup(flashlight);
+                scene.add(flashlight);
 
                 // Vehicle Warmup - All types to ensure shader compilation matches environment
                 const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
@@ -534,32 +605,77 @@ export const AssetPreloader = {
                 const iwMesh = new THREE.Mesh(waterSurfaceGeo, iceWater);
                 nwMesh.visible = false; iwMesh.visible = false;
                 dummyRoot.add(nwMesh, iwMesh);
+
+                // Aquatic Flora (Real geometries used in WaterSystem)
+                const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
+                const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
+                const lilyFlowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
+                const seaweedGeo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
+                ownedGeometries.push(lilyPadGeo, lilyStemGeo, lilyFlowerGeo, seaweedGeo);
+
+                addInstancedWarmup(lilyPadGeo, MATERIALS.waterLily);
+                addInstancedWarmup(lilyFlowerGeo, MATERIALS.waterLilyFlower);
+                addInstancedWarmup(seaweedGeo, MATERIALS.seaweed);
+                addInstancedWarmup(lilyStemGeo, MATERIALS.seaweed);
             }
 
+            // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
             // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
             if (isCamp) {
                 // 1. STATIONS & CANVASES
                 CampWorld.warmupStationAssets(renderer);
 
-                // Use the exported geometries for warmup meshes
-                const barrelGeo = (CampWorld as any).stationGeometries.barrel;
-                const mapGeo = (CampWorld as any).stationGeometries.map_plane;
-                const noteGeo = (CampWorld as any).stationGeometries.note_plane;
+                // --- [VINTERDÖD] FÅNGSTNÄT FÖR INTERAKTIONS-UI OCH OUTLINES ---
+                const dummyActionSpriteMat = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, depthTest: false });
+                const dummyActionSprite = new THREE.Sprite(dummyActionSpriteMat);
+                ownedMaterials.push(dummyActionSpriteMat);
+                dummyRoot.add(dummyActionSprite);
 
-                if (barrelGeo) {
-                    const barrel = new THREE.Mesh(barrelGeo, stationMaterials.metal);
-                    addToWarmup(barrel, false); // Stations never instance in Camp
-                    ownedGeometries.push(barrelGeo);
-                }
-                if (mapGeo) {
-                    const map = new THREE.Mesh(mapGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
-                    addToWarmup(map, false);
-                    ownedGeometries.push(mapGeo);
-                }
-                if (noteGeo) {
-                    const note = new THREE.Mesh(noteGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
-                    addToWarmup(note, false);
-                    ownedGeometries.push(noteGeo);
+                const dummyActionBasicMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false });
+                const dummyActionMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dummyActionBasicMat);
+                ownedMaterials.push(dummyActionBasicMat);
+                addToWarmup(dummyActionMesh, false);
+
+                const dummyEmissiveMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xaaaaaa, emissiveIntensity: 1.0 });
+                const dummyEmissiveMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), dummyEmissiveMat);
+                ownedMaterials.push(dummyEmissiveMat);
+                addToWarmup(dummyEmissiveMesh, false);
+
+                // Outline (LineSegments + LineBasicMaterial) - Used heavily in Camp
+                const dummyOutlineGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+                const dummyOutlineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+                const dummyOutline = new THREE.LineSegments(dummyOutlineGeo, dummyOutlineMat);
+                ownedGeometries.push(dummyOutlineGeo);
+                ownedMaterials.push(dummyOutlineMat);
+                dummyRoot.add(dummyOutline);
+
+                // Interaction Mesh (Transparent StandardMaterial med opacity 0)
+                const dummyInteractMat = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 });
+                const dummyInteractMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), dummyInteractMat);
+                ownedMaterials.push(dummyInteractMat);
+                addToWarmup(dummyInteractMesh, false);
+
+                // -------------------------------------------------------------
+
+                // THE ULTIMATE CAMP WARMUP: Just build the damn camp in the dummy scene!
+                // We use dummy positions to avoid messing up the persistent stations array.
+                const dummyStationsPos = [
+                    { id: 'armory', pos: new THREE.Vector3(0, 0, 0) },
+                    { id: 'sectors', pos: new THREE.Vector3(0, 0, 0) },
+                    { id: 'skills', pos: new THREE.Vector3(0, 0, 0) },
+                    { id: 'adventure_log', pos: new THREE.Vector3(0, 0, 0) }
+                ];
+
+                const dummyCampGroup = new THREE.Group();
+                const { interactables, outlines } = CampWorld.setupStations(dummyCampGroup as any, TEXTURES as any, dummyStationsPos);
+
+                // Add the whole populated group to warmup
+                addToWarmup(dummyCampGroup, false);
+
+                // Add the specific outlines returned by setupStations to warmup
+                const outlineKeys = Object.keys(outlines);
+                for (let i = 0; i < outlineKeys.length; i++) {
+                    dummyRoot.add(outlines[outlineKeys[i]]);
                 }
 
                 // 2. CELESTIAL BODIES (Moon, Stars, Halo)
@@ -577,7 +693,18 @@ export const AssetPreloader = {
                     const halo = new THREE.Sprite(haloMat);
                     dummyRoot.add(halo);
 
-                    // Star System (ShaderMaterial + Points is a unique pipeline)
+                    // Star System
+                    const starCount = CAMP_SCENE.starCount;
+                    const starGeo = new THREE.BufferGeometry();
+                    const positions = new Float32Array(starCount * 3);
+                    const sizes = new Float32Array(starCount);
+                    const phases = new Float32Array(starCount);
+                    const twinkleSpeeds = new Float32Array(starCount);
+                    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+                    starGeo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+                    starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
+
                     const starMat = new THREE.ShaderMaterial({
                         uniforms: { uTime: { value: 0 } },
                         vertexShader: `
@@ -592,11 +719,7 @@ export const AssetPreloader = {
                         fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
                         transparent: true, depthWrite: false
                     });
-                    const starGeo = new THREE.BufferGeometry();
-                    starGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3));
-                    starGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array([1]), 1));
-                    starGeo.setAttribute('phase', new THREE.BufferAttribute(new Float32Array([0]), 1));
-                    starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(new Float32Array([0]), 1));
+
                     ownedMaterials.push(starMat);
                     ownedGeometries.push(starGeo);
                     const stars = new THREE.Points(starGeo, starMat);
@@ -605,7 +728,7 @@ export const AssetPreloader = {
 
                 if (yieldToMain) await yieldToMain();
 
-                // 2. STATIONS (Geometries & Materials)
+                // 3. STATIONS (Geometries & Materials)
                 const campGeos = [
                     new THREE.CircleGeometry(1.8, 16),      // Ash
                     new THREE.CylinderGeometry(0.15, 0.15, 2.2), // Logs
@@ -639,7 +762,7 @@ export const AssetPreloader = {
 
                 if (yieldToMain) await yieldToMain();
 
-                // 3. GROUND PLANE (Cloned material with tiling)
+                // 4. GROUND PLANE (Cloned material with tiling)
                 const groundMat = MATERIALS.dirt.clone();
                 if (groundMat.map) groundMat.map.repeat.set(60, 60);
                 if (groundMat.bumpMap) groundMat.bumpMap.repeat.set(60, 60);
@@ -651,7 +774,7 @@ export const AssetPreloader = {
                 ground.receiveShadow = true;
                 addToWarmup(ground, false);
 
-                // Player Model Parity
+                // 5 Player Model Parity
                 const campPlayer = ModelFactory.createFamilyMember(PLAYER_CHARACTER);
                 addToWarmup(campPlayer);
             }

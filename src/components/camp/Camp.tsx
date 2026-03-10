@@ -11,10 +11,9 @@ import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
-import { CampEnvironment, CampEffectsState } from './CampEnvironment';
+import { CampEffectsState, CAMP_SCENE } from './CampWorld';
 import { WeatherType } from '../../types';
 import { PerformanceMonitor } from '../../core/systems/PerformanceMonitor';
-import { AssetPreloader } from '../../core/systems/AssetPreloader';
 
 // [VINTERDÖD] Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
@@ -71,7 +70,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string, subText?: string } | null>(null);
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
-
 
     // Renderer Ref for live updates
     const engineRef = useRef<WinterEngine | null>(null);
@@ -170,9 +168,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         camera.set('fov', 50);
         camera.set('far', 2500); // Increase draw distance for stars (r=1800)
 
-        //0x050510
-        scene.background = new THREE.Color(0x161629);
-        scene.fog = new THREE.FogExp2(0x161629, 0.01);
+        scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
+        scene.background = new THREE.Color(CAMP_SCENE.bgColor);
 
         const BASE_LOOK_AT = new THREE.Vector3(0, 2, -5);
         const CINEMATIC_LOOK_AT = new THREE.Vector3(0, 8, -5);
@@ -186,7 +183,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, STATIONS);
 
         // Initialize Environment (Sky, Campfire, Particles, Wind, Weather, Water)
-        envStateRef.current = CampEnvironment.initEffects(scene, textures, weather);
+        envStateRef.current = CampWorld.initEffects(scene, textures, weather);
 
         // --- FAMILY MEMBERS ---
         const familyGroup = new THREE.Group();
@@ -345,7 +342,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const monitor = PerformanceMonitor.getInstance();
 
             monitor.begin('env_camera');
-            CampEnvironment.updateEffects(scene, envStateRef.current, dt, now, frameCount);
+            CampWorld.updateEffects(scene, envStateRef.current, dt, now, frameCount);
 
             const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
             const BASE_LOOK_AT = sceneBaseLookAtRef.current;
