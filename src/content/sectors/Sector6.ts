@@ -54,7 +54,7 @@ export const Sector6: SectorDef = {
     setupProps: async (ctx: SectorContext) => {
         const { scene } = ctx;
 
-        // [VINTERDÖD] DUMMY COLLECTIBLE FOR TESTING
+        // DUMMY COLLECTIBLE FOR TESTING
         SectorGenerator.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge');
 
         // --- PLAZA (Center 0,0) ---
@@ -70,10 +70,10 @@ export const Sector6: SectorDef = {
         ambient.name = 'AMBIENT_LIGHT';
         scene.add(ambient);
 
-        // Add some lights to the plaza
+        // Add some lights to the plaza - SHADOWS DISABLED TO PREVENT TEXTURE LIMIT CRASH
         const pl = new THREE.PointLight(0xffaa00, 50, 30);
         pl.position.set(0, 8, 0);
-        pl.castShadow = true;
+        pl.castShadow = false;
         scene.add(pl);
 
         // --- INTERACTION STATIONS ---
@@ -106,7 +106,7 @@ export const Sector6: SectorDef = {
             scene.add(sprite);
         };
 
-        // Vehicls at the spawn point
+        // Vehicles at the spawn point
         SectorGenerator.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
         SectorGenerator.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
         SectorGenerator.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
@@ -184,7 +184,6 @@ export const Sector6: SectorDef = {
 
         // --- Car (Driveable) ---
         SectorGenerator.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
-
 
         // 4. WATER
         const p3 = SECTOR6_ZONES[3];
@@ -295,7 +294,7 @@ export const Sector6: SectorDef = {
             window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'spawner' } }));
         }
         else if (id === 'TERMINAL_ENV') {
-            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'environment' } })); // Check correct type string
+            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'environment' } }));
         }
     },
 

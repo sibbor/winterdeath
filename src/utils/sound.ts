@@ -434,11 +434,11 @@ export class SoundManager {
 
   // --- WILDLIFE ---
   playOwlHoot() {
-    SoundBank.play(this.core, 'owl_hoot', 0.15, 0.9 + Math.random() * 0.2);
+    SoundBank.play(this.core, 'owl_hoot', 0.60, 0.9 + Math.random() * 0.2);
   }
 
   playBirdAmbience() {
-    SoundBank.play(this.core, 'bird_ambience', 0.15, 0.9 + Math.random() * 0.2);
+    SoundBank.play(this.core, 'bird_ambience', 0.60, 0.9 + Math.random() * 0.2);
   }
 
   playArcCannonZap() {

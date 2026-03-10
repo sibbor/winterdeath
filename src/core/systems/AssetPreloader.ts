@@ -2,17 +2,16 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures } from '../../utils/assets';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
-import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER, VEHICLE_HEADLIGHT } from '../../content/constants';
+import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
-import { CAMP_SCENE, CampWorld, stationMaterials, stationTextures, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
+import { CampWorld, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
 import { SectorSystem } from '../systems/SectorSystem';
 import { CameraSystem } from '../systems/CameraSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
-import { PerformanceMonitor } from './PerformanceMonitor';
 import { FXSystem } from '../systems/FXSystem';
 import { COLLECTIBLES } from '../../content/collectibles';
 
@@ -262,7 +261,6 @@ export const AssetPreloader = {
                 dummyRoot.add(mesh);
             };
 
-            // 3. SHADER PERMUTATION SETUP (Fog, Lighting, Shadows)
             // 3. SHADER PERMUTATION SETUP (Fog, Lighting, Shadows)
             beginInternal('asset_warmup_permutations');
             if (envConfig) {
@@ -537,62 +535,51 @@ export const AssetPreloader = {
             }
 
             if (isSector) {
+                const sectorIndex = target as number;
+
+                // WARMUP FOR BUIDLINGS WITH SHADOWS
+                try {
+                    addToWarmup(ObjectGenerator.createBuilding(10, 8, 10, 0xffffff, true, true, 0.2));
+                } catch (e) { console.warn('[AssetPreloader] Building warmup failed', e); }
+
+                // WARMUP FOR SECTOR'S BOSS
+                try {
+                    const bossData = BOSSES[sectorIndex] || BOSSES[0];
+                    if (bossData) {
+                        const bossMesh = ModelFactory.createBoss('Boss', bossData);
+                        addToWarmup(bossMesh);
+                    }
+                } catch (e) {
+                    console.warn('[AssetPreloader] Boss warmup failed', e);
+                }
+
+
+                // SHADOW WARMUP LIMIT
+                // Strictly cap shadow-casting lights during warmup to prevent WebGL unit overflow.
+                // We only need 1-2 lights to cast shadows to trigger shadow-shader compilation.
+                let shadowLightsWarmupCount = 0;
+                const WARMUP_SHADOW_LIMIT = 2;
+
                 // Flashlight Parity (SpotLight)
-                // Used in Sectors; matches flashlight setup in GameSession.tsx
                 const flashlight = ModelFactory.createFlashlight();
+                if (shadowLightsWarmupCount >= WARMUP_SHADOW_LIMIT) {
+                    flashlight.castShadow = false;
+                } else {
+                    shadowLightsWarmupCount++;
+                }
                 addToWarmup(flashlight);
                 scene.add(flashlight);
 
-                // Vehicle Warmup - All types to ensure shader compilation matches environment
+                // Vehicle Warmup - All types (including boats)
                 const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
                 for (let i = 0; i < vehicleTypes.length; i++) {
-                    const v = VehicleGenerator.createVehicle(vehicleTypes[i]);
-
-                    // [FIX] Klipp bort lampan från warmup-modellen! 
-                    // Annars får vi 7 skuggkastande lampor i samma scen och kraschar WebGL.
-                    const internalLight = v.getObjectByName(VEHICLE_HEADLIGHT.name);
-                    if (internalLight && internalLight.parent) {
-                        internalLight.parent.remove(internalLight);
-                        // Disposea denna dummy-lampas tillhörigheter för att undvika läckage
-                        if ((internalLight as THREE.Light).shadow?.map) {
-                            (internalLight as THREE.Light).shadow.map.dispose();
-                        }
-                    }
-
-                    // Track geometries for disposal
-                    v.traverse((child) => {
-                        if ((child as THREE.Mesh).isMesh) {
-                            ownedGeometries.push((child as THREE.Mesh).geometry);
-                        }
-                    });
-                    addToWarmup(v);
-                }
-
-                // Vehicle headlight parity (SpotLight)
-                // Used in Sectors; matches vehicle headlight setup in VehicleGenerator.ts
-                const vehicleHeadlight = VehicleGenerator.createHeadlamp();
-                addToWarmup(vehicleHeadlight);
-                scene.add(vehicleHeadlight);
-
-                // Boat - Warm up with shadows to match VehicleMovementSystem/ObjectGenerator
-                const boat = VehicleGenerator.createBoat();
-
-                // Samma fix för båten
-                const boatLight = boat.getObjectByName(VEHICLE_HEADLIGHT.name);
-                if (boatLight && boatLight.parent) {
-                    boatLight.parent.remove(boatLight);
-                    if ((boatLight as THREE.Light).shadow?.map) {
-                        (boatLight as THREE.Light).shadow.map.dispose();
+                    const vType = vehicleTypes[i];
+                    if (vType === 'boat') {
+                        addToWarmup(VehicleGenerator.createBoat());
+                    } else {
+                        addToWarmup(VehicleGenerator.createVehicle(vType));
                     }
                 }
-
-                boat.traverse((child) => {
-                    if ((child as THREE.Mesh).isMesh) {
-                        ownedGeometries.push((child as THREE.Mesh).geometry);
-                    }
-                });
-
-                addToWarmup(boat);
 
                 // Water Surfaces - nordic and ice styles
                 const dummyRipples = new Array(16).fill(0).map(() => new THREE.Vector4(0, 0, -1000, 0));
@@ -630,7 +617,7 @@ export const AssetPreloader = {
                 const dummyTextures = createProceduralTextures();
                 const dummyWeather = 'snow'; // Default weather for warmup
 
-                await CampWorld.setupCampScene(renderer, scene, warmupCamera as any, dummyTextures as any, dummyWeather);
+                await CampWorld.setupCampScene(renderer, scene, warmupCamera as any, dummyTextures as any, dummyWeather, true);
 
                 // Additional UI interaction elements warmup
                 const dummyActionSpriteMat = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, depthTest: false });
@@ -793,8 +780,6 @@ export const AssetPreloader = {
             for (let i = 0; i < ownedGeometries.length; i++) ownedGeometries[i].dispose();
             for (let i = 0; i < ownedMaterials.length; i++) ownedMaterials[i].dispose();
 
-            scene.clear(); // Explicitly remove all children from dummy scene
-
             // Rensa explicit upp eventuella skuggkartor från lampor i dummy-scenen
             scene.traverse((obj) => {
                 if ((obj as any).isLight && (obj as THREE.Light).shadow && (obj as THREE.Light).shadow.map) {
@@ -802,14 +787,13 @@ export const AssetPreloader = {
                 }
             });
 
-            scene.clear();
+            scene.clear(); // Explicitly remove all children from dummy scene
             if ((renderer as any).renderLists) (renderer as any).renderLists.dispose();
 
             warmedModules.add(moduleKey);
             endInternal('asset_warmup_total');
 
             console.log(`[AssetPreloader] Warmup Module [${moduleKey}] Complete. Details:`, warmupTimings);
-            PerformanceMonitor.getInstance().startFrame();
         };
 
         const promise = warmupLogic().finally(() => {

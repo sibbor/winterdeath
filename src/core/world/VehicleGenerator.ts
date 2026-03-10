@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS, createSignMesh } from '../../utils/assets';
-import { VEHICLE_HEADLIGHT } from '../../content/constants';
 
 
 /**
@@ -277,8 +276,9 @@ export const VehicleGenerator = {
 
         VehicleGenerator._addWindow(chassis, 3.1 * S, 1.2 * S, 0.05 * S, 0, chassisY + 0.1 * S, cD / 2);
 
+        // Shifted side windows forward to fit the chassis length perfectly
         for (let i = 0; i < 6; i++) {
-            const zPos = 4.0 * S - i * 2.0 * S;
+            const zPos = 5.0 * S - i * 2.0 * S;
             VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.5 * S, (cW / 2) + 0.01, chassisY + 0.2 * S, zPos);
             VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.5 * S, -(cW / 2) - 0.01, chassisY + 0.2 * S, zPos);
         }
@@ -288,8 +288,8 @@ export const VehicleGenerator = {
         backSign.rotation.y = Math.PI;
         chassis.add(backSign);
 
-        // Nedsänkt bakruta
-        VehicleGenerator._addWindow(chassis, 3.1 * S, 0.8 * S, 0.05 * S, 0, chassisY - 0.2 * S, -(cD / 2));
+        // Raised rear window to sit just below the sign
+        VehicleGenerator._addWindow(chassis, 3.1 * S, 0.8 * S, 0.05 * S, 0, chassisY + 0.3 * S, -(cD / 2));
 
         VehicleGenerator._addTires(root, 6, 0.65 * S, 0.6 * S, 1.55 * S, 4.5 * S, -4.5 * S, -2.5 * S);
 
@@ -390,29 +390,9 @@ export const VehicleGenerator = {
         return VehicleGenerator._finalize(root);
     },
 
-    createHeadlamp() {
-        const vehicleHeadlight = new THREE.SpotLight(
-            VEHICLE_HEADLIGHT.color,
-            VEHICLE_HEADLIGHT.intensity,
-            VEHICLE_HEADLIGHT.distance,
-            VEHICLE_HEADLIGHT.angle,
-            VEHICLE_HEADLIGHT.penumbra,
-            VEHICLE_HEADLIGHT.decay);
-        vehicleHeadlight.name = VEHICLE_HEADLIGHT.name;
-        vehicleHeadlight.position.set(VEHICLE_HEADLIGHT.position.x, VEHICLE_HEADLIGHT.position.y, VEHICLE_HEADLIGHT.position.z);
-        vehicleHeadlight.target.position.set(VEHICLE_HEADLIGHT.targetPosition.x, VEHICLE_HEADLIGHT.targetPosition.y, VEHICLE_HEADLIGHT.targetPosition.z);
-        vehicleHeadlight.castShadow = VEHICLE_HEADLIGHT.castShadows;
-        vehicleHeadlight.shadow.camera.near = VEHICLE_HEADLIGHT.cameraNear;
-        vehicleHeadlight.shadow.camera.far = VEHICLE_HEADLIGHT.cameraFar;
-        vehicleHeadlight.shadow.bias = VEHICLE_HEADLIGHT.shadowBias;
-
-        return vehicleHeadlight;
-    },
-
     createVehicle: (type: string = 'station wagon', colorOverride?: number, addSnow: boolean = true): THREE.Group => {
         let vehicleGroup: THREE.Group;
 
-        // 1. Skapa rätt biltyp och spara i variabeln
         if (type === 'police') vehicleGroup = VehicleGenerator.createPoliceCar(colorOverride, addSnow);
         else if (type === 'ambulance') vehicleGroup = VehicleGenerator.createAmbulance(colorOverride, addSnow);
         else if (type === 'bus') vehicleGroup = VehicleGenerator.createBus(colorOverride, addSnow);
@@ -421,33 +401,6 @@ export const VehicleGenerator = {
         else if (type === 'sedan') vehicleGroup = VehicleGenerator.createSedan(colorOverride, addSnow);
         else vehicleGroup = VehicleGenerator.createStationWagon(colorOverride, addSnow);
 
-        // 2. --- LÄGG TILL FORDONETS EGNA STRÅLKASTARE ---
-        const vLight = VehicleGenerator.createHeadlamp();
-
-        const lights = vehicleGroup.userData.lights;
-        let frontZ = 0;
-        let lightY = 0;
-
-        // Försök läsa av positionen från bilens befintliga små "glödande" meshes
-        if (lights && lights.headlights && lights.headlights.meshes && lights.headlights.meshes.length > 0) {
-            frontZ = lights.headlights.meshes[0].position.z;
-            lightY = lights.headlights.meshes[0].position.y;
-        } else {
-            // Fallback: Räkna ut var fronten är genom att mäta 3D-modellens volym
-            const box = new THREE.Box3().setFromObject(vehicleGroup);
-            frontZ = box.max.z;
-            lightY = (box.max.y - box.min.y) * 0.4; // Sätt höjden till 40% av bilens höjd
-        }
-
-        vLight.position.set(0, lightY, frontZ + 0.2); // 0.2 m framför grillen
-        vLight.target.position.set(0, lightY, frontZ + 20);
-
-        // Fäst i chassit så lampan guppar med fjädringen (om chassi finns)
-        const mountTarget = vehicleGroup.userData.chassis || vehicleGroup;
-        mountTarget.add(vLight);
-        mountTarget.add(vLight.target);
-
-        // 3. Returnera det färdiga fordonet med inbyggd lampa
         return vehicleGroup;
     },
 

@@ -13,7 +13,6 @@ interface ScreenLoadingProps {
 const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isInitialBoot, isMobileDevice, isDone }) => {
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
-    const [isVisible, setIsVisible] = useState(false);
 
     // Stable state to prevent text flickering during fade-out
     const [displayInfo, setDisplayInfo] = useState({
@@ -39,17 +38,15 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
             const index = Math.floor(Math.random() * tips.length);
             setRandomTip(tips[index]);
         }
-
-        // Immediate fade in
-        requestAnimationFrame(() => setIsVisible(true));
     }, [tips]);
 
-    // [VINTERDÖD] Sticky "done" state to prevent "double-fade" flickers if flags overlap momentarily
+    // Sticky "done" state to prevent "double-fade" flickers if flags overlap momentarily
     const [isActuallyDone, setIsActuallyDone] = useState(false);
     if (isDone && !isActuallyDone) setIsActuallyDone(true);
 
-    // Handle fade out visibility
-    const finalOpacity = (isVisible && !isActuallyDone) ? 'opacity-100' : 'opacity-0';
+    // OMEDELBAR OPACITY-100 på mount. Inget fade-in trams!
+    // Fade-out triggas när isActuallyDone blir true.
+    const finalOpacity = isActuallyDone ? 'opacity-0' : 'opacity-100';
 
     return (
         <div
@@ -102,10 +99,6 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
                     0% { width: 0%; left: 0; }
                     50% { width: 70%; left: 15%; }
                     100% { width: 100%; left: 0; }
-                }
-                @keyframes fade-in {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
                 }
             `}</style>
         </div>

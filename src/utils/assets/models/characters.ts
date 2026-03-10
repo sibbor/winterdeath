@@ -58,10 +58,17 @@ export const CharacterModels = {
         flashlight.name = FLASHLIGHT.name;
         flashlight.position.set(FLASHLIGHT.position.x, FLASHLIGHT.position.y, FLASHLIGHT.position.z);
         flashlight.target.position.set(FLASHLIGHT.targetPosition.x, FLASHLIGHT.targetPosition.y, FLASHLIGHT.targetPosition.z);
+        flashlight.target.name = FLASHLIGHT.name + '_target';
         flashlight.castShadow = FLASHLIGHT.castShadows;
         flashlight.shadow.camera.near = FLASHLIGHT.cameraNear;
         flashlight.shadow.camera.far = FLASHLIGHT.cameraFar;
         flashlight.shadow.bias = FLASHLIGHT.shadowBias;
+
+        // Tag for discovery and shadow budgeting
+        // isPlayer: true prevents GameSession from setting matrixAutoUpdate = false
+        flashlight.userData.isFlashlight = true;
+        flashlight.userData.isPlayer = true;
+        flashlight.target.userData.isPlayer = true;
 
         return flashlight;
     },

@@ -32,6 +32,7 @@ export const FLASHLIGHT = {
     shadowBias: -0.0001
 };
 
+/*
 // Vehicle Headlight
 export const VEHICLE_HEADLIGHT = {
     name: 'vehicleLight',
@@ -48,6 +49,7 @@ export const VEHICLE_HEADLIGHT = {
     cameraFar: 80,
     shadowBias: -0.0001
 };
+*/
 
 export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';
 

@@ -6,7 +6,7 @@ import { EnemyManager } from '../EnemyManager';
 import { soundManager } from '../../utils/sound';
 import { VehicleDef } from '../../content/vehicles';
 import { _buoyancyResult } from './WaterSystem';
-import { FLASHLIGHT, VEHICLE_HEADLIGHT } from '@/src/content/constants';
+import { FLASHLIGHT } from '../../content/constants'; // Adjust path if needed
 
 // --- PERFORMANCE SCRATCHPADS ---
 // Pre-allocated vectors to prevent Garbage Collection (GC) during loops
@@ -129,27 +129,7 @@ export class VehicleMovementSystem implements System {
         // --- START ENGINE ---
         // Triggered when player assumes control
         if (input && state.vehicleEngineState === 'OFF') {
-            state.vehicleEngineState = 'RUNNING';
-            state.activeVehicleType = def.type;
-            const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
-            soundManager.playVehicleEnter(category);
-            soundManager.playVehicleEngine(category);
-            vel.set(0, 0, 0);
-            angVel.set(0, 0, 0);
-
-            // Hide player visuals
-            const laserSight = playerGroup.getObjectByName('laserSight');
-            if (laserSight) laserSight.visible = false; // LaserSight kastar inga tunga skuggor, så visible går bra här
-
-            // Göm ficklampan via INTENSITY för att slippa shader-kompilering!
-            const playerLight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
-            if (playerLight) playerLight.intensity = 0;
-
-            // Turn ON vehicle visuals via INTENSITY
-            const vehicleLight = vehicle.getObjectByName(VEHICLE_HEADLIGHT.name) as THREE.SpotLight;
-            if (vehicleLight && state.flashlightOn) {
-                vehicleLight.intensity = VEHICLE_HEADLIGHT.intensity;
-            }
+            this.enterVehicle(playerGroup, vehicle, state, def, vel, angVel);
         }
 
         // --- COMPUTE FORWARD & RIGHT VECTORS ---
@@ -360,12 +340,6 @@ export class VehicleMovementSystem implements System {
         const lights = ud.lights;
         const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
 
-        // Toggle Headlight State (Using 'f' key handled in GameSession)
-        const vehicleLight = vehicle.getObjectByName('vehicleLight');
-        if (vehicleLight) {
-            vehicleLight.visible = isEngineOn && state.flashlightOn;
-        }
-
         if (lights) {
             if (lights.headlights) {
                 lights.headlights.material.emissiveIntensity = isEngineOn ? 5.0 : 0.0;
@@ -483,37 +457,136 @@ export class VehicleMovementSystem implements System {
 
             // --- DISMOUNT ---
             if (input.e && !state.eDepressed) {
-                state.eDepressed = true;
-                state.activeVehicle = null;
-                state.activeVehicleType = null;
-                state.vehicleSpeed = 0;
-                state.vehicleEngineState = 'OFF';
-                soundManager.stopVehicleEngine();
-                soundManager.playVehicleSkid(0);
-                soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
-
-                // Determine exit position relative to car rotation
-                _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
-                    .applyQuaternion(vehicle.quaternion);
-                playerGroup.position.add(_dismountDir);
-                playerGroup.position.y = 0;
-
-                // Restore Player visuals
-                const laserSight = playerGroup.getObjectByName('laserSight');
-                if (laserSight) laserSight.visible = true;
-
-                // Tänd spelarens lampa om den var på
-                const playerLight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
-                if (playerLight) playerLight.intensity = state.flashlightOn ? FLASHLIGHT.intensity : 0;
-
-                // Släck bilens lampa
-                const vehicleLight = vehicle.getObjectByName(VEHICLE_HEADLIGHT.name) as THREE.SpotLight;
-                if (vehicleLight) vehicleLight.intensity = 0;
-
-                if (lights?.brake?.fakeGlow) {
-                    lights.brake.fakeGlow.visible = false;
-                }
+                this.exitVehicle(playerGroup, vehicle, state, def);
             }
+        }
+    }
+
+    private enterVehicle(
+        playerGroup: THREE.Group,
+        vehicle: THREE.Object3D,
+        state: any,
+        def: VehicleDef,
+        vel: THREE.Vector3,
+        angVel: THREE.Vector3
+    ) {
+        state.vehicleEngineState = 'RUNNING';
+        state.activeVehicleType = def.type;
+        const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
+        soundManager.playVehicleEnter(category);
+        soundManager.playVehicleEngine(category);
+        vel.set(0, 0, 0);
+        angVel.set(0, 0, 0);
+
+        // Dölj spelaren
+        playerGroup.visible = false;
+
+        // Leta efter lampan
+        const headlight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
+
+        if (headlight) {
+            const lights = vehicle.userData.lights;
+            let frontZ = 0;
+            let lightY = 0;
+
+            // Försök läsa av positionen från bilens befintliga små "glödande" meshes
+            if (lights && lights.headlights && lights.headlights.meshes && lights.headlights.meshes.length > 0) {
+                frontZ = lights.headlights.meshes[0].position.z;
+                lightY = lights.headlights.meshes[0].position.y;
+            } else {
+                // Fallback: Använd fordonets definierade dimensioner för lokala koordinater
+                const box = new THREE.Box3().setFromObject(vehicle);
+                frontZ = box.max.z;
+                lightY = (box.max.y - box.min.y) * 0.4;
+            }
+
+            headlight.position.set(0, lightY, frontZ + 0.2); // 0.2 m framför grillen
+            headlight.target.position.set(0, lightY, frontZ + 20);
+            headlight.updateMatrix();
+
+            // Fäst i chassit så lampan guppar med fjädringen (om chassi finns)
+            let mountTarget = vehicle;
+            if (vehicle.userData.chassis) {
+                mountTarget = vehicle.userData.chassis;
+            } else if (vehicle.children[0]?.userData?.chassis) {
+                mountTarget = vehicle.children[0].userData.chassis;
+            }
+
+            mountTarget.add(headlight);
+            if (headlight.target) mountTarget.add(headlight.target);
+
+            // Boosta lampan
+            if (state.flashlightOn) {
+                headlight.intensity = FLASHLIGHT.intensity * 2;
+                headlight.distance = FLASHLIGHT.distance * 2;
+                headlight.angle = Math.PI / 4;
+            }
+
+            headlight.updateMatrixWorld(true);
+            if (headlight.target) headlight.target.updateMatrixWorld(true);
+        }
+    }
+
+    private exitVehicle(
+        playerGroup: THREE.Group,
+        vehicle: THREE.Object3D,
+        state: any,
+        def: VehicleDef
+    ) {
+        state.eDepressed = true;
+        state.activeVehicle = null;
+        state.activeVehicleType = null;
+        state.vehicleSpeed = 0;
+        state.vehicleEngineState = 'OFF';
+
+        soundManager.stopVehicleEngine();
+        soundManager.playVehicleSkid(0);
+        soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
+
+        // Placera spelaren utanför dörren
+        _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
+            .applyQuaternion(vehicle.quaternion);
+        playerGroup.position.add(_dismountDir);
+        playerGroup.position.y = 0;
+
+        // Visa spelaren igen
+        playerGroup.visible = true;
+
+        // Leta efter lampan PÅ FORDONET
+        const headlight = vehicle.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
+
+        if (headlight) {
+            // 1. Sätt tillbaka lampan på spelaren
+            playerGroup.add(headlight);
+            headlight.position.set(FLASHLIGHT.position.x, FLASHLIGHT.position.y, FLASHLIGHT.position.z);
+
+            if (headlight.target) {
+                playerGroup.add(headlight.target);
+                headlight.target.position.set(
+                    FLASHLIGHT.targetPosition.x,
+                    FLASHLIGHT.targetPosition.y,
+                    FLASHLIGHT.targetPosition.z
+                );
+                headlight.target.updateMatrix();
+            }
+
+            // 2. Återställ människo-styrka
+            if (state.flashlightOn) {
+                headlight.intensity = FLASHLIGHT.intensity;
+                headlight.distance = FLASHLIGHT.distance;
+                headlight.angle = FLASHLIGHT.angle;
+            }
+
+            // 3. Force matrix updates for proper alignment immediately
+            playerGroup.updateMatrix();
+            playerGroup.updateMatrixWorld(true);
+            headlight.updateMatrixWorld(true);
+            if (headlight.target) headlight.target.updateMatrixWorld(true);
+        }
+
+        const lights = vehicle.userData.lights;
+        if (lights?.brake?.fakeGlow) {
+            lights.brake.fakeGlow.visible = false;
         }
     }
 

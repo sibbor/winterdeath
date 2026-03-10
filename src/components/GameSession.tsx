@@ -5,7 +5,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { SectorTrigger, MapItem, SectorStats, TriggerAction, GameCanvasProps, DeathPhase, GameScreen } from '../types';
 import { SectorContext } from '../types/SectorEnvironment';
-import { BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT, FLASHLIGHT, VEHICLE_HEADLIGHT } from '../content/constants';
+import { BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT, FLASHLIGHT } from '../content/constants';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { haptic } from '../utils/HapticManager';
@@ -385,16 +385,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (key.toLowerCase() === 'f') {
                 const s = stateRef.current;
+                if (s.flashlightOn === undefined) s.flashlightOn = true;
                 s.flashlightOn = !s.flashlightOn;
 
-                soundManager.playUiClick();
-
-                if (s.activeVehicle) {
-                    const vLight = s.activeVehicle.getObjectByName('vehicleLight') as THREE.SpotLight;
-                    if (vLight) vLight.intensity = s.flashlightOn ? VEHICLE_HEADLIGHT.intensity : 0;
-                } else {
-                    flashlightRef.current.intensity = s.flashlightOn ? FLASHLIGHT.intensity : 0;
+                if (flashlightRef.current) {
+                    const intensity = s.activeVehicle ? FLASHLIGHT.intensity * 2 : FLASHLIGHT.intensity;
+                    flashlightRef.current.intensity = s.flashlightOn ? intensity : 0;
                 }
+
+                soundManager.playUiClick();
             }
 
             if (stateRef.current.isDead) return;
@@ -1085,8 +1084,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 playerGroup.add(flashlight);
                 playerGroup.add(flashlight.target);
                 flashlightRef.current = flashlight;
-
-                // Tvinga state att matcha (slå på den från start)
                 stateRef.current.flashlightOn = true;
 
                 scene.add(playerGroup);
@@ -1160,7 +1157,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 // Scan scene for any lights NOT yet in dynamicLights and register them.
                 scene.traverse((obj) => {
                     if ((obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight)) {
-                        if (obj.name === FLASHLIGHT.name || obj.name === VEHICLE_HEADLIGHT.name) return;
+                        if (obj.name === FLASHLIGHT.name) return;
 
                         if (!ctx.dynamicLights.includes(obj)) {
                             ctx.dynamicLights.push(obj);

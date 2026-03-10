@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { PlayerStats } from '../../types';
@@ -15,7 +14,7 @@ import { CampEffectsState, CAMP_SCENE } from './CampWorld';
 import { WeatherType } from '../../types';
 import { PerformanceMonitor } from '../../core/systems/PerformanceMonitor';
 
-// [VINTERDÖD] Zero-GC Scratchpads
+// Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
 
 // Import UI Components
@@ -53,8 +52,6 @@ interface CampProps {
     isRunning?: boolean;
 }
 
-
-
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectSector, onStartSector, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, isSectorLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint, isRunning = true }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
@@ -88,7 +85,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     // Refs for scene data shared between build and interactivity effects
     const sceneInteractablesRef = useRef<THREE.Mesh[]>([]);
-    const sceneOutlinesRef = useRef<Record<string, THREE.Mesh>>({});
+    const sceneOutlinesRef = useRef<Record<string, THREE.LineSegments>>({});
+    const sceneOutlineKeysRef = useRef<string[]>([]);
     const sceneFamilyMembersRef = useRef<any[]>([]);
     const sceneActiveMembersRef = useRef<any[]>([]);
     const sceneBaseLookAtRef = useRef(CAMP_SCENE.cameraBaseLookAt);
@@ -185,13 +183,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             // Store scene data for the interactivity loop
             sceneInteractablesRef.current = allInteractables;
             sceneOutlinesRef.current = outlines;
+            sceneOutlineKeysRef.current = Object.keys(outlines);
             sceneFamilyMembersRef.current = familyMembers;
             sceneActiveMembersRef.current = activeMembers;
         };
 
         setup();
 
-        // [VINTERDÖD] Buffer frames to ensure campfire and particles are fully initialized
+        // Buffer frames to ensure campfire and particles are fully initialized
         let framesToWait = 10;
         const checkReady = () => {
             if (framesToWait > 0) {
@@ -207,7 +206,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             // Scene cleanup handled by engine
         };
     }, [rescuedFamilyIndices, debugMode, textures]);
-    // NOT isRunning
 
     // --- INTERACTIVITY EFFECT: Registers loop + events ---
     useEffect(() => {
@@ -280,19 +278,20 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         window.addEventListener('resize', onResize);
 
         let frameCount = 0;
-        let lastRaycastFrame = 0;
 
         engine.onUpdate = (dt: number) => {
             const now = performance.now();
 
             // Late init for wildlife sounds (15-45s after load)
             if (nextWildlifeTime.current === 0) {
-                nextWildlifeTime.current = now + 15000 + Math.random() * 30000;
+                nextWildlifeTime.current = now + 5000 + Math.random() * 10000;
             }
             const monitor = PerformanceMonitor.getInstance();
 
             monitor.begin('env_camera');
-            CampWorld.updateEffects(scene, camera.threeCamera, envStateRef.current, dt, now, frameCount);
+            if (envStateRef.current) {
+                CampWorld.updateEffects(scene, camera.threeCamera, envStateRef.current, dt, now, frameCount);
+            }
 
             const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
             const BASE_LOOK_AT = sceneBaseLookAtRef.current;
@@ -308,6 +307,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const familyMembers = sceneFamilyMembersRef.current;
             const interactables = sceneInteractablesRef.current;
             const outlines = sceneOutlinesRef.current;
+            const outlineKeys = sceneOutlineKeysRef.current;
 
             monitor.begin('family_anim');
             // Zero-GC: Avoid Set creation and .map/.filter in the loop
@@ -329,19 +329,21 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
                 if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
 
-                // [VINTERDÖD] Animate the entire Group (fm.mesh) to prevent head/body splitting
+                // Animate the entire Group (fm.mesh) to prevent head/body splitting
                 PlayerAnimation.update(fm.mesh as any, {
                     isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
                     isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
                 }, now, dt);
 
-                // Emissive highlight logic for the entire group
+                // Emissive highlight logic utilizing pre-cached materials to avoid traverse
                 const isHov = hoveredRef.current === (fm.mesh.userData.id);
-                fm.mesh.traverse(c => {
-                    if (c instanceof THREE.Mesh && c.material && 'emissive' in c.material) {
-                        (c.material as any).emissive.setHex(isHov ? 0x222222 : 0x000000);
-                    }
-                });
+                const emissiveIntensity = isHov ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
+
+                for (let j = 0; j < fm.emissiveMaterials.length; j++) {
+                    const mat = fm.emissiveMaterials[j];
+                    mat.emissive.setHex(0xaaaaaa);
+                    mat.emissiveIntensity = emissiveIntensity;
+                }
             }
             monitor.end('family_anim');
 
@@ -374,7 +376,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 } else {
                     soundManager.playBirdAmbience();
                 }
-                // Randomized interval between 30 and 90 seconds
                 nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
             }
 
@@ -398,7 +399,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             monitor.end('chatter');
 
             monitor.begin('raycasting');
-            const outlineKeys = Object.keys(outlines);
 
             if (isRunning && !activeModalRef.current) {
                 scene.updateMatrixWorld();
@@ -435,15 +435,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
                 setTooltip(newHover ? { text: toolTipText, subText: toolTipSubText, x: tooltipX, y: tooltipY } : null);
 
+                // Use the cached outline keys to avoid array allocation
                 for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
 
-                for (let i = 0; i < interactables.length; i++) {
-                    const o = interactables[i];
-                    if (o.userData.type === 'family') {
-                        (o.material as THREE.MeshStandardMaterial).emissiveIntensity = (o.userData.id === hoveredRef.current) ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
-                        (o.material as THREE.MeshStandardMaterial).emissive.setHex(0xaaaaaa);
-                    }
-                }
             } else {
                 // Not running or Modal open: Clean up
                 if (hoveredRef.current !== null) {
@@ -451,10 +445,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     setHoveredStation(null);
                     setTooltip(null);
                     for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = false; }
-                    for (let i = 0; i < interactables.length; i++) {
-                        const o = interactables[i];
-                        if (o.userData.type === 'family') (o.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
-                    }
                 }
             }
             monitor.end('raycasting');

@@ -42,12 +42,29 @@ const App: React.FC = () => {
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
 
+    // Sync references for the loading screen rendezvous
+    const transitionTaskRef = useRef(false);
+    const sceneReadyRef = useRef(false);
+
+    const tryDismissLoading = useCallback(() => {
+        if (!transitionTaskRef.current && sceneReadyRef.current) {
+            setIsLoadingCamp(false);
+            setIsLoadingSector(false);
+            requestAnimationFrame(() => {
+                setTimeout(() => setShowLoadingOverlay(false), 500);
+            });
+        }
+    }, []);
+
     const triggerLoadingTransition = useCallback(async (
         type: 'CAMP' | 'SECTOR' | 'PROLOGUE',
         task: () => Promise<void> | void,
         skipCleanup: boolean = false
     ) => {
         console.log(`[App] triggerLoadingTransition (type: ${type}, skipCleanup: ${skipCleanup})`);
+
+        transitionTaskRef.current = true;
+        sceneReadyRef.current = false;
 
         // 1. Instant UI Feedback
         if (type === 'CAMP') setIsLoadingCamp(true);
@@ -63,12 +80,13 @@ const App: React.FC = () => {
         if (!skipCleanup) FXSystem.reset();
 
         // 4. Run Task (Includes State Update + Warmup)
-        // This is awaited to ensure the "Loaded" signal from the component 
-        // respects the full transition duration.
         await task();
-    }, []);
 
-    // [VINTERDÖD] Boot Warmup: Pre-compiles shaders to prevent startup stalls
+        transitionTaskRef.current = false;
+        tryDismissLoading();
+    }, [tryDismissLoading]);
+
+    // Boot Warmup: Pre-compiles shaders to prevent startup stalls
     const isWarmedUpRef = useRef(false);
     useEffect(() => {
         let isMounted = true;
@@ -104,12 +122,8 @@ const App: React.FC = () => {
                     console.error("[App] Warmup Error:", e);
                 }
 
-                // [VINTERDÖD] CRITICAL: We MUST set isInitialBoot to false even if the component re-rendered.
-                // Re-rendering during warmup (due to setIsLoadingCamp in triggerLoadingTransition) 
-                // was causing the 'isMounted' check in the previous closure to fail, leaving 
-                // the game stuck in 'InitialBoot' mode (no interaction, no debug overlay).
+                // CRITICAL: We MUST set isInitialBoot to false even if the component re-rendered.
                 setIsInitialBoot(false);
-                setGameState(prev => ({ ...prev }));
                 console.log("[App] Boot Warmup Complete. isInitialBoot -> false");
             }, true);
         };
@@ -149,7 +163,6 @@ const App: React.FC = () => {
     // Interaction Locks
     const [isSaving, setIsSaving] = useState(false);
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
-
 
     useEffect(() => {
         // Auto-save on meaningful state changes (screens)
@@ -353,8 +366,7 @@ const App: React.FC = () => {
             setIsPaused(false);
             setIsMapOpen(false);
 
-            // [VINTERDÖD] Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
-            // MUST be inside the transition task to block the loading overlay fade-out.
+            // Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
             await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
         });
     }, [gameState.currentSector, triggerLoadingTransition]);
@@ -462,10 +474,8 @@ const App: React.FC = () => {
                     onSaveGraphics={handleSaveGraphics}
                     initialGraphics={gameState.graphics}
                     onCampLoaded={() => {
-                        setIsLoadingCamp(false);
-                        requestAnimationFrame(() => {
-                            setTimeout(() => setShowLoadingOverlay(false), 500);
-                        });
+                        sceneReadyRef.current = true;
+                        tryDismissLoading();
                     }}
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
@@ -495,10 +505,8 @@ const App: React.FC = () => {
                         rescuedFamilyIndices={gameState.rescuedFamilyIndices}
                         bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
                         onSectorLoaded={() => {
-                            setIsLoadingSector(false);
-                            requestAnimationFrame(() => {
-                                setTimeout(() => setShowLoadingOverlay(false), 500);
-                            });
+                            sceneReadyRef.current = true;
+                            tryDismissLoading();
                         }}
                         startAtCheckpoint={false}
                         onCheckpointReached={() => { }}
@@ -671,7 +679,7 @@ const App: React.FC = () => {
                                 return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
                             });
 
-                            // [VINTERDÖD] Warmup Camp assets during transition
+                            // Warmup Camp assets during transition
                             const engine = WinterEngine.getInstance();
                             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
                             await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', CAMP_SCENE, yieldToMain, engine.camera.threeCamera);
@@ -690,7 +698,7 @@ const App: React.FC = () => {
                             setActiveCollectible(null);
                             setIsPaused(false);
 
-                            // [VINTERDÖD] Warmup Sector assets during transition
+                            // Warmup Sector assets during transition
                             const sectorIndex = gameState.currentSector;
                             const envConfig = SECTOR_THEMES[sectorIndex];
                             const engine = WinterEngine.getInstance();

@@ -404,11 +404,11 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures) => {
 export const CampWorld = {
 
     setupSky, // Renamed for consistency
-    setupCampScene: async (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: any, textures: Textures, weather: WeatherType) => {
+    setupCampScene: async (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: any, textures: Textures, weather: WeatherType, isWarmup = false) => {
         // 1. Scene Reset
         scene.clear();
 
-        // [VINTERDÖD] Always use CameraSystem directly.
+        // Always use CameraSystem directly.
         camera.reset();
         camera.setPosition(0, 10, 22, true);
         camera.set('fov', 50);
@@ -432,7 +432,7 @@ export const CampWorld = {
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
 
         // 5. Effects (Sky, Campfire, Weather)
-        const envState = CampWorld.initEffects(scene, camera, textures, weather);
+        const envState = CampWorld.initEffects(scene, camera, textures, weather, isWarmup);
 
         return { interactables, outlines, envState };
     },
@@ -480,20 +480,32 @@ export const CampWorld = {
             const bodyMesh = member.children.find(c => c.userData.isBody);
             if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
 
+            const emissiveMaterials: THREE.MeshStandardMaterial[] = [];
+
             member.traverse(c => {
-                if (c instanceof THREE.Mesh) {
-                    c.castShadow = true;
+                if ((c as any).isMesh) {
+                    const m = c as THREE.Mesh;
+                    m.castShadow = true;
                     // Tag the group so it can be handled as a single unit in raycasting/highlights
-                    c.userData.groupId = member.userData.id;
-                    c.userData.id = member.userData.id;
-                    c.userData.name = member.userData.name;
-                    c.userData.type = 'family';
+                    m.userData.groupId = member.userData.id;
+                    m.userData.id = member.userData.id;
+                    m.userData.name = member.userData.name;
+                    m.userData.type = 'family';
+
+                    if (m.material) {
+                        const mats = Array.isArray(m.material) ? m.material : [m.material];
+                        for (let i = 0; i < mats.length; i++) {
+                            if ('emissive' in mats[i]) {
+                                emissiveMaterials.push(mats[i] as THREE.MeshStandardMaterial);
+                            }
+                        }
+                    }
                 }
             });
             familyGroup.add(member);
 
             let baseY = member.userData.baseY ?? 0;
-            familyMembers.push({ mesh: member, baseY, phase: Math.random() * Math.PI * 2, bounce: 0, name: memberData.name, seed: Math.random() * 100 });
+            familyMembers.push({ mesh: member, baseY, phase: Math.random() * Math.PI * 2, bounce: 0, name: memberData.name, seed: Math.random() * 100, emissiveMaterials });
         }
         scene.add(familyGroup);
         return { familyMembers, interactables, activeMembers };
@@ -660,11 +672,17 @@ export const CampWorld = {
         return { interactables, outlines };
     },
 
-    initEffects: (scene: THREE.Scene, camera: any, textures: Textures, weatherType: WeatherType): CampEffectsState => {
+    initEffects: (scene: THREE.Scene, camera: any, textures: Textures, weatherType: WeatherType, isWarmup = false): CampEffectsState => {
         const engine = WinterEngine.getInstance();
         engine.wind.setRandomWind(WEATHER.WIND_MIN, WEATHER.WIND_MAX);
-        engine.weather.reAttach(scene);
-        engine.water.reAttach(scene);
+
+        // Prevent "theft" of engine singletons during warmup.
+        // We only want to re-attach if we are actually loading the real camp.
+        if (!isWarmup) {
+            engine.weather.reAttach(scene);
+            engine.water.reAttach(scene);
+        }
+
         engine.weather.sync(weatherType, WEATHER.PARTICLE_COUNT, 60);
 
         const { objects: skyObjects } = CampWorld.setupSky(scene, textures);

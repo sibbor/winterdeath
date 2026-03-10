@@ -193,19 +193,19 @@ export const EnemySpawner = {
      * Specialized spawn for Boss entities.
      */
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any): Enemy => {
-        const g = ModelFactory.createBoss('Boss', bossData);
+        const boss = ModelFactory.createBoss('Boss', bossData);
         const scale = bossData.scale || 3.0;
         const widthMod = bossData.widthScale || 1.0;
 
-        g.scale.set(scale * widthMod, scale, scale * widthMod);
-        g.position.set(pos.x, 0, pos.z);
-        scene.add(g);
+        boss.scale.set(scale * widthMod, scale, scale * widthMod);
+        boss.position.set(pos.x, 0, pos.z);
+        scene.add(boss);
 
         soundManager.playZombieGrowl('TANK');
 
         const enemy: Enemy = {
             id: `boss_${bossData.id}`,
-            mesh: g,
+            mesh: boss,
             type: 'Boss',
             hp: bossData.hp,
             maxHp: bossData.hp,
@@ -256,7 +256,7 @@ export const EnemySpawner = {
             isAirborne: false, fallStartY: 0,
         };
 
-        g.userData.entity = enemy;
+        boss.userData.entity = enemy;
         console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
         return enemy;
     },
