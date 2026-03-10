@@ -121,7 +121,7 @@ export const PlayerAnimation = {
 
         // --- 3. Apply Optimized Transforms ---
         const baseScale = mesh.userData.baseScale || 1.0;
-        const baseHeight = mesh.userData.baseY || 1.0;
+        const baseHeight = mesh.userData.baseY || 0;
 
         mesh.scale.set(scaleXZ * baseScale, scaleY * baseScale, scaleXZ * baseScale);
         mesh.rotation.set(rotationX, rotationY, rotationZ);

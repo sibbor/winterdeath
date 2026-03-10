@@ -53,12 +53,7 @@ interface CampProps {
     isRunning?: boolean;
 }
 
-const STATIONS = [
-    { id: 'armory', pos: new THREE.Vector3(-6, 0, -3.75) },
-    { id: 'sectors', pos: new THREE.Vector3(2.25, 0, -7.125) },
-    { id: 'skills', pos: new THREE.Vector3(6, 0, -3.75) },
-    { id: 'adventure_log', pos: new THREE.Vector3(-2.25, 0, -7.125) }
-];
+
 
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectSector, onStartSector, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, isSectorLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint, isRunning = true }) => {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -96,8 +91,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const sceneOutlinesRef = useRef<Record<string, THREE.Mesh>>({});
     const sceneFamilyMembersRef = useRef<any[]>([]);
     const sceneActiveMembersRef = useRef<any[]>([]);
-    const sceneBaseLookAtRef = useRef(new THREE.Vector3(0, 2, -5));
-    const sceneCinematicLookAtRef = useRef(new THREE.Vector3(0, 8, -5));
+    const sceneBaseLookAtRef = useRef(CAMP_SCENE.cameraBaseLookAt);
+    const sceneCinematicLookAtRef = useRef(CAMP_SCENE.cameraCinematicLookAt);
 
     useEffect(() => { isIdleRef.current = isIdle; }, [isIdle]);
     useEffect(() => { activeModalRef.current = activeModal; }, [activeModal]);
@@ -142,16 +137,22 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     }, [activeModal]);
 
 
+    const setupCounterRef = useRef(0);
+
     useEffect(() => {
         if (!containerRef.current) return;
         const container = containerRef.current;
+        const engine = WinterEngine.getInstance();
+
+        setupCounterRef.current++;
+        const currentSetupId = setupCounterRef.current;
+
         while (container.firstChild) container.removeChild(container.firstChild);
 
         const width = container.clientWidth;
         const height = container.clientHeight;
 
         // --- ENGINE & RENDERER ---
-        const engine = WinterEngine.getInstance();
         engine.updateSettings(graphics);
         engine.mount(container);
         engineRef.current = engine;
@@ -160,96 +161,35 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const camera = engine.camera;
         const renderer = engine.renderer;
 
-        // Reset Scene for Camp
-        scene.clear();
-        camera.reset();
+        // Reset & Setup Scene via CampWorld
+        const setup = async () => {
+            // Setup Scene via CampWorld
+            const { interactables, outlines, envState } = await CampWorld.setupCampScene(renderer, scene, camera, textures, weather);
 
-        camera.setPosition(0, 10, 22, true);
-        camera.set('fov', 50);
-        camera.set('far', 2500); // Increase draw distance for stars (r=1800)
+            // Race condition check: If another setup started, abort this one
+            if (setupCounterRef.current !== currentSetupId || !container.parentElement) return;
 
-        scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
-        scene.background = new THREE.Color(CAMP_SCENE.bgColor);
+            envStateRef.current = envState;
 
-        const BASE_LOOK_AT = new THREE.Vector3(0, 2, -5);
-        const CINEMATIC_LOOK_AT = new THREE.Vector3(0, 8, -5);
-        camera.lookAt(BASE_LOOK_AT.x, BASE_LOOK_AT.y, BASE_LOOK_AT.z, true);
+            // Setup Family Members
+            const { familyMembers, interactables: familyInteractables, activeMembers } = CampWorld.setupFamilyMembers(
+                scene, rescuedFamilyIndices, debugMode, PLAYER_CHARACTER, FAMILY_MEMBERS
+            );
 
-        const hemiLight = new THREE.HemisphereLight(0x444455, 0x111115, 0.6);
-        scene.add(hemiLight);
+            // Final check inside the async scope
+            if (setupCounterRef.current !== currentSetupId) return;
 
-        // --- SETUP WORLD & ENV via Systems ---
-        CampWorld.setupTerrain(scene, textures);
-        const { interactables, outlines } = CampWorld.setupStations(scene, textures, STATIONS);
+            // Consolidate interactables from both stations and family
+            const allInteractables = [...interactables, ...familyInteractables];
 
-        // Initialize Environment (Sky, Campfire, Particles, Wind, Weather, Water)
-        envStateRef.current = CampWorld.initEffects(scene, textures, weather);
+            // Store scene data for the interactivity loop
+            sceneInteractablesRef.current = allInteractables;
+            sceneOutlinesRef.current = outlines;
+            sceneFamilyMembersRef.current = familyMembers;
+            sceneActiveMembersRef.current = activeMembers;
+        };
 
-        // --- FAMILY MEMBERS ---
-        const familyGroup = new THREE.Group();
-        const familyMembers: any[] = [];
-        const activeMembers: any[] = [PLAYER_CHARACTER];
-
-        if (debugMode) {
-            for (let i = 0; i < FAMILY_MEMBERS.length; i++) activeMembers.push(FAMILY_MEMBERS[i]);
-        }
-        else {
-            const indices = rescuedFamilyIndices || [];
-            for (let i = 0; i < indices.length; i++) {
-                const sectorId = indices[i];
-                if (sectorId < 4) activeMembers.push(FAMILY_MEMBERS[sectorId]);
-                else if (sectorId === 4) { activeMembers.push(FAMILY_MEMBERS[4]); activeMembers.push(FAMILY_MEMBERS[5]); }
-            }
-        }
-
-        const humans = activeMembers.filter(m => m.race === 'human');
-        const animals = activeMembers.filter(m => m.race === 'animal');
-
-        for (let globalIdx = 0; globalIdx < activeMembers.length; globalIdx++) {
-            const memberData = activeMembers[globalIdx];
-            // Use createFamilyMember for everyone (removes flashlight/gun for player in camp)
-            const member = ModelFactory.createFamilyMember(memberData);
-
-            // Ensure player has the correct ID format for interaction
-            if (memberData.id === 'player') {
-                member.userData.id = `player_${memberData.name}`;
-                member.userData.type = 'family';
-            }
-            let angle = 0, radius = memberData.race === 'animal' ? 5.2 : 5.0;
-
-            if (memberData.race === 'animal') {
-                angle = 1.2 + animals.indexOf(memberData) * 0.25;
-            } else {
-                const idx = humans.indexOf(memberData);
-                angle = -(humans.length - 1) * 0.25 / 2 + idx * 0.25;
-            }
-
-            member.position.set(Math.sin(angle) * radius, -0.25, Math.cos(angle) * radius);
-            member.lookAt(0, 0, 0);
-
-            const bodyMesh = member.children.find(c => c.userData.isBody);
-            if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
-
-            member.traverse(c => {
-                if (c instanceof THREE.Mesh) {
-                    c.castShadow = true;
-                    c.userData.id = member.userData.id;
-                    c.userData.name = member.userData.name;
-                    c.userData.type = 'family';
-                }
-            });
-            familyGroup.add(member);
-
-            let baseY = bodyMesh ? bodyMesh.userData.baseY : 0;
-            familyMembers.push({ mesh: member, baseY, phase: Math.random() * Math.PI * 2, bounce: 0, name: memberData.name, seed: Math.random() * 100 });
-        }
-        scene.add(familyGroup);
-
-        // Store scene data for the interactivity loop
-        sceneInteractablesRef.current = interactables;
-        sceneOutlinesRef.current = outlines;
-        sceneFamilyMembersRef.current = familyMembers;
-        sceneActiveMembersRef.current = activeMembers;
+        setup();
 
         // [VINTERDÖD] Buffer frames to ensure campfire and particles are fully initialized
         let framesToWait = 10;
@@ -315,8 +255,13 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const hits = raycaster.intersectObjects(sceneInteractablesRef.current);
             if (hits.length > 0) {
                 let target: any = hits[0].object;
-                if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
-                hoveredRef.current = target.userData.id;
+                // Use groupId to find the root family member group
+                if (target.userData.groupId) {
+                    hoveredRef.current = target.userData.groupId;
+                } else {
+                    if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
+                    hoveredRef.current = target.userData.id;
+                }
             }
 
             onCL();
@@ -339,10 +284,15 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
         engine.onUpdate = (dt: number) => {
             const now = performance.now();
+
+            // Late init for wildlife sounds (15-45s after load)
+            if (nextWildlifeTime.current === 0) {
+                nextWildlifeTime.current = now + 15000 + Math.random() * 30000;
+            }
             const monitor = PerformanceMonitor.getInstance();
 
             monitor.begin('env_camera');
-            CampWorld.updateEffects(scene, envStateRef.current, dt, now, frameCount);
+            CampWorld.updateEffects(scene, camera.threeCamera, envStateRef.current, dt, now, frameCount);
 
             const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
             const BASE_LOOK_AT = sceneBaseLookAtRef.current;
@@ -360,18 +310,38 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const outlines = sceneOutlinesRef.current;
 
             monitor.begin('family_anim');
-            const talkingMembers = new Set(activeChats.current.map((c: any) => (now >= c.startTime && now <= c.startTime + c.duration) ? c.mesh.uuid : null).filter(Boolean));
+            // Zero-GC: Avoid Set creation and .map/.filter in the loop
+            const chats = activeChats.current;
             for (let i = 0; i < familyMembers.length; i++) {
                 const fm = familyMembers[i];
-                const isSpeaking = talkingMembers.has(fm.mesh.uuid) || fm.bounce > 0;
-                if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
-                const body = fm.mesh.children.find((c: any) => c.userData.isBody) as THREE.Mesh;
-                if (body) {
-                    PlayerAnimation.update(body, {
-                        isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
-                        isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
-                    }, now, dt);
+                let isSpeaking = fm.bounce > 0;
+
+                // Check if this member is currently speaking in any active chat
+                if (!isSpeaking) {
+                    for (let j = 0; j < chats.length; j++) {
+                        const c = chats[j];
+                        if (c.mesh.uuid === fm.mesh.uuid && now >= c.startTime && now <= c.startTime + c.duration) {
+                            isSpeaking = true;
+                            break;
+                        }
+                    }
                 }
+
+                if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
+
+                // [VINTERDÖD] Animate the entire Group (fm.mesh) to prevent head/body splitting
+                PlayerAnimation.update(fm.mesh as any, {
+                    isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
+                    isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
+                }, now, dt);
+
+                // Emissive highlight logic for the entire group
+                const isHov = hoveredRef.current === (fm.mesh.userData.id);
+                fm.mesh.traverse(c => {
+                    if (c instanceof THREE.Mesh && c.material && 'emissive' in c.material) {
+                        (c.material as any).emissive.setHex(isHov ? 0x222222 : 0x000000);
+                    }
+                });
             }
             monitor.end('family_anim');
 
@@ -428,11 +398,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             monitor.end('chatter');
 
             monitor.begin('raycasting');
-            if (isRunning && !activeModalRef.current) {
-                // [VINTERDÖD] CRITICAL: Ensure world matrices are up-to-date before raycasting 
-                // to avoid missing hits on the first few frames or after movements.
-                scene.updateMatrixWorld();
+            const outlineKeys = Object.keys(outlines);
 
+            if (isRunning && !activeModalRef.current) {
+                scene.updateMatrixWorld();
                 raycaster.setFromCamera(mouse, camera.threeCamera);
                 const hits = raycaster.intersectObjects(interactables);
                 let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
@@ -440,19 +409,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
                 if (hits.length > 0) {
                     let target: any = hits[0].object;
-                    // Support finding parent ID if the mesh itself doesn't have it (fallback)
                     if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
-
                     newHover = target.userData.id;
                     if (newHover) {
                         const isMember = newHover.startsWith('family_') || newHover.startsWith('player_');
                         if (isMember) {
                             toolTipText = `${target.userData.name}`;
                         } else {
-                            // Map 'armory'/'sectors'/... to localized station names
                             toolTipText = t(`stations.${target.userData.name || newHover}`);
-
-                            // [VINTERDÖD] Calculate Dynamic Stat Subtext
                             if (newHover === 'armory') {
                                 toolTipSubText = `${t(WEAPONS[currentLoadout.primary].displayName)} | ${t(WEAPONS[currentLoadout.secondary].displayName)} | ${t(WEAPONS[currentLoadout.throwable].displayName)} | ${t(WEAPONS[currentLoadout.special].displayName)}`;
                             } else if (newHover === 'skills') {
@@ -463,18 +427,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                                 toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} | ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
                             }
                         }
-
                         const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
                         tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
                     }
                 }
+
                 if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
                 setTooltip(newHover ? { text: toolTipText, subText: toolTipSubText, x: tooltipX, y: tooltipY } : null);
 
-                const outlineKeys = Object.keys(outlines);
-                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = !activeModalRef.current && (hoveredRef.current === outlineKeys[i]); }
+                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
 
-                // Pulsating emissive for hovered family
                 for (let i = 0; i < interactables.length; i++) {
                     const o = interactables[i];
                     if (o.userData.type === 'family') {
@@ -483,8 +445,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     }
                 }
             } else {
-                setTooltip(null);
-                setHoveredStation(null);
+                // Not running or Modal open: Clean up
+                if (hoveredRef.current !== null) {
+                    hoveredRef.current = null;
+                    setHoveredStation(null);
+                    setTooltip(null);
+                    for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = false; }
+                    for (let i = 0; i < interactables.length; i++) {
+                        const o = interactables[i];
+                        if (o.userData.type === 'family') (o.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+                    }
+                }
             }
             monitor.end('raycasting');
 

@@ -68,7 +68,12 @@ export const CharacterModels = {
 
     createPlayer: (): THREE.Group => {
         const group = new THREE.Group();
-        group.userData = { isPlayer: true };
+        group.userData = {
+            isPlayer: true,
+            id: `player_${PLAYER_CHARACTER.name}`,
+            baseScale: 1.0,
+            baseY: 0
+        };
 
         const body = new THREE.Mesh(
             GEOMETRY.human,
@@ -116,7 +121,7 @@ export const CharacterModels = {
 
         body.position.y = baseY;
         body.castShadow = true;
-        body.userData = { isBody: true, baseY: body.position.y, geometryHeight, baseScale: scale };
+        body.userData = { isBody: true, geometryHeight }; // Metadata for internal parts
 
         group.scale.setScalar(scale);
 
@@ -134,7 +139,9 @@ export const CharacterModels = {
             name: memberData.name,
             title: memberData.title,
             geometryHeight,
-            isFamilyMember: true
+            isFamilyMember: true,
+            baseScale: scale, // Metadata for PlayerAnimation
+            baseY: 0          // Group sits at floor level
         };
 
         group.add(body);

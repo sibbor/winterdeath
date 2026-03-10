@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse } from '../../utils/assets';
+import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures } from '../../utils/assets';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER, VEHICLE_HEADLIGHT } from '../../content/constants';
@@ -9,6 +9,7 @@ import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { CAMP_SCENE, CampWorld, stationMaterials, stationTextures, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
 import { SectorSystem } from '../systems/SectorSystem';
+import { CameraSystem } from '../systems/CameraSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { PerformanceMonitor } from './PerformanceMonitor';
@@ -196,13 +197,17 @@ export const AssetPreloader = {
                 endInternal('asset_warmup_audio');
             }
 
-            // 2. SCENE & CAMERA SETUP
             const scene = new THREE.Scene();
-            // Dedicated warmup camera prevents frustum culling from skipping shader compilation
-            const warmupCamera = (overrideCamera || new THREE.PerspectiveCamera(50, 1, 0.1, 1000)) as THREE.Camera;
+            // [VINTERDÖD] Use real CameraSystem (wrapped PerspectiveCamera) for warmup
+            // This ensures camera.reset(), setPosition() etc. work as expected in generators.
+            const warmupCamera = new CameraSystem();
             if (!overrideCamera) {
-                warmupCamera.position.set(0, 5, 20);
-                warmupCamera.lookAt(0, 0, 0);
+                warmupCamera.setPosition(0, 5, 20, true);
+                warmupCamera.lookAt(0, 0, 0, true);
+            } else {
+                // If an override is provided, we sync the threeCamera it contains or the camera itself
+                // (AssetPreloader.warmupAsync expects THREE.Camera, but we'll adapt)
+                warmupCamera.threeCamera.copy(overrideCamera as any);
             }
 
             // --- WARMUP HELPERS (Defined early for use in all sections) ---
@@ -620,12 +625,14 @@ export const AssetPreloader = {
             }
 
             // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
-            // Camp-specific materials/geometry (allocated fresh — tracked for disposal)
             if (isCamp) {
-                // 1. STATIONS & CANVASES
-                CampWorld.warmupStationAssets(renderer);
+                // Use real procedural textures for 1:1 parity with runtime shaders
+                const dummyTextures = createProceduralTextures();
+                const dummyWeather = 'snow'; // Default weather for warmup
 
-                // --- [VINTERDÖD] FÅNGSTNÄT FÖR INTERAKTIONS-UI OCH OUTLINES ---
+                await CampWorld.setupCampScene(renderer, scene, warmupCamera as any, dummyTextures as any, dummyWeather);
+
+                // Additional UI interaction elements warmup
                 const dummyActionSpriteMat = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, depthTest: false });
                 const dummyActionSprite = new THREE.Sprite(dummyActionSpriteMat);
                 ownedMaterials.push(dummyActionSpriteMat);
@@ -636,94 +643,15 @@ export const AssetPreloader = {
                 ownedMaterials.push(dummyActionBasicMat);
                 addToWarmup(dummyActionMesh, false);
 
-                const dummyEmissiveMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xaaaaaa, emissiveIntensity: 1.0 });
-                const dummyEmissiveMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), dummyEmissiveMat);
-                ownedMaterials.push(dummyEmissiveMat);
-                addToWarmup(dummyEmissiveMesh, false);
-
-                // Outline (LineSegments + LineBasicMaterial) - Used heavily in Camp
-                const dummyOutlineGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-                const dummyOutlineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
-                const dummyOutline = new THREE.LineSegments(dummyOutlineGeo, dummyOutlineMat);
-                ownedGeometries.push(dummyOutlineGeo);
-                ownedMaterials.push(dummyOutlineMat);
-                dummyRoot.add(dummyOutline);
-
-                // Interaction Mesh (Transparent StandardMaterial med opacity 0)
-                const dummyInteractMat = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 });
-                const dummyInteractMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), dummyInteractMat);
-                ownedMaterials.push(dummyInteractMat);
-                addToWarmup(dummyInteractMesh, false);
-
-                // -------------------------------------------------------------
-
-                // THE ULTIMATE CAMP WARMUP: Just build the damn camp in the dummy scene!
-                // We use dummy positions to avoid messing up the persistent stations array.
-                const dummyStationsPos = [
-                    { id: 'armory', pos: new THREE.Vector3(0, 0, 0) },
-                    { id: 'sectors', pos: new THREE.Vector3(0, 0, 0) },
-                    { id: 'skills', pos: new THREE.Vector3(0, 0, 0) },
-                    { id: 'adventure_log', pos: new THREE.Vector3(0, 0, 0) }
-                ];
-
-                const dummyCampGroup = new THREE.Group();
-                const { interactables, outlines } = CampWorld.setupStations(dummyCampGroup as any, TEXTURES as any, dummyStationsPos);
-
-                // Add the whole populated group to warmup
-                addToWarmup(dummyCampGroup, false);
-
-                // Add the specific outlines returned by setupStations to warmup
-                const outlineKeys = Object.keys(outlines);
-                for (let i = 0; i < outlineKeys.length; i++) {
-                    dummyRoot.add(outlines[outlineKeys[i]]);
-                }
-
                 // 2. CELESTIAL BODIES (Moon, Stars, Halo)
                 try {
-                    // Moon Body
-                    const moonGeo = new THREE.SphereGeometry(15, 32, 32);
-                    const moonMat = new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false });
-                    ownedGeometries.push(moonGeo);
-                    ownedMaterials.push(moonMat);
-                    addToWarmup(new THREE.Mesh(moonGeo, moonMat), false); // Moon is unique
+                    const skyAssets = CampWorld.setupSky(dummyRoot, dummyTextures as any);
 
-                    // Moon Halo (Sprite shader is unique)
-                    const haloMat = new THREE.SpriteMaterial({ color: 0xffffee, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false });
-                    ownedMaterials.push(haloMat);
-                    const halo = new THREE.Sprite(haloMat);
-                    dummyRoot.add(halo);
+                    // Track for disposal
+                    ownedGeometries.push(...Object.values(skyAssets.geometries));
+                    ownedMaterials.push(...Object.values(skyAssets.materials));
 
-                    // Star System
-                    const starCount = CAMP_SCENE.starCount;
-                    const starGeo = new THREE.BufferGeometry();
-                    const positions = new Float32Array(starCount * 3);
-                    const sizes = new Float32Array(starCount);
-                    const phases = new Float32Array(starCount);
-                    const twinkleSpeeds = new Float32Array(starCount);
-                    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                    starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-                    starGeo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
-                    starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
-
-                    const starMat = new THREE.ShaderMaterial({
-                        uniforms: { uTime: { value: 0 } },
-                        vertexShader: `
-                            attribute float size; attribute float phase; attribute float twinkleSpeed; varying float vAlpha; uniform float uTime;
-                            void main() {
-                                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
-                                float alpha = 0.8 + 0.2 * sin(phase);
-                                if (twinkleSpeed > 0.0) alpha = 0.9 + 0.1 * sin(uTime * twinkleSpeed + phase);
-                                vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
-                            }
-                        `,
-                        fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
-                        transparent: true, depthWrite: false
-                    });
-
-                    ownedMaterials.push(starMat);
-                    ownedGeometries.push(starGeo);
-                    const stars = new THREE.Points(starGeo, starMat);
-                    dummyRoot.add(stars);
+                    // [VINTERDÖD] We don't need to add to warmup explicitly as createSky added them to dummyRoot
                 } catch (e) { console.warn("Sky warmup failed", e); }
 
                 if (yieldToMain) await yieldToMain();
@@ -844,16 +772,16 @@ export const AssetPreloader = {
                 for (let i = 0; i < children.length; i++) children[i].visible = true;
 
                 if ((renderer as any).compileAsync) {
-                    await (renderer as any).compileAsync(scene, warmupCamera);
+                    await (renderer as any).compileAsync(scene, warmupCamera.threeCamera);
                 } else {
-                    renderer.compile(scene, warmupCamera);
+                    renderer.compile(scene, warmupCamera.threeCamera);
                 }
 
                 // Final 1x1 pixel render
                 const originalViewport = new THREE.Vector4();
                 renderer.getViewport(originalViewport);
                 renderer.setViewport(0, 0, 1, 1);
-                renderer.render(scene, warmupCamera);
+                renderer.render(scene, warmupCamera.threeCamera);
                 renderer.setViewport(originalViewport);
 
                 for (let i = 0; i < children.length; i++) children[i].visible = false;
@@ -861,9 +789,11 @@ export const AssetPreloader = {
             } catch (e) { console.warn("Compilation warmup failed", e); }
             endInternal('asset_warmup_compilation');
 
-            // SAFE VRAM FLUSH
+            // SAFE VRAM FLUSH & SCENE CLEANUP
             for (let i = 0; i < ownedGeometries.length; i++) ownedGeometries[i].dispose();
             for (let i = 0; i < ownedMaterials.length; i++) ownedMaterials[i].dispose();
+
+            scene.clear(); // Explicitly remove all children from dummy scene
 
             // Rensa explicit upp eventuella skuggkartor från lampor i dummy-scenen
             scene.traverse((obj) => {

@@ -309,7 +309,9 @@ export const VehicleGenerator = {
 
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0xcc2222);
 
-        const cW = 1.4 * S; const cH = 0.8 * S; const cD = 1.5 * S;
+        const cW = 1.4 * S;
+        const cH = 0.8 * S;
+        const cD = 1.5 * S;
         const groundClearance = 0.6 * S;
         const bonnetY = groundClearance + (cH / 2);
 
@@ -377,10 +379,10 @@ export const VehicleGenerator = {
             logs.position.set(0, chassisY + (cH / 2) + 0.2 * S, -1.5 * S);
 
             // 2. Rotera HELA högen 90 grader (Y-axeln) så de vilar längs med lastbilen
-            logs.rotation.set(0, Math.PI / 2, 0);
+            logs.rotation.set(0, Math.PI, 0);
 
             // 3. Skala upp högen! Extra mycket på Z (längden) så de fyller upp hela flaket
-            logs.scale.set(1.5 * S, 1.5 * S, 2.6 * S);
+            logs.scale.set(1.5 * S, 1.5 * S, 1.5 * S);
 
             chassis.add(logs);
         });
