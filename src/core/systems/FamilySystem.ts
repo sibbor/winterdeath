@@ -88,6 +88,10 @@ export class FamilySystem implements System {
 
             // --- 0. VEHICLE RIDING LOGIC ---
             if (inVehicle) {
+                // [VINTERDÖD FIX] Only put family members IN the vehicle if they are actively following!
+                // Unrescued family members waiting in the sector should stay where they are.
+                if (!familyMember.following) continue;
+
                 const def = activeVehicle.userData.vehicleDef;
                 const suspY = activeVehicle.userData.suspY || 0;
 
@@ -161,7 +165,7 @@ export class FamilySystem implements System {
             if (userData.wasInVehicle) {
                 userData.wasInVehicle = false;
 
-                // Smooth dismount: Spread the 6 family members out so they don't clip
+                // Smooth dismount: Spread the active family members out so they don't clip
                 const spreadX = (i % 2 === 0 ? 1 : -1) * (1.5 + (i * 0.4));
                 const spreadZ = (Math.random() - 0.5) * 2.0;
 
