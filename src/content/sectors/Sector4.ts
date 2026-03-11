@@ -39,10 +39,16 @@ export const Sector4: SectorDef = {
         ambientIntensity: 0.6, // Increased for visibility
         groundColor: 0x2a1a11, // Oily dirt
         fov: 40,
-        skyLight: { visible: true, color: 0xffaa00, intensity: 0.3 },
+        skyLight: { visible: true, color: 0xffaa00, intensity: 3.0 },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
-        weather: 'rain'
+        weather: 'rain',
+        wind: {
+            strengthMin: 0.05,
+            strengthMax: 1.0,
+            direction: { x: 1, z: 1 },
+            angleVariance: Math.PI / 4
+        }
     },
     // Automatic Content
     groundType: 'DIRT',

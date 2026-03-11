@@ -406,7 +406,7 @@ export const CampWorld = {
     setupSky, // Renamed for consistency
     setupCampScene: async (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: any, textures: Textures, weather: WeatherType, isWarmup = false) => {
         // 1. Scene Reset
-        scene.clear();
+        if (!isWarmup) scene.clear();
 
         // Always use CameraSystem directly.
         camera.reset();

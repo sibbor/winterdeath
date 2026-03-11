@@ -13,9 +13,8 @@ import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 
 const LOCATIONS = {
     SPAWN: {
-        //PLAYER: { x: 0, z: 200, rot: Math.PI },
-        //TODO: when debugging the cave/mountain:
-        PLAYER: { x: 100, z: -60, rot: Math.PI },
+        PLAYER: { x: 0, z: 200, rot: Math.PI },
+        //PLAYER: { x: 100, z: -60, rot: Math.PI },
         FAMILY: { x: 25, z: -193, y: 0 },
         BOSS: { x: 74, z: -210 }
     },
@@ -149,7 +148,13 @@ export const Sector2: SectorDef = {
         skyLight: { visible: true, color: 0x8899aa, intensity: 1.0, position: { x: -40, y: 30, z: -20 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
-        weather: 'snow'
+        weather: 'snow',
+        wind: {
+            strengthMin: 0.05,
+            strengthMax: 1.0,
+            direction: { x: 1, z: 1 },
+            angleVariance: Math.PI / 4
+        }
     },
     groundType: 'SNOW',
     groundSize: { width: 600, depth: 600 },

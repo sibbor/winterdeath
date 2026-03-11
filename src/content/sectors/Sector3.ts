@@ -71,10 +71,16 @@ export const Sector3: SectorDef = {
         ambientIntensity: 0.3,
         groundColor: 0x112211,
         fov: 50,
-        skyLight: { visible: true, color: 0x88ffaa, intensity: 0.8, position: { x: 50, y: 35, z: 50 } },
+        skyLight: { visible: true, color: 0x88ffaa, intensity: 5.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
-        weather: 'rain'
+        weather: 'snow',
+        wind: {
+            strengthMin: 0.05,
+            strengthMax: 1.0,
+            direction: { x: 1, z: 1 },
+            angleVariance: Math.PI / 4
+        }
     },
 
     // Set to SNOW as requested for clear visual debugging
