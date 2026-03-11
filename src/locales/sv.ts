@@ -217,6 +217,13 @@ export const sv = {
         randomized_wind: "RANDOMISERAD VIND",
         sky_light_settings: "HIMMELSLJUS",
         fog_settings: "DIMINSTÄLLNINGAR",
+        playground_stats: "FÄRDIGHETSSTATION",
+        temp_effects: "TILLFÄLLIGA EFFEKTER",
+        invincible: "OÖVERVINNERLIG",
+        unlimited_ammo: "OÄNDLIG AMMO",
+        unlimited_throwables: "OÄNDLIGA KASTVAPEN",
+        no_reload: "INGEN OMLADDNING",
+        TERMINAL_SKILLS: "FÄRDIGHETSSTATION",
     },
     camp_tooltips: {
         equipped: "VALD UTRUSTNING",

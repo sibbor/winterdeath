@@ -224,6 +224,13 @@ export const en = {
         randomized_wind: "RANDOMIZED WIND",
         sky_light_settings: "SKY LIGHT SETTINGS",
         fog_settings: "FOG SETTINGS",
+        playground_stats: "SKILL STATION",
+        temp_effects: "TEMPORARY EFFECTS",
+        invincible: "INVINCIBLE",
+        unlimited_ammo: "UNLIMITED AMMO",
+        unlimited_throwables: "UNLIMITED THROWABLES",
+        no_reload: "NO RELOADING",
+        TERMINAL_SKILLS: "SKILL STATION",
     },
     camp_tooltips: {
         equipped: "EQUIPPED",
