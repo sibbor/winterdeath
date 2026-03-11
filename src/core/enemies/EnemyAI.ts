@@ -467,9 +467,11 @@ export const EnemyAI = {
                 e.mesh.scale.setScalar(breatheScale);
 
                 e.mesh.visible = true;
+                e.mesh.matrixAutoUpdate = true; // [VINTERDÖD FIX] Måste återaktiveras eftersom globala optimeraren i GameSession slår av det.
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
+                    e.indicatorRing.matrixAutoUpdate = true;
                     e.indicatorRing.position.set(0, -e.mesh.position.y + 0.05, 0);
 
                     const targetRadius = 12.0 + Math.sin(now * 0.01) * 1.0;

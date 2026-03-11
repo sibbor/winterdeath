@@ -18,6 +18,7 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 5, 0);
 const _white = new THREE.Color(0xffffff);
+const _cyan = new THREE.Color(0x00ffff);
 const _color = new THREE.Color();
 const _syncList: Enemy[] = [];
 const enemyPool: Enemy[] = [];
@@ -286,60 +287,57 @@ export const EnemyManager = {
             case 'ELECTRIFIED':
                 if (!e.mesh.userData.electrocuted) {
                     e.mesh.userData.electrocuted = true;
+                    // PERFORMANCE: Lock death coordinates to prevent drifting during pool recycling
                     e.mesh.userData.deathPosX = e.mesh.position.x;
                     e.mesh.userData.deathPosZ = e.mesh.position.z;
-                    e.mesh.userData.fallDuration = 300 + Math.random() * 300;
-                    e.mesh.userData.twitchDuration = e.mesh.userData.fallDuration + 1000 + Math.random() * 1000;
-                    e.mesh.userData.targetRotX = -Math.PI / 2 + (Math.random() - 0.5) * 0.4;
-                    e.mesh.userData.targetRotZ = (Math.random() - 0.5) * Math.PI;
+                    e.mesh.userData.deathPosY = e.mesh.position.y;
+
+                    e.mesh.userData.fallDuration = 400 + Math.random() * 200;
+                    e.mesh.userData.twitchDuration = 1800 + Math.random() * 500;
+
+                    e.mesh.userData.targetRotX = -Math.PI / 2.1;
+                    e.mesh.userData.targetRotZ = (Math.random() - 0.5) * 0.5;
                 }
 
                 const fallDur = e.mesh.userData.fallDuration;
                 const twitchDur = e.mesh.userData.twitchDuration;
 
                 if (age < twitchDur) {
-                    // Fall över
-                    if (age < fallDur) {
-                        const t = age / fallDur;
-                        e.mesh.rotation.x = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotX, t);
-                        e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotZ, t);
-                        e.mesh.position.y = Math.max(0.2, (e.mesh.userData.baseY || 1.0) * (1 - t));
-                    } else {
-                        e.mesh.rotation.x = e.mesh.userData.targetRotX;
-                        e.mesh.rotation.z = e.mesh.userData.targetRotZ;
-                        e.mesh.position.y = 0.2;
-                    }
+                    const fallProgress = Math.min(1.0, age / fallDur);
 
-                    // Krampa & Rotera
-                    const jitter = 0.1;
-                    e.mesh.position.x = e.mesh.userData.deathPosX + (Math.random() - 0.5) * jitter;
-                    e.mesh.position.z = e.mesh.userData.deathPosZ + (Math.random() - 0.5) * jitter;
-                    e.mesh.rotation.y += (Math.random() - 0.5) * 0.3;
-                    e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+                    // 1. Fall over animation using lerp
+                    e.mesh.rotation.x = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotX, fallProgress);
+                    e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotZ, fallProgress);
+                    e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.userData.deathPosY, 0.2, fallProgress);
 
-                    // Lyser upp mörkret med Emissive Intensity (Zero-GC)
-                    if (Math.random() > 0.5) {
-                        _color.setHex(0x00ffff).lerp(_white.setHex(0xffffff), Math.random());
-                        applyElectrifiedGlow(e.mesh, _color, 1.0 + Math.random() * 3.0);
-                    } else {
-                        _color.setHex(0x0088cc);
-                        applyElectrifiedGlow(e.mesh, _color, 0.5);
-                    }
+                    // 2. Cyan High-Frequency Pulse (Zero-GC emissive update)
+                    const pulse = Math.sin(now * 0.05) * 0.5 + 0.5;
+                    _color.copy(_cyan).lerp(_white, Math.random() * 0.3);
+                    applyElectrifiedGlow(e.mesh, _color, 1.0 + pulse * 4.0);
 
-                    if (Math.random() > 0.7 && callbacks.spawnPart) {
-                        callbacks.spawnPart(e.mesh.position.x, e.mesh.position.y + 0.5, e.mesh.position.z, 'spark', 1);
+                    // 3. Muscle Spasms: Use rotation jitter for better visual stability than position jitter
+                    const jitter = (1.0 - fallProgress * 0.5) * 0.2;
+                    e.mesh.rotation.y += (Math.random() - 0.5) * jitter;
+
+                    // 4. Fixed particles: Ensure sparks spawn relative to the locked death position
+                    if (Math.random() > 0.85 && callbacks.spawnPart) {
+                        _v1.set(
+                            e.mesh.userData.deathPosX + (Math.random() - 0.5),
+                            e.mesh.position.y + 0.5,
+                            e.mesh.userData.deathPosZ + (Math.random() - 0.5)
+                        );
+                        callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'spark', 1);
                     }
                 } else {
-                    // Återställ till mörk viloläge efter kramp
-                    e.mesh.position.x = e.mesh.userData.deathPosX;
-                    e.mesh.position.z = e.mesh.userData.deathPosZ;
-                    e.mesh.rotation.x = e.mesh.userData.targetRotX;
-                    e.mesh.rotation.z = e.mesh.userData.targetRotZ;
-                    e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-
-                    _color.setHex(e.color || 0xffffff).multiplyScalar(0.4); // Bränd och mörk
+                    // Finalize: Reset to charred, static state
+                    _color.setHex(e.color || 0xffffff).multiplyScalar(0.3);
                     resetMaterialEmissive(e.mesh);
                     setBaseColor(e.mesh, _color);
+
+                    // Ensure final snap to locked position
+                    e.mesh.position.x = e.mesh.userData.deathPosX;
+                    e.mesh.position.y = 0.2;
+                    e.mesh.position.z = e.mesh.userData.deathPosZ;
 
                     e.deathState = 'DEAD';
                 }
@@ -599,9 +597,11 @@ export const EnemyManager = {
             // 3. Renderings-beslut
             if (s === 'BURNED' || s === 'ELECTRIFIED' || s === 'DROWNED') {
                 e.mesh.visible = true;
+                e.mesh.matrixAutoUpdate = true; // Enable local matrix calculus when explicitly drawn
             }
             else if (!e.isBoss && !e.mesh.userData.exploded && s !== 'DEAD') {
                 e.mesh.visible = false;
+                e.mesh.matrixAutoUpdate = false; // Freeze to save CPU when instanced
                 _syncList.push(e);
             }
         }
