@@ -7,7 +7,7 @@ import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
-import { CampWorld, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
+import { CampWorld, CAMP_SCENE, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
 import { SectorSystem } from '../systems/SectorSystem';
 import { CameraSystem } from '../systems/CameraSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
@@ -48,7 +48,14 @@ export const AssetPreloader = {
         const warmupLogic = async () => {
             const isCamp = target === 'CAMP';
             const isSector = typeof target === 'number';
-            const envConfig = envConfigBase;
+
+            let envConfig = envConfigBase;
+            if (isSector && !envConfig) {
+                const sector = SectorSystem.getSector(target as number);
+                if (sector) envConfig = sector.environment;
+            } else if (isCamp && !envConfig) {
+                envConfig = CAMP_SCENE;
+            }
             const warmupTimings: Record<string, number> = {};
             const warmupStartTimes: Record<string, number> = {};
 
@@ -268,38 +275,26 @@ export const AssetPreloader = {
                 scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity);
                 scene.background = fogCol;
 
-                // HemisphereLight delas av både Camp och Sector
+                // HemisphereLight deals with both Camp and Sector
                 scene.add(new THREE.HemisphereLight(0x444455, 0x111115, 0.6));
 
                 if (isCamp) {
-                    // [VINTERDÖD] Exakt ljusrigg för Camp (Måne + Lägereld)
-                    const dirLight = new THREE.DirectionalLight(0xaaccff, 0.4);
-                    dirLight.position.set(-80, 150, -100);
-                    dirLight.castShadow = true;
-                    dirLight.shadow.mapSize.width = 1024;
-                    dirLight.shadow.mapSize.height = 1024;
-                    dirLight.shadow.bias = -0.0002;
-                    scene.add(dirLight);
-
-                    const pointLight = new THREE.PointLight(0xff7722, 40, 90);
-                    pointLight.position.set(0, 3, 0);
-                    pointLight.castShadow = true;
-                    pointLight.shadow.mapSize.width = 512;
-                    pointLight.shadow.mapSize.height = 512;
-                    pointLight.shadow.bias = -0.0005;
-                    pointLight.shadow.normalBias = 0.02;
-                    scene.add(pointLight);
+                    // [VINTERDÖD] Camp lighting is now handled by CampWorld.setupCampScene below
                 }
 
                 if (isSector) {
-                    // [VINTERDÖD] Exakt ljusrigg för Sektorer (Miljö-sol/måne + Spelarlampor)
+                    // [VINTERDÖD] Exact light rig for Sectors (Environment sun/moon + Player lights)
                     if (envConfig.ambientIntensity !== undefined) {
                         scene.add(new THREE.AmbientLight(0xffffff, envConfig.ambientIntensity));
                     }
 
                     const skyLightRef = envConfig.skyLight || { color: 0xaaccff, intensity: 0.4 };
                     const dirLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
-                    dirLight.position.set(-80, 150, -100);
+                    dirLight.position.set(
+                        skyLightRef.position?.x ?? -80,
+                        skyLightRef.position?.y ?? 150,
+                        skyLightRef.position?.z ?? -100
+                    );
                     dirLight.castShadow = true;
                     dirLight.shadow.mapSize.width = 1024;
                     dirLight.shadow.mapSize.height = 1024;
@@ -311,7 +306,7 @@ export const AssetPreloader = {
                     addToWarmup(flashlight);
                     scene.add(flashlight);
 
-                    // Generisk fall-back spotlight utan skuggor
+                    // Generic fall-back spotlight without shadows
                     const spotLight = new THREE.SpotLight(0xffffff, 1);
                     spotLight.castShadow = false;
                     spotLight.shadow.autoUpdate = false;
@@ -368,7 +363,7 @@ export const AssetPreloader = {
                 for (let i = 0; i < matKeys.length; i++) {
                     const k = matKeys[i];
                     // Skip materials requiring special geometry
-                    if (['road', 'asphalt', 'concrete', 'mountain', 'concreteDoubleSided'].includes(k as string)) continue;
+                    if (['road', 'asphalt', 'mountain'].includes(k as string)) continue;
                     const mat = MATERIALS[k] as THREE.Material;
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, mat));
                     if ((mat as any).map) renderer.initTexture((mat as any).map);
@@ -387,9 +382,6 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestBig));
                 addToWarmup(new THREE.Mesh(GEOMETRY.rail, MATERIALS.steel));
                 addToWarmup(new THREE.Mesh(GEOMETRY.sleeper, MATERIALS.wood));
-
-                // Pre-warm Double Sided Concrete
-                addToWarmup(new THREE.Mesh(GEOMETRY.box, MATERIALS.concreteDoubleSided));
 
                 // Pre-warm Mountain Material
                 const dummyMountainGeo = new THREE.BufferGeometry();
@@ -427,6 +419,7 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createTerminal('SPAWNER'));
                     addToWarmup(ObjectGenerator.createTerminal('ENV'));
                     addToWarmup(ObjectGenerator.createRubble(0, 0, 4));
+                    addToWarmup(ObjectGenerator.createRubble(0, 0, 4, MATERIALS.busBlue));
                     addToWarmup(ObjectGenerator.createShelf());
                     addToWarmup(ObjectGenerator.createScarecrow(0, 0)); // Sector 3
                 } catch (e) { console.warn('[AssetPreloader] Prop warmup failed', e); }
@@ -617,7 +610,18 @@ export const AssetPreloader = {
                 const dummyTextures = createProceduralTextures();
                 const dummyWeather = 'snow'; // Default weather for warmup
 
-                await CampWorld.setupCampScene(renderer, scene, warmupCamera as any, dummyTextures as any, dummyWeather, true);
+                const { envState: campState } = await CampWorld.setupCampScene(renderer, scene, warmupCamera as any, dummyTextures as any, dummyWeather, true);
+
+                // Track celestial and particle assets for disposal
+                if (campState.starSystem) {
+                    ownedGeometries.push(campState.starSystem.geometry);
+                    ownedMaterials.push(campState.starSystem.material as THREE.Material);
+                }
+                if (campState.particles) {
+                    const p = campState.particles;
+                    ownedGeometries.push(p.flames.geometry, p.sparkles.geometry, p.smokes.geometry);
+                    ownedMaterials.push(p.flames.material as THREE.Material, p.sparkles.material as THREE.Material, p.smokes.material as THREE.Material);
+                }
 
                 // Additional UI interaction elements warmup
                 const dummyActionSpriteMat = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, depthTest: false });
@@ -631,15 +635,9 @@ export const AssetPreloader = {
                 addToWarmup(dummyActionMesh, false);
 
                 // 2. CELESTIAL BODIES (Moon, Stars, Halo)
-                try {
-                    const skyAssets = CampWorld.setupSky(dummyRoot, dummyTextures as any);
-
-                    // Track for disposal
-                    ownedGeometries.push(...Object.values(skyAssets.geometries));
-                    ownedMaterials.push(...Object.values(skyAssets.materials));
-
-                    // [VINTERDÖD] We don't need to add to warmup explicitly as createSky added them to dummyRoot
-                } catch (e) { console.warn("Sky warmup failed", e); }
+                // [VINTERDÖD] Note: skyAssets.geometries/materials were tracked here, 
+                // but setupSky is now internal to setupCampScene.
+                // We should ideally track all owned objects from setupCampScene for disposal.
 
                 if (yieldToMain) await yieldToMain();
 

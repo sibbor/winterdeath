@@ -187,9 +187,10 @@ export const WeaponHandler = {
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
+                const isUnlimited = !!state.sectorState?.unlimitedAmmo;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                 if (hasAmmo) {
-                    if (!debugMode) {
+                    if (!isUnlimited) {
                         if (now > state.lastShotTime + wep.fireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = now;
@@ -238,10 +239,11 @@ export const WeaponHandler = {
             if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
 
             if (input.fire) {
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode;
+                const isUnlimited = !!state.sectorState?.unlimitedAmmo;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode || isUnlimited;
                 if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
                     state.lastShotTime = now;
-                    if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
+                    if (!debugMode && !isUnlimited) state.weaponAmmo[state.activeWeapon]--;
                     state.shotsFired++;
 
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
@@ -273,10 +275,14 @@ export const WeaponHandler = {
                     }
                 } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + wep.fireRate) {
                     state.lastShotTime = now;
-                    soundManager.playEmptyClick();
-                    state.isReloading = true;
-                    state.reloadEndTime = now + wep.reloadTime;
-                    soundManager.playMagOut();
+                    if (state.sectorState?.noReload) {
+                        state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
+                    } else {
+                        soundManager.playEmptyClick();
+                        state.isReloading = true;
+                        state.reloadEndTime = now + wep.reloadTime;
+                        soundManager.playMagOut();
+                    }
                 }
             }
             return;
@@ -288,7 +294,8 @@ export const WeaponHandler = {
             // Helper function to force the throw and avoid code duplication.
             // Restored the exact _v3 target calculation logic from the original code!
             const executeThrow = (ratio: number) => {
-                if (!debugMode) state.weaponAmmo[state.activeWeapon]--;
+                const isUnlimited = !!state.sectorState?.unlimitedThrowables;
+                if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
                 state.throwablesThrown = (state.throwablesThrown || 0) + 1;
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();

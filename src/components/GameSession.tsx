@@ -5,7 +5,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { SectorTrigger, MapItem, SectorStats, TriggerAction, GameCanvasProps, DeathPhase, GameScreen } from '../types';
 import { SectorContext } from '../types/SectorEnvironment';
-import { BOSSES, SECTOR_THEMES, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT, FLASHLIGHT } from '../content/constants';
+import { BOSSES, SECTOR_THEMES, WEAPONS, FAMILY_MEMBERS, LEVEL_CAP, CAMERA_HEIGHT, FLASHLIGHT } from '../content/constants';
 import { STORY_SCRIPTS } from '../content/dialogues';
 import { soundManager } from '../utils/sound';
 import { haptic } from '../utils/HapticManager';
@@ -37,6 +37,7 @@ import ScreenPlayerDied from './game/ScreenPlayerDied';
 import { ScreenPlaygroundEnemyStation } from './game/ScreenPlaygroundEnemyStation';
 import { ScreenPlaygroundEnvironmentStation } from './game/ScreenPlaygroundEnvironmentStation';
 import ScreenPlaygroundArmoryStation from './game/ScreenPlaygroundArmoryStation';
+import ScreenPlaygroundSkillStation from './game/ScreenPlaygroundSkillStation';
 import CinematicBubble, { CinematicBubbleHandle } from './game/CinematicBubble';
 import GameUI from './game/GameUI';
 import { requestWakeLock, releaseWakeLock } from '../utils/device';
@@ -105,7 +106,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const handleOpenStation = (e: any) => {
             const type = e.detail?.type;
             if (type) {
-                setActiveModal(type);
+                if (type === 'armory') setActiveModal('armory');
+                if (type === 'spawner') setActiveModal('spawner');
+                if (type === 'environment') setActiveModal('environment');
+                if (type === 'skills') setActiveModal('skills');
+
                 activeModalRef.current = type;
                 if (!props.isMobileDevice && document.pointerLockElement) document.exitPointerLock();
                 // Disable player input systems while station is open
@@ -224,7 +229,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const setupIdRef = useRef(0);
     const [foundMemberName, setFoundMemberName] = useState('');
     const [interactionType, setInteractionType] = useState<'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null>(null);
-    const [activeModal, setActiveModal] = useState<'armory' | 'spawner' | 'environment' | null>(null);
+    const [activeModal, setActiveModal] = useState<'armory' | 'spawner' | 'environment' | 'skills' | null>(null);
 
     const [interactionScreenPos, setInteractionScreenPos] = useState<{ x: number, y: number } | null>(null);
     const lastInteractionPosRef = useRef<{ x: number, y: number } | null>(null);
@@ -307,7 +312,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [deathPhase, props.isPaused, props.isClueOpen, cinematicActive, bossIntroActive]);
 
-    const activeModalRef = useRef<'armory' | 'spawner' | 'environment' | null>(null);
+    const activeModalRef = useRef<'armory' | 'spawner' | 'environment' | 'skills' | null>(null);
 
     useEffect(() => {
         activeModalRef.current = activeModal;
@@ -1422,7 +1427,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         let frame = 0;
 
         engine.onUpdate = (dt: number) => {
-            if (!isMounted.current || propsRef.current.isPaused || isBuildingSectorRef.current) return;
+            if (!isMounted.current || isBuildingSectorRef.current) return;
+
+            if (propsRef.current.isPaused) {
+                engine.isSimulationPaused = true;
+                engine.isRenderingPaused = true;
+                return;
+            } else {
+                engine.isSimulationPaused = false;
+            }
 
             const now = performance.now();
             const input = engine.input.state;
@@ -2036,6 +2049,86 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                     stateRef.current.seenEnemies.push(e.type);
                                 }
                             }
+                        }}
+                    />
+                </div>
+            )}
+
+            {activeModal === 'armory' && (
+                <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
+                    <ScreenPlaygroundArmoryStation
+                        loadout={props.loadout}
+                        weaponLevels={props.weaponLevels}
+                        isMobileDevice={props.isMobileDevice}
+                        sectorState={stateRef.current.sectorState}
+                        onClose={() => {
+                            setActiveModal(null);
+                            activeModalRef.current = null;
+                            const s = gameSessionRef.current;
+                            if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
+                        }}
+                        onSave={(newLoadout, newLevels, newSectorState) => {
+                            // Update global App state
+                            if (props.onUpdateLoadout) {
+                                props.onUpdateLoadout(newLoadout, newLevels);
+                            }
+
+                            // Update internal state immediately for real-time response
+                            stateRef.current.loadout = newLoadout;
+                            stateRef.current.weaponLevels = newLevels;
+                            stateRef.current.sectorState = {
+                                ...stateRef.current.sectorState,
+                                ...newSectorState
+                            };
+
+                            // Refill all weapons and throwables as requested
+                            Object.keys(stateRef.current.weaponAmmo).forEach(key => {
+                                const wepType = key as any;
+                                stateRef.current.weaponAmmo[wepType] = WEAPONS[wepType]?.magSize || 0;
+                            });
+
+                            setActiveModal(null);
+                            activeModalRef.current = null;
+                            const s = gameSessionRef.current;
+                            if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
+                        }}
+                    />
+                </div>
+            )}
+
+            {activeModal === 'skills' && (
+                <div className="absolute inset-0 flex items-center justify-center z-[100] pointer-events-auto">
+                    <ScreenPlaygroundSkillStation
+                        stats={props.stats}
+                        isMobileDevice={props.isMobileDevice}
+                        sectorState={stateRef.current.sectorState}
+                        onClose={() => {
+                            setActiveModal(null);
+                            activeModalRef.current = null;
+                            const s = gameSessionRef.current;
+                            if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
+                        }}
+                        onSave={(newStats, newSectorState) => {
+                            // Update global App state
+                            if (props.onSaveStats) {
+                                props.onSaveStats(newStats);
+                            }
+
+                            // Update internal state immediately
+                            stateRef.current.hp = newStats.maxHp;
+                            stateRef.current.maxHp = newStats.maxHp;
+                            stateRef.current.stamina = newStats.maxStamina;
+                            stateRef.current.maxStamina = newStats.maxStamina;
+
+                            stateRef.current.sectorState = {
+                                ...stateRef.current.sectorState,
+                                ...newSectorState
+                            };
+
+                            setActiveModal(null);
+                            activeModalRef.current = null;
+                            const s = gameSessionRef.current;
+                            if (s) { s.setSystemEnabled('player_combat', true); s.setSystemEnabled('player_movement', true); s.setSystemEnabled('player_interaction', true); }
                         }}
                     />
                 </div>

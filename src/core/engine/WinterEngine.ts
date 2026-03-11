@@ -45,6 +45,7 @@ export class WinterEngine {
     public onUpdate: ((dt: number) => void) | null = null;
     public onRender: (() => void) | null = null;
     public isRenderingPaused: boolean = false;
+    public isSimulationPaused: boolean = false;
 
     constructor() {
         this.scene = new THREE.Scene();
@@ -307,18 +308,20 @@ export class WinterEngine {
         monitor.end('logic');
 
         // 2. Environmental Systems Update
-        monitor.begin('wind');
-        this.wind.update(now, dt);
-        monitor.end('wind');
+        if (!this.isSimulationPaused) {
+            monitor.begin('wind');
+            this.wind.update(now, dt);
+            monitor.end('wind');
 
-        monitor.begin('weather');
-        this.weather.update(dt, now);
-        monitor.end('weather');
+            monitor.begin('weather');
+            this.weather.update(dt, now);
+            monitor.end('weather');
 
-        monitor.begin('water');
-        this.water.setWaterDynamics(this.wind.strength, this.wind.current);
-        this.water.update(dt, now);
-        monitor.end('water');
+            monitor.begin('water');
+            this.water.setWaterDynamics(this.wind.strength, this.wind.current);
+            this.water.update(dt, now);
+            monitor.end('water');
+        }
 
         // 3. Camera Update — runs after all environment systems so thunder/weather
         // effects applied this frame (shake, FOV changes) are reflected immediately.

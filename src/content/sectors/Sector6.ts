@@ -29,20 +29,25 @@ export const Sector6: SectorDef = {
     id: 5,
     name: "sectors.sector_6_name",
     environment: {
-        bgColor: 0x000000,
-        fogDensity: 0.01,
+        bgColor: 0x020208,
+        fogDensity: 0.02,
         ambientIntensity: 0.4,
         groundColor: 0x111111,
         fov: 50,
-        skyLight: { visible: true, color: 0x88ccff, intensity: 0.5, position: { x: 50, y: 100, z: 50 } },
+        skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'rain',
         weatherDensity: 0.5,
-        wind: { strengthMin: 0.5, strengthMax: 1.0 },
+        wind: {
+            strengthMin: 0.05,
+            strengthMax: 1.0,
+            direction: { x: 1, z: 1 },
+            angleVariance: Math.PI / 4
+        }
     },
     atmosphereZones: SECTOR6_ZONES,
-    groundType: 'GRAVEL',
+    groundType: 'SNOW',
     ambientLoop: 'ambient_wind_loop',
 
     playerSpawn: { x: 0, z: 0 },
@@ -76,27 +81,37 @@ export const Sector6: SectorDef = {
         pl.castShadow = false;
         scene.add(pl);
 
-        // --- INTERACTION STATIONS ---
+        // --- INTERACTION STATIONS (Circular Layout) ---
+        const stationDist = 13; // Distance from center
+        const s_scale = 1.5;   // Magnificent Scale
+
         // 1. Armory (West)
-        SectorGenerator.spawnTerminal(ctx, -12, 0, 'TERMINAL_ARMORY');
+        SectorGenerator.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
         const armoryLabel = createTextSprite(t('stations.armory'));
-        armoryLabel.position.set(-12, 3.5, 0);
+        armoryLabel.position.set(-stationDist, 4.5, 0);
         armoryLabel.scale.set(10, 1.5, 1);
         scene.add(armoryLabel);
 
         // 2. Enemy Spawner (North)
-        SectorGenerator.spawnTerminal(ctx, 0, -12, 'TERMINAL_SPAWNER');
+        SectorGenerator.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
         const spawnerLabel = createTextSprite(t('ui.enemy_spawner'));
-        spawnerLabel.position.set(0, 3.5, -12);
+        spawnerLabel.position.set(0, 4.5, -stationDist);
         spawnerLabel.scale.set(10, 1.5, 1);
         scene.add(spawnerLabel);
 
         // 3. Environment Control (East)
-        SectorGenerator.spawnTerminal(ctx, 12, 0, 'TERMINAL_ENV');
+        SectorGenerator.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
         const envLabel = createTextSprite(t('ui.environment_control'));
-        envLabel.position.set(12, 3.5, 0);
+        envLabel.position.set(stationDist, 4.5, 0);
         envLabel.scale.set(10, 1.5, 1);
         scene.add(envLabel);
+
+        // 4. Skill Station (South)
+        SectorGenerator.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
+        const skillLabel = createTextSprite(t('stations.skills'));
+        skillLabel.position.set(0, 4.5, stationDist);
+        skillLabel.scale.set(10, 1.5, 1);
+        scene.add(skillLabel);
 
         // Helper for POI Markers
         const addPoiLabel = (label: string, pos: { x: number, z: number }) => {
@@ -175,7 +190,12 @@ export const Sector6: SectorDef = {
                 const hz = p2.z + dz * 35;
                 const house = ObjectGenerator.createBuilding(10, 8, 10, 0xffffff, true, true, 0.2);
                 house.position.set(hx, 4, hz);
-                house.castShadow = true;
+                // Traversera och tvinga bort skuggor från alla väggar, tak och fönster inuti!
+                house.traverse((child) => {
+                    if ((child as THREE.Mesh).isMesh) {
+                        child.castShadow = false;
+                    }
+                });
 
                 scene.add(house);
                 SectorGenerator.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: 'box', size: new THREE.Vector3(10, 8, 10) } });
@@ -220,7 +240,7 @@ export const Sector6: SectorDef = {
         const ball = new THREE.Mesh(ballGeom, ballMat);
 
         ball.position.set(p3.x + 10, 5, p3.z + 10);
-        ball.castShadow = true;
+        ball.castShadow = false;
         ball.userData = {
             isBall: true,
             radius: 1.5,
@@ -228,19 +248,27 @@ export const Sector6: SectorDef = {
             friction: 0.96,
             velocity: new THREE.Vector3(0, 0, 0)
         };
+
+        ball.matrixAutoUpdate = true;
         scene.add(ball);
+
         if (lake) {
             lake.registerFloatingProp(ball);
             lake.registerSplashSource(ball);
         }
 
-        SectorGenerator.addObstacle(ctx, {
+        const ballObstacle = {
             mesh: ball,
             position: ball.position,
             radius: 1.5,
             collider: { type: 'sphere', radius: 1.5 },
             type: 'Ball'
-        });
+        };
+        SectorGenerator.addObstacle(ctx, ballObstacle);
+
+        // Spara referenser i state så vi kan uppdatera fysiken i onUpdate
+        ctx.state.interactiveBall = ball;
+        ctx.state.interactiveBallObs = ballObstacle;
 
         // 5. SURPRISE
         const p4 = SECTOR6_ZONES[4];
@@ -296,9 +324,40 @@ export const Sector6: SectorDef = {
         else if (id === 'TERMINAL_ENV') {
             window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'environment' } }));
         }
+        else if (id === 'TERMINAL_SKILLS') {
+            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'skills' } }));
+        }
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
+        // Hämta ut bollen från state
+        const ball = sectorState.interactiveBall;
+        const obs = sectorState.interactiveBallObs;
 
+        if (ball && obs) {
+            const vel = ball.userData.velocity as THREE.Vector3;
+
+            // Kör bara fysik om bollen faktiskt har fart (optimerat)
+            if (vel.lengthSq() > 0.001) {
+                // 1. Applicera hastigheten i X och Z (Y styrs av WaterSystem)
+                ball.position.x += vel.x * dt;
+                ball.position.z += vel.z * dt;
+
+                // 2. Rulla bollen visuellt!
+                ball.rotation.x += vel.z * dt * 0.5;
+                ball.rotation.z -= vel.x * dt * 0.5;
+
+                // 3. Friktion (bromsar in bollen gradvis)
+                vel.multiplyScalar(ball.userData.friction || 0.96);
+
+                // 4. Synka kollisions-boxen så man inte kan gå rakt igenom den
+                obs.position.copy(ball.position);
+
+                // Uppdatera SpatialGrid så fysiken stämmer överens med renderingen
+                if (gameState.collisionGrid && typeof gameState.collisionGrid.updateObstacle === 'function') {
+                    gameState.collisionGrid.updateObstacle(obs);
+                }
+            }
+        }
     }
 };

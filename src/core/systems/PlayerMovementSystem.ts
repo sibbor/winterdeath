@@ -53,6 +53,35 @@ export class PlayerMovementSystem implements System {
             isMoving,
             session
         );
+
+        this.updateInvincibleGlow(state, now);
+    }
+
+    private _shieldMesh: THREE.Mesh | null = null;
+    private updateInvincibleGlow(state: any, now: number) {
+        if (state.sectorState?.isInvincible) {
+            if (!this._shieldMesh) {
+                const geo = new THREE.SphereGeometry(1.2, 32, 32);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: 0x00ffff,
+                    transparent: true,
+                    opacity: 0.15,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide
+                });
+                this._shieldMesh = new THREE.Mesh(geo, mat);
+                this._shieldMesh.position.y = 1.0;
+                this.playerGroup.add(this._shieldMesh);
+            }
+            // Pulse effect
+            const pulse = 0.15 + Math.sin(now * 0.005) * 0.05;
+            (this._shieldMesh.material as THREE.MeshBasicMaterial).opacity = pulse;
+            const s = 1.0 + Math.sin(now * 0.005) * 0.05;
+            this._shieldMesh.scale.setScalar(s);
+            this._shieldMesh.visible = true;
+        } else if (this._shieldMesh) {
+            this._shieldMesh.visible = false;
+        }
     }
 
     private handleMovement(

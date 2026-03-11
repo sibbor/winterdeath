@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { PlayerStats } from '../../types';
-import { WeaponType, WeaponCategory } from '../../content/weapons';
+import { PlayerStats, SectorState } from '../../types';
+import { WeaponType, WeaponCategory, WEAPONS as WEAPON_DEFS } from '../../content/weapons';
 import { t } from '../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../content/constants';
 import { soundManager } from '../../utils/sound';
@@ -8,12 +8,14 @@ import GameModalLayout from './GameModalLayout';
 
 interface ScreenPlaygroundArmoryStationProps {
     stats: PlayerStats;
+    sectorState: SectorState;
     currentLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
     weaponLevels: Record<WeaponType, number>;
     onSave: (
         newStats: PlayerStats,
         newLoadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; },
-        newLevels: Record<WeaponType, number>
+        newLevels: Record<WeaponType, number>,
+        newSectorState: SectorState
     ) => void;
     onClose: () => void;
     isMobileDevice?: boolean;
@@ -27,11 +29,12 @@ const CATEGORY_COLORS: Record<string, string> = {
     [WeaponCategory.TOOL]: '#3b82f6',      // Blue-500
 };
 
-const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps> = ({ stats, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
+const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps> = ({ stats, sectorState, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<WeaponCategory>(WeaponCategory.PRIMARY);
     const [tempStats, setTempStats] = useState({ ...stats });
     const [tempLoadout, setTempLoadout] = useState({ ...currentLoadout });
     const [tempWeaponLevels, setTempWeaponLevels] = useState({ ...weaponLevels });
+    const [tempSectorState, setTempSectorState] = useState({ ...sectorState });
 
     const handleUpgradeWeapon = (e: React.MouseEvent, weapon: WeaponType) => {
         e.stopPropagation();
@@ -71,17 +74,19 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
         if (tempLoadout.throwable !== currentLoadout.throwable) return true;
         if (tempLoadout.special !== currentLoadout.special) return true;
 
-        // Deep compare weapon levels if any upgrade happened
+        if (tempSectorState.unlimitedThrowables !== sectorState.unlimitedThrowables) return true;
+        if (tempSectorState.noReload !== sectorState.noReload) return true;
+
         const keys = Object.keys(WEAPONS) as WeaponType[];
         for (const k of keys) {
             if ((tempWeaponLevels[k] || 1) !== (weaponLevels[k] || 1)) return true;
         }
         return false;
-    }, [tempStats, tempLoadout, tempWeaponLevels, stats, currentLoadout, weaponLevels]);
+    }, [tempStats, tempLoadout, tempWeaponLevels, tempSectorState, stats, currentLoadout, weaponLevels, sectorState]);
 
     const handleConfirm = () => {
         if (hasChanges) {
-            onSave(tempStats, tempLoadout, tempWeaponLevels);
+            onSave(tempStats, tempLoadout, tempWeaponLevels, tempSectorState);
         } else {
             onClose();
         }
@@ -123,6 +128,33 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             showCloseButton={false}
         >
             <div className={`flex flex-col h-full overflow-hidden ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
+
+                <div className="flex justify-center gap-8 px-3 py-4 border-y border-yellow-900/30 bg-yellow-900/5 shrink-0">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <div
+                            className={`w-6 h-6 border-2 flex items-center justify-center transition-colors ${tempSectorState.unlimitedThrowables ? 'bg-yellow-500 border-yellow-500' : 'border-gray-600 group-hover:border-yellow-500'}`}
+                            onClick={() => setTempSectorState({ ...tempSectorState, unlimitedThrowables: !tempSectorState.unlimitedThrowables })}
+                        >
+                            {tempSectorState.unlimitedThrowables && <span className="text-black font-black text-xs">✓</span>}
+                        </div>
+                        <span className={`text-lg font-black uppercase tracking-wider ${tempSectorState.unlimitedThrowables ? 'text-yellow-500' : 'text-gray-500'}`}>
+                            {t('ui.unlimited_throwables')}
+                        </span>
+                    </label>
+
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <div
+                            className={`w-6 h-6 border-2 flex items-center justify-center transition-colors ${tempSectorState.noReload ? 'bg-yellow-500 border-yellow-500' : 'border-gray-600 group-hover:border-yellow-500'}`}
+                            onClick={() => setTempSectorState({ ...tempSectorState, noReload: !tempSectorState.noReload, unlimitedAmmo: !tempSectorState.noReload })}
+                        >
+                            {tempSectorState.noReload && <span className="text-black font-black text-xs">✓</span>}
+                        </div>
+                        <span className={`text-lg font-black uppercase tracking-wider ${tempSectorState.noReload ? 'text-yellow-500' : 'text-gray-500'}`}>
+                            {t('ui.no_reloading')}
+                        </span>
+                    </label>
+                </div>
+
                 {/* Tabs bar - Ensure horizontal scroll on mobile */}
                 <div className="relative shrink-0">
                     <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
@@ -146,13 +178,6 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                 </button>
                             );
                         })}
-                    </div>
-                </div>
-
-                <div className="flex justify-between items-center bg-yellow-900/10 px-3 py-2 border border-yellow-500/30 shrink-0">
-                    <span className="text-[10px] font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg font-black text-white">{(tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap}</span>
                     </div>
                 </div>
 
@@ -184,7 +209,12 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                     className={`${isMobileDevice ? 'w-32 h-full' : 'w-full h-40'} border-r md:border-r-0 md:border-b flex items-center justify-center relative shrink-0 bg-black/40`}
                                     style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
                                 >
-                                    <div className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} transition-transform group-hover:scale-110 duration-500`} dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                                    <img
+                                        src={weapon.icon}
+                                        alt={weapon.name}
+                                        className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} object-contain transition-transform group-hover:scale-110 duration-500`}
+                                        style={{ filter: isEquipped ? 'none' : 'grayscale(1) brightness(0.5)' }}
+                                    />
 
                                     <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
                                         {t('ui.lvl')} {level}

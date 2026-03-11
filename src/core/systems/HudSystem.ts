@@ -111,6 +111,14 @@ export const HudSystem = {
             bossPos: bPos,
             distanceTraveled: Math.floor(distanceTraveled),
             kills: state.killsInRun,
+            sectorStats: state.sectorState ? {
+                unlimitedAmmo: !!state.sectorState.unlimitedAmmo,
+                unlimitedThrowables: !!state.sectorState.unlimitedThrowables,
+                isInvincible: !!state.sectorState.isInvincible,
+                hordeTarget: state.sectorState.hordeTarget || 0,
+                zombiesKilled: state.sectorState.zombiesKilled || 0,
+                zombiesKillTarget: state.sectorState.zombiesKillTarget || 0
+            } : null,
             isDriving: !!state.activeVehicleType,
             vehicleSpeed: state.vehicleSpeed || 0,
             throttleState: state.vehicleThrottle || 0,

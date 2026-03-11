@@ -116,7 +116,7 @@ export class EnemySystem implements System {
         const state = session.state;
         const now = performance.now();
 
-        if (state.isDead) return;
+        if (state.isDead || state.sectorState.isInvincible) return;
 
         const isBite = type === 'BITING';
 

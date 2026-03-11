@@ -94,6 +94,7 @@ export class GameSessionLogic {
             lastDamageTime: 0, lastStaminaUseTime: 0,
             noiseLevel: 0, speakBounce: 0,
             cameraShake: 0, hurtShake: 0,
+            lastBiteTime: 0,
 
             sectorState: {
                 envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined

@@ -41,6 +41,7 @@ interface MobileGameHUDProps {
     isDriving?: boolean;
     vehicleSpeed?: number;
     throttleState?: number;
+    sectorStats?: any;
     debugInfo?: any;
     onTogglePause?: () => void;
     onToggleMap?: () => void;
@@ -54,6 +55,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
     familyDistance = null, familySignal = 0, familyFound = false, level = 1, currentXp = 0, nextLevelXp = 100,
     reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false,
     isDriving = false, vehicleSpeed = 0, throttleState = 0,
+    sectorStats,
     debugInfo, onTogglePause, onToggleMap, onSelectWeapon, onRotateCamera
 }) => {
     const hpP = Math.max(0, (hp / maxHp) * 100);
@@ -174,16 +176,24 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
             const stackMax = wData.magSize;
             const stackCurrent = throwableAmmo || 0;
 
-            countDisplay = (
-                <div className="absolute bottom-0 left-0 w-full flex justify-center gap-0.5 px-1 pb-0.5">
-                    {Array.from({ length: stackMax }).map((_, i) => (
-                        <div key={i}
-                            className={`h-1.5 flex-1 skew-x-[10deg] ${i < stackCurrent ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
-                            style={{ backgroundColor: i < stackCurrent ? wData.color : undefined, boxShadow: i < stackCurrent ? `0 0 5px ${wData.color}` : undefined }}
-                        />
-                    ))}
-                </div>
-            );
+            if (sectorStats?.unlimitedThrowables) {
+                countDisplay = (
+                    <div className="absolute bottom-1 w-full text-center">
+                        <span className="text-xl font-black text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">∞</span>
+                    </div>
+                );
+            } else {
+                countDisplay = (
+                    <div className="absolute bottom-0 left-0 w-full flex justify-center gap-0.5 px-1 pb-0.5">
+                        {Array.from({ length: stackMax }).map((_, i) => (
+                            <div key={i}
+                                className={`h-1.5 flex-1 skew-x-[10deg] ${i < stackCurrent ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
+                                style={{ backgroundColor: i < stackCurrent ? wData.color : undefined, boxShadow: i < stackCurrent ? `0 0 5px ${wData.color}` : undefined }}
+                            />
+                        ))}
+                    </div>
+                );
+            }
         }
 
         if (isRadio) {
@@ -430,9 +440,9 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                     ) : (
                                         <div className="flex items-baseline justify-center">
                                             <span className={`text-xl font-black text-white tracking-tighter leading-none`}>
-                                                {ammo}
+                                                <span>{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
                                             </span>
-                                            {!isThrowableActive && (
+                                            {!isThrowableActive && !sectorStats?.unlimitedAmmo && (
                                                 <span className={`text-[10px] font-bold text-zinc-600 ml-1`}>
                                                     /{magSize}
                                                 </span>
