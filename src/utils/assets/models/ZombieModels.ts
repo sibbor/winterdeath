@@ -16,10 +16,9 @@ export const ZombieModels = {
         const scale = typeData.scale || 1.0;
         const widthScale = typeData.widthScale || 1.0;
 
-        body.position.y = 1.0; // Pivot is centered in LatheGeometry (-1 to 1), so +1 moves feet to ground
         body.castShadow = true;
 
-        body.userData = { isBody: true, baseY: body.position.y };
+        body.userData = { isBody: true, baseY: 0 };
 
         group.scale.set(widthScale * scale, scale, widthScale * scale);
         // Add Ash Pile (Hidden by default)

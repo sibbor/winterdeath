@@ -33,6 +33,7 @@ interface SpawnRequest {
     type: string;
     customMesh?: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
     customVel: THREE.Vector3;
+    hasCustomVel?: boolean;
     color?: number;
     scale?: number;
     life?: number;
@@ -60,7 +61,30 @@ const PHYSICS_TYPES = new Set([
     'debris', 'glass', 'blood', 'gore', 'splash'
 ]);
 
+// Spawn limits
+const MAX_INSTANCES_PER_MESH = 5000;
+const MAX_AMBIENT_SPAWNS_PER_FRAME = 250;
+
+// Max decals
+const MAX_DECALS = 150
+
+// TTL for particles
+const PARTICLE_TTL: Record<string, number> = {
+    blood: 120,
+    debris: 200,
+    large_fire: 60,
+    large_smoke: 60,
+    flame: 60,
+    fire: 60,
+    smoke: 60,
+    spark: 60,
+    enemy_effect_flame: 60,
+    enemy_effect_spark: 60,
+    default: 30
+};
+
 export const FXSystem = {
+
     essentialQueue: [] as SpawnRequest[],
     ambientQueue: [] as SpawnRequest[],
     decalQueue: [] as SpawnRequest[],
@@ -75,7 +99,6 @@ export const FXSystem = {
         FXSystem._essentialQueueHead = 0;
         FXSystem._ambientQueueHead = 0;
         FXSystem._decalQueueHead = 0;
-        // Also clear REQUEST_POOLS to be safe
         REQUEST_POOL.length = 0;
         DECAL_REQUEST_POOL.length = 0;
     },
@@ -90,9 +113,6 @@ export const FXSystem = {
     _instancedMeshes: {} as Record<string, THREE.InstancedMesh>,
     _instancedCounts: {} as Record<string, number>,
     _instancedMeshKeys: [] as string[],
-
-    // Increased significantly to handle intense firezones and burning enemies
-    _MAX_INSTANCES: 5000,
 
     // --- POOLING METHODS ---
 
@@ -173,11 +193,13 @@ export const FXSystem = {
         const req = REQUEST_POOL.pop();
         if (req) {
             req.life = undefined;
+            req.hasCustomVel = false; // <--- NY RAD
             return req;
         }
         return {
             scene: null as any, particlesList: [],
-            x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3()
+            x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
+            hasCustomVel: false // <--- NY RAD
         };
     },
 
@@ -301,7 +323,7 @@ export const FXSystem = {
         // --- VELOCITY ---
         if (t === 'electric_flash') {
             p.vel.set(0, 0, 0);
-        } else if (req.customVel.lengthSq() > 0) {
+        } else if (req.hasCustomVel) {
             p.vel.copy(req.customVel);
         } else {
             const speedScale = (t === 'gore') ? 8.0 : (t === 'splash' || t === 'blood_splat' ? 12.0 : 1.0);
@@ -318,13 +340,12 @@ export const FXSystem = {
         }
 
         // --- LIFETIME ---
-        let baseLife = 30;
-        if (t === 'blood') baseLife = 120;
-        else if (t === 'debris') baseLife = 200;
-        else if (t === 'electric_flash') baseLife = 4 + Math.random() * 4; // VERY SNAPPY
-        else if (t === 'large_fire' || t === 'large_smoke' || t === 'flame' || t === 'fire' || t === 'smoke' || t === 'spark' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') baseLife = 60;
-
-        p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 20);
+        if (t === 'electric_flash') {
+            p.life = req.life !== undefined ? req.life : (4 + Math.random() * 4);
+        } else {
+            const baseLife = PARTICLE_TTL[t] || PARTICLE_TTL.default;
+            p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 20);
+        }
         p.maxLife = p.life;
         p.rotVel.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
 
@@ -370,12 +391,19 @@ export const FXSystem = {
             req.scene = scene; req.particlesList = particlesList; req.x = x; req.y = y; req.z = z;
             req.type = type; req.customMesh = customMesh; req.color = color; req.scale = scale; req.life = life;
 
-            if (customVel) req.customVel.copy(customVel);
-            else req.customVel.set(0, 0, 0);
-
+            if (customVel) {
+                req.customVel.copy(customVel);
+                req.hasCustomVel = true;
+            } else {
+                req.customVel.set(0, 0, 0);
+                req.hasCustomVel = false;
+            }
             if (isEssential) {
                 FXSystem.essentialQueue.push(req);
             } else {
+                if (FXSystem.ambientQueue.length === 1000) {
+                    console.warn(`[FXSystem] Ambient queue is heavily backlogged (1000+ particles waiting to spawn). Performance may degrade.`);
+                }
                 FXSystem.ambientQueue.push(req);
             }
         }
@@ -440,8 +468,7 @@ export const FXSystem = {
         FXSystem._essentialQueueHead = 0;
 
         // AMBIENT QUEUE: Processed with a budget to maintain performance
-        const AMBIENT_BUDGET = 250;
-        const pEnd = Math.min(FXSystem._ambientQueueHead + AMBIENT_BUDGET, FXSystem.ambientQueue.length);
+        const pEnd = Math.min(FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME, FXSystem.ambientQueue.length);
         for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
             const req = FXSystem.ambientQueue[i];
             if (!req.scene) req.scene = scene;
@@ -501,10 +528,24 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    // FPS-independent scale decay: Math.pow(r, delta*60) gives the same
-                    // per-second result (r^60) at any refresh rate. Without this,
-                    // smoke/fire shrinks 3× faster at 144 Hz than at 60 Hz.
-                    p.mesh.scale.multiplyScalar(Math.pow(0.985, safeDelta * 60));
+                    // --- EXPLOSION PHYSICS FIX ---
+
+                    // 1. AIR FRICTION (Drag)
+                    // Multiplier < 1.0 makes particles lose velocity over time. 
+                    // Lower value (0.001) = higher friction. Prevents "drifting" across screen.
+                    p.vel.multiplyScalar(Math.pow(0.001, safeDelta));
+
+                    // 2. CONTROLLED EXPANSION vs DECAY
+                    if (p.type === 'shockwave') {
+                        // Linear growth: 30 units per second. Fast but stops when life ends.
+                        p.mesh.scale.addScalar(30 * safeDelta);
+                    } else if (p.type === 'flash') {
+                        p.mesh.scale.addScalar(15 * safeDelta);
+                    } else {
+                        // Smoke and fire should shrink as they cool down.
+                        // Removed isInstanced check to ensure all types shrink.
+                        p.mesh.scale.multiplyScalar(Math.pow(0.05, safeDelta));
+                    }
                 }
             }
 
@@ -515,12 +556,17 @@ export const FXSystem = {
             } else {
                 const imesh = FXSystem._getInstancedMesh(scene, p.type);
                 const idx = FXSystem._instancedCounts[p.type];
-                if (imesh && idx < FXSystem._MAX_INSTANCES) {
+                if (imesh && idx < MAX_INSTANCES_PER_MESH) {
                     p.mesh.updateMatrix();
                     imesh.setMatrixAt(idx, p.mesh.matrix);
                     if (p.color !== undefined) {
                         imesh.setColorAt(idx, _tempColor.setHex(p.color));
                     }
+                    FXSystem._instancedCounts[p.type]++;
+                } else if (imesh && idx === MAX_INSTANCES_PER_MESH) {
+                    console.warn(`[FXSystem] MAX_INSTANCES_PER_MESH (${MAX_INSTANCES_PER_MESH}) reached for type: ${p.type}. Particles will be invisible.`);
+                    FXSystem._instancedCounts[p.type]++;
+                } else if (imesh) {
                     FXSystem._instancedCounts[p.type]++;
                 }
             }
@@ -553,15 +599,16 @@ export const FXSystem = {
             FXSystem._instancedCounts[type] = 0;
         }
 
-        const MAX_DECALS = 150;
+        // Max decals
         if (decalList.length > MAX_DECALS) {
-            const toRemove = decalList.length - MAX_DECALS;
-            for (let i = 0; i < toRemove; i++) {
-                const oldDecal = decalList.shift();
-                if (oldDecal) {
-                    FXSystem.recycleMesh(oldDecal as any, 'decal');
-                }
-            }
+            console.warn(`[FXSystem] MAX_DECALS (${MAX_DECALS}) exceeded. Earliest decals will be force-recycled.`);
+        }
+        while (decalList.length > MAX_DECALS) {
+            const oldDecal = decalList[0];
+            if (oldDecal) FXSystem.recycleMesh(oldDecal as any, 'decal');
+
+            decalList[0] = decalList[decalList.length - 1];
+            decalList.pop();
         }
     },
 
@@ -580,16 +627,29 @@ export const FXSystem = {
 
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
         p.mesh.position.y = 0.05;
-        p.landed = true;
 
         if (p.type === 'blood') {
+            p.landed = true;
             if (Math.random() < 0.20) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.5 + Math.random() * 0.3, MATERIALS.bloodDecal);
             FXSystem._killParticle(index, list);
         } else if (p.type === 'gore') {
+            p.landed = true;
             if (Math.random() < 0.40) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
             soundManager.playImpact('flesh');
             p.vel.set(0, 0, 0);
+        } else if (p.type === 'debris') {
+            // Studsa om farten är hög nog
+            if (p.vel.y < -8) {
+                p.vel.y *= -0.3; // Studsar uppåt
+                p.vel.x *= 0.5; // Tappar fart i sidled
+                p.vel.z *= 0.5;
+                p.landed = false; // Fortsätter flyga/studsa
+            } else {
+                p.vel.set(0, 0, 0);
+                p.landed = true; // NU HAR DEN STANNAT OCH ÄR LANDAD! Gravitationen stängs av.
+            }
         } else {
+            p.landed = true;
             FXSystem._killParticle(index, list);
         }
     },
@@ -622,7 +682,7 @@ export const FXSystem = {
                 (mat as any).color.setHex(0xffffff);
             }
 
-            const imesh = new THREE.InstancedMesh(geo, mat, FXSystem._MAX_INSTANCES);
+            const imesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES_PER_MESH);
             imesh.frustumCulled = false;
 
             // [VINTERDÖD] DISABLE SHADOWS FOR ENTIRE PARTICLE SYSTEM
@@ -639,7 +699,7 @@ export const FXSystem = {
 
             // Initialize instanceColor attribute to prevent WebGL lazy-allocation spikes
             if (!imesh.instanceColor) {
-                imesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FXSystem._MAX_INSTANCES * 3), 3);
+                imesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES_PER_MESH * 3), 3);
             }
 
             FXSystem._instancedMeshes[type] = imesh;
@@ -683,6 +743,7 @@ export const FXSystem = {
         let colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
 
         req.customVel.copy(_v1).multiplyScalar(speed);
+        req.hasCustomVel = true;
         req.scale = scale;
         req.color = colorHex;
         FXSystem.essentialQueue.push(req);
@@ -706,6 +767,7 @@ export const FXSystem = {
         req.type = 'fire';
 
         req.customVel.copy(_v1).multiplyScalar(speed);
+        req.hasCustomVel = true;
         req.scale = scale;
         req.color = isCyan ? 0x00bfff : 0xffcc00;
         req.life = 6 + Math.random() * 4;
@@ -746,6 +808,7 @@ export const FXSystem = {
 
                 // CRITICAL: Point shard exactly to next node for oriented line look
                 req.customVel.subVectors(v_node, v_prev);
+                req.hasCustomVel = true;
                 FXSystem.essentialQueue.push(req);
 
                 // Add blinding white core (snappy)
@@ -757,6 +820,7 @@ export const FXSystem = {
                     reqC.color = 0xffffff;
                     reqC.life = req.life;
                     reqC.customVel.copy(req.customVel);
+                    reqC.hasCustomVel = true;
                     FXSystem.essentialQueue.push(reqC);
                 }
 
@@ -794,6 +858,7 @@ export const FXSystem = {
                 Math.random() * 2,
                 (Math.random() - 0.5) * 2
             );
+            req.hasCustomVel = true;
             req.scale = 0.2;
             FXSystem.essentialQueue.push(req);
         }
