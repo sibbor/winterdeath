@@ -2,20 +2,15 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { FXSystem } from './FXSystem';
-import { EnemyManager } from '../EnemyManager';
 import { soundManager } from '../../utils/sound';
 import { VehicleDef } from '../../content/vehicles';
+import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
-import { FLASHLIGHT } from '../../content/constants'; // Adjust path if needed
 
 // --- PERFORMANCE SCRATCHPADS ---
-// Pre-allocated vectors to prevent Garbage Collection (GC) during loops
 const _v1 = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
-const _toEnemy = new THREE.Vector3();
-const _knockDir = new THREE.Vector3();
-const _dismountDir = new THREE.Vector3();
 
 // --- FAKE BRAKE GLOW (Zero-GC / Procedural Texture) ---
 // Generates a soft, glowing gradient texture dynamically on load
@@ -52,22 +47,24 @@ const _fakeBrakeGlowMat = new THREE.MeshBasicMaterial({
     map: createBrakeGlowTexture(),
     transparent: true,
     blending: THREE.AdditiveBlending,
-    depthWrite: false, // Prevents Z-fighting with the ground
+    depthWrite: false,
     opacity: 0.8,
     fog: false
 });
 
 // Constants
-const HIT_COOLDOWN_MS = 350;
-const SPEED_SQ_PUSH = 1.0; // Lowered to allow pushing enemies even at very slow speeds
 const KMH_TO_MS = 1.0 / 3.6;
 
 export class VehicleMovementSystem implements System {
     id = 'vehicle_movement';
 
-    constructor(private playerGroup: THREE.Group) { }
+    constructor(private playerGroup: THREE.Group) {
+
+    }
 
     update(session: GameSessionLogic, delta: number, now: number) {
+        VehicleManager.update(session, delta, now, this.playerGroup);
+
         const state = session.state;
         const input = session.engine.input.state;
 
@@ -126,11 +123,7 @@ export class VehicleMovementSystem implements System {
         const vel = ud.velocity as THREE.Vector3;
         const angVel = ud.angularVelocity as THREE.Vector3;
 
-        // --- START ENGINE ---
-        // Triggered when player assumes control
-        if (input && state.vehicleEngineState === 'OFF') {
-            this.enterVehicle(playerGroup, vehicle, state, def, vel, angVel);
-        }
+        // (Engine startup is now handled by VehicleManager)
 
         // --- COMPUTE FORWARD & RIGHT VECTORS ---
         // Extracted directly from the world matrix (Zero-GC)
@@ -434,8 +427,7 @@ export class VehicleMovementSystem implements System {
         }
 
         // --- COLLISION ---
-        this.handleEnemyCollisions(vehicle, vel, def, session, now);
-        this.handleObstacleCollisions(vehicle, vel, def, session);
+        // (Collisions are now handled by VehicleManager)
 
         // --- SYNC PLAYER TO VEHICLE & DISMOUNT LOGIC ---
         if (input) {
@@ -455,230 +447,6 @@ export class VehicleMovementSystem implements System {
                 if (child.rotation) child.rotation.y = 0;
             }
 
-            // --- DISMOUNT ---
-            if (input.e && !state.eDepressed) {
-                this.exitVehicle(playerGroup, vehicle, state, def);
-            }
-        }
-    }
-
-    private enterVehicle(
-        playerGroup: THREE.Group,
-        vehicle: THREE.Object3D,
-        state: any,
-        def: VehicleDef,
-        vel: THREE.Vector3,
-        angVel: THREE.Vector3
-    ) {
-        state.vehicleEngineState = 'RUNNING';
-        state.activeVehicleType = def.type;
-        const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
-        soundManager.playVehicleEnter(category);
-        soundManager.playVehicleEngine(category);
-        vel.set(0, 0, 0);
-        angVel.set(0, 0, 0);
-
-        // Dölj spelaren
-        playerGroup.visible = false;
-
-        // Leta efter lampan
-        const headlight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
-
-        if (headlight) {
-            const lights = vehicle.userData.lights;
-            let frontZ = 0;
-            let lightY = 0;
-
-            // Försök läsa av positionen från bilens befintliga små "glödande" meshes
-            if (lights && lights.headlights && lights.headlights.meshes && lights.headlights.meshes.length > 0) {
-                frontZ = lights.headlights.meshes[0].position.z;
-                lightY = lights.headlights.meshes[0].position.y;
-            } else {
-                // Fallback: Använd fordonets definierade dimensioner för lokala koordinater
-                const box = new THREE.Box3().setFromObject(vehicle);
-                frontZ = box.max.z;
-                lightY = (box.max.y - box.min.y) * 0.4;
-            }
-
-            headlight.position.set(0, lightY, frontZ + 0.2); // 0.2 m framför grillen
-            headlight.target.position.set(0, lightY, frontZ + 20);
-            headlight.updateMatrix();
-
-            // Fäst i chassit så lampan guppar med fjädringen (om chassi finns)
-            let mountTarget = vehicle;
-            if (vehicle.userData.chassis) {
-                mountTarget = vehicle.userData.chassis;
-            } else if (vehicle.children[0]?.userData?.chassis) {
-                mountTarget = vehicle.children[0].userData.chassis;
-            }
-
-            mountTarget.add(headlight);
-            if (headlight.target) mountTarget.add(headlight.target);
-
-            // Boosta lampan
-            if (state.flashlightOn) {
-                headlight.intensity = FLASHLIGHT.intensity * 2;
-                headlight.distance = FLASHLIGHT.distance * 2;
-                headlight.angle = Math.PI / 4;
-            }
-
-            headlight.updateMatrixWorld(true);
-            if (headlight.target) headlight.target.updateMatrixWorld(true);
-        }
-    }
-
-    private exitVehicle(
-        playerGroup: THREE.Group,
-        vehicle: THREE.Object3D,
-        state: any,
-        def: VehicleDef
-    ) {
-        state.eDepressed = true;
-        state.activeVehicle = null;
-        state.activeVehicleType = null;
-        state.vehicleSpeed = 0;
-        state.vehicleEngineState = 'OFF';
-
-        soundManager.stopVehicleEngine();
-        soundManager.playVehicleSkid(0);
-        soundManager.playVehicleExit(def.category === 'BOAT' ? 'BOAT' : 'CAR');
-
-        // Placera spelaren utanför dörren
-        _dismountDir.set(def.dismountOffset.x, def.dismountOffset.y, def.dismountOffset.z)
-            .applyQuaternion(vehicle.quaternion);
-        playerGroup.position.add(_dismountDir);
-        playerGroup.position.y = 0;
-
-        // Visa spelaren igen
-        playerGroup.visible = true;
-
-        // Leta efter lampan PÅ FORDONET
-        const headlight = vehicle.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
-
-        if (headlight) {
-            // 1. Sätt tillbaka lampan på spelaren
-            playerGroup.add(headlight);
-            headlight.position.set(FLASHLIGHT.position.x, FLASHLIGHT.position.y, FLASHLIGHT.position.z);
-
-            if (headlight.target) {
-                playerGroup.add(headlight.target);
-                headlight.target.position.set(
-                    FLASHLIGHT.targetPosition.x,
-                    FLASHLIGHT.targetPosition.y,
-                    FLASHLIGHT.targetPosition.z
-                );
-                headlight.target.updateMatrix();
-            }
-
-            // 2. Återställ människo-styrka
-            if (state.flashlightOn) {
-                headlight.intensity = FLASHLIGHT.intensity;
-                headlight.distance = FLASHLIGHT.distance;
-                headlight.angle = FLASHLIGHT.angle;
-            }
-
-            // 3. Force matrix updates for proper alignment immediately
-            playerGroup.updateMatrix();
-            playerGroup.updateMatrixWorld(true);
-            headlight.updateMatrixWorld(true);
-            if (headlight.target) headlight.target.updateMatrixWorld(true);
-        }
-
-        const lights = vehicle.userData.lights;
-        if (lights?.brake?.fakeGlow) {
-            lights.brake.fakeGlow.visible = false;
-        }
-    }
-
-    private handleEnemyCollisions(
-        vehicle: THREE.Object3D,
-        vel: THREE.Vector3,
-        def: VehicleDef,
-        session: GameSessionLogic,
-        now: number
-    ) {
-        const speedSq = vel.lengthSq();
-        if (speedSq < SPEED_SQ_PUSH) return;
-
-        const state = session.state;
-
-        // Hit radius is slightly larger than the physical box to catch enemies early
-        const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5 + 1.0;
-
-        const enemies = state.collisionGrid.getNearbyEnemies(vehicle.position, hitRadius);
-        const eLen = enemies.length;
-
-        for (let i = 0; i < eLen; i++) {
-            const e = enemies[i];
-            if (e.deathState !== 'ALIVE') continue;
-
-            _toEnemy.subVectors(e.mesh.position, vehicle.position);
-            _toEnemy.y = 0;
-            const distSq = _toEnemy.lengthSq();
-            const collisionRad = (hitRadius * 0.7) + (e.widthScale || 1.0) * (e.originalScale || 1.0);
-
-            if (distSq > collisionRad * collisionRad) continue;
-
-            const lastHit = e.lastVehicleHit || 0;
-            if (now - lastHit < HIT_COOLDOWN_MS) continue;
-            e.lastVehicleHit = now;
-
-            const speedMS = Math.sqrt(speedSq);
-
-            _knockDir.copy(_toEnemy).normalize();
-            if (_knockDir.lengthSq() < 0.01) _knockDir.copy(_forward);
-
-            // Delegera logiken för skada/animation till EnemyManager!
-            if (typeof (EnemyManager as any).applyVehicleHit === 'function') {
-                const isHeavyHit = (EnemyManager as any).applyVehicleHit(e, _knockDir, speedMS, def, state, session, now);
-
-                // Om det var en tung krock som krävde lite tryck, guppa bilens chassi
-                if (isHeavyHit) {
-                    vehicle.userData.suspVelY += 2.0;
-                }
-            }
-        }
-    }
-
-    private handleObstacleCollisions(
-        vehicle: THREE.Object3D,
-        vel: THREE.Vector3,
-        def: VehicleDef,
-        session: GameSessionLogic,
-    ) {
-        const state = session.state;
-        const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5;
-        const obstacles = state.collisionGrid.getNearbyObstacles(vehicle.position, hitRadius + 2.0);
-        const oLen = obstacles.length;
-
-        for (let i = 0; i < oLen; i++) {
-            const obs = obstacles[i];
-            if (obs.mesh === vehicle) continue;
-
-            const obsPos = obs.position;
-            _toEnemy.subVectors(vehicle.position, obsPos);
-            _toEnemy.y = 0;
-            const distSq = _toEnemy.lengthSq();
-            const combinedRad = hitRadius + (obs.radius || 2.0);
-
-            // Simple radial check for bouncing against rigid environment objects
-            if (distSq < combinedRad * combinedRad && distSq > 0.01) {
-                const dist = Math.sqrt(distSq);
-                const overlap = combinedRad - dist;
-
-                _toEnemy.normalize();
-
-                vehicle.position.addScaledVector(_toEnemy, overlap * 0.6);
-
-                const impactDot = vel.dot(_toEnemy);
-                if (impactDot < 0) {
-                    vel.addScaledVector(_toEnemy, -impactDot * 1.2);
-                }
-
-                // Small vertical bounce feedback upon collision
-                vehicle.userData.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
-                vel.multiplyScalar(0.85);
-            }
         }
     }
 
