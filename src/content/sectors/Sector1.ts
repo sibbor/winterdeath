@@ -503,7 +503,7 @@ export const Sector1: SectorDef = {
         scene.add(colMesh);
 
         const busIdx = obstacles.length;
-        const obstacle_bus = { mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
+        const obstacle_bus = { id: 'tunnel_bus', mesh: colMesh, collider: { type: 'box' as const, size: busSize } };
 
         scene.add(bus);
 
@@ -1118,12 +1118,9 @@ export const Sector1: SectorDef = {
 
                 // --- 1. USE NATIVE GAME ENGINE EXPLOSION (NO CRASHES) ---
                 if (events.spawnPart) {
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'flash', 1);
                     events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'shockwave', 1);
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_fire', 15);
-                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 10);
-                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'debris', 30);
-                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'scrap', 15);
+                    events.spawnPart(_busOriginalPos.x, 2, _busOriginalPos.z, 'large_smoke', 5);
+                    events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'debris', 15);
                 }
 
                 // --- 2. CLEAR THE TUNNEL PASSAGE ---
@@ -1140,8 +1137,7 @@ export const Sector1: SectorDef = {
                     for (let i = 0; i < _obsArray.length; i++) {
                         const obs = _obsArray[i];
                         if (obs && obs.collider && obs.collider.type === 'box' &&
-                            Math.abs(obs.position.x - _busOriginalPos.x) < 2.0 &&
-                            Math.abs(obs.position.z - _busOriginalPos.z) < 2.0) {
+                            obs.id === 'tunnel_bus') {
 
                             obs.collider.size.set(0, 0, 0);
                             obs.radius = 0;
@@ -1276,7 +1272,7 @@ export const Sector1: SectorDef = {
 
                 rubble.instanceMatrix.needsUpdate = true;
 
-                if (!stillMoving || elapsed > 3500) {
+                if (!stillMoving || elapsed > 10000) {
                     data.active = false;
                     transitionToState9 = true;
                 }
