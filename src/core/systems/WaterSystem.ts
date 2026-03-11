@@ -322,6 +322,7 @@ export class WaterSystem {
     }
 
     public registerGround(mesh: THREE.Mesh): void {
+        if (this.grounds.includes(mesh)) return;
         this.grounds.push(mesh);
         this.updateGroundUniforms();
     }
@@ -383,6 +384,7 @@ export class WaterSystem {
         if (this.lilyStems) { this.scene.remove(this.lilyStems); this.lilyStems.dispose(); this.lilyStems = null; }
         if (this.lilyFlowers) { this.scene.remove(this.lilyFlowers); this.lilyFlowers.dispose(); this.lilyFlowers = null; }
         this.lilyData.length = 0;
+        this.grounds.length = 0;
 
         this.playerWasInWater = false;
     }
