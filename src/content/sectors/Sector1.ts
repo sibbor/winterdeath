@@ -200,9 +200,6 @@ export const Sector1: SectorDef = {
 
         // Home - Police car and family's car
         VehicleGenerator.createPoliceCar().position.set(LOCATIONS.VEHICLES.POLICE_CAR.x, 0, LOCATIONS.VEHICLES.POLICE_CAR.z);
-        // We'll use SectorGenerator for high-level spawn tasks that include obstacles,
-        // but for specific event-anchored vehicles like Sector1 bus or family car,
-        // direct generator usage is often cleaner for custom setup.
 
         SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.POLICE_CAR.x, LOCATIONS.VEHICLES.POLICE_CAR.z, LOCATIONS.VEHICLES.POLICE_CAR.rotation, 'police');
         const familyCar = SectorGenerator.spawnVehicle(ctx, LOCATIONS.VEHICLES.FAMILY_CAR.x, LOCATIONS.VEHICLES.FAMILY_CAR.z, 0.3, 'station wagon', 0x333333, false);
@@ -490,7 +487,7 @@ export const Sector1: SectorDef = {
         // Bus (tunnel blocker)
         const bus = VehicleGenerator.createBus(0x009ddb, false);
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, 1.8, LOCATIONS.TRIGGERS.BUS.z);
-        bus.rotation.set(-Math.PI / 2, 0, 0);
+        bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
         bus.updateMatrixWorld();
 
         const busBox = new THREE.Box3().setFromObject(bus);
@@ -1219,29 +1216,37 @@ export const Sector1: SectorDef = {
                 for (let i = 0; i < rubble.count; i++) {
                     const ix = i * 3;
 
-                    if (data.positions[ix + 1] > 0.5) {
+                    const isAboveGround = data.positions[ix + 1] > 0.5;
+                    const hasVelY = Math.abs(data.velocities[ix + 1]) > 0.1;
+                    const hasVelX = Math.abs(data.velocities[ix]) > 0.1;
+                    const hasVelZ = Math.abs(data.velocities[ix + 2]) > 0.1;
+
+                    if (isAboveGround || hasVelY || hasVelX || hasVelZ) {
                         stillMoving = true;
 
-                        data.velocities[ix + 1] -= 50.0 * dtSec; // Gravity
+                        // [VINTERDÖD FIX] Cap delta time to prevent physics explosions on lag spikes
+                        const safeDt = Math.min(dtSec, 0.05);
 
-                        data.positions[ix] += data.velocities[ix] * dtSec;
-                        data.positions[ix + 1] += data.velocities[ix + 1] * dtSec;
-                        data.positions[ix + 2] += data.velocities[ix + 2] * dtSec;
+                        data.velocities[ix + 1] -= 50.0 * safeDt; // Gravity
+
+                        data.positions[ix] += data.velocities[ix] * safeDt;
+                        data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
+                        data.positions[ix + 2] += data.velocities[ix + 2] * safeDt;
 
                         if (data.positions[ix + 1] <= 0.5) {
                             data.positions[ix + 1] = 0.5;
 
-                            data.velocities[ix] *= 0.4;
-                            data.velocities[ix + 2] *= 0.4;
-                            data.velocities[ix + 1] *= -0.3; // Dampened bounce
+                            data.velocities[ix] *= 0.6; // Mindre dämpning för att tillåta glidning
+                            data.velocities[ix + 2] *= 0.6;
+                            data.velocities[ix + 1] *= -0.4; // Dampened bounce
 
-                            data.spin[ix] *= 0.2;
-                            data.spin[ix + 1] *= 0.2;
-                            data.spin[ix + 2] *= 0.2;
+                            data.spin[ix] *= 0.5;
+                            data.spin[ix + 1] *= 0.5;
+                            data.spin[ix + 2] *= 0.5;
 
-                            if (Math.abs(data.velocities[ix + 1]) < 1.0) {
-                                data.velocities[ix + 1] = 0;
-                            }
+                            if (Math.abs(data.velocities[ix + 1]) < 1.0) data.velocities[ix + 1] = 0;
+                            if (Math.abs(data.velocities[ix]) < 0.2) data.velocities[ix] = 0;
+                            if (Math.abs(data.velocities[ix + 2]) < 0.2) data.velocities[ix + 2] = 0;
 
                             if (data.hasLanded && !data.hasLanded[i] && events.playSound) {
                                 data.hasLanded[i] = 1;
@@ -1252,14 +1257,17 @@ export const Sector1: SectorDef = {
                             }
                         }
 
-                        data.rotations[ix] += data.spin[ix] * dtSec;
-                        data.rotations[ix + 1] += data.spin[ix + 1] * dtSec;
-                        data.rotations[ix + 2] += data.spin[ix + 2] * dtSec;
+                        data.rotations[ix] += data.spin[ix] * safeDt;
+                        data.rotations[ix + 1] += data.spin[ix + 1] * safeDt;
+                        data.rotations[ix + 2] += data.spin[ix + 2] * safeDt;
 
                         _position.set(data.positions[ix], data.positions[ix + 1], data.positions[ix + 2]);
                         _rotation.set(data.rotations[ix], data.rotations[ix + 1], data.rotations[ix + 2]);
                         _quat.setFromEuler(_rotation);
-                        _scale.setScalar(data.scales ? data.scales[i] : 1.0);
+
+                        // [VINTERDÖD FIX] Återställ rätt rektangulära proportioner från ObjectGenerator istället för att platta till!
+                        const s = data.scales ? data.scales[i] : 1.0;
+                        _scale.set(2 * s, 2 * s, 4 * s);
 
                         _matrix.compose(_position, _quat, _scale);
                         rubble.setMatrixAt(i, _matrix);

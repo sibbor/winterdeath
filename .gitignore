@@ -33,3 +33,5 @@ Thumbs.db
 test-output.css
 coverage
 src/content/sectors/Sector3_backup.ts
+ts_errors.txt
+tsc_output.txt
