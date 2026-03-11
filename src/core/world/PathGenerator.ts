@@ -11,8 +11,17 @@ const _v3 = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
 const _matrix = new THREE.Matrix4();
+const _euler = new THREE.Euler();
+const _scale = new THREE.Vector3();
 
 let pathLayer = 0; // Incremental Y-offset to prevent Z-fighting
+
+// --- [VINTERDÖD] CACHED ASSETS (ZERO-GC VRAM) ---
+const SHARED_GEO = {
+    box: new THREE.BoxGeometry(1, 1, 1),
+    plane: new THREE.PlaneGeometry(1, 1),
+    cylinder: new THREE.CylinderGeometry(1, 1, 1, 8).rotateX(Math.PI / 2) // Orient for rails
+};
 
 /**
  * PathGenerator
@@ -50,14 +59,6 @@ export const PathGenerator = {
         const height = 50;
         const thickness = 4.0; // Increased from 2.0 to prevent clipping
 
-        // Simplification DISABLED to ensure collision matches visual line exactly
-        // const consolidated: THREE.Vector3[] = [points[0]];
-        // for (let i = 1; i < points.length - 1; i++) {
-        //     _v1.subVectors(points[i], points[i - 1]).normalize();
-        //     _v2.subVectors(points[i + 1], points[i]).normalize();
-        //     if (_v1.dot(_v2) < 0.999) consolidated.push(points[i]);
-        // }
-        // consolidated.push(points[points.length - 1]);
         const consolidated = points;
 
         for (let i = 0; i < consolidated.length - 1; i++) {
@@ -68,12 +69,14 @@ export const PathGenerator = {
             const angle = Math.atan2(next.x - curr.x, next.z - curr.z);
             _v2.addVectors(curr, next).multiplyScalar(0.5);
 
+            _quat.setFromAxisAngle(_up, angle);
+
             SectorGenerator.addObstacle(ctx, {
                 position: _v2.clone().setY(height / 2),
-                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, angle),
+                quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) },
-                type: 'Boundary', // Debug Identifier
-                id: `${name}_${i}` // Specific Segment ID
+                type: 'Boundary',
+                id: `${name}_${i}`
             });
         }
     },
@@ -126,22 +129,26 @@ export const PathGenerator = {
         const sleeperSpacing = 0.8;
         const sleeperCount = Math.floor(length / sleeperSpacing);
         const sleeperPoints = curve.getSpacedPoints(sleeperCount);
-        const sleeperIM = new THREE.InstancedMesh(GEOMETRY.box, MATERIALS.brownBrick, sleeperCount + 1);
-        const dummy = new THREE.Object3D();
+
+        // Zero-GC: Use shared box, apply scale via matrix
+        const sleeperIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.brownBrick, sleeperCount + 1);
+
         for (let i = 0; i < sleeperPoints.length; i++) {
             const pt = sleeperPoints[i];
             if (i < sleeperPoints.length - 1) _v1.subVectors(sleeperPoints[i + 1], pt).normalize();
             else _v1.subVectors(pt, sleeperPoints[i - 1]).normalize();
-            dummy.position.copy(pt).setY(0.08);
-            dummy.scale.set(3.0, 0.15, 0.4);
-            dummy.lookAt(_v3.copy(pt).add(_v1));
-            dummy.updateMatrix();
-            sleeperIM.setMatrixAt(i, dummy.matrix);
+
+            _matrix.lookAt(pt, _v3.copy(pt).add(_v1), _up);
+            _quat.setFromRotationMatrix(_matrix);
+
+            // Apply size (3.0, 0.15, 0.4) directly in the matrix
+            _matrix.compose(pt.clone().setY(0.08), _quat, _v2.set(3.0, 0.15, 0.4));
+            sleeperIM.setMatrixAt(i, _matrix);
         }
         sleeperIM.instanceMatrix.needsUpdate = true;
         ctx.scene.add(sleeperIM);
 
-        // Rails - FIXED: Using PathGenerator instead of 'this'
+        // Rails
         const railMat = MATERIALS.blackMetal.clone();
         (railMat as any).metalness = 0.9;
         buildRibbon(PathGenerator.getOffsetPoints(pointsList, -1.0), 0.2, 0.08, railMat, 'Rail_L');
@@ -190,7 +197,9 @@ export const PathGenerator = {
             }
 
             if ((showBlood || showFootprints) && i % 6 === 0) {
-                const decal = new THREE.Mesh(GEOMETRY.plane, showBlood ? MATERIALS.bloodStainDecal : MATERIALS.footprintDecal);
+                // Använd en instans-lösning om det är väldigt många, annars är detta okej 
+                // då decals (enkel plane) drar väldigt lite draw calls i jämförelse med 3D-modeller.
+                const decal = new THREE.Mesh(SHARED_GEO.plane, showBlood ? MATERIALS.bloodStainDecal : MATERIALS.footprintDecal);
                 decal.position.set(pt.x + (Math.random() - 0.5), yOff + 0.01, pt.z + (Math.random() - 0.5));
                 decal.rotation.x = -Math.PI / 2;
                 decal.rotation.z = Math.random() * Math.PI * 2;
@@ -265,9 +274,9 @@ export const PathGenerator = {
         const mat = options.material.clone();
         if (options.color !== undefined) (mat as any).color.setHex(options.color);
 
-        const im = new THREE.InstancedMesh(GEOMETRY.plane, mat, count);
+        // Zero-GC: Shared Plane
+        const im = new THREE.InstancedMesh(SHARED_GEO.plane, mat, count);
         im.renderOrder = 5;
-        const dummy = new THREE.Object3D();
 
         for (let i = 0; i < pts.length; i++) {
             const pt = pts[i];
@@ -276,18 +285,22 @@ export const PathGenerator = {
 
             const varVal = options.variance || 0;
             const y = options.yOffset !== undefined ? options.yOffset : 0.04;
-            dummy.position.set(pt.x + (Math.random() - 0.5) * varVal, pt.y + y, pt.z + (Math.random() - 0.5) * varVal);
+
+            _v2.set(pt.x + (Math.random() - 0.5) * varVal, pt.y + y, pt.z + (Math.random() - 0.5) * varVal);
 
             if (options.randomRotation) {
-                dummy.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
+                _quat.setFromEuler(_euler.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2));
             } else {
-                dummy.lookAt(_v3.copy(pt).add(_v1));
-                dummy.rotateX(-Math.PI / 2);
-                if (i % 2 === 0) dummy.translateX(0.2); else dummy.translateX(-0.2);
+                _matrix.lookAt(_v2, _v3.copy(pt).add(_v1), _up);
+                _quat.setFromRotationMatrix(_matrix);
+                _quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
+
+                if (i % 2 === 0) _v2.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), 0.2);
+                else _v2.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(_quat), -0.2);
             }
-            dummy.scale.set(options.size, options.size * 1.5, 1);
-            dummy.updateMatrix();
-            im.setMatrixAt(i, dummy.matrix);
+
+            _matrix.compose(_v2, _quat, _v3.set(options.size, options.size * 1.5, 1));
+            im.setMatrixAt(i, _matrix);
         }
         im.instanceMatrix.needsUpdate = true;
         ctx.scene.add(im);
@@ -335,10 +348,11 @@ export const PathGenerator = {
 
         for (let i = 0; i < segCount; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-            // Optimized: No dummy mesh
+            _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
+
             SectorGenerator.addObstacle(ctx, {
                 position: mid.clone(),
-                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)),
+                quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) }
             });
         }
@@ -369,9 +383,11 @@ export const PathGenerator = {
 
         for (let i = 0; i < pts.length - 1; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
+            _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
+
             SectorGenerator.addObstacle(ctx, {
-                position: mid,
-                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)),
+                position: mid.clone(),
+                quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) }
             });
         }
@@ -382,13 +398,18 @@ export const PathGenerator = {
         const dist = 1.5;
         const steps = Math.ceil(curve.getLength() / dist);
         const pts = curve.getSpacedPoints(steps);
-        const im = new THREE.InstancedMesh(new THREE.BoxGeometry(thickness, height, dist), MATERIALS.stone, pts.length - 1);
+
+        // Zero-GC: Använd delad box och sätt dist i scale
+        const im = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.stone, pts.length - 1);
 
         for (let i = 0; i < pts.length - 1; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
             _matrix.lookAt(mid, pts[i + 1], _up);
             _quat.setFromRotationMatrix(_matrix);
-            _matrix.compose(mid, _quat, _v3.set(1, 1, 1));
+
+            // Offset y since box geometry is centered
+            mid.y += height / 2;
+            _matrix.compose(mid, _quat, _v3.set(thickness, height, dist));
             im.setMatrixAt(i, _matrix);
 
             SectorGenerator.addObstacle(ctx, {
@@ -405,11 +426,15 @@ export const PathGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const pts = curve.getSpacedPoints(Math.ceil(curve.getLength() / 2.0));
 
-        const postIM = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.1, 1.0), MATERIALS.blackMetal, pts.length);
-        const railIM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.15, 0.3, 1), MATERIALS.blackMetal, pts.length - 1);
+        // Zero-GC Geometry
+        const postIM = new THREE.InstancedMesh(SHARED_GEO.cylinder, MATERIALS.blackMetal, pts.length);
+        const railIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.blackMetal, pts.length - 1);
 
         for (let i = 0; i < pts.length; i++) {
+            // Apply scale (0.1 radius = 0.2 width, 1.0 height)
             _matrix.makeTranslation(pts[i].x, pts[i].y + 0.5, pts[i].z);
+            _scale.set(0.2, 1.0, 0.2);
+            _matrix.scale(_scale);
             postIM.setMatrixAt(i, _matrix);
         }
 
@@ -418,12 +443,14 @@ export const PathGenerator = {
             const dist = pts[i].distanceTo(pts[i + 1]);
             _matrix.lookAt(mid, _v2.copy(pts[i + 1]).setY(mid.y), _up);
             _quat.setFromRotationMatrix(_matrix);
-            _matrix.compose(mid, _quat, _v3.set(1, 1, dist));
+            _matrix.compose(mid, _quat, _v3.set(0.15, 0.3, dist));
             railIM.setMatrixAt(i, _matrix);
+
+            _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
 
             SectorGenerator.addObstacle(ctx, {
                 position: mid.clone().setY(floating ? mid.y : mid.y / 2),
-                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)),
+                quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) }
             });
         }
@@ -439,21 +466,21 @@ export const PathGenerator = {
         const v: number[] = [], idx: number[] = [], uv: number[] = [];
 
         // Local vectors to avoid GC and state collisions
-        const _v1 = new THREE.Vector3();
-        const _v2 = new THREE.Vector3();
-        const _up = new THREE.Vector3(0, 1, 0);
+        const _v1_local = new THREE.Vector3();
+        const _v2_local = new THREE.Vector3();
+        const _up_local = new THREE.Vector3(0, 1, 0);
+        const _quat_local = new THREE.Quaternion();
 
         for (let i = 0; i < pts.length; i++) {
             const pt = pts[i];
-            if (i < pts.length - 1) _v1.subVectors(pts[i + 1], pt).normalize();
-            else _v1.subVectors(pt, pts[i - 1]).normalize();
-            _v2.crossVectors(_v1, _up).normalize();
+            if (i < pts.length - 1) _v1_local.subVectors(pts[i + 1], pt).normalize();
+            else _v1_local.subVectors(pt, pts[i - 1]).normalize();
+            _v2_local.crossVectors(_v1_local, _up_local).normalize();
 
-            // Smooth slopes (Base extended by 2 meters outwards on each side)
-            const p1 = pt.clone().addScaledVector(_v2, (-width * 0.5) - 2.0).setY(0.1);
-            const p2 = pt.clone().addScaledVector(_v2, -width * 0.2).setY(height);
-            const p3 = pt.clone().addScaledVector(_v2, width * 0.2).setY(height);
-            const p4 = pt.clone().addScaledVector(_v2, (width * 0.5) + 2.0).setY(0.1);
+            const p1 = pt.clone().addScaledVector(_v2_local, (-width * 0.5) - 2.0).setY(0.1);
+            const p2 = pt.clone().addScaledVector(_v2_local, -width * 0.2).setY(height);
+            const p3 = pt.clone().addScaledVector(_v2_local, width * 0.2).setY(height);
+            const p4 = pt.clone().addScaledVector(_v2_local, (width * 0.5) + 2.0).setY(0.1);
 
             v.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, p4.x, p4.y, p4.z);
 
@@ -463,8 +490,6 @@ export const PathGenerator = {
             if (i > 0) {
                 const o = (i - 1) * 4, c = i * 4;
 
-                // CORRECTED: Reverse the order of the indices to create 
-                // Counter-Clockwise (CCW) triangles! Now the slope faces upwards towards the light.
                 idx.push(
                     o, o + 1, c,
                     o + 1, c + 1, c,
@@ -474,17 +499,17 @@ export const PathGenerator = {
                     o + 3, c + 3, c + 2
                 );
 
-                // Collision works perfectly
                 const pPrev = pts[i - 1];
                 const pCurr = pts[i];
-                const mid = _v1.addVectors(pPrev, pCurr).multiplyScalar(0.5);
+                const mid = _v1_local.addVectors(pPrev, pCurr).multiplyScalar(0.5);
                 const angle = Math.atan2(pCurr.x - pPrev.x, pCurr.z - pPrev.z);
                 const dist = pPrev.distanceTo(pCurr);
 
+                _quat_local.setFromAxisAngle(_up_local, angle);
+
                 SectorGenerator.addObstacle(ctx, {
                     position: mid.clone().setY(height / 2),
-                    quaternion: new THREE.Quaternion().setFromAxisAngle(_up, angle),
-                    // Extended collider width by 4 to account for the +2m extension on both sides
+                    quaternion: _quat_local.clone(),
                     collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) }
                 });
             }
@@ -495,7 +520,6 @@ export const PathGenerator = {
         geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
         geo.setIndex(idx);
 
-        // These three are important for custom geometry!
         geo.computeVertexNormals();
         geo.computeBoundingSphere();
         geo.computeBoundingBox();

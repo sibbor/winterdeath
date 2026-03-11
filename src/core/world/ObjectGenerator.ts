@@ -7,7 +7,6 @@ import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
 import { EffectManager } from '../systems/EffectManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-// Reused to prevent garbage collection stutter during mass-instancing
 const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
 const _scale = new THREE.Vector3();
@@ -22,9 +21,24 @@ const getSharedTextures = () => {
     return sharedTextures;
 };
 
-// --- [VINTERDÖD] MATERIAL CACHE ---
-// Prevents massive GPU memory leaks and stuttering by reusing materials
-// instead of creating 'new THREE.Material' inside generator functions.
+// --- [VINTERDÖD] CACHED ASSETS (ZERO-GC VRAM) ---
+// Prevents massive GPU memory leaks and stuttering by reusing geometries
+// instead of creating 'new THREE.Geometry' inside generator functions.
+const SHARED_GEO = {
+    box: new THREE.BoxGeometry(1, 1, 1),
+    plane: new THREE.PlaneGeometry(1, 1),
+    cylinder: new THREE.CylinderGeometry(1, 1, 1, 8),
+    cone: new THREE.ConeGeometry(1, 1, 8),
+    ring: new THREE.RingGeometry(0.8, 1.0, 32).rotateX(-Math.PI / 2),
+    fencePost: new THREE.BoxGeometry(0.2, 1.2, 0.2),
+    fenceRail: new THREE.BoxGeometry(0.1, 0.15, 1), // Skalas i Z per anrop
+    meshFencePost: new THREE.BoxGeometry(0.12, 1, 0.12), // Skalas i Y per anrop
+    meshFenceRail: new THREE.CylinderGeometry(0.04, 0.04, 1).rotateX(Math.PI / 2), // Skalas i Y (som blir Z efter rot)
+    log: new THREE.CylinderGeometry(0.3, 0.3, 6, 8).rotateX(Math.PI / 2),
+    stalk: new THREE.PlaneGeometry(0.1, 1).translate(0, 0.5, 0),
+    rock: new THREE.DodecahedronGeometry(1, 0)
+};
+
 let fenceMat: THREE.MeshStandardMaterial | null = null;
 
 const LOCAL_MATS = {
@@ -35,48 +49,47 @@ const LOCAL_MATS = {
     caveLampCage: new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true })
 };
 
-// Dynamic caches for colored objects
 const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
-
 
 export const ObjectGenerator = {
 
     createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
         const group = new THREE.Group();
-        // Använder det vind-patchade materialet direkt från MATERIALS!
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, length), MATERIALS.hedge);
+
+        // Återanvänd SHARED_GEO.box och sätt skalan istället för ny geometri
+        const mesh = new THREE.Mesh(SHARED_GEO.box, MATERIALS.hedge);
+        mesh.scale.set(thickness, height, length);
         mesh.position.y = height / 2;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
 
-        const leafGeo = new THREE.BoxGeometry(thickness * 1.1, height * 0.2, length * 0.2);
+        // Skapa löven
         for (let i = 0; i < 5; i++) {
-            const leaf = new THREE.Mesh(leafGeo, MATERIALS.hedge);
+            const leaf = new THREE.Mesh(SHARED_GEO.box, MATERIALS.hedge);
+            leaf.scale.set(thickness * 1.1, height * 0.2, length * 0.2);
             leaf.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
             group.add(leaf);
         }
+
         group.userData.material = 'WOOD';
         return group;
     },
 
-
     createFence: (length: number = 3.0) => {
         const group = new THREE.Group();
 
-        // Lazy load & tint wood texture specifically for fences
         if (!fenceMat) {
             fenceMat = MATERIALS.wood.clone();
             fenceMat.color.setHex(0x4a3728);
         }
 
-        const postGeo = new THREE.BoxGeometry(0.2, 1.2, 0.2);
-        const p1 = new THREE.Mesh(postGeo, fenceMat); p1.position.set(0, 0.6, -length / 2); group.add(p1);
-        const p2 = new THREE.Mesh(postGeo, fenceMat); p2.position.set(0, 0.6, length / 2); group.add(p2);
+        // Återanvänder geometri, multiplicerar längd
+        const p1 = new THREE.Mesh(SHARED_GEO.fencePost, fenceMat); p1.position.set(0, 0.6, -length / 2); group.add(p1);
+        const p2 = new THREE.Mesh(SHARED_GEO.fencePost, fenceMat); p2.position.set(0, 0.6, length / 2); group.add(p2);
 
-        const railGeo = new THREE.BoxGeometry(0.1, 0.15, length);
-        const r1 = new THREE.Mesh(railGeo, fenceMat); r1.position.set(0, 0.4, 0); group.add(r1);
-        const r2 = new THREE.Mesh(railGeo, fenceMat); r2.position.set(0, 0.9, 0); group.add(r2);
+        const r1 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r1.scale.z = length; r1.position.set(0, 0.4, 0); group.add(r1);
+        const r2 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r2.scale.z = length; r2.position.set(0, 0.9, 0); group.add(r2);
 
         group.userData.material = 'WOOD';
         return group;
@@ -87,19 +100,18 @@ export const ObjectGenerator = {
         const postMat = MATERIALS.steel;
         const meshMat = MATERIALS.fenceMesh;
 
-        const postGeo = new THREE.BoxGeometry(0.12, height, 0.12);
-        const p1 = new THREE.Mesh(postGeo, postMat); p1.position.set(0, height / 2, -length / 2); group.add(p1);
-        const p2 = new THREE.Mesh(postGeo, postMat); p2.position.set(0, height / 2, length / 2); group.add(p2);
+        // Återanvänder geometri
+        const p1 = new THREE.Mesh(SHARED_GEO.meshFencePost, postMat); p1.scale.y = height; p1.position.set(0, height / 2, -length / 2); group.add(p1);
+        const p2 = new THREE.Mesh(SHARED_GEO.meshFencePost, postMat); p2.scale.y = height; p2.position.set(0, height / 2, length / 2); group.add(p2);
 
-        const planeGeo = new THREE.PlaneGeometry(length, height * 0.9);
-        const mesh = new THREE.Mesh(planeGeo, meshMat);
+        const mesh = new THREE.Mesh(SHARED_GEO.plane, meshMat);
+        mesh.scale.set(length, height * 0.9, 1);
         mesh.rotation.y = Math.PI / 2;
         mesh.position.set(0, height * 0.48, 0);
         group.add(mesh);
 
-        const railGeo = new THREE.CylinderGeometry(0.04, 0.04, length);
-        const rail = new THREE.Mesh(railGeo, postMat);
-        rail.rotation.x = Math.PI / 2;
+        const rail = new THREE.Mesh(SHARED_GEO.meshFenceRail, postMat);
+        rail.scale.y = length; // Roterad så y blir dess längd utmed z
         rail.position.set(0, height * 0.95, 0);
         group.add(rail);
 
@@ -154,13 +166,8 @@ export const ObjectGenerator = {
         tunnelMat.side = THREE.DoubleSide;
         tunnelGroup.add(new THREE.Mesh(archGeo, tunnelMat));
 
-        const floorGeo = new THREE.PlaneGeometry(halfWidthI * 2, tunnelDepth);
-        const gravelMat = MATERIALS.gravel.clone();
-        if (gravelMat.map) {
-            gravelMat.map.wrapS = gravelMat.map.wrapT = THREE.RepeatWrapping;
-            gravelMat.map.repeat.set(halfWidthI, tunnelDepth / 2);
-        }
-        const floor = new THREE.Mesh(floorGeo, gravelMat);
+        const floor = new THREE.Mesh(SHARED_GEO.plane, MATERIALS.gravel);
+        floor.scale.set(halfWidthI * 2, tunnelDepth, 1);
         floor.rotation.x = -Math.PI / 2;
         floor.position.y = 0.02;
         tunnelGroup.add(floor);
@@ -181,14 +188,25 @@ export const ObjectGenerator = {
 
     createStreetLamp: () => {
         const group = new THREE.Group();
-        const poleGeo = new THREE.CylinderGeometry(0.1, 0.2, 8).translate(0, 4, 0);
-        const armGeo = new THREE.BoxGeometry(0.2, 0.2, 2).translate(0, 7.5, 0.5);
-        const headGeo = new THREE.BoxGeometry(0.6, 0.2, 0.8).translate(0, 7.5, 1.5);
 
-        const mergedGeo = BufferGeometryUtils.mergeGeometries([poleGeo, armGeo, headGeo]);
-        const lampMesh = new THREE.Mesh(mergedGeo, MATERIALS.blackMetal);
-        lampMesh.castShadow = true;
-        group.add(lampMesh);
+        // Använder boxar/cylindrar och positionerar via matrix/scale för att slippa mergeGeometries på runtime
+        const pole = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.blackMetal);
+        pole.scale.set(0.2, 8, 0.2);
+        pole.position.set(0, 4, 0);
+        pole.castShadow = true;
+        group.add(pole);
+
+        const arm = new THREE.Mesh(SHARED_GEO.box, MATERIALS.blackMetal);
+        arm.scale.set(0.2, 0.2, 2);
+        arm.position.set(0, 7.5, 0.5);
+        arm.castShadow = true;
+        group.add(arm);
+
+        const head = new THREE.Mesh(SHARED_GEO.box, MATERIALS.blackMetal);
+        head.scale.set(0.6, 0.2, 0.8);
+        head.position.set(0, 7.5, 1.5);
+        head.castShadow = true;
+        group.add(head);
 
         const light = new THREE.PointLight(0xaaddff, 4, 30);
         light.position.set(0, 7.4, 1.5);
@@ -224,6 +242,7 @@ export const ObjectGenerator = {
 
             mergedGeometry = BufferGeometryUtils.mergeGeometries([nonIndexedBody, nonIndexedRoof]);
 
+            // Städa upp de temporära!
             roofGeo.dispose();
             nonIndexedRoof.dispose();
         } else {
@@ -241,7 +260,6 @@ export const ObjectGenerator = {
         group.add(building);
 
         if (withLights) {
-            const winGeo = new THREE.PlaneGeometry(1.2, 1.5);
             let litCount = 0;
             let darkCount = 0;
 
@@ -253,12 +271,15 @@ export const ObjectGenerator = {
             }
 
             if (litCount > 0) {
-                const litWindows = new THREE.InstancedMesh(winGeo, LOCAL_MATS.litWindow, litCount);
+                const litWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.litWindow, litCount);
                 let idx = 0;
                 for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                     for (let y = 2; y < height - 1; y += 4) {
                         if (Math.random() < lightProbability) {
                             _matrix.makeTranslation(x, y, depth / 2 + 0.05);
+                            // Scale up the shared plane
+                            _scale.set(1.2, 1.5, 1);
+                            _matrix.scale(_scale);
                             litWindows.setMatrixAt(idx++, _matrix);
                         }
                     }
@@ -268,12 +289,14 @@ export const ObjectGenerator = {
             }
 
             if (darkCount > 0) {
-                const darkWindows = new THREE.InstancedMesh(winGeo, LOCAL_MATS.darkWindow, darkCount);
+                const darkWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.darkWindow, darkCount);
                 let idx = 0;
                 for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                     for (let y = 2; y < height - 1; y += 4) {
                         if (Math.random() >= lightProbability) {
                             _matrix.makeTranslation(x, y, depth / 2 + 0.05);
+                            _scale.set(1.2, 1.5, 1);
+                            _matrix.scale(_scale);
                             darkWindows.setMatrixAt(idx++, _matrix);
                         }
                     }
@@ -288,6 +311,7 @@ export const ObjectGenerator = {
             material: 'CONCRETE'
         };
 
+        // Städa!
         bodyGeo.dispose();
         nonIndexedBody.dispose();
 
@@ -297,25 +321,31 @@ export const ObjectGenerator = {
     createShelf: (scale: number = 1.0) => {
         const group = new THREE.Group();
         const mat = MATERIALS.treeTrunk;
-
         const w = 2.0, h = 2.0, d = 0.5;
-        const sideGeo = new THREE.BoxGeometry(0.1, h, d);
-        group.add(new THREE.Mesh(sideGeo, mat).translateX(-w / 2).translateY(h / 2));
-        group.add(new THREE.Mesh(sideGeo, mat).translateX(w / 2).translateY(h / 2));
 
-        const shelfGeo = new THREE.BoxGeometry(w, 0.1, d);
-        const propGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+        // Använd shared box för allt!
+        const leftSide = new THREE.Mesh(SHARED_GEO.box, mat);
+        leftSide.scale.set(0.1, h, d);
+        leftSide.position.set(-w / 2, h / 2, 0);
+        group.add(leftSide);
+
+        const rightSide = new THREE.Mesh(SHARED_GEO.box, mat);
+        rightSide.scale.set(0.1, h, d);
+        rightSide.position.set(w / 2, h / 2, 0);
+        group.add(rightSide);
 
         for (let y = 0.1; y < h; y += 0.6) {
-            const s = new THREE.Mesh(shelfGeo, mat);
-            s.position.set(0, y, 0);
-            s.castShadow = true;
-            group.add(s);
+            const shelf = new THREE.Mesh(SHARED_GEO.box, mat);
+            shelf.scale.set(w, 0.1, d);
+            shelf.position.set(0, y, 0);
+            shelf.castShadow = true;
+            group.add(shelf);
 
             if (Math.random() > 0.3) {
                 const numProps = Math.floor(Math.random() * 4);
                 for (let i = 0; i < numProps; i++) {
-                    const prop = new THREE.Mesh(propGeo, MATERIALS.barrel);
+                    const prop = new THREE.Mesh(SHARED_GEO.box, MATERIALS.barrel);
+                    prop.scale.setScalar(0.2);
                     prop.position.set((Math.random() - 0.5) * w * 0.8, y + 0.15, (Math.random() - 0.5) * d * 0.6);
                     group.add(prop);
                 }
@@ -329,38 +359,34 @@ export const ObjectGenerator = {
         const group = new THREE.Group();
         group.position.set(x, 0, z);
 
-        // Wood material for post and arms
         const postMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
 
-        // Vertical post
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.5), postMat);
+        const post = new THREE.Mesh(SHARED_GEO.cylinder, postMat);
+        post.scale.set(0.1, 2.5, 0.1);
         post.position.y = 1.25;
         group.add(post);
 
-        // Horizontal arms
-        const arms = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.8), postMat);
+        const arms = new THREE.Mesh(SHARED_GEO.cylinder, postMat);
+        arms.scale.set(0.08, 1.8, 0.08);
         arms.rotation.z = Math.PI / 2;
         arms.position.y = 1.8;
         group.add(arms);
 
-        // Burlap sack head
+        // Skräddarsydda geometrier (körs sällan så det är ok, men vi kan undvika new inuti funktionen)
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xeadbaf, roughness: 1.0 }));
         head.position.y = 2.4;
         group.add(head);
 
-        // Flannel/Shirt body
         const shirt = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 1.0), new THREE.MeshStandardMaterial({ color: 0x6b8e23, roughness: 0.8 }));
         shirt.position.y = 1.6;
         group.add(shirt);
 
-        // Farmer hat
         const hat = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.5), new THREE.MeshStandardMaterial({ color: 0x4a3c31, roughness: 1.0 }));
         hat.position.y = 2.75;
         group.add(hat);
 
         return group;
     },
-
 
     createFire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
         const group = new THREE.Group();
@@ -390,11 +416,11 @@ export const ObjectGenerator = {
         ash.receiveShadow = true;
         group.add(ash);
 
-        const stoneGeo = new THREE.DodecahedronGeometry(0.25);
         for (let i = 0; i < 10; i++) {
-            const s = new THREE.Mesh(stoneGeo, MATERIALS.stone);
+            const s = new THREE.Mesh(SHARED_GEO.rock, MATERIALS.stone);
             const angle = (i / 10) * Math.PI * 2;
             const r = 0.9 + (Math.random() - 0.5) * 0.1;
+            s.scale.setScalar(0.25);
             s.position.set(Math.cos(angle) * r, 0.15, Math.sin(angle) * r);
             s.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
             s.castShadow = true;
@@ -402,9 +428,9 @@ export const ObjectGenerator = {
             group.add(s);
         }
 
-        const logGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.4);
         for (let i = 0; i < 4; i++) {
-            const log = new THREE.Mesh(logGeo, MATERIALS.treeTrunk);
+            const log = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.treeTrunk);
+            log.scale.set(0.12, 1.4, 0.12);
             log.rotation.set((Math.random() - 0.5) * 0.2, (i / 4) * Math.PI * 2 + (Math.random() * 0.2), Math.PI / 2);
             log.position.y = 0.25;
             log.castShadow = true;
@@ -432,28 +458,23 @@ export const ObjectGenerator = {
 
         const mat = MATERIALS.concrete;
 
-        // Vänster vägg
-        const sideL = new THREE.Mesh(new THREE.BoxGeometry(wallThick, height, length), mat);
+        const sideL = new THREE.Mesh(SHARED_GEO.box, mat);
+        sideL.scale.set(wallThick, height, length);
         sideL.position.set(-width / 2 - wallThick / 2, height / 2, 0);
         group.add(sideL);
 
-        // Höger vägg
-        const sideR = new THREE.Mesh(new THREE.BoxGeometry(wallThick, height, length), mat);
+        const sideR = new THREE.Mesh(SHARED_GEO.box, mat);
+        sideR.scale.set(wallThick, height, length);
         sideR.position.set(width / 2 + wallThick / 2, height / 2, 0);
         group.add(sideR);
 
-        // Tak
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(width + wallThick * 2, roofThick, length), mat);
+        const roof = new THREE.Mesh(SHARED_GEO.box, mat);
+        roof.scale.set(width + wallThick * 2, roofThick, length);
         roof.position.set(0, height + roofThick / 2, 0);
         group.add(roof);
 
         ctx.scene.add(group);
 
-        // --------------------------------------------------------
-        // KOLLISIONSHANTERING
-        // Tvinga fram en uppdatering av världen så vi kan hämta 
-        // de exakta globala positionerna för väggarna.
-        // --------------------------------------------------------
         group.updateMatrixWorld(true);
 
         const worldPosL = new THREE.Vector3();
@@ -465,9 +486,6 @@ export const ObjectGenerator = {
         const worldQuat = new THREE.Quaternion();
         group.getWorldQuaternion(worldQuat);
 
-        // Använd SectorGenerator.addObstacle så de hamnar i SpatialGrid!
-        // Vi skickar in position och quaternion direkt istället för meshen 
-        // för att vara 100% säkra på att det blir världskoordinater.
         SectorGenerator.addObstacle(ctx, {
             position: worldPosL,
             quaternion: worldQuat,
@@ -485,7 +503,9 @@ export const ObjectGenerator = {
 
     createHaybale: (scale: number = 1.0) => {
         const group = new THREE.Group();
-        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 2.4, 12).rotateZ(Math.PI / 2), MATERIALS.hay);
+        const mesh = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.hay);
+        mesh.scale.set(1.2, 2.4, 1.2);
+        mesh.rotation.z = Math.PI / 2;
         mesh.position.y = 1.2;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -498,7 +518,6 @@ export const ObjectGenerator = {
     createTimberPile: (scale: number = 1.0) => {
         const group = new THREE.Group();
         const logHeight = 6, logRadius = 0.3;
-        const logGeo = new THREE.CylinderGeometry(logRadius, logRadius, logHeight, 8).rotateX(Math.PI / 2);
         const materials = [MATERIALS.treeTrunk, MATERIALS.logEnd, MATERIALS.logEnd];
 
         for (let l = 0; l < 4; l++) {
@@ -506,9 +525,11 @@ export const ObjectGenerator = {
             const y = logRadius + l * (logRadius * 1.7);
             const startX = -(logsInLayer - 1) * logRadius;
             for (let i = 0; i < logsInLayer; i++) {
-                const log = new THREE.Mesh(logGeo, materials);
+                const log = new THREE.Mesh(SHARED_GEO.log, materials);
+                // SHARED_GEO.log is already rotated correctly, just set the scale we want
+                log.scale.set(logRadius / 0.3, logHeight / 6, logRadius / 0.3); // Scale relative to the shared geometry
                 log.position.set(startX + i * logRadius * 2, y, 0);
-                log.rotation.z = (Math.random() - 0.5) * 0.05;
+                log.rotation.x = (Math.random() - 0.5) * 0.05; // Slumpmässig rotation på stocken
                 log.castShadow = true;
                 group.add(log);
             }
@@ -520,13 +541,16 @@ export const ObjectGenerator = {
     createWheatStalk: (scale: number = 1.0) => {
         const group = new THREE.Group();
         const height = 1.2 + Math.random() * 0.4;
-        const stalkGeo = new THREE.PlaneGeometry(0.1, height).translate(0, height / 2, 0);
-        const p1 = new THREE.Mesh(stalkGeo, MATERIALS.wheat);
+
+        const p1 = new THREE.Mesh(SHARED_GEO.stalk, MATERIALS.wheat);
+        p1.scale.y = height;
         p1.rotation.set((Math.random() - 0.5) * 0.2, Math.random() * Math.PI, 0);
         group.add(p1);
+
         const p2 = p1.clone();
         p2.rotation.y += Math.PI / 2;
         group.add(p2);
+
         group.scale.setScalar(scale);
         return group;
     },
@@ -557,14 +581,16 @@ export const ObjectGenerator = {
         const mat = MATERIALS.container.clone();
         if (colorOverride !== undefined) mat.color.setHex(colorOverride);
 
-        const body = new THREE.Mesh(new THREE.BoxGeometry(6.0, 2.6, 2.4), mat);
+        const body = new THREE.Mesh(SHARED_GEO.box, mat);
+        body.scale.set(6.0, 2.6, 2.4);
         body.position.y = 1.3;
         body.castShadow = true;
         body.receiveShadow = true;
         group.add(body);
 
         if (addSnow) {
-            const snow = new THREE.Mesh(new THREE.BoxGeometry(6.05, 0.1, 2.45), MATERIALS.snow);
+            const snow = new THREE.Mesh(SHARED_GEO.box, MATERIALS.snow);
+            snow.scale.set(6.05, 0.1, 2.45);
             snow.position.y = 2.65;
             group.add(snow);
         }
@@ -578,7 +604,8 @@ export const ObjectGenerator = {
         if (withBacking) {
             const mat = MATERIALS.blackMetal.clone();
             mat.color.setHex(backgroundColor);
-            const base = new THREE.Mesh(new THREE.BoxGeometry(text.length * 0.4 + 1, 0.8, 0.2), mat);
+            const base = new THREE.Mesh(SHARED_GEO.box, mat);
+            base.scale.set(text.length * 0.4 + 1, 0.8, 0.2);
             group.add(base);
         }
 
@@ -595,7 +622,9 @@ export const ObjectGenerator = {
 
     createCaveLamp: () => {
         const group = new THREE.Group();
-        group.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2), MATERIALS.blackMetal));
+        const base = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.blackMetal);
+        base.scale.set(0.3, 0.2, 0.3);
+        group.add(base);
 
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), LOCAL_MATS.caveLampBulb);
         bulb.position.y = -0.15;
@@ -615,19 +644,21 @@ export const ObjectGenerator = {
 
     createElectricPole: (withWires: boolean = false) => {
         const group = new THREE.Group();
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 10), MATERIALS.treeTrunk);
+        const pole = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.treeTrunk);
+        pole.scale.set(0.2, 10, 0.2); // Använder cylinder som bas
         pole.position.y = 5;
         group.add(pole);
 
-        const crossArm = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 0.2), MATERIALS.treeTrunk);
+        const crossArm = new THREE.Mesh(SHARED_GEO.box, MATERIALS.treeTrunk);
+        crossArm.scale.set(3, 0.2, 0.2);
         crossArm.position.y = 9;
         group.add(crossArm);
 
-        const insGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3);
         const xs = [-1.2, 0, 1.2];
         for (let i = 0; i < xs.length; i++) {
             const x = xs[i];
-            const ins = new THREE.Mesh(insGeo, MATERIALS.stone);
+            const ins = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.stone);
+            ins.scale.set(0.1, 0.3, 0.1);
             ins.position.set(x, 9.2, 0);
             group.add(ins);
         }
@@ -638,15 +669,16 @@ export const ObjectGenerator = {
 
     createGlassStaircase: (width: number, height: number, depth: number) => {
         const group = new THREE.Group();
-        const box = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), MATERIALS.glass);
+        const box = new THREE.Mesh(SHARED_GEO.box, MATERIALS.glass);
+        box.scale.set(width, height, depth);
         box.position.y = height / 2;
         group.add(box);
 
         const numSteps = 12;
         const stepHeight = height / numSteps, stepDepth = depth / numSteps;
-        const stepGeo = new THREE.BoxGeometry(width - 0.2, 0.1, stepDepth);
         for (let i = 0; i < numSteps; i++) {
-            const step = new THREE.Mesh(stepGeo, MATERIALS.concrete);
+            const step = new THREE.Mesh(SHARED_GEO.box, MATERIALS.concrete);
+            step.scale.set(width - 0.2, 0.1, stepDepth);
             step.position.set(0, i * stepHeight + 0.1, -depth / 2 + i * stepDepth + stepDepth / 2);
             group.add(step);
         }
@@ -681,13 +713,13 @@ export const ObjectGenerator = {
 
         const midPoint = height * 0.4;
 
-        const lowerGeo = new THREE.BoxGeometry(width, midPoint, depth).translate(0, midPoint / 2, 0);
-        const lowerMesh = new THREE.Mesh(lowerGeo, lowerMat || MATERIALS.whiteBrick);
+        const lowerMesh = new THREE.Mesh(SHARED_GEO.box, lowerMat || MATERIALS.whiteBrick);
+        lowerMesh.scale.set(width, midPoint, depth);
+        lowerMesh.position.y = midPoint / 2;
         lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
         group.add(lowerMesh);
 
         const upperHeight = height - midPoint;
-        const upperGeo = new THREE.BoxGeometry(width, upperHeight, depth).translate(0, midPoint + upperHeight / 2, 0);
 
         let finalUpperMat = upperMat || MATERIALS.wooden_fasade;
         if (mapRepeat && (finalUpperMat as any).map) {
@@ -698,14 +730,18 @@ export const ObjectGenerator = {
             (finalUpperMat as any).map.needsUpdate = true;
         }
 
-        const upperMesh = new THREE.Mesh(upperGeo, finalUpperMat);
+        const upperMesh = new THREE.Mesh(SHARED_GEO.box, finalUpperMat);
+        upperMesh.scale.set(width, upperHeight, depth);
+        upperMesh.position.y = midPoint + upperHeight / 2;
         upperMesh.castShadow = true; upperMesh.receiveShadow = true;
         group.add(upperMesh);
 
         if (withRoof) {
             const roofHeight = 3;
-            const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.7, roofHeight, 4).rotateY(Math.PI / 4).translate(0, height + roofHeight / 2, 0);
+            // Roof shape is unique, so we create a new geometry here, but don't forget to dispose!
+            const roofGeo = new THREE.ConeGeometry(Math.max(width, depth) * 0.7, roofHeight, 4).rotateY(Math.PI / 4);
             const roof = new THREE.Mesh(roofGeo, MATERIALS.stone);
+            roof.position.y = height + roofHeight / 2;
             roof.castShadow = true;
             group.add(roof);
         }
@@ -713,7 +749,6 @@ export const ObjectGenerator = {
         if (shopWindows) {
             const winWidth = 3.5;
             const winHeight = midPoint * 0.7;
-            const winGeo = new THREE.PlaneGeometry(winWidth, winHeight);
 
             const sides = allSides ? 4 : 1;
             let totalWinCount = 0;
@@ -725,7 +760,7 @@ export const ObjectGenerator = {
             }
 
             if (totalWinCount > 0) {
-                const instancedWindows = new THREE.InstancedMesh(winGeo, MATERIALS.glass, totalWinCount);
+                const instancedWindows = new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.glass, totalWinCount);
                 let idx = 0;
 
                 for (let s = 0; s < sides; s++) {
@@ -740,8 +775,11 @@ export const ObjectGenerator = {
                         _quat.setFromEuler(_rotation);
                         _position.applyQuaternion(_quat);
 
+                        // Set rotation, apply specific scale to the shared geometry
                         _matrix.makeRotationFromQuaternion(_quat);
                         _matrix.setPosition(_position);
+                        _scale.set(winWidth, winHeight, 1);
+                        _matrix.scale(_scale);
 
                         instancedWindows.setMatrixAt(idx++, _matrix);
 
@@ -761,7 +799,6 @@ export const ObjectGenerator = {
         if (upperWindows) {
             const upWinWidth = 1.2;
             const upWinHeight = 1.5;
-            const upWinGeo = new THREE.PlaneGeometry(upWinWidth, upWinHeight);
 
             const sides = allSides ? 4 : 1;
             let totalUpWinCount = 0;
@@ -775,7 +812,7 @@ export const ObjectGenerator = {
             }
 
             if (totalUpWinCount > 0) {
-                const instancedUpWindows = new THREE.InstancedMesh(upWinGeo, LOCAL_MATS.upWindow, totalUpWinCount);
+                const instancedUpWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.upWindow, totalUpWinCount);
                 let idx = 0;
 
                 for (let s = 0; s < sides; s++) {
@@ -795,6 +832,8 @@ export const ObjectGenerator = {
 
                             _matrix.makeRotationFromQuaternion(_quat);
                             _matrix.setPosition(_position);
+                            _scale.set(upWinWidth, upWinHeight, 1);
+                            _matrix.scale(_scale);
 
                             instancedUpWindows.setMatrixAt(idx++, _matrix);
                         }
@@ -838,17 +877,15 @@ export const ObjectGenerator = {
     },
 
     createGrassField: (ctx: SectorContext, x: number, z: number, width: number, depth: number, count: number) => {
-        const geometry = new THREE.ConeGeometry(0.05, 0.4, 3);
-        geometry.translate(0, 0.2, 0);
-
-        const mesh = new THREE.InstancedMesh(geometry, MATERIALS.grass, count);
+        const mesh = new THREE.InstancedMesh(SHARED_GEO.cone, MATERIALS.grass, count);
         mesh.castShadow = false;
         mesh.receiveShadow = true;
 
         for (let i = 0; i < count; i++) {
             _position.set(x + (Math.random() - 0.5) * width, 0, z + (Math.random() - 0.5) * depth);
             const scaleBase = 0.8 + Math.random() * 0.4;
-            _scale.set(scaleBase, scaleBase * (0.8 + Math.random() * 0.5), scaleBase);
+            // SHARED_GEO.cone expects radius 1, height 1. Adjust scale accordingly.
+            _scale.set(scaleBase * 0.05, scaleBase * 0.4 * (0.8 + Math.random() * 0.5), scaleBase * 0.05);
             _rotation.set(0, Math.random() * Math.PI, 0);
             _quat.setFromEuler(_rotation);
 
@@ -860,57 +897,90 @@ export const ObjectGenerator = {
         ctx.scene.add(mesh);
     },
 
-    createTerminal: (type: 'ARMORY' | 'SPAWNER' | 'ENV') => {
+    createTerminal: (type: 'ARMORY' | 'SPAWNER' | 'ENV' | 'SKILLS', scale: number = 1.0) => {
         const group = new THREE.Group();
+        group.scale.setScalar(scale);
 
-        const baseGeo = new THREE.BoxGeometry(1.2, 1.0, 0.8);
-        const baseMat = MATERIALS.gun;
-        const base = new THREE.Mesh(baseGeo, baseMat);
+        // 1. BASE STRUCTURE
+        const baseMat = MATERIALS.blackMetal;
+        const base = new THREE.Mesh(SHARED_GEO.box, baseMat);
+        base.scale.set(1.2, 1.0, 0.8);
         base.position.y = 0.5;
         base.castShadow = true;
         group.add(base);
 
-        const screenGeo = new THREE.BoxGeometry(1.0, 0.6, 0.1);
-        const screenMat = type === 'ARMORY' ? MATERIALS.chestBig :
-            type === 'SPAWNER' ? MATERIALS.barrelExplosive : MATERIALS.steel;
-
-        const consoleTop = new THREE.Mesh(screenGeo, screenMat);
+        // 2. CONSOLE TOP
+        const screenMat = MATERIALS.steel;
+        const consoleTop = new THREE.Mesh(SHARED_GEO.box, screenMat);
+        consoleTop.scale.set(1.0, 0.6, 0.1);
         consoleTop.position.set(0, 1.3, -0.2);
         consoleTop.rotation.x = -Math.PI / 6;
         group.add(consoleTop);
 
-        const glowGeo = new THREE.PlaneGeometry(0.9, 0.5);
-        const color = type === 'ARMORY' ? 0xffaa00 : type === 'SPAWNER' ? 0xff0000 : 0x00ffff;
+        // 3. GLOWING SCREEN
+        const color = type === 'ARMORY' ? 0xffaa00 :
+            type === 'SPAWNER' ? 0xff0000 :
+                type === 'SKILLS' ? 0x00ff00 :
+                    0x00ffff;
 
-        if (!neonHeartCache[color]) neonHeartCache[color] = new THREE.MeshBasicMaterial({ color: color });
+        if (!neonHeartCache[color]) neonHeartCache[color] = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.9
+        });
 
-        const glow = new THREE.Mesh(glowGeo, neonHeartCache[color]);
+        const glow = new THREE.Mesh(SHARED_GEO.plane, neonHeartCache[color]);
+        glow.scale.set(0.9, 0.5, 1);
         glow.position.set(0, 1.3, -0.14);
         glow.rotation.x = -Math.PI / 6;
         group.add(glow);
 
+        // 4. MAGNIFICENT BEACON
+        const ringMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+        const ring = new THREE.Mesh(SHARED_GEO.ring, ringMat);
+        ring.position.y = 0.02;
+        group.add(ring);
+
+        const beamMat = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.05,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        // Beam needs an open cylinder (we use shared cylinder and scale it)
+        const beamGeo = new THREE.CylinderGeometry(0.6, 0.6, 8, 16, 1, true);
+        const beam = new THREE.Mesh(beamGeo, beamMat);
+        beam.position.y = 4;
+        group.add(beam);
+
+        group.userData.effects = [
+            { type: 'light', color, intensity: 20, distance: 15, offset: new THREE.Vector3(0, 1.5, 0) },
+            {
+                type: 'emitter',
+                particle: 'spark',
+                interval: 150,
+                count: 1,
+                offset: new THREE.Vector3(0, 0.2, 0),
+                spread: 0.8,
+                color: color,
+                velocity: new THREE.Vector3(0, 1.5, 0)
+            }
+        ];
+
         return group;
     },
 
-    /**
-     * Creates an InstancedMesh of animated bus rubble pieces.
-     * @param x Epicenter X
-     * @param z Epicenter Z
-     * @param count Number of pieces
-     * @param material Optional material override
-     * @param directionBias Center angle (radians) of the half-arc launch direction.
-     *   Default PI = northward (negative Z). The arc spans [bias - PI/2, bias + PI/2].
-     */
     createRubble: (x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
         const mat = material == null ? MATERIALS.steel : material;
 
-        const geometry = new THREE.BoxGeometry(2, 2, 4);
-        const mesh = new THREE.InstancedMesh(geometry, mat, count);
+        // Använd delad box och sätt skala via InstancedMesh matrix istället
+        const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
 
-        // Allocate continuous memory for physics (Zero-GC)
-        // 3 floats per instance (x, y, z)
         const positions = new Float32Array(count * 3);
         const velocities = new Float32Array(count * 3);
         const rotations = new Float32Array(count * 3);
@@ -920,44 +990,37 @@ export const ObjectGenerator = {
         for (let i = 0; i < count; i++) {
             const ix = i * 3;
 
-            // Start near the epicenter
             positions[ix] = x + (Math.random() - 0.5) * 4.0;
             positions[ix + 1] = 2.0 + Math.random() * 2.0;
             positions[ix + 2] = z + (Math.random() - 0.5) * 4.0;
 
-            // Polar-form velocity biased toward directionBias half-arc.
-            // With gravity 50 m/s^2, speed=30 and vy=20: t_air=0.8s, range=30*0.8=24m.
-            // Pieces land 15-25m from bus, scattered in the chosen half-circle arc.
-            const halfArc = Math.PI * 0.5; // 90 degrees each side of bias
+            const halfArc = Math.PI * 0.5;
             const angle = (directionBias - halfArc) + Math.random() * (halfArc * 2.0);
-            const speed = 20.0 + Math.random() * 15.0; // 20-35 m/s lateral
+            const speed = 20.0 + Math.random() * 15.0;
             velocities[ix] = Math.cos(angle) * speed;
-            velocities[ix + 1] = 12.0 + Math.random() * 18.0; // 12-30 m/s upward
+            velocities[ix + 1] = 12.0 + Math.random() * 18.0;
             velocities[ix + 2] = Math.sin(angle) * speed;
 
-            // Initial rotation
             rotations[ix] = Math.random() * Math.PI;
             rotations[ix + 1] = Math.random() * Math.PI;
             rotations[ix + 2] = Math.random() * Math.PI;
 
-            // Spin speed
             spin[ix] = (Math.random() - 0.5) * 15.0;
             spin[ix + 1] = (Math.random() - 0.5) * 15.0;
             spin[ix + 2] = (Math.random() - 0.5) * 15.0;
 
-            // Randomize scale for variety
             scales[i] = 0.5 + Math.random() * 0.8;
 
             _position.set(positions[ix], positions[ix + 1], positions[ix + 2]);
             _rotation.set(rotations[ix], rotations[ix + 1], rotations[ix + 2]);
             _quat.setFromEuler(_rotation);
-            _scale.setScalar(scales[i]);
+            // Sätt skalan till rubble-storlek (2, 2, 4) * individuell skala
+            _scale.set(2 * scales[i], 2 * scales[i], 4 * scales[i]);
 
             _matrix.compose(_position, _quat, _scale);
             mesh.setMatrixAt(i, _matrix);
         }
 
-        // Store physics data in userData for access in the update loop
         mesh.userData = { positions, velocities, rotations, spin, scales, active: true };
         mesh.instanceMatrix.needsUpdate = true;
 

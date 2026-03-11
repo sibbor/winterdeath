@@ -2,19 +2,19 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS, createSignMesh } from '../../utils/assets';
 
-
 /**
  * VehicleGenerator
  * Dedicated generator for all driveable and static vehicles.
  * Optimized for Zero-GC, shared geometries, and fake emissive lighting.
- * Features separated chassis and root groups for realistic suspension.
  */
 
-// --- GLOBAL SCALE MULTIPLIER ---
-// 1.5x gör fordonen betydligt mer proportionerliga gentemot spelaren
 const S = 1.5;
 
-// --- SHARED GEOMETRIES FOR ZERO-GC ---
+// --- PERFORMANCE SCRATCHPADS ---
+const _v1 = new THREE.Vector3();
+const _m1 = new THREE.Matrix4();
+
+// --- SHARED GEOMETRIES ---
 const SHARED_GEOMETRIES = {
     box: new THREE.BoxGeometry(1, 1, 1),
     tire16: new THREE.CylinderGeometry(1, 1, 1, 16),
@@ -41,25 +41,25 @@ export const VehicleGenerator = {
 
     createBoat: (): THREE.Mesh => {
         if (!boatMat) {
-            boatMat = MATERIALS.wood.clone();
+            boatMat = (MATERIALS.wood as THREE.MeshStandardMaterial).clone();
             boatMat.color.setHex(0x5a3d2b);
             boatMat.roughness = 0.85;
             boatMat.metalness = 0.0;
             boatMat.flatShading = true;
-            boatMat.needsUpdate = true;
         }
 
         if (!cachedBoatGeo) {
             const parts: THREE.BufferGeometry[] = [];
             const addPart = (w: number, h: number, d: number, tx: number, ty: number, tz: number, rx = 0, ry = 0, rz = 0) => {
                 const geo = new THREE.BoxGeometry(w * S, h * S, d * S);
-                geo.rotateY(ry); geo.rotateX(rx); geo.rotateZ(rz);
-                geo.translate(tx * S, ty * S, tz * S);
+                const quat = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
+                _m1.compose(_v1.set(tx * S, ty * S, tz * S), quat, new THREE.Vector3(1, 1, 1));
+                geo.applyMatrix4(_m1);
                 parts.push(geo);
             };
 
             const hullLength = 6.5;
-            addPart(0.15, 0.3, hullLength + 0.5, 0, -0.2, 0); // Köl (Z är längden)
+            addPart(0.15, 0.3, hullLength + 0.5, 0, -0.2, 0);
             addPart(0.9, 0.08, hullLength, 0.4, -0.05, 0, 0, 0, 0.15);
             addPart(0.9, 0.08, hullLength, -0.4, -0.05, 0, 0, 0, -0.15);
             addPart(0.1, 0.7, hullLength + 0.2, 0.85, 0.3, 0, 0, 0, -0.4);
@@ -72,27 +72,22 @@ export const VehicleGenerator = {
             addPart(0.1, 0.7, 2.5, -0.5, 0.35, bowZ, 0, 0.6, 0.3);
             addPart(0.2, 1.2, 0.25, 0, 0.4, bowZ, 0.1, 0, 0);
 
-            addPart(2.4, 1.0, 0.15, 0, 0.5, -(hullLength / 2 + 0.1), -0.2, 0, 0); // Akter
+            addPart(2.4, 1.0, 0.15, 0, 0.5, -(hullLength / 2 + 0.1), -0.2, 0, 0);
             addPart(1.2, 0.05, 4.0, 0, 0.05, 0.5);
             addPart(2.2, 0.08, 0.6, 0, 0.6, 1.8);
             addPart(2.3, 0.08, 0.7, 0, 0.6, -0.5);
             addPart(1.5, 0.08, 0.5, 0, 0.65, -2.8);
 
             cachedBoatGeo = BufferGeometryUtils.mergeGeometries(parts, false);
+            // CRITICAL: Cleanup memory
             for (let i = 0; i < parts.length; i++) parts[i].dispose();
         }
 
         const boatMesh = new THREE.Mesh(cachedBoatGeo, boatMat);
         boatMesh.castShadow = true;
         boatMesh.receiveShadow = true;
-
-        // OBS! Ingen rotateY(Math.PI / 2) här. Båten byggs exakt längs med Z från start.
-
         return boatMesh;
     },
-
-    // Notera nu: X är Bredd, Y är Höjd, Z är Längd framåt/bakåt.
-    // Däcken sätts på Y = radien. Detta garanterar att botten på däcket alltid är Y = 0.
 
     createStationWagon: (colorOverride?: number, addSnow: boolean = true) => {
         const root = new THREE.Group();
@@ -104,7 +99,7 @@ export const VehicleGenerator = {
 
         const cW = 1.8 * S; const cH = 0.7 * S; const cD = 4.6 * S;
         const groundClearance = 0.3 * S;
-        const chassisY = groundClearance + (cH / 2); // Exakt botten-nivå för karossen
+        const chassisY = groundClearance + (cH / 2);
 
         VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
         VehicleGenerator._addPart(chassis, 1.6 * S, 0.65 * S, 2.8 * S, 0, chassisY + (cH / 2) + 0.325 * S, -0.4 * S, mat);
@@ -119,7 +114,6 @@ export const VehicleGenerator = {
         VehicleGenerator._addWindow(chassis, 1.4 * S, 0.5 * S, 0.05 * S, 0, cabY, -1.4 * S);
 
         VehicleGenerator._addTires(root, 4, 0.35 * S, 0.4 * S, 0.95 * S, 1.5 * S, -1.5 * S);
-
         VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
         VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
 
@@ -176,7 +170,6 @@ export const VehicleGenerator = {
 
         const cabY = chassisY + (cH / 2) + 0.325 * S;
 
-        // POLICE SIGN FIX: Exakt på dörrarna (sidorna), roterade rätt
         const signPolis = createSignMesh("POLIS", 1.8 * S, 0.4 * S, '#000000', '#ffff00');
         signPolis.position.set(-0.91 * S, chassisY, 0);
         signPolis.rotation.y = -Math.PI / 2;
@@ -194,7 +187,6 @@ export const VehicleGenerator = {
 
         VehicleGenerator._addTires(root, 4, 0.35 * S, 0.4 * S, 0.95 * S, 1.5 * S, -1.5 * S);
 
-        // SIREN FIX: På taket!
         const roofY = cabY + (0.65 * S / 2);
         VehicleGenerator._addSirens(chassis, root, 0, roofY, -0.4 * S, true);
 
@@ -218,9 +210,8 @@ export const VehicleGenerator = {
         const groundClearance = 0.4 * S;
         const chassisY = groundClearance + (cH / 2);
 
-        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat); // Lower body
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
 
-        // Förlängt skåp som går ända bak till dörrarna
         const cabH = 1.4 * S; const cabD = 3.8 * S;
         const cabY = chassisY + (cH / 2) + (cabH / 2);
         VehicleGenerator._addPart(chassis, 2.0 * S, cabH, cabD, 0, cabY, -0.7 * S, mat);
@@ -241,7 +232,6 @@ export const VehicleGenerator = {
         VehicleGenerator._addWindow(chassis, 0.05 * S, 0.8 * S, 1.5 * S, 1.01 * S, cabY, -1.5 * S);
         VehicleGenerator._addWindow(chassis, 0.05 * S, 0.8 * S, 1.5 * S, -1.01 * S, cabY, -1.5 * S);
 
-        // Bakdörrar
         VehicleGenerator._addPart(chassis, 0.95 * S, 1.2 * S, 0.05 * S, 0.5 * S, cabY, -2.6 * S, mat);
         VehicleGenerator._addPart(chassis, 0.95 * S, 1.2 * S, 0.05 * S, -0.5 * S, cabY, -2.6 * S, mat);
 
@@ -276,7 +266,6 @@ export const VehicleGenerator = {
 
         VehicleGenerator._addWindow(chassis, 3.1 * S, 1.2 * S, 0.05 * S, 0, chassisY + 0.1 * S, cD / 2);
 
-        // Shifted side windows forward to fit the chassis length perfectly
         for (let i = 0; i < 6; i++) {
             const zPos = 5.0 * S - i * 2.0 * S;
             VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.5 * S, (cW / 2) + 0.01, chassisY + 0.2 * S, zPos);
@@ -288,7 +277,6 @@ export const VehicleGenerator = {
         backSign.rotation.y = Math.PI;
         chassis.add(backSign);
 
-        // Raised rear window to sit just below the sign
         VehicleGenerator._addWindow(chassis, 3.1 * S, 0.8 * S, 0.05 * S, 0, chassisY + 0.3 * S, -(cD / 2));
 
         VehicleGenerator._addTires(root, 6, 0.65 * S, 0.6 * S, 1.55 * S, 4.5 * S, -4.5 * S, -2.5 * S);
@@ -309,17 +297,15 @@ export const VehicleGenerator = {
 
         const mat = VehicleGenerator._getVehicleMaterial(colorOverride ?? 0xcc2222);
 
-        const cW = 1.4 * S;
-        const cH = 0.8 * S;
-        const cD = 1.5 * S;
+        const cW = 1.4 * S; const cH = 0.8 * S; const cD = 1.5 * S;
         const groundClearance = 0.6 * S;
         const bonnetY = groundClearance + (cH / 2);
 
-        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, bonnetY, 0.5 * S, mat); // Bonnet
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, bonnetY, 0.5 * S, mat);
 
         const cabH = 1.8 * S;
         const cabY = groundClearance + (cabH / 2) + 0.2 * S;
-        VehicleGenerator._addPart(chassis, 1.8 * S, cabH, 1.2 * S, 0, cabY, -0.65 * S, mat); // Cab 
+        VehicleGenerator._addPart(chassis, 1.8 * S, cabH, 1.2 * S, 0, cabY, -0.65 * S, mat);
 
         VehicleGenerator._addWindow(chassis, 1.6 * S, 1.0 * S, 0.05 * S, 0, cabY, -0.05 * S);
         VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 0.8 * S, 0.9 * S, cabY, -0.65 * S);
@@ -332,7 +318,7 @@ export const VehicleGenerator = {
             const r = (isFront ? 0.45 : 0.8) * S;
             const w = (isFront ? 0.45 : 0.7) * S;
             m.scale.set(r, w, r);
-            m.position.set(tx * S, r, tz * S); // Perfekt på marken
+            m.position.set(tx * S, r, tz * S);
             m.castShadow = true;
             root.add(m);
         };
@@ -357,33 +343,25 @@ export const VehicleGenerator = {
         const groundClearance = 0.6 * S;
         const chassisY = groundClearance + (cH / 2);
 
-        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat); // Main bed
+        VehicleGenerator._addPart(chassis, cW, cH, cD, 0, chassisY, 0, mat);
 
         const cabH = 1.8 * S;
         const cabY = chassisY + (cH / 2) + (cabH / 2);
-        VehicleGenerator._addPart(chassis, 2.4 * S, cabH, 2.5 * S, 0, cabY, 4.7 * S, mat); // Cab front
+        VehicleGenerator._addPart(chassis, 2.4 * S, cabH, 2.5 * S, 0, cabY, 4.7 * S, mat);
 
         VehicleGenerator._addWindow(chassis, 2.0 * S, 1.0 * S, 0.05 * S, 0, cabY + 0.1 * S, 5.96 * S);
         VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.2 * S, 1.21 * S, cabY + 0.1 * S, 4.7 * S);
         VehicleGenerator._addWindow(chassis, 0.05 * S, 1.0 * S, 1.2 * S, -1.21 * S, cabY + 0.1 * S, 4.7 * S);
 
         VehicleGenerator._addTires(root, 6, 0.6 * S, 0.6 * S, 1.3 * S, 4.5 * S, -4.5 * S, -3.0 * S);
-
         VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
         VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
 
         import('./ObjectGenerator').then(({ ObjectGenerator }) => {
             const logs = ObjectGenerator.createTimberPile(1.0);
-
-            // 1. Positionera uppe på flaket
             logs.position.set(0, chassisY + (cH / 2) + 0.2 * S, -1.5 * S);
-
-            // 2. Rotera HELA högen 90 grader (Y-axeln) så de vilar längs med lastbilen
             logs.rotation.set(0, Math.PI, 0);
-
-            // 3. Skala upp högen! Extra mycket på Z (längden) så de fyller upp hela flaket
             logs.scale.set(1.5 * S, 1.5 * S, 1.5 * S);
-
             chassis.add(logs);
         });
 
@@ -391,24 +369,20 @@ export const VehicleGenerator = {
     },
 
     createVehicle: (type: string = 'station wagon', colorOverride?: number, addSnow: boolean = true): THREE.Group => {
-        let vehicleGroup: THREE.Group;
-
-        if (type === 'police') vehicleGroup = VehicleGenerator.createPoliceCar(colorOverride, addSnow);
-        else if (type === 'ambulance') vehicleGroup = VehicleGenerator.createAmbulance(colorOverride, addSnow);
-        else if (type === 'bus') vehicleGroup = VehicleGenerator.createBus(colorOverride, addSnow);
-        else if (type === 'tractor') vehicleGroup = VehicleGenerator.createTractor(colorOverride, addSnow);
-        else if (type === 'timber_truck') vehicleGroup = VehicleGenerator.createTimberTruck(colorOverride, addSnow);
-        else if (type === 'sedan') vehicleGroup = VehicleGenerator.createSedan(colorOverride, addSnow);
-        else vehicleGroup = VehicleGenerator.createStationWagon(colorOverride, addSnow);
-
-        return vehicleGroup;
+        if (type === 'police') return VehicleGenerator.createPoliceCar(colorOverride, addSnow);
+        if (type === 'ambulance') return VehicleGenerator.createAmbulance(colorOverride, addSnow);
+        if (type === 'bus') return VehicleGenerator.createBus(colorOverride, addSnow);
+        if (type === 'tractor') return VehicleGenerator.createTractor(colorOverride, addSnow);
+        if (type === 'timber_truck') return VehicleGenerator.createTimberTruck(colorOverride, addSnow);
+        if (type === 'sedan') return VehicleGenerator.createSedan(colorOverride, addSnow);
+        return VehicleGenerator.createStationWagon(colorOverride, addSnow);
     },
 
     // --- INTERNAL HELPERS ---
 
     _getVehicleMaterial: (color: number) => {
         if (!vehicleBodyCache[color]) {
-            const mat = MATERIALS.vehicleBody.clone();
+            const mat = (MATERIALS.vehicleBody as THREE.MeshStandardMaterial).clone();
             mat.color.setHex(color);
             vehicleBodyCache[color] = mat;
         }
@@ -436,9 +410,8 @@ export const VehicleGenerator = {
     _addTires: (group: THREE.Group, count: number, radius: number, width: number, x: number, z: number, rearZ: number, midZ?: number) => {
         const addT = (tx: number, tz: number) => {
             const m = new THREE.Mesh(SHARED_GEOMETRIES.tire16, VEHICLE_MATS.tire);
-            m.rotation.z = Math.PI / 2; // Rullar längs Z
+            m.rotation.z = Math.PI / 2;
             m.scale.set(radius, width, radius);
-            // Eftersom vi sätter y = radius är botten av däcket garanterat på y=0
             m.position.set(tx, radius, tz);
             m.castShadow = true;
             group.add(m);
@@ -451,14 +424,12 @@ export const VehicleGenerator = {
     },
 
     _addLights: (chassis: THREE.Group, root: THREE.Group, cW: number, cH: number, cD: number, yCenter: number, zOffset: number = 0) => {
-        const mat = VEHICLE_MATS.headlight.clone();
-
         const xOffset = (cW / 2) - (0.2 * S);
         const yPos = yCenter + (cH / 2) - (0.15 * S);
         const zPos = (cD / 2) + zOffset;
 
         const createL = (xPos: number) => {
-            const glow = new THREE.Mesh(SHARED_GEOMETRIES.sphere, mat);
+            const glow = new THREE.Mesh(SHARED_GEOMETRIES.sphere, VEHICLE_MATS.headlight);
             glow.scale.setScalar(0.15 * S);
             glow.position.set(xPos, yPos, zPos);
             chassis.add(glow);
@@ -469,18 +440,16 @@ export const VehicleGenerator = {
         const right = createL(xOffset);
 
         if (!root.userData.lights) root.userData.lights = {};
-        root.userData.lights.headlights = { material: mat, meshes: [left, right] };
+        root.userData.lights.headlights = { material: VEHICLE_MATS.headlight, meshes: [left, right] };
     },
 
     _addBrakeLights: (chassis: THREE.Group, root: THREE.Group, cW: number, cH: number, cD: number, yCenter: number) => {
-        const mat = VEHICLE_MATS.brakeLight.clone();
-
         const xOffset = (cW / 2) - (0.3 * S);
         const yPos = yCenter + (cH / 2) - (0.15 * S);
         const zPos = -(cD / 2 + 0.01);
 
         const createL = (xPos: number) => {
-            const glow = new THREE.Mesh(SHARED_GEOMETRIES.box, mat);
+            const glow = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.brakeLight);
             glow.scale.set(0.4 * S, 0.2 * S, 0.01);
             glow.position.set(xPos, yPos, zPos);
             chassis.add(glow);
@@ -491,21 +460,18 @@ export const VehicleGenerator = {
         const right = createL(xOffset);
 
         if (!root.userData.lights) root.userData.lights = {};
-        root.userData.lights.brake = { material: mat, meshes: [left, right] };
+        root.userData.lights.brake = { material: VEHICLE_MATS.brakeLight, meshes: [left, right] };
     },
 
     _addSirens: (chassis: THREE.Group, root: THREE.Group, x: number, y: number, z: number, enableBlinking: boolean = false) => {
-        const matBlue = VEHICLE_MATS.sirenBlue.clone();
-        const matRed = VEHICLE_MATS.sirenRed.clone();
-
         VehicleGenerator._addPart(chassis, 0.8 * S, 0.15 * S, 0.4 * S, x, y + 0.05 * S, z, VEHICLE_MATS.sirenBase);
 
-        const blue = new THREE.Mesh(SHARED_GEOMETRIES.box, matBlue);
+        const blue = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.sirenBlue);
         blue.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
         blue.position.set(x + 0.2 * S, y + 0.15 * S, z);
         chassis.add(blue);
 
-        const red = new THREE.Mesh(SHARED_GEOMETRIES.box, matRed);
+        const red = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.sirenRed);
         red.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
         red.position.set(x - 0.2 * S, y + 0.15 * S, z);
         chassis.add(red);
@@ -513,7 +479,7 @@ export const VehicleGenerator = {
         if (enableBlinking) {
             root.userData.sirenOn = false;
             if (!root.userData.lights) root.userData.lights = {};
-            root.userData.lights.siren = { materialBlue: matBlue, materialRed: matRed, blueMesh: blue, redMesh: red };
+            root.userData.lights.siren = { materialBlue: VEHICLE_MATS.sirenBlue, materialRed: VEHICLE_MATS.sirenRed, blueMesh: blue, redMesh: red };
         }
     },
 

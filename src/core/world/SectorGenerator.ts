@@ -188,7 +188,7 @@ export const SectorGenerator = {
         }
 
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `Ground_${type}`;
+        mesh.name = `GROUND`;
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05; // Standardized snow/ground base
         mesh.receiveShadow = true;
@@ -1368,8 +1368,8 @@ export const SectorGenerator = {
         }
     },
 
-    spawnTerminal: (ctx: SectorContext, x: number, z: number, type: 'TERMINAL_ARMORY' | 'TERMINAL_SPAWNER' | 'TERMINAL_ENV') => {
-        const terminal = ObjectGenerator.createTerminal(type.replace('TERMINAL_', '') as any);
+    spawnTerminal: (ctx: SectorContext, x: number, z: number, type: 'TERMINAL_ARMORY' | 'TERMINAL_SPAWNER' | 'TERMINAL_ENV' | 'TERMINAL_SKILLS', scale: number = 1.0) => {
+        const terminal = ObjectGenerator.createTerminal(type.replace('TERMINAL_', '') as any, scale);
         terminal.position.set(x, 0, z);
         ctx.scene.add(terminal);
 
@@ -1378,6 +1378,13 @@ export const SectorGenerator = {
             id: type,
             type: 'sector_specific',
             label: 'ui.interact'
+        });
+
+        // Add to obstacles for collision
+        SectorGenerator.addObstacle(ctx, {
+            mesh: terminal,
+            position: terminal.position,
+            collider: { type: 'box', size: new THREE.Vector3(1.2 * scale, 2.0 * scale, 1.2 * scale) }
         });
 
         return terminal;
