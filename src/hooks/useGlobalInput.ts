@@ -45,7 +45,6 @@ export const useGlobalInput = (
                 e.stopPropagation();
 
                 if (ui.isMapOpen) {
-                    // [VINTERDÖD] Borttagen: actions.requestPointerLock?.(); - Webbläsaren tillåter inte lock på ESC
                     actions.setIsMapOpen(false);
                     actions.setIsPaused(false);
                     soundManager.playUiClick();
@@ -54,7 +53,6 @@ export const useGlobalInput = (
                     actions.setIsPaused(false);
                     soundManager.playUiClick();
                 } else if (ui.showTeleportMenu) {
-                    // Return to Map Screen instead of unpausing
                     actions.setShowTeleportMenu(false);
                     actions.setTeleportInitialCoords(null);
                     actions.setIsMapOpen(true);

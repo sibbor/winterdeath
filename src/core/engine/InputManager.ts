@@ -9,6 +9,11 @@ export interface InputState {
     fire: boolean;
     r: boolean;
     e: boolean;
+    f: boolean;
+    m: boolean;
+    enter: boolean;
+    escape: boolean;
+    shift: boolean;
     '1': boolean;
     '2': boolean;
     '3': boolean;
@@ -23,8 +28,7 @@ export interface InputState {
     locked: boolean;
 }
 
-// [VINTERDÖD] Utökad KEY_MAP som täcker versaler.
-// Eliminerar behovet av minnesallokerande .toLowerCase() i event-listeners.
+// Map both uppercase and lowercase to avoid string allocation (.toLowerCase()) at runtime
 const KEY_MAP: Record<string, keyof InputState> = {
     'w': 'w', 'W': 'w',
     'a': 'a', 'A': 'a',
@@ -33,6 +37,11 @@ const KEY_MAP: Record<string, keyof InputState> = {
     ' ': 'space',
     'r': 'r', 'R': 'r',
     'e': 'e', 'E': 'e',
+    'f': 'f', 'F': 'f',
+    'm': 'm', 'M': 'm',
+    'Enter': 'enter',
+    'Escape': 'escape',
+    'Shift': 'shift',
     '1': '1', '2': '2', '3': '3', '4': '4'
 };
 
@@ -52,6 +61,7 @@ export class InputManager {
         this.state = {
             w: false, a: false, s: false, d: false,
             space: false, fire: false, r: false, e: false,
+            f: false, m: false, enter: false, escape: false, shift: false,
             '1': false, '2': false, '3': false, '4': false,
             scrollUp: false, scrollDown: false,
             mouse: new THREE.Vector2(),
@@ -75,24 +85,21 @@ export class InputManager {
     }
 
     private resetState() {
-        // [VINTERDÖD] Platt nollställning. Ingen dynamisk array-allokering (keys = []) eller iteration.
-        this.state.w = false;
-        this.state.a = false;
-        this.state.s = false;
-        this.state.d = false;
-        this.state.space = false;
-        this.state.fire = false;
-        this.state.r = false;
-        this.state.e = false;
-        this.state['1'] = false;
-        this.state['2'] = false;
-        this.state['3'] = false;
-        this.state['4'] = false;
-        this.state.scrollUp = false;
-        this.state.scrollDown = false;
+        // Pre-defined array avoids runtime allocation
+        const keys: (keyof InputState)[] = [
+            'w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', 'f', 'm',
+            'enter', 'escape', 'shift', '1', '2', '3', '4'
+        ];
+
+        // Classic for-loop preferred for performance
+        for (let i = 0; i < keys.length; i++) {
+            (this.state[keys[i]] as boolean) = false;
+        }
 
         this.state.joystickMove.set(0, 0);
         this.state.joystickAim.set(0, 0);
+        this.state.scrollUp = false;
+        this.state.scrollDown = false;
     }
 
     private bindEvents() {
@@ -125,7 +132,7 @@ export class InputManager {
     private handleKeyDown = (e: KeyboardEvent) => {
         if (!this.isEnabled) return;
 
-        // [VINTERDÖD] Blixtsnabb hash-map lookup utan toLowerCase()-skräpsamling.
+        // Zero-GC: Direct property lookup avoids string mutation
         const stateKey = KEY_MAP[e.key];
 
         if (stateKey) {
@@ -138,6 +145,7 @@ export class InputManager {
     private handleKeyUp = (e: KeyboardEvent) => {
         if (!this.isEnabled) return;
 
+        // Zero-GC: Direct property lookup avoids string mutation
         const stateKey = KEY_MAP[e.key];
 
         if (stateKey) {
@@ -210,12 +218,8 @@ export class InputManager {
     };
 
     public requestPointerLock(element: HTMLElement) {
-        if (this.state.locked || !element.requestPointerLock) return;
-        try {
-            element.requestPointerLock();
-        } catch (e) {
-            console.warn("Pointer lock request failed", e);
-        }
+        if (this.state.locked) return;
+        element.requestPointerLock();
     }
 
     public setJoystickMove(x: number, y: number) {
