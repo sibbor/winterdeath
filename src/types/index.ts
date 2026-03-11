@@ -227,6 +227,10 @@ export interface EnvironmentOverride {
 export interface SectorState {
   [key: string]: any;
   envOverride?: EnvironmentOverride;
+  isInvincible?: boolean;
+  unlimitedAmmo?: boolean;
+  unlimitedThrowables?: boolean;
+  noReload?: boolean;
 }
 
 export interface Obstacle {
