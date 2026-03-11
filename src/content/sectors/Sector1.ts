@@ -47,7 +47,7 @@ const LOCATIONS = {
         BLOOD_STAINS: { x: 34, z: 47 },
         STILL_TRACKING: { x: 87, z: 60 },
         TOWN_CENTER: { x: 145, z: 260 },
-        BUS: { x: 138, z: 333 },
+        BUS: { x: 138, z: 329, y: 2 },
         TUNNEL: { x: 138, z: 344 }
     },
     OVERPASS: [
@@ -486,7 +486,7 @@ export const Sector1: SectorDef = {
 
         // Bus (tunnel blocker)
         const bus = VehicleGenerator.createBus(0x009ddb, false);
-        bus.position.set(LOCATIONS.TRIGGERS.BUS.x, 1.8, LOCATIONS.TRIGGERS.BUS.z);
+        bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
         bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
         bus.updateMatrixWorld();
 
@@ -1206,6 +1206,7 @@ export const Sector1: SectorDef = {
             // Animate rubble physics using TypedArrays
             if (sectorState.busRubble && sectorState.busRubble.userData.active) {
                 const rubble = sectorState.busRubble;
+                const rubbleWeight = 100;
                 const data = rubble.userData;
                 let stillMoving = false;
 
@@ -1223,7 +1224,7 @@ export const Sector1: SectorDef = {
                         // [VINTERDÖD FIX] Cap delta time to prevent physics explosions on lag spikes
                         const safeDt = Math.min(dtSec, 0.05);
 
-                        data.velocities[ix + 1] -= 50.0 * safeDt; // Gravity
+                        data.velocities[ix + 1] -= rubbleWeight * safeDt; // Gravity
 
                         data.positions[ix] += data.velocities[ix] * safeDt;
                         data.positions[ix + 1] += data.velocities[ix + 1] * safeDt;
