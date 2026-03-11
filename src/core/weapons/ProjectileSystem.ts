@@ -72,12 +72,34 @@ const FIREZONE_POOL: FireZone[] = [];
 // --- REGISTRIES ---
 
 const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radius: number, ctx: GameContext, damage?: number, hitWater?: boolean) => void }> = {
+
     [WeaponType.GRENADE]: {
         onImpact: (pos, radius, ctx, damage = 180, hitWater = false) => {
             if (!hitWater) {
-                ctx.spawnPart(pos.x, 0, pos.z, 'flash', 1, undefined, undefined, undefined, 15.0);
-                ctx.spawnPart(pos.x, 0, pos.z, 'shockwave', 1, undefined, undefined, undefined, 12.0);
-                ctx.spawnPart(pos.x, 0, pos.z, 'debris', 25, undefined, undefined, undefined, 2.0);
+                _v2.set(0, 0, 0);
+
+                // 1. Skala effekten utifrån granatens sprängradie
+                const effectScale = radius * 0.4; // Om radius är ~10-12, blir detta ~4-5
+
+                ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2, undefined, effectScale, 15.0);
+                ctx.spawnPart(pos.x, pos.y + 0.2, pos.z, 'shockwave', 1, undefined, _v2, undefined, effectScale * 0.8, 20.0);
+
+                // 2. Eld och rök anpassas för att fylla upp radien men inte mer
+                for (let i = 0; i < 15; i++) {
+                    _v2.set(Math.random() - 0.5, Math.random() * 0.5 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * (0.8 + Math.random()));
+                    ctx.spawnPart(pos.x, pos.y + 1.0, pos.z, 'large_fire', 1, undefined, _v2, undefined, effectScale * 0.4 + Math.random(), 25 + Math.random() * 15);
+                }
+
+                for (let i = 0; i < 20; i++) {
+                    _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.4, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.6 * (1.0 + Math.random()));
+                    ctx.spawnPart(pos.x, pos.y + 1.0, pos.z, 'large_smoke', 1, undefined, _v2, undefined, effectScale * 0.5 + Math.random(), 40 + Math.random() * 30);
+                }
+
+                // 3. Debris kastas utåt lite längre än radien
+                for (let i = 0; i < 20; i++) {
+                    _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * 1.5 * (0.5 + Math.random()));
+                    ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'debris', 1, undefined, _v2, undefined, 1.0 + Math.random(), 100 + Math.random() * 50);
+                }
             }
 
             const engine = WinterEngine.getInstance();
