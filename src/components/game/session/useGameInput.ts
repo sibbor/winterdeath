@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GameCanvasProps } from '../../../types';
 import { soundManager } from '../../../utils/sound';
