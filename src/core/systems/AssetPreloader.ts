@@ -224,19 +224,27 @@ export const AssetPreloader = {
             const ownedGeometries: THREE.BufferGeometry[] = [];
             const ownedMaterials: THREE.Material[] = [];
 
-            const addToWarmup = (obj: THREE.Object3D, instancing: boolean = true) => {
+            // [VINTERDÖD FIX] forceShadow-flag added. Default is true for static geometry, false for FX.
+            // Explicitly kills castShadow on auxiliary lights inside objects (like car headlights) to protect WebGL limits.
+            const addToWarmup = (obj: THREE.Object3D, instancing: boolean = true, forceShadow: boolean = true) => {
                 obj.visible = false;
                 obj.traverse((child) => {
+                    if ((child as any).isLight) {
+                        (child as THREE.Light).castShadow = false;
+                    }
                     if ((child as any).isMesh) {
                         const mesh = child as THREE.Mesh;
-                        mesh.castShadow = true;
+                        if (forceShadow) mesh.castShadow = true;
+
                         const mat = mesh.material as any;
-                        mesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
+                        if (forceShadow) mesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
 
                         if (instancing && !(mesh as any).isInstancedMesh) {
                             const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
-                            iMesh.castShadow = true;
-                            iMesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
+                            if (forceShadow) {
+                                iMesh.castShadow = true;
+                                iMesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
+                            }
                             iMesh.visible = false;
                             dummyRoot.add(iMesh);
                         }
@@ -245,10 +253,10 @@ export const AssetPreloader = {
                 dummyRoot.add(obj);
             };
 
-            const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
+            const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material, castShadow: boolean = true) => {
                 const mesh = new THREE.InstancedMesh(geo, mat, 1);
-                mesh.castShadow = true;
-                mesh.receiveShadow = mat && !(mat as any).isMeshBasicMaterial && !(mat as any).isShaderMaterial;
+                mesh.castShadow = castShadow;
+                mesh.receiveShadow = castShadow && mat && !(mat as any).isMeshBasicMaterial && !(mat as any).isShaderMaterial;
                 mesh.setMatrixAt(0, new THREE.Matrix4());
                 mesh.visible = false;
                 dummyRoot.add(mesh);
@@ -314,13 +322,15 @@ export const AssetPreloader = {
                     if ((mat as any).map) renderer.initTexture((mat as any).map);
                 }
 
-                addToWarmup(new THREE.Mesh(GEOMETRY.splash, MATERIALS.splash));
-                addToWarmup(new THREE.Mesh(GEOMETRY.bloodSplat, MATERIALS.bloodSplat));
-                addToWarmup(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal));
-                addToWarmup(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodStainDecal));
-                addToWarmup(new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone));
-                addToWarmup(new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog));
-                addToWarmup(new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius));
+                // No shadows for FX
+                addToWarmup(new THREE.Mesh(GEOMETRY.splash, MATERIALS.splash), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.bloodSplat, MATERIALS.bloodSplat), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodStainDecal), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius), false, false);
+
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard));
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestBig));
                 addToWarmup(new THREE.Mesh(GEOMETRY.rail, MATERIALS.steel));
@@ -404,20 +414,31 @@ export const AssetPreloader = {
                     });
                 }
 
+                // Collectibles
                 try {
-                    const collectibleTypes = ['phone', 'pacifier', 'axe', 'jacket', 'badge', 'diary', 'ring', 'teddy'];
-                    for (let i = 0; i < collectibleTypes.length; i++) {
-                        addToWarmup(ModelFactory.createCollectible(collectibleTypes[i]));
+                    // Extract unique modelTypes dynamically from the COLLECTIBLES data source
+                    const warmedModels: string[] = [];
+                    // Using Object.values ensures this works whether COLLECTIBLES is an Array or a Record/Object
+                    const allCollectibles = Object.values(COLLECTIBLES) as any[];
+
+                    for (let i = 0; i < allCollectibles.length; i++) {
+                        const mType = allCollectibles[i].modelType;
+
+                        // Only warm up the model if we haven't already processed it
+                        if (mType && warmedModels.indexOf(mType) === -1) {
+                            warmedModels.push(mType);
+                            addToWarmup(ModelFactory.createCollectible(mType));
+                        }
                     }
                 } catch (e) {
                     console.warn('[AssetPreloader] Collectible warmup failed', e);
                 }
 
-                // [VINTERDÖD FIX] Återställd till InstancedMesh-warmup för att matcha WeatherSystem.
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow);
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain);
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash);
-                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember);
+                // Weather particles without shadows
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow, false);
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain, false);
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash, false);
+                addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember, false);
 
                 const windMats = [MATERIALS.grass, MATERIALS.flower, MATERIALS.treeTrunkBirch, MATERIALS.treeTrunk];
                 for (let i = 0; i < windMats.length; i++) {
