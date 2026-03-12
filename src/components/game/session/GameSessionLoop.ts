@@ -139,23 +139,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             const hudMesh = refs.familyMemberRef.current?.mesh || null;
 
-            if (!isBossIntro) {
-                const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
-                hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
+            const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
+            hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
 
-                // Expose performance metrics implicitly onto state struct (updated by renderer)
-                state.renderCpuTime = engine.renderer.info.render.frame || 0;
-                state.drawCalls = engine.renderer.info.render.calls;
-                state.triangles = engine.renderer.info.render.triangles;
+            // Expose performance metrics implicitly onto state struct (updated by renderer)
+            state.renderCpuTime = engine.renderer.info.render.frame || 0;
+            state.drawCalls = engine.renderer.info.render.calls;
+            state.triangles = engine.renderer.info.render.triangles;
 
-                if (propsRef.current.onUpdateHUD) {
-                    propsRef.current.onUpdateHUD({ 
-                        ...hudData, 
-                        debugMode: propsRef.current.debugMode,
-                        systems: session.getSystems()
-                    });
-                }
-
+            if (propsRef.current.onUpdateHUD) {
+                propsRef.current.onUpdateHUD({ 
+                    ...hudData, 
+                    debugMode: propsRef.current.debugMode,
+                    systems: session.getSystems()
+                });
             }
         }
 

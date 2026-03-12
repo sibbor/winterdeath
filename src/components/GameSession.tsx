@@ -369,7 +369,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     startTime: performance.now()
                 };
                 
-                const bossNameKey = (BOSSES as any)[boss.bossId]?.name || 'Unknown';
+                const bossNameKey = (BOSSES as any)[boss.bossId]?.name || 'BOSS';
                 updateUiState({ 
                     bossIntroActive: true,
                     bossName: t(bossNameKey)
@@ -457,10 +457,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         props.onDeathStateChange(true);
                     }
                 },
-                setBossIntroActive: (val: boolean) => updateUiState({ bossIntroActive: val }),
+                setBossIntroActive: (val: boolean) => {
+                    updateUiState({ bossIntroActive: val });
+                    if (props.onBossIntroStateChange) props.onBossIntroStateChange(val);
+                },
                 setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
                 setCurrentLine: (val: any) => updateUiState({ currentLine: val }),
-                setCinematicActive: (val: boolean) => updateUiState({ cinematicActive: val }),
+                setCinematicActive: (val: boolean) => {
+                    updateUiState({ cinematicActive: val });
+                    if (props.onDialogueStateChange) props.onDialogueStateChange(val);
+                },
                 setInteractionType: (val: any) => updateUiState({ interactionType: val }),
                 setFoundMemberName: (val: string) => updateUiState({ foundMemberName: val }),
                 setOverlay: (val: string | null) => {

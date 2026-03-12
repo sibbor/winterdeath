@@ -20,9 +20,10 @@ export const HudSystem = {
 
         if (activeBossObj) {
             activeBoss = activeBossObj;
+            const bossId = activeBossObj.bossId;
             bossInfo = {
                 active: true,
-                name: activeBossObj.type === 'Boss' ? (BOSSES[props.currentSector]?.name || 'Unknown') : 'Boss',
+                name: (bossId !== undefined && BOSSES[bossId]) ? BOSSES[bossId].name : 'BOSS',
                 hp: activeBossObj.hp,
                 maxHp: activeBossObj.maxHp
             };

@@ -218,7 +218,7 @@ export class InputManager {
     };
 
     public requestPointerLock(element: HTMLElement) {
-        if (this.state.locked) return;
+        if (this.state.locked || !element.requestPointerLock) return;
         element.requestPointerLock();
     }
 

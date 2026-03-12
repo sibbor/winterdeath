@@ -277,6 +277,7 @@ export interface GameCanvasProps {
   environmentOverrides?: Record<number, EnvironmentOverride>;
   onInteractionStateChange?: (type: string | null) => void;
   isMobileDevice?: boolean;
+  disableInput?: boolean;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

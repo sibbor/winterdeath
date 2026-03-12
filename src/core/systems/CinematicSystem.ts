@@ -204,10 +204,31 @@ export class CinematicSystem implements System {
         const actors: (THREE.Object3D | null)[] = [];
         for (let i = 0; i < familyMembers.length; i++) actors.push(familyMembers[i].mesh);
         actors.push(playerMesh);
+        if (cinematic.speakers[1] && !actors.includes(cinematic.speakers[1])) {
+            actors.push(cinematic.speakers[1]);
+        }
 
         for (let i = 0; i < actors.length; i++) {
             const actor = actors[i];
             if (!actor) continue;
+
+            const actorName = (actor.userData.name || '').toLowerCase();
+            const isSpeaking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking) || (actor === cinematic.speakers[1] && !isPlayerSpeaking))
+                && timeInLine < cinematic.typingDuration;
+
+            // Named Animation Clip Support (e.g. for Bosses or custom GLTFs)
+            if (actor.userData.mixer && isSpeaking) {
+                const action = actor.userData.mixer.clipAction('speak');
+                if (action) {
+                    action.play();
+                    // We don't call update on the mixer here - that should be handled by the 
+                    // System that owns the mixer (e.g. EnemySystem or ModelFactory update)
+                    // or we can update it here if it's strictly a cinematic actor.
+                }
+            } else if (actor.userData.mixer && !isSpeaking) {
+                const action = actor.userData.mixer.clipAction('speak');
+                if (action) action.stop();
+            }
 
             if (!actor.userData.cachedBody) {
                 actor.userData.cachedBody = actor.userData.isBody ? actor : actor.children.find((c: any) => c.userData.isBody);
@@ -215,10 +236,6 @@ export class CinematicSystem implements System {
 
             const body = actor.userData.cachedBody;
             if (!body) continue;
-
-            const actorName = (actor.userData.name || '').toLowerCase();
-            const isSpeaking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking))
-                && timeInLine < cinematic.typingDuration;
 
             PlayerAnimation.update(body as THREE.Mesh, {
                 isMoving: false, isRushing: false, isRolling: false,

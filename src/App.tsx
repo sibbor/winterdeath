@@ -395,10 +395,10 @@ const App: React.FC = () => {
 
     const handleCollectibleClose = useCallback(() => {
         // CALL Pointer Lock BEFORE setting state to null to preserve user gesture context
-        if (gameCanvasRef.current) gameCanvasRef.current.requestPointerLock();
+        if (gameCanvasRef.current && !isMobileDevice) gameCanvasRef.current.requestPointerLock();
         setActiveOverlay(null);
         setActiveCollectible(null);
-    }, []);
+    }, [isMobileDevice]);
 
     const handleClueDiscovered = useCallback((clue: SectorTrigger) => {
         if (!clue.id) return;
@@ -478,9 +478,9 @@ const App: React.FC = () => {
     const globalInputActions = React.useMemo(() => ({
         setActiveOverlay,
         setTeleportInitialCoords,
-        requestPointerLock: () => gameCanvasRef.current?.requestPointerLock(),
+        requestPointerLock: () => { if (!isMobileDevice) gameCanvasRef.current?.requestPointerLock(); },
         onCollectibleClose: handleCollectibleClose
-    }), [handleCollectibleClose]);
+    }), [handleCollectibleClose, isMobileDevice]);
 
     // Global Input Hook (ESC, M)
     useGlobalInput(activeOverlay, {
@@ -576,7 +576,7 @@ const App: React.FC = () => {
                         weather={gameState.weather}
                     />
 
-                    {!activeOverlay && !hudState.isHidden && (
+                    {(!activeOverlay || activeOverlay === 'INTRO') && !hudState.isHidden && (
                         isMobileDevice ? (
                             <MobileGameHUD
                                 {...hudState}
@@ -617,7 +617,7 @@ const App: React.FC = () => {
             {activeOverlay === 'PAUSE' && (
                 <ScreenPause
                     onResume={() => {
-                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
                     }}
                     onAbort={handleAbortSector}
@@ -631,7 +631,7 @@ const App: React.FC = () => {
             {activeOverlay === 'SETTINGS' && (
                 <ScreenSettings
                     onClose={() => {
-                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
                     }}
                     graphics={gameState.graphics}
@@ -644,7 +644,7 @@ const App: React.FC = () => {
                 <ScreenAdventureLog
                     stats={gameState.stats}
                     onClose={() => {
-                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
                     }}
                     onMarkCollectiblesViewed={handleMarkCollectiblesViewed}
@@ -698,7 +698,7 @@ const App: React.FC = () => {
                         isMobileDevice={isMobileDevice}
                         sectorState={{ envOverride: gameState.environmentOverrides?.[gameState.currentSector] }}
                         onClose={() => {
-                            if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                            if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                             setActiveOverlay(null);
                         }}
                         onSave={(loadout, levels) => {
@@ -723,7 +723,7 @@ const App: React.FC = () => {
                         isMobileDevice={isMobileDevice}
                         sectorState={{ envOverride: gameState.environmentOverrides?.[gameState.currentSector] }}
                         onClose={() => {
-                            if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                            if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                             setActiveOverlay(null);
                         }}
                         onSave={(stats) => {
@@ -736,7 +736,7 @@ const App: React.FC = () => {
             {activeOverlay === 'STATION_ENVIRONMENT' && (
                 <ScreenPlaygroundEnvironmentStation
                     onClose={() => {
-                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
                     }}
                     isMobileDevice={isMobileDevice}
@@ -757,7 +757,7 @@ const App: React.FC = () => {
             {activeOverlay === 'STATION_SPAWNER' && (
                 <ScreenPlaygroundEnemyStation
                     onClose={() => {
-                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
                     }}
                     isMobileDevice={isMobileDevice}
@@ -775,7 +775,7 @@ const App: React.FC = () => {
                     familyPos={hudState.familyPos || undefined}
                     bossPos={hudState.bossPos || undefined}
                     onClose={() => {
-                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
                     }}
                     onSelectCoords={handleMapSelectCoords}
