@@ -4,7 +4,7 @@ import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossS
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.
- * Optimized with buffer caching to prevent procedural generation overhead during gameplay.
+ * Optimized with a single shared noise buffer and C++ native audio nodes for Zero-GC procedural generation.
  */
 export class SoundManager {
   core: SoundCore;
@@ -26,16 +26,14 @@ export class SoundManager {
   private vehicleGain: GainNode | null = null;
   private vehicleSkidOsc: AudioBufferSourceNode | null = null;
   private vehicleSkidGain: GainNode | null = null;
-  private vehicleSkidBuffer: AudioBuffer | null = null;
 
-  // Music (ambient loops & boss fight)
+  // Music
   private musicSource: AudioBufferSourceNode | null = null;
   private musicGain: GainNode | null = null;
   private currentMusicId: string | null = null;
 
-  // Cached procedural buffers
-  private campfireBuffer: AudioBuffer | null = null;
-  private radioStaticBuffer: AudioBuffer | null = null;
+  // GLOBAL SHARED NOISE BUFFER
+  private sharedNoiseBuffer: AudioBuffer | null = null;
 
   constructor() {
     this.core = new SoundCore();
@@ -44,19 +42,35 @@ export class SoundManager {
 
   resume() { this.core.resume(); }
 
-  /**
-   * Hard stop for all game sounds.
-   */
   stopAll() {
     this.core.stopAll();
     this.stopCampfire();
     this.stopRadioStatic();
     this.playFlamethrowerEnd();
+    this.stopVehicleEngine();
     if (this.vehicleSkidGain) this.vehicleSkidGain.gain.value = 0;
   }
 
   setReverb(amount: number) {
     this.core.setReverb(amount);
+  }
+
+  /**
+   * Generates a generic 2-second white noise buffer ONLY ONCE.
+   * This is used by Weapons, Throwables, Environment, and Vehicles.
+   */
+  private getNoiseBuffer(): AudioBuffer {
+    if (!this.sharedNoiseBuffer) {
+      const ctx = this.core.ctx;
+      const length = ctx.sampleRate * 2.0;
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        data[i] = Math.random() * 2 - 1; // Pure white noise
+      }
+      this.sharedNoiseBuffer = buffer;
+    }
+    return this.sharedNoiseBuffer;
   }
 
   // --- UI DELEGATES ---
@@ -123,7 +137,6 @@ export class SoundManager {
   playBossDeath(id: number) { BossSounds.playBossDeath(this.core, id); }
 
   // --- ENVIRONMENT & PERSISTENT SOUNDS ---
-
   playVictory() {
     const now = this.core.ctx.currentTime;
     const freqs = [440, 554, 659, 880];
@@ -140,43 +153,30 @@ export class SoundManager {
       gain.connect(this.core.masterGain);
       osc.start(now + i * 0.1);
       osc.stop(now + i * 0.1 + 2.0);
-      // Track as BufferSource for global stop control
       this.core.track(osc as unknown as AudioBufferSourceNode);
     }
   }
 
-  /**
-   * Starts the procedural campfire crackle. 
-   * Uses cached buffer to avoid recalculating noise.
-   */
   startCampfire() {
     if (this.fireOsc) return;
     const ctx = this.core.ctx;
 
-    if (!this.campfireBuffer) {
-      const bufferSize = ctx.sampleRate * 5.0;
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const output = buffer.getChannelData(0);
-      let lastOut = 0;
-      for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        output[i] = (lastOut + (0.02 * white)) / 1.02; // Low-pass
-        lastOut = output[i];
-        output[i] *= 0.5;
-        const r = Math.random();
-        if (r > 0.9995) output[i] += (Math.random() * 2 - 1) * 0.95; // Crackle
-        else if (r > 0.990) output[i] += (Math.random() * 2 - 1) * 0.5;
-      }
-      this.campfireBuffer = buffer;
-    }
-
     const noise = ctx.createBufferSource();
-    noise.buffer = this.campfireBuffer;
+    noise.buffer = this.getNoiseBuffer();
     noise.loop = true;
+
+    // Use C++ node to shape white noise into a warm, low fire rumble
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 150;
+
     const gain = ctx.createGain();
-    gain.gain.value = 0.2;
-    noise.connect(gain);
+    gain.gain.value = 0.5;
+
+    noise.connect(filter);
+    filter.connect(gain);
     gain.connect(this.core.masterGain);
+
     noise.start();
     this.fireOsc = noise;
     this.fireGain = gain;
@@ -190,40 +190,27 @@ export class SoundManager {
     }
   }
 
-  /**
-   * Starts the complex filtered noise for radio static.
-   * Cached for performance.
-   */
   startRadioStatic() {
     if (this.radioOsc) return;
     const ctx = this.core.ctx;
 
-    if (!this.radioStaticBuffer) {
-      const bufferSize = ctx.sampleRate * 2.0;
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-      for (let i = 0; i < bufferSize; i++) {
-        const white = Math.random() * 2 - 1;
-        b0 = 0.99886 * b0 + white * 0.0555179;
-        b1 = 0.99332 * b1 + white * 0.0750759;
-        b2 = 0.96900 * b2 + white * 0.1538520;
-        b3 = 0.86650 * b3 + white * 0.3104856;
-        b4 = 0.55000 * b4 + white * 0.5329522;
-        b5 = -0.7616 * b5 - white * 0.0168980;
-        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-        b6 = white * 0.115926;
-      }
-      this.radioStaticBuffer = buffer;
-    }
-
     const noise = ctx.createBufferSource();
-    noise.buffer = this.radioStaticBuffer;
+    noise.buffer = this.getNoiseBuffer();
     noise.loop = true;
+
+    // Use C++ node to shape white noise into a "tin can" radio sound
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2500;
+    filter.Q.value = 1.0;
+
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    noise.connect(gain);
+
+    noise.connect(filter);
+    filter.connect(gain);
     gain.connect(this.core.masterGain);
+
     noise.start();
     this.radioOsc = noise;
     this.radioGain = gain;
@@ -240,7 +227,6 @@ export class SoundManager {
   stopRadioStatic() {
     if (this.radioOsc && this.radioGain) {
       this.radioGain.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.2);
-      // Using core.safeTimeout to ensure cleanup even if game state changes
       this.core.safeTimeout(() => {
         try { this.radioOsc?.stop(); this.radioOsc?.disconnect(); } catch (e) { }
         try { this.radioGain?.disconnect(); } catch (e) { }
@@ -270,26 +256,16 @@ export class SoundManager {
     }
   }
 
-  /**
-   * FLAMETHROWER LOOP
-   */
+  // --- WEAPON & COMBAT LOOPS ---
   playFlamethrowerStart() {
     if (this.flameOsc) return;
-
-    // Simple white noise loop for flamethrower
     const ctx = this.core.ctx;
-    const bufferSize = ctx.sampleRate * 2.0;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
 
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.getNoiseBuffer(); // Use global buffer
     noise.loop = true;
 
-    // Lowpass filter for "whoosh"
+    // Use C++ node to shape white noise into a deep gas "whoosh"
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 400;
@@ -300,8 +276,8 @@ export class SoundManager {
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.core.masterGain);
-    noise.start();
 
+    noise.start();
     this.flameOsc = noise;
     this.flameGain = gain;
   }
@@ -309,7 +285,6 @@ export class SoundManager {
   playFlamethrowerEnd() {
     const osc = this.flameOsc;
     const gain = this.flameGain;
-
     if (osc && gain) {
       gain.gain.setTargetAtTime(0, this.core.ctx.currentTime, 0.2);
       setTimeout(() => {
@@ -321,6 +296,61 @@ export class SoundManager {
     }
   }
 
+  playArcCannonZap() {
+    const ctx = this.core.ctx;
+    const now = ctx.currentTime;
+
+    // 1. THE HUM: Low frequency sawtooth for the underlying "current"
+    const humOsc = ctx.createOscillator();
+    humOsc.type = 'sawtooth';
+    humOsc.frequency.setValueAtTime(60, now);
+
+    // 2. THE CRACKLE: Use the global generic noise buffer
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = this.getNoiseBuffer();
+    noiseSource.loop = true;
+
+    // Filter the noise to keep only the aggressive high-end sizzle
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 3500;
+    filter.Q.value = 1.2;
+
+    // AM SYNTHESIS (Modulation): Make the constant noise "chop" rapidly to simulate sparks
+    const lfo = ctx.createOscillator();
+    lfo.type = 'square';
+    lfo.frequency.value = 45; // 45 sparks per second
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.8;
+    lfo.connect(lfoGain);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.5;
+    lfoGain.connect(noiseGain.gain); // Modulate the volume of the noise
+
+    // 3. MASTER ENVELOPE
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.0, now);
+    masterGain.gain.linearRampToValueAtTime(0.4, now + 0.02);
+    masterGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+    const humGain = ctx.createGain();
+    humGain.gain.value = 0.6;
+
+    // Routing
+    humOsc.connect(humGain).connect(masterGain);
+    noiseSource.connect(filter).connect(noiseGain).connect(masterGain);
+    masterGain.connect(this.core.masterGain);
+
+    humOsc.start(now);
+    noiseSource.start(now);
+    lfo.start(now);
+
+    humOsc.stop(now + 0.3);
+    noiseSource.stop(now + 0.3);
+    lfo.stop(now + 0.3);
+  }
+
   // --- VEHICLE AUDIO ---
   playVehicleEngine(type: 'BOAT' | 'CAR') {
     if (this.vehicleOsc) return;
@@ -329,7 +359,6 @@ export class SoundManager {
     if (sound) {
       this.vehicleOsc = sound.source;
       this.vehicleGain = sound.gain;
-      // Fade in
       this.vehicleGain.gain.setTargetAtTime(0.2, this.core.ctx.currentTime, 0.2);
     }
   }
@@ -370,28 +399,15 @@ export class SoundManager {
 
     if (!this.vehicleSkidOsc) {
       const ctx = this.core.ctx;
-      if (!this.vehicleSkidBuffer) {
-        const length = ctx.sampleRate * 0.5; // 0.5s loop
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        let lastOut = 0;
-        for (let i = 0; i < length; i++) {
-          const white = Math.random() * 2 - 1;
-          // Mörk filtrering (Brown noise) för ett tungt gummiskrap mot marken
-          lastOut = (lastOut * 0.95 + white * 0.05);
-          data[i] = lastOut * 3.0;
-        }
-        this.vehicleSkidBuffer = buffer;
-      }
 
       const noise = ctx.createBufferSource();
-      noise.buffer = this.vehicleSkidBuffer;
+      noise.buffer = this.getNoiseBuffer(); // Shared global buffer
       noise.loop = true;
 
-      // Lågpassfilter för att rensa bort allt vasst "tv-brus"
+      // Use C++ node to shape white noise into a deep, roaring brown noise
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = 400; // Väldigt dovt
+      filter.frequency.value = 150;
 
       const gain = ctx.createGain();
       gain.gain.value = 0;
@@ -399,8 +415,8 @@ export class SoundManager {
       noise.connect(filter);
       filter.connect(gain);
       gain.connect(this.core.masterGain);
-      noise.start();
 
+      noise.start();
       this.vehicleSkidOsc = noise;
       this.vehicleSkidGain = gain;
     }
@@ -441,37 +457,6 @@ export class SoundManager {
     SoundBank.play(this.core, 'bird_ambience', 0.60, 0.9 + Math.random() * 0.2);
   }
 
-  playArcCannonZap() {
-    // Sharp high-pitch zap
-    const ctx = this.core.ctx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(400, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
-
-    // Add noise for "fizz"
-    const lfo = ctx.createOscillator();
-    lfo.type = 'square';
-    lfo.frequency.value = 50;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 500;
-    lfo.connect(lfoGain);
-    lfoGain.connect(osc.frequency);
-    lfo.start();
-    lfo.stop(ctx.currentTime + 0.2);
-
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-
-    osc.connect(gain);
-    gain.connect(this.core.masterGain);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.2);
-  }
-
   /**
    * Master dispatcher for triggering effects via string ID.
    */
@@ -480,22 +465,19 @@ export class SoundManager {
       case 'ambient_rustle': GamePlaySounds.playAmbientRustle(this.core); break;
       case 'ambient_metal': GamePlaySounds.playAmbientMetal(this.core); break;
 
-      // Footsteps
       case 'step': this.playFootstep('step'); break;
       case 'step_snow': this.playFootstep('snow'); break;
       case 'step_metal': this.playFootstep('metal'); break;
       case 'step_wood': this.playFootstep('wood'); break;
       case 'step_water': this.playFootstep('water'); break;
-      case 'step_zombie': this.playZombieStep(); break; // [VINTERDÖD] Added missing mapping
+      case 'step_zombie': this.playZombieStep(); break;
 
-      // Impacts
       case 'impact_flesh': this.playImpact('flesh'); break;
       case 'impact_metal': this.playImpact('metal'); break;
       case 'impact_concrete': this.playImpact('concrete'); break;
       case 'impact_stone': this.playImpact('stone'); break;
       case 'impact_wood': this.playImpact('wood'); break;
 
-      // Wildlife
       case 'owl_hoot': this.playOwlHoot(); break;
       case 'bird_ambience': this.playBirdAmbience(); break;
 
@@ -513,7 +495,6 @@ export class SoundManager {
       case 'bomber_explode': this.playBomberExplode(); break;
 
       default:
-        // Pattern matching for dynamic boss IDs
         if (id.startsWith('boss_')) {
           const parts = id.split('_');
           const bossId = parseInt(parts[2]);
@@ -528,26 +509,25 @@ export class SoundManager {
   }
 
   playMusic(id: string) {
-    // Avoid restarting the same track
     if (this.currentMusicId === id) return;
     this.stopMusic();
 
     const buffer = createMusicBuffer(this.core.ctx, id);
     if (!buffer) return;
 
-    const gain = this.core.ctx.createGain();
-    gain.gain.setValueAtTime(0, this.core.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.35, this.core.ctx.currentTime + 2.0); // 2s fade-in
-    gain.connect(this.core.masterGain);
+    const createdGain = this.core.ctx.createGain();
+    createdGain.gain.setValueAtTime(0, this.core.ctx.currentTime);
+    createdGain.gain.linearRampToValueAtTime(0.35, this.core.ctx.currentTime + 2.0);
+    createdGain.connect(this.core.masterGain);
 
     const src = this.core.ctx.createBufferSource();
     src.buffer = buffer;
     src.loop = true;
-    src.connect(gain);
+    src.connect(createdGain);
     src.start();
 
     this.musicSource = src;
-    this.musicGain = gain;
+    this.musicGain = createdGain;
     this.currentMusicId = id;
   }
 
@@ -563,11 +543,10 @@ export class SoundManager {
     this.musicGain = null;
     this.currentMusicId = null;
 
-    // Fade out then stop
     gain.gain.setValueAtTime(gain.gain.value, this.core.ctx.currentTime);
     gain.gain.linearRampToValueAtTime(0, this.core.ctx.currentTime + fadeDuration);
     setTimeout(() => {
-      try { src.stop(); } catch (_) { /* already stopped */ }
+      try { src.stop(); } catch (_) { }
     }, fadeDuration * 1000 + 50);
   }
 
@@ -576,7 +555,7 @@ export class SoundManager {
   }
 
   stopPrologueMusic() {
-    this.stopMusic(2.0); // Slightly longer fade for music
+    this.stopMusic(2.0);
   }
 }
 

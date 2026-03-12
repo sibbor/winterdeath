@@ -9,7 +9,7 @@ import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { Obstacle } from './world/CollisionResolution';
-import { soundManager } from '../utils/sound';
+import { soundManager } from '../utils/SoundManager';
 import { PerformanceMonitor } from './systems/PerformanceMonitor';
 
 export interface NoiseEvent {

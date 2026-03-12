@@ -17,7 +17,7 @@ interface GameModalLayoutProps {
     heightClass?: string;
 }
 
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
 
 const GameModalLayout: React.FC<GameModalLayoutProps> = ({

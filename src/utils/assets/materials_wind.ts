@@ -1,20 +1,30 @@
 import * as THREE from 'three';
 
 /**
- * Optimazed vertex shader injection for instanced vegetation and trees.
+ * Optimized vertex shader injection for instanced vegetation and trees.
  * Calculates wind deformation in World Space and transforms to Local Space.
  */
-export const patchWindMaterial = <T extends THREE.Material>(material: T): T => {    // Pre-allokera referenserna så lazy-compilation inte sabbar bindningen
+export const patchWindMaterial = <T extends THREE.Material>(material: T): T => {
+    // Pre-allocate references so lazy-compilation retains the binding
     const windUniforms = {
-        uTime: { value: 0 },
+        uTime: { value: Math.random() * 10.0 },
         uWind: { value: new THREE.Vector2(0, 0) }
     };
 
     material.userData.windUniforms = windUniforms;
 
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = windUniforms.uTime;
-        shader.uniforms.uWind = windUniforms.uWind;
+        // Safeguard against Material.clone() breaking the uniform object reference
+        // Reconnects the object dynamically if it was lost during JSON deep clone
+        if (!material.userData.windUniforms || typeof material.userData.windUniforms.uTime.value === 'undefined') {
+            material.userData.windUniforms = {
+                uTime: { value: Math.random() * 10.0 },
+                uWind: { value: new THREE.Vector2(0, 0) }
+            };
+        }
+
+        shader.uniforms.uTime = material.userData.windUniforms.uTime;
+        shader.uniforms.uWind = material.userData.windUniforms.uWind;
 
         shader.vertexShader = `
             uniform float uTime;
@@ -29,31 +39,35 @@ export const patchWindMaterial = <T extends THREE.Material>(material: T): T => {
             float h = abs(position.y);
             float bend = (h * 0.1) + (h * h * 0.02);
 
-            // Hämta rätt matris beroende på om objektet är instansierat (skog/gräs) 
-            // eller ett unikt objekt (t.ex. en dynamisk boss eller spelaren).
+            // Fetch correct matrix depending on if the object is instanced
+            // or a unique object.
             #ifdef USE_INSTANCING
                 mat4 instanceWorldMatrix = modelMatrix * instanceMatrix;
             #else
                 mat4 instanceWorldMatrix = modelMatrix;
             #endif
 
-            // Beräkna unik position i världen för organiskt brus/darr
+            // Calculate unique world position for organic noise/jitter
             vec4 wPos = instanceWorldMatrix * vec4(position, 1.0);
             float noise = sin(uTime * 1.8 + wPos.x * 0.1 + wPos.z * 0.1) * 0.04;
             vec2 windVec = uWind + (noise * 0.5);
 
-            // [VINTERDÖD] Omvandla vindvektorn från World Space till Instansens Local Space
+            // Transform the wind vector from World Space to the Instance's Local Space
             mat3 invRot = transpose(mat3(instanceWorldMatrix));
             vec3 localWind = invRot * vec3(windVec.x, 0.0, windVec.y);
 
-            // Applicera vertex-förskjutning
+            // Apply vertex displacement
             transformed.x += localWind.x * bend;
             transformed.z += localWind.z * bend;
             transformed.y -= length(localWind.xz) * bend * 0.15;
             `
         );
     };
-    // Start at random time phase so instances are out of sync based on their creation
-    windUniforms.uTime.value = Math.random() * 10.0;
+
+    // Force unique cache key to prevent WebGL program collision with unpatched materials
+    // This entirely solves the GL_INVALID_OPERATION sampler mismatch!
+    material.customProgramCacheKey = () => 'wind_patched_' + material.uuid;
+    material.needsUpdate = true;
+
     return material;
 };

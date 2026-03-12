@@ -7,7 +7,7 @@ import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { BOSSES, CAMERA_HEIGHT } from '../../content/constants';
 import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 

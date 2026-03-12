@@ -4,7 +4,7 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
 import { PLAYER_CHARACTER } from '../../content/constants';
 import { MATERIALS } from '../../utils/assets';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
 import { FXSystem } from './FXSystem';

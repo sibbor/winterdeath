@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../../content/collectibles';
 import { FXSystem } from './FXSystem';

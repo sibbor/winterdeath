@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { soundManager } from '../utils/sound';
+import { soundManager } from '../utils/SoundManager';
 import { OverlayType } from '../App';
 import { GameScreen } from '../types';
 
@@ -66,7 +66,7 @@ export const useGlobalInput = (
                     }
                     soundManager.playUiClick();
                 }
-            } 
+            }
             // Map Logic (M)
             else if (e.key.toLowerCase() === 'm') {
                 if (!current && state.hp > 0) {

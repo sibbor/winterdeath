@@ -3,7 +3,7 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
 import { CameraSystem } from './CameraSystem';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { STORY_SCRIPTS } from '../../content/dialogues';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -67,11 +67,11 @@ export class CinematicSystem implements System {
         cinematic.script = script;
         cinematic.lineIndex = 0;
         cinematic.speakers = [this.playerMeshRef.current, target]; // [Robert, Subject]
-        
+
         // Camera setup
         cinematic.cameraBasePos.copy(camera.position);
         cinematic.cameraLookAt.copy(target.position);
-        
+
         // Midpoint and Relative Offset for zooming/rotating
         const playerPos = this.playerMeshRef.current?.position || new THREE.Vector3();
         cinematic.midPoint.copy(playerPos).lerp(target.position, 0.5);

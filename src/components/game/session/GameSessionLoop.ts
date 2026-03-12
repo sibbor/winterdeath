@@ -10,7 +10,7 @@ import { FXSystem } from '../../../core/systems/FXSystem';
 import { ProjectileSystem } from '../../../core/weapons/ProjectileSystem';
 import { TriggerHandler } from '../../../core/systems/TriggerHandler';
 import { CAMERA_HEIGHT } from '../../../content/constants';
-import { soundManager } from '../../../utils/sound';
+import { soundManager } from '../../../utils/SoundManager';
 import { EnemyManager } from '../../../core/EnemyManager';
 
 interface LoopContext {
@@ -40,16 +40,23 @@ const _animStateScratch: any = {};
 const _fxCallbacks: any = {};
 const _triggerOptionsScratch: any = {};
 
+// String cache for damage numbers to prevent GC spikes during rapid fire (Flamethrower/Arc-Cannon)
+const _numberStringCache: Record<number, string> = {};
+function getCachedNumberString(num: number): string {
+    const rounded = Math.round(num);
+    if (!_numberStringCache[rounded]) _numberStringCache[rounded] = rounded.toString();
+    return _numberStringCache[rounded];
+}
+
 export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     const { engine, session, state, refs, propsRef, callbacks } = ctx;
 
     let uiSyncTimer = 0;
     let frame = 0;
     let lastTime = performance.now();
-    let gameContextCache: any = null;
 
     const getActiveCallbacks = () => state.callbacks || callbacks || {};
-    
+
     // Initial binding for FX (will be updated in loop if needed)
     _fxCallbacks.spawnPart = callbacks.spawnPart;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
@@ -59,6 +66,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             enemySystem.handlePlayerHit(session, dmg, attacker, type);
         }
     };
+
     _triggerOptionsScratch.removeVisual = (id: string) => {
         const scene = engine.scene;
         const visual = scene.getObjectByName(`clue_visual_${id}`) || scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual');
@@ -73,6 +81,57 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
     };
 
+    // Allocate the GameContext once to achieve true Zero-GC. 
+    // We update its properties dynamically inside the loop instead of creating a new object `{}` every frame.
+    const _gameContext: any = {
+        explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
+        trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
+            if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; callbacks.gainXp(Math.ceil(amt)); }
+            if (type === 'hit') state.shotsHit += amt;
+        },
+        addFireZone: (z: any) => state.fireZones.push(z),
+        onPlayerHit: (dmg: number, attacker: any, type: string) => {
+            if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type);
+        },
+        applyDamage: (enemy: any, amount: number, type: string, isHighImpact: boolean = false) => {
+            if (enemy.deathState !== 'ALIVE') return false;
+
+            const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
+            enemy.hp -= actualDmg;
+            enemy.lastDamageType = type;
+            enemy.hitTime = _gameContext.now;
+            enemy.lastHitWasHighImpact = isHighImpact;
+
+            // Track stats & XP centrally
+            if (actualDmg > 0) {
+                state.damageDealt += actualDmg;
+                if (enemy.isBoss) state.bossDamageDealt += actualDmg;
+                callbacks.gainXp(Math.ceil(actualDmg));
+            }
+
+            // Throttle text spawning for continuous weapons to save performance
+            const isContinuous = type === 'FLAMETHROWER' || type === 'ARC_CANNON' || type === 'FLAME';
+            const textThrottle = isContinuous ? 200 : 0;
+
+            if (_gameContext.now - (enemy._lastDamageTextTime || 0) > textThrottle) {
+                let color = '#ffffff';
+                if (isHighImpact) color = '#ff0000';
+                else if (type === 'FLAMETHROWER' || type === 'MOLOTOV' || type === 'FLAME') color = '#ffaa00';
+                else if (type === 'ARC_CANNON') color = '#00ffff';
+
+                if (_gameContext.spawnFloatingText) {
+                    _gameContext.spawnFloatingText(enemy.mesh.position.x, enemy.isBoss ? 4.0 : 2.5, enemy.mesh.position.z, getCachedNumberString(amount), color);
+                }
+                enemy._lastDamageTextTime = _gameContext.now;
+            }
+
+            return enemy.hp <= 0;
+        },
+    };
+
+    state.applyDamage = _gameContext.applyDamage;
+
+
     return (dt: number) => {
         if (!refs.isMounted.current || refs.isBuildingSectorRef.current) return;
 
@@ -80,7 +139,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         let delta = dt;
         if (delta > 0.1) delta = 0.016; // Prevent physics explosions after alt-tab
 
-        // FIX: Added propsRef.current.isClueOpen so the game loop pauses when a collectible is read
+        // Added propsRef.current.isClueOpen so the game loop pauses when a collectible is read
         if (propsRef.current.isPaused || propsRef.current.isClueOpen) {
             engine.isSimulationPaused = true;
             engine.isRenderingPaused = true;
@@ -148,8 +207,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             state.triangles = engine.renderer.info.render.triangles;
 
             if (propsRef.current.onUpdateHUD) {
-                propsRef.current.onUpdateHUD({ 
-                    ...hudData, 
+                propsRef.current.onUpdateHUD({
+                    ...hudData,
                     debugMode: propsRef.current.debugMode,
                     systems: session.getSystems()
                 });
@@ -312,7 +371,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
 
             if (refs.playerMeshRef.current) {
-                // FIX: Safe stamina calculation to prevent invisible player (NaN scaling)
+                // Safe stamina calculation to prevent invisible player (NaN scaling)
                 const safeStamina = state.stamina ?? 100;
                 const safeMaxStamina = state.maxStamina ?? 100;
                 _animStateScratch.staminaRatio = safeStamina / safeMaxStamina;
@@ -327,7 +386,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isSwimming = state.isSwimming;
                 _animStateScratch.isDead = state.isDead;
                 _animStateScratch.deathStartTime = state.deathStartTime;
-                _animStateScratch.seed = 0; // Fix för andnings-animationen
+                _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
                 PlayerAnimation.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
@@ -368,7 +427,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     state.cameraShake = Math.max(0, state.cameraShake - 5.0 * delta);
                 }
 
-                // FIXED: Default camera Z-offset changed from 0 to 25 to prevent Gimbal Lock on sector load
+                // Default camera Z-offset changed from 0 to 25 to prevent Gimbal Lock on sector load
                 const envCameraZ = propsRef.current.currentSectorData?.environment.cameraOffsetZ || 25;
                 const envCameraY = propsRef.current.currentSectorData?.environment.cameraHeight || CAMERA_HEIGHT;
                 engine.camera.setCinematic(false);
@@ -416,30 +475,26 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         const activeCallbacks = getActiveCallbacks() as any;
-        
-        // 13. Game Context
-        gameContextCache = {
-            scene: engine.scene,
-            enemies: state.enemies,
-            obstacles: state.obstacles,
-            collisionGrid: state.collisionGrid,
-            spawnPart: activeCallbacks.spawnPart || callbacks.spawnPart,
-            spawnDecal: activeCallbacks.spawnDecal || callbacks.spawnDecal,
-            spawnFloatingText: activeCallbacks.spawnFloatingText || callbacks.spawnFloatingText,
-            explodeEnemy: activeCallbacks.explodeEnemy || ((e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force)),
-            addScore: activeCallbacks.gainXp || callbacks.gainXp,
-            trackStats: activeCallbacks.trackStats || ((type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
-                if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; callbacks.gainXp(Math.ceil(amt)); }
-                if (type === 'hit') state.shotsHit += amt;
-            }),
-            addFireZone: activeCallbacks.addFireZone || ((z: any) => state.fireZones.push(z)),
-            now: now,
-            playerPos: playerGroup.position,
-            onPlayerHit: (dmg: number, attacker: any, type: string) => {
-                if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type);
-            }
-        };
-        refs.gameContextRef.current = gameContextCache;
+
+        // 13. Game Context (Zero-GC property updates instead of Object reassignment)
+        _gameContext.scene = engine.scene;
+        _gameContext.enemies = state.enemies;
+        _gameContext.obstacles = state.obstacles;
+        _gameContext.collisionGrid = state.collisionGrid;
+
+        _gameContext.spawnPart = activeCallbacks.spawnPart || callbacks.spawnPart;
+        _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
+        _gameContext.spawnFloatingText = activeCallbacks.spawnFloatingText || callbacks.spawnFloatingText;
+
+        // Only assign these if they are explicitly overridden (otherwise keep default)
+        if (activeCallbacks.explodeEnemy) _gameContext.explodeEnemy = activeCallbacks.explodeEnemy;
+        if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
+        if (activeCallbacks.addFireZone) _gameContext.addFireZone = activeCallbacks.addFireZone;
+
+        _gameContext.now = now;
+        _gameContext.playerPos = playerGroup.position;
+
+        refs.gameContextRef.current = _gameContext;
 
         if (state.isMoving && playerGroup) {
             const noiseRadius = (state.isRushing || state.isRolling) ? 20 : 15;
@@ -447,7 +502,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         monitor.begin('projectiles');
-        ProjectileSystem.update(delta, now, gameContextCache, state.projectiles, state.fireZones);
+        ProjectileSystem.update(delta, now, _gameContext, state.projectiles, state.fireZones);
         monitor.end('projectiles');
 
         monitor.begin('triggers');
@@ -458,19 +513,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.collectedCluesRef = (activeCallbacks as any).collectedCluesRef || refs.collectedCluesRef;
-        _triggerOptionsScratch.removeVisual = (id: string) => {
-            const scene = engine.scene;
-            const visual = scene.getObjectByName(`clue_visual_${id}`) || scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual');
-            if (visual) {
-                visual.traverse((child) => {
-                    if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight || child instanceof THREE.DirectionalLight) {
-                        child.intensity = 0;
-                    } else if (child instanceof THREE.Mesh) {
-                        child.visible = false;
-                    }
-                });
-            }
-        };
 
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');

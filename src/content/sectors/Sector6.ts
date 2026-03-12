@@ -136,8 +136,6 @@ export const Sector6: SectorDef = {
             const zone = SECTOR6_ZONES[i];
             const angle = (i / SECTOR6_ZONES.length) * Math.PI * 2;
 
-            // Re-calc position just to be safe/consistent with curve logic 
-            // (or trust zone.x/z if I update SECTOR6_ZONES correctly)
             const x = zone.x;
             const z = zone.z;
 
@@ -191,7 +189,8 @@ export const Sector6: SectorDef = {
                 const hz = p2.z + dz * 35;
                 const house = ObjectGenerator.createBuilding(10, 8, 10, 0xffffff, true, true, 0.2);
                 house.position.set(hx, 4, hz);
-                // Traversera och tvinga bort skuggor från alla väggar, tak och fönster inuti!
+
+                // Traverse and force remove shadows from all inside walls, roofs, and windows!
                 house.traverse((child) => {
                     if ((child as THREE.Mesh).isMesh) {
                         child.castShadow = false;
@@ -267,7 +266,7 @@ export const Sector6: SectorDef = {
         };
         SectorGenerator.addObstacle(ctx, ballObstacle);
 
-        // Spara referenser i state så vi kan uppdatera fysiken i onUpdate
+        // Save references in state so we can update physics in onUpdate
         ctx.state.interactiveBall = ball;
         ctx.state.interactiveBallObs = ballObstacle;
 
@@ -331,30 +330,30 @@ export const Sector6: SectorDef = {
     },
 
     onUpdate: (dt, now, playerPos, gameState, sectorState, events) => {
-        // Hämta ut bollen från state
+        // Extract the ball from state
         const ball = sectorState.interactiveBall;
         const obs = sectorState.interactiveBallObs;
 
         if (ball && obs) {
             const vel = ball.userData.velocity as THREE.Vector3;
 
-            // Kör bara fysik om bollen faktiskt har fart (optimerat)
+            // Only run physics if the ball actually has speed (optimized)
             if (vel.lengthSq() > 0.001) {
-                // 1. Applicera hastigheten i X och Z (Y styrs av WaterSystem)
+                // 1. Apply speed in X and Z (Y is controlled by the WaterSystem)
                 ball.position.x += vel.x * dt;
                 ball.position.z += vel.z * dt;
 
-                // 2. Rulla bollen visuellt!
+                // 2. Roll the ball visually!
                 ball.rotation.x += vel.z * dt * 0.5;
                 ball.rotation.z -= vel.x * dt * 0.5;
 
-                // 3. Friktion (bromsar in bollen gradvis)
+                // 3. Friction (gradually slows down the ball)
                 vel.multiplyScalar(ball.userData.friction || 0.96);
 
-                // 4. Synka kollisions-boxen så man inte kan gå rakt igenom den
+                // 4. Sync the collision box so the player can't walk straight through it
                 obs.position.copy(ball.position);
 
-                // Uppdatera SpatialGrid så fysiken stämmer överens med renderingen
+                // Update the SpatialGrid so physics match rendering
                 if (gameState.collisionGrid && typeof gameState.collisionGrid.updateObstacle === 'function') {
                     gameState.collisionGrid.updateObstacle(obs);
                 }

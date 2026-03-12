@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets/materials';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 
 const MAX_FOOTPRINTS = 50;
 const FADE_DURATION = 15000; // 15 seconds fade

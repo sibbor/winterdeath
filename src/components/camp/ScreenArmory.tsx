@@ -3,7 +3,7 @@ import { PlayerStats } from '../../types';
 import { WeaponType, WeaponCategory } from '../../content/weapons';
 import { t } from '../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../content/constants';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import CampModalLayout from './CampModalLayout';
 
 interface ScreenArmoryProps {

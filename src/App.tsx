@@ -30,7 +30,7 @@ import ScreenLoading from './components/game/ScreenLoading';
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
-import { soundManager } from './utils/sound';
+import { soundManager } from './utils/SoundManager';
 import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
 import { isMobile } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
@@ -376,13 +376,13 @@ const App: React.FC = () => {
 
     const handleAbortSector = useCallback(() => {
         if (!gameCanvasRef.current) return;
-        
+
         setActiveOverlay(null);
-        
+
         // Get current run stats but mark as aborted
         const stats = gameCanvasRef.current.getSectorStats(false, true);
         handleSectorEnded(stats);
-        
+
         soundManager.playUiClick();
     }, [handleSectorEnded]);
 

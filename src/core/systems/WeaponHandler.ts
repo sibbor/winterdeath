@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../../content/weapons';
 import { ProjectileSystem } from '../weapons/ProjectileSystem';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { haptic } from '../../utils/HapticManager';
 import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
@@ -14,6 +14,13 @@ const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
 const _slotArray: WeaponType[] = [];
+
+const _continuousNumberCache: Record<number, string> = {};
+function getContinuousNumberString(num: number): string {
+    const rounded = Math.round(num);
+    if (!_continuousNumberCache[rounded]) _continuousNumberCache[rounded] = rounded.toString();
+    return _continuousNumberCache[rounded];
+}
 
 // Reusable context object to prevent GC allocation during continuous fire
 const _continuousCtx: any = {
@@ -176,10 +183,10 @@ export const WeaponHandler = {
         let wep = WEAPONS[state.activeWeapon];
         if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
 
-        const laser = playerGroup.getObjectByName('laserSight');
-        if (laser) {
-            laser.visible = state.activeWeapon !== WeaponType.ARC_CANNON && state.activeWeapon !== WeaponType.FLAMETHROWER;
-        }
+        //const laser = playerGroup.getObjectByName('laserSight');
+        //if (laser) {
+        //    laser.visible = state.activeWeapon !== WeaponType.ARC_CANNON && state.activeWeapon !== WeaponType.FLAMETHROWER;
+        //}
 
         if (state.activeWeapon === WeaponType.RADIO) {
             state.throwChargeStart = 0;
@@ -226,8 +233,13 @@ export const WeaponHandler = {
                     _continuousCtx.now = now;
                     _continuousCtx.noiseEvents = state.noiseEvents;
 
-                    ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, _continuousCtx, WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]) * (60 * delta));
+                    _continuousCtx.applyDamage = (state as any).applyDamage;
 
+                    ProjectileSystem.handleContinuousFire(
+                        state.activeWeapon, _v2, _v3, delta, _continuousCtx,
+                        WeaponHandler.getScaledDamage(state.activeWeapon,
+                            state.weaponLevels[state.activeWeapon]) * (60 * delta)
+                    );
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
                     if (input.fire && now > state.lastShotTime + 500) {

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 
 interface CampModalLayoutProps {
     title: string;

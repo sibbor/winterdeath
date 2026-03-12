@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { Enemy } from '../EnemyManager';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { haptic } from '../../utils/HapticManager';
 import { WEAPONS, WeaponType } from '../../content/weapons';
 import { FXSystem } from '../systems/FXSystem';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
+import { WeaponFX } from './WeaponFX';
 
 // --- INTERFACES ---
 
@@ -24,12 +25,12 @@ export interface GameContext {
     enemies: Enemy[];
     collisionGrid: SpatialGrid;
     spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
-    spawnFloatingText: (x: number, y: number, z: number, text: string, color?: string) => void;
     spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
     explodeEnemy: (e: Enemy, force: THREE.Vector3) => void;
-    trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => void;
     addScore: (amt: number) => void;
     addFireZone: (z: FireZone) => void;
+    applyDamage: (enemy: Enemy, amount: number, type: string, isHighImpact?: boolean) => boolean;
+
     now: number;
     playerPos: THREE.Vector3;
     onPlayerHit: (damage: number, attacker: any, type: string) => void;
@@ -57,13 +58,17 @@ const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
+const _v6 = new THREE.Vector3();
 
 // Dedicated scratchpads for Arc-Cannon continuous fire
 const _arcCannonHitList: Enemy[] = [];
 const _arcCannonHitIds = new Set<string>();
 
+// Audio Throttling for Arc-Cannon
+let _lastArcSoundTime = 0;
+
 // CONSTANTS (Pre-calculated math to save CPU cycles)
-const FLAMETHROWER_CONE_ANGLE = Math.cos(25 * Math.PI / 180);
+const FLAMETHROWER_CONE_ANGLE = Math.cos(28 * Math.PI / 180);
 
 // ZERO-GC Pools
 const PROJECTILE_POOL: Projectile[] = [];
@@ -78,13 +83,11 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             if (!hitWater) {
                 _v2.set(0, 0, 0);
 
-                // 1. Skala effekten utifrån granatens sprängradie
-                const effectScale = radius * 0.4; // Om radius är ~10-12, blir detta ~4-5
+                const effectScale = radius * 0.4;
 
                 ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2, undefined, effectScale, 15.0);
                 ctx.spawnPart(pos.x, pos.y + 0.2, pos.z, 'shockwave', 1, undefined, _v2, undefined, effectScale * 0.8, 20.0);
 
-                // 2. Eld och rök anpassas för att fylla upp radien men inte mer
                 for (let i = 0; i < 15; i++) {
                     _v2.set(Math.random() - 0.5, Math.random() * 0.5 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * (0.8 + Math.random()));
                     ctx.spawnPart(pos.x, pos.y + 1.0, pos.z, 'large_fire', 1, undefined, _v2, undefined, effectScale * 0.4 + Math.random(), 25 + Math.random() * 15);
@@ -95,7 +98,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                     ctx.spawnPart(pos.x, pos.y + 1.0, pos.z, 'large_smoke', 1, undefined, _v2, undefined, effectScale * 0.5 + Math.random(), 40 + Math.random() * 30);
                 }
 
-                // 3. Debris kastas utåt lite längre än radien
                 for (let i = 0; i < 20; i++) {
                     _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * 1.5 * (0.5 + Math.random()));
                     ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'debris', 1, undefined, _v2, undefined, 1.0 + Math.random(), 100 + Math.random() * 50);
@@ -152,14 +154,10 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                 const totalRad = radius + (1.0 * e.widthScale * (e.originalScale || 1.0));
 
                 if (distSq < totalRad * totalRad) {
-                    const actualDmg = Math.max(0, Math.min(e.hp, damage));
-                    e.lastDamageType = WeaponType.GRENADE;
-                    e.hp -= damage;
-                    e.hitTime = ctx.now;
-                    ctx.trackStats('damage', actualDmg, !!e.isBoss);
-                    if (ctx.spawnFloatingText) ctx.spawnFloatingText(e.mesh.position.x, 2, e.mesh.position.z, Math.round(damage).toString(), '#ffaa00');
+                    // DELEGERAT TILL CENTRAL SKADEHANTERING
+                    const isKill = ctx.applyDamage(e, damage, WeaponType.GRENADE, true);
 
-                    if (e.hp <= 0) {
+                    if (isKill) {
                         const force = 15.0 * (1.0 - Math.sqrt(distSq) / radius);
                         _v4.copy(_v2).normalize().setY(0.5).multiplyScalar(force);
                         e.deathVel.copy(_v4);
@@ -225,7 +223,8 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             for (let i = 0; i < direct.length; i++) {
                 const e = direct[i];
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
-                    e.lastDamageType = WeaponType.MOLOTOV;
+                    // LÄGG TILLBAKA: Registrera träffen direkt för stats/aggro
+                    ctx.applyDamage(e, 0, WeaponType.MOLOTOV);
                     e.isBurning = true;
                     e.afterburnTimer = 5.0;
                     e.burnTimer = 0.5;
@@ -376,13 +375,15 @@ export const ProjectileSystem = {
 
         if (weapon === WeaponType.FLAMETHROWER) {
             if (Math.random() < 0.3) {
-                FXSystem.spawnMuzzleFlash(origin, direction, true);
+                WeaponFX.spawnMuzzleFlash(origin, direction, false);
             }
 
-            const count = 3;
+            // Skapa elden (vi ökar till 4 partiklar per tick för att molnet ska bli riktigt tätt)
+            const count = 4;
             for (let i = 0; i < count; i++) {
-                _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.5);
-                FXSystem.spawnFlame(_v1, direction);
+                // Sprid ut startpunkten marginellt för att elden ska se oregelbunden ut direkt från mynningen
+                _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.8);
+                WeaponFX.spawnFlame(_v1, direction);
             }
 
             const range = data.range;
@@ -403,24 +404,21 @@ export const ProjectileSystem = {
 
                 const dot = direction.dot(_v1);
 
+                // Fienden måste befinna sig inuti den nya, bredare konen
                 if (dot > FLAMETHROWER_CONE_ANGLE) {
                     e.isBurning = true;
-                    e.lastDamageType = WeaponType.FLAMETHROWER;
                     e.burnTimer = 0.5;
                     e.afterburnTimer = 5.0;
 
-                    const chance = delta / data.fireRate;
+                    const chance = (delta * 1000) / data.fireRate;
                     if (Math.random() < chance) {
                         const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
-                        e.hp -= finalDmg;
-                        ctx.trackStats('damage', finalDmg, !!e.isBoss);
-                        if (ctx.spawnFloatingText) {
-                            ctx.spawnFloatingText(e.mesh.position.x, 2.0 + Math.random(), e.mesh.position.z, Math.round(finalDmg).toString(), '#ffaa00');
-                        }
+                        ctx.applyDamage(e, finalDmg, WeaponType.FLAMETHROWER);
                     }
                 }
             }
         }
+
         else if (weapon === WeaponType.ARC_CANNON) {
             const range = data.range;
             const rangeSq = range * range;
@@ -450,7 +448,6 @@ export const ProjectileSystem = {
             }
 
             if (target) {
-                const damage = data.damage;
                 const chainMax = 5;
                 const chainRange = 8.0;
 
@@ -488,31 +485,44 @@ export const ProjectileSystem = {
                 const finalDamage = damage / _arcCannonHitList.length;
                 const stunDur = (data.statusEffect?.duration || 2.5) / _arcCannonHitList.length;
 
+                // 1. MAIN BOLT: Origin -> First Target (Thicker visual)
                 _v3.copy(origin);
+                const primaryTarget = _arcCannonHitList[0];
+                _v1.copy(primaryTarget.mesh.position).y += 1.0;
 
-                for (let i = 0; i < _arcCannonHitList.length; i++) {
+                WeaponFX.spawnLightning(_v3, _v1, true);
+                ctx.applyDamage(primaryTarget, finalDamage, WeaponType.ARC_CANNON);
+                primaryTarget.stunTimer = stunDur;
+
+                // 2. BRANCHES: First Target -> Secondary Targets (Kedjad ström från fiende till fiende)
+                _v3.copy(_v1);
+
+                for (let i = 1; i < _arcCannonHitList.length; i++) {
                     const e = _arcCannonHitList[i];
                     _v1.copy(e.mesh.position).y += 1.0;
 
-                    FXSystem.spawnLightning(_v3, _v1);
-
-                    e.hp -= finalDamage;
-                    e.lastDamageType = WeaponType.ARC_CANNON;
-                    e.hitTime = ctx.now;
-                    e.lastHitWasHighImpact = false;
+                    WeaponFX.spawnLightning(_v3, _v1, false);
+                    ctx.applyDamage(e, finalDamage, WeaponType.ARC_CANNON);
                     e.stunTimer = stunDur;
-                    ctx.trackStats('damage', finalDamage, !!e.isBoss);
 
-                    _v3.copy(_v1);
-
-                    ctx.spawnFloatingText(e.mesh.position.x, 2.5, e.mesh.position.z, Math.round(finalDamage).toString(), '#00ffff');
+                    _v3.copy(_v1); // Nästa gren startar från denna fienden!
                 }
 
-                soundManager.playArcCannonZap();
+                // Throttle the sound logic (approx 6 times per second)
+                if (ctx.now - _lastArcSoundTime > 150) {
+                    soundManager.playArcCannonZap();
+                    _lastArcSoundTime = ctx.now;
+                }
+
             } else {
+                // Shoot empty bolt into the void
                 _v1.copy(origin).addScaledVector(direction, range);
-                FXSystem.spawnLightning(origin, _v1);
-                soundManager.playArcCannonZap();
+                WeaponFX.spawnLightning(origin, _v1, true);
+
+                if (ctx.now - _lastArcSoundTime > 150) {
+                    soundManager.playArcCannonZap();
+                    _lastArcSoundTime = ctx.now;
+                }
             }
         }
     },
@@ -542,12 +552,10 @@ export const ProjectileSystem = {
                     const e = nearby[_ni];
                     if (e.deathState !== 'ALIVE') continue;
                     if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
-                        e.lastDamageType = WeaponType.MOLOTOV;
-                        e.hp -= 15;
+                        ctx.applyDamage(e, 15, WeaponType.MOLOTOV);
                         e.isBurning = true;
                         e.afterburnTimer = 5.0;
                         e.burnTimer = 0.5;
-                        ctx.trackStats('damage', 15, !!e.isBoss);
                     }
                 }
 
@@ -622,7 +630,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     for (let i = 0; i < nearbyObs.length; i++) {
         const obs = nearbyObs[i];
 
-        // FIX 1: Ignorera spelarens egen collider! Annars sprängs skotten direkt i pipan.
+        // Ignorera spelarens egen collider!
         if (Math.abs(obs.position.x - ctx.playerPos.x) < 0.5 && Math.abs(obs.position.z - ctx.playerPos.z) < 0.5) {
             continue;
         }
@@ -630,13 +638,14 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
         _v5.set(obs.position.x, 0, obs.position.z);
         const rad = obs.radius || 2.0;
 
-        _v1.subVectors(_v5, _v3);
-        let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v1.dot(_v2) / lineLenSq)) : 0;
-        _v1.copy(_v3).addScaledVector(_v2, t);
+        // VINTERDÖD-OPTIMERING: Använd _v6 här så att vi inte krossar _v1 som används för Grid Search
+        _v6.subVectors(_v5, _v3);
+        let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v6.dot(_v2) / lineLenSq)) : 0;
+        _v6.copy(_v3).addScaledVector(_v2, t);
 
-        if (_v1.distanceToSquared(_v5) < rad * rad) {
+        if (_v6.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
-            ctx.spawnPart(_v1.x, projectile.mesh.position.y, _v1.z, 'smoke', 3);
+            ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'smoke', 3);
             soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
             break;
         }
@@ -658,27 +667,24 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
             const hitRad = 1.2 * (enemy.widthScale || 1.0) * (enemy.originalScale || 1.0);
 
-            _v1.subVectors(_v5, _v3);
-            let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v1.dot(_v2) / lineLenSq)) : 0;
-            _v1.copy(_v3).addScaledVector(_v2, t);
+            _v6.subVectors(_v5, _v3);
+            let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v6.dot(_v2) / lineLenSq)) : 0;
+            _v6.copy(_v3).addScaledVector(_v2, t);
 
-            if (_v1.distanceToSquared(_v5) < hitRad * hitRad) {
+            if (_v6.distanceToSquared(_v5) < hitRad * hitRad) {
                 let isHighImpact = false;
                 if (projectile.weapon === WeaponType.SHOTGUN) {
-                    const distFromOriginSq = Math.pow(_v1.x - projectile.origin.x, 2) + Math.pow(_v1.z - projectile.origin.z, 2);
+                    const distFromOriginSq = Math.pow(_v6.x - projectile.origin.x, 2) + Math.pow(_v6.z - projectile.origin.z, 2);
                     if (distFromOriginSq < 144.0) isHighImpact = true;
                 } else if (projectile.weapon === WeaponType.REVOLVER) {
                     if (projectile.damage >= data.baseDamage * 0.5) isHighImpact = true;
                 }
 
-                enemy.lastHitWasHighImpact = isHighImpact;
-                enemy.lastDamageType = projectile.weapon;
-                const actualDmg = Math.max(0, Math.min(enemy.hp, projectile.damage));
-                const isKill = enemy.hp <= 0;
-                enemy.hp -= projectile.damage;
-                enemy.hitTime = ctx.now;
-                enemy.slowTimer = 0.5;
                 projectile.hitEntities.add(enemy.id);
+                enemy.slowTimer = 0.5;
+
+                // DELEGERAT TILL CENTRAL SKADEHANTERING
+                const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
 
                 const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
                 const force = (projectile.damage / 3) / Math.max(0.3, mass);
@@ -690,16 +696,9 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
                 enemy.knockbackVel.add(_v5);
 
-                if (ctx.spawnFloatingText) {
-                    ctx.spawnFloatingText(enemy.mesh.position.x, 3.0, enemy.mesh.position.z, Math.round(projectile.damage).toString(), isHighImpact ? '#ff0000' : '#ffffff');
-                }
-
-                ctx.trackStats('hit', 1);
-                ctx.trackStats('damage', actualDmg, !!enemy.isBoss);
-
                 const headY = enemy.mesh.position.y + (enemy.originalScale || 1.0) * 1.8;
-                ctx.spawnPart(_v1.x, projectile.mesh.position.y, _v1.z, 'blood', 40);
-                ctx.spawnPart(_v1.x, headY, _v1.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
+                ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'blood', 40);
+                ctx.spawnPart(_v6.x, headY, _v6.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
                 soundManager.playImpact('flesh');
 
                 if (data.piercing) {

@@ -4,7 +4,7 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { EnemyManager } from '../EnemyManager';
 import { FXSystem } from './FXSystem';
 import { WorldLootSystem } from './WorldLootSystem';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();

@@ -11,7 +11,7 @@ import { EnemyManager } from '../../../core/EnemyManager';
 import { AssetPreloader } from '../../../core/systems/AssetPreloader';
 import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LEVEL_CAP, FLASHLIGHT } from '../../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../../utils/assets';
-import { soundManager } from '../../../utils/sound';
+import { soundManager } from '../../../utils/SoundManager';
 import { FootprintSystem } from '../../../core/systems/FootprintSystem';
 import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 

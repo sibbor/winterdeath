@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { t, setLocale, getLocale } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { GraphicsSettings } from '../../types';
 import { SHADOW_PRESETS } from '../../content/constants';
 import CampModalLayout from './CampModalLayout';

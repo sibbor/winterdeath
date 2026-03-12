@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { Enemy, AIState, EnemyEffectType } from '../types/enemy';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
-import { soundManager } from '../utils/sound';
+import { soundManager } from '../utils/SoundManager';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ZombieRenderer } from './renderers/ZombieRenderer';
 import { CorpseRenderer } from './renderers/CorpseRenderer';

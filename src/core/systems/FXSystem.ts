@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 
 // --- TYPES & INTERFACES ---
 
@@ -43,13 +43,6 @@ interface SpawnRequest {
 // --- PERFORMANCE SCRATCHPADS ---
 const _tempColor = new THREE.Color();
 const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
-const _v3 = new THREE.Vector3();
-const _v4 = new THREE.Vector3();
-const _v5 = new THREE.Vector3();
-const _v6 = new THREE.Vector3();
-const _v7 = new THREE.Vector3();
-const _v8 = new THREE.Vector3();
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
@@ -151,7 +144,7 @@ export const FXSystem = {
             m.geometry = geo;
             m.material = finalMat;
             m.visible = true;
-            m.scale.set(1, 1, 1); // Zero-GC scaling
+            m.scale.set(1, 1, 1);
             m.rotation.set(0, 0, 0);
         } else {
             m = new THREE.Mesh(geo, finalMat);
@@ -214,7 +207,6 @@ export const FXSystem = {
             req.hasCustomVel = false;
             return req;
         }
-        // Fallback if pool is depleted (should rarely happen with pre-allocation)
         return {
             scene: null as any, particlesList: [],
             x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
@@ -256,7 +248,7 @@ export const FXSystem = {
             t === 'glass' || t === 'enemy_effect_stun' || t === 'electric_flash' ||
             t === 'enemy_effect_flame' || t === 'enemy_effect_spark' ||
             t === 'gore' || t === 'splash' ||
-            t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke';
+            t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'flamethrower_fire';
 
         const p = FXSystem.getPooledState();
 
@@ -269,7 +261,7 @@ export const FXSystem = {
 
         if (p.color === undefined && isInstanced) {
             const st = t as string;
-            if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame') p.color = 0xff7700;
+            if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame' || st === 'flamethrower_fire') p.color = 0xff7700;
             else if (st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0x00ffff;
             else if (st === 'spark') p.color = 0xffcc00;
             else if (st === 'smoke' || st === 'large_smoke' || st === 'campfire_smoke') p.color = 0x555555;
@@ -288,7 +280,7 @@ export const FXSystem = {
 
             if (t === 'gore') geo = GEOMETRY.gore;
             else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'];
-            else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame' || t === 'enemy_effect_flame') {
+            else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame' || t === 'enemy_effect_flame' || t === 'flamethrower_fire') {
                 geo = GEOMETRY.flame;
                 mat = (t === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
             }
@@ -313,7 +305,7 @@ export const FXSystem = {
         p.mesh.renderOrder = 60;
 
         // --- ROTATION & ORIENTATION ---
-        if (t === 'electric_flash') {
+        if (t === 'electric_flash' && req.hasCustomVel) {
             _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
             p.mesh.lookAt(_v1);
         } else if (t === 'shockwave') {
@@ -328,10 +320,10 @@ export const FXSystem = {
             const fs = (1.5 + Math.random() * 1.0) * s;
             p.mesh.scale.set(fs, fs, fs);
         }
-        else if (t === 'electric_flash') {
-            const needleLen = (4.0 + Math.random() * 4.0) * s;
+        else if (t === 'electric_flash' && req.hasCustomVel) {
+            const dist = req.customVel.length();
             const thickness = (0.15 + Math.random() * 0.1) * s;
-            p.mesh.scale.set(thickness, thickness, needleLen);
+            p.mesh.scale.set(thickness, thickness, dist);
         }
         else if (t === 'large_fire') {
             const fs = 3.0 * Math.random() * s;
@@ -341,7 +333,7 @@ export const FXSystem = {
             const fs = 4.0 * Math.random() * s;
             p.mesh.scale.set(fs, fs, fs);
         }
-        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') {
+        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark' || t === 'flamethrower_fire') {
             const fs = (1.0 + Math.random() * 0.8) * s;
             p.mesh.scale.set(fs, fs, fs);
         }
@@ -379,7 +371,7 @@ export const FXSystem = {
 
         // --- LIFETIME ---
         if (t === 'electric_flash') {
-            p.life = req.life !== undefined ? req.life : (4 + Math.random() * 4);
+            p.life = req.life !== undefined ? req.life : (2 + Math.random() * 2);
         } else {
             const baseLife = PARTICLE_TTL[t] || PARTICLE_TTL.default;
             p.life = req.life !== undefined ? req.life : (baseLife + Math.random() * 20);
@@ -403,7 +395,7 @@ export const FXSystem = {
             MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
         }
 
-        const types = ['blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke'];
+        const types = ['blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire'];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
             if (imesh.parent !== scene) scene.add(imesh);
@@ -542,7 +534,6 @@ export const FXSystem = {
         // 2. Update Particles
         const decay = safeDelta * 44;
 
-        // Linear approximations for CPU performance instead of Math.pow
         const airFriction = Math.max(0.0, 1.0 - (5.0 * safeDelta));
         const shrinkRate = Math.max(0.0, 1.0 - (10.0 * safeDelta));
 
@@ -568,7 +559,6 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    // Optimized Air friction
                     p.vel.multiplyScalar(airFriction);
 
                     if (p.type === 'shockwave') {
@@ -577,8 +567,13 @@ export const FXSystem = {
                     } else if (p.type === 'flash') {
                         const grow = 15 * safeDelta;
                         p.mesh.scale.addScalar(grow);
+                    } else if (p.type === 'electric_flash') {
+                        p.mesh.scale.x *= 0.6;
+                        p.mesh.scale.y *= 0.6;
+                    } else if (p.type === 'flamethrower_fire') {
+                        p.mesh.scale.addScalar(4.0 * safeDelta);
+                        p.vel.multiplyScalar(Math.max(0.0, 1.0 - (9.0 * safeDelta)));
                     } else {
-                        // Optimized Shrink rate
                         p.mesh.scale.multiplyScalar(shrinkRate);
                     }
                 }
@@ -689,7 +684,7 @@ export const FXSystem = {
             let geo: THREE.BufferGeometry = GEOMETRY.particle;
             let mat: THREE.Material = MATERIALS.blood;
 
-            if (type === 'fire' || type === 'flame' || type === 'large_fire' || type === 'campfire_flame' || type === 'enemy_effect_flame') {
+            if (type === 'fire' || type === 'flame' || type === 'large_fire' || type === 'campfire_flame' || type === 'enemy_effect_flame' || type === 'flamethrower_fire') {
                 geo = GEOMETRY.flame;
                 mat = (type === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
             }
@@ -717,7 +712,10 @@ export const FXSystem = {
 
             if (type === 'debris' || type === 'scrap' || type === 'glass' || type === 'gore') {
                 imesh.castShadow = true;
-                imesh.receiveShadow = true;
+                // [VINTERDÖD FIX] Only allow receiveShadow if the material is not MeshBasicMaterial 
+                // to prevent "Mismatch between texture format and sampler type" errors with shadow samplers.
+                const isBasic = (imesh.material as any).isMeshBasicMaterial;
+                imesh.receiveShadow = !isBasic;
             } else {
                 imesh.castShadow = false;
                 imesh.receiveShadow = false;
@@ -742,141 +740,5 @@ export const FXSystem = {
         FXSystem._instancedMeshes[type].visible = true;
 
         return FXSystem._instancedMeshes[type];
-    },
-
-    // --- SPECIAL WEAPON EFFECTS ---
-
-    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
-        const spread = 0.15;
-        _v1.copy(direction).add(_v2.set(
-            (Math.random() - 0.5) * spread,
-            (Math.random() - 0.5) * spread,
-            (Math.random() - 0.5) * spread
-        )).normalize();
-
-        let speed = 10 + Math.random() * 5;
-        let scale = 0.5 + Math.random() * 0.5;
-
-        const req = FXSystem._getSpawnRequest();
-        req.scene = null as any;
-        req.particlesList = null as any;
-        req.x = start.x; req.y = start.y; req.z = start.z;
-        req.type = 'fire';
-
-        let colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
-
-        req.customVel.copy(_v1).multiplyScalar(speed);
-        req.hasCustomVel = true;
-        req.scale = scale;
-        req.color = colorHex;
-        FXSystem.essentialQueue.push(req);
-    },
-
-    spawnMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
-        const spread = 0.2;
-        _v1.copy(direction).add(_v2.set(
-            (Math.random() - 0.5) * spread,
-            (Math.random() - 0.5) * spread,
-            (Math.random() - 0.5) * spread
-        )).normalize();
-
-        let speed = 3 + Math.random() * 2;
-        let scale = 0.3 + Math.random() * 0.3;
-
-        const req = FXSystem._getSpawnRequest();
-        req.scene = null as any;
-        req.particlesList = null as any;
-        req.x = start.x; req.y = start.y; req.z = start.z;
-        req.type = 'fire';
-
-        req.customVel.copy(_v1).multiplyScalar(speed);
-        req.hasCustomVel = true;
-        req.scale = scale;
-        req.color = isCyan ? 0x00bfff : 0xffcc00;
-        req.life = 6 + Math.random() * 4;
-        FXSystem.essentialQueue.push(req);
-    },
-
-    spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
-        const spawnSegment = (a: THREE.Vector3, b: THREE.Vector3, depth: number, isBranch: boolean = false) => {
-            if (depth <= 0) return;
-
-            const segments = isBranch ? 4 : 10;
-            const jitterScale = isBranch ? 0.8 : 2.0;
-
-            const v_node = isBranch ? _v5 : _v1;
-            const v_prev = isBranch ? _v7 : _v8;
-
-            v_prev.copy(a);
-            for (let i = 1; i <= segments; i++) {
-                const alpha = i / segments;
-                v_node.lerpVectors(a, b, alpha);
-                if (i < segments) {
-                    v_node.x += (Math.random() - 0.5) * jitterScale;
-                    v_node.y += (Math.random() - 0.5) * jitterScale;
-                    v_node.z += (Math.random() - 0.5) * jitterScale;
-                } else {
-                    v_node.copy(b);
-                }
-
-                const req = FXSystem._getSpawnRequest();
-                req.x = v_prev.x; req.y = v_prev.y; req.z = v_prev.z;
-                req.type = 'electric_flash';
-                req.scale = (isBranch ? 0.5 : 1.0) + Math.random() * 0.3;
-                req.color = 0x00ffff;
-                req.life = 4 + Math.random() * 4;
-
-                req.customVel.subVectors(v_node, v_prev);
-                req.hasCustomVel = true;
-                FXSystem.essentialQueue.push(req);
-
-                if (Math.random() > 0.2) {
-                    const reqC = FXSystem._getSpawnRequest();
-                    reqC.x = v_prev.x; reqC.y = v_prev.y; reqC.z = v_prev.z;
-                    reqC.type = 'electric_flash';
-                    reqC.scale = req.scale * 0.3;
-                    reqC.color = 0xffffff;
-                    reqC.life = req.life;
-                    reqC.customVel.copy(req.customVel);
-                    reqC.hasCustomVel = true;
-                    FXSystem.essentialQueue.push(reqC);
-                }
-
-                if (!isBranch && i > 1 && depth > 1 && Math.random() < 0.25) {
-                    _v3.copy(v_node);
-                    _v4.set(
-                        v_node.x + (Math.random() - 0.5) * 10,
-                        v_node.y + (Math.random() - 0.5) * 10,
-                        v_node.z + (Math.random() - 0.5) * 10
-                    );
-                    spawnSegment(_v3, _v4, 1, true);
-                }
-
-                v_prev.copy(v_node);
-            }
-        };
-
-        spawnSegment(start, end, 2);
-    },
-
-    spawnStunSparks: (pos: THREE.Vector3) => {
-        for (let i = 0; i < 3; i++) {
-            const req = FXSystem._getSpawnRequest();
-            req.scene = null as any;
-            req.particlesList = null as any;
-            req.x = pos.x + (Math.random() - 0.5);
-            req.y = pos.y + 1.5 + (Math.random() - 0.5);
-            req.z = pos.z + (Math.random() - 0.5);
-            req.type = 'enemy_effect_stun';
-
-            req.customVel.set(
-                (Math.random() - 0.5) * 2,
-                Math.random() * 2,
-                (Math.random() - 0.5) * 2
-            );
-            req.hasCustomVel = true;
-            req.scale = 0.2;
-            FXSystem.essentialQueue.push(req);
-        }
     }
 };

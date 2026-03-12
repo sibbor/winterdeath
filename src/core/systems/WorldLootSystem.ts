@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---

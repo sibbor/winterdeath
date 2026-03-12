@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TEXTURES } from './AssetLoader';
 
 export interface WaterStyleConfig {
     color: number;
@@ -18,11 +19,20 @@ export const WATER_STYLES: Record<'nordic' | 'ice', WaterStyleConfig> = {
 const MAX_RIPPLES = 16;
 const MAX_OBJECTS = 8;
 
+// Safe fallback texture to satisfy WebGL2 samplers before the image loads
+const dummyNoise = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
+dummyNoise.needsUpdate = true;
+
 export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
     // Pre-declare uniform object to permanently anchor it to the material instance
     mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
 
     mat.onBeforeCompile = (shader) => {
+        // Safeguard: If .clone() corrupted userData using JSON.stringify, reconstruct the Vector4s
+        if (!mat.userData.uWaterBodies || !mat.userData.uWaterBodies.value || typeof mat.userData.uWaterBodies.value[0].isVector4 === 'undefined') {
+            mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
+        }
+
         // Guarantee we pass the exact referenced pointer to the shader
         shader.uniforms.uWaterBodies = mat.userData.uWaterBodies;
 
@@ -62,7 +72,8 @@ export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
         );
     };
 
-    mat.customProgramCacheKey = () => 'ground_cutout_material';
+    // [VINTERDÖD FIX] Add unique UUID so multiple ground types (dirt/snow) don't share the same shader and crash
+    mat.customProgramCacheKey = () => 'ground_cutout_material_' + mat.uuid;
     mat.needsUpdate = true;
     return mat;
 }
@@ -91,20 +102,20 @@ export function createWaterMaterial(
             uFresnelStrength: { value: config.fresnelStrength || 1.8 },
             uPlaneSize: { value: new THREE.Vector2(width, depth) },
             uIsCircle: { value: shape === 'circle' ? 1.0 : 0.0 },
-            uWaterDepth: { value: 2.0 }, // Visibility depth in meters
-            uClarity: { value: config.clarity !== undefined ? config.clarity : 1.0 }, // 0.0 = muddy opaque, 1.0 = clear glass
+            uWaterDepth: { value: 2.0 },
+            uClarity: { value: config.clarity !== undefined ? config.clarity : 1.0 },
             uRipples: { value: ripples },
             uObjectPositions: { value: objectPositions },
             uLightPosition: { value: new THREE.Vector3() },
             uWaterDirection: { value: new THREE.Vector2(1, 0) },
-            uNoiseTexture: { value: null }
+            uNoiseTexture: { value: TEXTURES.water_ripple || dummyNoise }
         },
         vertexShader: `
             uniform float uTime;
             uniform float uWaveStrength;
             uniform vec2 uWaterDirection;
             uniform vec4 uRipples[${MAX_RIPPLES}];
-            uniform sampler2D uNoiseTexture; // Added for vertex displacement micro-detail
+            uniform sampler2D uNoiseTexture; 
             uniform vec2 uPlaneSize;
             uniform float uIsCircle;
             
@@ -119,20 +130,12 @@ export function createWaterMaterial(
                 vLocalPos = position;
                 vec4 worldPosition = modelMatrix * vec4(position, 1.0);
                 
-                // Hyper-Sharp Stylized Waves (Ridges)
-                // Moving in uWaterDirection
                 float waveScale = 0.45;
-                
-                // Project local coordinate onto wave direction
                 float phaseXZ = dot(worldPosition.xz, uWaterDirection);
                 
-                // Higher pow (3.2) for sharp "V-shaped" peaks
                 float w1 = pow(sin(phaseXZ * waveScale - uTime * 1.5) * 0.5 + 0.5, 3.2) * 0.45;
-                // Add minor cross-turbulence
                 float w2 = pow(sin(phaseXZ * (waveScale * 1.6) + worldPosition.z * 0.2 - uTime * 2.0) * 0.5 + 0.5, 2.5) * 0.22;
                 
-                // --- EDGE DAMPENING ---
-                // Flatten waves near the shore to prevent looking under the mesh
                 float edgeDist = 0.0;
                 if (uIsCircle > 0.5) {
                     edgeDist = (uPlaneSize.x * 0.5) - length(position.xz);
@@ -143,22 +146,19 @@ export function createWaterMaterial(
                 
                 float baseWave = (w1 + w2) * uWaveStrength * edgeDampen;
                 
-                // Interactive Ripples (UPWARD ONLY)
-                // Add noise-based micro-waves to the peaks for faceted detail
                 float noiseDetail = texture2D(uNoiseTexture, worldPosition.xz * 0.1).r;
                 
                 float rippleSum = 0.0;
                 for(int i = 0; i < ${MAX_RIPPLES}; i++) {
                     vec4 rip = uRipples[i];
-                    if (rip.z < -100.0) continue; // Uninitialized
+                    if (rip.z < -100.0) continue; 
                     
                     float d = distance(worldPosition.xz, rip.xy);
                     float t = uTime - rip.z;
                     if (t > 0.0 && t < 3.0) {
-                        float radius = t * 4.0; // Fast expanding ring
+                        float radius = t * 4.0; 
                         if (abs(d - radius) < 1.0) {
                             float decay = max(0.0, 1.0 - (t / 3.0));
-                            // Distort the ripple ring with the noise texture
                             float ringNoise = texture2D(uNoiseTexture, worldPosition.xz * 0.05 + uTime * 0.1).r;
                             rippleSum += max(0.0, sin((d - radius) * 6.0 + ringNoise * 2.0)) * rip.w * decay;
                         }
@@ -201,7 +201,6 @@ export function createWaterMaterial(
             varying float vWaveHeight;
 
             void main() {
-                // High-Quality Clipping & Shore SDF
                 float distToEdge;
                 if (uIsCircle > 0.5) {
                     float radialDist = length(vLocalPos.xz);
@@ -211,65 +210,45 @@ export function createWaterMaterial(
                     distToEdge = min(uPlaneSize.x * 0.5 - abs(vLocalPos.x), uPlaneSize.y * 0.5 - abs(vLocalPos.z));
                 }
 
-                // --- 1. DEPTH & OPACITY ---
-                // Fade depth visibility based on the uniform parameter. Areas deeper than uWaterDepth will become opaque.
                 float depthFactor = smoothstep(0.0, uWaterDepth, distToEdge);
                 
-                // Muddy Lake Bed Fog (Clarity)
-                // We want to control the murkiness mathematically using uClarity.
-                // A clarity of 1.0 means no fog/mud unless depth is theoretically infinite.
-                // A clarity of 0.0 means immediate mud.
                 float fogStartDepth = mix(0.0, uWaterDepth * 2.0, uClarity); 
                 float fogFactor = smoothstep(fogStartDepth, uWaterDepth * 2.5, distToEdge) * (1.0 - uClarity);
                 
-                // Opacity increases as fog gets thicker, obscuring the bottom
                 float defaultOpacity = mix(0.15, uOpacity, depthFactor);
                 float finalOpacity = mix(defaultOpacity, 1.0, fogFactor);
 
-                // --- 2. FLAT SHADED NORMALS (Jewelry Look) ---
                 vec3 fdx = dFdx(vWorldPos);
                 vec3 fdy = dFdy(vWorldPos);
                 vec3 normal = normalize(cross(fdx, fdy));
                 vec3 viewDir = normalize(cameraPosition - vWorldPos);
                 
-                // --- 3. HYPER-SENSITIVE LIGHT SENSITIVITY ---
                 vec3 lightDir = normalize(uLightPosition);
                 vec3 halfDir = normalize(lightDir + viewDir);
                 
-                // Stationary noise for surface detail
                 float noise = texture2D(uNoiseTexture, vWorldPos.xz * 0.1).r;
                 
-                // HYPER-SENSITIVE LIGHT SENSITIVITY
-                // This is the "Jewelry" effect: entire triangles pop as solid light
                 float lightDot = dot(normal, lightDir);
-                float faceGlow = step(0.4, lightDot) * 0.85; // Lower threshold to catch more wave facets
+                float faceGlow = step(0.4, lightDot) * 0.85; 
                 
-                // Specular glints only on the very sharpest edges
                 float spec = pow(max(dot(normal, halfDir), 0.0), 24.0) * (0.6 + 0.5 * noise);
                 
                 float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0) * uFresnelStrength;
                 
                 vec3 specularCol = vec3(1.0, 1.0, 1.0) * (faceGlow + spec * 2.0 + rim * 0.6);
 
-                // --- 4. COLOR MIXING ---
-                // Scatter color highlights the slopes
                 float scatter = clamp(vWaveHeight * 2.5, 0.0, 0.4) * max(0.0, dot(normal, lightDir));
                 
-                // Muddy Lake Bed Color (Clarity)
-                // Blend from shallow clear color, to base clear color, and finally into murky fog color
                 vec3 clearWater = mix(uShallowColor, uBaseColor, depthFactor);
-                vec3 muddyWater = vec3(0.12, 0.18, 0.10); // Dark murky green/brown
+                vec3 muddyWater = vec3(0.12, 0.18, 0.10); 
                 vec3 waterColor = mix(clearWater, muddyWater, fogFactor);
 
-                // Add sub-surface scattering highlights to peaks
                 waterColor = mix(waterColor, waterColor + scatter, 0.6);
-                // Sky-light catch for the "wavy form"
                 float skyCatch = max(0.0, normal.y * 0.1); 
                 waterColor += skyCatch * uShallowColor * (1.0 - depthFactor);
                 
                 waterColor = mix(waterColor, waterColor + specularCol, 0.9);
 
-                // --- 5. SINGLE FAST RADIAL FOAM PULSE (Growing Texture logic) ---
                 float breathe = sin(uTime * 1.2) * 0.2;
                 float shoreStroke = step(0.96, 1.0 - (distToEdge / (1.8 + breathe)));
                 
@@ -282,28 +261,20 @@ export function createWaterMaterial(
                         vec2 localPos = vWorldPos.xz - op.xy;
                         float dist = length(localPos);
                         
-                        // Larger spread (12m to 24m)
                         float peakPos = mod(pulseTime * 12.0, 24.0);
                         
-                        // EXPANDING UVs: More dramatic scale
-                        // Texture pattern looks bigger and spreads more
                         float uvScale = 1.0 / (peakPos * 0.5 + 1.0);
                         vec2 objUV = localPos * uvScale + 0.5;
                         
-                        // KILL TILING: Keep edge safe
                         float edgeMask = smoothstep(0.5, 0.45, length(objUV - 0.5));
                         float foamTex = texture2D(uNoiseTexture, objUV).r * edgeMask;
                         
-                        // THINNER but stronger pulse
                         float organicDist = dist + foamTex * 1.5;
-                        // peak radius is wider
-                        float ringMask = smoothstep(2.5, 0.0, abs(organicDist - peakPos) * 1.0);
+                        float ringMask = smoothstep(2.5, 0.0, abs(organicDist - peakPos));
                         
-                        // Wider Proximity: Spread much more (10m instead of 5.0m)
                         float proximity = 1.0 - smoothstep(op.z, op.z + 10.0 + breathe, dist);
                         float pulseFade = 1.0 - smoothstep(18.0, 24.0, peakPos);
                         
-                        // Noticeably lower threshold to show more of the ring
                         float stylizedRings = step(0.15, ringMask * proximity * pulseFade * foamTex);
                         
                         objFoam = max(objFoam, stylizedRings * op.w);
@@ -320,14 +291,6 @@ export function createWaterMaterial(
     });
 }
 
-/**
- * Optimized vertex shader injection for underwater vegetation and waterlilies.
- * Animates slowly based on current/wave timings instead of gusty wind.
- */
-/**
- * Optimized vertex shader injection for underwater vegetation and waterlilies.
- * Animates in perfect sync with the WaterSystem wave mechanics.
- */
 export const patchWaterVegetationMaterial = <T extends THREE.Material>(material: T): T => {
     const waterUniforms = {
         uTime: { value: 0 },
@@ -338,9 +301,17 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
     material.userData.waterUniforms = waterUniforms;
 
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = waterUniforms.uTime;
-        shader.uniforms.uWaterDirection = waterUniforms.uWaterDirection;
-        shader.uniforms.uWaveStrength = waterUniforms.uWaveStrength;
+        if (!material.userData.waterUniforms || typeof material.userData.waterUniforms.uWaterDirection.value.isVector2 === 'undefined') {
+            material.userData.waterUniforms = {
+                uTime: { value: 0 },
+                uWaterDirection: { value: new THREE.Vector2(1, 0) },
+                uWaveStrength: { value: 1.0 }
+            };
+        }
+
+        shader.uniforms.uTime = material.userData.waterUniforms.uTime;
+        shader.uniforms.uWaterDirection = material.userData.waterUniforms.uWaterDirection;
+        shader.uniforms.uWaveStrength = material.userData.waterUniforms.uWaveStrength;
 
         shader.vertexShader = `
             uniform float uTime;
@@ -352,9 +323,8 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
             `
             #include <begin_vertex>
             
-            // Bend factor based on height (bottom of mesh is anchored, top sways)
             float h = abs(position.y);
-            float bend = (h * 0.15) + (h * h * 0.03); // Slightly increased bend for visual impact
+            float bend = (h * 0.15) + (h * h * 0.03); 
 
             #ifdef USE_INSTANCING
                 mat4 instanceWorldMatrix = modelMatrix * instanceMatrix;
@@ -364,12 +334,9 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
 
             vec4 wPos = instanceWorldMatrix * vec4(position, 1.0);
             
-            // --- SYNC WITH WATER SYSTEM WAVES ---
             float waveScale = 0.45;
             float phaseXZ = dot(wPos.xz, uWaterDirection);
             
-            // Use 'cos' (derivative of the water's 'sin' wave) to simulate the 
-            // push-and-pull (orbital current) of the water mass beneath the surface.
             float flowVelocity = cos(phaseXZ * waveScale - uTime * 1.5);
             float crossVelocity = cos(phaseXZ * (waveScale * 1.6) + wPos.z * 0.2 - uTime * 2.0);
 
@@ -382,7 +349,6 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
                 uWaterDirection.y * waveSway + uWaterDirection.x * crossSway
             ) * bend;
             
-            // ROBUST INVERS: Korrekt hantering av InstancedMesh-skalning (Zero-GC)
             mat3 m = mat3(instanceWorldMatrix);
             vec3 scaleSq = vec3(dot(m[0], m[0]), dot(m[1], m[1]), dot(m[2], m[2]));
             mat3 invMat = transpose(mat3(m[0] / scaleSq.x, m[1] / scaleSq.y, m[2] / scaleSq.z));
@@ -392,7 +358,8 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
         );
     };
 
-    material.customProgramCacheKey = () => 'water_veg_mat';
+    // [VINTERDÖD FIX] Add unique UUID so WaterLily and Seaweed don't share the same shader map and crash
+    material.customProgramCacheKey = () => 'water_veg_mat_' + material.uuid;
     material.needsUpdate = true;
     return material;
 }

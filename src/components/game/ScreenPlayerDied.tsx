@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { PLAYER_CHARACTER } from '../../content/constants';
 
 interface ScreenPlayerDiedProps {

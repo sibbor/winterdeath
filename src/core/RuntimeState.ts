@@ -60,6 +60,7 @@ export interface RuntimeState {
     bossDamageDealt: number;
     bossDamageTaken: number;
     killsByType: Record<string, number>;
+    applyDamage?: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
 
     // --- PROGRESSION ---
     seenEnemies: string[];

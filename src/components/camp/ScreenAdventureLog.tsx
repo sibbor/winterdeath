@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PlayerStats } from '../../types';
 import { t } from '../../utils/i18n';
 import { ZOMBIE_TYPES, BOSSES, SECTOR_THEMES } from '../../content/constants';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { COLLECTIBLES } from '../../content/collectibles';
 import CampModalLayout from './CampModalLayout';
 import CollectiblePreview from '../ui/core/CollectiblePreview';

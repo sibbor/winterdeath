@@ -134,7 +134,7 @@ export class WinterEngine {
             this.renderer.shadowMap.enabled = shadowsEnabled;
             this.renderer.shadowMap.type = shadowType;
 
-            // [VINTERDÖD] Force material recompilation for shadows
+            // Force material recompilation for shadows
             // Zero-GC loop, avoids allocating functions in a massive scene traversal
             this.scene.traverse((obj: any) => {
                 if (obj.isMesh && obj.material) {
@@ -186,12 +186,12 @@ export class WinterEngine {
             this.container.removeChild(this.renderer.domElement);
         }
 
-        // [VINTERDÖD] Aggressive Cleanup before renderer disposal
+        // Aggressive Cleanup before renderer disposal
         this.clearActiveScene(true);
 
         this.renderer.dispose();
 
-        // [VINTERDÖD] Aggressive Garbage Collection flagging
+        // Aggressive Garbage Collection flagging
         // Helps the browser instantly reclaim VRAM and RAM when switching main states
         this.sceneStack.length = 0;
         this.onUpdate = null;
@@ -222,6 +222,12 @@ export class WinterEngine {
             }
         });
 
+        // Pre-allocate disposal function to ensure Zero-GC loops during cleanup traversal
+        const checkMaterial = (m: any) => {
+            const isSharedMat = Object.values(MATERIALS).includes(m);
+            if (!isSharedMat && m.dispose) m.dispose();
+        };
+
         // 2. Dispose of Geometries and Materials
         for (let i = 0; i < disposableObjects.length; i++) {
             const obj = disposableObjects[i];
@@ -235,17 +241,15 @@ export class WinterEngine {
                     if (child.geometry) {
                         // Safeguard: Do not dispose if it's a shared geometry
                         const isSharedGeo = Object.values(GEOMETRY).includes(child.geometry);
-                        if (!isSharedGeo) child.geometry.dispose();
+                        if (!isSharedGeo && child.geometry.dispose) child.geometry.dispose();
                     }
 
                     if (child.material) {
-                        const checkMaterial = (m: any) => {
-                            const isSharedMat = Object.values(MATERIALS).includes(m);
-                            if (!isSharedMat) m.dispose();
-                        };
-
                         if (Array.isArray(child.material)) {
-                            child.material.forEach(checkMaterial);
+                            const len = child.material.length;
+                            for (let m = 0; m < len; m++) {
+                                checkMaterial(child.material[m]);
+                            }
                         } else {
                             checkMaterial(child.material);
                         }
@@ -255,9 +259,6 @@ export class WinterEngine {
 
             this.scene.remove(obj);
         }
-
-        // 3. Clear light pools if they are being used
-        // (Handled by specific systems, but we clear the scene here)
 
         monitor.end('cleanup');
         if (monitor.consoleLoggingEnabled) {
@@ -283,7 +284,7 @@ export class WinterEngine {
     }
 
     private syncSystemsToScene() {
-        // [VINTERDÖD] Move environmental meshes to the new active scene
+        // Move environmental meshes to the new active scene
         if (this.weather && (this.weather as any).reAttach) (this.weather as any).reAttach(this.scene);
         if (this.water && (this.water as any).reAttach) (this.water as any).reAttach(this.scene);
     }
@@ -349,9 +350,10 @@ export class WinterEngine {
                 monitor.begin('render_setup');
                 this.scene.updateMatrixWorld();
                 this.camera.threeCamera.updateMatrixWorld();
-                if (this.renderer.shadowMap.enabled) {
-                    this.renderer.shadowMap.needsUpdate = true;
-                }
+
+                // Note: Removed the forced this.renderer.shadowMap.needsUpdate here.
+                // Three.js handles shadow map autoUpdate organically. Forcing it creates major GPU bottleneck overhead.
+
                 monitor.end('render_setup');
 
                 monitor.begin('render_draw');

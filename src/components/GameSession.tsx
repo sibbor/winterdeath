@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GameCanvasProps, SectorStats } from '../types';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
-import { soundManager } from '../utils/sound';
+import { soundManager } from '../utils/SoundManager';
 import { t } from '../utils/i18n';
 import { WEAPONS, LEVEL_CAP, BOSSES } from '../content/constants';
 
@@ -360,7 +360,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const handleBossSpawn = (e: any) => {
             const { type, pos } = e.detail || {};
             const boss = refs.sectorContextRef.current?.spawnBoss(type, pos);
-            
+
             if (boss) {
                 // Activate Boss Intro Sequence
                 refs.bossIntroRef.current = {
@@ -368,9 +368,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     bossMesh: boss.mesh,
                     startTime: performance.now()
                 };
-                
+
                 const bossNameKey = (BOSSES as any)[boss.bossId]?.name || 'BOSS';
-                updateUiState({ 
+                updateUiState({
                     bossIntroActive: true,
                     bossName: t(bossNameKey)
                 });
@@ -386,7 +386,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 refs.bossIntroTimerRef.current = setTimeout(() => {
                     refs.bossIntroRef.current.active = false;
                     updateUiState({ bossIntroActive: false });
-                    
+
                     // Start boss battle music
                     const sectorData = (props as any).currentSectorData || { environment: { bossMusic: 'boss_battle' } };
                     soundManager.playMusic(sectorData.environment.bossMusic || 'boss_battle');
@@ -400,7 +400,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (fm.found) fm.following = active;
             });
         };
-        
+
         const handleFamilyMemberFound = (e: any) => {
             const { name, id } = e.detail || {};
             refs.activeFamilyMembers.current.forEach(fm => {

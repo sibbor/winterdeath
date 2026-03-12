@@ -19,27 +19,10 @@ const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
 let lastSectorIndex = -1;
 
-/**
- * Storage for UI icons where the black background has been programmatically removed.
- * Use this exported object in React components: <img src={TRANSPARENT_UI_ICONS['smg.png']} />
- */
 export const TRANSPARENT_UI_ICONS: Record<string, string> = {};
 
-/**
- * AssetPreloader - Service for warming up shaders and textures before they are needed.
- * This prevents the synchronous hitches caused by Three.js compiling shaders on-demand.
- * Optimized for Zero-GC.
- */
 export const AssetPreloader = {
 
-    /**
-     * Pre-compiles shaders and initializes assets for a given module/sector.
-     * @param renderer The current WebGL renderer.
-     * @param target Target module: 'CORE', 'CAMP', or a sector index (number).
-     * @param envConfigBase Optional base environment config for matching fog/lights.
-     * @param yieldToMain Callback to return control to the main loop (prevents browser lockup).
-     * @param overrideCamera Optional camera for exact shader permutation matching.
-     */
     warmupAsync: async (renderer: THREE.WebGLRenderer, target: 'CORE' | 'CAMP' | number, envConfigBase: any = null, yieldToMain?: () => Promise<void>, overrideCamera?: THREE.Camera) => {
         const moduleKey = typeof target === 'number' ? `SECTOR_${target}` : (typeof target === 'string' ? target : 'UNKNOWN');
         if (warmedModules.has(moduleKey)) return;
@@ -60,7 +43,6 @@ export const AssetPreloader = {
                 envConfig = CAMP_SCENE;
             }
 
-            // Safety: Ensure envConfig is at least an empty object to avoid crashes on property access
             if (!envConfig) envConfig = {};
 
             const warmupTimings: Record<string, number> = {};
@@ -74,8 +56,7 @@ export const AssetPreloader = {
 
             beginInternal('asset_warmup_total');
 
-
-            // 0. PROCEDURAL TEXTURE CACHE WARMUP (CORE only)
+            // 0. PROCEDURAL TEXTURE CACHE WARMUP
             if (target === 'CORE') {
                 beginInternal('asset_warmup_procedural');
                 const procedural = createProceduralDiffuse();
@@ -84,7 +65,6 @@ export const AssetPreloader = {
                 endInternal('asset_warmup_procedural');
                 if (yieldToMain) await yieldToMain();
 
-                // HTML UI ICON PROCESSING (REMOVE BLACK BACKGROUND)
                 beginInternal('asset_warmup_ui_images');
                 const uiIcons = [
                     'pistol.png', 'revolver.png', 'smg.png', 'shotgun.png',
@@ -100,7 +80,6 @@ export const AssetPreloader = {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d', { willReadFrequently: true });
                         if (!ctx) {
-                            console.error('[AssetPreloader] Failed to get canvas context for image processing');
                             resolve();
                             return;
                         }
@@ -135,7 +114,7 @@ export const AssetPreloader = {
                     };
 
                     img.onerror = () => {
-                        console.warn(`[AssetPreloader] Missing or failed to load UI icon: ${file}`);
+                        console.warn(`[AssetPreloader] Missing UI icon: ${file}`);
                         TRANSPARENT_UI_ICONS[file] = '';
                         resolve();
                     };
@@ -147,7 +126,7 @@ export const AssetPreloader = {
                 if (yieldToMain) await yieldToMain();
             }
 
-            // 1. AUDIO SYSTEM WARMUP (CORE only, targeted essential sounds)
+            // 1. AUDIO SYSTEM WARMUP
             if (target === 'CORE') {
                 beginInternal('asset_warmup_audio');
                 registerSoundGenerators();
@@ -200,15 +179,13 @@ export const AssetPreloader = {
                 warmupCamera.threeCamera.copy(overrideCamera as any);
             }
 
-            // 3. SHADER PERMUTATION SETUP - ENVIRONMENT (Fog, Base Lighting)
-            // We set this up early so the scene is fully "decorated" before any objects are added.
+            // 3. SHADER PERMUTATION SETUP
             beginInternal('asset_warmup_permutations');
             if (envConfig) {
                 const fogCol = new THREE.Color(envConfig.fogColor || envConfig.bgColor);
                 scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity);
                 scene.background = fogCol;
 
-                // 3.1 Base Environment Lighting
                 if (envConfig.hemiLight) {
                     const hemi = new THREE.HemisphereLight(
                         envConfig.hemiLight.sky,
@@ -217,7 +194,6 @@ export const AssetPreloader = {
                     );
                     scene.add(hemi);
                 } else {
-                    // Match GameSessionSetup Ambient Light for Sectors
                     const ambientLight = new THREE.AmbientLight(
                         envConfig.ambientColor || 0x404050,
                         envConfig.ambientIntensity || 0.4
@@ -226,14 +202,12 @@ export const AssetPreloader = {
                     scene.add(ambientLight);
                 }
 
-                // 3.2 Sky / Directional Light
                 const skyLightRef = envConfig.skyLight;
                 if (skyLightRef && skyLightRef.visible) {
                     const lightPos = skyLightRef.position || { x: 80, y: 50, z: 50 };
                     const skyLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
                     skyLight.name = 'SKY_LIGHT';
                     skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
-
                     skyLight.castShadow = true;
                     skyLight.shadow.camera.left = -100;
                     skyLight.shadow.camera.right = 100;
@@ -245,7 +219,6 @@ export const AssetPreloader = {
                 }
             }
 
-            // --- WARMUP HELPERS (Defined early for use in all sections) ---
             const dummyRoot = new THREE.Group();
             scene.add(dummyRoot);
             const ownedGeometries: THREE.BufferGeometry[] = [];
@@ -257,30 +230,14 @@ export const AssetPreloader = {
                     if ((child as any).isMesh) {
                         const mesh = child as THREE.Mesh;
                         mesh.castShadow = true;
-                        mesh.receiveShadow = true;
-
-                        if (mesh.material && (mesh.material as any).alphaTest > 0) {
-                            if (!mesh.customDepthMaterial) {
-                                const depthMat = new THREE.MeshDepthMaterial({
-                                    depthPacking: THREE.RGBADepthPacking,
-                                    map: (mesh.material as any).map,
-                                    alphaTest: (mesh.material as any).alphaTest
-                                });
-                                mesh.customDepthMaterial = depthMat;
-                                ownedMaterials.push(depthMat);
-                            }
-                        }
+                        const mat = mesh.material as any;
+                        mesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
 
                         if (instancing && !(mesh as any).isInstancedMesh) {
                             const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
                             iMesh.castShadow = true;
-                            iMesh.receiveShadow = true;
+                            iMesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
                             iMesh.visible = false;
-                            if (mesh.customDepthMaterial) {
-                                const depthClone = mesh.customDepthMaterial.clone();
-                                iMesh.customDepthMaterial = depthClone;
-                                ownedMaterials.push(depthClone);
-                            }
                             dummyRoot.add(iMesh);
                         }
                     }
@@ -290,17 +247,14 @@ export const AssetPreloader = {
 
             const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
                 const mesh = new THREE.InstancedMesh(geo, mat, 1);
+                mesh.castShadow = true;
+                mesh.receiveShadow = mat && !(mat as any).isMeshBasicMaterial && !(mat as any).isShaderMaterial;
                 mesh.setMatrixAt(0, new THREE.Matrix4());
                 mesh.visible = false;
                 dummyRoot.add(mesh);
             };
 
-            // 3.3 AUXILIARY LIGHTS (Sector Specific)
             if (envConfig && isSector) {
-                const flashlight = ModelFactory.createFlashlight();
-                addToWarmup(flashlight);
-                scene.add(flashlight);
-
                 const spotLight = new THREE.SpotLight(0xffffff, 1);
                 spotLight.castShadow = false;
                 spotLight.shadow.autoUpdate = false;
@@ -309,7 +263,7 @@ export const AssetPreloader = {
             }
             endInternal('asset_warmup_permutations');
 
-            // 4. GENERATOR & PROTOTYPE INITIALIZATION (CORE only)
+            // 4. GENERATOR INITIALIZATION
             if (target === 'CORE') {
                 beginInternal('asset_warmup_generators');
                 try {
@@ -349,8 +303,7 @@ export const AssetPreloader = {
                 if (yieldToMain) await yieldToMain();
             }
 
-            // 5. GEOMETRY & MATERIAL BATCHING & SHADER PERMUTATIONS
-            // Ensures all shared materials are compiled against the SPECIFIC lighting and fog of the destination module.
+            // 5. GEOMETRY & MATERIAL BATCHING
             if (target === 'CORE' || isSector || isCamp) {
                 const matKeys = Object.keys(MATERIALS) as (keyof typeof MATERIALS)[];
                 for (let i = 0; i < matKeys.length; i++) {
@@ -460,20 +413,18 @@ export const AssetPreloader = {
                     console.warn('[AssetPreloader] Collectible warmup failed', e);
                 }
 
-                // Weather particles
+                // [VINTERDÖD FIX] Återställd till InstancedMesh-warmup för att matcha WeatherSystem.
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember);
 
-                // Wind materials
                 const windMats = [MATERIALS.grass, MATERIALS.flower, MATERIALS.treeTrunkBirch, MATERIALS.treeTrunk];
                 for (let i = 0; i < windMats.length; i++) {
                     const m = windMats[i];
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, m));
                 }
 
-                // Water materials
                 const waterMats = [MATERIALS.waterLily, MATERIALS.waterLilyFlower, MATERIALS.seaweed];
                 for (let i = 0; i < waterMats.length; i++) {
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
@@ -487,10 +438,8 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.box, waterNordic), false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.box, waterIce), false);
 
-                // Scrap material
                 addInstancedWarmup(GEOMETRY.scrap, MATERIALS.scrap);
 
-                // Player & family member models:
                 addToWarmup(ModelFactory.createPlayer());
                 for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
                     addToWarmup(ModelFactory.createFamilyMember(FAMILY_MEMBERS[i]));
@@ -514,15 +463,7 @@ export const AssetPreloader = {
                     console.warn('[AssetPreloader] Boss warmup failed', e);
                 }
 
-                let shadowLightsWarmupCount = 0;
-                const WARMUP_SHADOW_LIMIT = 2;
-
                 const flashlight = ModelFactory.createFlashlight();
-                if (shadowLightsWarmupCount >= WARMUP_SHADOW_LIMIT) {
-                    flashlight.castShadow = false;
-                } else {
-                    shadowLightsWarmupCount++;
-                }
                 addToWarmup(flashlight);
                 scene.add(flashlight);
 
@@ -643,10 +584,7 @@ export const AssetPreloader = {
 
                 if (yieldToMain) await yieldToMain();
 
-                const groundMat = MATERIALS.dirt.clone();
-                if (groundMat.map) groundMat.map.repeat.set(60, 60);
-                if (groundMat.bumpMap) groundMat.bumpMap.repeat.set(60, 60);
-                ownedMaterials.push(groundMat);
+                const groundMat = MATERIALS.dirt;
                 const groundGeo = new THREE.PlaneGeometry(120, 120);
                 groundGeo.rotateX(-Math.PI / 2);
                 ownedGeometries.push(groundGeo);
@@ -669,14 +607,14 @@ export const AssetPreloader = {
                 for (let i = 0; i < fxTypes.length; i++) {
                     const realIMesh = FXSystem._getInstancedMesh(null as any, fxTypes[i]);
 
-                    // Use the geometry and material directly but do NOT dispose them
                     const dummyIMesh = new THREE.InstancedMesh(realIMesh.geometry, realIMesh.material, 1);
                     dummyIMesh.visible = false;
                     dummyRoot.add(dummyIMesh);
 
                     if (fxTypes[i] === 'debris' || fxTypes[i] === 'scrap' || fxTypes[i] === 'glass' || fxTypes[i] === 'gore') {
                         dummyIMesh.castShadow = true;
-                        dummyIMesh.receiveShadow = true;
+                        const mat = dummyIMesh.material as any;
+                        dummyIMesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
                     } else {
                         dummyIMesh.castShadow = false;
                         dummyIMesh.receiveShadow = false;
@@ -720,21 +658,12 @@ export const AssetPreloader = {
             endInternal('asset_warmup_compilation');
 
             // SAFE VRAM FLUSH & SCENE CLEANUP
-            // Only dispose what we EXPLICITLY created for this warmup
             for (let i = 0; i < ownedGeometries.length; i++) {
                 if (ownedGeometries[i]) ownedGeometries[i].dispose();
             }
             for (let i = 0; i < ownedMaterials.length; i++) {
                 if (ownedMaterials[i]) ownedMaterials[i].dispose();
             }
-
-            scene.traverse((obj) => {
-                if ((obj as any).isLight && (obj as THREE.Light).shadow && (obj as THREE.Light).shadow.map) {
-                    (obj as THREE.Light).shadow.map!.dispose();
-                }
-                // SAFETY: Never dispose geometry or materials during traversal here,
-                // as many might be shared constants (GEOMETRY, MATERIALS).
-            });
 
             scene.clear();
             if ((renderer as any).renderLists) (renderer as any).renderLists.dispose();
@@ -761,10 +690,6 @@ export const AssetPreloader = {
     getLastSectorIndex: () => lastSectorIndex,
     setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; },
 
-    /**
-     * Explicitly unmarks a sector as warmed up.
-     * Use this when transitioning away from a sector to allow it to be re-cleaned and re-warmed.
-     */
     releaseSectorAssets: (index: number) => {
         const moduleKey = `SECTOR_${index}`;
         if (warmedModules.has(moduleKey)) {

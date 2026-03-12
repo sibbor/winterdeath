@@ -3,7 +3,7 @@ import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { FXSystem } from './FXSystem';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { AIState } from '../../types/enemy';
 import { EnemyManager } from '../EnemyManager';
 import { _buoyancyResult } from './WaterSystem';

@@ -4,7 +4,7 @@ import { applyCollisionResolution } from '../world/CollisionResolution';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType, WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../systems/WaterSystem';
 
 const _waterCheckResult = { flatDepth: 0 };

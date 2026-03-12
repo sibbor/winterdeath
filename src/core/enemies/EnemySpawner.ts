@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { Enemy, AIState } from '../../types/enemy';
 import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 

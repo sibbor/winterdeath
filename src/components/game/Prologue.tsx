@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { t, getLocale } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 
 interface PrologueProps {
     onComplete: () => void;

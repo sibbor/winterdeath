@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { MapItem, MapItemType } from '../../types';
 import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import GameModalLayout from './GameModalLayout';
 
 interface ScreenMapProps {

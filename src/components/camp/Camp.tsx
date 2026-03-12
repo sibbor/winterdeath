@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { PlayerStats } from '../../types';
 import { WeaponType } from '../../content/weapons';
 import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
 import { ModelFactory } from '../../utils/assets';
 import { PlayerAnimation } from '../../core/animation/PlayerAnimation';

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import { EnemyManager } from '../EnemyManager';
 import { VehicleDef } from '../../content/vehicles';
 import { FLASHLIGHT } from '../../content/constants';
@@ -92,7 +92,7 @@ export const VehicleManager = {
                 lightY = (box.max.y - box.min.y) * 0.4;
             }
 
-            headlight.position.set(0, lightY, frontZ + 0.2); 
+            headlight.position.set(0, lightY, frontZ + 0.2);
             headlight.target.position.set(0, lightY, frontZ + 20);
             headlight.updateMatrix();
 

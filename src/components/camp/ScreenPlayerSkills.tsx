@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PlayerStats } from '../../types';
 import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/sound';
+import { soundManager } from '../../utils/SoundManager';
 import CampModalLayout from './CampModalLayout';
 import { LEVEL_CAP } from '../../content/constants';
 
