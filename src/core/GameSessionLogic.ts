@@ -87,7 +87,8 @@ export class GameSessionLogic {
             killsByType: {} as Record<string, number>,
             seenEnemies: props.stats.seenEnemies || [],
             seenBosses: props.stats.seenBosses || [],
-            visitedPOIs: props.stats.visitedPOIs || [],
+            discoveredPOIs: props.stats.discoveredPOIs || [],
+            cluesFound: props.stats.cluesFound || [],
             bossesDefeated: [],
             familyFound: !!props.familyAlreadyRescued, familyExtracted: false,
             chestsOpened: 0, bigChestsOpened: 0, killsInRun: 0, isInteractionOpen: false, bossSpawned: false,
@@ -129,8 +130,8 @@ export class GameSessionLogic {
             isSwimming: false,
 
             // --- COLLECTIBLES ---
-            sessionCollectiblesFound: [],
-            collectiblesFound: props.stats.collectiblesFound || [],
+            sessionCollectiblesDiscovered: [],
+            collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
             mapItems: [],
 
             // --- VEHICLES ---
@@ -149,7 +150,13 @@ export class GameSessionLogic {
                 id: '',
                 object: null,
                 type: null
-            }
+            },
+            renderCpuTime: 0,
+            drawCalls: 0,
+            triangles: 0,
+            flashlightOn: false,
+            currentInteraction: null,
+            stats: props.stats
         };
     }
 
@@ -244,6 +251,14 @@ export class GameSessionLogic {
             out.push({ id: s.id, enabled: s.enabled !== false });
         }
         return out;
+    }
+
+    /** Find a system by its ID. */
+    getSystem(id: string): System | undefined {
+        for (let i = 0; i < this.systems.length; i++) {
+            if (this.systems[i].id === id) return this.systems[i];
+        }
+        return undefined;
     }
 
     removeSystem(id: string) {

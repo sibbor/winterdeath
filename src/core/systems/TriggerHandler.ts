@@ -23,9 +23,10 @@ export const TriggerHandler = {
         state: RuntimeState,
         now: number,
         callbacks: {
-            spawnBubble: (text: string) => void;
+            spawnBubble: (text: string, duration?: number) => void;
             removeVisual: (id: string) => void;
-            onClueFound: (clue: SectorTrigger) => void;
+            onClueDiscovered: (clue: SectorTrigger) => void;
+            onPOIdiscovered: (poi: SectorTrigger) => void;
             onTrigger: (type: string, duration: number) => void;
             onAction: (action: TriggerAction) => void;
             collectedCluesRef: any;
@@ -114,17 +115,14 @@ export const TriggerHandler = {
                     // Log discovery for Adventure Log
                     if (trig.id) {
                         if (trig.type === 'POI') {
-                            if (!state.visitedPOIs) state.visitedPOIs = [];
-                            if (!state.visitedPOIs.includes(trig.id)) {
-                                state.visitedPOIs.push(trig.id);
+                            if (!state.discoveredPOIs) state.discoveredPOIs = [];
+                            if (!state.discoveredPOIs.includes(trig.id)) {
+                                callbacks.onPOIdiscovered(trig);
                             }
-                        } else if (
-                            trig.type === 'THOUGHT' ||
-                            trig.type === 'SPEAK' ||
-                            !trig.type
-                        ) {
+                        } else {
+                            // Any THOUGHT/SPEAK/INFO trigger can be a clue if not POI
                             if (!callbacks.collectedCluesRef.current.includes(trig.id)) {
-                                callbacks.collectedCluesRef.current.push(trig.id);
+                                callbacks.onClueDiscovered(trig);
                             }
                         }
                     }
@@ -145,14 +143,17 @@ export const TriggerHandler = {
                 // Fire Narrative (Only on First Entry to avoid spam)
                 if (isFirstEntry && trig.content) {
                     const translatedText = callbacks.t(trig.content);
-                    callbacks.spawnBubble(translatedText);
+                    const duration = 2000 + translatedText.length * 50;
+                    callbacks.spawnBubble(translatedText, duration);
 
                     // Dynamic duration based on readability speed
-                    const duration = 2000 + translatedText.length * 50;
 
                     if (trig.type === 'SPEAK') {
                         soundManager.playVoice(PLAYER_CHARACTER.name);
                         callbacks.onTrigger('SPEAK', duration);
+                    } else if (trig.type === 'THOUGHT') {
+                        soundManager.playUiHover();
+                        callbacks.onTrigger('THOUGHT', duration);
                     } else {
                         soundManager.playUiHover();
                         callbacks.onTrigger(trig.type || 'INFO', duration);

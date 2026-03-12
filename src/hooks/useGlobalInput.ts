@@ -1,100 +1,87 @@
-import { useEffect } from 'react';
-import { GameScreen } from '../types';
+import { useEffect, useRef } from 'react';
 import { soundManager } from '../utils/sound';
-
-interface UIState {
-    isPaused: boolean;
-    isMapOpen: boolean;
-    showTeleportMenu: boolean;
-    activeCollectible: any;
-    isDialogueOpen: boolean;
-    isBossIntroActive?: boolean;
-    hp: number;
-    isSettingsOpen: boolean;
-    isInteractionOpen: boolean;
-    isAdventureLogOpen: boolean;
-}
+import { OverlayType } from '../App';
+import { GameScreen } from '../types';
 
 interface UIActions {
-    setIsPaused: (val: boolean) => void;
-    setIsMapOpen: (val: boolean) => void;
-    setShowTeleportMenu: (val: boolean) => void;
+    setActiveOverlay: (val: OverlayType | null) => void;
     setTeleportInitialCoords: (val: any) => void;
-    onResume: () => void;
-    setIsSettingsOpen: (val: boolean) => void;
-    setIsAdventureLogOpen?: (val: boolean) => void;
-    setActiveCollectible?: (val: any) => void;
     requestPointerLock?: () => void;
+    onCollectibleClose?: () => void;
 }
 
 export const useGlobalInput = (
-    screen: GameScreen,
-    ui: UIState,
+    activeOverlay: OverlayType | null,
+    state: { hp: number, screen: GameScreen },
     actions: UIActions
 ) => {
+    // Stable ref to prevent listener re-registration on every toggle.
+    const overlayRef = useRef<OverlayType | null>(activeOverlay);
+    overlayRef.current = activeOverlay;
+    const lastEscTimeRef = useRef<number>(0);
+
     useEffect(() => {
-        const handleInput = (e: KeyboardEvent) => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const now = Date.now();
+            const current = overlayRef.current;
+
             // ESC Logic
             if (e.key === 'Escape') {
-                if (screen === GameScreen.CAMP) return;
+                if (now - lastEscTimeRef.current < 150) return;
+                lastEscTimeRef.current = now;
 
-                // If a dialogue or boss intro is active, let GameCanvas handle the ESC key
-                if (ui.isDialogueOpen || ui.isBossIntroActive) return;
+                if (current === 'DIALOGUE' || current === 'INTRO') return;
 
                 e.preventDefault();
                 e.stopPropagation();
 
-                if (ui.isMapOpen) {
-                    actions.setIsMapOpen(false);
-                    actions.setIsPaused(false);
-                    soundManager.playUiClick();
-                } else if (ui.activeCollectible) {
-                    actions.setActiveCollectible?.(null);
-                    actions.setIsPaused(false);
-                    soundManager.playUiClick();
-                } else if (ui.showTeleportMenu) {
-                    actions.setShowTeleportMenu(false);
+                if (current === 'TELEPORT') {
                     actions.setTeleportInitialCoords(null);
-                    actions.setIsMapOpen(true);
+                    actions.setActiveOverlay('MAP');
                     soundManager.playUiClick();
-                } else if (ui.isSettingsOpen) {
-                    actions.setIsSettingsOpen(false);
+                } else if (current === 'RESET_CONFIRM') {
+                    actions.setActiveOverlay('SETTINGS');
                     soundManager.playUiClick();
-                } else if (ui.isAdventureLogOpen) {
-                    actions.setIsAdventureLogOpen?.(false);
+                } else if (current === 'SETTINGS' || current === 'ADVENTURE_LOG') {
+                    if (state.screen === GameScreen.CAMP) {
+                        actions.setActiveOverlay(null);
+                    } else {
+                        actions.setActiveOverlay('PAUSE');
+                    }
                     soundManager.playUiClick();
-                } else if (ui.isPaused) {
-                    // Try to lock FIRST before state changes (which might unmount UI)
-                    // (Denna kan ibland fortfarande fallera på ESC, men vi låter den vara 
-                    // ifall resume-logiken triggas av andra knappar också. Bäst är dock 
-                    // att sköta muslåset via ett fysiskt musklick på UI:t).
-                    actions.onResume();
-                } else if (screen === GameScreen.SECTOR && !ui.activeCollectible && !ui.isDialogueOpen && !ui.isBossIntroActive && ui.hp > 0 && !ui.isAdventureLogOpen) {
-                    actions.setIsPaused(true);
-                    if (document.pointerLockElement) document.exitPointerLock();
+                } else if (current === 'PAUSE' || current === 'MAP' || current === 'COLLECTIBLE' || current?.startsWith('STATION_')) {
+                    if (current === 'COLLECTIBLE' && actions.onCollectibleClose) {
+                        actions.onCollectibleClose();
+                    } else {
+                        actions.setActiveOverlay(null);
+                        actions.requestPointerLock?.();
+                    }
+                    soundManager.playUiClick();
+                } else if (!current && state.hp > 0) {
+                    if (state.screen === GameScreen.CAMP) {
+                        actions.setActiveOverlay('SETTINGS');
+                    } else {
+                        actions.setActiveOverlay('PAUSE');
+                        if (document.pointerLockElement) document.exitPointerLock();
+                    }
+                    soundManager.playUiClick();
                 }
-            }
+            } 
             // Map Logic (M)
             else if (e.key.toLowerCase() === 'm') {
-                if (screen === GameScreen.SECTOR && !ui.activeCollectible && !ui.isDialogueOpen && !ui.showTeleportMenu && ui.hp > 0) {
-                    if (ui.isMapOpen) {
-                        // [VINTERDÖD] Här fungerar det oftast att låsa eftersom M inte är reserverad av webbläsaren
-                        actions.requestPointerLock?.();
-                        actions.setIsMapOpen(false);
-                        actions.setIsPaused(false);
-                        soundManager.playUiClick();
-                    } else if (!ui.isPaused) {
-                        // Only allow opening map if the game is not currently paused (e.g. Pause Menu)
-                        actions.setIsMapOpen(true);
-                        actions.setIsPaused(true);
-                        if (document.pointerLockElement) document.exitPointerLock();
-                        soundManager.playUiConfirm();
-                    }
+                if (!current && state.hp > 0) {
+                    actions.setActiveOverlay('MAP');
+                    if (document.pointerLockElement) document.exitPointerLock();
+                    soundManager.playUiConfirm();
+                } else if (current === 'MAP') {
+                    actions.setActiveOverlay(null);
+                    actions.requestPointerLock?.();
+                    soundManager.playUiClick();
                 }
             }
         };
 
-        window.addEventListener('keydown', handleInput, { capture: true });
-        return () => window.removeEventListener('keydown', handleInput, { capture: true });
-    }, [screen, ui.isPaused, ui.isMapOpen, ui.showTeleportMenu, ui.activeCollectible, ui.isDialogueOpen, ui.isAdventureLogOpen, ui.hp, actions]);
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    }, [actions, state.hp, state.screen]);
 };

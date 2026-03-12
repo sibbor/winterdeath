@@ -23,7 +23,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
-        const foundIds = stats.collectiblesFound || [];
+        const foundIds = stats.collectiblesDiscovered || [];
         const viewedIds = stats.viewedCollectibles || [];
         const newIds = foundIds.filter(id => !viewedIds.includes(id));
 
@@ -53,7 +53,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         switch (activeTab) {
             case 'collectibles': {
                 const allIds = Object.keys(COLLECTIBLES);
-                stats.collectiblesFound = [...new Set([...(stats.collectiblesFound || []), ...allIds])];
+                stats.collectiblesDiscovered = [...new Set([...(stats.collectiblesDiscovered || []), ...allIds])];
                 if (onMarkCollectiblesViewed) onMarkCollectiblesViewed(allIds);
                 break;
             }
@@ -75,7 +75,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 break;
             }
             case 'poi': {
-                stats.visitedPOIs = [
+                stats.discoveredPOIs = [
                     's1_poi_building_on_fire', 's1_poi_church', 's1_poi_cafe', 's1_poi_pizzeria', 's1_poi_grocery', 's1_poi_gym', 's1_poi_train_yard',
                     's2_poi_campfire', 's2_poi_train_tunnel', 's2_poi_cave_entrance', 's2_poi_mountain_vault',
                     's3_poi_farm', 's3_poi_farmhouse', 's3_poi_barn', 's3_poi_mast', 's4_poi_shed', 's4_poi_scrapyard'
@@ -258,7 +258,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
 };
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({ stats, isMobile }) => {
-    const foundIds = stats.collectiblesFound || [];
+    const foundIds = stats.collectiblesDiscovered || [];
     const viewedIds = stats.viewedCollectibles || [];
 
     // Group collectibles by sector for better organization - ascending
@@ -335,10 +335,10 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {sectorClues.map((clueId) => {
-                                // Default detection of thought vs speech
-                                const isSpeech = clueId.includes('dialogue') || clueId.includes('speech') || clueId.includes('speak') || clueId.includes('talk');
-                                const type = isSpeech ? 'SPEAK' : 'THOUGHT';
-                                const typeColor = isSpeech ? '#eab308' : '#3b82f6';
+                                // Default detection of THOUGHT vs SPEAK
+                                const isThought = clueId.includes('thought');
+                                const type = isThought ? 'THOUGHT' : 'SPEAK';
+                                const typeColor = isThought ? '#3b82f6' : '#eab308';
 
                                 return (
                                     <Card key={clueId} isLocked={false} color={typeColor}>
@@ -365,7 +365,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
 
 // --- POI TAB ---
 const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
-    const visitedList = stats.visitedPOIs || [];
+    const visitedList = stats.discoveredPOIs || [];
     const sectors = [1, 2, 3, 4, 5];
 
     return (

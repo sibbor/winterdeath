@@ -69,6 +69,7 @@ export const Sector3: SectorDef = {
         bgColor: 0x051015,
         fogDensity: 0.02,
         ambientIntensity: 0.3,
+        ambientColor: 0x404050,
         groundColor: 0x112211,
         fov: 50,
         skyLight: { visible: true, color: 0x88ffaa, intensity: 5.0, position: { x: 50, y: 35, z: 50 } },

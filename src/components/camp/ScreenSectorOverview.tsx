@@ -57,7 +57,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
         // Accurate Collectible Count
         const sectorCollectibles = getCollectiblesBySector(sectorNum);
-        const foundCollectibles = (stats.collectiblesFound || []).filter(id =>
+        const foundCollectibles = (stats.collectiblesDiscovered || []).filter(id =>
             sectorCollectibles.some(c => c.id === id)
         ).length;
 
@@ -70,7 +70,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         const poiKeys = sectorKeys.filter(k => k.includes('poi'));
 
         const foundCluesCount = (stats.cluesFound || []).filter(id => clueKeys.includes(id)).length;
-        const foundPoisCount = (stats.visitedPOIs || []).filter(id => poiKeys.includes(id)).length;
+        const foundPoisCount = (stats.discoveredPOIs || []).filter(id => poiKeys.includes(id)).length;
 
         return {
             collectibles: { found: foundCollectibles, total: sectorCollectibles.length },

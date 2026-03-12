@@ -99,12 +99,12 @@ export const INITIAL_STATS: PlayerStats = {
     cluesFound: [],
     seenEnemies: [],
     seenBosses: [],
-    visitedPOIs: [],
+    discoveredPOIs: [],
     deaths: 0,
     mostUsedWeapon: '',
     chestsOpened: 0,
     bigChestsOpened: 0,
-    collectiblesFound: [],
+    collectiblesDiscovered: [],
     viewedCollectibles: []
 };
 

@@ -51,11 +51,18 @@ export const AssetPreloader = {
 
             let envConfig = envConfigBase;
             if (isSector && !envConfig) {
-                const sector = SectorSystem.getSector(target as number);
-                if (sector) envConfig = sector.environment;
+                const sectorId = Number(target);
+                if (!isNaN(sectorId)) {
+                    const sector = SectorSystem.getSector(sectorId);
+                    if (sector) envConfig = sector.environment;
+                }
             } else if (isCamp && !envConfig) {
                 envConfig = CAMP_SCENE;
             }
+
+            // Safety: Ensure envConfig is at least an empty object to avoid crashes on property access
+            if (!envConfig) envConfig = {};
+
             const warmupTimings: Record<string, number> = {};
             const warmupStartTimes: Record<string, number> = {};
 
@@ -66,6 +73,7 @@ export const AssetPreloader = {
             };
 
             beginInternal('asset_warmup_total');
+
 
             // 0. PROCEDURAL TEXTURE CACHE WARMUP (CORE only)
             if (target === 'CORE') {
@@ -192,6 +200,51 @@ export const AssetPreloader = {
                 warmupCamera.threeCamera.copy(overrideCamera as any);
             }
 
+            // 3. SHADER PERMUTATION SETUP - ENVIRONMENT (Fog, Base Lighting)
+            // We set this up early so the scene is fully "decorated" before any objects are added.
+            beginInternal('asset_warmup_permutations');
+            if (envConfig) {
+                const fogCol = new THREE.Color(envConfig.fogColor || envConfig.bgColor);
+                scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity);
+                scene.background = fogCol;
+
+                // 3.1 Base Environment Lighting
+                if (envConfig.hemiLight) {
+                    const hemi = new THREE.HemisphereLight(
+                        envConfig.hemiLight.sky,
+                        envConfig.hemiLight.ground,
+                        envConfig.hemiLight.intensity
+                    );
+                    scene.add(hemi);
+                } else {
+                    // Match GameSessionSetup Ambient Light for Sectors
+                    const ambientLight = new THREE.AmbientLight(
+                        envConfig.ambientColor || 0x404050,
+                        envConfig.ambientIntensity || 0.4
+                    );
+                    ambientLight.name = 'AMBIENT_LIGHT';
+                    scene.add(ambientLight);
+                }
+
+                // 3.2 Sky / Directional Light
+                const skyLightRef = envConfig.skyLight;
+                if (skyLightRef && skyLightRef.visible) {
+                    const lightPos = skyLightRef.position || { x: 80, y: 50, z: 50 };
+                    const skyLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
+                    skyLight.name = 'SKY_LIGHT';
+                    skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
+
+                    skyLight.castShadow = true;
+                    skyLight.shadow.camera.left = -100;
+                    skyLight.shadow.camera.right = 100;
+                    skyLight.shadow.camera.top = 100;
+                    skyLight.shadow.camera.bottom = -100;
+                    skyLight.shadow.camera.far = 300;
+                    skyLight.shadow.bias = -0.0005;
+                    scene.add(skyLight);
+                }
+            }
+
             // --- WARMUP HELPERS (Defined early for use in all sections) ---
             const dummyRoot = new THREE.Group();
             scene.add(dummyRoot);
@@ -242,43 +295,17 @@ export const AssetPreloader = {
                 dummyRoot.add(mesh);
             };
 
-            // 3. SHADER PERMUTATION SETUP (Fog, Lighting, Shadows)
-            beginInternal('asset_warmup_permutations');
-            if (envConfig) {
-                const fogCol = new THREE.Color(envConfig.fogColor || envConfig.bgColor);
-                scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity);
-                scene.background = fogCol;
+            // 3.3 AUXILIARY LIGHTS (Sector Specific)
+            if (envConfig && isSector) {
+                const flashlight = ModelFactory.createFlashlight();
+                addToWarmup(flashlight);
+                scene.add(flashlight);
 
-                scene.add(new THREE.HemisphereLight(0x444455, 0x111115, 0.6));
-
-                if (isSector) {
-                    if (envConfig.ambientIntensity !== undefined) {
-                        scene.add(new THREE.AmbientLight(0xffffff, envConfig.ambientIntensity));
-                    }
-
-                    const skyLightRef = envConfig.skyLight || { color: 0xaaccff, intensity: 0.4 };
-                    const dirLight = new THREE.DirectionalLight(skyLightRef.color, skyLightRef.intensity);
-                    dirLight.position.set(
-                        skyLightRef.position?.x ?? -80,
-                        skyLightRef.position?.y ?? 150,
-                        skyLightRef.position?.z ?? -100
-                    );
-                    dirLight.castShadow = true;
-                    dirLight.shadow.mapSize.width = 1024;
-                    dirLight.shadow.mapSize.height = 1024;
-                    dirLight.shadow.bias = -0.001;
-                    scene.add(dirLight);
-
-                    const flashlight = ModelFactory.createFlashlight();
-                    addToWarmup(flashlight);
-                    scene.add(flashlight);
-
-                    const spotLight = new THREE.SpotLight(0xffffff, 1);
-                    spotLight.castShadow = false;
-                    spotLight.shadow.autoUpdate = false;
-                    spotLight.shadow.bias = -0.0001;
-                    scene.add(spotLight);
-                }
+                const spotLight = new THREE.SpotLight(0xffffff, 1);
+                spotLight.castShadow = false;
+                spotLight.shadow.autoUpdate = false;
+                spotLight.shadow.bias = -0.0001;
+                scene.add(spotLight);
             }
             endInternal('asset_warmup_permutations');
 
@@ -433,17 +460,20 @@ export const AssetPreloader = {
                     console.warn('[AssetPreloader] Collectible warmup failed', e);
                 }
 
+                // Weather particles
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember);
 
+                // Wind materials
                 const windMats = [MATERIALS.grass, MATERIALS.flower, MATERIALS.treeTrunkBirch, MATERIALS.treeTrunk];
                 for (let i = 0; i < windMats.length; i++) {
                     const m = windMats[i];
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, m));
                 }
 
+                // Water materials
                 const waterMats = [MATERIALS.waterLily, MATERIALS.waterLilyFlower, MATERIALS.seaweed];
                 for (let i = 0; i < waterMats.length; i++) {
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
@@ -457,6 +487,10 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.box, waterNordic), false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.box, waterIce), false);
 
+                // Scrap material
+                addInstancedWarmup(GEOMETRY.scrap, MATERIALS.scrap);
+
+                // Player & family member models:
                 addToWarmup(ModelFactory.createPlayer());
                 for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
                     addToWarmup(ModelFactory.createFamilyMember(FAMILY_MEMBERS[i]));
@@ -629,11 +663,13 @@ export const AssetPreloader = {
                     'blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke',
                     'debris', 'glass', 'flash', 'splash',
                     'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat',
-                    'campfire_flame', 'campfire_spark', 'campfire_smoke'
+                    'campfire_flame', 'campfire_spark', 'campfire_smoke',
+                    'scrap'
                 ];
                 for (let i = 0; i < fxTypes.length; i++) {
                     const realIMesh = FXSystem._getInstancedMesh(null as any, fxTypes[i]);
 
+                    // Use the geometry and material directly but do NOT dispose them
                     const dummyIMesh = new THREE.InstancedMesh(realIMesh.geometry, realIMesh.material, 1);
                     dummyIMesh.visible = false;
                     dummyRoot.add(dummyIMesh);
@@ -684,13 +720,20 @@ export const AssetPreloader = {
             endInternal('asset_warmup_compilation');
 
             // SAFE VRAM FLUSH & SCENE CLEANUP
-            for (let i = 0; i < ownedGeometries.length; i++) ownedGeometries[i].dispose();
-            for (let i = 0; i < ownedMaterials.length; i++) ownedMaterials[i].dispose();
+            // Only dispose what we EXPLICITLY created for this warmup
+            for (let i = 0; i < ownedGeometries.length; i++) {
+                if (ownedGeometries[i]) ownedGeometries[i].dispose();
+            }
+            for (let i = 0; i < ownedMaterials.length; i++) {
+                if (ownedMaterials[i]) ownedMaterials[i].dispose();
+            }
 
             scene.traverse((obj) => {
                 if ((obj as any).isLight && (obj as THREE.Light).shadow && (obj as THREE.Light).shadow.map) {
                     (obj as THREE.Light).shadow.map!.dispose();
                 }
+                // SAFETY: Never dispose geometry or materials during traversal here,
+                // as many might be shared constants (GEOMETRY, MATERIALS).
             });
 
             scene.clear();

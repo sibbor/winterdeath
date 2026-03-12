@@ -50,15 +50,17 @@ interface CampProps {
     weather: WeatherType;
     hasCheckpoint?: boolean;
     isRunning?: boolean;
+    activeOverlay: string | null;
+    setActiveOverlay: (type: any) => void;
+    onInteractionStateChange: (type: string | null) => void;
 }
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectSector, onStartSector, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, isSectorLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint, isRunning = true }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectSector, onStartSector, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, isSectorLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const lastDrawCallsRef = useRef(0);
 
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
-    const [activeModal, setActiveModal] = useState<'armory' | 'sectors' | 'skills' | 'stats' | 'settings' | 'reset_confirm' | 'adventure_log' | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string, subText?: string } | null>(null);
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
@@ -72,14 +74,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const lastInputRef = useRef(Date.now());
 
     const hoveredRef = useRef<string | null>(null);
-    const activeRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
-    const activeModalRef = useRef<'armory' | 'sectors' | 'skills' | 'stats' | 'adventure_log' | 'settings' | 'reset_confirm' | null>(null);
+    const activeOverlayRef = useRef<string | null>(null);
 
     const nextChatterTime = useRef<number>(0); // First chatter soon
     const nextWildlifeTime = useRef<number>(15000); // Start wildlife after 15s
     const activeChats = useRef<Array<{ id: string, mesh: THREE.Object3D, text: string, startTime: number, duration: number, element: HTMLDivElement, playedSound: boolean }>>([]);
 
     const envStateRef = useRef<CampEffectsState | null>(null);
+    const frameRef = useRef(0);
 
     const textures = useMemo(() => createProceduralTextures(), []);
 
@@ -93,7 +95,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     const sceneCinematicLookAtRef = useRef(CAMP_SCENE.cameraCinematicLookAt);
 
     useEffect(() => { isIdleRef.current = isIdle; }, [isIdle]);
-    useEffect(() => { activeModalRef.current = activeModal; }, [activeModal]);
+    useEffect(() => { activeOverlayRef.current = activeOverlay; }, [activeOverlay]);
 
 
     useEffect(() => {
@@ -112,27 +114,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         return () => { window.removeEventListener('mousemove', handleInput); window.removeEventListener('mousedown', handleInput); window.removeEventListener('keydown', handleInput); window.removeEventListener('touchstart', handleInput); clearInterval(idleTimer); };
     }, [isIdle]);
 
-    // --- KEYBOARD LISTENERS ---
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                if (activeModal) {
-                    if (activeModal === 'reset_confirm') {
-                        // specialized closing
-                        soundManager.playUiClick();
-                        setActiveModal('settings');
-                    } else {
-                        soundManager.playUiClick();
-                        setActiveModal(null);
-                    }
-                } else {
-                    soundManager.playUiClick();
-                    setActiveModal('settings');
-                }
-            }
-        };
-        window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc);
-    }, [activeModal]);
+    // --- KEYBOARD LISTENERS REMOVED (NOW GLOBAL) ---
 
 
     const setupCounterRef = useRef(0);
@@ -227,7 +209,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         };
 
         const onCL = () => {
-            if (!isRunning || activeModalRef.current) return;
+            if (!isRunning || activeOverlayRef.current) return;
             const hovered = hoveredRef.current;
             if (hovered) {
                 if (hovered.startsWith('family_') || hovered.startsWith('player_')) {
@@ -236,7 +218,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
                 } else {
                     soundManager.playUiConfirm();
-                    openModal(hovered as any);
+                    // Map local Camp station IDs to Global OverlayTypes
+                    const typeMap: Record<string, string> = {
+                        'armory': 'STATION_ARMORY',
+                        'skills': 'STATION_SKILLS',
+                        'sectors': 'STATION_SECTORS',
+                        'stats': 'STATION_STATISTICS',
+                        'adventure_log': 'ADVENTURE_LOG',
+                        'settings': 'SETTINGS'
+                    };
+                    onInteractionStateChange(typeMap[hovered] || null);
                 }
             }
         };
@@ -400,43 +391,48 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             monitor.begin('raycasting');
 
-            if (isRunning && !activeModalRef.current) {
-                scene.updateMatrixWorld();
-                raycaster.setFromCamera(mouse, camera.threeCamera);
-                const hits = raycaster.intersectObjects(interactables);
-                let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
-                const width = container.clientWidth, height = container.clientHeight;
+            if (isRunning && !activeOverlayRef.current) {
+                frameRef.current++;
+                const shouldUpdateInteractions = (frameRef.current % 2 === 0);
 
-                if (hits.length > 0) {
-                    let target: any = hits[0].object;
-                    if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
-                    newHover = target.userData.id;
-                    if (newHover) {
-                        const isMember = newHover.startsWith('family_') || newHover.startsWith('player_');
-                        if (isMember) {
-                            toolTipText = `${target.userData.name}`;
-                        } else {
-                            toolTipText = t(`stations.${target.userData.name || newHover}`);
-                            if (newHover === 'armory') {
-                                toolTipSubText = `${t(WEAPONS[currentLoadout.primary].displayName)} | ${t(WEAPONS[currentLoadout.secondary].displayName)} | ${t(WEAPONS[currentLoadout.throwable].displayName)} | ${t(WEAPONS[currentLoadout.special].displayName)}`;
-                            } else if (newHover === 'skills') {
-                                toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.maxHp} | ${t('camp_tooltips.adrenaline')}: ${stats.maxStamina} | ${t('camp_tooltips.reflexes')}: ${Math.round(stats.speed * 100)}`;
-                            } else if (newHover === 'adventure_log') {
-                                toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesFound?.length || 0} | ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} | ${t('camp_tooltips.poi')}: ${stats.visitedPOIs?.length || 0} | ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} | ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
-                            } else if (newHover === 'sectors') {
-                                toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} | ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
+                if (shouldUpdateInteractions) {
+                    scene.updateMatrixWorld();
+                    raycaster.setFromCamera(mouse, camera.threeCamera);
+                    const hits = raycaster.intersectObjects(interactables);
+                    let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
+                    const width = container.clientWidth, height = container.clientHeight;
+
+                    if (hits.length > 0) {
+                        let target: any = hits[0].object;
+                        if (!target.userData.id && target.parent && target.parent.userData.id) target = target.parent;
+                        newHover = target.userData.id;
+                        if (newHover) {
+                            const isMember = newHover.startsWith('family_') || newHover.startsWith('player_');
+                            if (isMember) {
+                                toolTipText = `${target.userData.name}`;
+                            } else {
+                                toolTipText = t(`stations.${target.userData.name || newHover}`);
+                                if (newHover === 'armory') {
+                                    toolTipSubText = `${t(WEAPONS[currentLoadout.primary].displayName)} | ${t(WEAPONS[currentLoadout.secondary].displayName)} | ${t(WEAPONS[currentLoadout.throwable].displayName)} | ${t(WEAPONS[currentLoadout.special].displayName)}`;
+                                } else if (newHover === 'skills') {
+                                    toolTipSubText = `${t('camp_tooltips.vitality')}: ${stats.maxHp} | ${t('camp_tooltips.adrenaline')}: ${stats.maxStamina} | ${t('camp_tooltips.reflexes')}: ${Math.round(stats.speed * 100)}`;
+                                } else if (newHover === 'adventure_log') {
+                                    toolTipSubText = `${t('camp_tooltips.collectibles')}: ${stats.collectiblesDiscovered?.length || 0} | ${t('camp_tooltips.clues')}: ${stats.cluesFound?.length || 0} | ${t('camp_tooltips.poi')}: ${stats.discoveredPOIs?.length || 0} | ${t('camp_tooltips.enemies')}: ${stats.seenEnemies?.length || 0} | ${t('camp_tooltips.bosses')}: ${stats.seenBosses?.length || 0}`;
+                                } else if (newHover === 'sectors') {
+                                    toolTipSubText = `${t('camp_tooltips.finished_sectors')}: ${stats.sectorsCompleted} | ${t('camp_tooltips.selected_sector')}: ${t(SECTOR_THEMES[currentSector]?.name || '')}`;
+                                }
                             }
+                            const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
+                            tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
                         }
-                        const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
-                        tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
                     }
+
+                    if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
+                    setTooltip(newHover ? { text: toolTipText, subText: toolTipSubText, x: tooltipX, y: tooltipY } : null);
+
+                    // Use the cached outline keys to avoid array allocation
+                    for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
                 }
-
-                if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
-                setTooltip(newHover ? { text: toolTipText, subText: toolTipSubText, x: tooltipX, y: tooltipY } : null);
-
-                // Use the cached outline keys to avoid array allocation
-                for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
 
             } else {
                 // Not running or Modal open: Clean up
@@ -472,8 +468,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         };
     }, [isRunning]);
 
-    const openModal = (id: typeof activeModal) => setActiveModal(id);
-    const closeModal = () => { soundManager.playUiClick(); setActiveModal(null); };
+    const closeModal = () => { soundManager.playUiClick(); setActiveOverlay(null); };
 
     return (
         <div className={`relative w-full h-full bg-black font-sans overflow-hidden`} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
@@ -494,53 +489,18 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 </div>
             )}
 
-            {!activeModal && (
+            {!activeOverlay && (
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(WEAPONS[currentLoadout.primary].displayName), sec: t(WEAPONS[currentLoadout.secondary].displayName), thr: t(WEAPONS[currentLoadout.throwable].displayName) }}
-                    onOpenStats={() => openModal('stats')} onOpenArmory={() => openModal('armory')} onOpenSkills={() => openModal('skills')}
-                    onOpenSettings={() => openModal('settings')} onStartSector={() => { }}
-                    debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => openModal('reset_confirm')}
+                    onOpenStats={() => onInteractionStateChange('STATION_STATISTICS')}
+                    onOpenArmory={() => onInteractionStateChange('STATION_ARMORY')}
+                    onOpenSkills={() => onInteractionStateChange('STATION_SKILLS')}
+                    onOpenSettings={() => setActiveOverlay('SETTINGS')}
+                    onStartSector={() => { }}
+                    debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => setActiveOverlay('RESET_CONFIRM')}
                     onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 10 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
                     isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeModal === 'stats' && <ScreenStatistics stats={stats} onClose={closeModal} isMobileDevice={isMobileDevice} />}
-            {activeModal === 'armory' && <ScreenArmory stats={stats} currentLoadout={currentLoadout} weaponLevels={weaponLevels} onClose={closeModal} onSave={(s, l, wl) => { onSaveStats(s); onSaveLoadout(l, wl); closeModal(); }} isMobileDevice={isMobileDevice} />}
-            {activeModal === 'adventure_log' && <ScreenAdventureLog
-                stats={stats}
-                onClose={closeModal}
-                isMobileDevice={isMobileDevice}
-                debugMode={debugMode}
-                onMarkCollectiblesViewed={(newIds) => {
-                    const updated = [...(stats.viewedCollectibles || [])];
-                    for (let i = 0; i < newIds.length; i++) {
-                        const id = newIds[i];
-                        if (!updated.includes(id)) {
-                            updated.push(id);
-                        }
-                    }
-                    onSaveStats({ ...stats, viewedCollectibles: updated });
-                }}
-            />}
-            {activeModal === 'sectors' && <ScreenSectorOverview currentSector={currentSector} rescuedFamilyIndices={rescuedFamilyIndices} deadBossIndices={deadBossIndices} debugMode={debugMode} stats={stats} onClose={closeModal} onSelectSector={onSelectSector} onStartSector={onStartSector} isMobileDevice={isMobileDevice} />}
-            {activeModal === 'skills' && <ScreenPlayerSkills stats={stats} onSave={onSaveStats} onClose={closeModal} isMobileDevice={isMobileDevice} />}
-            {activeModal === 'settings' && (
-                <ScreenSettings
-                    onClose={closeModal}
-                    graphics={graphics}
-                    onUpdateGraphics={(newG) => {
-                        setGraphics(newG);
-                        onSaveGraphics(newG);
-                    }}
-                />
-            )}
-
-            {activeModal === 'reset_confirm' && (
-                <ScreenResetConfirm
-                    onConfirm={onResetGame}
-                    onCancel={closeModal}
                 />
             )}
 

@@ -18,7 +18,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
     return (
         <GameModalLayout title={t('ui.paused')} isMobile={isMobileDevice} onClose={onResume} showCloseButton={false}>
             <div className="space-y-6">
-                <button onClick={onResume} className={`${buttonStyle} bg-white text-black border-white hover:bg-slate-300`}>
+                <button onClick={() => { soundManager.playUiClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-slate-300`}>
                     <span className="block skew-x-[10deg]">{t('ui.continue')}</span>
                 </button>
                 <button
@@ -39,7 +39,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                 >
                     <span className="block skew-x-[10deg]">{t('ui.settings')}</span>
                 </button>
-                <button onClick={onAbort} className={`${buttonStyle} bg-black text-red-600 border-red-600 hover:bg-red-900/20`}>
+                <button onClick={() => { soundManager.playUiClick(); onAbort(); }} className={`${buttonStyle} bg-black text-red-600 border-red-600 hover:bg-red-900/20`}>
                     <span className="block skew-x-[10deg]">{t('ui.end_game')}</span>
                 </button>
             </div>

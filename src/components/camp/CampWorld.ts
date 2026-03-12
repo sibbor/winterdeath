@@ -692,18 +692,21 @@ export const CampWorld = {
         const flameCount = 40;
         const flames = new THREE.InstancedMesh(CONST_GEO.flame, CONST_MAT.flame, flameCount);
         flames.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        flames.userData.isEngineStatic = true;
         scene.add(flames);
         const flameData = new Float32Array(flameCount * FLAME_VARS);
 
         const sparkleCount = 60;
         const sparkles = new THREE.InstancedMesh(CONST_GEO.spark, CONST_MAT.spark, sparkleCount);
         sparkles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        sparkles.userData.isEngineStatic = true;
         scene.add(sparkles);
         const sparkleData = new Float32Array(sparkleCount * SPARKLE_VARS);
 
         const smokeCount = 30;
         const smokes = new THREE.InstancedMesh(CONST_GEO.smoke, CONST_MAT.smoke, smokeCount);
         smokes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        smokes.userData.isEngineStatic = true;
 
         // Setup custom alpha attribute for smoke
         const smokeAlphas = new Float32Array(smokeCount);

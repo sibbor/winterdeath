@@ -8,6 +8,7 @@ import { WindSystem } from '../systems/WindSystem';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { WaterSystem } from '../systems/WaterSystem';
 import { PerformanceMonitor } from '../systems/PerformanceMonitor';
+import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 /**
  * The Engine class acts as the central hub for the 3D environment.
@@ -226,21 +227,30 @@ export class WinterEngine {
             const obj = disposableObjects[i];
 
             obj.traverse((child: any) => {
+                // Safeguard: Check if this object or any children are explicitly protected
+                const isProtected = child.userData?.isEngineStatic || child.userData?.isSharedAsset;
+                if (isProtected) return;
+
                 if (child.isMesh || child.isLine || child.isPoints || child.isSprite) {
-                    if (child.geometry) child.geometry.dispose();
+                    if (child.geometry) {
+                        // Safeguard: Do not dispose if it's a shared geometry
+                        const isSharedGeo = Object.values(GEOMETRY).includes(child.geometry);
+                        if (!isSharedGeo) child.geometry.dispose();
+                    }
 
                     if (child.material) {
+                        const checkMaterial = (m: any) => {
+                            const isSharedMat = Object.values(MATERIALS).includes(m);
+                            if (!isSharedMat) m.dispose();
+                        };
+
                         if (Array.isArray(child.material)) {
-                            child.material.forEach((m: any) => m.dispose());
+                            child.material.forEach(checkMaterial);
                         } else {
-                            child.material.dispose();
+                            checkMaterial(child.material);
                         }
                     }
                 }
-
-                // Dispose of textures in material if they are unique
-                // (In Vinterdöd, most textures are shared in AssetLoader/MATERIALS, 
-                // so we usually DON'T dispose them here unless they are dynamic.)
             });
 
             this.scene.remove(obj);

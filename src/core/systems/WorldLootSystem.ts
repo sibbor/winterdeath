@@ -6,10 +6,8 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
-const _tempQuat = new THREE.Quaternion(); // [VINTERDÖD] För blixtsnabb Euler -> Quaternion konvertering
-const _m4 = new THREE.Matrix4(); // [VINTERDÖD] Ren matris, bypassar all Object3D overhead
-
-// [VINTERDÖD] Förberäknad gömd matris. Sparar CPU-cykler när vi städar upp instanser.
+const _tempQuat = new THREE.Quaternion();
+const _m4 = new THREE.Matrix4();
 const _hiddenMatrix = new THREE.Matrix4().makeTranslation(0, -1000, 0);
 
 export interface ScrapItem {
@@ -19,8 +17,6 @@ export interface ScrapItem {
     magnetized: boolean;
     life: number;
     spawnTime: number;
-
-    // Transform props
     index: number;
     position: THREE.Vector3;
     rotation: THREE.Euler;
@@ -56,7 +52,6 @@ export class WorldLootSystem implements System {
         this.instancedMesh.frustumCulled = false;
         scene.add(this.instancedMesh);
 
-        // Pre-allocate the entire pool
         for (let i = 0; i < WorldLootSystem.MAX_SCRAP; i++) {
             this.pool.push({
                 velocity: new THREE.Vector3(),
@@ -73,21 +68,15 @@ export class WorldLootSystem implements System {
                 needsUpdate: false
             });
             this.freeIndices.push(i);
-
-            // Hide initially with zero math
             this.instancedMesh.setMatrixAt(i, _hiddenMatrix);
         }
         this.instancedMesh.instanceMatrix.needsUpdate = true;
 
-        // Pre-allocate some requests
         for (let i = 0; i < 50; i++) this.requestPool.push({ x: 0, z: 0 });
-
         WorldLootSystem.instance = this;
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
-        // 1. Process Spawn Queue (Staggered) 
-        // [VINTERDÖD] O(1) Pop istället för O(N) Shift.
         const batchSize = Math.min(this.spawnQueue.length, 10);
         for (let i = 0; i < batchSize; i++) {
             const req = this.spawnQueue.pop();
@@ -97,7 +86,6 @@ export class WorldLootSystem implements System {
             }
         }
 
-        // 2. Update existing loot
         const collected = this.updateLoot(this.playerGroup.position, dt, now);
         if (collected > 0) {
             session.state.collectedScrap += collected;
@@ -121,31 +109,26 @@ export class WorldLootSystem implements System {
             const distSq = item.position.distanceToSquared(playerPos);
             const canMagnetize = (now - item.spawnTime) > magnetismDelay;
 
-            // --- 1. STATE LOGIC ---
+            // 1. State logic
             if (!item.magnetized && canMagnetize && distSq < magnetRangeSq) {
                 item.magnetized = true;
                 item.grounded = false;
                 item.needsUpdate = true;
             }
 
-            // --- 2. PHYSICS & MOVEMENT ---
+            // 2. Magnetize (physics)
             if (item.magnetized) {
                 _v1.subVectors(playerPos, item.position).normalize();
-
-                // [VINTERDÖD] Snabbare uträkning av pullStrength
                 const dist = Math.max(0.1, Math.sqrt(distSq));
                 const pullStrength = 1.0 + (20.0 / (dist + 1.0));
 
                 item.position.addScaledVector(_v1, magnetSpeed * pullStrength * delta);
                 item.rotation.y += 10.0 * delta;
 
-                // Snabb matematisk tilldelning (ingen setScalar-overhead)
                 const ns = Math.max(0.4, item.scale.x - 1.5 * delta);
                 item.scale.set(ns, ns, ns);
-
                 item.needsUpdate = true;
-            }
-            else if (!item.grounded) {
+            } else if (!item.grounded) {
                 item.velocity.y -= 35 * delta;
                 item.position.addScaledVector(item.velocity, delta);
 
@@ -164,11 +147,10 @@ export class WorldLootSystem implements System {
                 item.needsUpdate = true;
             }
 
-            // --- 3. COLLECTION ---
+            // 3. Collection
             if (distSq < collectionRangeSq) {
                 collectedAmount += item.value;
                 this.deactivateItem(item);
-
                 if (now - this.lastSoundTime > 40) {
                     soundManager.playUiPickup();
                     this.lastSoundTime = now;
@@ -177,7 +159,6 @@ export class WorldLootSystem implements System {
                 continue;
             }
 
-            // --- 4. GPU SYNC (Only if transform changed) ---
             if (item.needsUpdate) {
                 this.updateInstanceMatrix(item);
                 item.needsUpdate = !item.grounded;
@@ -193,8 +174,6 @@ export class WorldLootSystem implements System {
     }
 
     private updateInstanceMatrix(item: ScrapItem) {
-        // [VINTERDÖD] Direkt Matrix Composition via _m4. 
-        // Inget Object3D-skräp, inga smutsiga flaggor i Three.js att checka. Blixtsnabbt.
         _tempQuat.setFromEuler(item.rotation);
         _m4.compose(item.position, _tempQuat, item.scale);
         this.instancedMesh.setMatrixAt(item.index, _m4);
@@ -206,15 +185,12 @@ export class WorldLootSystem implements System {
         item.grounded = false;
         item.needsUpdate = false;
         this.freeIndices.push(item.index);
-
-        // [VINTERDÖD] Omedelbar radering från vyn utan matematik via förkompilerad matris.
         this.instancedMesh.setMatrixAt(item.index, _hiddenMatrix);
     }
 
     public static spawnScrapExplosion(scene: THREE.Scene, _legacy: any[], x: number, z: number, amount: number) {
         if (!WorldLootSystem.instance) return;
         const sys = WorldLootSystem.instance;
-
         const count = Math.min(Math.ceil(amount / 5), 15);
 
         for (let i = 0; i < count; i++) {
@@ -227,10 +203,8 @@ export class WorldLootSystem implements System {
 
     private spawnSingle(x: number, z: number) {
         if (this.freeIndices.length === 0) return;
-
         const idx = this.freeIndices.pop()!;
         const item = this.pool[idx];
-
         const angle = Math.random() * Math.PI * 2;
         const horizontalForce = 4 + Math.random() * 6;
 
@@ -240,12 +214,11 @@ export class WorldLootSystem implements System {
         item.magnetized = false;
         item.spawnTime = performance.now();
         item.value = 5 + Math.floor(Math.random() * 10);
-
         item.position.set(x, 1.5, z);
-        item.scale.set(1.0, 1.0, 1.0); // Snabb set() istället för setScalar()
+        item.scale.set(1.0, 1.0, 1.0);
         item.velocity.set(
             Math.cos(angle) * horizontalForce,
-            6 + Math.random() * 6, // Vertical pop
+            6 + Math.random() * 6,
             Math.sin(angle) * horizontalForce
         );
         item.rotation.set(Math.random(), Math.random(), 0);

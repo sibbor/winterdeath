@@ -148,7 +148,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
                             <StatBlock
                                 label={t('ui.log_collectibles')}
-                                value={`${stats.collectiblesFound?.length || 0} / ${getCollectiblesBySector(currentSector + 1).length}`}
+                                value={`${stats.collectiblesDiscovered?.length || 0} / ${getCollectiblesBySector(currentSector + 1).length}`}
                                 color="text-yellow-400"
                             />
                             <StatBlock label={t('ui.clues_found')} value={stats.cluesFound.length} color="text-yellow-400" />
@@ -158,9 +158,9 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         <div className="grid grid-cols-2 gap-4 pt-2">
                             {/* Collectibles List */}
                             <div className="overflow-y-auto custom-scrollbar text-left max-h-48">
-                                {stats.collectiblesFound && stats.collectiblesFound.length > 0 ? (
+                                {stats.collectiblesDiscovered && stats.collectiblesDiscovered.length > 0 ? (
                                     <ul className="space-y-2">
-                                        {stats.collectiblesFound.map((id, i) => {
+                                        {stats.collectiblesDiscovered.map((id, i) => {
                                             const def = getCollectibleById(id);
                                             return (
                                                 <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">

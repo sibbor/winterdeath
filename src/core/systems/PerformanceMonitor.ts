@@ -15,6 +15,20 @@ export class PerformanceMonitor {
     private startTimes: Record<string, number> = {};
     private _lastFrameTotal: number = 0;
     private _consoleLoggingEnabled: boolean = true;
+    private _aiLoggingEnabled: boolean = true;
+    private _shaderLoggingEnabled: boolean = true;
+
+    constructor() {
+        // Load initial state from localStorage
+        const savedEng = localStorage.getItem('vinterdod_debug_console_logging');
+        if (savedEng !== null) this._consoleLoggingEnabled = savedEng === 'true';
+
+        const savedAI = localStorage.getItem('vinterdod_debug_ai_logging');
+        if (savedAI !== null) this._aiLoggingEnabled = savedAI === 'true';
+
+        const savedShaders = localStorage.getItem('vinterdod_debug_shader_logging');
+        if (savedShaders !== null) this._shaderLoggingEnabled = savedShaders === 'true';
+    }
 
     // FPS Tracking
     private _fps: number = 0;
@@ -97,7 +111,7 @@ export class PerformanceMonitor {
             const diff = programCount - this._lastShaderPrograms;
             this._shaderRecompileCount += diff;
 
-            if (this._consoleLoggingEnabled) {
+            if (this._shaderLoggingEnabled) {
                 console.warn(`[SHADER] New program compiled — total: ${programCount} (+${diff})`);
 
                 // Identify exactly what caused the recompile by checking against our known set
@@ -110,11 +124,11 @@ export class PerformanceMonitor {
                     const permPreview = keyString.length > 120 ? keyString.substring(0, 120) + '...' : keyString;
 
                     // Leta i hela scenen efter materialet som just skapades!
-                    let foundObjectName = "Okänd (Förmodligen en Sprite/Partikel)";
+                    let foundObjectName = "Unknown (probably a sprite/particle)";
                     if ((window as any).gameEngine && (window as any).gameEngine.scene) {
                         (window as any).gameEngine.scene.traverse((obj: any) => {
                             if (obj.material && (obj.material.id === p.id || String(p.cacheKey) === obj.material.customProgramCacheKey?.())) {
-                                foundObjectName = obj.name || obj.type || "Namnlöst Objekt";
+                                foundObjectName = obj.name || obj.type || "Nameless object";
                             }
                         });
                     }
@@ -196,6 +210,25 @@ export class PerformanceMonitor {
 
     public set consoleLoggingEnabled(value: boolean) {
         this._consoleLoggingEnabled = value;
+        localStorage.setItem('vinterdod_debug_console_logging', String(value));
+    }
+
+    public get aiLoggingEnabled(): boolean {
+        return this._aiLoggingEnabled;
+    }
+
+    public set aiLoggingEnabled(value: boolean) {
+        this._aiLoggingEnabled = value;
+        localStorage.setItem('vinterdod_debug_ai_logging', String(value));
+    }
+
+    public get shaderLoggingEnabled(): boolean {
+        return this._shaderLoggingEnabled;
+    }
+
+    public set shaderLoggingEnabled(value: boolean) {
+        this._shaderLoggingEnabled = value;
+        localStorage.setItem('vinterdod_debug_shader_logging', String(value));
     }
 
     public getTimings(): Record<string, number> {

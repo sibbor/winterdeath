@@ -58,9 +58,9 @@ export const HudSystem = {
             : 0;
 
         // Calculate potential SP earned in this run, excluding what's already been saved to global stats
-        const sessionCollectibles = state.sessionCollectiblesFound || [];
-        const globalCollectibles = (props.stats && props.stats.collectiblesFound) || [];
-        const newCollectiblesCount = sessionCollectibles.filter((id: string) => !globalCollectibles.includes(id)).length;
+        const sessionCollectibles = state.sessionCollectiblesDiscovered || [];
+        const globalCollectibles = (props.stats && props.stats.collectiblesDiscovered) || [];
+        const newCollectiblesCount = (state.sessionCollectiblesDiscovered || []).length;
 
         // SP from levels gained in this specific run
         const levelGained = Math.max(0, state.level - (props.stats?.level || 1));
@@ -158,7 +158,8 @@ export const HudSystem = {
                     } : null,
                     renderer: (window as any).gameEngine?.getRendererStats() || null
                 }
-            }
+            },
+            mapItems: state.mapItems || []
         };
     }
 };

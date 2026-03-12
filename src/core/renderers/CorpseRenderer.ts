@@ -27,6 +27,7 @@ export class CorpseRenderer {
         material.color.setHex(0xffffff); // Set to white to act as a multiplier for instance colors
 
         this.mesh = new THREE.InstancedMesh(GEOMETRY.zombie, material, this.maxInstances);
+        this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances * 3), 3);
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
         this.mesh.count = 0;

@@ -1,5 +1,5 @@
-﻿import * as THREE from 'three';
-import { SectorTrigger, SectorState } from '../types';
+import * as THREE from 'three';
+import { SectorTrigger, SectorState, PlayerStats } from '../types';
 import { WeaponType } from '../content/weapons';
 import { VehicleType } from '../content/vehicles';
 import { Obstacle } from './world/CollisionResolution';
@@ -64,7 +64,8 @@ export interface RuntimeState {
     // --- PROGRESSION ---
     seenEnemies: string[];
     seenBosses: string[];
-    visitedPOIs: string[];
+    discoveredPOIs: string[];
+    cluesFound: string[];
     bossesDefeated: number[];
     familyFound: boolean;
     familyExtracted: boolean;
@@ -108,6 +109,11 @@ export interface RuntimeState {
     isWading: boolean;
     isSwimming: boolean;
 
+    // --- PERFORMANCE MONITORING (Zero-GC) ---
+    renderCpuTime: number;
+    drawCalls: number;
+    triangles: number;
+
     // --- INTERACTION ---
     interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
     interactionLabel: string | null;
@@ -116,17 +122,20 @@ export interface RuntimeState {
 
     nearestCollectible?: SectorTrigger | null; // Kan städas om till ID-sträng istället för referens
     onClueFound?: ((clue: SectorTrigger) => void) | null;
-    onCollectibleFound?: ((id: string) => void) | null;
+    onCollectibleDiscovered?: ((id: string) => void) | null;
     gainXp?: ((amount: number) => void) | null;
     bossIntroActive: boolean;
-    sessionCollectiblesFound: string[];
-    collectiblesFound: string[];
+    sessionCollectiblesDiscovered: string[];
+    collectiblesDiscovered: string[];
     mapItems: any[];
 
     activeVehicle: THREE.Object3D | null;
     activeVehicleType: VehicleType | null;
     vehicleSpeed: number;
     vehicleEngineState: 'OFF' | 'STARTING' | 'RUNNING';
+
+    flashlightOn: boolean;
+    currentInteraction: any | null;
 
     // --- PRE-ALLOCATED REQUEST OBJECT (Zero-GC) ---
     interactionRequest: {
@@ -135,4 +144,6 @@ export interface RuntimeState {
         object: THREE.Object3D | null;
         type: 'sector_specific' | 'global' | null;
     };
+    callbacks?: any;
+    stats: PlayerStats;
 }

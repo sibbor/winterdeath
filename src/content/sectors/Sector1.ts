@@ -87,6 +87,7 @@ export const Sector1: SectorDef = {
         bgColor: 0x020208,
         fogDensity: 0.02,
         ambientIntensity: 0.4,
+        ambientColor: 0x404050,
         groundColor: 0xddddff,
         fov: 50,
         skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
@@ -434,7 +435,7 @@ export const Sector1: SectorDef = {
         SectorGenerator.createGuardrail(ctx, guardRailSouth, true);
 
         const guardRailNorthWest = [
-            new THREE.Vector3(130, 5, 339),
+            new THREE.Vector3(113, 5, 339),
             new THREE.Vector3(84, 5, 344),
             new THREE.Vector3(20, 5, 358)
         ];
@@ -442,18 +443,17 @@ export const Sector1: SectorDef = {
 
         const guardRailNorthEast = [
             new THREE.Vector3(264, 5, 339),
-            new THREE.Vector3(145, 5, 339)
+            new THREE.Vector3(135, 5, 339)
         ];
         SectorGenerator.createGuardrail(ctx, guardRailNorthEast, true);
 
-        // TODO: Adjust this:
         // Debris
         const debrisGeo = new THREE.BoxGeometry(0.15, 0.3, 5);
         const debrisPositions = [
-            { x: 144, z: 339, ry: 0.2, rz: 0.1 },
-            { x: 142, z: 338, ry: 0.5, rz: -0.5 },
-            { x: 128, z: 337, ry: 0.8, rz: -0.8 },
-            { x: 131, z: 339, ry: -0.2, rz: 0.1 }
+            { x: 113, z: 339, ry: 0.2, rz: 0.1 },
+            { x: 113, z: 338, ry: 0.5, rz: -0.5 },
+            { x: 135, z: 337, ry: 0.8, rz: -0.8 },
+            { x: 135, z: 339, ry: -0.2, rz: 0.1 }
         ];
         for (let i = 0; i < debrisPositions.length; i++) {
             const d = debrisPositions[i];
@@ -465,19 +465,20 @@ export const Sector1: SectorDef = {
         }
 
         // Skid Marks (Sliding from West towards the broken edge)
-        // Left Tire
+        // Left tire
         PathGenerator.createDecalPath(ctx, [
-            new THREE.Vector3(100, 6, 344),
-            new THREE.Vector3(115, 6, 343),
-            new THREE.Vector3(125, 6, 341),
-            new THREE.Vector3(130, 6, 339)
+            new THREE.Vector3(80, 6, 344),
+            new THREE.Vector3(95, 6, 344),
+            new THREE.Vector3(110, 6, 341.5),
+            new THREE.Vector3(125, 6, 339.5)
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
+
         // Right tire
         PathGenerator.createDecalPath(ctx, [
-            new THREE.Vector3(100, 6, 346.5),
-            new THREE.Vector3(115, 6, 345.5),
-            new THREE.Vector3(125, 6, 343.5),
-            new THREE.Vector3(131, 6, 341.5)
+            new THREE.Vector3(80, 6, 346.5),
+            new THREE.Vector3(95, 6, 345.5),
+            new THREE.Vector3(110, 6, 343.5),
+            new THREE.Vector3(125, 6, 341.5)
         ], { spacing: 0.2, size: 0.5, material: MATERIALS.skidMark, variance: 0.02 });
 
         // Tunnel
@@ -922,10 +923,10 @@ export const Sector1: SectorDef = {
             if (events.cameraShake) events.cameraShake(1.0);
 
             gameState.triggers.push({
-                id: 'dyn_speech_' + Date.now(),
+                id: 'dyn_speak_' + Date.now(),
                 position: playerPos.clone(),
                 radius: 100,
-                type: 'SPEECH',
+                type: 'SPEAK',
                 content: "clues.s1_event_tunnel_whats_happening",
                 triggered: false,
                 actions: []
@@ -970,10 +971,10 @@ export const Sector1: SectorDef = {
             if (events.setCameraOverride) events.setCameraOverride(null);
 
             gameState.triggers.push({
-                id: 'dyn_speech_' + Date.now(),
+                id: 'dyn_speak_' + Date.now(),
                 position: playerPos.clone(),
                 radius: 100,
-                type: 'SPEECH',
+                type: 'SPEAK',
                 content: "clues.s1_event_tunnel_explosion_attracted_zombies",
                 triggered: false,
                 actions: []
@@ -1012,10 +1013,10 @@ export const Sector1: SectorDef = {
                 sectorState.busEventTimer = now;
 
                 gameState.triggers.push({
-                    id: 'dyn_speech_' + Date.now(),
+                    id: 'dyn_speak_' + Date.now(),
                     position: playerPos.clone(),
                     radius: 100,
-                    type: 'SPEECH',
+                    type: 'SPEAK',
                     content: "clues.s1_event_tunnel_plant_explosives",
                     triggered: false,
                     actions: []
@@ -1287,10 +1288,10 @@ export const Sector1: SectorDef = {
                 if (events.setCameraOverride) events.setCameraOverride(null);
 
                 gameState.triggers.push({
-                    id: 'dyn_speech_' + Date.now(),
+                    id: 'dyn_speak_' + Date.now(),
                     position: playerPos.clone(),
                     radius: 100,
-                    type: 'SPEECH',
+                    type: 'SPEAK',
                     content: "clues.s1_event_tunnel_cleared",
                     triggered: false,
                     actions: []

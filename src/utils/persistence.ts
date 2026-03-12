@@ -77,8 +77,8 @@ export const loadGameState = (): GameState => {
             if (mergedState.stats.totalThrowablesThrown === undefined) mergedState.stats.totalThrowablesThrown = 0;
             if (mergedState.stats.seenEnemies === undefined) mergedState.stats.seenEnemies = [];
             if (mergedState.stats.seenBosses === undefined) mergedState.stats.seenBosses = [];
-            if (mergedState.stats.visitedPOIs === undefined) mergedState.stats.visitedPOIs = [];
-            if (mergedState.stats.collectiblesFound === undefined) mergedState.stats.collectiblesFound = [];
+            if (mergedState.stats.discoveredPOIs === undefined) mergedState.stats.discoveredPOIs = [];
+            if (mergedState.stats.collectiblesDiscovered === undefined) mergedState.stats.collectiblesDiscovered = [];
 
             // Migration for renamed fields
             if (loaded.familyMembersFound && mergedState.rescuedFamilyIndices.length === 0) {
@@ -93,12 +93,33 @@ export const loadGameState = (): GameState => {
                 mergedState.loadout.special = WeaponType.NONE;
             }
 
+            // Sanitize stats to prevent NaN values (especially after upgrades)
+            sanitizeStats(mergedState.stats);
+
             return mergedState;
         } catch (e) {
             console.error("Save file corrupted, resetting.");
         }
     }
     return DEFAULT_STATE;
+};
+
+const sanitizeStats = (stats: any) => {
+    if (!stats) return;
+    const hp = Number(stats.hp);
+    const maxHp = Number(stats.maxHp);
+    const st = Number(stats.stamina);
+    const maxSt = Number(stats.maxStamina);
+
+    if (isNaN(maxHp) || maxHp < 100) stats.maxHp = 100;
+    if (isNaN(hp) || hp <= 0 || hp > stats.maxHp) stats.hp = stats.maxHp;
+
+    if (isNaN(maxSt) || maxSt < 100) stats.maxStamina = 100;
+    if (isNaN(st) || st < 0 || st > stats.maxStamina) stats.stamina = stats.maxStamina;
+
+    // Ensure numeric types for other critical stats
+    if (isNaN(stats.skillPoints)) stats.skillPoints = 0;
+    if (isNaN(stats.level)) stats.level = 1;
 };
 
 export const saveGameState = (state: GameState) => {

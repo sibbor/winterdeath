@@ -41,8 +41,16 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
     });
 
     const [fps, setFps] = useState(0);
-    const [consoleLogging, setConsoleLogging] = useState(() => {
+    const [engineLogging, setEngineLogging] = useState(() => {
         const saved = localStorage.getItem('vinterdod_debug_console_logging');
+        return saved !== 'false';
+    });
+    const [aiLogging, setAiLogging] = useState(() => {
+        const saved = localStorage.getItem('vinterdod_debug_ai_logging');
+        return saved !== 'false';
+    });
+    const [shaderLogging, setShaderLogging] = useState(() => {
+        const saved = localStorage.getItem('vinterdod_debug_shader_logging');
         return saved !== 'false';
     });
     const [systemsExpanded, setSystemsExpanded] = useState(true);
@@ -70,11 +78,18 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
         return () => clearInterval(interval);
     }, []);
 
-    // Sync console logging state to PerformanceMonitor
+    // Sync logging states to PerformanceMonitor
     useEffect(() => {
-        PerformanceMonitor.getInstance().consoleLoggingEnabled = consoleLogging;
-        localStorage.setItem('vinterdod_debug_console_logging', String(consoleLogging));
-    }, [consoleLogging]);
+        PerformanceMonitor.getInstance().consoleLoggingEnabled = engineLogging;
+    }, [engineLogging]);
+
+    useEffect(() => {
+        PerformanceMonitor.getInstance().aiLoggingEnabled = aiLogging;
+    }, [aiLogging]);
+
+    useEffect(() => {
+        PerformanceMonitor.getInstance().shaderLoggingEnabled = shaderLogging;
+    }, [shaderLogging]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
         if (!debugMode) return;
@@ -87,7 +102,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
     // --- Mode: OFF - Simple FPS in top-left ---
     if (!debugMode) {
         return (
-            <div className="fixed top-0 right-0 z-[9999] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] pointer-events-none select-none backdrop-blur-[2px] border border-white/5 rounded-sm">
+            <div className="fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] pointer-events-none select-none backdrop-blur-[2px] border border-white/5 rounded-sm">
                 {Math.round(fps)} FPS
             </div>
         );
@@ -99,7 +114,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
         return (
             <div
                 onClick={toggleMinimized}
-                className="fixed top-0 right-0 z-[9999] bg-black/40 px-2 py-0.5 cursor-pointer shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 backdrop-blur-md"
+                className="fixed top-0 right-0 z-[9998] bg-black/40 px-2 py-0.5 cursor-pointer shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 backdrop-blur-md"
             >
                 <div className="font-mono font-bold text-white text-[12px]">
                     {Math.round(fps)} FPS
@@ -112,7 +127,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
     return (
         <div
             onClick={toggleMinimized}
-            className="fixed top-0 bottom-0 right-0 w-56 bg-black/85 backdrop-blur-md border-l border-white/10 shadow-2xl z-[9999] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden"
+            className="fixed top-0 bottom-0 right-0 w-56 bg-black/85 backdrop-blur-md border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden"
         >
             {/* Static top section — never scrolls */}
             <div className="p-3 shrink-0 space-y-2">
@@ -124,14 +139,14 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
                 <div className="flex items-center justify-between">
                     <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Player</div>
                     <span className="text-white tabular-nums">
-                        {debugInfo?.coords?.x?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}
+                        X: {debugInfo?.coords?.x?.toFixed(1) ?? '0.0'}, Y: {debugInfo?.coords?.z?.toFixed(1) ?? '0.0'}
                     </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                     <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Camera</div>
-                    <span className="text-white tabular-nums">
-                        {debugInfo?.camera?.x?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.z?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}
+                    <span className="text-white tabular-nums text-[10px]">
+                        {debugInfo?.camera?.x?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.z?.toFixed(1) ?? '0.0'}
                     </span>
                 </div>
 
@@ -195,14 +210,33 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
                     </div>
                 )}
 
-                <div className="border-t border-white/10 pt-1">
+                <div className="border-t border-white/10 pt-1 space-y-0.5">
+                    <div className="text-white/40 uppercase text-[10px] mb-1">Logging</div>
                     <div
-                        onClick={(e) => { e.stopPropagation(); setConsoleLogging(!consoleLogging); }}
+                        onClick={(e) => { e.stopPropagation(); setEngineLogging(!engineLogging); }}
                         className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
                     >
-                        <span className="text-white/60">Console Logging</span>
-                        <span className={`font-bold ${consoleLogging ? 'text-green-400' : 'text-red-400'}`}>
-                            {consoleLogging ? 'ON' : 'OFF'}
+                        <span className="text-white/60">Engine Perf</span>
+                        <span className={`font-bold ${engineLogging ? 'text-green-400' : 'text-red-400'}`}>
+                            {engineLogging ? 'ON' : 'OFF'}
+                        </span>
+                    </div>
+                    <div
+                        onClick={(e) => { e.stopPropagation(); setAiLogging(!aiLogging); }}
+                        className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
+                    >
+                        <span className="text-white/60">AI</span>
+                        <span className={`font-bold ${aiLogging ? 'text-green-400' : 'text-red-400'}`}>
+                            {aiLogging ? 'ON' : 'OFF'}
+                        </span>
+                    </div>
+                    <div
+                        onClick={(e) => { e.stopPropagation(); setShaderLogging(!shaderLogging); }}
+                        className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
+                    >
+                        <span className="text-white/60">Shaders</span>
+                        <span className={`font-bold ${shaderLogging ? 'text-green-400' : 'text-red-400'}`}>
+                            {shaderLogging ? 'ON' : 'OFF'}
                         </span>
                     </div>
                 </div>
@@ -211,7 +245,12 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
             {/* CPU Timings — pinned at bottom, fills remaining height, inner list scrolls */}
             {debugInfo?.performance?.cpu && (
                 <div className="flex flex-col flex-1 min-h-0 border-t border-white/10 p-3">
-                    <div className="text-white/40 uppercase text-[10px] mb-1 shrink-0">CPU Timings</div>
+                    <div className="flex justify-between items-center mb-1 shrink-0">
+                        <div className="text-white/40 uppercase text-[10px]">CPU Timings</div>
+                        <div className="text-green-400 text-[10px] font-bold">
+                            {(Object.values(debugInfo.performance.cpu) as number[]).reduce((acc: number, val: number) => acc + val, 0).toFixed(2)}ms
+                        </div>
+                    </div>
                     <div className="overflow-y-auto flex-1 space-y-0.5 pr-1">
                         {Object.entries(debugInfo.performance.cpu).map(([key, val]) => (
                             <div key={key} className="flex justify-between border-b border-white/5 py-0.5">

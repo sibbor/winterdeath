@@ -3,13 +3,13 @@ import { t } from '../../utils/i18n';
 import { CollectibleDefinition } from '../../content/collectibles';
 import CollectiblePreview from '../ui/core/CollectiblePreview';
 
-interface ScreenCollectibleFoundProps {
+interface ScreenCollectibleDiscoveredProps {
     collectible: CollectibleDefinition;
     onClose: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenCollectibleFound: React.FC<ScreenCollectibleFoundProps> = ({ collectible, onClose, isMobileDevice }) => {
+const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectible, onClose, isMobileDevice }) => {
 
     return (
         <div className="absolute inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-8" onClick={(e) => e.stopPropagation()}>
@@ -66,4 +66,4 @@ const ScreenCollectibleFound: React.FC<ScreenCollectibleFoundProps> = ({ collect
     );
 };
 
-export default ScreenCollectibleFound;
+export default ScreenCollectibleDiscovered;

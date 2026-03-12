@@ -132,6 +132,13 @@ export const WeaponHandler = {
         }
     },
 
+    // --- DAMAGE SCALING ---
+    getScaledDamage: (weaponType: WeaponType, level: number = 0) => {
+        const baseDamage = WEAPONS[weaponType]?.damage || 0;
+        // 10% increase per level: Damage * (1 + level * 0.1)
+        return Math.floor(baseDamage * (1 + level * 0.1));
+    },
+
     // Updates the reload progress bar above the player
     updateReloadBar: (reloadBar: { bg: THREE.Mesh, fg: THREE.Mesh } | null, state: any, playerPos: THREE.Vector3, cameraQuaternion: THREE.Quaternion, now: number) => {
         if (!reloadBar) return;
@@ -205,20 +212,21 @@ export const WeaponHandler = {
                         soundManager.playFlamethrowerStart();
                     }
 
+                    const cb = state.callbacks || {};
                     _continuousCtx.scene = scene;
                     _continuousCtx.enemies = state.enemies || [];
                     _continuousCtx.collisionGrid = state.collisionGrid;
-                    _continuousCtx.spawnPart = state.callbacks.spawnPart;
-                    _continuousCtx.spawnFloatingText = state.callbacks.spawnFloatingText || ((x: number, y: number, z: number, t: string, c?: string) => { });
-                    _continuousCtx.spawnDecal = state.callbacks.spawnDecal;
-                    _continuousCtx.explodeEnemy = state.callbacks.explodeEnemy;
-                    _continuousCtx.trackStats = state.callbacks.trackStats;
-                    _continuousCtx.addScore = state.callbacks.addScore;
-                    _continuousCtx.addFireZone = state.callbacks.addFireZone;
+                    _continuousCtx.spawnPart = cb.spawnPart;
+                    _continuousCtx.spawnFloatingText = cb.spawnFloatingText || ((x: number, y: number, z: number, t: string, c?: string) => { });
+                    _continuousCtx.spawnDecal = cb.spawnDecal;
+                    _continuousCtx.explodeEnemy = cb.explodeEnemy;
+                    _continuousCtx.trackStats = cb.trackStats;
+                    _continuousCtx.addScore = cb.gainXp;
+                    _continuousCtx.addFireZone = cb.addFireZone;
                     _continuousCtx.now = now;
                     _continuousCtx.noiseEvents = state.noiseEvents;
 
-                    ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, _continuousCtx);
+                    ProjectileSystem.handleContinuousFire(state.activeWeapon, _v2, _v3, delta, _continuousCtx, WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]) * (60 * delta));
 
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
@@ -271,7 +279,7 @@ export const WeaponHandler = {
                             _v3.normalize();
                         }
 
-                        ProjectileSystem.spawnBullet(scene, state.projectiles, _v2, _v3, wep.name);
+                        ProjectileSystem.spawnBullet(scene, state.projectiles, _v2, _v3, wep.name, WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]));
                     }
                 } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + wep.fireRate) {
                     state.lastShotTime = now;

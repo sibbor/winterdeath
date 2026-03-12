@@ -52,11 +52,11 @@ export interface PlayerStats {
   totalDamageTaken: number;
   totalDistanceTraveled: number; // New: In meters
   cluesFound: string[]; // List of collected clue names (IDs)
-  collectiblesFound: string[]; // New: List of collected 3D items
+  collectiblesDiscovered: string[]; // New: List of collected 3D items
   viewedCollectibles: string[]; // New: List of collectibles seen in Adventure Log
   seenEnemies: string[]; // New: List of enemy types seen
   seenBosses: string[]; // New: List of bosses seen
-  visitedPOIs: string[]; // New: List of POI IDs visited
+  discoveredPOIs: string[]; // New: List of POI IDs visited
   deaths: number;
   mostUsedWeapon: string;
   chestsOpened: number;
@@ -81,10 +81,10 @@ export interface SectorStats {
   bossDamageTaken?: number;
   distanceTraveled: number;
   cluesFound: string[];
-  collectiblesFound: string[];
+  collectiblesDiscovered: string[];
   seenEnemies?: string[];
   seenBosses?: string[];
-  visitedPOIs?: string[];
+  discoveredPOIs?: string[];
   isExtraction?: boolean;
   chestsOpened: number;
   bigChestsOpened: number;
@@ -263,8 +263,9 @@ export interface GameCanvasProps {
   rescuedFamilyIndices: number[];
   onSectorLoaded: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
-  onCollectibleFound: (id: string) => void;
-  onClueFound: (clue: SectorTrigger) => void;
+  onCollectibleDiscovered: (id: string) => void;
+  onClueDiscovered: (clue: SectorTrigger) => void;
+  onPOIdiscovered: (poi: SectorTrigger) => void;
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
   onFPSUpdate?: (fps: number) => void;
@@ -274,7 +275,7 @@ export interface GameCanvasProps {
   onUpdateLoadout?: (loadout: any, levels: any) => void;
   onEnvironmentOverrideChange?: (overrides: EnvironmentOverride, weather: WeatherType) => void;
   environmentOverrides?: Record<number, EnvironmentOverride>;
-  onInteractionStateChange?: (isOpen: boolean) => void;
+  onInteractionStateChange?: (type: string | null) => void;
   isMobileDevice?: boolean;
 }
 

@@ -173,7 +173,13 @@ export const MATERIALS = {
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
     molotov: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
     flashbang: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
-    scrap: new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
+    scrap: new THREE.MeshStandardMaterial({
+        color: 0xffaa00,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.8,
+        metalness: 0.8,
+        roughness: 0.2
+    }),
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
     chestStandard: new THREE.MeshStandardMaterial({ color: 0x5c4033 }),
     chestBig: new THREE.MeshStandardMaterial({ color: 0xffd700 }),

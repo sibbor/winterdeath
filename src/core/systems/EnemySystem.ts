@@ -15,7 +15,6 @@ interface Callbacks {
     spawnBubble: (text: string, duration: number) => void;
     gainXp: (amount: number) => void;
     t: (key: string) => string;
-    onClueFound: (clue: any) => void;
     onBossKilled: (id: number) => void;
 }
 

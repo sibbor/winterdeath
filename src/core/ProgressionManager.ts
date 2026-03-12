@@ -16,9 +16,9 @@ export const aggregateStats = (
     const s = { ...prevStats };
 
     // Ensure lists exist
-    s.collectiblesFound = s.collectiblesFound || [];
+    s.collectiblesDiscovered = s.collectiblesDiscovered || [];
     s.cluesFound = s.cluesFound || [];
-    s.visitedPOIs = s.visitedPOIs || [];
+    s.discoveredPOIs = s.discoveredPOIs || [];
     s.killsByType = { ...(s.killsByType || {}) };
 
     // 1. Sector Completion Progress
@@ -59,15 +59,15 @@ export const aggregateStats = (
         s.cluesFound = [...s.cluesFound, ...newUniqueClues];
     }
 
-    if (sectorStats.visitedPOIs && sectorStats.visitedPOIs.length > 0) {
-        const newUniquePOIs = sectorStats.visitedPOIs.filter((id: string) => !s.visitedPOIs.includes(id));
-        s.visitedPOIs = [...s.visitedPOIs, ...newUniquePOIs];
+    if (sectorStats.discoveredPOIs && sectorStats.discoveredPOIs.length > 0) {
+        const newUniquePOIs = sectorStats.discoveredPOIs.filter((id: string) => !s.discoveredPOIs.includes(id));
+        s.discoveredPOIs = [...s.discoveredPOIs, ...newUniquePOIs];
     }
 
     // SP for Collectibles
-    if (sectorStats.collectiblesFound && sectorStats.collectiblesFound.length > 0) {
-        const newUnique = sectorStats.collectiblesFound.filter(c => !s.collectiblesFound.includes(c));
-        s.collectiblesFound = [...s.collectiblesFound, ...newUnique];
+    if (sectorStats.collectiblesDiscovered && sectorStats.collectiblesDiscovered.length > 0) {
+        const newUnique = sectorStats.collectiblesDiscovered.filter(c => !s.collectiblesDiscovered.includes(c));
+        s.collectiblesDiscovered = [...s.collectiblesDiscovered, ...newUnique];
 
         // Award SP for each new unique collectible
         s.skillPoints += newUnique.length;

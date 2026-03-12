@@ -167,7 +167,7 @@ export const sv = {
         clue: "Ledtråd",
         boss: "Boss",
         log_poi: "INTRESSEPUNKT",
-        adventure_log: "ÄVENTYRLOGG",
+        adventure_log: "ÄVENTYRSLOGG",
         log_enemies: "FIENDER",
         log_bosses: "BOSSAR",
         log_collectibles: "SAMLAROBJEKT",

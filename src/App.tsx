@@ -12,11 +12,21 @@ import ScreenTeleport from './components/game/ScreenTeleport';
 import ScreenSectorReport from './components/game/ScreenSectorReport';
 import { CAMP_SCENE } from './components/camp/CampWorld';
 import ScreenBossKilled from './components/game/ScreenBossKilled';
-import ScreenCollectibleFound from './components/game/ScreenCollectibleFound';
+import ScreenCollectibleDiscovered from './components/game/ScreenCollectibleDiscovered';
 import ScreenAdventureLog from './components/camp/ScreenAdventureLog';
+import ScreenSettings from './components/camp/ScreenSettings';
+import ScreenPlaygroundArmoryStation from './components/game/ScreenPlaygroundArmoryStation';
+import { ScreenPlaygroundEnemyStation } from './components/game/ScreenPlaygroundEnemyStation';
+import ScreenPlaygroundSkillStation from './components/game/ScreenPlaygroundSkillStation';
+import { ScreenPlaygroundEnvironmentStation } from './components/game/ScreenPlaygroundEnvironmentStation';
+import ScreenPlayerDied from './components/game/ScreenPlayerDied';
+import ScreenArmory from './components/camp/ScreenArmory';
+import ScreenPlayerSkills from './components/camp/ScreenPlayerSkills';
+import ScreenStatistics from './components/camp/ScreenStatistics';
+import ScreenSectorOverview from './components/camp/ScreenSectorOverview';
+import ScreenResetConfirm from './components/camp/ScreenResetConfirm';
 import Prologue from './components/game/Prologue';
 import ScreenLoading from './components/game/ScreenLoading';
-import ScreenSettings from './components/camp/ScreenSettings';
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
@@ -28,12 +38,18 @@ import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
 import { FXSystem } from './core/systems/FXSystem';
 import { DEFAULT_GRAPHICS, SECTOR_THEMES } from './content/constants';
 
+const getCursorHidden = (isMobileDevice: boolean, isOverlayActive: boolean, screen: GameScreen, hudIsDead: boolean) =>
+    isMobileDevice || (screen === GameScreen.SECTOR && !isOverlayActive && !hudIsDead);
+
+export type OverlayType =
+    | 'PAUSE' | 'SETTINGS' | 'MAP' | 'TELEPORT' | 'COLLECTIBLE' | 'DIALOGUE'
+    | 'ADVENTURE_LOG' | 'SECTOR_REPORT' | 'DEATH' | 'STATION_ARMORY'
+    | 'STATION_SKILLS' | 'STATION_SPAWNER' | 'STATION_ENVIRONMENT'
+    | 'STATION_SECTORS' | 'STATION_STATISTICS' | 'INTRO' | 'RESET_CONFIRM';
+
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
-    const [isPaused, setIsPaused] = useState(false);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isMapOpen, setIsMapOpen] = useState(false);
-    const [showTeleportMenu, setShowTeleportMenu] = useState(false);
+    const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
     const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE);
@@ -80,10 +96,15 @@ const App: React.FC = () => {
         if (!skipCleanup) FXSystem.reset();
 
         // 4. Run Task (Includes State Update + Warmup)
-        await task();
+        try {
+            await task();
+        } catch (e) {
+            console.error("[App] triggerLoadingTransition task failed:", e);
+        } finally {
+            transitionTaskRef.current = false;
+            tryDismissLoading();
+        }
 
-        transitionTaskRef.current = false;
-        tryDismissLoading();
     }, [tryDismissLoading]);
 
     // Boot Warmup: Pre-compiles shaders to prevent startup stalls
@@ -135,29 +156,28 @@ const App: React.FC = () => {
         return () => { };
     }, []);
 
-    useEffect(() => {
-        const checkMobile = () => {
-            setIsMobileDevice(isMobile());
-        };
-        // Initial check is already done by useState(isMobile())
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-    }, []);
-
-    // HUD & Game State tracked in App for persistence/UI overlay
     const [hudState, setHudState] = useState<any>({});
+    const [isPointerLocked, setIsPointerLocked] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobileDevice(isMobile());
+        const handleLockChange = () => setIsPointerLocked(!!document.pointerLockElement);
+
+        window.addEventListener('resize', checkMobile);
+        document.addEventListener('pointerlockchange', handleLockChange);
+
+        return () => {
+            window.removeEventListener('resize', checkMobile);
+            document.removeEventListener('pointerlockchange', handleLockChange);
+        };
+    }, []);
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
-    const [isDialogueOpen, setIsDialogueOpen] = useState(false);
-    const [isInteractionOpen, setIsInteractionOpen] = useState(false);
-    const [isAdventureLogOpen, setIsAdventureLogOpen] = useState(false);
-    const [isBossIntroActive, setIsBossIntroActive] = useState(false);
     const [currentMapItems, setCurrentSectorMapItems] = useState<MapItem[]>([]);
     const [fps, setFps] = useState(0);
     const [debugSystems, setDebugSystems] = useState<{ id: string; enabled: boolean }[]>([]);
 
     // Sector Results
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
-    const [isDeathScreenActive, setIsDeathScreenActive] = useState(false);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
 
     // Interaction Locks
@@ -170,20 +190,11 @@ const App: React.FC = () => {
         (window as any).setGameScreen = (screen: GameScreen) => setGameState(prev => ({ ...prev, screen }));
     }, [gameState]);
 
-    // Global Input Hook (ESC, M)
-    useGlobalInput(gameState.screen, {
-        isPaused, isMapOpen, showTeleportMenu, activeCollectible, isDialogueOpen, isInteractionOpen, isBossIntroActive, hp: hudState.hp || 100, isSettingsOpen, isAdventureLogOpen
-    }, {
-        setIsPaused, setIsMapOpen, setShowTeleportMenu, setTeleportInitialCoords, onResume: () => setIsPaused(false), setIsSettingsOpen,
-        setIsAdventureLogOpen,
-        setActiveCollectible,
-        requestPointerLock: () => gameCanvasRef.current?.requestPointerLock()
-    });
-
 
     const handleUpdateHUD = useCallback((data: any) => {
         setHudState(data);
         if (data.fps !== undefined) setFps(data.fps);
+        if (data.mapItems) setCurrentSectorMapItems(data.mapItems);
         // Refresh system list for debug panel at same cadence as HUD (10Hz)
         if (gameState.debugMode) {
             const systems = gameCanvasRef.current?.getSystems();
@@ -250,14 +261,14 @@ const App: React.FC = () => {
         }
 
         // 3. Aggregate stats and calculate SP
-        const newStats = aggregateStats(gameState.stats, stats, false, false, newUniqueAchievements);
+        const newStats = aggregateStats(gameState.stats, stats, false, !!stats.aborted, newUniqueAchievements);
 
         // 4. Update Sector Stats for Report Screen
         stats.spEarned = newStats.skillPoints - prevSp;
 
         // Filter global found list to only include those from the current sector
         const sectorCollectibles = getCollectiblesBySector(gameState.currentSector + 1).map(c => c.id);
-        stats.collectiblesFound = newStats.collectiblesFound.filter(id => sectorCollectibles.includes(id));
+        stats.collectiblesDiscovered = newStats.collectiblesDiscovered.filter(id => sectorCollectibles.includes(id));
 
         setSectorStats(stats);
 
@@ -271,40 +282,15 @@ const App: React.FC = () => {
         }));
     }, [gameState.stats, gameState.currentSector, gameState.deadBossIndices, gameState.rescuedFamilyIndices]);
 
-    const handleAbortSector = () => {
-        setIsPaused(false);
-        setDeathDetails(null);
-
-        // Get actual stats from the game session
-        const abortedStats = gameCanvasRef.current?.getSectorStats(false, true) || {
-            timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {},
-            scrapLooted: 0, xpGained: 0, familyFound: false, damageDealt: 0, damageTaken: 0,
-            chestsOpened: 0, bigChestsOpened: 0, aborted: true, distanceTraveled: 0, cluesFound: [], collectiblesFound: [],
-            seenEnemies: [], seenBosses: [], visitedPOIs: []
-        };
-
-        setSectorStats(abortedStats);
-
-        const newStats = aggregateStats(gameState.stats, abortedStats, false, true);
-        setGameState(prev => ({
-            ...prev,
-            stats: newStats,
-            screen: GameScreen.RECAP
-        }));
-    };
-
     const handleTeleportJump = (x: number, z: number) => {
         gameCanvasRef.current?.requestPointerLock();
         setTeleportTarget({ x, z, timestamp: Date.now() });
-        setShowTeleportMenu(false);
-        setIsPaused(false);
+        setActiveOverlay(null);
     };
 
     const handleMapSelectCoords = (x: number, z: number) => {
         setTeleportInitialCoords({ x, z });
-        setShowTeleportMenu(true);
-        setIsMapOpen(false);
-        // Keep paused while in Teleport menu is implied by showTeleportMenu not unpausing immediately
+        setActiveOverlay('TELEPORT');
     };
 
     const handleSaveStats = (newStats: PlayerStats) => {
@@ -363,13 +349,16 @@ const App: React.FC = () => {
             setHudState({});
             setCurrentSectorMapItems([]);
             setActiveCollectible(null);
-            setIsPaused(false);
-            setIsMapOpen(false);
+            setActiveOverlay(null);
 
             // Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
             await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
         });
     }, [gameState.currentSector, triggerLoadingTransition]);
+
+    const onStationInteraction = useCallback((type: OverlayType | null) => {
+        setActiveOverlay(type);
+    }, []);
 
     const handlePrologueComplete = () => {
         // Transition straight to SECTOR (skipping CAMP as requested)
@@ -385,37 +374,33 @@ const App: React.FC = () => {
         soundManager.playUiConfirm();
     };
 
+    const handleAbortSector = useCallback(() => {
+        if (!gameCanvasRef.current) return;
+        
+        setActiveOverlay(null);
+        
+        // Get current run stats but mark as aborted
+        const stats = gameCanvasRef.current.getSectorStats(false, true);
+        handleSectorEnded(stats);
+        
+        soundManager.playUiClick();
+    }, [handleSectorEnded]);
+
     const handleResetGame = () => {
         clearSave();
         window.location.reload();
     };
 
-    const cursorHidden = isMobileDevice || (gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !activeCollectible && !showTeleportMenu && !isDialogueOpen && !isInteractionOpen && !deathDetails && !hudState.isDead && !isDeathScreenActive && !isAdventureLogOpen);
+    const cursorHidden = isMobileDevice || isPointerLocked || (gameState.screen === GameScreen.SECTOR && !activeOverlay && !hudState.isDead);
 
     const handleCollectibleClose = useCallback(() => {
+        // CALL Pointer Lock BEFORE setting state to null to preserve user gesture context
         if (gameCanvasRef.current) gameCanvasRef.current.requestPointerLock();
-        if (activeCollectible) {
-            setGameState(prev => {
-                const collId = activeCollectible as string;
-                if (!prev.stats.collectiblesFound) return prev; // Safety check
-                if (collId === 'dummy_badge_test') return prev;
-                if (prev.stats.collectiblesFound.includes(collId)) return prev;
-                return {
-                    ...prev,
-                    stats: {
-                        ...prev.stats,
-                        collectiblesFound: [...prev.stats.collectiblesFound, collId],
-                        skillPoints: prev.stats.skillPoints + 1,
-                        totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
-                    }
-                };
-            });
-        }
+        setActiveOverlay(null);
         setActiveCollectible(null);
-        setIsPaused(false);
-    }, [activeCollectible]);
+    }, []);
 
-    const handleClueFound = useCallback((clue: SectorTrigger) => {
+    const handleClueDiscovered = useCallback((clue: SectorTrigger) => {
         if (!clue.id) return;
         setGameState(prev => {
             if (prev.stats.cluesFound.includes(clue.id)) return prev;
@@ -424,6 +409,37 @@ const App: React.FC = () => {
                 stats: {
                     ...prev.stats,
                     cluesFound: [...prev.stats.cluesFound, clue.id]
+                }
+            };
+        });
+    }, []);
+
+    const handlePOIdiscovered = useCallback((poi: SectorTrigger) => {
+        if (!poi.id) return;
+        setGameState(prev => {
+            if (prev.stats.discoveredPOIs.includes(poi.id)) return prev;
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    discoveredPOIs: [...prev.stats.discoveredPOIs, poi.id]
+                }
+            };
+        });
+    }, []);
+
+    const handleCollectibleDiscovered = useCallback((id: string) => {
+        setActiveCollectible(id);
+        setActiveOverlay('COLLECTIBLE');
+        setGameState(prev => {
+            if (prev.stats.collectiblesDiscovered.includes(id)) return prev;
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    collectiblesDiscovered: [...prev.stats.collectiblesDiscovered, id],
+                    skillPoints: prev.stats.skillPoints + 1,
+                    totalSkillPointsEarned: prev.stats.totalSkillPointsEarned + 1
                 }
             };
         });
@@ -451,6 +467,26 @@ const App: React.FC = () => {
             };
         });
     }, []);
+
+    // Ensure pointer lock is released when an overlay opens (for mouse visibility)
+    useEffect(() => {
+        if (activeOverlay && document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+    }, [activeOverlay]);
+
+    const globalInputActions = React.useMemo(() => ({
+        setActiveOverlay,
+        setTeleportInitialCoords,
+        requestPointerLock: () => gameCanvasRef.current?.requestPointerLock(),
+        onCollectibleClose: handleCollectibleClose
+    }), [handleCollectibleClose]);
+
+    // Global Input Hook (ESC, M)
+    useGlobalInput(activeOverlay, {
+        hp: hudState.hp || 100,
+        screen: gameState.screen
+    }, globalInputActions);
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
@@ -480,6 +516,10 @@ const App: React.FC = () => {
                     isMobileDevice={isMobileDevice}
                     weather={gameState.weather}
                     isRunning={!isInitialBoot}
+                    activeOverlay={activeOverlay}
+                    setActiveOverlay={setActiveOverlay}
+                    onPauseToggle={(val) => setActiveOverlay(val ? 'PAUSE' : null)}
+                    onInteractionStateChange={onStationInteraction}
                 />
             )}
 
@@ -492,14 +532,14 @@ const App: React.FC = () => {
                         weaponLevels={gameState.weaponLevels}
                         currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
                         debugMode={gameState.debugMode}
-                        isRunning={gameState.screen === GameScreen.SECTOR && !isPaused && !isMapOpen && !showTeleportMenu && !activeCollectible && !isLoadingSector && !isAdventureLogOpen}
-                        isPaused={isPaused || isMapOpen || showTeleportMenu || !!activeCollectible || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || isAdventureLogOpen}
-                        disableInput={!!activeCollectible || isLoadingSector || isAdventureLogOpen}
+                        isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
+                        isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE}
+                        disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
                         onUpdateHUD={handleUpdateHUD}
                         onDie={handleDie}
                         onSectorEnded={handleSectorEnded}
-                        onPauseToggle={setIsPaused}
-                        onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
+                        onPauseToggle={(val) => setActiveOverlay(val ? 'PAUSE' : null)}
+                        onOpenMap={() => { setActiveOverlay('MAP'); soundManager.playUiConfirm(); }}
                         triggerEndSector={false}
                         familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
                         rescuedFamilyIndices={gameState.rescuedFamilyIndices}
@@ -511,15 +551,15 @@ const App: React.FC = () => {
                         startAtCheckpoint={false}
                         onCheckpointReached={() => { }}
                         teleportTarget={teleportTarget}
-                        onCollectibleFound={setActiveCollectible}
-                        onClueFound={handleClueFound}
-                        isCollectibleOpen={!!activeCollectible}
+                        onCollectibleDiscovered={handleCollectibleDiscovered}
+                        onClueDiscovered={handleClueDiscovered}
+                        onPOIdiscovered={handlePOIdiscovered}
+                        isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
                         onCollectibleClose={handleCollectibleClose}
-                        onDialogueStateChange={setIsDialogueOpen}
-                        onInteractionStateChange={setIsInteractionOpen}
-                        onDeathStateChange={setIsDeathScreenActive}
-                        onBossIntroStateChange={setIsBossIntroActive}
-                        onMapInit={setCurrentSectorMapItems}
+                        onDialogueStateChange={(val) => setActiveOverlay(val ? 'DIALOGUE' : null)}
+                        onDeathStateChange={(val) => setActiveOverlay(val ? 'DEATH' : null)}
+                        onBossIntroStateChange={(val) => setActiveOverlay(val ? 'INTRO' : null)}
+                        onInteractionStateChange={onStationInteraction}
                         onUpdateLoadout={(loadout, levels) => {
                             setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
                         }}
@@ -536,20 +576,20 @@ const App: React.FC = () => {
                         weather={gameState.weather}
                     />
 
-                    {!isMapOpen && !showTeleportMenu && !activeCollectible && !hudState.isHidden && !isDialogueOpen && (
+                    {!activeOverlay && !hudState.isHidden && (
                         isMobileDevice ? (
                             <MobileGameHUD
                                 {...hudState}
                                 loadout={gameState.loadout}
                                 weaponLevels={gameState.weaponLevels}
                                 debugMode={gameState.debugMode}
-                                isBossIntro={isBossIntroActive}
+                                isBossIntro={activeOverlay === 'INTRO'}
                                 isDriving={hudState.isDriving}
                                 vehicleSpeed={hudState.vehicleSpeed}
                                 throttleState={hudState.throttleState}
                                 isMobileDevice={true}
-                                onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
-                                onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
+                                onTogglePause={() => { setActiveOverlay('PAUSE'); soundManager.playUiClick(); }}
+                                onToggleMap={() => { setActiveOverlay('MAP'); soundManager.playUiConfirm(); }}
                                 onSelectWeapon={(slot) => { gameCanvasRef.current?.triggerInput(slot as any); }}
                                 onRotateCamera={(dir) => gameCanvasRef.current?.rotateCamera(dir)}
                             />
@@ -559,98 +599,195 @@ const App: React.FC = () => {
                                 loadout={gameState.loadout}
                                 weaponLevels={gameState.weaponLevels}
                                 debugMode={gameState.debugMode}
-                                isBossIntro={isBossIntroActive}
+                                isBossIntro={activeOverlay === 'INTRO'}
                                 isDriving={hudState.isDriving}
                                 vehicleSpeed={hudState.vehicleSpeed}
                                 throttleState={hudState.throttleState}
-                                onTogglePause={() => { setIsPaused(true); soundManager.playUiClick(); }}
-                                onToggleMap={() => { setIsMapOpen(true); setIsPaused(true); soundManager.playUiConfirm(); }}
+                                onTogglePause={() => { setActiveOverlay('PAUSE'); soundManager.playUiClick(); }}
+                                onToggleMap={() => { setActiveOverlay('MAP'); soundManager.playUiConfirm(); }}
                                 onSelectWeapon={(slot) => { gameCanvasRef.current?.triggerInput(slot as any); }}
                             />
                         )
                     )}
 
-                    {isPaused && !isMapOpen && !showTeleportMenu && !isSettingsOpen && !isAdventureLogOpen && !activeCollectible && (
-                        <ScreenPause
-                            onResume={() => { setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
-                            onAbort={handleAbortSector}
-                            onOpenMap={() => { setIsMapOpen(true); soundManager.playUiConfirm(); }}
-                            onOpenSettings={() => setIsSettingsOpen(true)}
-                            onOpenAdventureLog={() => { setIsAdventureLogOpen(true); soundManager.playUiConfirm(); }}
-                            isMobileDevice={isMobileDevice}
-                        />
-                    )}
-
-                    {isSettingsOpen && (
-                        <ScreenSettings
-                            onClose={() => { setIsSettingsOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
-                            graphics={gameState.graphics}
-                            onUpdateGraphics={handleSaveGraphics}
-                            isMobileDevice={isMobileDevice}
-                        />
-                    )}
-
-                    {activeCollectible && (
-                        <ScreenCollectibleFound
-                            collectible={getCollectibleById(activeCollectible)!}
-                            onClose={handleCollectibleClose}
-                            isMobileDevice={isMobileDevice}
-                        />
-                    )}
-
-                    {isAdventureLogOpen && (
-                        <ScreenAdventureLog
-                            stats={gameState.stats}
-                            onClose={() => { setIsAdventureLogOpen(false); setIsPaused(false); gameCanvasRef.current?.requestPointerLock(); }}
-                            onMarkCollectiblesViewed={handleMarkCollectiblesViewed}
-                            isMobileDevice={isMobileDevice}
-                        />
-                    )}
                 </>
             )}
 
-            {!isInitialBoot && <DebugDisplay
-                debugMode={gameState.debugMode}
-                debugInfo={gameState.debugMode ? hudState.debugInfo : undefined}
-                systems={gameState.debugMode ? debugSystems : undefined}
-                onToggleSystem={gameState.debugMode ? (id, enabled) => {
-                    gameCanvasRef.current?.setSystemEnabled(id, enabled);
-                    setDebugSystems(prev => prev.map(s => s.id === id ? { ...s, enabled } : s));
-                } : undefined}
-            />}
-
-            {showLoadingOverlay && (
-                <ScreenLoading
-                    sectorIndex={gameState.currentSector}
-                    isCamp={isLoadingCamp}
-                    isInitialBoot={isInitialBoot}
+            {/* UNIVERSAL OVERLAYS */}
+            {activeOverlay === 'PAUSE' && (
+                <ScreenPause
+                    onResume={() => {
+                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        setActiveOverlay(null);
+                    }}
+                    onAbort={handleAbortSector}
+                    onOpenMap={() => { setActiveOverlay('MAP'); soundManager.playUiConfirm(); }}
+                    onOpenSettings={() => setActiveOverlay('SETTINGS')}
+                    onOpenAdventureLog={() => { setActiveOverlay('ADVENTURE_LOG'); soundManager.playUiConfirm(); }}
                     isMobileDevice={isMobileDevice}
-                    isDone={!isLoadingCamp && !isLoadingSector}
-                    debugInfo={{
-                        fps,
-                        sceneChildren: hudState.debugInfo?.sceneChildren,
-                        obstacles: hudState.debugInfo?.obstacles
+                />
+            )}
+
+            {activeOverlay === 'SETTINGS' && (
+                <ScreenSettings
+                    onClose={() => {
+                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        setActiveOverlay(null);
+                    }}
+                    graphics={gameState.graphics}
+                    onUpdateGraphics={handleSaveGraphics}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
+            {activeOverlay === 'ADVENTURE_LOG' && (
+                <ScreenAdventureLog
+                    stats={gameState.stats}
+                    onClose={() => {
+                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        setActiveOverlay(null);
+                    }}
+                    onMarkCollectiblesViewed={handleMarkCollectiblesViewed}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
+            {activeOverlay === 'COLLECTIBLE' && activeCollectible && (
+                <ScreenCollectibleDiscovered
+                    collectible={getCollectibleById(activeCollectible)!}
+                    onClose={handleCollectibleClose}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
+            {activeOverlay === 'STATION_STATISTICS' && (
+                <ScreenStatistics
+                    stats={gameState.stats}
+                    onClose={() => setActiveOverlay(null)}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
+            {activeOverlay === 'DEATH' && (
+                <ScreenPlayerDied
+                    onContinue={() => {
+                        setActiveOverlay(null);
+                    }}
+                    killerName={hudState.killerName || "UNKNOWN"}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
+            {activeOverlay === 'STATION_ARMORY' && (
+                gameState.screen === GameScreen.CAMP ? (
+                    <ScreenArmory
+                        stats={gameState.stats}
+                        currentLoadout={gameState.loadout}
+                        weaponLevels={gameState.weaponLevels}
+                        onClose={() => setActiveOverlay(null)}
+                        onSave={(s, l, wl) => {
+                            setGameState(prev => ({ ...prev, stats: s, loadout: l, weaponLevels: wl }));
+                            setActiveOverlay(null);
+                        }}
+                        isMobileDevice={isMobileDevice}
+                    />
+                ) : (
+                    <ScreenPlaygroundArmoryStation
+                        loadout={gameState.loadout}
+                        weaponLevels={gameState.weaponLevels}
+                        isMobileDevice={isMobileDevice}
+                        sectorState={{ envOverride: gameState.environmentOverrides?.[gameState.currentSector] }}
+                        onClose={() => {
+                            if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                            setActiveOverlay(null);
+                        }}
+                        onSave={(loadout, levels) => {
+                            setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
+                        }}
+                        stats={gameState.stats}
+                    />
+                )
+            )}
+
+            {activeOverlay === 'STATION_SKILLS' && (
+                gameState.screen === GameScreen.CAMP ? (
+                    <ScreenPlayerSkills
+                        stats={gameState.stats}
+                        onSave={(s) => setGameState(prev => ({ ...prev, stats: s }))}
+                        onClose={() => setActiveOverlay(null)}
+                        isMobileDevice={isMobileDevice}
+                    />
+                ) : (
+                    <ScreenPlaygroundSkillStation
+                        stats={gameState.stats}
+                        isMobileDevice={isMobileDevice}
+                        sectorState={{ envOverride: gameState.environmentOverrides?.[gameState.currentSector] }}
+                        onClose={() => {
+                            if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                            setActiveOverlay(null);
+                        }}
+                        onSave={(stats) => {
+                            setGameState(prev => ({ ...prev, stats }));
+                        }}
+                    />
+                )
+            )}
+
+            {activeOverlay === 'STATION_ENVIRONMENT' && (
+                <ScreenPlaygroundEnvironmentStation
+                    onClose={() => {
+                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        setActiveOverlay(null);
+                    }}
+                    isMobileDevice={isMobileDevice}
+                    currentWeather={gameState.weather}
+                    onWeatherChange={(w) => setGameState(prev => ({ ...prev, weather: w }))}
+                    currentOverride={gameState.environmentOverrides?.[gameState.currentSector]}
+                    onOverrideChange={(overrides) => {
+                        setGameState(prev => {
+                            const newOverrides = { ...(prev.environmentOverrides || {}) };
+                            newOverrides[prev.currentSector] = overrides;
+                            return { ...prev, environmentOverrides: newOverrides };
+                        });
+                    }}
+                    transparent={true}
+                />
+            )}
+
+            {activeOverlay === 'STATION_SPAWNER' && (
+                <ScreenPlaygroundEnemyStation
+                    onClose={() => {
+                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        setActiveOverlay(null);
+                    }}
+                    isMobileDevice={isMobileDevice}
+                    playerPos={hudState.playerPos}
+                    onSpawnEnemies={(enemies) => {
+                        gameCanvasRef.current?.spawnEnemies(enemies);
                     }}
                 />
             )}
 
-            {isMapOpen && (
+            {activeOverlay === 'MAP' && (
                 <ScreenMap
                     items={currentMapItems}
                     playerPos={hudState.playerPos}
                     familyPos={hudState.familyPos || undefined}
                     bossPos={hudState.bossPos || undefined}
-                    onClose={() => { gameCanvasRef.current?.requestPointerLock(); setIsMapOpen(false); setIsPaused(false); }}
+                    onClose={() => {
+                        if (gameState.screen === GameScreen.SECTOR) gameCanvasRef.current?.requestPointerLock();
+                        setActiveOverlay(null);
+                    }}
                     onSelectCoords={handleMapSelectCoords}
                     isMobileDevice={isMobileDevice}
                 />
             )}
 
-            {showTeleportMenu && (
+            {activeOverlay === 'TELEPORT' && (
                 <ScreenTeleport
                     initialCoords={teleportInitialCoords}
                     onJump={handleTeleportJump}
-                    onCancel={() => { setShowTeleportMenu(false); setTeleportInitialCoords(null); setIsMapOpen(true); }}
+                    onCancel={() => { setActiveOverlay('MAP'); setTeleportInitialCoords(null); }}
                     isMobileDevice={isMobileDevice}
                 />
             )}
@@ -672,7 +809,6 @@ const App: React.FC = () => {
                     onReturnCamp={() => {
                         soundManager.playUiConfirm();
                         triggerLoadingTransition('CAMP', async () => {
-                            setIsDeathScreenActive(false);
                             setGameState(prev => {
                                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
                                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
@@ -688,7 +824,6 @@ const App: React.FC = () => {
                     onRetry={() => {
                         soundManager.playUiConfirm();
                         triggerLoadingTransition('SECTOR', async () => {
-                            setIsDeathScreenActive(false);
                             const nextState = { screen: GameScreen.SECTOR };
                             setGameState(prev => ({ ...prev, ...nextState }));
                             setSectorStats(null);
@@ -696,7 +831,7 @@ const App: React.FC = () => {
                             setHudState({});
                             setCurrentSectorMapItems([]);
                             setActiveCollectible(null);
-                            setIsPaused(false);
+                            setActiveOverlay(null);
 
                             // Warmup Sector assets during transition
                             const sectorIndex = gameState.currentSector;
@@ -715,6 +850,50 @@ const App: React.FC = () => {
             )}
 
             <CustomCursor hidden={cursorHidden} />
+            {activeOverlay === 'STATION_SECTORS' && (
+                <ScreenSectorOverview
+                    currentSector={gameState.currentSector}
+                    rescuedFamilyIndices={gameState.rescuedFamilyIndices}
+                    deadBossIndices={gameState.deadBossIndices}
+                    debugMode={gameState.debugMode}
+                    stats={gameState.stats}
+                    onClose={() => setActiveOverlay(null)}
+                    onSelectSector={handleSelectSector}
+                    onStartSector={handleStartSector}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
+            {activeOverlay === 'RESET_CONFIRM' && (
+                <ScreenResetConfirm
+                    onConfirm={handleResetGame}
+                    onCancel={() => setActiveOverlay('SETTINGS')}
+                />
+            )}
+
+            {gameState.debugMode && (
+                <DebugDisplay
+                    fps={fps}
+                    debugMode={gameState.debugMode}
+                    debugInfo={hudState.debugInfo}
+                    systems={debugSystems}
+                    onToggleSystem={(id, enabled) => {
+                        const success = gameCanvasRef.current?.setSystemEnabled(id, enabled);
+                        if (success !== false) {
+                            const systems = gameCanvasRef.current?.getSystems();
+                            if (systems) setDebugSystems(systems);
+                        }
+                    }}
+                />
+            )}
+
+            <ScreenLoading
+                isDone={!showLoadingOverlay}
+                sectorIndex={gameState.currentSector}
+                isCamp={gameState.screen === GameScreen.CAMP}
+                isInitialBoot={isInitialBoot}
+                isMobileDevice={isMobileDevice}
+            />
         </div>
     );
 };

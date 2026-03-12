@@ -3,6 +3,7 @@ import { ZOMBIE_TYPES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/sound';
 import { Enemy, AIState } from '../../types/enemy';
+import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -185,7 +186,9 @@ export const EnemySpawner = {
             enemy.indicatorRing = ring;
         }
 
-        console.log(`[Spawner] Spawns ${typeKey}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+            console.log(`[EnemySpawner] Spawns ${typeKey}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+        }
         return enemy;
     },
 

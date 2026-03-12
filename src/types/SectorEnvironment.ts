@@ -7,6 +7,7 @@ export interface SectorEnvironment {
     fogDensity: number;
     fogColor?: number;
     ambientIntensity: number;
+    ambientColor?: number;
     groundColor: number;
     fov: number;
     skyLight: {
@@ -14,6 +15,11 @@ export interface SectorEnvironment {
         color: number;
         intensity: number;
         position?: { x: number; y: number; z: number };
+    };
+    hemiLight?: {
+        sky: number;
+        ground: number;
+        intensity: number;
     };
     cameraOffsetZ: number;
     cameraHeight?: number;
@@ -69,9 +75,10 @@ export interface SectorContext {
     textures: any; // Dynamic textures passed from App/Canvas
     spawnZombie: (type: string, pos?: THREE.Vector3) => void;
     spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => void;
+    spawnBoss: (type: string, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
     cluesFound: string[];
-    collectiblesFound: string[];
+    collectiblesDiscovered: string[];
     collectibles: THREE.Group[]; // Optimized Cache
     dynamicLights: THREE.Light[];  // Optimized Cache
     sectorId: number;
@@ -142,7 +149,7 @@ export interface SectorDef {
             t: (key: string) => string;
             scene?: THREE.Scene;
             spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
-            startCinematic?: (target: THREE.Object3D, id: number) => void;
+            startCinematic?: (target: THREE.Object3D, id: number, params?: any) => void;
             // Environment Controls
             setWind: (direction: number, strength: number) => void;
             setWindRandomized: (active: boolean) => void;

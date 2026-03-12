@@ -34,10 +34,11 @@ export const Sector4: SectorDef = {
     id: 3,
     name: "sectors.sector_4_name",
     environment: {
-        bgColor: 0x110500, // Rusty orange/red sky
+        bgColor: 0x110500,
         fogDensity: 0.02,
-        ambientIntensity: 0.6, // Increased for visibility
-        groundColor: 0x2a1a11, // Oily dirt
+        ambientIntensity: 0.6,
+        ambientColor: 0x404050,
+        groundColor: 0x2a1a11,
         fov: 40,
         skyLight: { visible: true, color: 0xffaa00, intensity: 3.0 },
         cameraOffsetZ: 40,

@@ -142,7 +142,8 @@ export const Sector2: SectorDef = {
     environment: {
         bgColor: 0x050510,
         fogDensity: 0.02,
-        ambientIntensity: 0.3, // Increased for better visibility
+        ambientIntensity: 0.3,
+        ambientColor: 0x404050,
         groundColor: 0x111111,
         fov: 50,
         skyLight: { visible: true, color: 0x8899aa, intensity: 1.0, position: { x: -40, y: 30, z: -20 } },
@@ -313,9 +314,13 @@ export const Sector2: SectorDef = {
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
         if (id === 'cave_door') {
-            state.sectorState.doorKnocked = true;
-            object.userData.isInteractable = false;
-            events.setNotification({ text: events.t('ui.knocking'), duration: 2000 });
+            if (!state.sectorState.jordanEventState) {
+                state.sectorState.jordanEventState = 1; // KNOCKING
+                state.sectorState.jordanEventTimer = performance.now();
+                object.userData.isInteractable = false;
+                events.setNotification({ text: events.t('ui.knocking'), duration: 2000 });
+                soundManager.playMetalKnocking();
+            }
         }
     },
 
@@ -334,7 +339,7 @@ export const Sector2: SectorDef = {
 
         for (let index = 0; index < familyMembers.length; index++) {
             const member = familyMembers[index];
-            if (member.userData.name === 'Jordan' && sectorState.jordanCinematic?.phase !== 'COMPLETE') continue;
+            if (member.userData.name === 'Jordan' && (!sectorState.jordanEventState || sectorState.jordanEventState < 7)) continue;
 
             const ring = member.children.find((c: any) => c.userData.isRing);
             const familyObj = {
@@ -363,170 +368,140 @@ export const Sector2: SectorDef = {
             }
         }
 
-        // --- SCENE-DEPENDENT LOGIC ---
-        if ((events as any).scene) {
-            const scene = (events as any).scene as THREE.Scene;
+        // --- SECTOR-SPECIFIC NARRATIVE SYSTEM (Numeric State Machine) ---
+        if (!sectorState.jordanEventState) sectorState.jordanEventState = 0;
+        const jcState = sectorState.jordanEventState;
+        const jcTimer = sectorState.jordanEventTimer || 0;
+        const elapsed = now - jcTimer;
+
+        // Shared positions and refs
+        const fixedCamTarget = new THREE.Vector3(60, 12, -193);
+        const fixedCamLookAt = new THREE.Vector3(45, 1, -193);
+        const sceneHost = (events as any).scene || (gameState as any).scene;
+        const scene = sceneHost as THREE.Scene;
+        const jordan = scene?.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Jordan');
+        const doorL = scene?.getObjectByName('s2_shelter_port_left');
+        const doorR = scene?.getObjectByName('s2_shelter_port_right');
+        const doorFrame = scene?.getObjectByName('s2_shelter_port_frame');
+
+        if (scene) {
+            // 1. VOID ROOF HANDLING
             const voidRoof = scene.getObjectByName("Sector2_VoidRoof");
             if (voidRoof) voidRoof.visible = true;
 
-            if (!sectorState.jordanCinematic) {
-                sectorState.jordanCinematic = { phase: 'NONE', timer: 0 };
-            }
-
-            const jc = sectorState.jordanCinematic;
-            const fixedCamTarget = new THREE.Vector3(60, 12, -193);
-            const fixedCamLookAt = new THREE.Vector3(45, 1, -193);
-
-            // const knockingTrigger = gameState.triggers.find(t => t.id === 's2_cave_knock_shelter_port');
-            if (sectorState.doorKnocked && !sectorState.introCinematicPlayed) {
-                const doorFrame = scene.getObjectByName('s2_shelter_port_frame');
-                if (doorFrame && (events as any).startCinematic) {
-                    (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
-                    sectorState.introCinematicPlayed = true;
-                    soundManager.playMetalKnocking();
+            // 2. STATE MACHINE TRANSITIONS
+            if (jcState === 1) { // KNOCKING -> START CINEMATIC
+                if (elapsed > 1500) {
+                    if (doorFrame && (events as any).startCinematic) {
+                        (events as any).startCinematic(doorFrame, 1, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
+                        sectorState.jordanEventState = 2; // CINEMATIC_1_RUNNING
+                        sectorState.jordanEventTimer = now;
+                    }
                 }
             }
 
-            const jordan = scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && c.userData.name === 'Jordan');
-            const doorL = scene.getObjectByName('s2_shelter_port_left');
-            const doorR = scene.getObjectByName('s2_shelter_port_right');
-
-            // Re-enable matrix auto update on the doors so their animated position changes are reflected each frame.
-            if (doorL) doorL.matrixAutoUpdate = true;
-            if (doorR) doorR.matrixAutoUpdate = true;
-
-            if (!jc.listenerAdded) {
+            // 3. EVENT LISTENERS (Bridge between Cinematic scripts and Sector State)
+            if (!sectorState.eventsInitialized) {
                 window.addEventListener('spawn_jordan', () => {
-                    if (sectorState.jordanCinematic && sectorState.jordanCinematic.phase === 'NONE') {
-                        sectorState.jordanCinematic.phase = 'OPENING_DOORS';
-                        sectorState.jordanCinematic.timer = performance.now();
-                        soundManager.playMetalDoorOpen();
-                        window.dispatchEvent(new CustomEvent('hide_hud'));
-                        if (events.setCameraOverride) {
-                            events.setCameraOverride({
-                                active: true,
-                                targetPos: fixedCamTarget,
-                                lookAtPos: fixedCamLookAt,
-                                endTime: performance.now() + 60000
-                            });
-                        }
+                    sectorState.jordanEventState = 3; // OPENING_DOORS
+                    sectorState.jordanEventTimer = performance.now();
+                    soundManager.playMetalDoorOpen();
+                    window.dispatchEvent(new CustomEvent('hide_hud'));
+                    if (events.setCameraOverride) {
+                        events.setCameraOverride({
+                            active: true,
+                            targetPos: fixedCamTarget,
+                            lookAtPos: fixedCamLookAt,
+                            endTime: performance.now() + 60000
+                        });
                     }
                 }, { once: true });
 
                 window.addEventListener('s2_conclusion', () => {
-                    jc.phase = 'FINISHED_AFTER_DIALOGUE';
-                    if (!jc.doorsClosing) {
-                        jc.doorsClosing = true;
-                        jc.doorsClosingTimer = performance.now();
-                    }
+                    sectorState.jordanEventState = 6; // DOORS_CLOSING
+                    sectorState.jordanEventTimer = performance.now();
                 });
-                jc.listenerAdded = true;
+
+                sectorState.eventsInitialized = true;
             }
 
-            // Shelter doors opening
-            if (jc.phase === 'OPENING_DOORS') {
-                // Ensure we use the exact same time source as the event listeners
-                const currentTime = performance.now();
-                const elapsed = currentTime - jc.timer;
-
-                // Clamp values to prevent negative movement if timelines desync
+            // 4. BEHAVIOR BY STATE
+            if (jcState === 3) { // OPENING_DOORS
                 const openDist = Math.max(0, Math.min(10, elapsed * 0.005));
+                if (doorL) { doorL.position.x = -5 - openDist; doorL.matrixAutoUpdate = true; }
+                if (doorR) { doorR.position.x = 5 + openDist; doorR.matrixAutoUpdate = true; }
 
-                if (doorL) doorL.position.x = -5 - openDist;
-                if (doorR) doorR.position.x = 5 + openDist;
-
-                // Disable physical collisions once opening starts
                 if (sectorState.doorObstacleL?.collider) sectorState.doorObstacleL.collider.size.set(0, 0, 0);
                 if (sectorState.doorObstacleR?.collider) sectorState.doorObstacleR.collider.size.set(0, 0, 0);
 
-                // Proceed to next phase after 2 seconds
                 if (elapsed > 2000) {
-                    jc.phase = 'JORDAN_WALK';
-                    jc.timer = currentTime; // Sync the timer using the same time source
+                    sectorState.jordanEventState = 4; // JORDAN_WALK
+                    sectorState.jordanEventTimer = now;
 
                     if (playerPos) {
-                        jc.walkTarget = new THREE.Vector3(playerPos.x, 0, playerPos.z);
+                        sectorState.walkTarget = new THREE.Vector3(playerPos.x, 0, playerPos.z);
                         const toPlayer = new THREE.Vector3().subVectors(playerPos, jordan?.position || new THREE.Vector3(25, 0, -193)).normalize();
-                        jc.walkTarget.sub(toPlayer.multiplyScalar(2.0));
+                        sectorState.walkTarget.sub(toPlayer.multiplyScalar(2.0));
                     } else {
-                        jc.walkTarget = new THREE.Vector3(52, 0, -193);
+                        sectorState.walkTarget = new THREE.Vector3(52, 0, -193);
                     }
                 }
             }
-            // Shelter doors closing
-            else if (jc.doorsClosing) {
-                const currentTime = performance.now();
-                const elapsed = currentTime - (jc.doorsClosingTimer || currentTime);
+            else if (jcState === 4) { // JORDAN_WALK
+                if (jordan) {
+                    const target = sectorState.walkTarget || new THREE.Vector3(52, 0, -193);
+                    jordan.position.lerp(target, 0.05);
 
-                // Ensure progress stays strictly between 0 and 1
-                const closeProgress = Math.max(0, Math.min(1, elapsed / 800));
-
-                if (doorL) doorL.position.x = -15 + (closeProgress * 10);
-                if (doorR) doorR.position.x = 15 - (closeProgress * 10);
-
-                if (elapsed >= 800 && !jc.doorCloseSoundPlayed) {
-                    soundManager.playMetalDoorShut();
-                    jc.doorCloseSoundPlayed = true;
-                }
-
-                if (elapsed > 500 && jc.phase === 'FINISHED_AFTER_DIALOGUE') {
-                    jc.phase = 'COMPLETE';
-                    if ((events as any).setCameraOverride) (events as any).setCameraOverride(null);
-                    window.dispatchEvent(new CustomEvent('show_hud'));
-                    window.dispatchEvent(new CustomEvent('boss-spawn-trigger'));
-                    window.dispatchEvent(new CustomEvent('family-follow'));
-                }
-            }
-
-            // Phase Machine
-            if (jc.phase === 'JORDAN_WALK') {
-                if (!jc.jordan && jordan) jc.jordan = jordan;
-                if (jc.jordan) {
-                    const walkTarget = jc.walkTarget || new THREE.Vector3(52, 0, -193);
-                    const jordanPos = jc.jordan.position;
-                    jordanPos.lerp(walkTarget, 0.05);
-
-                    const familyObj = {
-                        mesh: jc.jordan,
-                        following: false,
-                        isMoving: true,
-                        isSpeaking: (gameState.speakingUntil > now),
-                        seed: jc.jordan.userData.seed || 0
-                    };
-                    // Animate Jordan's body while walking
-                    const jordanBody = jc.jordan.userData.cachedBody ||
-                        jc.jordan.children.find((c: any) => c.userData.isBody);
-                    jc.jordan.userData.cachedBody = jordanBody;
-                    if (jordanBody) {
-                        PlayerAnimation.update(jordanBody, {
+                    const body = jordan.userData.cachedBody || jordan.children.find((c: any) => c.userData.isBody);
+                    if (body) {
+                        PlayerAnimation.update(body, {
                             isMoving: true, isRushing: false, isRolling: false, rollStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
-                            seed: jc.jordan.userData.seed || 0
+                            seed: jordan.userData.seed || 0
                         }, now, delta);
                     }
 
-                    if (jordanPos.distanceTo(walkTarget) < 1.5) jc.phase = 'START_DIALOGUE_2';
-                }
-            } else if (jc.phase === 'START_DIALOGUE_2') {
-                jc.phase = 'WAITING_FOR_CONCLUSION';
-                const jordanObj = (events as any).familyMesh || scene.children.find(c => (c.userData.isFamilyMember || c.userData.type === 'family') && (c.userData.name === 'Jordan' || c.userData.id === 'Jordan'));
-                if (jordanObj && (events as any).startCinematic) {
-                    (events as any).startCinematic(jordanObj, 102);
-                }
-            }
-
-            if (!sectorState.bossListenerAdded) {
-                window.addEventListener('boss-spawn-trigger', () => {
-                    if (!sectorState.bossSpawned) {
-                        const EnemyManager = (window as any).EnemyManager || (events as any).EnemyManager;
-                        if (EnemyManager) {
-                            EnemyManager.spawnBoss(scene, LOCATIONS.SPAWN.BOSS, BOSSES[1]);
-                            sectorState.bossSpawned = true;
+                    if (jordan.position.distanceTo(target) < 1.5) {
+                        sectorState.jordanEventState = 5; // DIALOGUE_102
+                        sectorState.jordanEventTimer = now;
+                        if (events.startCinematic) {
+                            events.startCinematic(jordan, 102, { targetPos: fixedCamTarget, lookAtPos: fixedCamLookAt });
                         }
                     }
-                }, { once: true });
-                sectorState.bossListenerAdded = true;
+                }
+            }
+            else if (jcState === 6) { // DOORS_CLOSING
+                const closeProgress = Math.max(0, Math.min(1, elapsed / 800));
+                if (doorL) { doorL.position.x = -15 + (closeProgress * 10); doorL.matrixAutoUpdate = true; }
+                if (doorR) { doorR.position.x = 15 - (closeProgress * 10); doorR.matrixAutoUpdate = true; }
+
+                if (elapsed >= 800 && !sectorState.doorCloseSoundPlayed) {
+                    soundManager.playMetalDoorShut();
+                    sectorState.doorCloseSoundPlayed = true;
+                }
+
+                if (elapsed > 1000) {
+                    sectorState.jordanEventState = 7; // COMPLETE
+                    sectorState.jordanEventTimer = now;
+                    if (events.setCameraOverride) events.setCameraOverride(null);
+                    window.dispatchEvent(new CustomEvent('show_hud'));
+
+                    // Mark Jordan as rescued so the FamilySystem picks him up
+                    window.dispatchEvent(new CustomEvent('family-member-found', {
+                        detail: { name: 'Jordan' }
+                    }));
+
+                    // Spawn the boss correctly
+                    window.dispatchEvent(new CustomEvent('boss-spawn-trigger', {
+                        detail: { type: 'BIG_ZOMBIE', pos: LOCATIONS.SPAWN.BOSS }
+                    }));
+
+                    // Hand back control to family follow system
+                    window.dispatchEvent(new CustomEvent('family-follow', {
+                        detail: { active: true }
+                    }));
+                }
             }
         }
 

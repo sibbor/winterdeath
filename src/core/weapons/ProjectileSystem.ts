@@ -283,7 +283,7 @@ export const ProjectileSystem = {
         return p;
     },
 
-    spawnBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string) => {
+    spawnBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, damage?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
@@ -312,7 +312,7 @@ export const ProjectileSystem = {
         p.speed = data.bulletSpeed || 70;
         p.vel.copy(_v1).multiplyScalar(p.speed);
         p.origin.copy(origin);
-        p.damage = data.damage;
+        p.damage = damage !== undefined ? damage : data.damage;
         p.life = 1.5;
         projectiles.push(p);
     },
@@ -368,9 +368,11 @@ export const ProjectileSystem = {
 
     // --- CONTINUOUS WEAPON HANDLING ---
 
-    handleContinuousFire: (weapon: WeaponType, origin: THREE.Vector3, direction: THREE.Vector3, delta: number, ctx: GameContext) => {
+    handleContinuousFire: (weapon: WeaponType, origin: THREE.Vector3, direction: THREE.Vector3, delta: number, ctx: GameContext, damageOverride?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
+
+        const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * delta);
 
         if (weapon === WeaponType.FLAMETHROWER) {
             if (Math.random() < 0.3) {
@@ -409,10 +411,11 @@ export const ProjectileSystem = {
 
                     const chance = delta / data.fireRate;
                     if (Math.random() < chance) {
-                        e.hp -= data.damage;
-                        ctx.trackStats('damage', data.damage, !!e.isBoss);
+                        const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
+                        e.hp -= finalDmg;
+                        ctx.trackStats('damage', finalDmg, !!e.isBoss);
                         if (ctx.spawnFloatingText) {
-                            ctx.spawnFloatingText(e.mesh.position.x, 2.0 + Math.random(), e.mesh.position.z, Math.round(data.damage).toString(), '#ffaa00');
+                            ctx.spawnFloatingText(e.mesh.position.x, 2.0 + Math.random(), e.mesh.position.z, Math.round(finalDmg).toString(), '#ffaa00');
                         }
                     }
                 }

@@ -56,4 +56,4 @@ Polished the "discovery" loop to make it feel premium.
 ### Verification Proof
 - **Build Status**: Verified all components render correctly and state flows between `App` and various screens.
 - **AI Testing**: Observed zombies searching for noise at the bus explosion site before returning to wander.
-- **Mobile Emulation**: Validated that `ScreenCollectibleFound` fits within vertical bounds on simulated small screens.
+- **Mobile Emulation**: Validated that `ScreencollectibleDiscovered` fits within vertical bounds on simulated small screens.

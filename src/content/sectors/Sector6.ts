@@ -32,6 +32,7 @@ export const Sector6: SectorDef = {
         bgColor: 0x020208,
         fogDensity: 0.02,
         ambientIntensity: 0.4,
+        ambientColor: 0x404050,
         groundColor: 0x111111,
         fov: 50,
         skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
@@ -316,16 +317,16 @@ export const Sector6: SectorDef = {
 
         // STATIONS
         if (id === 'TERMINAL_ARMORY') {
-            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'armory' } }));
+            events.setOverlay('STATION_ARMORY');
         }
         else if (id === 'TERMINAL_SPAWNER') {
-            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'spawner' } }));
+            events.setOverlay('STATION_SPAWNER');
         }
         else if (id === 'TERMINAL_ENV') {
-            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'environment' } }));
+            events.setOverlay('STATION_ENVIRONMENT');
         }
         else if (id === 'TERMINAL_SKILLS') {
-            window.dispatchEvent(new CustomEvent('open_station', { detail: { type: 'skills' } }));
+            events.setOverlay('STATION_SKILLS');
         }
     },
 

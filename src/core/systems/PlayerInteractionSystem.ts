@@ -29,7 +29,7 @@ interface ActiveAnimation {
 
 export class PlayerInteractionSystem implements System {
     id = 'player_interaction';
-    public onCollectibleFound?: (collectibleId: string) => void;
+    public onCollectibleDiscovered?: (collectibleId: string) => void;
     private lastDetectionTime: number = 0;
     private activeAnimations: ActiveAnimation[] = [];
 
@@ -37,9 +37,9 @@ export class PlayerInteractionSystem implements System {
         private playerGroup: THREE.Group,
         private onSectorEnded: (isExtraction: boolean) => void,
         private collectibles: THREE.Group[],
-        onCollectibleFound?: (collectibleId: string) => void
+        onCollectibleDiscovered?: (collectibleId: string) => void
     ) {
-        this.onCollectibleFound = onCollectibleFound;
+        this.onCollectibleDiscovered = onCollectibleDiscovered;
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
@@ -209,9 +209,9 @@ export class PlayerInteractionSystem implements System {
                     this.collectibles.pop();
                 }
 
-                // HÄR triggas ScreenCollectibleFound (När animationen är 100% klar)
-                if (this.onCollectibleFound && anim.collectibleId) {
-                    this.onCollectibleFound(anim.collectibleId);
+                // HÄR triggas ScreenCollectibleDiscovered (När animationen är 100% klar)
+                if (this.onCollectibleDiscovered && anim.collectibleId) {
+                    this.onCollectibleDiscovered(anim.collectibleId);
                 }
 
                 this.activeAnimations[i] = this.activeAnimations[this.activeAnimations.length - 1];
@@ -412,8 +412,8 @@ export class PlayerInteractionSystem implements System {
 
         collectible.userData.pickedUp = true;
 
-        if ((soundManager as any).collectibleFound) {
-            (soundManager as any).collectibleFound();
+        if ((soundManager as any).collectibleDiscovered) {
+            (soundManager as any).collectibleDiscovered();
         } else {
             soundManager.playUiPickup();
         }

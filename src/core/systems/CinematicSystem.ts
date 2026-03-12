@@ -4,6 +4,7 @@ import { System } from './System';
 import { CameraSystem } from './CameraSystem';
 import { PlayerAnimation } from '../animation/PlayerAnimation';
 import { soundManager } from '../../utils/sound';
+import { STORY_SCRIPTS } from '../../content/dialogues';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -49,6 +50,84 @@ export class CinematicSystem implements System {
         this.bubbleRef = opts.bubbleRef;
         this.activeFamilyMembers = opts.activeFamilyMembers;
         this.callbacks = opts.callbacks;
+    }
+
+    public startCinematic(target: THREE.Object3D, scriptId: number, params: any = {}) {
+        const script = STORY_SCRIPTS[scriptId];
+        if (!script) {
+            console.warn(`[CinematicSystem] No script found for id ${scriptId}`);
+            return;
+        }
+
+        const cinematic = this.cinematicRef.current;
+        const camera = this.camera;
+
+        cinematic.active = true;
+        cinematic.startTime = performance.now();
+        cinematic.script = script;
+        cinematic.lineIndex = 0;
+        cinematic.speakers = [this.playerMeshRef.current, target]; // [Robert, Subject]
+        
+        // Camera setup
+        cinematic.cameraBasePos.copy(camera.position);
+        cinematic.cameraLookAt.copy(target.position);
+        
+        // Midpoint and Relative Offset for zooming/rotating
+        const playerPos = this.playerMeshRef.current?.position || new THREE.Vector3();
+        cinematic.midPoint.copy(playerPos).lerp(target.position, 0.5);
+        cinematic.midPoint.y += 1.5; // Look at head level
+
+        if (params.targetPos) {
+            cinematic.cameraBasePos.copy(params.targetPos);
+            cinematic.customCameraOverride = true;
+        } else {
+            // Calculate a nice cinematic angle if not specified
+            _v1.copy(playerPos).sub(target.position).normalize();
+            _v2.set(_v1.z, 0, -_v1.x).normalize().multiplyScalar(10); // Perpendicular
+            _v2.y = 5;
+            cinematic.relativeOffset.copy(_v2);
+            cinematic.customCameraOverride = false;
+        }
+
+        if (params.lookAtPos) {
+            cinematic.cameraLookAt.copy(params.lookAtPos);
+        }
+
+        cinematic.rotationSpeed = params.rotationSpeed || 0;
+        cinematic.zoom = params.zoom || 0.2;
+        cinematic.fadingOut = false;
+
+        this.callbacks.setCinematicActive(true);
+        this.playLine(0);
+    }
+
+    public playLine(index: number) {
+        const cinematic = this.cinematicRef.current;
+        if (index >= cinematic.script.length) {
+            this.endCinematic();
+            return;
+        }
+
+        const line = cinematic.script[index];
+        cinematic.lineIndex = index;
+        cinematic.lineStartTime = performance.now();
+        cinematic.fadingOut = false;
+
+        // Auto-calculate durations based on text length
+        // approx 15 chars per second + 1.5s padding
+        const textToDisplay = line.text || "";
+        cinematic.typingDuration = textToDisplay.length * 30; // 30ms per char
+        cinematic.lineDuration = Math.max(2000, cinematic.typingDuration + 1500);
+
+        this.callbacks.setCurrentLine(line);
+    }
+
+    public endCinematic() {
+        if (!this.cinematicRef.current.active) return;
+        this.cinematicRef.current.active = false;
+        this.callbacks.setCinematicActive(false);
+        this.callbacks.setCurrentLine(null);
+        this.callbacks.endCinematic();
     }
 
     update(_session: GameSessionLogic, delta: number, now: number) {

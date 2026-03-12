@@ -33,7 +33,7 @@ interface SpawnRequest {
     type: string;
     customMesh?: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
     customVel: THREE.Vector3;
-    hasCustomVel?: boolean;
+    hasCustomVel: boolean;
     color?: number;
     scale?: number;
     life?: number;
@@ -53,6 +53,23 @@ const _v8 = new THREE.Vector3();
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
+// Pre-allocate pools to prevent mid-combat GC spikes
+for (let i = 0; i < 500; i++) {
+    REQUEST_POOL.push({
+        scene: null as any, particlesList: [],
+        x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
+        hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
+    });
+}
+
+for (let i = 0; i < 150; i++) {
+    DECAL_REQUEST_POOL.push({
+        scene: null as any, particlesList: [],
+        x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
+        hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
+    });
+}
+
 const UNIQUE_MATERIAL_TYPES = [
     'black_smoke', 'debris_trail', 'shockwave', 'flash', 'splash'
 ];
@@ -66,7 +83,7 @@ const MAX_INSTANCES_PER_MESH = 5000;
 const MAX_AMBIENT_SPAWNS_PER_FRAME = 250;
 
 // Max decals
-const MAX_DECALS = 150
+const MAX_DECALS = 150;
 
 // TTL for particles
 const PARTICLE_TTL: Record<string, number> = {
@@ -99,8 +116,6 @@ export const FXSystem = {
         FXSystem._essentialQueueHead = 0;
         FXSystem._ambientQueueHead = 0;
         FXSystem._decalQueueHead = 0;
-        REQUEST_POOL.length = 0;
-        DECAL_REQUEST_POOL.length = 0;
     },
 
     // Pools
@@ -136,7 +151,7 @@ export const FXSystem = {
             m.geometry = geo;
             m.material = finalMat;
             m.visible = true;
-            m.scale.setScalar(1);
+            m.scale.set(1, 1, 1); // Zero-GC scaling
             m.rotation.set(0, 0, 0);
         } else {
             m = new THREE.Mesh(geo, finalMat);
@@ -193,13 +208,17 @@ export const FXSystem = {
         const req = REQUEST_POOL.pop();
         if (req) {
             req.life = undefined;
-            req.hasCustomVel = false; // <--- NY RAD
+            req.scale = undefined;
+            req.color = undefined;
+            req.material = undefined;
+            req.hasCustomVel = false;
             return req;
         }
+        // Fallback if pool is depleted (should rarely happen with pre-allocation)
         return {
             scene: null as any, particlesList: [],
             x: 0, y: 0, z: 0, type: '', customVel: new THREE.Vector3(),
-            hasCustomVel: false // <--- NY RAD
+            hasCustomVel: false, color: undefined, scale: undefined, life: undefined, material: undefined
         };
     },
 
@@ -211,19 +230,18 @@ export const FXSystem = {
         d.position.set(req.x, 0.2 + Math.random() * 0.05, req.z);
         d.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI * 2);
 
-        // Store intended scale but start at zero for animation
         d.userData.targetScale = req.scale || 1.0;
 
         if (req.type === 'splatter') {
-            d.scale.setScalar(d.userData.targetScale); // Instantly appear
+            d.scale.set(d.userData.targetScale, d.userData.targetScale, d.userData.targetScale);
         } else {
-            d.scale.setScalar(0.01); // Grow over time
+            d.scale.set(0.01, 0.01, 0.01);
         }
 
         if (req.material === MATERIALS.scorchDecal) {
-            d.renderOrder = -1; // Under firezone
+            d.renderOrder = -1;
         } else {
-            d.renderOrder = 50; // Decals should sit below particles (60)
+            d.renderOrder = 50;
         }
 
         (req.particlesList as unknown as THREE.Mesh[]).push(d);
@@ -252,13 +270,13 @@ export const FXSystem = {
         if (p.color === undefined && isInstanced) {
             const st = t as string;
             if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame') p.color = 0xff7700;
-            else if (st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0x00ffff; // Cyan for electric effects
-            else if (st === 'spark') p.color = 0xffcc00; // Orange for regular sparks
+            else if (st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0x00ffff;
+            else if (st === 'spark') p.color = 0xffcc00;
             else if (st === 'smoke' || st === 'large_smoke' || st === 'campfire_smoke') p.color = 0x555555;
             else if (st === 'blood' || st === 'gore') p.color = 0x880000;
             else if (st === 'glass' || st === 'flash' || st === 'electric_flash') p.color = 0xffffff;
             else if (st === 'splash') p.color = 0x77bbcc;
-            else p.color = 0x888888; // Default generic gray
+            else p.color = 0x888888;
         }
 
         if (req.customMesh) {
@@ -296,7 +314,6 @@ export const FXSystem = {
 
         // --- ROTATION & ORIENTATION ---
         if (t === 'electric_flash') {
-            // Point the shard in the direction of the bolt segment
             _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
             p.mesh.lookAt(_v1);
         } else if (t === 'shockwave') {
@@ -307,18 +324,39 @@ export const FXSystem = {
 
         // --- SCALING ---
         const s = req.scale || 1.0;
-        if (t === 'flash') p.mesh.scale.setScalar((1.5 + Math.random() * 1.0) * s);
+        if (t === 'flash') {
+            const fs = (1.5 + Math.random() * 1.0) * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
         else if (t === 'electric_flash') {
             const needleLen = (4.0 + Math.random() * 4.0) * s;
             const thickness = (0.15 + Math.random() * 0.1) * s;
             p.mesh.scale.set(thickness, thickness, needleLen);
         }
-        else if (t === 'large_fire') p.mesh.scale.setScalar(3.0 * Math.random() * s);
-        else if (t === 'large_smoke') p.mesh.scale.setScalar(4.0 * Math.random() * s);
-        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') p.mesh.scale.setScalar((1.0 + Math.random() * 0.8) * s);
-        else if (t === 'spark') p.mesh.scale.setScalar((0.5 + Math.random() * 0.5) * s);
-        else if (t === 'splash') p.mesh.scale.setScalar((0.5 + Math.random() * 0.7) * s);
-        else p.mesh.scale.setScalar((0.3 + Math.random() * 0.3) * s);
+        else if (t === 'large_fire') {
+            const fs = 3.0 * Math.random() * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
+        else if (t === 'large_smoke') {
+            const fs = 4.0 * Math.random() * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
+        else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark') {
+            const fs = (1.0 + Math.random() * 0.8) * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
+        else if (t === 'spark') {
+            const fs = (0.5 + Math.random() * 0.5) * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
+        else if (t === 'splash') {
+            const fs = (0.5 + Math.random() * 0.7) * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
+        else {
+            const fs = (0.3 + Math.random() * 0.3) * s;
+            p.mesh.scale.set(fs, fs, fs);
+        }
 
         // --- VELOCITY ---
         if (t === 'electric_flash') {
@@ -374,7 +412,7 @@ export const FXSystem = {
 
     spawnDecal: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
         let req = DECAL_REQUEST_POOL.pop();
-        if (!req) req = { scene, particlesList: decalList, x, y: 0, z, type, customVel: new THREE.Vector3() };
+        if (!req) req = { scene, particlesList: decalList, x, y: 0, z, type, customVel: new THREE.Vector3(), hasCustomVel: false };
         else { req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; req.type = type; }
 
         req.scale = scale;
@@ -402,7 +440,7 @@ export const FXSystem = {
                 FXSystem.essentialQueue.push(req);
             } else {
                 if (FXSystem.ambientQueue.length === 1000) {
-                    console.warn(`[FXSystem] Ambient queue is heavily backlogged (1000+ particles waiting to spawn). Performance may degrade.`);
+                    console.warn(`[FXSystem] Ambient queue is heavily backlogged. Performance may degrade.`);
                 }
                 FXSystem.ambientQueue.push(req);
             }
@@ -456,7 +494,6 @@ export const FXSystem = {
         const safeDelta = Math.min(delta, 0.1);
 
         // 1. Process Queues (Budgeted)
-        // ESSENTIAL QUEUE: Drained completely every frame to ensure immediate feedback
         for (let i = FXSystem._essentialQueueHead; i < FXSystem.essentialQueue.length; i++) {
             const req = FXSystem.essentialQueue[i];
             if (!req.scene) req.scene = scene;
@@ -467,7 +504,6 @@ export const FXSystem = {
         FXSystem.essentialQueue.length = 0;
         FXSystem._essentialQueueHead = 0;
 
-        // AMBIENT QUEUE: Processed with a budget to maintain performance
         const pEnd = Math.min(FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME, FXSystem.ambientQueue.length);
         for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
             const req = FXSystem.ambientQueue[i];
@@ -494,18 +530,22 @@ export const FXSystem = {
             FXSystem._decalQueueHead = 0;
         }
 
-        // Animate decals (blood pouring/spreading effect)
         for (let i = 0; i < decalList.length; i++) {
             const m = decalList[i];
             if (m.userData.targetScale && m.scale.x < m.userData.targetScale) {
                 const growthStep = m.userData.targetScale * 3.0 * safeDelta;
                 const newScale = Math.min(m.userData.targetScale, m.scale.x + growthStep);
-                m.scale.setScalar(newScale);
+                m.scale.set(newScale, newScale, newScale);
             }
         }
 
         // 2. Update Particles
         const decay = safeDelta * 44;
+
+        // Linear approximations for CPU performance instead of Math.pow
+        const airFriction = Math.max(0.0, 1.0 - (5.0 * safeDelta));
+        const shrinkRate = Math.max(0.0, 1.0 - (10.0 * safeDelta));
+
         for (let i = particlesList.length - 1; i >= 0; i--) {
             const p = particlesList[i];
             p.life -= decay;
@@ -528,28 +568,22 @@ export const FXSystem = {
                         if (!p.inUse) continue;
                     }
                 } else {
-                    // --- EXPLOSION PHYSICS FIX ---
+                    // Optimized Air friction
+                    p.vel.multiplyScalar(airFriction);
 
-                    // 1. AIR FRICTION (Drag)
-                    // Multiplier < 1.0 makes particles lose velocity over time. 
-                    // Lower value (0.001) = higher friction. Prevents "drifting" across screen.
-                    p.vel.multiplyScalar(Math.pow(0.001, safeDelta));
-
-                    // 2. CONTROLLED EXPANSION vs DECAY
                     if (p.type === 'shockwave') {
-                        // Linear growth: 30 units per second. Fast but stops when life ends.
-                        p.mesh.scale.addScalar(30 * safeDelta);
+                        const grow = 30 * safeDelta;
+                        p.mesh.scale.addScalar(grow);
                     } else if (p.type === 'flash') {
-                        p.mesh.scale.addScalar(15 * safeDelta);
+                        const grow = 15 * safeDelta;
+                        p.mesh.scale.addScalar(grow);
                     } else {
-                        // Smoke and fire should shrink as they cool down.
-                        // Removed isInstanced check to ensure all types shrink.
-                        p.mesh.scale.multiplyScalar(Math.pow(0.05, safeDelta));
+                        // Optimized Shrink rate
+                        p.mesh.scale.multiplyScalar(shrinkRate);
                     }
                 }
             }
 
-            // Sync Visuals
             if (!p.isInstanced) {
                 const mat = p.mesh.material as FXMaterial;
                 if (mat.transparent) mat.opacity = Math.max(0, p.life / p.maxLife);
@@ -564,7 +598,6 @@ export const FXSystem = {
                     }
                     FXSystem._instancedCounts[p.type]++;
                 } else if (imesh && idx === MAX_INSTANCES_PER_MESH) {
-                    console.warn(`[FXSystem] MAX_INSTANCES_PER_MESH (${MAX_INSTANCES_PER_MESH}) reached for type: ${p.type}. Particles will be invisible.`);
                     FXSystem._instancedCounts[p.type]++;
                 } else if (imesh) {
                     FXSystem._instancedCounts[p.type]++;
@@ -572,7 +605,7 @@ export const FXSystem = {
             }
         }
 
-        // 3. Update Text Floaters (Zero-GC)
+        // 3. Update Text Floaters
         for (let i = 0; i < FXSystem._textPool.length; i++) {
             const t = FXSystem._textPool[i];
             if (!t.active) continue;
@@ -599,7 +632,6 @@ export const FXSystem = {
             FXSystem._instancedCounts[type] = 0;
         }
 
-        // Max decals
         if (decalList.length > MAX_DECALS) {
             console.warn(`[FXSystem] MAX_DECALS (${MAX_DECALS}) exceeded. Earliest decals will be force-recycled.`);
         }
@@ -620,7 +652,6 @@ export const FXSystem = {
         p.inUse = false;
         FXSystem.FREE_STATE_INDICES.push(p._poolIdx);
 
-        // SWAP AND POP
         list[index] = list[list.length - 1];
         list.pop();
     },
@@ -638,15 +669,14 @@ export const FXSystem = {
             soundManager.playImpact('flesh');
             p.vel.set(0, 0, 0);
         } else if (p.type === 'debris') {
-            // Studsa om farten är hög nog
             if (p.vel.y < -8) {
-                p.vel.y *= -0.3; // Studsar uppåt
-                p.vel.x *= 0.5; // Tappar fart i sidled
+                p.vel.y *= -0.3;
+                p.vel.x *= 0.5;
                 p.vel.z *= 0.5;
-                p.landed = false; // Fortsätter flyga/studsa
+                p.landed = false;
             } else {
                 p.vel.set(0, 0, 0);
-                p.landed = true; // NU HAR DEN STANNAT OCH ÄR LANDAD! Gravitationen stängs av.
+                p.landed = true;
             }
         } else {
             p.landed = true;
@@ -685,7 +715,6 @@ export const FXSystem = {
             const imesh = new THREE.InstancedMesh(geo, mat, MAX_INSTANCES_PER_MESH);
             imesh.frustumCulled = false;
 
-            // [VINTERDÖD] DISABLE SHADOWS FOR ENTIRE PARTICLE SYSTEM
             if (type === 'debris' || type === 'scrap' || type === 'glass' || type === 'gore') {
                 imesh.castShadow = true;
                 imesh.receiveShadow = true;
@@ -694,10 +723,8 @@ export const FXSystem = {
                 imesh.receiveShadow = false;
             }
 
-            // Assign a high render order to ensure it renders correctly above decals
             imesh.renderOrder = 60;
 
-            // Initialize instanceColor attribute to prevent WebGL lazy-allocation spikes
             if (!imesh.instanceColor) {
                 imesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES_PER_MESH * 3), 3);
             }
@@ -712,9 +739,6 @@ export const FXSystem = {
             scene.add(mesh);
         }
 
-        // [VINTERDÖD] CRITICAL FIX: AssetPreloader hides all meshes (visible=false) after compiling shaders
-        // to prevent 1-frame screen flashes. Since these are singletons, we MUST restore their visibility
-        // here when the active combat sector requests them for spawning.
         FXSystem._instancedMeshes[type].visible = true;
 
         return FXSystem._instancedMeshes[type];
@@ -739,7 +763,6 @@ export const FXSystem = {
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'fire';
 
-        // --- FLAME COLOR RANDOMIZATION ---
         let colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
 
         req.customVel.copy(_v1).multiplyScalar(speed);
@@ -775,11 +798,9 @@ export const FXSystem = {
     },
 
     spawnLightning: (start: THREE.Vector3, end: THREE.Vector3) => {
-        // [VINTERDÖD] High-density recursive lightning generator.
         const spawnSegment = (a: THREE.Vector3, b: THREE.Vector3, depth: number, isBranch: boolean = false) => {
             if (depth <= 0) return;
 
-            // Density: More segments = smoother jagged curve
             const segments = isBranch ? 4 : 10;
             const jitterScale = isBranch ? 0.8 : 2.0;
 
@@ -798,20 +819,17 @@ export const FXSystem = {
                     v_node.copy(b);
                 }
 
-                // --- SPAWN BOLT SHARD ---
                 const req = FXSystem._getSpawnRequest();
                 req.x = v_prev.x; req.y = v_prev.y; req.z = v_prev.z;
                 req.type = 'electric_flash';
                 req.scale = (isBranch ? 0.5 : 1.0) + Math.random() * 0.3;
-                req.color = 0x00ffff; // Cyan
+                req.color = 0x00ffff;
                 req.life = 4 + Math.random() * 4;
 
-                // CRITICAL: Point shard exactly to next node for oriented line look
                 req.customVel.subVectors(v_node, v_prev);
                 req.hasCustomVel = true;
                 FXSystem.essentialQueue.push(req);
 
-                // Add blinding white core (snappy)
                 if (Math.random() > 0.2) {
                     const reqC = FXSystem._getSpawnRequest();
                     reqC.x = v_prev.x; reqC.y = v_prev.y; reqC.z = v_prev.z;
@@ -824,10 +842,8 @@ export const FXSystem = {
                     FXSystem.essentialQueue.push(reqC);
                 }
 
-                // Branching logic: Reaches out significantly
                 if (!isBranch && i > 1 && depth > 1 && Math.random() < 0.25) {
                     _v3.copy(v_node);
-                    // Branch direction: biased towards main bolt but with deviation
                     _v4.set(
                         v_node.x + (Math.random() - 0.5) * 10,
                         v_node.y + (Math.random() - 0.5) * 10,

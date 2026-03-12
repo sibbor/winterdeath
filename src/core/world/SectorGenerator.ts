@@ -319,7 +319,7 @@ export const SectorGenerator = {
         }
 
         // Persistence Check: Don't spawn if already found
-        const foundList = (ctx as any).collectiblesFound || [];
+        const foundList = (ctx as any).collectiblesDiscovered || [];
         if (foundList.includes(id)) return;
 
         const group = new THREE.Group();

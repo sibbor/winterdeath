@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FLASHLIGHT } from '../../content/constants';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
 import { SectorContext } from '../../types/SectorEnvironment';
@@ -31,6 +32,24 @@ export class LightingSystem implements System {
         this.flickeringLights = flickeringLights;
         this.sectorContext = sectorContext;
         this.playerGroup = playerGroup;
+    }
+
+    init(session: GameSessionLogic) {
+        const sectorCtx = this.sectorContext.current;
+        if (!sectorCtx) return;
+
+        session.engine.scene.traverse((obj) => {
+            if ((obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight)) {
+                if (obj.name === FLASHLIGHT.name) return;
+                
+                // Register if not already present
+                if (!sectorCtx.dynamicLights.includes(obj)) {
+                    sectorCtx.dynamicLights.push(obj);
+                    if (obj.userData.isCulled === undefined) obj.userData.isCulled = false;
+                    if (obj.userData.baseIntensity === undefined) obj.userData.baseIntensity = obj.intensity;
+                }
+            }
+        });
     }
 
     update(_session: GameSessionLogic, _dt: number, _now: number) {

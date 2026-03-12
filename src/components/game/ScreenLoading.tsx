@@ -44,8 +44,6 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
     const [isActuallyDone, setIsActuallyDone] = useState(false);
     if (isDone && !isActuallyDone) setIsActuallyDone(true);
 
-    // OMEDELBAR OPACITY-100 på mount. Inget fade-in trams!
-    // Fade-out triggas när isActuallyDone blir true.
     const finalOpacity = isActuallyDone ? 'opacity-0' : 'opacity-100';
 
     return (
@@ -64,7 +62,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
                     <h4 className="text-red-600 font-black tracking-[0.4em] uppercase text-sm animate-pulse">
                         {displayInfo.isInitialBoot ? t('ui.starting') : t('ui.loading')}
                     </h4>
-                    <h2 className={`${isMobileDevice ? 'text-3xl' : 'text-5xl md:text-6xl'} font-black italic tracking-tighter uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)] skew-x-[-10deg]`}>
+                    <h2 className={`${isMobileDevice ? 'text-3xl' : 'text-5xl md:text-6xl'} font-black italic tracking-tighter uppercase skew-x-[-10deg]`}>
                         {displayInfo.isInitialBoot ? (
                             <div className="flex flex-col items-center">
                                 <span className="block leading-none">{t('ui.game_title_1')}</span>
