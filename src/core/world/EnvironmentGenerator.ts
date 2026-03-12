@@ -585,7 +585,7 @@ export const EnvironmentGenerator = {
         const portalGeoExtruded = new THREE.ExtrudeGeometry(portalShape, extrudeSettings);
         portalGeoExtruded.translate(0, 0, -tunnelDepth / 2);
 
-        const portalGeo = portalGeoExtruded.toNonIndexed();
+        const portalGeo = portalGeoExtruded.index ? portalGeoExtruded.toNonIndexed() : portalGeoExtruded;
 
         const posAttr = portalGeo.getAttribute('position');
         for (let i = 0; i < posAttr.count; i++) {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, createTextSprite } from '../../utils/assets';
+import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 
 // --- TYPES & INTERFACES ---
@@ -571,8 +571,10 @@ export const FXSystem = {
                         p.mesh.scale.x *= 0.6;
                         p.mesh.scale.y *= 0.6;
                     } else if (p.type === 'flamethrower_fire') {
-                        p.mesh.scale.addScalar(4.0 * safeDelta);
-                        p.vel.multiplyScalar(Math.max(0.0, 1.0 - (9.0 * safeDelta)));
+                        p.mesh.scale.addScalar(5.0 * safeDelta);
+                        p.vel.multiplyScalar(Math.max(0.0, 1.0 - (5.0 * safeDelta)));
+                    } else if (p.type === 'fire' || p.type === 'enemy_effect_flame' || p.type === 'large_fire') {
+                        p.mesh.scale.multiplyScalar(Math.max(0.0, 1.0 - (1.5 * safeDelta)));
                     } else {
                         p.mesh.scale.multiplyScalar(shrinkRate);
                     }

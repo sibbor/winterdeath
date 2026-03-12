@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { MATERIALS } from '../utils/assets';
 import { Enemy, AIState, EnemyEffectType } from '../types/enemy';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
@@ -10,6 +10,7 @@ import { CorpseRenderer } from './renderers/CorpseRenderer';
 import { AshRenderer } from './renderers/AshRenderer';
 import { FXSystem } from './systems/FXSystem';
 import { WaterSystem } from './systems/WaterSystem';
+import { WeaponType } from '../content/weapons';
 
 export type { Enemy };
 
@@ -19,6 +20,7 @@ const _v2 = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 5, 0);
 const _white = new THREE.Color(0xffffff);
 const _cyan = new THREE.Color(0x00ffff);
+const _flashColor = new THREE.Color();
 const _color = new THREE.Color();
 const _syncList: Enemy[] = [];
 const enemyPool: Enemy[] = [];
@@ -68,7 +70,7 @@ const _aiCallbacks: any = {
     spawnPart: null as any,
     spawnDecal: null as any,
     spawnBubble: null as any,
-    onDamageDealt: null as any,
+    applyDamage: null as any,
     onEffectTick: null as any,
     playSound: (id: string) => soundManager.playEffect(id)
 };
@@ -206,8 +208,8 @@ export const EnemyManager = {
 
         let burstScale = 1.0;
         const dmgType = enemy.lastDamageType || '';
-        if (dmgType === 'GRENADE' || dmgType === 'grenade') burstScale = 3.0;
-        else if (dmgType === 'SHOTGUN' || dmgType === 'shotgun' || dmgType === 'REVOLVER' || dmgType === 'revolver') burstScale = 2.0;
+        if (dmgType === WeaponType.GRENADE) burstScale = 3.0;
+        else if (dmgType === WeaponType.SHOTGUN || dmgType === WeaponType.REVOLVER) burstScale = 2.0;
 
         const decalScale = (enemy.isBoss ? 6.0 : enemyScale * burstScale);
         callbacks.spawnDecal(pos.x, pos.z, decalScale, MATERIALS.bloodDecal, 'splatter');
@@ -568,7 +570,7 @@ export const EnemyManager = {
         }
     },
 
-    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], shakeIntensity: number, playerIsDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, onDamageDealt?: any, water?: WaterSystem) => {
+    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, applyDamage?: any, water?: WaterSystem) => {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
@@ -576,7 +578,7 @@ export const EnemyManager = {
         _aiCallbacks.spawnPart = spawnPart;
         _aiCallbacks.spawnDecal = spawnDecal;
         _aiCallbacks.spawnBubble = spawnBubble;
-        _aiCallbacks.onDamageDealt = onDamageDealt;
+        _aiCallbacks.applyDamage = applyDamage;
 
         const len = enemies.length;
         for (let i = 0; i < len; i++) {
@@ -584,7 +586,7 @@ export const EnemyManager = {
 
             // 1. Endast AI Logic om de är ALIVE
             if (e.deathState === 'ALIVE') {
-                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, shakeIntensity, playerIsDead, _aiCallbacks, water);
+                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, isDead, _aiCallbacks, water);
             }
 
             // 2. Visuella animationer 
@@ -603,6 +605,58 @@ export const EnemyManager = {
                 e.mesh.visible = false;
                 e.mesh.matrixAutoUpdate = false; // Freeze to save CPU when instanced
                 _syncList.push(e);
+            }
+
+            // 4. Hit Flashes (Flyttat från AI för renare arkitektur!)
+            if (s === 'ALIVE') {
+                if (e.isBoss && e.mesh && e.color !== undefined) {
+                    const timeSinceHit = now - e.hitTime;
+                    if (timeSinceHit < 100) {
+                        if (!e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = true;
+                            const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
+
+                            if (isArc) _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4);
+                            else _flashColor.setHex(0xffffff);
+
+                            e.mesh.traverse((c: any) => {
+                                if (c.isMesh && c.material && c.material.emissive) {
+                                    c.material.emissive.copy(_flashColor);
+                                    c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
+                                }
+                            });
+                        }
+                    } else {
+                        if (e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = false;
+                            e.mesh.traverse((c: any) => {
+                                if (c.isMesh && c.material && c.material.emissive) {
+                                    c.material.emissive.setHex(0x000000);
+                                    c.material.emissiveIntensity = 0.0;
+                                }
+                            });
+                        }
+                    }
+                } else if (!e.isBoss && e.color !== undefined) {
+                    const timeSinceHit = now - e.hitTime;
+                    if (timeSinceHit < 100) {
+                        if (!e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = true;
+                            e.mesh.userData.originalColor = e.color;
+                            const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
+                            if (isArc) {
+                                e.color = _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4).getHex();
+                            } else {
+                                e.color = 0xffffff;
+                            }
+                        }
+                    } else {
+                        if (e.mesh.userData.isFlashing) {
+                            e.mesh.userData.isFlashing = false;
+                            e.color = e.mesh.userData.originalColor || 0xffffff;
+                        }
+                    }
+                }
             }
         }
 

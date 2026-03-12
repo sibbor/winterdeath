@@ -11,20 +11,20 @@ const _v7 = new THREE.Vector3();
 const _v8 = new THREE.Vector3();
 
 export const WeaponFX = {
+
     spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
-        // En mycket bredare spridningsvektor för att forma konen
-        const spread = 0.40;
+        // Tajtare spridning så att trycket riktas mer framåt
+        const spread = 0.30;
         _v1.copy(direction).add(_v2.set(
             (Math.random() - 0.5) * spread,
             (Math.random() - 0.5) * spread,
             (Math.random() - 0.5) * spread
         )).normalize();
 
-        // Skjuts ut stenhårt från mynningen
-        let speed = 18 + Math.random() * 10;
+        // Mycket högre starthastighet så molnet skjuts långt fram
+        let speed = 35 + Math.random() * 20;
 
-        // Superliten vid vapnets mynning, kommer svälla upp i update-loopen
-        let scale = 0.05 + Math.random() * 0.1;
+        let scale = 0.1 + Math.random() * 0.2;
 
         const req = FXSystem._getSpawnRequest();
         req.scene = null as any;
@@ -32,7 +32,6 @@ export const WeaponFX = {
         req.x = start.x; req.y = start.y; req.z = start.z;
         req.type = 'flamethrower_fire';
 
-        // Mer aggressiva färger (djupt orange och rött, blandat med lite gult)
         let colorHex = Math.random() > 0.8 ? 0xffcc00 : (Math.random() > 0.4 ? 0xff4400 : 0xaa1100);
 
         req.customVel.copy(_v1).multiplyScalar(speed);
@@ -40,8 +39,7 @@ export const WeaponFX = {
         req.scale = scale;
         req.color = colorHex;
 
-        // Något kortare livslängd så molnet inte flyger för långt iväg utanför hitboxen
-        req.life = 15 + Math.random() * 15;
+        req.life = 25 + Math.random() * 15;
         FXSystem.essentialQueue.push(req);
     },
 

@@ -158,6 +158,11 @@ export class WinterEngine {
         }
         container.appendChild(this.renderer.domElement);
         this.handleResize();
+
+        // [VINTERDÖD] Reset pause states on mount to ensure fresh state
+        this.isRenderingPaused = false;
+        this.isSimulationPaused = false;
+        
         this.start();
     }
 
@@ -224,7 +229,7 @@ export class WinterEngine {
 
         // Pre-allocate disposal function to ensure Zero-GC loops during cleanup traversal
         const checkMaterial = (m: any) => {
-            const isSharedMat = Object.values(MATERIALS).includes(m);
+            const isSharedMat = Object.values(MATERIALS).includes(m) || m.userData?.isSharedAsset;
             if (!isSharedMat && m.dispose) m.dispose();
         };
 
@@ -240,7 +245,7 @@ export class WinterEngine {
                 if (child.isMesh || child.isLine || child.isPoints || child.isSprite) {
                     if (child.geometry) {
                         // Safeguard: Do not dispose if it's a shared geometry
-                        const isSharedGeo = Object.values(GEOMETRY).includes(child.geometry);
+                        const isSharedGeo = Object.values(GEOMETRY).includes(child.geometry) || child.geometry.userData?.isSharedAsset;
                         if (!isSharedGeo && child.geometry.dispose) child.geometry.dispose();
                     }
 
@@ -257,6 +262,7 @@ export class WinterEngine {
                 }
             });
 
+            // If it's a shared asset group, we still remove it from scene but DON'T traverse for disposal
             this.scene.remove(obj);
         }
 

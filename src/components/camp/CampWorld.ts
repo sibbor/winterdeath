@@ -131,6 +131,9 @@ export const CONST_MAT = {
     })
 };
 
+// [VINTERDÖD] Tag materials as shared assets to prevent disposal during clearActiveScene
+Object.values(CONST_MAT).forEach(m => { m.userData = { isSharedAsset: true }; });
+
 // --- PROCEDURAL TEXTURES ---
 const createSmokeTexture = () => {
     const size = 64;
@@ -178,6 +181,9 @@ export const stationMaterials: Record<string, THREE.MeshStandardMaterial> = {
     ammoGreen: new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 }),
     medkitRed: new THREE.MeshStandardMaterial({ color: 0xcc0000 })
 };
+
+// [VINTERDÖD] Tag station materials as shared assets
+Object.values(stationMaterials).forEach(m => { m.userData = { isSharedAsset: true }; });
 
 // ============================================================================
 // INTERNAL HELPERS
@@ -491,6 +497,14 @@ export const CampWorld = {
                     m.userData.id = member.userData.id;
                     m.userData.name = member.userData.name;
                     m.userData.type = 'family';
+                    // [VINTERDÖD] Tag family materials as shared (they are reused models)
+                    if (m.material) {
+                        const mats = Array.isArray(m.material) ? m.material : [m.material];
+                        for (let i = 0; i < mats.length; i++) {
+                            mats[i].userData = mats[i].userData || {};
+                            mats[i].userData.isSharedAsset = true;
+                        }
+                    }
 
                     if (m.material) {
                         const mats = Array.isArray(m.material) ? m.material : [m.material];
@@ -666,7 +680,14 @@ export const CampWorld = {
 
         const stationGroups = [rackGroup, deskGroup, mapGroup, medGroup];
         for (let i = 0; i < stationGroups.length; i++) {
-            stationGroups[i].traverse(c => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; });
+            stationGroups[i].traverse(c => { 
+                if ((c as THREE.Mesh).isMesh) {
+                    c.castShadow = true;
+                    // [VINTERDÖD] Tag station parts as shared assets to protect their materials
+                    c.userData = c.userData || {};
+                    c.userData.isSharedAsset = true;
+                }
+            });
         }
 
         return { interactables, outlines };

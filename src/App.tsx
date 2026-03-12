@@ -102,6 +102,12 @@ const App: React.FC = () => {
             console.error("[App] triggerLoadingTransition task failed:", e);
         } finally {
             transitionTaskRef.current = false;
+
+            // [VINTERDÖD] Safety: Reset engine pause flags after ANY transition
+            const engine = WinterEngine.getInstance();
+            engine.isRenderingPaused = false;
+            engine.isSimulationPaused = false;
+
             tryDismissLoading();
         }
 
@@ -671,6 +677,8 @@ const App: React.FC = () => {
             {activeOverlay === 'DEATH' && (
                 <ScreenPlayerDied
                     onContinue={() => {
+                        const stats = gameCanvasRef.current?.getSectorStats() || sectorStats;
+                        handleDie(stats, hudState.killerName);
                         setActiveOverlay(null);
                     }}
                     killerName={hudState.killerName || "UNKNOWN"}

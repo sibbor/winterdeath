@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { Enemy } from '../../types/enemy';
+import { WeaponType } from '../../content/weapons';
 
 export class ZombieRenderer {
     private meshes: Record<string, THREE.InstancedMesh> = {};
@@ -109,7 +110,7 @@ export class ZombieRenderer {
             // Calculate color based on hit feedback. Arc-Cannon has a unique cyan-white flash.
             const timeSinceHit = now - e.hitTime;
             if (timeSinceHit < 100) {
-                if (e.lastDamageType === 'Arc-Cannon') { // WeaponType.ARC_CANNON
+                if (e.lastDamageType === WeaponType.ARC_CANNON) {
                     // Lerp between White and Cyan for the electric look
                     this._tempColor.set(0x00ffff).lerp(this._white, 0.4);
                 } else {

@@ -109,7 +109,7 @@ export class DeathSystem implements System {
             state.deathVel.y -= 30 * delta;
             pgPos.addScaledVector(state.deathVel, delta);
 
-            const isExploded = state.killerType === 'BOMBER_EXPLOSION';
+            const isExploded = !!state.killerType && state.killerType.toUpperCase().includes('EXPLOSION');
             const isBurning = state.killerType === 'BURNED' || state.killerType === 'FLAME';
             const isBiting = state.killerType === 'BITING' || state.killerType === 'Walker' || state.killerType === 'Zombie';
 
@@ -161,7 +161,9 @@ export class DeathSystem implements System {
         }
 
         // --- 3. Player Animation & Gibbing ---
-        if (state.killerType === 'BOMBER_EXPLOSION') {
+        const killerIsExplosive = !!state.killerType && state.killerType.toUpperCase().includes('EXPLOSION');
+
+        if (killerIsExplosive) {
             if (playerMesh) playerMesh.visible = false;
 
             if (!state.playerBloodSpawned) {
@@ -197,11 +199,6 @@ export class DeathSystem implements System {
                 _griefAnimState.seed = fm.seed || 0;
                 PlayerAnimation.update(body, _griefAnimState, now, delta);
             }
-        }
-
-        // --- 5. FX still runs during death ---
-        if (playerGroup) {
-            FXSystem.update(session.engine.scene, state.particles, state.bloodDecals, delta, 0, now, pgPos, this.fxCallbacks);
         }
     }
 }

@@ -139,17 +139,21 @@ export class PlayerCombatSystem implements System {
 
         if (!disableInput) {
             WeaponHandler.handleInput(input, state, state.loadout, now, disableInput);
+        }
 
-            if (this.reloadBar) {
-                WeaponHandler.updateReloadBar(
-                    this.reloadBar,
-                    state,
-                    this.playerGroup.position,
-                    session.engine.camera.threeCamera.quaternion,
-                    now
-                );
-            }
+        // [VINTERDÖD] Movement/Combat UI updates should happen even if input is disabled 
+        // to prevent "stuck" visuals during cinematics or state transitions.
+        if (this.reloadBar) {
+            WeaponHandler.updateReloadBar(
+                this.reloadBar,
+                state,
+                this.playerGroup.position,
+                session.engine.camera.threeCamera.quaternion,
+                now
+            );
+        }
 
+        if (!disableInput) {
             WeaponHandler.handleFiring(
                 session.engine.scene,
                 this.playerGroup,

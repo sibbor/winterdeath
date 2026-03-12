@@ -19,6 +19,7 @@ import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 import { PlayerMovementSystem } from '../../../core/systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../../core/systems/VehicleMovementSystem';
 import { PlayerCombatSystem } from '../../../core/systems/PlayerCombatSystem';
+import { PlayerStatsSystem } from '@/src/core/systems/PlayerStatsSystem';
 import { WorldLootSystem } from '../../../core/systems/WorldLootSystem';
 import { PlayerInteractionSystem } from '../../../core/systems/PlayerInteractionSystem';
 import { EnemySystem } from '../../../core/systems/EnemySystem';
@@ -346,8 +347,6 @@ export class GameSessionSetup {
             });
 
             // --- System Registration ---
-            session.addSystem(new PlayerMovementSystem(playerGroup));
-            session.addSystem(new VehicleMovementSystem(playerGroup));
             if (engine.water) {
                 engine.water.setPlayerRef(playerGroup);
                 engine.water.setCallbacks({
@@ -355,14 +354,32 @@ export class GameSessionSetup {
                     emitNoise: (pos, rad, type) => session.makeNoise(pos, rad, type as any)
                 });
             }
+
+            session.addSystem(new PlayerMovementSystem(playerGroup));
+            session.addSystem(new VehicleMovementSystem(playerGroup));
+
             session.addSystem(new PlayerCombatSystem(playerGroup));
-            session.addSystem(new WorldLootSystem(playerGroup, scene));
             session.addSystem(new PlayerInteractionSystem(
                 playerGroup,
                 callbacks.concludeSector,
                 sectorCtx.collectibles,
                 callbacks.onCollectibleDiscovered
             ));
+            const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t);
+            session.addSystem(playerStatsSystem);
+
+            session.addSystem(new EnemySystem(playerGroup, {
+                spawnBubble: callbacks.spawnBubble,
+                gainXp: callbacks.gainXp,
+                t: callbacks.t,
+                onBossKilled: (id: number) => {
+                    if (!state.bossesDefeated.includes(id)) state.bossesDefeated.push(id);
+                    state.bossDefeatedTime = performance.now();
+                    soundManager.stopMusic();
+                    if (currentSector.environment.ambientLoop) soundManager.playMusic(currentSector.environment.ambientLoop);
+                },
+                onPlayerHit: (damage, attacker, type) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type)
+            }));
 
             session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
                 setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
@@ -385,19 +402,7 @@ export class GameSessionSetup {
                 spawnHorde: spawnHorde,
                 setOverlay: ui.setOverlay
             }));
-
-            const enemySystem = new EnemySystem(playerGroup, {
-                spawnBubble: callbacks.spawnBubble,
-                gainXp: callbacks.gainXp,
-                t: callbacks.t,
-                onBossKilled: (id: number) => {
-                    if (!state.bossesDefeated.includes(id)) state.bossesDefeated.push(id);
-                    state.bossDefeatedTime = performance.now();
-                    soundManager.stopMusic();
-                    if (currentSector.environment.ambientLoop) soundManager.playMusic(currentSector.environment.ambientLoop);
-                }
-            });
-            session.addSystem(enemySystem);
+            session.addSystem(new WorldLootSystem(playerGroup, scene));
 
             session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
                 setFoundMemberName: (n: string) => ui.setFoundMemberName && ui.setFoundMemberName(n),
@@ -422,7 +427,7 @@ export class GameSessionSetup {
                 fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
                 deathPhaseRef: refs.deathPhaseRef, inputRef: () => engine.input.state,
                 cameraRef: () => engine.camera.threeCamera, propsRef: refs.propsRef,
-                distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: {}, // Fixed later via loop binding
+                distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: callbacks,
                 setDeathPhase: ui.setDeathPhase
             }));
 

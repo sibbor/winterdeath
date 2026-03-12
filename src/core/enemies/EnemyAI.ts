@@ -6,6 +6,7 @@ import { WeaponType, WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
 import { soundManager } from '../../utils/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../systems/WaterSystem';
+import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -16,13 +17,17 @@ const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3();
-const _white = new THREE.Color(0xffffff);
-const _flashColor = new THREE.Color();
+
+function logAI(msg: string) {
+    if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+        console.log(msg);
+    }
+}
 
 function logStateChange(e: Enemy, newState: AIState, reason?: string) {
     if (e.state !== newState) {
         const reasonStr = reason ? ` (${reason})` : '';
-        console.log(`[AI] ${e.type}_${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]}${reasonStr}`);
+        logAI(`[AI] ${e.type}_${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]}${reasonStr}`);
     }
 }
 
@@ -34,11 +39,10 @@ export const EnemyAI = {
         playerPos: THREE.Vector3,
         collisionGrid: SpatialGrid,
         noiseEvents: any[],
-        shakeIntensity: number,
-        playerIsDead: boolean,
+        isDead: boolean,
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: string) => void;
-            onDamageDealt: (amount: number, enemy: Enemy) => void;
+            applyDamage: (amount: number, enemy: Enemy) => void;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void;
@@ -68,7 +72,9 @@ export const EnemyAI = {
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
         if (e.hp <= 0 && e.deathState === 'ALIVE') {
-            console.log(`[AI] ${e.type}_${e.id} triggered DEATH by ${e.lastDamageType}`);
+            const isWeapon = Object.values(WeaponType).includes(e.lastDamageType as WeaponType);
+            const cause = isWeapon ? `Weapon (${e.lastDamageType})` : `Effect (${e.lastDamageType})`;
+            logAI(`[AI] ${e.type}_${e.id} killed by: ${cause}`);
             e.deathTimer = now;
 
             const baseScale = e.originalScale || 1.0;
@@ -183,8 +189,11 @@ export const EnemyAI = {
                 } else if (peakY > 1.5) {
                     const fallDamage = Math.min(e.maxHp * 0.6, peakY * 8);
                     e.hp -= fallDamage;
+                    if (callbacks.applyDamage) callbacks.applyDamage(fallDamage, e);
+
                     callbacks.spawnPart?.(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
                     if (e.hp <= 0 && e.deathState === 'ALIVE') {
+                        logAI(`[AI] ${e.type}_${e.id} killed by: Environment (FALL)`);
                         e.deathState = 'FALL';
                     }
                 }
@@ -242,9 +251,10 @@ export const EnemyAI = {
 
                 const tickDmg = e.maxHp * 0.25 * 0.15;
                 e.hp -= tickDmg;
-                if (callbacks.onDamageDealt) callbacks.onDamageDealt(tickDmg, e);
+                if (callbacks.applyDamage) callbacks.applyDamage(tickDmg, e);
 
                 if (e.hp <= 0 && e.deathState === 'ALIVE') {
+                    logAI(`[AI] ${e.type}_${e.id} killed by: Environment (DROWNED)`);
                     e.deathState = 'DROWNED';
                     e.velocity.set(0, 0, 0);
                     e.knockbackVel.set(0, 0, 0);
@@ -286,6 +296,7 @@ export const EnemyAI = {
             if (Math.random() < 0.1) callbacks.onEffectTick(e, 'STUN');
 
             if (e.stunTimer <= 0) {
+                logStateChange(e, AIState.CHASE);
                 e.state = AIState.CHASE;
                 e.mesh.userData.isRagdolling = false;
                 e.mesh.rotation.x = 0;
@@ -343,12 +354,15 @@ export const EnemyAI = {
             case AIState.IDLE:
                 e.idleTimer -= delta;
                 if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.idleTimer <= 0) {
+                    logStateChange(e, AIState.WANDER);
                     e.state = AIState.WANDER;
                     const angle = Math.random() * Math.PI * 2;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
@@ -363,12 +377,15 @@ export const EnemyAI = {
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
                 if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
+                    logStateChange(e, AIState.IDLE);
                     e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0;
                 }
 
@@ -386,18 +403,22 @@ export const EnemyAI = {
                 }
 
                 if ((!canSeePlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
+                    logStateChange(e, AIState.SEARCH);
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
                 }
                 else {
                     const target = canSeePlayer ? playerPos : e.lastSeenPos!;
                     if (e.type === 'BOMBER' && distSq < 12.0) {
+                        logStateChange(e, AIState.EXPLODING);
                         e.state = AIState.EXPLODING;
                         e.explosionTimer = 1.5;
                         return;
                     }
 
-                    if (playerIsDead) {
+                    // If player is dead, stop chasing
+                    if (isDead) {
+                        logStateChange(e, AIState.SEARCH);
                         e.state = AIState.SEARCH;
                         e.searchTimer = 3.0;
                         return;
@@ -416,7 +437,10 @@ export const EnemyAI = {
                         if (e.type === 'TANK') {
                             e.attackCooldown = 3000;
                             callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
+
+                            logAI(`[AI] ${e.type}_${e.id} hit player for ${e.damage} dmg (TANK_SMASH)`);
                         } else {
+                            logStateChange(e, AIState.BITING);
                             e.state = AIState.BITING;
                             e.grappleTimer = 0.8;
                             e.attackCooldown = 1500;
@@ -439,14 +463,17 @@ export const EnemyAI = {
                 if (e.grappleTimer > 0.4) e.mesh.rotateX(-0.5);
 
                 if (e.grappleTimer <= 0.4 && !e.mesh.userData.hasBittenThisCycle) {
-                    if (distSq < 10.0 && !playerIsDead) {
+                    if (distSq < 10.0 && !isDead) {
                         callbacks.onPlayerHit(e.damage, e, 'BITING');
                         callbacks.playSound('impact_flesh');
+
+                        logAI(`[AI] ${e.type}_${e.id} bit player for ${e.damage} dmg (BITING)`);
                     }
                     e.mesh.userData.hasBittenThisCycle = true;
                 }
 
-                if (e.grappleTimer <= 0 || playerIsDead) {
+                if (e.grappleTimer <= 0 || isDead) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     e.attackCooldown = 1000;
                     e.mesh.userData.hasBittenThisCycle = false;
@@ -467,7 +494,7 @@ export const EnemyAI = {
                 e.mesh.scale.setScalar(breatheScale);
 
                 e.mesh.visible = true;
-                e.mesh.matrixAutoUpdate = true; // [VINTERDÖD FIX] Måste återaktiveras eftersom globala optimeraren i GameSession slår av det.
+                e.mesh.matrixAutoUpdate = true;
 
                 if (e.indicatorRing) {
                     e.indicatorRing.visible = true;
@@ -488,9 +515,12 @@ export const EnemyAI = {
                 }
 
                 if (e.explosionTimer <= 0) {
+                    logAI(`[AI] ${e.type}_${e.id} exploded itself (BOMBER_EXPLOSION)`);
+
                     if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
                         callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
                     }
+
                     e.hp = 0;
                     e.deathState = 'EXPLODED';
                     e.deathVel.set(0, 10.0, 0);
@@ -509,69 +539,22 @@ export const EnemyAI = {
                 }
 
                 if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
+                    logStateChange(e, AIState.IDLE);
                     e.state = AIState.IDLE;
                 }
                 break;
         }
 
-        // --- 10. ZERO-GC HIT FLASH (Bosses use Emissive, Normal Zombies use Color for Instancing) ---
+        // --- 10. COOLDOWNS & BOUNCE ANIMATION ---
         if (e.attackCooldown > 0) e.attackCooldown -= delta * 1000;
-
-        if (e.isBoss && e.mesh && e.color !== undefined) {
-            const timeSinceHit = now - e.hitTime;
-            if (timeSinceHit < 100) {
-                if (!e.mesh.userData.isFlashing) {
-                    e.mesh.userData.isFlashing = true;
-                    const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
-
-                    if (isArc) _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4);
-                    else _flashColor.setHex(0xffffff);
-
-                    e.mesh.traverse((c: any) => {
-                        if (c.isMesh && c.material && c.material.emissive) {
-                            c.material.emissive.copy(_flashColor);
-                            c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
-                        }
-                    });
-                }
-            } else {
-                if (e.mesh.userData.isFlashing) {
-                    e.mesh.userData.isFlashing = false;
-                    e.mesh.traverse((c: any) => {
-                        if (c.isMesh && c.material && c.material.emissive) {
-                            c.material.emissive.setHex(0x000000);
-                            c.material.emissiveIntensity = 0.0;
-                        }
-                    });
-                }
-            }
-        } else if (!e.isBoss && e.color !== undefined) {
-            const timeSinceHit = now - e.hitTime;
-            if (timeSinceHit < 100) {
-                if (!e.mesh.userData.isFlashing) {
-                    e.mesh.userData.isFlashing = true;
-                    e.mesh.userData.originalColor = e.color;
-                    const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
-                    if (isArc) {
-                        e.color = _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4).getHex();
-                    } else {
-                        e.color = 0xffffff;
-                    }
-                }
-            } else {
-                if (e.mesh.userData.isFlashing) {
-                    e.mesh.userData.isFlashing = false;
-                    e.color = e.mesh.userData.originalColor || 0xffffff;
-                }
-            }
-        }
-
         if (e.slowTimer > 0) e.slowTimer -= delta;
 
         if (!isPhysicallyAirborne && e.state !== AIState.EXPLODING) {
@@ -634,7 +617,7 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
             if (e.burnTimer <= 0) {
                 e.hp -= 6;
                 e.lastDamageType = 'BURN';
-                if (callbacks.onDamageDealt) callbacks.onDamageDealt(6, e);
+                if (callbacks.applyDamage) callbacks.applyDamage(6, e);
                 e.burnTimer = 0.5;
             }
         }

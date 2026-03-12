@@ -29,7 +29,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
                 <div className="w-full h-full bg-[radial-gradient(circle_at_center,_transparent_0%,_black_95%)]" />
             </div>
 
-            <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center animate-[narrative-fade_1.5s_ease-out_forwards]`}>
+            <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center animate-[fadeIn_0.6s_ease-out_forwards]`}>
                 {/* Header */}
                 <div className="flex flex-col gap-2">
                     <h2 className={`text-red-600 font-bold tracking-[0.3em] ${isMobileDevice ? 'text-lg' : 'text-xl'} uppercase animate-pulse`}>

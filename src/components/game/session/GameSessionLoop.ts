@@ -12,6 +12,7 @@ import { TriggerHandler } from '../../../core/systems/TriggerHandler';
 import { CAMERA_HEIGHT } from '../../../content/constants';
 import { soundManager } from '../../../utils/SoundManager';
 import { EnemyManager } from '../../../core/EnemyManager';
+import { WeaponType } from '../../../content/weapons';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -110,15 +111,29 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
 
             // Throttle text spawning for continuous weapons to save performance
-            const isContinuous = type === 'FLAMETHROWER' || type === 'ARC_CANNON' || type === 'FLAME';
-            const textThrottle = isContinuous ? 200 : 0;
+            let isContinuous = false;
+            let color = '#ffffff';
+
+            if (isHighImpact) {
+                color = '#ff0000';
+            } else if (type === WeaponType.FLAMETHROWER || type === WeaponType.MOLOTOV || type === 'Burn') {
+                isContinuous = true;
+                color = '#ffaa00'; // Orange
+            } else if (type === WeaponType.ARC_CANNON) {
+                isContinuous = true;
+                color = '#00ffff'; // Cyan
+            } else if (type === WeaponType.MINIGUN) {
+                // If Minigun shoots extremely fast, you can set isContinuous = true here as well
+                color = '#cccccc'; // Gray
+            }
+
+            // 1. Räkna ut throttle EFTER att isContinuous har satts
+            const textThrottle = isContinuous ? 250 : 0;
+
+            // 2. Samla upp skadan i bakgrunden (Zero-GC)
+            enemy._accumulatedDamage = (enemy._accumulatedDamage || 0) + amount;
 
             if (_gameContext.now - (enemy._lastDamageTextTime || 0) > textThrottle) {
-                let color = '#ffffff';
-                if (isHighImpact) color = '#ff0000';
-                else if (type === 'FLAMETHROWER' || type === 'MOLOTOV' || type === 'FLAME') color = '#ffaa00';
-                else if (type === 'ARC_CANNON') color = '#00ffff';
-
                 if (_gameContext.spawnFloatingText) {
                     _gameContext.spawnFloatingText(enemy.mesh.position.x, enemy.isBoss ? 4.0 : 2.5, enemy.mesh.position.z, getCachedNumberString(amount), color);
                 }

@@ -1,6 +1,6 @@
-
 import { SoundCore } from './SoundCore';
 import { SoundBank } from './SoundBank';
+import { WeaponType } from '../../content/weapons';
 
 // --- GENERATORS ---
 // These functions create AudioBuffers for specific sound profiles.
@@ -786,13 +786,13 @@ export const GamePlaySounds = {
 export const WeaponSounds = {
     playShot: (core: SoundCore, weaponId: string) => {
         let key = 'shot_pistol';
-        if (weaponId === 'SMG') key = 'shot_smg';
-        else if (weaponId === 'Assault Rifle') key = 'shot_rifle';
-        else if (weaponId === 'Revolver') key = 'shot_revolver';
-        else if (weaponId === 'Shotgun') key = 'shot_shotgun';
-        else if (weaponId === 'Minigun') key = 'shot_minigun';
-        else if (weaponId === 'Arc-Cannon') key = 'shot_arc_cannon';
-        else if (weaponId === 'Flamethrower') key = 'shot_flamethrower';
+        if (weaponId === WeaponType.SMG) key = 'shot_smg';
+        else if (weaponId === WeaponType.RIFLE) key = 'shot_rifle';
+        else if (weaponId === WeaponType.REVOLVER) key = 'shot_revolver';
+        else if (weaponId === WeaponType.SHOTGUN) key = 'shot_shotgun';
+        else if (weaponId === WeaponType.MINIGUN) key = 'shot_minigun';
+        else if (weaponId === WeaponType.ARC_CANNON) key = 'shot_arc_cannon';
+        else if (weaponId === WeaponType.FLAMETHROWER) key = 'shot_flamethrower';
 
         // Random pitch map
         const pitch = 0.95 + Math.random() * 0.1;

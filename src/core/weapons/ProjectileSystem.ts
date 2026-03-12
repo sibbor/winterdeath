@@ -4,7 +4,6 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 import { haptic } from '../../utils/HapticManager';
 import { WEAPONS, WeaponType } from '../../content/weapons';
-import { FXSystem } from '../systems/FXSystem';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
@@ -154,7 +153,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
                 const totalRad = radius + (1.0 * e.widthScale * (e.originalScale || 1.0));
 
                 if (distSq < totalRad * totalRad) {
-                    // DELEGERAT TILL CENTRAL SKADEHANTERING
                     const isKill = ctx.applyDamage(e, damage, WeaponType.GRENADE, true);
 
                     if (isKill) {
@@ -223,7 +221,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             for (let i = 0; i < direct.length; i++) {
                 const e = direct[i];
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
-                    // LÄGG TILLBAKA: Registrera träffen direkt för stats/aggro
                     ctx.applyDamage(e, 0, WeaponType.MOLOTOV);
                     e.isBurning = true;
                     e.afterburnTimer = 5.0;
@@ -560,7 +557,8 @@ export const ProjectileSystem = {
                 }
 
                 if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
-                    ctx.onPlayerHit(10, fz, 'FLAME');
+                    //Use this: playerStatsSystem.handlePlayerHit(this, damage, attacker, type);
+                    //Instead of: ctx.onPlayerHit(10, fz, WeaponType.MOLOTOV);
                 }
             }
 
@@ -683,7 +681,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 projectile.hitEntities.add(enemy.id);
                 enemy.slowTimer = 0.5;
 
-                // DELEGERAT TILL CENTRAL SKADEHANTERING
                 const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
 
                 const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
