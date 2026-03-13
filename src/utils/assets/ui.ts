@@ -44,20 +44,29 @@ export const createTextSprite = (text: string) => {
 export const createSignMesh = (text: string, width: number, height: number, textColor: string = '#ffaa00', bgColor: string = '#000000') => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    // Higher res for clean text
-    canvas.width = 256; canvas.height = 64;
+    
+    // [VINTERDÖD MOD] Dynamic aspect ratio to prevent stretching
+    const aspect = width / height;
+    if (aspect >= 1) {
+        canvas.width = 512;
+        canvas.height = Math.round(512 / aspect);
+    } else {
+        canvas.height = 512;
+        canvas.width = Math.round(512 * aspect);
+    }
 
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.font = 'bold 40px Arial'; // Bigger font for 256x64
+    // Font size relative to height for consistent padding
+    const fontSize = Math.round(canvas.height * 0.75);
+    ctx.font = `bold ${fontSize}px Arial`; 
     ctx.fillStyle = textColor;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
-    // Emissive to shine a bit?
     const mat = new THREE.MeshBasicMaterial({ map: tex });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
     return mesh;
