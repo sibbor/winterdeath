@@ -175,7 +175,7 @@ export const VehicleGenerator = {
         signPolis.rotation.y = -Math.PI / 2;
         chassis.add(signPolis);
 
-        const signPolisR = signPolis.clone();
+        const signPolisR = new THREE.Mesh(signPolis.geometry, signPolis.material);
         signPolisR.position.x = 0.91 * S;
         signPolisR.rotation.y = Math.PI / 2;
         chassis.add(signPolisR);
@@ -214,17 +214,19 @@ export const VehicleGenerator = {
 
         const cabH = 1.4 * S; const cabD = 3.8 * S;
         const cabY = chassisY + (cH / 2) + (cabH / 2);
+
+        // Calculate roofY early for both the cross and the sirens
+        const roofY = cabY + (cabH / 2);
+
         VehicleGenerator._addPart(chassis, 2.0 * S, cabH, cabD, 0, cabY, -0.7 * S, mat);
 
-        const cross = createSignMesh("✚", 0.5 * S, 0.5 * S, '#ff0000', '#ffffff');
-        cross.position.set(-1.01 * S, cabY, -0.7 * S);
-        cross.rotation.y = -Math.PI / 2;
-        chassis.add(cross);
+        // Create a single, larger cross for the roof (Square aspect ratio handled by ui.ts)
+        const cross = createSignMesh("✚", 1.8 * S, 1.8 * S, '#ff0000', '#ffffff');
 
-        const crossR = cross.clone();
-        crossR.position.x = 1.01 * S;
-        crossR.rotation.y = Math.PI / 2;
-        chassis.add(crossR);
+        // Center on the cab roof (-0.7 * S is the cab center)
+        cross.position.set(0, roofY + 0.01 * S, -0.7 * S);
+        cross.rotation.x = -Math.PI / 2;
+        chassis.add(cross);
 
         VehicleGenerator._addWindow(chassis, 1.8 * S, 0.7 * S, 0.05 * S, 0, cabY, 1.2 * S);
         VehicleGenerator._addWindow(chassis, 0.05 * S, 0.6 * S, 1.0 * S, 1.01 * S, cabY, 0.5 * S);
@@ -237,8 +239,7 @@ export const VehicleGenerator = {
 
         VehicleGenerator._addTires(root, 4, 0.45 * S, 0.5 * S, 1.15 * S, 1.6 * S, -1.8 * S);
 
-        const roofY = cabY + (cabH / 2);
-        VehicleGenerator._addSirens(chassis, root, 0, roofY, 1.0 * S, true);
+        VehicleGenerator._addSirens(chassis, root, 0, roofY, 0.8 * S, true);
 
         VehicleGenerator._addLights(chassis, root, cW, cH, cD, chassisY);
         VehicleGenerator._addBrakeLights(chassis, root, cW, cH, cD, chassisY);
