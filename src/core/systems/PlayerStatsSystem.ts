@@ -24,6 +24,32 @@ export class PlayerStatsSystem implements System {
         // Empty for now, handles events via handlePlayerHit
     }
 
+    private updateBuffs(session: GameSessionLogic) {
+        /*
+        const state = session.state;
+        const family = this.opts.activeFamilyMembers.current;
+
+        // Reset to defaults
+        state.multipliers.reloadTime = 1.0;
+        state.multipliers.scrapGain = 1.0;
+        state.multipliers.fireRate = 1.0;
+        state.multipliers.damageResist = 1.0;
+
+        // Apply passives if family members are following
+        for (let i = 0; i < family.length; i++) {
+            const member = family[i];
+            if (!member.following) continue;
+
+            switch (member.name.toLowerCase()) {
+                case 'loke': state.multipliers.reloadTime = 0.8; break;
+                case 'jordan': state.multipliers.scrapGain = 1.25; break;
+                case 'esmeralda': state.multipliers.fireRate = 1.2; break;
+                case 'nathalie': state.multipliers.damageResist = 0.9; break;
+            }
+        }
+        */
+    }
+
     public handlePlayerHit(session: GameSessionLogic, damage: number, attacker: any, type: string) {
         const state = session.state;
         const now = performance.now();

@@ -549,16 +549,10 @@ export const ProjectileSystem = {
                     const e = nearby[_ni];
                     if (e.deathState !== 'ALIVE') continue;
                     if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
-                        ctx.applyDamage(e, 15, WeaponType.MOLOTOV);
                         e.isBurning = true;
                         e.afterburnTimer = 5.0;
                         e.burnTimer = 0.5;
                     }
-                }
-
-                if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
-                    //Use this: playerStatsSystem.handlePlayerHit(this, damage, attacker, type);
-                    //Instead of: ctx.onPlayerHit(10, fz, WeaponType.MOLOTOV);
                 }
             }
 

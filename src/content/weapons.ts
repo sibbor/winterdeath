@@ -128,7 +128,7 @@ export const WEAPONS: Record<string, WeaponStats> = {
     name: WeaponType.MOLOTOV, displayName: 'weapons.molotov', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
     damage: 15, baseDamage: 15, fireRate: 4, bulletSpeed: 0, magSize: 5, reloadTime: 0, range: 12, spread: 0, color: '#10b981',
     icon: PNG_PATH + 'molotov.png', iconIsPng: true,
-    piercing: true, pierceDecay: 1.0, impactType: 'BURNED', statusEffect: { type: 'burning', duration: 5.0, damagePerTick: 12 }
+    piercing: true, pierceDecay: 1.0, impactType: 'BURNED', statusEffect: { type: 'burning', duration: 5.0, damagePerTick: 5 }
   },
   [WeaponType.FLASHBANG]: {
     name: WeaponType.FLASHBANG, displayName: 'weapons.flashbang', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
