@@ -26,17 +26,19 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            if (coords.x !== "" && coords.z !== "") {
-                handleJump();
-            }
-        }
-    };
+
 
     return (
-        <GameModalLayout title={t('ui.teleport_title')} titleColorClass="text-white" maxWidthClass="max-w-2xl" isMobile={isMobileDevice} onClose={onCancel} showCloseButton={false}>
-            <div className="space-y-8" onKeyDown={handleKeyDown}>
+        <GameModalLayout 
+            title={t('ui.teleport_title')} 
+            titleColorClass="text-white" 
+            maxWidthClass="max-w-2xl" 
+            isMobile={isMobileDevice} 
+            onClose={onCancel} 
+            onConfirm={handleJump}
+            showCloseButton={false}
+        >
+            <div className="space-y-8">
                 <div className={`flex ${isMobileDevice ? 'flex-col sm:flex-row' : ''} gap-4 justify-center items-center`}>
                     <div className="flex flex-col items-start gap-2">
                         <label className="text-xs uppercase font-bold text-blue-400 tracking-widest">{t('ui.teleport_x')}</label>

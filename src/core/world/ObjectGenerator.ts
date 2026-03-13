@@ -33,10 +33,11 @@ const SHARED_GEO = {
     fencePost: new THREE.BoxGeometry(0.2, 1.2, 0.2),
     fenceRail: new THREE.BoxGeometry(0.1, 0.15, 1), // Skalas i Z per anrop
     meshFencePost: new THREE.BoxGeometry(0.12, 1, 0.12), // Skalas i Y per anrop
-    meshFenceRail: new THREE.CylinderGeometry(0.04, 0.04, 1).rotateX(Math.PI / 2), // Skalas i Y (som blir Z efter rot)
+    meshFenceRail: new THREE.CylinderGeometry(0.04, 0.04, 1).rotateX(Math.PI / 2),
     log: new THREE.CylinderGeometry(0.3, 0.3, 6, 8).rotateX(Math.PI / 2),
     stalk: new THREE.PlaneGeometry(0.1, 1).translate(0, 0.5, 0),
-    rock: new THREE.DodecahedronGeometry(1, 0)
+    rock: new THREE.DodecahedronGeometry(1, 0),
+    terminalBeam: new THREE.CylinderGeometry(0.6, 0.6, 8, 16, 1, true)
 };
 
 let fenceMat: THREE.MeshStandardMaterial | null = null;
@@ -50,6 +51,7 @@ const LOCAL_MATS = {
 };
 
 const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
+const terminalMaterialCache: Record<string, THREE.MeshBasicMaterial> = {};
 
 export const ObjectGenerator = {
 
@@ -917,58 +919,24 @@ export const ObjectGenerator = {
         consoleTop.rotation.x = -Math.PI / 6;
         group.add(consoleTop);
 
-        // 3. GLOWING SCREEN
+        // 3. SIMPLE SCREEN
         const color = type === 'ARMORY' ? 0xffaa00 :
             type === 'SPAWNER' ? 0xff0000 :
                 type === 'SKILLS' ? 0x00ff00 :
                     0x00ffff;
 
-        if (!neonHeartCache[color]) neonHeartCache[color] = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.9
-        });
+        const screenCacheKey = `screen_${color}`;
+        if (!terminalMaterialCache[screenCacheKey]) {
+            terminalMaterialCache[screenCacheKey] = new THREE.MeshBasicMaterial({
+                color: color
+            });
+        }
 
-        const glow = new THREE.Mesh(SHARED_GEO.plane, neonHeartCache[color]);
-        glow.scale.set(0.9, 0.5, 1);
-        glow.position.set(0, 1.3, -0.14);
-        glow.rotation.x = -Math.PI / 6;
-        group.add(glow);
-
-        // 4. MAGNIFICENT BEACON
-        const ringMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
-        const ring = new THREE.Mesh(SHARED_GEO.ring, ringMat);
-        ring.position.y = 0.02;
-        group.add(ring);
-
-        const beamMat = new THREE.MeshBasicMaterial({
-            color: color,
-            transparent: true,
-            opacity: 0.05,
-            side: THREE.DoubleSide,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
-
-        // Beam needs an open cylinder (we use shared cylinder and scale it)
-        const beamGeo = new THREE.CylinderGeometry(0.6, 0.6, 8, 16, 1, true);
-        const beam = new THREE.Mesh(beamGeo, beamMat);
-        beam.position.y = 4;
-        group.add(beam);
-
-        group.userData.effects = [
-            { type: 'light', color, intensity: 20, distance: 15, offset: new THREE.Vector3(0, 1.5, 0) },
-            {
-                type: 'emitter',
-                particle: 'spark',
-                interval: 150,
-                count: 1,
-                offset: new THREE.Vector3(0, 0.2, 0),
-                spread: 0.8,
-                color: color,
-                velocity: new THREE.Vector3(0, 1.5, 0)
-            }
-        ];
+        const screen = new THREE.Mesh(SHARED_GEO.plane, terminalMaterialCache[screenCacheKey]);
+        screen.scale.set(0.9, 0.5, 1);
+        screen.position.set(0, 1.3, -0.14);
+        screen.rotation.x = -Math.PI / 6;
+        group.add(screen);
 
         return group;
     },

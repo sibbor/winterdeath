@@ -2,18 +2,34 @@
 import * as THREE from 'three';
 import { FAMILY_MEMBERS, PLAYER_CHARACTER } from '../../content/constants';
 
+const spriteTextureCache: Record<string, THREE.CanvasTexture> = {};
+
 export const createTextSprite = (text: string) => {
+    if (spriteTextureCache[text]) {
+        const mat = new THREE.SpriteMaterial({
+            map: spriteTextureCache[text],
+            transparent: true,
+            depthWrite: false,
+            depthTest: true
+        });
+        const sprite = new THREE.Sprite(mat);
+        sprite.scale.set(4, 1, 1);
+        return sprite;
+    }
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
     canvas.width = 256;
     canvas.height = 64;
-    ctx.font = 'bold 32px Arial';
+    ctx.font = 'bold 20px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
+    spriteTextureCache[text] = tex;
+
     const mat = new THREE.SpriteMaterial({
         map: tex,
         transparent: true,

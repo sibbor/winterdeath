@@ -106,6 +106,8 @@ export class PlayerStatsSystem implements System {
         const state = session.state;
         const now = performance.now();
 
+        console.log("[PlayerStatsSystem] handlePlayerHit", damage, attacker, type, isDoT);
+
         if (state.isDead || state.sectorState?.isInvincible) return;
 
         // Apply Damage Resistance Multiplier (Nathalie)
@@ -134,11 +136,65 @@ export class PlayerStatsSystem implements System {
         }
 
         state.lastDamageTime = now;
-        if (type === 'Boss') state.bossDamageTaken += actualDmg;
+        // Boss check
+        if ((attacker && attacker.isBoss) || type === 'Boss' || type === DamageType.BOSS) {
+            state.bossDamageTaken += actualDmg;
+        }
 
         // Visuals
         if (state.particles && !isDoT) {
-            FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.2, this.playerGroup.position.z, 'splash', 5);
+            let pType = 'blood_splat';
+            let pCount = 5;
+            let pScale = 3.0;
+            let pColor: number | undefined = undefined;
+
+            switch (type) {
+                case DamageType.BITE:
+                case DamageType.PHYSICAL:
+                case DamageType.BLEED:
+                    pType = 'blood_splat';
+                    break;
+                case DamageType.BURN:
+                    pType = 'fire';
+                    pCount = 8;
+                    pScale = 2.0;
+                    break;
+                case DamageType.EXPLOSION:
+                    pType = 'explosion';
+                    pCount = 15;
+                    pScale = 1.5;
+                    break;
+                case DamageType.DROWNING:
+                    pType = 'splash';
+                    break;
+                case DamageType.FALL:
+                    pType = 'impact_splat';
+                    pColor = 0x888888;
+                    pScale = 3.5;
+                    break;
+                case DamageType.ELECTRIC:
+                    pType = 'spark';
+                    pCount = 10;
+                    pScale = 1.2;
+                    break;
+                default:
+                    pType = 'blood_splat';
+                    break;
+            }
+
+            FXSystem.spawnPart(
+                session.engine.scene,
+                state.particles,
+                this.playerGroup.position.x,
+                1.3,
+                this.playerGroup.position.z,
+                pType,
+                pCount,
+                undefined,
+                undefined,
+                pColor,
+                pScale
+            );
         }
 
         // Death check

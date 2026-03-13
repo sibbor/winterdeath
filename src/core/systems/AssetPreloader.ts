@@ -326,6 +326,7 @@ export const AssetPreloader = {
                 // No shadows for FX
                 addToWarmup(new THREE.Mesh(GEOMETRY.splash, MATERIALS.splash), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.bloodSplat, MATERIALS.bloodSplat), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.impactSplat, MATERIALS.impactSplat), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.decal, MATERIALS.bloodDecal), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.splatterDecal, MATERIALS.bloodStainDecal), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.fireZone, MATERIALS.fireZone), false, false);
@@ -622,7 +623,7 @@ export const AssetPreloader = {
                 const fxTypes = [
                     'blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke',
                     'debris', 'glass', 'flash', 'splash',
-                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat',
+                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat', 'impact_splat',
                     'campfire_flame', 'campfire_spark', 'campfire_smoke',
                     'scrap'
                 ];

@@ -121,22 +121,43 @@ const createSplatterGeo = () => {
 const createBloodSplatGeo = () => {
     const w = 0.3;
     const h = 0.5;
-
     const plane1 = new THREE.PlaneGeometry(w, h);
     plane1.translate(0, h / 2, 0);
-
     const plane2 = plane1.clone();
     plane2.rotateY(Math.PI / 2);
-
     const geo = BufferGeometryUtils.mergeGeometries([plane1, plane2]);
     geo.computeVertexNormals();
-
     const count = geo.attributes.position.count;
     const colors = new Float32Array(count * 3);
     const pos = geo.attributes.position;
     const topColor = new THREE.Color(0xaa0000);
     const bottomColor = new THREE.Color(0x440000);
+    for (let i = 0; i < count; i++) {
+        const y = pos.getY(i);
+        const t = (y + 1) / 2;
+        const c = topColor.clone().lerp(bottomColor, 1.0 - t);
+        colors[i * 3] = c.r;
+        colors[i * 3 + 1] = c.g;
+        colors[i * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    return geo;
+};
 
+const createImpactSplatGeo = () => {
+    const w = 0.35;
+    const h = 0.55;
+    const plane1 = new THREE.PlaneGeometry(w, h);
+    plane1.translate(0, h / 2, 0);
+    const plane2 = plane1.clone();
+    plane2.rotateY(Math.PI / 2);
+    const geo = BufferGeometryUtils.mergeGeometries([plane1, plane2]);
+    geo.computeVertexNormals();
+    const count = geo.attributes.position.count;
+    const colors = new Float32Array(count * 3);
+    const pos = geo.attributes.position;
+    const topColor = new THREE.Color(0xffffff);
+    const bottomColor = new THREE.Color(0xaaaaaa);
     for (let i = 0; i < count; i++) {
         const y = pos.getY(i);
         const t = (y + 1) / 2;
@@ -188,5 +209,6 @@ export const GEOMETRY = {
     flame: new THREE.TetrahedronGeometry(0.5, 1), // [VINTERDÖD] Reduced poly count from Dodecahedron to fix AdditiveBlending fill rate lag
     showInPreloader: true, // Marker for preloader
     bloodSplat: createBloodSplatGeo(),
+    impactSplat: createImpactSplatGeo(),
     splash: createSplashGeo()
 };

@@ -701,16 +701,32 @@ const App: React.FC = () => {
                     />
                 ) : (
                     <ScreenPlaygroundArmoryStation
-                        loadout={gameState.loadout}
+                        currentLoadout={gameState.loadout}
                         weaponLevels={gameState.weaponLevels}
                         isMobileDevice={isMobileDevice}
-                        sectorState={{ envOverride: gameState.environmentOverrides?.[gameState.currentSector] }}
+                        sectorState={{
+                            unlimitedThrowables: gameState.loadout.throwable === 'INF_NADE', // Just a placeholder check if we had one
+                            envOverride: gameState.environmentOverrides?.[gameState.currentSector]
+                        }}
                         onClose={() => {
                             if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                             setActiveOverlay(null);
                         }}
-                        onSave={(loadout, levels) => {
-                            setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
+                        onSave={(newStats, newLoadout, newLevels, newSectorState) => {
+                            setGameState(prev => {
+                                const newOverrides = { ...(prev.environmentOverrides || {}) };
+                                if (newSectorState.envOverride) {
+                                    newOverrides[prev.currentSector] = newSectorState.envOverride;
+                                }
+                                return {
+                                    ...prev,
+                                    stats: newStats,
+                                    loadout: newLoadout,
+                                    weaponLevels: newLevels,
+                                    environmentOverrides: newOverrides
+                                };
+                            });
+                            setActiveOverlay(null);
                         }}
                         stats={gameState.stats}
                     />
@@ -734,8 +750,19 @@ const App: React.FC = () => {
                             if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                             setActiveOverlay(null);
                         }}
-                        onSave={(stats) => {
-                            setGameState(prev => ({ ...prev, stats }));
+                        onSave={(newStats, newSectorState) => {
+                            setGameState(prev => {
+                                const newOverrides = { ...(prev.environmentOverrides || {}) };
+                                if (newSectorState.envOverride) {
+                                    newOverrides[prev.currentSector] = newSectorState.envOverride;
+                                }
+                                return {
+                                    ...prev,
+                                    stats: newStats,
+                                    environmentOverrides: newOverrides
+                                };
+                            });
+                            setActiveOverlay(null);
                         }}
                     />
                 )

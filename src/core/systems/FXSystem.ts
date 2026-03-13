@@ -250,7 +250,7 @@ export const FXSystem = {
             t === 'flame' || t === 'spark' || t === 'smoke' || t === 'debris' || t === 'large_smoke' ||
             t === 'glass' || t === 'enemy_effect_stun' || t === 'electric_flash' ||
             t === 'enemy_effect_flame' || t === 'enemy_effect_spark' ||
-            t === 'gore' || t === 'splash' ||
+            t === 'gore' || t === 'splash' || t === 'blood_splat' || t === 'impact_splat' ||
             t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'flamethrower_fire';
 
         const p = FXSystem.getPooledState();
@@ -407,7 +407,7 @@ export const FXSystem = {
             MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
         }
 
-        const types = ['blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire'];
+        const types = ['blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'blood_splat', 'impact_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire'];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
             if (imesh.parent !== scene) scene.add(imesh);
@@ -722,6 +722,8 @@ export const FXSystem = {
             else if (type === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (type === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
             else if (type === 'blood_splat') { geo = GEOMETRY.bloodSplat; mat = MATERIALS.bloodSplat; }
+            else if (type === 'impact_splat') { geo = GEOMETRY.impactSplat; mat = MATERIALS.impactSplat; }
+            else if (type === 'bullet_shell') { geo = GEOMETRY.bullet; mat = MATERIALS.bullet; }
             else if (type === 'gore') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();

@@ -25,6 +25,8 @@ export interface GameSessionHandle {
     getSystems: () => { id: string; enabled: boolean }[];
     setSystemEnabled: (id: string, enabled: boolean) => void;
     getMergedSessionStats: () => any;
+    spawnBoss: (type: string, pos?: THREE.Vector3) => any;
+    spawnEnemies: (newEnemies: any[]) => void;
 }
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
@@ -319,7 +321,16 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         adjustPitch: (dir: number) => refs.engineRef.current?.camera.adjustPitch(dir * 2.0),
         getSystems: () => refs.gameSessionRef.current?.getSystems() ?? [],
         setSystemEnabled: (id: string, enabled: boolean) => refs.gameSessionRef.current?.setSystemEnabled(id, enabled),
-        spawnBoss: (type: string, pos?: THREE.Vector3) => refs.sectorContextRef.current?.spawnBoss(type, pos)
+        spawnBoss: (type: string, pos?: THREE.Vector3) => refs.sectorContextRef.current?.spawnBoss(type, pos),
+        spawnEnemies: (newEnemies: any[]) => {
+            for (let i = 0; i < newEnemies.length; i++) {
+                const e = newEnemies[i];
+                refs.stateRef.current.enemies.push(e);
+                if (e.type && !refs.stateRef.current.seenEnemies.includes(e.type)) {
+                    refs.stateRef.current.seenEnemies.push(e.type);
+                }
+            }
+        }
     }));
 
     // 4. Initialization and Teardown

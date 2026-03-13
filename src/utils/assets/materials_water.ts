@@ -19,10 +19,15 @@ export const WATER_STYLES: Record<'nordic' | 'ice', WaterStyleConfig> = {
 const MAX_RIPPLES = 16;
 const MAX_OBJECTS = 8;
 
-// Safe fallback texture to satisfy WebGL2 samplers before the image loads
+// Safe fallback texture to satisfy WebGL samplers before the image loads
 const dummyNoise = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
+dummyNoise.colorSpace = THREE.SRGBColorSpace;
 dummyNoise.needsUpdate = true;
 
+/**
+ * Modifies a standard material to physically cut out holes (discard pixels)
+ * where water bodies exist, preventing Z-fighting and allowing water depth.
+ */
 export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
     // Pre-declare uniform object to permanently anchor it to the material instance
     mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
@@ -59,25 +64,27 @@ export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
             `#include <clipping_planes_fragment>
             for(int i = 0; i < 8; i++) {
                 vec4 water = uWaterBodies[i];
-                if (water.w < -0.5) continue; // Inactive
+                if (water.w < -0.5) continue; // Inactive water body
                 
                 float dist = length(vWorldPos_Cutout.xz - water.xy);
-                if (water.w > 0.5) { // Circle
+                if (water.w > 0.5) { // Circular cutout
                     if (dist < water.z) discard;
-                } else { // Rect (z is radius/half-width)
+                } else { // Rectangular cutout (z is half-width/depth)
                     if (abs(vWorldPos_Cutout.x - water.x) < water.z && abs(vWorldPos_Cutout.z - water.y) < water.z) discard;
                 }
-            }
-            `
+            }`
         );
     };
 
-    // [VINTERDÖD FIX] Add unique UUID so multiple ground types (dirt/snow) don't share the same shader and crash
+    // Ensure unique cache key so multiple ground types don't share the same shader map and crash
     mat.customProgramCacheKey = () => 'ground_cutout_material_' + mat.uuid;
     mat.needsUpdate = true;
     return mat;
 }
 
+/**
+ * Creates an advanced, interactive water shader material.
+ */
 export function createWaterMaterial(
     styleName: 'nordic' | 'ice',
     width: number,
@@ -106,7 +113,7 @@ export function createWaterMaterial(
             uClarity: { value: config.clarity !== undefined ? config.clarity : 1.0 },
             uRipples: { value: ripples },
             uObjectPositions: { value: objectPositions },
-            uLightPosition: { value: new THREE.Vector3() },
+            uLightPosition: { value: new THREE.Vector3(10, 20, 10) },
             uWaterDirection: { value: new THREE.Vector2(1, 0) },
             uNoiseTexture: { value: TEXTURES.water_ripple || dummyNoise }
         },
@@ -133,9 +140,11 @@ export function createWaterMaterial(
                 float waveScale = 0.45;
                 float phaseXZ = dot(worldPosition.xz, uWaterDirection);
                 
+                // Procedural wave heights
                 float w1 = pow(sin(phaseXZ * waveScale - uTime * 1.5) * 0.5 + 0.5, 3.2) * 0.45;
                 float w2 = pow(sin(phaseXZ * (waveScale * 1.6) + worldPosition.z * 0.2 - uTime * 2.0) * 0.5 + 0.5, 2.5) * 0.22;
                 
+                // Edge dampening to keep shores calm
                 float edgeDist = 0.0;
                 if (uIsCircle > 0.5) {
                     edgeDist = (uPlaneSize.x * 0.5) - length(position.xz);
@@ -145,9 +154,9 @@ export function createWaterMaterial(
                 float edgeDampen = smoothstep(0.0, 2.0, max(0.0, edgeDist));
                 
                 float baseWave = (w1 + w2) * uWaveStrength * edgeDampen;
-                
                 float noiseDetail = texture2D(uNoiseTexture, worldPosition.xz * 0.1).r;
                 
+                // Process dynamic ripples
                 float rippleSum = 0.0;
                 for(int i = 0; i < ${MAX_RIPPLES}; i++) {
                     vec4 rip = uRipples[i];
@@ -212,12 +221,14 @@ export function createWaterMaterial(
 
                 float depthFactor = smoothstep(0.0, uWaterDepth, distToEdge);
                 
+                // Fog and opacity calculations
                 float fogStartDepth = mix(0.0, uWaterDepth * 2.0, uClarity); 
                 float fogFactor = smoothstep(fogStartDepth, uWaterDepth * 2.5, distToEdge) * (1.0 - uClarity);
                 
                 float defaultOpacity = mix(0.15, uOpacity, depthFactor);
                 float finalOpacity = mix(defaultOpacity, 1.0, fogFactor);
 
+                // Calculate procedural normals based on world position derivatives
                 vec3 fdx = dFdx(vWorldPos);
                 vec3 fdy = dFdy(vWorldPos);
                 vec3 normal = normalize(cross(fdx, fdy));
@@ -228,15 +239,13 @@ export function createWaterMaterial(
                 
                 float noise = texture2D(uNoiseTexture, vWorldPos.xz * 0.1).r;
                 
+                // Lighting
                 float lightDot = dot(normal, lightDir);
                 float faceGlow = step(0.4, lightDot) * 0.85; 
-                
                 float spec = pow(max(dot(normal, halfDir), 0.0), 24.0) * (0.6 + 0.5 * noise);
-                
                 float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0) * uFresnelStrength;
                 
                 vec3 specularCol = vec3(1.0, 1.0, 1.0) * (faceGlow + spec * 2.0 + rim * 0.6);
-
                 float scatter = clamp(vWaveHeight * 2.5, 0.0, 0.4) * max(0.0, dot(normal, lightDir));
                 
                 vec3 clearWater = mix(uShallowColor, uBaseColor, depthFactor);
@@ -246,9 +255,9 @@ export function createWaterMaterial(
                 waterColor = mix(waterColor, waterColor + scatter, 0.6);
                 float skyCatch = max(0.0, normal.y * 0.1); 
                 waterColor += skyCatch * uShallowColor * (1.0 - depthFactor);
-                
                 waterColor = mix(waterColor, waterColor + specularCol, 0.9);
 
+                // Shoreline and dynamic object foam
                 float breathe = sin(uTime * 1.2) * 0.2;
                 float shoreStroke = step(0.96, 1.0 - (distToEdge / (1.8 + breathe)));
                 
@@ -262,7 +271,6 @@ export function createWaterMaterial(
                         float dist = length(localPos);
                         
                         float peakPos = mod(pulseTime * 12.0, 24.0);
-                        
                         float uvScale = 1.0 / (peakPos * 0.5 + 1.0);
                         vec2 objUV = localPos * uvScale + 0.5;
                         
@@ -276,12 +284,13 @@ export function createWaterMaterial(
                         float pulseFade = 1.0 - smoothstep(18.0, 24.0, peakPos);
                         
                         float stylizedRings = step(0.15, ringMask * proximity * pulseFade * foamTex);
-                        
                         objFoam = max(objFoam, stylizedRings * op.w);
                     }
                 }
+                
                 float finalFoam = clamp(shoreStroke + objFoam, 0.0, 1.0);
                 vec3 finalColor = mix(waterColor, uFoamColor, finalFoam * 0.95);
+                
                 gl_FragColor = vec4(finalColor, finalOpacity);
             }
         `,
@@ -291,6 +300,10 @@ export function createWaterMaterial(
     });
 }
 
+/**
+ * Patches vegetation materials (like reeds or water lilies) to sway correctly 
+ * with the water flow based on global water direction and time.
+ */
 export const patchWaterVegetationMaterial = <T extends THREE.Material>(material: T): T => {
     const waterUniforms = {
         uTime: { value: 0 },
@@ -343,12 +356,14 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
             float waveSway = flowVelocity * (0.6 * uWaveStrength);
             float crossSway = crossVelocity * (0.25 * uWaveStrength);
 
+            // Calculate directional offset
             vec3 worldOffset = vec3(
                 uWaterDirection.x * waveSway - uWaterDirection.y * crossSway, 
                 0.0, 
                 uWaterDirection.y * waveSway + uWaterDirection.x * crossSway
             ) * bend;
             
+            // Inverse transform back to local space
             mat3 m = mat3(instanceWorldMatrix);
             vec3 scaleSq = vec3(dot(m[0], m[0]), dot(m[1], m[1]), dot(m[2], m[2]));
             mat3 invMat = transpose(mat3(m[0] / scaleSq.x, m[1] / scaleSq.y, m[2] / scaleSq.z));
@@ -358,7 +373,7 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
         );
     };
 
-    // [VINTERDÖD FIX] Add unique UUID so WaterLily and Seaweed don't share the same shader map and crash
+    // Ensure unique cache key so vegetation doesn't crash the material system
     material.customProgramCacheKey = () => 'water_veg_mat_' + material.uuid;
     material.needsUpdate = true;
     return material;
