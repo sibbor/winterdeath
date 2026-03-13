@@ -137,7 +137,7 @@ export class PlayerStatsSystem implements System {
 
         state.lastDamageTime = now;
         // Boss check
-        if ((attacker && attacker.isBoss) || type === 'Boss' || type === DamageType.BOSS) {
+        if ((attacker && attacker.isBoss) || type === DamageType.BOSS) {
             state.bossDamageTaken += actualDmg;
         }
 

@@ -216,14 +216,14 @@ export class CinematicSystem implements System {
             const isSpeaking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking) || (actor === cinematic.speakers[1] && !isPlayerSpeaking))
                 && timeInLine < cinematic.typingDuration;
 
+            const isThinking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking))
+                && activeScriptLine?.type === 'thought';
+
             // Named Animation Clip Support (e.g. for Bosses or custom GLTFs)
             if (actor.userData.mixer && isSpeaking) {
                 const action = actor.userData.mixer.clipAction('speak');
                 if (action) {
                     action.play();
-                    // We don't call update on the mixer here - that should be handled by the 
-                    // System that owns the mixer (e.g. EnemySystem or ModelFactory update)
-                    // or we can update it here if it's strictly a cinematic actor.
                 }
             } else if (actor.userData.mixer && !isSpeaking) {
                 const action = actor.userData.mixer.clipAction('speak');
@@ -240,7 +240,7 @@ export class CinematicSystem implements System {
             PlayerAnimation.update(body as THREE.Mesh, {
                 isMoving: false, isRushing: false, isRolling: false,
                 rollStartTime: 0, staminaRatio: 1.0,
-                isSpeaking, isThinking: false, isIdleLong: false,
+                isSpeaking, isThinking, isIdleLong: false,
                 isSwimming: false, isWading: false,
                 seed: actor.userData.seed || 0
             }, now, delta);

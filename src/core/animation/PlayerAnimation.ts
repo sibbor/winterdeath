@@ -45,6 +45,7 @@ export const PlayerAnimation = {
 
         // --- 2. State Machine (Priority Order) ---
 
+        // Death animation
         if (animState.isDead) {
             // High-speed death animation (350ms)
             const deathDuration = 350;
@@ -52,8 +53,10 @@ export const PlayerAnimation = {
 
             rotationX = -Math.PI / 2 * progress;
             positionY = -0.8 * progress; // Sink into snow/ground
+        }
 
-        } else if (animState.isRolling) {
+        // Rolling animation
+        else if (animState.isRolling) {
             // FIX: Clamp progress to prevent overshoot if state lingers
             const progress = Math.min(1.0, Math.max(0, (now - animState.rollStartTime) / 300));
             rotationX = progress * Math.PI * 2;
@@ -62,8 +65,10 @@ export const PlayerAnimation = {
             scaleXZ = 1.0 + (squashFactor * 0.4);
             positionY = 0.2;
 
-        } else if (animState.isSwimming) {
-            // Swimming Animation: Heavy lean, deep bobbing
+        }
+
+        // Swimming Animation: Heavy lean, deep bobbing
+        else if (animState.isSwimming) {
             const swimSpeed = 0.008;
             const bob = Math.sin(now * swimSpeed);
             rotationX = 1.45; // [VINTERDÖD] Flatter "swimming" pose
@@ -71,7 +76,10 @@ export const PlayerAnimation = {
             scaleY = 1.0 + bob * 0.05;
             rotationZ = Math.sin(now * swimSpeed * 0.5) * 0.1;
 
-        } else if (animState.isMoving) {
+        }
+
+        // Moving animation
+        else if (animState.isMoving) {
             const moveSpeed = animState.isRushing ? 0.020 : 0.012;
             const wadingFactor = animState.isWading ? 0.6 : 1.0;
             const bob = Math.sin(now * moveSpeed * wadingFactor);
@@ -87,35 +95,51 @@ export const PlayerAnimation = {
                 positionY = Math.abs(bob) * 0.2;
             }
 
-        } else {
-            // Stationary behaviors (Breathing, Speaking, Thinking)
-            const breathe = Math.sin(now * breatheSpeed + animState.seed);
-            scaleY = 1.0 + (breathe * breatheAmp);
-            scaleXZ = 1.0 - (breathe * (breatheAmp * 0.5));
+        }
 
+        // Stationary behaviors (Breathing, Speaking, Thinking)
+        else {
+            // Breathing intensity and added subtle bobbing
+            const breathe = Math.sin(now * breatheSpeed + animState.seed);
+            const idleSine = Math.sin(now * 0.002 + animState.seed * 0.5);
+
+            scaleY = 1.0 + (breathe * breatheAmp * 1.5);
+            scaleXZ = 1.0 - (breathe * (breatheAmp * 0.75));
+
+            // Subtle weight shift/sway
+            rotationZ = Math.sin(now * 0.001 + animState.seed) * 0.03;
+
+            // Speaking
             if (animState.isSpeaking) {
                 const talkWobble = Math.sin(now * 0.03) * 0.1;
                 scaleY += talkWobble + 0.1;
                 scaleXZ -= talkWobble * 0.5;
             }
 
-            if (animState.isThinking) {
+            // Thinking
+            else if (animState.isThinking) {
                 const nod = Math.sin(now * 0.008);
                 rotationX = 0.3 + (nod * 0.1); // Pensive lean
-                rotationZ = Math.sin(now * 0.003) * 0.1;
+                rotationZ += Math.sin(now * 0.003) * 0.1;
             }
 
-            // Long Idle Fidgeting
-            if (animState.isIdleLong && !animState.isSpeaking && !animState.isThinking) {
+            // Long Idle Fidgeting (Shivering/Looking around)
+            else if (animState.isIdleLong) {
                 const t = now * 0.001;
                 const shiverTrigger = Math.sin(t * 0.15 + animState.seed);
                 if (shiverTrigger > 0.8) {
-                    rotationZ = Math.sin(now * 0.05) * 0.03;
+                    rotationZ += Math.sin(now * 0.05) * 0.05;
                 }
                 const shiftTrigger = Math.sin(t * 0.6 + animState.seed * 3);
                 if (shiftTrigger > 0.95) {
-                    positionY = Math.sin(now * 0.01) * 0.05;
+                    positionY = Math.sin(now * 0.01) * 0.08;
+                    rotationX += Math.sin(now * 0.005) * 0.05;
                 }
+            }
+
+            // Gentle idle bob
+            else {
+                positionY = idleSine * 0.03;
             }
         }
 
@@ -130,17 +154,22 @@ export const PlayerAnimation = {
         mesh.position.y = (baseHeight * scaleY) + positionY;
 
         // --- 4. Equipment Aim Adjustment (Zero-GC) ---
-        // If swimming, the body is tilted forward. We need to tilt the gun/laser BACK to aim straight.
+        // [VINTERDÖD FIX] Counter-rotate the weapon to keep it pointing forward despite body lean/tilt
         const children = mesh.children;
         const cLen = children.length;
         for (let i = 0; i < cLen; i++) {
             const child = children[i] as THREE.Object3D;
             if (child.name === 'gun' || child.userData.isLaserSight) {
+                // Keep the weapon horizontal regardless of the character's lean (swimming, moving, thinking)
+                child.rotation.x = -rotationX;
+
+                // Adjust position while swimming to look like it's held in front of the swimmer's head
                 if (animState.isSwimming) {
-                    // Counter-rotate the tilt (1.45) to aim forward (0.0 approx)
-                    child.rotation.x = -1.45;
+                    child.position.y = 0.6; // Raise relative to tilted body
+                    child.position.z = 0.8; // Move further "forward" (which is UP in swimming pose)
                 } else {
-                    child.rotation.x = 0;
+                    child.position.y = 0.4; // Default gun/laser height
+                    child.position.z = 0.5; // Default distance forward
                 }
             }
         }

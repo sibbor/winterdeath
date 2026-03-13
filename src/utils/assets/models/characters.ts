@@ -128,7 +128,13 @@ export const CharacterModels = {
 
         body.position.y = baseY;
         body.castShadow = true;
-        body.userData = { isBody: true, geometryHeight }; // Metadata for internal parts
+        // [VINTERDÖD MOD] Added metadata so PlayerAnimation.update can properly offset and pulse the body
+        body.userData = { 
+            isBody: true, 
+            geometryHeight,
+            baseY: baseY,
+            baseScale: 1.0 
+        }; 
 
         group.scale.setScalar(scale);
 

@@ -172,8 +172,11 @@ export class FamilySystem implements System {
                 fm.position.copy(this.playerGroup.position);
                 fm.position.x += spreadX;
                 fm.position.z += spreadZ;
-                fm.position.y = 0; // Reset to ground level
+                
+                // [VINTERDÖD FIX] Don't force y=0 here, let the animation system handle floor alignment 
+                // based on buoyancy or ground checks in the next frame to prevent "pop" or sinking.
                 fm.rotation.set(0, 0, 0); // Reset rotation so they don't lean
+                userData.lastMoveTime = now; // Reset idle timer
             }
 
             // --- 1. Ring Pulse Visual ---
@@ -247,6 +250,10 @@ export class FamilySystem implements System {
                 _animState.isRolling = false; // Family members don't dodge-roll
                 _animState.staminaRatio = state.stamina / Math.max(1, state.maxStamina);
                 _animState.isIdleLong = isIdleLong;
+
+                // [VINTERDÖD MOD] Support speaking/thinking for family members during gameplay
+                _animState.isSpeaking = now < (userData.speakingUntil || 0);
+                _animState.isThinking = now < (userData.thinkingUntil || 0);
 
                 const engine = WinterEngine.getInstance();
                 if (engine?.water) {
