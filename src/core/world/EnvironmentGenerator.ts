@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MATERIALS } from '../../utils/assets/materials';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from './SectorGenerator';
+import { TreeType } from '../../types/enemy';
 
 // Pre-allocated math objects for fast matrix composition.
 // Blazing fast compared to using Object3D.updateMatrix().
@@ -387,11 +388,11 @@ export const EnvironmentGenerator = {
     initNaturePrototypes: async (yieldToMain?: () => Promise<void>) => {
         const VARIANTS = 3;
         for (let i = 0; i < VARIANTS; i++) {
-            if (!prototypes[`PINE_${i}`]) prototypes[`PINE_${i}`] = generatePinePrototype(i);
-            if (!prototypes[`SPRUCE_${i}`]) prototypes[`SPRUCE_${i}`] = generateSprucePrototype(i);
-            if (!prototypes[`OAK_${i}`]) prototypes[`OAK_${i}`] = generateOakPrototype(i);
-            if (!prototypes[`BIRCH_${i}`]) prototypes[`BIRCH_${i}`] = generateBirchPrototype(i);
-            if (!prototypes[`DEAD_${i}`]) prototypes[`DEAD_${i}`] = generateDeadTreePrototype(i);
+            if (!prototypes[`${TreeType.PINE}_${i}`]) prototypes[`${TreeType.PINE}_${i}`] = generatePinePrototype(i);
+            if (!prototypes[`${TreeType.SPRUCE}_${i}`]) prototypes[`${TreeType.SPRUCE}_${i}`] = generateSprucePrototype(i);
+            if (!prototypes[`${TreeType.OAK}_${i}`]) prototypes[`${TreeType.OAK}_${i}`] = generateOakPrototype(i);
+            if (!prototypes[`${TreeType.BIRCH}_${i}`]) prototypes[`${TreeType.BIRCH}_${i}`] = generateBirchPrototype(i);
+            if (!prototypes[`${TreeType.DEAD}_${i}`]) prototypes[`${TreeType.DEAD}_${i}`] = generateDeadTreePrototype(i);
             if (yieldToMain) await yieldToMain();
         }
     },
@@ -792,10 +793,10 @@ export const EnvironmentGenerator = {
 
     // Varning: createDeadTree och createTree returnerar "THREE.Group". Använder du dessa i dina skript 
     // för att spawna tusentals individuella träd så bryter du Instancingen. Forest-funktionerna är säkra.
-    createTree: (type: 'PINE' | 'SPRUCE' | 'OAK' | 'DEAD' | 'BIRCH' = 'PINE', scale: number = 1.0, variant: number = 0): THREE.Group => {
+    createTree: (type: TreeType = TreeType.PINE, scale: number = 1.0, variant: number = 0): THREE.Group => {
         const group = new THREE.Group();
         const key = `${type}_${variant % 3}`;
-        const proto = prototypes[key] || prototypes[`${type}_0`] || prototypes['PINE_0'];
+        const proto = prototypes[key] || prototypes[`${type}_0`] || prototypes[`${TreeType.PINE}_0`];
 
         if (!proto) return group;
 
@@ -1185,7 +1186,7 @@ export const EnvironmentGenerator = {
     },
 
     createDeadTree: (variant: 'standing' | 'fallen' = 'standing', scale: number = 1.0): THREE.Group => {
-        const tree = EnvironmentGenerator.createTree('DEAD', scale, Math.floor(Math.random() * 3));
+        const tree = EnvironmentGenerator.createTree(TreeType.DEAD, scale, Math.floor(Math.random() * 3));
         if (variant === 'fallen') {
             tree.rotation.z = Math.PI / 2 + (Math.random() - 0.5) * 0.5;
             tree.position.y = 0.5 * scale;

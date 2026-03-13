@@ -127,7 +127,8 @@ export const WeaponHandler = {
 
         if (input.r && !state.isReloading && !isThrowable && !isRadio && state.weaponAmmo[state.activeWeapon] < wep.magSize) {
             state.isReloading = true;
-            state.reloadEndTime = now + wep.reloadTime;
+            const actualReloadTime = wep.reloadTime * (state.multipliers.reloadTime || 1.0);
+            state.reloadEndTime = now + actualReloadTime;
             soundManager.playMagOut();
             haptic.reload();
         }
@@ -152,7 +153,8 @@ export const WeaponHandler = {
 
         if (state.isReloading) {
             const wep = WEAPONS[state.activeWeapon];
-            const progress = Math.min(1, Math.max(0, 1 - ((state.reloadEndTime - now) / (wep.reloadTime || 1))));
+            const baseReload = wep.reloadTime * (state.multipliers.reloadTime || 1.0);
+            const progress = Math.min(1, Math.max(0, 1 - ((state.reloadEndTime - now) / (baseReload || 1))));
 
             _v1.copy(playerPos);
             _v1.y += 2.5;
@@ -205,7 +207,8 @@ export const WeaponHandler = {
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                 if (hasAmmo) {
                     if (!isUnlimited) {
-                        if (now > state.lastShotTime + wep.fireRate) {
+                        const actualFireRate = wep.fireRate / (state.multipliers.fireRate || 1.0);
+                        if (now > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = now;
                         }
@@ -261,7 +264,8 @@ export const WeaponHandler = {
             if (input.fire) {
                 const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode || isUnlimited;
-                if (now > state.lastShotTime + wep.fireRate && hasAmmo) {
+                const actualFireRate = wep.fireRate / (state.multipliers.fireRate || 1.0);
+                if (now > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = now;
                     if (!debugMode && !isUnlimited) state.weaponAmmo[state.activeWeapon]--;
                     state.shotsFired++;
@@ -320,7 +324,7 @@ export const WeaponHandler = {
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                const maxDist = (wep as any).maxThrowDistance || 25.0;
+                const maxDist = ((wep as any).maxThrowDistance || 25.0) * (state.multipliers.range || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
                 // Origin and exact Target calculation restored
@@ -359,7 +363,7 @@ export const WeaponHandler = {
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                const maxDist = (wep as any).maxThrowDistance || 25.0;
+                const maxDist = ((wep as any).maxThrowDistance || 25.0) * (state.multipliers.range || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
                 // Origin and exact Target calculation for rendering

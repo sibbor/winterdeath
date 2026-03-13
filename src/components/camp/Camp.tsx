@@ -364,8 +364,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             if (now > nextWildlifeTime.current) {
                 if (Math.random() > 0.5) {
                     soundManager.playOwlHoot();
-                } else {
-                    soundManager.playBirdAmbience();
                 }
                 nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
             }
@@ -458,15 +456,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             window.removeEventListener('click', onCL);
             window.removeEventListener('touchstart', onTS);
             window.removeEventListener('resize', onResize);
-            engine.onUpdate = null;
-            engine.onRender = null;
-            const chats = activeChats.current;
-            for (let i = 0; i < chats.length; i++) {
-                const c = chats[i];
-                if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
-            }
         };
-    }, [isRunning]);
+    }, [isRunning, stats, currentLoadout, currentSector]);
 
     const closeModal = () => { soundManager.playUiClick(); setActiveOverlay(null); };
 

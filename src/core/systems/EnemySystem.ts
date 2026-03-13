@@ -11,7 +11,7 @@ interface Callbacks {
     gainXp: (amount: number) => void;
     t: (key: string) => string;
     onBossKilled: (id: number) => void;
-    onPlayerHit: (damage: number, attacker: any, type: string) => void;
+    onPlayerHit: (damage: number, attacker: any, type: string, effect?: any, effectDuration?: number, effectIntensity?: number) => void;
 }
 
 export class EnemySystem implements System {

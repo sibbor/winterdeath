@@ -4,6 +4,7 @@ import { GameCanvasProps, SectorState, SectorTrigger } from '../types';
 import { WeaponType } from '../content/weapons';
 import { RuntimeState } from './RuntimeState';
 import { System } from './systems/System';
+import { StatusEffectType, PlayerDeathState } from '../types/combat';
 import { WEAPONS } from '../content/constants';
 import { Enemy } from './EnemyManager';
 import { ScrapItem } from './systems/WorldLootSystem';
@@ -27,6 +28,7 @@ export class GameSessionLogic {
     public cameraAngle: number = 0;
     public mapId: number = 0;
 
+    public engine: WinterEngine;
     public state!: RuntimeState;
     private systems: System[] = [];
 
@@ -34,7 +36,9 @@ export class GameSessionLogic {
     // Zero-GC: Single array. We reuse objects by toggling the 'active' flag.
     public noiseEvents: NoiseEvent[] = [];
 
-    constructor(public engine: WinterEngine) { }
+    constructor(engine: WinterEngine) { 
+        this.engine = engine;
+    }
 
     static createInitialState(props: GameCanvasProps): RuntimeState {
         const now = performance.now();
@@ -116,6 +120,8 @@ export class GameSessionLogic {
             killerType: '',
             killerName: '',
             playerBloodSpawned: false,
+            playerAshSpawned: false,
+            lastDrownTick: 0,
 
             deathVel: new THREE.Vector3(),
 
@@ -156,7 +162,18 @@ export class GameSessionLogic {
             triangles: 0,
             flashlightOn: false,
             currentInteraction: null,
-            stats: props.stats
+            stats: props.stats,
+
+            // --- COMBAT & STATUS INITIALIZATION ---
+            multipliers: {
+                speed: 1.0,
+                reloadTime: 1.0,
+                fireRate: 1.0,
+                damageResist: 1.0,
+                range: 1.0
+            },
+            statusEffects: {} as any,
+            playerDeathState: PlayerDeathState.ALIVE
         };
     }
 

@@ -3,6 +3,7 @@ import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProce
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
+import { TreeType } from '../../types/enemy';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
@@ -148,7 +149,7 @@ export const AssetPreloader = {
                         'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
                         'step', 'step_snow', 'step_metal', 'step_wood', 'step_water', 'swimming',
                         'mech_mag_out', 'mech_mag_in', 'mech_empty_click', 'mech_holster',
-                        'owl_hoot', 'bird_ambience', 'ambient_rustle', 'ambient_metal'
+                        'owl_hoot', 'bird_ambience', 'ambient_rustle', 'ambient_metal', 'dash'
                     ];
                     for (let i = 0; i < essentialSounds.length; i++) {
                         SoundBank.get(soundEngine, essentialSounds[i]);
@@ -395,7 +396,7 @@ export const AssetPreloader = {
                 addInstancedWarmup(GEOMETRY.stone, sunflowerHeadMat);
                 addInstancedWarmup(GEOMETRY.stone, sunflowerCenterMat);
 
-                const treeTypes: ('PINE' | 'SPRUCE' | 'OAK' | 'DEAD' | 'BIRCH')[] = ['PINE', 'SPRUCE', 'OAK', 'DEAD', 'BIRCH'];
+                const treeTypes: TreeType[] = [TreeType.PINE, TreeType.SPRUCE, TreeType.OAK, TreeType.DEAD, TreeType.BIRCH];
                 for (let i = 0; i < treeTypes.length; i++) {
                     addToWarmup(EnvironmentGenerator.createTree(treeTypes[i], 1.0, 0));
                 }

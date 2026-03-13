@@ -13,6 +13,8 @@ import { CAMERA_HEIGHT } from '../../../content/constants';
 import { soundManager } from '../../../utils/SoundManager';
 import { EnemyManager } from '../../../core/EnemyManager';
 import { WeaponType } from '../../../content/weapons';
+import { EnemyDeathState } from '../../../types/enemy';
+import { DamageType, PlayerDeathState } from '../../../types/combat';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -61,10 +63,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     // Initial binding for FX (will be updated in loop if needed)
     _fxCallbacks.spawnPart = callbacks.spawnPart;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
-    _fxCallbacks.onPlayerHit = (dmg: number, attacker: any, type: string) => {
-        const enemySystem = session.getSystem('enemy_system') as any;
-        if (enemySystem) {
-            enemySystem.handlePlayerHit(session, dmg, attacker, type);
+    _fxCallbacks.onPlayerHit = (dmg: number, attacker: any, type: DamageType) => {
+        const statsSystem = session.getSystem('player_stats_system') as any;
+        if (statsSystem) {
+            statsSystem.handlePlayerHit(session, dmg, attacker, type);
         }
     };
 
@@ -91,11 +93,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (type === 'hit') state.shotsHit += amt;
         },
         addFireZone: (z: any) => state.fireZones.push(z),
-        onPlayerHit: (dmg: number, attacker: any, type: string) => {
+        onPlayerHit: (dmg: number, attacker: any, type: DamageType) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type);
         },
-        applyDamage: (enemy: any, amount: number, type: string, isHighImpact: boolean = false) => {
-            if (enemy.deathState !== 'ALIVE') return false;
+        applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType, isHighImpact: boolean = false) => {
+            if (enemy.deathState !== EnemyDeathState.ALIVE) return false;
 
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
@@ -116,7 +118,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             if (isHighImpact) {
                 color = '#ff0000';
-            } else if (type === WeaponType.FLAMETHROWER || type === WeaponType.MOLOTOV || type === 'Burn') {
+            } else if (type === WeaponType.FLAMETHROWER || type === WeaponType.MOLOTOV || type === DamageType.BURN) {
                 isContinuous = true;
                 color = '#ffaa00'; // Orange
             } else if (type === WeaponType.ARC_CANNON) {

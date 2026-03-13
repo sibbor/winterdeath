@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
-import { Enemy, AIState } from '../../types/enemy';
+import { Enemy, AIState, EnemyDeathState } from '../../types/enemy';
 import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -153,7 +153,7 @@ export const EnemySpawner = {
             knockbackVel: new THREE.Vector3(0, 0, 0),
             deathVel: new THREE.Vector3(0, 0, 0),
 
-            deathState: 'ALIVE',
+            deathState: EnemyDeathState.ALIVE,
             deathTimer: 0,
             lastHitWasHighImpact: false,
             lastDamageType: '',
@@ -245,7 +245,7 @@ export const EnemySpawner = {
             velocity: new THREE.Vector3(0, 0, 0),
             knockbackVel: new THREE.Vector3(0, 0, 0),
             deathVel: new THREE.Vector3(0, 0, 0),
-            deathState: 'ALIVE',
+            deathState: EnemyDeathState.ALIVE,
             lastDamageType: '',
             lastHitWasHighImpact: false,
             deathTimer: 0,

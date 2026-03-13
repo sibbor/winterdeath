@@ -47,6 +47,8 @@ interface MobileGameHUDProps {
     onToggleMap?: () => void;
     onSelectWeapon?: (slot: string) => void;
     onRotateCamera?: (dir: number) => void;
+    statusEffects?: Array<{ type: string, duration: number, intensity: number }>;
+    isDisoriented?: boolean;
 }
 
 const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
@@ -56,7 +58,8 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
     reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, debugMode = false, isBossIntro = false,
     isDriving = false, vehicleSpeed = 0, throttleState = 0,
     sectorStats,
-    debugInfo, onTogglePause, onToggleMap, onSelectWeapon, onRotateCamera
+    debugInfo, onTogglePause, onToggleMap, onSelectWeapon, onRotateCamera,
+    statusEffects = [], isDisoriented = false
 }) => {
     const hpP = Math.max(0, (hp / maxHp) * 100);
     const stP = Math.max(0, (stamina / maxStamina) * 100);
@@ -244,7 +247,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
     const isRadioActive = activeWeapon === WeaponType.RADIO;
 
     return (
-        <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ease-in ${isDead ? 'opacity-0 scale-110 blur-[2px] rotate-1 translate-y-8' : 'opacity-100 scale-100 blur-0 rotate-0 translate-y-0'}`}>
+        <div className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
             {/* Top Gradient Background (Behind UI) */}
             <div className="fixed top-0 left-0 w-full h-32 pointer-events-none z-0"
                 style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)' }}>
@@ -310,6 +313,20 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                     </span>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Status Effects Icons (Mobile) */}
+                        <div className="flex flex-wrap gap-1 mt-1 z-10 w-[200px]">
+                            {statusEffects.map((eff, i) => (
+                                <div key={i} className="px-1.5 py-0.5 bg-red-900/40 border border-red-500/50 skew-x-[-10deg] flex items-center gap-1 animate-pulse">
+                                    <span className="text-[8px] font-black text-red-100 skew-x-[10deg] uppercase tracking-tighter">
+                                        {eff.type}
+                                    </span>
+                                    <span className="text-[6px] font-bold text-red-300 skew-x-[10deg]">
+                                        {Math.ceil(eff.duration / 1000)}s
+                                    </span>
+                                </div>
+                            ))}
                         </div>
 
                         <div className="flex flex-row gap-4 items-start">

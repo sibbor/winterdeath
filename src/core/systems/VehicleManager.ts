@@ -3,6 +3,7 @@ import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/SoundManager';
 import { EnemyManager } from '../EnemyManager';
+import { EnemyDeathState } from '../../types/enemy';
 import { VehicleDef } from '../../content/vehicles';
 import { FLASHLIGHT } from '../../content/constants';
 
@@ -190,7 +191,7 @@ export const VehicleManager = {
 
         for (let i = 0; i < eLen; i++) {
             const e = enemies[i];
-            if (e.deathState !== 'ALIVE') continue;
+            if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
             _toEnemy.subVectors(e.mesh.position, vehicle.position);
             _toEnemy.y = 0;

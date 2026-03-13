@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SectorTrigger, SectorState, PlayerStats } from '../types';
+import { StatusEffectType, PlayerDeathState, ActiveStatusEffect } from '../types/combat';
 import { WeaponType } from '../content/weapons';
 import { VehicleType } from '../content/vehicles';
 import { Obstacle } from './world/CollisionResolution';
@@ -62,6 +63,17 @@ export interface RuntimeState {
     killsByType: Record<string, number>;
     applyDamage?: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
 
+    // --- COMBAT & STATUS (Zero-GC) ---
+    multipliers: {
+        speed: number;
+        reloadTime: number;
+        fireRate: number;
+        damageResist: number;
+        range: number;
+    };
+    statusEffects: Partial<Record<StatusEffectType, ActiveStatusEffect>>;
+    playerDeathState: PlayerDeathState;
+
     // --- PROGRESSION ---
     seenEnemies: string[];
     seenBosses: string[];
@@ -98,6 +110,8 @@ export interface RuntimeState {
     killerType: string;
     killerName: string;
     playerBloodSpawned: boolean;
+    playerAshSpawned: boolean;
+    lastDrownTick: number;
 
     // --- ZERO-GC VECTORS (Replaced nulls with flags) ---
     deathVel: THREE.Vector3;

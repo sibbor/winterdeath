@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets';
-import { Enemy, AIState, EnemyEffectType } from '../types/enemy';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState } from '../types/enemy';
+import { DamageType, StatusEffectType } from '../types/combat';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
 import { soundManager } from '../utils/SoundManager';
@@ -72,6 +73,9 @@ const _aiCallbacks: any = {
     spawnBubble: null as any,
     applyDamage: null as any,
     onEffectTick: null as any,
+    onPlayerHitExtended: (damage: number, attacker: any, type: string, effect?: any, dur?: number, intense?: number) => {
+        if (_aiCallbacks.onPlayerHit) _aiCallbacks.onPlayerHit(damage, attacker, type, effect, dur, intense);
+    },
     playSound: (id: string) => soundManager.playEffect(id)
 };
 
@@ -133,7 +137,7 @@ export const EnemyManager = {
 
         e.dead = false;
         e.hp = e.maxHp;
-        e.deathState = 'ALIVE';
+        e.deathState = EnemyDeathState.ALIVE;
         e.velocity.set(0, 0, 0);
         e.knockbackVel.set(0, 0, 0);
         e.deathVel.set(0, 0, 0);
@@ -243,21 +247,21 @@ export const EnemyManager = {
         const age = now - (e.deathTimer || now);
 
         switch (e.deathState) {
-            case 'EXPLODED':
+            case EnemyDeathState.EXPLODED:
                 EnemyManager.explodeEnemy(e, callbacks, e.deathVel);
-                e.deathState = 'DEAD';
+                e.deathState = EnemyDeathState.DEAD;
                 break;
 
-            case 'GIBBED':
+            case EnemyDeathState.GIBBED:
                 EnemyManager.explodeEnemy(e, callbacks, e.deathVel, true);
-                e.deathState = 'DEAD';
+                e.deathState = EnemyDeathState.DEAD;
                 break;
 
-            case 'DROWNED':
-                e.deathState = 'DEAD';
+            case EnemyDeathState.DROWNED:
+                e.deathState = EnemyDeathState.DEAD;
                 break;
 
-            case 'BURNED':
+            case EnemyDeathState.BURNED:
                 const duration = 1500;
                 const progress = Math.min(1.0, age / duration);
 
@@ -282,11 +286,11 @@ export const EnemyManager = {
                         e.mesh.userData.ashPermanent = true;
                         if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
                     }
-                    e.deathState = 'DEAD';
+                    e.deathState = EnemyDeathState.DEAD;
                 }
                 break;
 
-            case 'ELECTRIFIED':
+            case EnemyDeathState.ELECTRIFIED:
                 if (!e.mesh.userData.electrocuted) {
                     e.mesh.userData.electrocuted = true;
                     // PERFORMANCE: Lock death coordinates to prevent drifting during pool recycling
@@ -341,13 +345,13 @@ export const EnemyManager = {
                     e.mesh.position.y = 0.2;
                     e.mesh.position.z = e.mesh.userData.deathPosZ;
 
-                    e.deathState = 'DEAD';
+                    e.deathState = EnemyDeathState.DEAD;
                 }
                 break;
 
-            case 'SHOT':
-            case 'GENERIC':
-            case 'FALL':
+            case EnemyDeathState.SHOT:
+            case EnemyDeathState.GENERIC:
+            case EnemyDeathState.FALL:
             default:
                 e.deathVel.y -= 35 * delta;
                 e.mesh.position.addScaledVector(e.deathVel, delta);
@@ -367,7 +371,7 @@ export const EnemyManager = {
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
 
                 if (age > 1000) {
-                    e.deathState = 'DEAD';
+                    e.deathState = EnemyDeathState.DEAD;
                 }
                 break;
         }
@@ -507,8 +511,8 @@ export const EnemyManager = {
 
             // 1. GIBBED (>= 80 km/h) - High speed splatter
             if (speedKmh >= 80) {
-                e.deathState = 'GIBBED';
-                e.lastDamageType = 'vehicle_splatter';
+                e.deathState = EnemyDeathState.GIBBED;
+                e.lastDamageType = DamageType.VEHICLE_SPLATTER;
 
                 // Tvingar fram lite uppåt-kraft och mycket framåt-kraft för gibbningen
                 const forceDir = _v1.copy(knockDir).multiplyScalar(speedMS * 1.5).setY(3.0);
@@ -522,8 +526,8 @@ export const EnemyManager = {
 
                 // 2. FALL (20 - 79 km/h) - Airborne ragdoll effect
             } else if (speedKmh >= 20) {
-                e.deathState = 'FALL';
-                e.lastDamageType = 'vehicle_ram';
+                e.deathState = EnemyDeathState.FALL;
+                e.lastDamageType = DamageType.VEHICLE_RAM;
 
                 // Båge genom luften
                 const pushForce = speedMS * 0.8 * massRatio;
@@ -543,8 +547,8 @@ export const EnemyManager = {
 
                 // 3. GENERIC (< 20 km/h) - Low speed death, falls over
             } else {
-                e.deathState = 'GENERIC';
-                e.lastDamageType = 'vehicle_push';
+                e.deathState = EnemyDeathState.GENERIC;
+                e.lastDamageType = DamageType.VEHICLE_PUSH;
 
                 e.deathVel.copy(knockDir).multiplyScalar(speedMS * massRatio * 0.2);
                 e.deathVel.y = 2.0;
@@ -554,7 +558,7 @@ export const EnemyManager = {
 
             // --- SURVIVED HIT (Knockback) ---
         } else {
-            e.lastDamageType = 'vehicle_push';
+            e.lastDamageType = DamageType.VEHICLE_PUSH;
 
             // Skapa en velocity-vektor som representerar bilens smäll för att skicka till knockback-systemet
             _v1.copy(knockDir).multiplyScalar(speedMS);
@@ -586,7 +590,10 @@ export const EnemyManager = {
 
             // 1. Endast AI Logic om de är ALIVE
             if (e.deathState === 'ALIVE') {
-                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, isDead, _aiCallbacks, water);
+                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, isDead, {
+                    ..._aiCallbacks,
+                    onPlayerHit: _aiCallbacks.onPlayerHitExtended
+                }, water);
             }
 
             // 2. Visuella animationer 
@@ -668,7 +675,7 @@ export const EnemyManager = {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
 
-            if (e.deathState === 'ALIVE') continue;
+            if (e.deathState === EnemyDeathState.ALIVE) continue;
 
             if (!e.deathTimer) {
                 e.deathTimer = now;
@@ -682,7 +689,7 @@ export const EnemyManager = {
                 }
             }
 
-            const shouldCleanup = (e.deathState === 'DEAD') || e.mesh.userData.exploded || e.mesh.userData.gibbed;
+            const shouldCleanup = (e.deathState === EnemyDeathState.DEAD) || e.mesh.userData.exploded || e.mesh.userData.gibbed;
 
             if (shouldCleanup) {
                 let leaveCorpse = false;
@@ -740,7 +747,7 @@ export const EnemyManager = {
                 enemies.pop();
 
                 recycled.dead = true;
-                recycled.deathState = 'DEAD';
+                recycled.deathState = EnemyDeathState.DEAD;
                 if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }

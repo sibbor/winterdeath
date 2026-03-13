@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { Enemy } from '../EnemyManager';
+import { EnemyDeathState } from '../../types/enemy';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 import { haptic } from '../../utils/HapticManager';
 import { WEAPONS, WeaponType } from '../../content/weapons';
+import { StatusEffectType, DamageType } from '../../types/combat';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
@@ -28,11 +30,11 @@ export interface GameContext {
     explodeEnemy: (e: Enemy, force: THREE.Vector3) => void;
     addScore: (amt: number) => void;
     addFireZone: (z: FireZone) => void;
-    applyDamage: (enemy: Enemy, amount: number, type: string, isHighImpact?: boolean) => boolean;
+    applyDamage: (enemy: Enemy, amount: number, type: string | WeaponType | DamageType, isHighImpact?: boolean) => boolean;
 
     now: number;
     playerPos: THREE.Vector3;
-    onPlayerHit: (damage: number, attacker: any, type: string) => void;
+    onPlayerHit: (damage: number, attacker: any, type: string | DamageType) => void;
     noiseEvents?: { pos: THREE.Vector3, radius: number, time: number, active: boolean }[];
 }
 
@@ -146,7 +148,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius + 3.0);
             for (let i = 0; i < nearby.length; i++) {
                 const e = nearby[i];
-                if (e.deathState !== 'ALIVE') continue;
+                if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
                 _v2.subVectors(e.mesh.position, pos);
                 const distSq = _v2.lengthSq();
@@ -389,7 +391,7 @@ export const ProjectileSystem = {
             const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
             for (let _fi = 0; _fi < enemies.length; _fi++) {
                 const e = enemies[_fi];
-                if (e.deathState !== 'ALIVE') continue;
+                if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
                 _v1.subVectors(e.mesh.position, origin);
                 const distSq = _v1.lengthSq();
@@ -427,7 +429,7 @@ export const ProjectileSystem = {
 
             for (let _fi = 0; _fi < enemies.length; _fi++) {
                 const e = enemies[_fi];
-                if (e.deathState !== 'ALIVE') continue;
+                if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
                 _v1.subVectors(e.mesh.position, origin);
                 const distSq = _v1.lengthSq();
@@ -547,11 +549,22 @@ export const ProjectileSystem = {
                 const rSq = fz.radiusSq;
                 for (let _ni = 0; _ni < nearby.length; _ni++) {
                     const e = nearby[_ni];
-                    if (e.deathState !== 'ALIVE') continue;
+                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
                     if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
                         e.isBurning = true;
                         e.afterburnTimer = 5.0;
                         e.burnTimer = 0.5;
+                    }
+                }
+
+                // [VINTERDÖD] Player Burn Interaction
+                if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
+                    if (ctx.onPlayerHit) {
+                        ctx.onPlayerHit(0, null, DamageType.BURN);
+                        // Status effects are now handled via extended parameters if available, 
+                        // but since the base method only takes 3, we'll rely on the 'Burn' type 
+                        // in PlayerStatsSystem to trigger the burning effect if we can't change the signature everywhere.
+                        // Or better: update the signature in GameContext.
                     }
                 }
             }

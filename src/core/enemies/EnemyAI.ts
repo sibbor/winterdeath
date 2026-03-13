@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Enemy, AIState, EnemyEffectType } from '../../types/enemy';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState } from '../../types/enemy';
+import { DamageType } from '../../types/combat';
 import { applyCollisionResolution } from '../world/CollisionResolution';
 import { SpatialGrid } from '../world/SpatialGrid';
 import { WeaponType, WEAPONS } from '../../content/weapons';
@@ -41,7 +42,7 @@ export const EnemyAI = {
         noiseEvents: any[],
         isDead: boolean,
         callbacks: {
-            onPlayerHit: (damage: number, attacker: any, type: string) => void;
+            onPlayerHit: (damage: number, attacker: any, type: string, effect?: any, effectDuration?: number, effectIntensity?: number) => void;
             applyDamage: (amount: number, enemy: Enemy) => void;
             onEffectTick: (e: Enemy, type: EnemyEffectType) => void;
             playSound: (id: string) => void;
@@ -50,7 +51,7 @@ export const EnemyAI = {
         },
         water?: WaterSystem
     ) => {
-        if (e.deathState === 'DEAD' || !e.mesh) return;
+        if (e.deathState === EnemyDeathState.DEAD || !e.mesh) return;
 
         // --- 0. DISTANCE CULLING (AI SLEEP) ---
         const dx = playerPos.x - e.mesh.position.x;
@@ -58,7 +59,7 @@ export const EnemyAI = {
         const distSq = dx * dx + dz * dz;
 
         if (distSq > 10000 &&
-            e.deathState === 'ALIVE' &&
+            e.deathState === EnemyDeathState.ALIVE &&
             !e.isBurning &&
             !e.isDrowning &&
             (!e.knockbackVel || e.knockbackVel.lengthSq() < 0.1) &&
@@ -71,7 +72,7 @@ export const EnemyAI = {
         }
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
-        if (e.hp <= 0 && e.deathState === 'ALIVE') {
+        if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
             const isWeapon = Object.values(WeaponType).includes(e.lastDamageType as WeaponType);
             const cause = isWeapon ? `Weapon (${e.lastDamageType})` : `Effect (${e.lastDamageType})`;
             logAI(`[AI] ${e.type}_${e.id} killed by: ${cause}`);
@@ -85,34 +86,31 @@ export const EnemyAI = {
             const isHighImpact = e.lastHitWasHighImpact;
             const weapon = WEAPONS[dmgType as WeaponType];
 
-            let weaponImpact = 'SHOT';
+            let weaponImpact = EnemyDeathState.SHOT;
             if (weapon && weapon.impactType) {
-                const rawImpact = weapon.impactType as string;
-                if (rawImpact === 'gib' || rawImpact === 'GIB' || rawImpact === 'GIBBED') weaponImpact = 'GIBBED';
-                else if (rawImpact === 'burning' || rawImpact === 'BURNING' || rawImpact === 'BURNED') weaponImpact = 'BURNED';
-                else if (rawImpact === 'electrified' || rawImpact === 'ELECTRIFIED') weaponImpact = 'ELECTRIFIED';
+                weaponImpact = weapon.impactType;
             }
 
-            if (weaponImpact === 'ELECTRIFIED' || dmgType === WeaponType.ARC_CANNON) {
-                e.deathState = 'ELECTRIFIED';
+            if (weaponImpact === EnemyDeathState.ELECTRIFIED || dmgType === WeaponType.ARC_CANNON) {
+                e.deathState = EnemyDeathState.ELECTRIFIED;
                 e.deathVel.set(0, 0, 0);
             }
-            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === 'BURN') {
-                e.deathState = 'BURNED';
+            else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === DamageType.BURN) {
+                e.deathState = EnemyDeathState.BURNED;
             }
             else if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
-                e.deathState = 'EXPLODED';
+                e.deathState = EnemyDeathState.EXPLODED;
                 if (dmgType !== WeaponType.GRENADE) {
                     soundManager.playExplosion();
                     haptic.explosion();
                 }
             }
-            else if (weaponImpact === 'GIBBED' && isHighImpact) {
-                e.deathState = 'GIBBED';
+            else if (weaponImpact === EnemyDeathState.GIBBED && isHighImpact) {
+                e.deathState = EnemyDeathState.GIBBED;
                 e.mesh.userData.gibbed = true;
             }
             else if (weapon) {
-                e.deathState = 'SHOT';
+                e.deathState = EnemyDeathState.SHOT;
 
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
@@ -127,7 +125,7 @@ export const EnemyAI = {
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 5.0;
             }
             else {
-                e.deathState = 'GENERIC';
+                e.deathState = EnemyDeathState.GENERIC;
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
                     const forwardMomentum = e.velocity.dot(_v1.clone().negate());
@@ -141,7 +139,7 @@ export const EnemyAI = {
         }
 
         // AI only processes ALIVE enemies from here on
-        if (e.deathState !== 'ALIVE') return;
+        if (e.deathState !== EnemyDeathState.ALIVE) return;
 
         // --- 2. POOLING SCALE RECOVERY ---
         const targetScaleY = e.originalScale || 1.0;
@@ -194,7 +192,7 @@ export const EnemyAI = {
                     callbacks.spawnPart?.(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
                     if (e.hp <= 0 && e.deathState === 'ALIVE') {
                         logAI(`[AI] ${e.type}_${e.id} killed by: Environment (FALL)`);
-                        e.deathState = 'FALL';
+                        e.deathState = EnemyDeathState.FALL;
                     }
                 }
 
@@ -255,7 +253,7 @@ export const EnemyAI = {
 
                 if (e.hp <= 0 && e.deathState === 'ALIVE') {
                     logAI(`[AI] ${e.type}_${e.id} killed by: Environment (DROWNED)`);
-                    e.deathState = 'DROWNED';
+                    e.deathState = EnemyDeathState.DROWNED;
                     e.velocity.set(0, 0, 0);
                     e.knockbackVel.set(0, 0, 0);
                 }
@@ -293,7 +291,7 @@ export const EnemyAI = {
                 e.mesh.rotation.y += (Math.random() - 0.5) * 0.5 * jitterScale;
             }
 
-            if (Math.random() < 0.1) callbacks.onEffectTick(e, 'STUN');
+            if (Math.random() < 0.1) callbacks.onEffectTick(e, EnemyEffectType.STUN);
 
             if (e.stunTimer <= 0) {
                 logStateChange(e, AIState.CHASE);
@@ -432,19 +430,63 @@ export const EnemyAI = {
                         e.lastStepTime = now;
                     }
 
-                    const attackRangeSq = e.type === 'TANK' ? 12.0 : 6.5;
-                    if (distSq < attackRangeSq && e.attackCooldown <= 0) {
-                        if (e.type === 'TANK') {
-                            e.attackCooldown = 3000;
-                            callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
+                    // --- MULTI-ATTACK SYSTEM ---
+                    if (e.attacks && e.attacks.length > 0 && e.attackCooldown <= 0) {
+                        // Select best attack (simple: find first in range)
+                        let bestAttackIndex = -1;
+                        for (let i = 0; i < e.attacks.length; i++) {
+                            const att = e.attacks[i];
+                            const rangeSq = att.range * att.range;
+                            if (distSq < rangeSq) {
+                                bestAttackIndex = i;
+                                // If it's a special attack (with cooldown), prefer it over HIT
+                                if (att.type !== 'HIT' || bestAttackIndex === -1) {
+                                    break; 
+                                }
+                            }
+                        }
 
-                            logAI(`[AI] ${e.type}_${e.id} hit player for ${e.damage} dmg (TANK_SMASH)`);
-                        } else {
-                            logStateChange(e, AIState.BITING);
-                            e.state = AIState.BITING;
-                            e.grappleTimer = 0.8;
-                            e.attackCooldown = 1500;
-                            e.mesh.userData.hasBittenThisCycle = false;
+                        if (bestAttackIndex !== -1) {
+                            const att = e.attacks[bestAttackIndex];
+                            e.currentAttackIndex = bestAttackIndex;
+                            e.attackCooldown = att.cooldown;
+
+                            if (att.chargeTime && att.chargeTime > 0) {
+                                logStateChange(e, AIState.CHARGING);
+                                e.state = AIState.CHARGING;
+                                e.attackTimer = att.chargeTime / 1000;
+                            } else if (att.activeTime && att.activeTime > 0) {
+                                logStateChange(e, AIState.ATTACKING);
+                                e.state = AIState.ATTACKING;
+                                e.attackTimer = att.activeTime / 1000;
+                                // Start attack logic immediately if no charge
+                                performAttack(e, att, distSq, callbacks);
+                            } else {
+                                // Instant attack
+                                performAttack(e, att, distSq, callbacks);
+                                // Stay in CHASE or brief ATTACKING state?
+                                // For visual feedback, let's enter ATTACKING briefly
+                                logStateChange(e, AIState.ATTACKING);
+                                e.state = AIState.ATTACKING;
+                                e.attackTimer = 0.5; // Brief pose
+                            }
+                        }
+                    } 
+                    // Fallback for legacy hardcoded attacks if no attacks defined
+                    else if (!e.attacks || e.attacks.length === 0) {
+                        const attackRangeSq = e.type === 'TANK' ? 12.0 : 6.5;
+                        if (distSq < attackRangeSq && e.attackCooldown <= 0) {
+                            if (e.type === 'TANK') {
+                                e.attackCooldown = 3000;
+                                callbacks.onPlayerHit(e.damage, e, 'TANK_SMASH');
+                                logAI(`[AI] ${e.type}_${e.id} hit player for ${e.damage} dmg (TANK_SMASH)`);
+                            } else {
+                                logStateChange(e, AIState.BITING);
+                                e.state = AIState.BITING;
+                                e.grappleTimer = 0.8;
+                                e.attackCooldown = 1500;
+                                e.mesh.userData.hasBittenThisCycle = false;
+                            }
                         }
                     }
                 }
@@ -515,18 +557,64 @@ export const EnemyAI = {
                 }
 
                 if (e.explosionTimer <= 0) {
-                    logAI(`[AI] ${e.type}_${e.id} exploded itself (BOMBER_EXPLOSION)`);
+                    logAI(`[AI] ${e.type}_${e.id} exploded itself`);
 
                     if (e.mesh.position.distanceToSquared(playerPos) < 144.0) {
-                        callbacks.onPlayerHit(60, e, 'BOMBER_EXPLOSION');
+                        // Use defined attack if available, else fallback
+                        if (e.attacks && e.attacks[0]) {
+                            performAttack(e, e.attacks[0], distSq, callbacks);
+                        } else {
+                            callbacks.onPlayerHit(60, e, DamageType.EXPLOSION);
+                        }
                     }
 
                     e.hp = 0;
-                    e.deathState = 'EXPLODED';
+                    e.deathState = EnemyDeathState.EXPLODED;
                     e.deathVel.set(0, 10.0, 0);
 
                     soundManager.playExplosion();
                     haptic.explosion();
+                }
+                break;
+
+            case AIState.CHARGING:
+                if (e.attackTimer !== undefined) {
+                    e.attackTimer -= delta;
+
+                    // Face player during charge
+                    _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
+                    e.mesh.lookAt(_v5);
+
+                    // Visual feedback for charging (vibration/scaling)
+                    const jitter = 0.05 * (1.0 - (e.attackTimer / 1.0)); // Jitter increases
+                    e.mesh.position.x += (Math.random() - 0.5) * jitter;
+                    e.mesh.position.z += (Math.random() - 0.5) * jitter;
+
+                    if (e.attackTimer <= 0) {
+                        const att = e.attacks![e.currentAttackIndex!];
+                        logStateChange(e, AIState.ATTACKING);
+                        e.state = AIState.ATTACKING;
+                        e.attackTimer = (att.activeTime || 500) / 1000;
+                        performAttack(e, att, distSq, callbacks);
+                    }
+                }
+                break;
+
+            case AIState.ATTACKING:
+                if (e.attackTimer !== undefined) {
+                    e.attackTimer -= delta;
+
+                    // Some attacks might need per-frame logic (e.g. beam)
+                    const att = e.attacks?.[e.currentAttackIndex!];
+                    if (att && att.type === 'ELECTRIC_BEAM') {
+                        // Beam logic: continuous hit?
+                        // For now keep it simple: one hit at start of state
+                    }
+
+                    if (e.attackTimer <= 0) {
+                        logStateChange(e, AIState.CHASE);
+                        e.state = AIState.CHASE;
+                    }
                 }
                 break;
 
@@ -565,6 +653,50 @@ export const EnemyAI = {
 };
 
 // --- HELPERS ---
+
+function performAttack(e: Enemy, att: any, distSq: number, callbacks: any) {
+    if (distSq < att.range * att.range) {
+        callbacks.onPlayerHit(att.damage, e, att.type, att.effect, att.effectDuration, att.effectIntensity);
+        logAI(`[AI] ${e.type}_${e.id} performed attack ${att.type} for ${att.damage} dmg`);
+
+        if (att.soundImpact) callbacks.playSound(att.soundImpact);
+        else callbacks.playSound(att.type); // Fallback to type as sound ID
+
+        // --- VFX TRIGGERING ---
+        if (callbacks.spawnPart) {
+            const pos = e.mesh.position;
+            const target = _v5; // playerPos is usually what e looks at in ATTACKING/BITING
+
+            if (att.vfx) {
+                callbacks.spawnPart(pos.x, pos.y + 1.5, pos.z, att.vfx, 5);
+            } else {
+                // Procedural fallbacks for standard types
+                switch (att.type) {
+                    case 'ELECTRIC_BEAM':
+                        // Directional beam effect
+                        _v1.subVectors(target, pos).normalize().multiplyScalar(5.0);
+                        callbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'electric_beam', 1, undefined, _v1);
+                        callbacks.spawnPart(target.x, target.y + 1.0, target.z, 'electric_flash', 3);
+                        break;
+                    case 'SMASH':
+                        callbacks.spawnPart(pos.x, 0.2, pos.z, 'ground_impact', 12);
+                        callbacks.spawnPart(pos.x, 0.1, pos.z, 'shockwave', 1);
+                        break;
+                    case 'SCREECH':
+                        callbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'screech_wave', 1);
+                        break;
+                    case 'BITE':
+                        callbacks.spawnPart(target.x, target.y + 1.0, target.z, 'blood', 3);
+                        break;
+                    case 'EXPLODE':
+                        // Handled by death state usually, but for consistency:
+                        callbacks.spawnPart(pos.x, 1.0, pos.z, 'large_fire', 5);
+                        break;
+                }
+            }
+        }
+    }
+}
 
 function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3) {
     _v1.set(target.x, e.mesh.position.y, target.z);
@@ -610,13 +742,13 @@ function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
 
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {
     if (e.isBurning) {
-        if (Math.random() > 0.4) callbacks.onEffectTick(e, 'FLAME');
+        if (Math.random() > 0.4) callbacks.onEffectTick(e, EnemyEffectType.FLAME);
 
         if (e.burnTimer > 0) {
             e.burnTimer -= delta;
             if (e.burnTimer <= 0) {
                 e.hp -= 6;
-                e.lastDamageType = 'BURN';
+                e.lastDamageType = DamageType.BURN;
                 if (callbacks.applyDamage) callbacks.applyDamage(6, e);
                 e.burnTimer = 0.5;
             }
@@ -628,6 +760,6 @@ function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: an
     }
 
     if (e.stunTimer > 0 && e.lastDamageType === WeaponType.ARC_CANNON) {
-        if (Math.random() < 0.25) callbacks.onEffectTick(e, 'SPARK');
+        if (Math.random() < 0.25) callbacks.onEffectTick(e, EnemyEffectType.SPARK);
     }
 }

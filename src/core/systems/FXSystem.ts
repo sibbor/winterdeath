@@ -64,7 +64,7 @@ for (let i = 0; i < 150; i++) {
 }
 
 const UNIQUE_MATERIAL_TYPES = [
-    'black_smoke', 'debris_trail', 'shockwave', 'flash', 'splash'
+    'black_smoke', 'debris_trail', 'shockwave', 'flash', 'splash', 'electric_beam', 'ground_impact', 'screech_wave'
 ];
 
 const PHYSICS_TYPES = new Set([
@@ -90,6 +90,9 @@ const PARTICLE_TTL: Record<string, number> = {
     spark: 60,
     enemy_effect_flame: 60,
     enemy_effect_spark: 60,
+    electric_beam: 15,
+    ground_impact: 40,
+    screech_wave: 30,
     default: 30
 };
 
@@ -297,6 +300,9 @@ export const FXSystem = {
             else if (t === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
             else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (t === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
+            else if (t === 'electric_beam') { geo = GEOMETRY.shard; mat = MATERIALS.flashWhite; }
+            else if (t === 'ground_impact') { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
+            else if (t === 'screech_wave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
 
             p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, t, isInstanced);
         }
@@ -344,6 +350,12 @@ export const FXSystem = {
         else if (t === 'splash') {
             const fs = (0.5 + Math.random() * 0.7) * s;
             p.mesh.scale.set(fs, fs, fs);
+        }
+        else if (t === 'electric_beam') {
+            p.mesh.scale.set(0.2, 0.2, 5.0); // Procedural laser-like shard
+        }
+        else if (t === 'screech_wave') {
+            p.mesh.scale.set(1, 1, 1); // Shockwave starts small and grows
         }
         else {
             const fs = (0.3 + Math.random() * 0.3) * s;
@@ -575,6 +587,13 @@ export const FXSystem = {
                         p.vel.multiplyScalar(Math.max(0.0, 1.0 - (5.0 * safeDelta)));
                     } else if (p.type === 'fire' || p.type === 'enemy_effect_flame' || p.type === 'large_fire') {
                         p.mesh.scale.multiplyScalar(Math.max(0.0, 1.0 - (1.5 * safeDelta)));
+                    } else if (p.type === 'screech_wave') {
+                        const grow = 60 * safeDelta;
+                        p.mesh.scale.addScalar(grow);
+                    } else if (p.type === 'electric_beam') {
+                        p.mesh.scale.z += 20 * safeDelta; // Stretch out
+                        p.mesh.scale.x *= 0.9;
+                        p.mesh.scale.y *= 0.9;
                     } else {
                         p.mesh.scale.multiplyScalar(shrinkRate);
                     }

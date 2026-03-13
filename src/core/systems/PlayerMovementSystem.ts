@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { FXSystem } from './FXSystem';
+import { StatusEffectType, DamageType } from '../../types/combat';
 import { Obstacle, applyCollisionResolution } from '../world/CollisionResolution';
 import { soundManager } from '../../utils/SoundManager';
 import { AIState } from '../../types/enemy';
@@ -26,6 +27,19 @@ export class PlayerMovementSystem implements System {
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
+        const currentSectorData = (session.engine.renderer as any)._sectorData || (session as any).currentSectorData;
+        const env = currentSectorData?.environment;
+        
+        // --- APPLY DYNAMIC MULTIPLIERS ---
+        const speedMult = state.multipliers.speed;
+        const baseSpeed = state.stats.speed;
+        const currentSpeed = baseSpeed * speedMult * 10;
+
+        if (state.isRolling) {
+            state.isMoving = false;
+            return;
+        }
+
         if (state.activeVehicle) {
             state.isMoving = false;
             return;
@@ -39,7 +53,8 @@ export class PlayerMovementSystem implements System {
             delta,
             now,
             disableInput,
-            session
+            session,
+            currentSpeed
         );
 
         state.isMoving = isMoving;
@@ -91,7 +106,8 @@ export class PlayerMovementSystem implements System {
         delta: number,
         now: number,
         disableInput: boolean,
-        session: GameSessionLogic
+        session: GameSessionLogic,
+        currentSpeed: number
     ): boolean {
         // --- 1. Stamina, Shove & Rush Logic ---
         if (!input.space) {
@@ -117,8 +133,8 @@ export class PlayerMovementSystem implements System {
             }
         }
 
-        let speed = 15;
-        if (state.stats?.speed) speed = 15 * state.stats.speed;
+        const isRushing = state.isRushing;
+        let speed = currentSpeed;
 
         // --- 2. WATER PHYSICS & DRAG ---
         let inWater = false;
@@ -157,13 +173,29 @@ export class PlayerMovementSystem implements System {
         state.isSwimming = isSwimming;
         state.isWading = isWading;
 
-        // --- 3. STAMINA & REGENERATION ---
+        // --- 3. EXTINGUISH BURNING IN WATER ---
+        if (inWater && state.statusEffects[StatusEffectType.BURNING]) {
+            state.statusEffects[StatusEffectType.BURNING].duration = 0;
+            soundManager.playEffect('steam_hiss'); // Assume this exists or use fallback
+        }
+
+        // --- 4. STAMINA & REGENERATION ---
         const waterStaminaDrain = isSwimming ? 7 : (isWading ? 3 : 0);
         if (waterStaminaDrain > 0 && !state.activeVehicle) {
             state.lastStaminaUseTime = now;
             state.stamina = Math.max(0, state.stamina - waterStaminaDrain * delta);
             if (isSwimming && state.stamina <= 0) {
                 speed *= 0.5; // Exhaustion penalty while swimming
+                
+                // Drowning Damage
+                if (now - (state.lastDrownTick || 0) > 1000) {
+                    state.lastDrownTick = now;
+                    // Trigger drowning hit
+                    const statsSys = session.getSystem('player_stats_system') as any;
+                    if (statsSys) {
+                        statsSys.handlePlayerHit(session, 15, null, DamageType.DROWNING, true);
+                    }
+                }
             }
         }
 
@@ -219,6 +251,17 @@ export class PlayerMovementSystem implements System {
             if (input.joystickMove) {
                 _v6.x += input.joystickMove.x;
                 _v6.z += input.joystickMove.y;
+            }
+
+            const isDisoriented = !!state.statusEffects?.[StatusEffectType.DISORIENTED]?.duration && state.statusEffects[StatusEffectType.DISORIENTED].duration > 0;
+            if (isDisoriented) {
+                // Jerky rotation and movement noise
+                const noise = Math.sin(now * 0.01) * 0.5;
+                _v6.x += noise;
+                if (now % 300 < 50) {
+                    _v6.x += (Math.random() - 0.5) * 2;
+                    _v6.z += (Math.random() - 0.5) * 2;
+                }
             }
 
             if (_v6.lengthSq() > 0) {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AttackDefinition } from './combat';
 
 /**
  * States for the Enemy AI State Machine
@@ -10,18 +11,46 @@ export enum AIState {
     SEARCH = 'SEARCH',
     BITING = 'BITING',
     EXPLODING = 'EXPLODING',
-    STUNNED = 'STUNNED'
+    STUNNED = 'STUNNED',
+    CHARGING = 'CHARGING',
+    ATTACKING = 'ATTACKING'
 }
 
 /**
  * Standardized death states for enemies
  */
-export type EnemyDeathState = 'ALIVE' | 'DEAD' | 'SHOT' | 'GIBBED' | 'EXPLODED' | 'BURNED' | 'ELECTRIFIED' | 'GENERIC' | 'DROWNED' | 'FALL';
+export enum EnemyDeathState {
+    ALIVE = 'ALIVE',
+    DEAD = 'DEAD',
+    SHOT = 'SHOT',
+    GIBBED = 'GIBBED',
+    EXPLODED = 'EXPLODED',
+    BURNED = 'BURNED',
+    ELECTRIFIED = 'ELECTRIFIED',
+    GENERIC = 'GENERIC',
+    DROWNED = 'DROWNED',
+    FALL = 'FALL'
+}
+
+/**
+ * Standardized tree types for environment generation
+ */
+export enum TreeType {
+    PINE = 'PINE',
+    SPRUCE = 'SPRUCE',
+    OAK = 'OAK',
+    DEAD = 'DEAD',
+    BIRCH = 'BIRCH'
+}
 
 /**
  * Standardized effect types for semantic visual feedback
  */
-export type EnemyEffectType = 'STUN' | 'FLAME' | 'SPARK';
+export enum EnemyEffectType {
+    STUN = 'STUN',
+    FLAME = 'FLAME',
+    SPARK = 'SPARK'
+}
 
 /**
  * Static data definitions for different zombie types
@@ -34,6 +63,7 @@ export interface ZombieTypeData {
     color: number;
     scale: number;
     widthScale?: number;
+    attacks?: AttackDefinition[];
 }
 
 /**
@@ -84,6 +114,9 @@ export interface Enemy {
     lastTackleTime?: number; // Timestamp of the last physical collision with the player
     lastVehicleHit?: number; // Timestamp of the last vehicle collision
     fleeing: boolean;        // Flag for retreat behavior
+    attacks?: AttackDefinition[];
+    currentAttackIndex?: number;
+    attackTimer?: number;    // Multi-purpose timer for charging/attacking states
 
     // Status Effects (Timers are delta-based for consistency)
     isBurning: boolean;

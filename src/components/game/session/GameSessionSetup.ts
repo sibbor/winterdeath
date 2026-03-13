@@ -365,7 +365,7 @@ export class GameSessionSetup {
                 sectorCtx.collectibles,
                 callbacks.onCollectibleDiscovered
             ));
-            const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t);
+            const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
             session.addSystem(playerStatsSystem);
 
             session.addSystem(new EnemySystem(playerGroup, {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Obstacle } from './CollisionResolution';
-import { Enemy } from '../../types/enemy';
+import { Enemy, EnemyDeathState } from '../../types/enemy';
 
 export class SpatialGrid {
     private obstacleCells: Map<number, Obstacle[]> = new Map();
@@ -89,7 +89,7 @@ export class SpatialGrid {
             const e = enemies[i];
 
             // Only index enemies that are actually alive
-            if (e.dead || e.deathState !== 'ALIVE') continue;
+            if (e.dead || e.deathState !== EnemyDeathState.ALIVE) continue;
 
             const hitRadius = 1.0 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
 

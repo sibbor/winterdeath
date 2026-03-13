@@ -111,7 +111,7 @@ export const useGameInput = (
                             state.rollDir.copy(new THREE.Vector3(0, 0, 1).applyQuaternion(refs.playerGroupRef.current.quaternion).normalize());
                         }
 
-                        (soundManager as any).playDash();
+                        soundManager.playDash();
                     }
                 }
                 state.spaceDepressed = false;

@@ -470,6 +470,18 @@ const Generators = {
         }
         return buffer;
     },
+    dash: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.4;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const noise = (Math.random() * 2 - 1) * 0.25 * Math.exp(-10 * t);
+            const low = Math.sin(2 * Math.PI * 100 * t) * 0.2 * Math.exp(-15 * t);
+            data[i] = noise + low;
+        }
+        return buffer;
+    },
 };
 
 // --- HELPER GENERATORS ---
@@ -716,6 +728,9 @@ export function registerSoundGenerators() {
     // Wildlife
     SoundBank.register('owl_hoot', Generators.owl_hoot);
     SoundBank.register('bird_ambience', Generators.bird_ambience);
+
+    // Movement
+    SoundBank.register('dash', Generators.dash);
 }
 
 

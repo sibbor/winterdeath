@@ -2,6 +2,7 @@ import type React from 'react';
 import * as THREE from 'three';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
+import { PlayerDeathState, DamageType } from '../../types/combat';
 import { PLAYER_CHARACTER } from '../../content/constants';
 import { MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
@@ -109,9 +110,9 @@ export class DeathSystem implements System {
             state.deathVel.y -= 30 * delta;
             pgPos.addScaledVector(state.deathVel, delta);
 
-            const isExploded = !!state.killerType && state.killerType.toUpperCase().includes('EXPLOSION');
-            const isBurning = state.killerType === 'BURNED' || state.killerType === 'FLAME';
-            const isBiting = state.killerType === 'BITING' || state.killerType === 'Walker' || state.killerType === 'Zombie';
+            const isExploded = state.playerDeathState === PlayerDeathState.GIBBED;
+            const isBurning = state.playerDeathState === PlayerDeathState.BURNED;
+            const isBiting = state.killerType === DamageType.BITE;
 
             if (pgPos.y <= 0.0) {
                 pgPos.y = 0.0;
@@ -150,7 +151,6 @@ export class DeathSystem implements System {
             }
 
             if (isBiting && this.deathPhaseRef.current === 'ANIMATION') {
-                // FIX: Sätt positionen absolut istället för med += för att undvika "drift"
                 playerMesh.position.x = Math.sin(now * 0.05) * 0.1;
                 playerMesh.position.z = Math.cos(now * 0.05) * 0.1;
 
@@ -158,26 +158,64 @@ export class DeathSystem implements System {
                     this.fxCallbacks.spawnPart(pgPos.x, 0.8, pgPos.z, 'blood', 5);
                 }
             }
+
+            // [VINTERDÖD] Enhanced DROWNED & BURNED Visuals
+            if (state.playerDeathState === PlayerDeathState.DROWNED) {
+                // Sinking logic
+                state.deathVel.y = -0.5; // Slow sink
+                state.deathVel.x *= 0.95;
+                state.deathVel.z *= 0.95;
+
+                if (this.deathPhaseRef.current === 'ANIMATION') {
+                    if (now % 500 < 50) {
+                        this.fxCallbacks.spawnPart(pgPos.x, pgPos.y + 1.0, pgPos.z, 'splash', 2);
+                    }
+                }
+            } else if (state.playerDeathState === PlayerDeathState.BURNED) {
+                const age = now - state.deathStartTime;
+                const duration = 1500;
+                const progress = Math.min(1.0, age / duration);
+
+                // Ash Pile Logic
+                if (!state.playerAshSpawned) {
+                    state.playerAshSpawned = true;
+                    const ashRenderer = (session as any).engine.getRenderer('ash');
+                    if (ashRenderer) {
+                        ashRenderer.addAsh(playerMesh.position, playerMesh.rotation, 1.0, 1.0, 0x333333, now, 1500);
+                    }
+                }
+
+                // Shrink and Char
+                const shrink = 1.0 - progress;
+                playerMesh.scale.setScalar(shrink);
+
+                // Lerp color to black (assuming we can access materials)
+                playerMesh.traverse((child: any) => {
+                    if (child.isMesh && child.material && child.material.color) {
+                        child.material.color.lerp(_zeroV, progress * 0.1); // _zeroV is black essentially
+                    }
+                });
+
+                if (progress >= 1.0) {
+                    playerMesh.visible = false;
+                }
+            }
         }
 
         // --- 3. Player Animation & Gibbing ---
-        const killerIsExplosive = !!state.killerType && state.killerType.toUpperCase().includes('EXPLOSION');
-
-        if (killerIsExplosive) {
+        if (state.playerDeathState === PlayerDeathState.GIBBED) {
             if (playerMesh) playerMesh.visible = false;
 
             if (!state.playerBloodSpawned) {
                 state.playerBloodSpawned = true;
                 const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
 
-                // FIX: Återanvänd pgPos istället för ternära if-satser om och om igen
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnPart(pgPos.x, 1.0, pgPos.z, 'blood', 60);
                 this.fxCallbacks.spawnPart(pgPos.x, 1.5, pgPos.z, 'meat', 12);
             }
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
-            // FIX: Använd det korrekta 'delta'-värdet, annars pajar animationen för högfrekvensskärmar!
             PlayerAnimation.update(playerMesh as any, _deathAnimState, now, delta);
         }
 

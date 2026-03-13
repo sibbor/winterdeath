@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WEAPONS, BOSSES } from '../../content/constants';
 import { WeaponType } from '../../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
+import { StatusEffectType } from '../../types/combat';
 
 export const HudSystem = {
     getHudData: (
@@ -81,11 +82,25 @@ export const HudSystem = {
         // Trace SP changes for debugging (throttled to once per change)
         const totalSP = (props.stats?.skillPoints || 0) + spEarned;
         const lastTotal = (state as any)._lastLoggedSP || 0;
-        if (totalSP !== lastTotal && spEarned > 0) {
-            (state as any)._lastLoggedSP = totalSP;
+        // Status Effects
+        const activeEffects = [];
+        const statusEffects = state.statusEffects;
+        for (const key in statusEffects) {
+            const effect = statusEffects[key];
+            if (effect && effect.duration > 0) {
+                activeEffects.push({
+                    type: key,
+                    duration: effect.duration,
+                    intensity: effect.intensity
+                });
+            }
         }
 
+        const isDisoriented = !!statusEffects[StatusEffectType.DISORIENTED] && statusEffects[StatusEffectType.DISORIENTED].duration > 0;
+
         return {
+            isDisoriented,
+            statusEffects: activeEffects,
             hp: state.hp,
             maxHp: state.maxHp,
             stamina: state.stamina,

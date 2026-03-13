@@ -46,6 +46,8 @@ interface GameHUDProps {
     debugInfo?: any;
     onTogglePause?: () => void;
     onToggleMap?: () => void;
+    statusEffects?: Array<{ type: string, duration: number, intensity: number }>;
+    isDisoriented?: boolean;
 }
 
 const GameHUD: React.FC<GameHUDProps> = React.memo(({
@@ -55,7 +57,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     reloadProgress = 0, skillPoints = 0, weaponLevels, playerPos, distanceTraveled = 0, isDead = false, isBossIntro = false,
     isDriving = false, vehicleSpeed = 0, throttleState = 0,
     sectorStats,
-    fps = 0, debugInfo, onTogglePause, onToggleMap, debugMode = false
+    fps = 0, debugInfo, onTogglePause, onToggleMap, debugMode = false,
+    statusEffects = [], isDisoriented = false
 }) => {
     const hpP = Math.max(0, (hp / maxHp) * 100);
     const stP = Math.max(0, (stamina / maxStamina) * 100);
@@ -238,7 +241,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const isRadioActive = activeWeapon === WeaponType.RADIO;
 
     return (
-        <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ease-in ${isDead ? 'opacity-0 scale-110 blur-[2px] rotate-1 translate-y-8' : 'opacity-100 scale-100 blur-0 rotate-0 translate-y-0'}`}>
+        <div className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
             {/* Top Gradient Background (Behind UI) */}
             <div className="fixed top-0 left-0 w-full h-32 pointer-events-none z-0"
                 style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)' }}>
@@ -375,6 +378,19 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             <div className="h-full bg-emerald-600 transition-all duration-200 ease-out" style={{ width: `${stP}%` }} />
                         </div>
 
+                        {/* Status Effects Icons */}
+                        <div className="flex gap-2 mt-2 z-10">
+                            {statusEffects.map((eff, i) => (
+                                <div key={i} className="px-2 py-1 bg-red-900/40 border border-red-500/50 skew-x-[-10deg] flex items-center gap-1 animate-pulse">
+                                    <span className="text-[10px] font-black text-red-100 skew-x-[10deg] uppercase tracking-tighter">
+                                        {eff.type}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-red-300 skew-x-[10deg]">
+                                        {Math.ceil(eff.duration / 1000)}s
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Action Bar or Speedometer */}

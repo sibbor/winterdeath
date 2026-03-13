@@ -64,6 +64,19 @@ export const aggregateStats = (
         s.discoveredPOIs = [...s.discoveredPOIs, ...newUniquePOIs];
     }
 
+    // 6. Enemy & Boss Discovery
+    if (sectorStats.seenEnemies && sectorStats.seenEnemies.length > 0) {
+        s.seenEnemies = s.seenEnemies || [];
+        const newEnemies = sectorStats.seenEnemies.filter(e => !s.seenEnemies.includes(e));
+        s.seenEnemies = [...s.seenEnemies, ...newEnemies];
+    }
+
+    if (sectorStats.seenBosses && sectorStats.seenBosses.length > 0) {
+        s.seenBosses = s.seenBosses || [];
+        const newBosses = sectorStats.seenBosses.filter(b => !s.seenBosses.includes(b));
+        s.seenBosses = [...s.seenBosses, ...newBosses];
+    }
+
     // SP for Collectibles
     if (sectorStats.collectiblesDiscovered && sectorStats.collectiblesDiscovered.length > 0) {
         const newUnique = sectorStats.collectiblesDiscovered.filter(c => !s.collectiblesDiscovered.includes(c));

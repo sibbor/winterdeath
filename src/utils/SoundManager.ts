@@ -93,6 +93,7 @@ export class SoundManager {
     GamePlaySounds.playImpact(this.core, type);
   }
   playSwimming() { GamePlaySounds.playSwimming(this.core); }
+  playDash() { SoundBank.play(this.core, 'dash', 0.25, 1.0 + Math.random() * 0.2); }
 
   // --- VOICE DELEGATES ---
   playVoice(name: string) { VoiceSounds.playVoice(this.core, name); }
@@ -488,7 +489,24 @@ export class SoundManager {
       case 'runner_scream': this.playRunnerScream(); break;
       case 'runner_attack': this.playRunnerAttack(); break;
       case 'runner_death': this.playRunnerDeath(); break;
-      case 'tank_smash': this.playTankSmash(); break;
+
+      case 'tank_smash':
+      case 'SMASH':
+        this.playTankSmash();
+        break;
+
+      case 'ELECTRIC_BEAM':
+        this.playArcCannonZap(); // Use existing zap for now
+        break;
+
+      case 'SCREECH':
+        this.playRunnerScream(); // Use runner scream for screech
+        break;
+
+      case 'MAGNETIC_CHAIN':
+        this.playArcCannonZap();
+        break;
+
       case 'tank_roar': this.playTankRoar(); break;
       case 'tank_death': this.playTankDeath(); break;
       case 'bomber_beep': this.playBomberBeep(); break;

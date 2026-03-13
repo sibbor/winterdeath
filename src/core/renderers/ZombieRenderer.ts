@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
-import { Enemy } from '../../types/enemy';
+import { Enemy, EnemyDeathState } from '../../types/enemy';
 import { WeaponType } from '../../content/weapons';
 
 export class ZombieRenderer {
@@ -87,7 +87,7 @@ export class ZombieRenderer {
             const e = enemies[i];
 
             // Only render enemies in render-ready states (migration to CorpseRenderer handles death)
-            if (e.deathState === 'DEAD') continue;
+            if (e.deathState === EnemyDeathState.DEAD) continue;
 
             const instMesh = this.meshes[e.type];
             if (!instMesh || instMesh.count >= this.maxInstances) continue;
