@@ -11,6 +11,7 @@ import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
 import { WaterBodyType, WaterStyle, WaterBody } from '../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
+import { TreeType } from '../../types/enemy';
 
 // Shared Utilities for Sector Generation
 const _c1 = new THREE.Color();
@@ -1041,9 +1042,10 @@ export const SectorGenerator = {
 
     spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
         // Map legacy types to new procedural types
-        let genType: 'PINE' | 'OAK' | 'DEAD' | 'BIRCH' = 'PINE';
-        if (type === 'birch') genType = 'BIRCH';
-        // 'spruce' and 'pine' map to 'PINE'
+        let genType: TreeType = TreeType.PINE;
+        if (type === 'birch') genType = TreeType.BIRCH;
+        if (type === 'spruce') genType = TreeType.SPRUCE;
+        // 'pine' maps to 'PINE' (default)
 
         const tree = EnvironmentGenerator.createTree(genType, scaleMultiplier);
         tree.position.set(x, 0, z);
@@ -1102,6 +1104,7 @@ export const SectorGenerator = {
 
         let targetFogDensity = defEnv.fogDensity;
         let targetAmbient = defEnv.ambientIntensity;
+        let targetGroundColor = defEnv.groundColor ?? 0xffffff;
         let activeWeather: any = 'none';
         let maxWeight = 0;
 
@@ -1166,6 +1169,7 @@ export const SectorGenerator = {
             if (override.fogColor !== undefined) targetFogColor.setHex(override.fogColor);
             if (override.fogDensity !== undefined) targetFogDensity = override.fogDensity;
             if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
+            if (override.groundColor !== undefined) targetGroundColor = override.groundColor;
 
             // Lights Override
             events.setLight({
@@ -1219,6 +1223,11 @@ export const SectorGenerator = {
         const ambientLight = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
         if (ambientLight) {
             ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbient, 0.05);
+        }
+        
+        const ground = scene.getObjectByName('GROUND') as THREE.Mesh;
+        if (ground && ground.material) {
+            (ground.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);
         }
 
         // 5. Auto-Weather Sync
