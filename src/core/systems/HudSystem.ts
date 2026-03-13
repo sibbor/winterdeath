@@ -140,6 +140,8 @@ export const HudSystem = {
             throttleState: state.vehicleThrottle || 0,
             spEarned: spEarned,
             skillPoints: (props.stats?.skillPoints || 0) + spEarned, // Total SP: base + session (safely)
+            isDead: state.isDead,
+            killerName: state.killerName,
             debugInfo: {
                 aim: input.aimVector ? { x: parseFloat(input.aimVector.x.toFixed(2)), y: parseFloat(input.aimVector.y.toFixed(2)) } : { x: 0, y: 0 },
                 input: {
