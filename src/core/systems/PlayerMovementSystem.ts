@@ -29,22 +29,16 @@ export class PlayerMovementSystem implements System {
 
         const currentSectorData = (session.engine.renderer as any)._sectorData || (session as any).currentSectorData;
         const env = currentSectorData?.environment;
-        
+
         // --- APPLY DYNAMIC MULTIPLIERS ---
         const speedMult = state.multipliers.speed;
         const baseSpeed = state.stats.speed;
         const currentSpeed = baseSpeed * speedMult * 10;
 
-        if (state.isRolling) {
-            state.isMoving = false;
-            return;
-        }
-
         if (state.activeVehicle) {
             state.isMoving = false;
             return;
         }
-
 
         const isMoving = this.handleMovement(
             this.playerGroup,
@@ -186,7 +180,7 @@ export class PlayerMovementSystem implements System {
             state.stamina = Math.max(0, state.stamina - waterStaminaDrain * delta);
             if (isSwimming && state.stamina <= 0) {
                 speed *= 0.5; // Exhaustion penalty while swimming
-                
+
                 // Drowning Damage
                 if (now - (state.lastDrownTick || 0) > 1000) {
                     state.lastDrownTick = now;
