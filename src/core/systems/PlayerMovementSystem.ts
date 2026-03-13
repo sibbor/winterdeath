@@ -157,15 +157,25 @@ export class PlayerMovementSystem implements System {
         state.isSwimming = isSwimming;
         state.isWading = isWading;
 
+        // --- 3. STAMINA & REGENERATION ---
+        const waterStaminaDrain = isSwimming ? 7 : (isWading ? 3 : 0);
+        if (waterStaminaDrain > 0 && !state.activeVehicle) {
+            state.lastStaminaUseTime = now;
+            state.stamina = Math.max(0, state.stamina - waterStaminaDrain * delta);
+            if (isSwimming && state.stamina <= 0) {
+                speed *= 0.5; // Exhaustion penalty while swimming
+            }
+        }
+
         if (state.isRushing) {
             state.lastStaminaUseTime = now;
             if (state.stamina > 0) {
                 state.stamina -= 5 * delta;
-                speed *= 1.75;
+                speed *= 1.5;
             } else {
                 state.isRushing = false;
             }
-        } else if (!state.isRolling) {
+        } else if (!state.isRolling && waterStaminaDrain === 0) {
             if (now - state.lastStaminaUseTime > 5000) {
                 state.stamina = Math.min(state.maxStamina, state.stamina + 15 * delta);
             }
