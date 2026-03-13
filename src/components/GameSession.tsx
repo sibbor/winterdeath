@@ -14,6 +14,7 @@ import { createGameLoop } from './game/session/GameSessionLoop';
 import GameSessionUI from './game/session/GameSessionUI';
 import { requestWakeLock, releaseWakeLock } from '../utils/device';
 import { FXSystem } from '../core/systems/FXSystem';
+import { aggregateStats } from '../core/ProgressionManager';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -23,6 +24,7 @@ export interface GameSessionHandle {
     adjustPitch: (dir: number) => void;
     getSystems: () => { id: string; enabled: boolean }[];
     setSystemEnabled: (id: string, enabled: boolean) => void;
+    getMergedSessionStats: () => any;
 }
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
@@ -303,6 +305,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         },
         getSectorStats,
+        getMergedSessionStats: () => {
+            const sessionStats = getSectorStats(false, false);
+            return aggregateStats(props.stats, sessionStats, false, false, 0);
+        },
         triggerInput: (key: string) => {
             window.dispatchEvent(new KeyboardEvent('keydown', { key: key, bubbles: true }));
             setTimeout(() => {

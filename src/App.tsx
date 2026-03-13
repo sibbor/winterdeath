@@ -648,7 +648,7 @@ const App: React.FC = () => {
 
             {activeOverlay === 'ADVENTURE_LOG' && (
                 <ScreenAdventureLog
-                    stats={gameState.stats}
+                    stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
                     onClose={() => {
                         if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
