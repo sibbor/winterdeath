@@ -187,6 +187,8 @@ export const en = {
         intel_none: "No intel gathered.",
         classified_threat: "Classified threat data.",
         unknown_threat: "Unknown Threat",
+        drowning: "Drowning",
+        falling: "Fall Damage",
         unknown_sector: "Unknown Sector",
         health: "Health",
         speed: "Speed",

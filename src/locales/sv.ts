@@ -180,6 +180,8 @@ export const sv = {
         intel_none: "Ingen intel insamlad.",
         classified_threat: "Klassificerad hotbild.",
         unknown_threat: "Okänt hot",
+        drowning: "Drunkning",
+        falling: "Fallskada",
         unknown_sector: "Okänd sektor",
         health: "Hälsa",
         speed: "Hastighet",

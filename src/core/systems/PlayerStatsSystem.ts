@@ -173,6 +173,10 @@ export class PlayerStatsSystem implements System {
             state.killerName = this.t(`bosses.${attacker.bossId}.name`);
         } else if (attacker) {
             state.killerName = this.t(`enemies.${attacker.type}.name`);
+        } else if (type === DamageType.DROWNING) {
+            state.killerName = this.t('ui.drowning');
+        } else if (type === DamageType.FALL) {
+            state.killerName = this.t('ui.falling');
         } else {
             state.killerName = this.t('ui.unknown_threat');
         }
