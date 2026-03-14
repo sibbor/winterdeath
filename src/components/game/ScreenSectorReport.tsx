@@ -29,7 +29,7 @@ const formatDistance = (meters: number) => {
 
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentSector, isMobileDevice }) => {
 
-    const buttonStyle = "flex-1 max-w-xs py-4 font-black uppercase tracking-widest transition-colors skew-x-[-10deg] border-2 shadow-[0_0_20px_rgba(220,38,38,0.4)]";
+    const buttonStyle = "flex-1 max-w-xs py-4 font-bold uppercase tracking-widest transition-colors skew-x-[-10deg] border-2 shadow-[0_0_20px_rgba(220,38,38,0.4)]";
 
     const accuracy = stats.shotsFired > 0
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
@@ -83,7 +83,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     const StatBlock = ({ label, value, color }: { label: string, value: string | number, color: string }) => (
         <div>
             <span className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{label}</span>
-            <span className={`text-2xl font-black ${color}`}>{value}</span>
+            <span className={`text-2xl font-semibold ${color}`}>{value}</span>
         </div>
     );
 
@@ -107,18 +107,18 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 1. Performance (Blue) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-black uppercase text-2xl border-b-4 border-blue-500 bg-blue-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.performance')}</h3>
+                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-blue-500 bg-blue-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.performance')}</h3>
                     <div className="space-y-4 px-2">
                         {/* XP Box */}
                         <div className="bg-blue-900/20 p-4 border-l-4 border-blue-500 shadow-lg">
                             <span className="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">{t('ui.xp_earned')}</span>
-                            <span className="text-4xl font-black text-white">+{stats.xpGained}</span>
+                            <span className="text-4xl font-semibold text-white">+{stats.xpGained}</span>
                         </div>
 
                         {/* SP Box */}
                         <div className="bg-purple-900/20 p-4 border-l-4 border-purple-500 shadow-lg">
                             <span className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1">{t('ui.sp_earned')}</span>
-                            <span className="text-4xl font-black text-white">+{stats.spEarned || 0}</span>
+                            <span className="text-4xl font-semibold text-white">+{stats.spEarned || 0}</span>
                         </div>
 
                         <div className="pt-2 space-y-4">
@@ -131,12 +131,12 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 2. Scavenging (Yellow) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-black uppercase text-2xl border-b-4 border-yellow-500 bg-yellow-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.scavenging')}</h3>
+                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-yellow-500 bg-yellow-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.scavenging')}</h3>
                     <div className="space-y-4 flex flex-col px-2">
                         {/* Scrap Box */}
                         <div className="bg-yellow-900/20 p-4 border-l-4 border-yellow-500 shadow-lg">
                             <span className="block text-xs font-bold text-yellow-400 uppercase tracking-widest mb-1">{t('ui.scrap_earned')}</span>
-                            <span className="text-4xl font-black text-white">+{stats.scrapLooted}</span>
+                            <span className="text-4xl font-semibold text-white">+{stats.scrapLooted}</span>
                         </div>
 
                         {/* Chests info */}
@@ -196,7 +196,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 3. Combat (Red) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-black uppercase text-2xl border-b-4 border-red-500 bg-red-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.combat')}</h3>
+                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-red-500 bg-red-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.combat')}</h3>
                     <div className="space-y-6 px-2">
 
                         {/* Damage Stats Row */}
@@ -237,19 +237,19 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 4. Outcome (Green) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-black uppercase text-2xl border-b-4 border-green-500 bg-green-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.outcome')}</h3>
+                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-green-500 bg-green-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.outcome')}</h3>
                     <div className="space-y-6 px-2">
 
                         {/* Family Member Box */}
                         <div className={`p-4 border-l-4 shadow-lg ${familyBoxClass}`}>
                             <span className={`block text-xs font-bold uppercase tracking-widest mb-1 opacity-90 ${familyTitleColor}`}>{t('ui.family_member')}</span>
-                            <span className="text-3xl font-black uppercase text-white">{t(familyStatusKey)}</span>
+                            <span className="text-3xl font-semibold uppercase text-white">{t(familyStatusKey)}</span>
                         </div>
 
                         {/* Boss Status Box */}
                         <div className={`p-4 border-l-4 shadow-lg ${bossBoxClass}`}>
                             <span className={`block text-xs font-bold uppercase tracking-widest mb-1 opacity-90 ${bossTitleColor}`}>{t('ui.boss_status')}</span>
-                            <span className="text-3xl font-black uppercase text-white">{t(bossStatusKey)}</span>
+                            <span className="text-3xl font-semibold uppercase text-white">{t(bossStatusKey)}</span>
                         </div>
 
                     </div>

@@ -59,19 +59,18 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     }, [onClose, onConfirm]);
 
     return (
-        <div className={`absolute inset-0 flex items-center justify-center z-[100] p-4 md:p-8 pointer-events-auto touch-auto ${transparent ? '' : 'bg-black/30 backdrop-blur-lg'}`}>
-            <div className={`relative flex flex-col w-full ${maxWidthClass} ${heightClass} bg-black shadow-2xl border-2 ${borderColorClass} shadow-[0_0_50px_rgba(220,38,38,0.2)] overflow-hidden`}>
+        <div className={`absolute inset-0 flex items-center justify-center z-[100] p-4 md:p-8 pointer-events-auto touch-auto ${transparent ? '' : 'bg-black/80 backdrop-blur-2xl'}`}>
+            <div className={`relative flex flex-col w-full ${maxWidthClass} ${heightClass} bg-black border border-white/10 shadow-[0_0_100px_rgba(0,0,0,1)] overflow-hidden`}>
 
-                {/* Background Decoration */}
-                <div className="absolute top-0 right-0 opacity-10 pointer-events-none">
-                    <svg viewBox="0 0 100 100" width="300" height="300" fill="red"><path d="M10 10 L90 10 L50 90 Z" /></svg>
-                </div>
+                {/* Gritty Overlay Decoration */}
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" 
+                     style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/dark-leather.png")' }} />
 
                 {/* Header */}
-                <div className="p-4 md:p-8 pb-0 relative z-10 shrink-0">
-                    <div className={`mb-4 md:mb-8 border-b-4 pb-4 flex justify-between items-end ${titleColorClass.includes('blue') ? 'border-blue-600' : 'border-red-900'}`}>
+                <div className="p-6 md:p-10 pb-0 relative z-10 shrink-0">
+                    <div className={`mb-4 md:mb-8 border-b border-white/10 pb-6 flex justify-between items-center`}>
                         {typeof title === 'string' ? (
-                            <h2 className={`text-4xl md:text-6xl font-black uppercase tracking-tighter inline-block skew-x-[-10deg] ${titleColorClass}`}>
+                            <h2 className={`text-4xl md:text-6xl font-medium uppercase tracking-tighter hud-text-glow ${titleColorClass}`}>
                                 {title}
                             </h2>
                         ) : (
@@ -81,9 +80,9 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                         {onClose && showCloseButton && (
                             <button
                                 onClick={() => { soundManager.playUiClick(); onClose(); }}
-                                className="px-4 md:px-8 py-2 md:py-3 font-black uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 border-2 border-gray-600 text-gray-400 hover:text-white hover:border-white skew-x-[-10deg] mb-2"
+                                className="hud-touch-btn px-6 py-2 text-xs font-bold tracking-widest uppercase transition-all"
                             >
-                                <span className="block skew-x-[10deg]">{t('ui.close')}</span>
+                                {t('ui.close')}
                             </button>
                         )}
                     </div>
@@ -96,7 +95,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
 
                 {/* Footer */}
                 {footer && (
-                    <div className={`${isMobile ? 'p-4' : 'p-6'} bg-gray-900/50 border-t-2 border-gray-800 flex justify-center gap-4`}>
+                    <div className={`${isMobile ? 'p-6' : 'p-8'} bg-white/[0.02] border-t border-white/10 flex justify-center gap-4 relative z-10`}>
                         {footer}
                     </div>
                 )}

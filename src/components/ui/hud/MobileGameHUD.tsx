@@ -161,356 +161,138 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
         prevDistanceTraveled.current = distanceTraveled;
     }, [distanceTraveled]);
 
-    const renderSlot = (slot: string, weapon: WeaponType, isActive: boolean) => {
-        const wData = WEAPONS[weapon];
-        if (!wData) return <div key={slot} className="w-12 h-12 border-2 border-zinc-800 bg-black/50 skew-x-[-10deg]"></div>;
 
-        const isThrowable = wData.category === 'THROWABLE';
-        const isRadio = weapon === WeaponType.RADIO;
-        let countDisplay = null;
-        let isDisabled = false;
-        let signalText = null;
+    const isBossActive = boss && boss.active && !bossDefeated;
+    const wep = WEAPONS[activeWeapon];
 
-        const borderColor = isActive ? wData.color : '#27272a'; // zinc-800 fallback
-
-        if (isThrowable) {
-            if (throwableAmmo !== undefined && throwableAmmo <= 0) isDisabled = true;
-            // Stack Graphics
-            const stackMax = wData.magSize;
-            const stackCurrent = throwableAmmo || 0;
-
-            if (sectorStats?.unlimitedThrowables) {
-                countDisplay = (
-                    <div className="absolute bottom-1 w-full text-center">
-                        <span className="text-xl font-black text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">∞</span>
-                    </div>
-                );
-            } else {
-                countDisplay = (
-                    <div className="absolute bottom-0 left-0 w-full flex justify-center gap-0.5 px-1 pb-0.5">
-                        {Array.from({ length: stackMax }).map((_, i) => (
-                            <div key={i}
-                                className={`h-1.5 flex-1 skew-x-[10deg] ${i < stackCurrent ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
-                                style={{ backgroundColor: i < stackCurrent ? wData.color : undefined, boxShadow: i < stackCurrent ? `0 0 5px ${wData.color}` : undefined }}
-                            />
-                        ))}
-                    </div>
-                );
-            }
-        }
-
-        if (isRadio) {
-            if (familyFound) {
-                isDisabled = true;
-                signalText = t('ui.located');
-            }
-        }
-
+    const renderSegments = (current: number, max: number, colorClass: string = 'active') => {
+        const totalSegments = 10;
+        const activeSegments = Math.ceil((current / max) * totalSegments);
         return (
-            <button key={slot}
-                onClick={(e) => { e.stopPropagation(); onSelectWeapon && onSelectWeapon(slot); }}
-                onTouchStart={(e) => {
-                    e.stopPropagation();
-                    if (onSelectWeapon) onSelectWeapon(slot);
-                }} /* Capture touch immediately on mobile */
-                className={`w-12 h-12 border-2 flex flex-col items-center justify-center relative transition-all overflow-hidden skew-x-[-10deg] pointer-events-auto ${isActive ? 'bg-zinc-950 text-white shadow-lg z-10 scale-105' : 'bg-black/90 text-zinc-600'} ${isDisabled ? 'opacity-40 grayscale' : ''} active:scale-95`}
-                style={{ borderColor: borderColor }}
-            >
-                <div className="w-6 h-6 skew-x-[10deg] flex items-center justify-center"
-                    style={{
-                        filter: isActive ? 'drop-shadow(0 0 2px rgba(255,255,255,0.8))' : 'opacity(0.5)',
-                        transform: isActive ? 'scale(1.1)' : 'scale(1.0)'
-                    }}
-                >
-                    {wData.iconIsPng ? (
-                        <img src={wData.icon} alt="" className="w-full h-full object-contain" />
-                    ) : (
-                        <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: wData.icon }} />
-                    )}
-                </div>
-
-                <span className="hidden text-[9px] uppercase font-black text-center w-full px-1 skew-x-[10deg] tracking-wider mb-3 leading-none whitespace-normal">{t(wData.displayName)}</span>
-
-                <span className="text-[8px] absolute top-0.5 left-1.5 font-bold skew-x-[10deg] text-zinc-500">{slot}</span>
-
-                <div className="skew-x-[10deg] w-full">{countDisplay}</div>
-
-                {isRadio && signalText && <span className={`absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 skew-x-[10deg]`}>{signalText}</span>}
-            </button>
+            <div className="flex gap-1 w-full max-w-[200px]">
+                {Array.from({ length: totalSegments }).map((_, i) => (
+                    <div 
+                        key={i} 
+                        className={`h-1.5 flex-1 border border-white/10 transition-all ${i < activeSegments ? 'bg-[#fb923c] shadow-[0_0_5px_#fb923c]' : 'bg-white/5'}`}
+                    />
+                ))}
+            </div>
         );
     };
 
-    const isBossActive = boss && boss.active && !bossDefeated;
-    const currentWeaponLevel = (weaponLevels && activeWeapon && weaponLevels[activeWeapon]) ? weaponLevels[activeWeapon] : 1;
-    const wep = WEAPONS[activeWeapon];
-    const isThrowableActive = wep && wep.category === 'THROWABLE';
-    const isRadioActive = activeWeapon === WeaponType.RADIO;
-
     return (
         <div className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
-            {/* Top Gradient Background (Behind UI) */}
-            <div className="fixed top-0 left-0 w-full h-32 pointer-events-none z-0"
-                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)' }}>
-            </div>
-
-            {/* Bottom Gradient Background (Behind UI) */}
-            <div className="fixed bottom-0 left-0 w-full h-32 pointer-events-none z-0"
-                style={{ background: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 30%, rgba(0,0,0,0) 100%)' }}>
-            </div>
-
-            <div className={`absolute inset-0 pointer-events-none p-4 flex flex-col justify-between font-sans z-[80]`}>
-
-                {/* Top Header */}
-                <div className="flex justify-between items-start">
-                    {/* Ranking & Resource Group (Top Left) */}
-                    <div className={`flex flex-col gap-2 items-start transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                        {/* Rank Box (Matches CampHUD) */}
-                        <div className={`bg-slate-900/95 p-2 border-l-4 border-blue-500 shadow-2xl w-[200px] backdrop-blur-sm relative group`}>
-                            {/* Rank Title Animation */}
-                            <div className="relative overflow-hidden">
-                                {showLevelUp ? (
-                                    <h1 className="text-xl font-black text-white tracking-tighter leading-none uppercase animate-[revealRight_1s_ease-out_forwards]" style={{ fontWeight: 900 }}>
-                                        {getRank(level)}
-                                    </h1>
-                                ) : (
-                                    <h1 className="text-xl font-black text-white tracking-tighter leading-none uppercase" style={{ fontWeight: 900 }}>
-                                        {getRank(level)}
-                                    </h1>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-2 mt-1">
-                                <span className="text-blue-400 font-bold text-[10px] tracking-widest">{t('ui.lvl')} {level}</span>
-                                <div className="flex-1 h-1 bg-blue-900/40">
-                                    <div className="h-full bg-blue-400 transition-all duration-500" style={{ width: `${xpP}%` }} />
-                                    {/* Large XP Gain Indicator */}
-                                    {xpGained && (
-                                        <div className="absolute top-0 right-0 h-full flex items-center justify-end pr-2 overflow-visible">
-                                            <span className="text-[8px] font-black text-blue-300 animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)] absolute right-0">+{xpGainAmount} XP</span>
-                                            <span className="text-[8px] font-black text-white drop-shadow-[0_0_5px_rgba(59,130,246,1)] animate-pulse relative z-10">+{xpGainAmount} XP</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Mobile HP/Stamina - Nested inside Rank Box for compact layout */}
-                            <div className="mt-2 w-full flex flex-col gap-1">
-                                {/* HP Bar */}
-                                <div className="relative w-full h-3 bg-red-950/60 z-10 border border-red-900/30">
-                                    <div className="h-full bg-red-700 transition-all duration-200 ease-out" style={{ width: `${hpP}%` }} />
-                                </div>
-                                {/* Stamina Bar */}
-                                <div className="relative w-full h-2 bg-emerald-950/60 z-10 border border-emerald-900/30 -mt-0.5">
-                                    <div className="h-full bg-emerald-600 transition-all duration-200 ease-out" style={{ width: `${stP}%` }} />
-                                </div>
-                            </div>
-
-                            {/* Level Up Notification Overlay */}
-                            {showLevelUp && (
-                                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none bg-black/60 backdrop-blur-[1px]">
-                                    <span className="text-blue-400 text-xl font-black tracking-[0.2em] animate-[pulse_0.5s_ease-in-out_infinite] uppercase drop-shadow-[0_0_10px_rgba(59,130,246,0.8)] border-y-2 border-blue-500 py-1 bg-black/80 w-full text-center transform -skew-x-6">
-                                        {t('ui.level_up')}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Status Effects Icons (Mobile) */}
-                        <div className="flex flex-wrap gap-1 mt-1 z-10 w-[200px]">
-                            {statusEffects.map((eff, i) => (
-                                <div key={i} className="px-1.5 py-0.5 bg-red-900/40 border border-red-500/50 skew-x-[-10deg] flex items-center gap-1 animate-pulse">
-                                    <span className="text-[8px] font-black text-red-100 skew-x-[10deg] uppercase tracking-tighter">
-                                        {eff.type}
-                                    </span>
-                                    <span className="text-[6px] font-bold text-red-300 skew-x-[10deg]">
-                                        {Math.ceil(eff.duration / 1000)}s
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="flex flex-row gap-4 items-start">
-                            {/* Skill Points (Left, Narrow) - Animated */}
-                            <div className={`relative transition-all duration-300 transform origin-left ${spGained ? 'animate-[resource-boom_0.5s_ease-out] z-10' : ''}`}>
-                                <div className={`px-2 py-1 border backdrop-blur-sm transition-all duration-300 ${skillPoints > 0 || spGained ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/80 border-slate-700'}`}>
-                                    <div className="flex flex-col">
-                                        <div className="flex justify-between items-baseline gap-2 relative">
-                                            <span className={`text-[8px] uppercase font-black block tracking-widest transition-colors ${skillPoints > 0 || spGained ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                                        </div>
-                                        <div className="relative">
-                                            <span className={`text-base font-black transition-colors ${skillPoints > 0 || spGained ? 'text-purple-400' : 'text-white'}`}>{skillPoints}</span>
-                                            {spGained && (
-                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                    <span className="text-xl font-black text-white drop-shadow-[0_0_10px_rgba(168,85,247,1)] animate-[pop_0.4s_ease-out] z-20 absolute">+{spGainAmount}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Scrap (Right) - Animated on gain */}
-                            <div className={`transition-all duration-200 transform origin-left ${scrapGained ? 'animate-[resource-boom_0.5s_ease-out] z-10' : ''}`}>
-                                <div className={`px-2 py-1 border backdrop-blur-sm transition-all duration-300 ${scrap > 0 || scrapGained ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 border-slate-700'}`}>
-                                    <div className="flex flex-col">
-                                        <div className="flex justify-between items-baseline gap-2 relative">
-                                            <span className={`text-[8px] uppercase font-black block tracking-widest ${scrap > 0 || scrapGained ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                                        </div>
-                                        <div className="relative">
-                                            <span className={`text-base font-black ${scrap > 0 || scrapGained ? 'text-yellow-400' : 'text-white'}`}>{scrap}</span>
-                                            {scrapGained && (
-                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                    <span className="text-xl font-black text-white drop-shadow-[0_0_10px_rgba(234,179,8,1)] animate-[pop_0.4s_ease-out] z-20 absolute">+{scrapGainAmount}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+            
+            {/* Top Row */}
+            <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
+                
+                {/* Top Left: Bars */}
+                <div className={`flex flex-col gap-1 w-40 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                    <div className="hud-bar-container h-5 w-full">
+                        <div className="h-full bg-red-900/20 relative">
+                            <div className="h-full bg-[#ff3333] hud-bar-glow" style={{ width: `${hpP}%` }} />
                         </div>
                     </div>
-
-                    {/* Boss Bar or Kill Tracker - MOVED UNDER RESOURCES */}
-                    <div className="flex flex-col gap-2 w-[200px]">
-                        {isBossActive ? (
-                            <div className="w-full text-center">
-                                <h3 className="text-white font-black text-[10px] uppercase tracking-tighter drop-shadow-lg mb-0.5">{t(boss!.name)}</h3>
-                                <div className="h-1.5 bg-black/90 border border-red-900 overflow-hidden shadow-2xl skew-x-[-10deg]">
-                                    <div className="h-full bg-red-700 transition-all duration-300" style={{ width: `${(boss!.hp / boss!.maxHp) * 100}%` }} />
-                                </div>
-                            </div>
-                        ) : (
-                            <div className={`bg-black/90 border border-red-900/50 px-3 py-1 skew-x-[-10deg] transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'} flex flex-col items-start w-max`}>
-                                <span className="text-red-700 font-black text-[10px] tracking-[0.2em] block skew-x-[10deg] uppercase">
-                                    {kills} {t('ui.kills')}
-                                </span>
-                            </div>
-                        )}
+                    <div className="hud-bar-container h-2 w-[85%]">
+                        <div className="h-full bg-purple-900/20 relative">
+                            <div className="h-full bg-[#a855f7] hud-bar-glow" style={{ width: `${stP}%` }} />
+                        </div>
+                    </div>
+                    <div className="hud-bar-container h-1.5 w-[70%]">
+                        <div className="h-full bg-cyan-900/20 relative">
+                            <div className="h-full bg-[#06b6d4] hud-bar-glow" style={{ width: `${xpP}%` }} />
+                        </div>
                     </div>
                 </div>
 
-                {/* Top Right Actions (Boss Mode only) */}
-                {isBossActive && !isBossIntro && (
-                    <div className="absolute top-4 right-4 flex gap-2 pointer-events-auto">
-                        <button onClick={onToggleMap} className="w-10 h-10 bg-zinc-900/80 border border-zinc-700 text-white flex items-center justify-center skew-x-[-10deg] active:bg-zinc-800">
-                            <span className="skew-x-[10deg] text-[8px] font-black uppercase">MAP</span>
-                        </button>
-                        <button onClick={onTogglePause} className="w-10 h-10 bg-zinc-900/80 border border-zinc-700 text-white flex items-center justify-center skew-x-[-10deg] active:bg-zinc-800">
-                            <span className="skew-x-[10deg] text-[8px] font-black uppercase">||</span>
-                        </button>
-                    </div>
-                )}
-
-                {/* Camera Rotation Controls (Only Visible in Debug Mode) */}
-                {debugMode && !isBossIntro && (
-                    <div className="absolute top-20 right-4 flex translate-y-10 gap-2 pointer-events-auto">
-                        <button onClick={() => onRotateCamera && onRotateCamera(1)} className="w-10 h-10 rounded-full bg-zinc-900/60 border border-zinc-500 text-white flex items-center justify-center active:bg-zinc-700 backdrop-blur-sm shadow-lg">
-                            <span className="text-lg font-black">↺</span>
-                        </button>
-                        <button onClick={() => onRotateCamera && onRotateCamera(-1)} className="w-10 h-10 rounded-full bg-zinc-900/60 border border-zinc-500 text-white flex items-center justify-center active:bg-zinc-700 backdrop-blur-sm shadow-lg">
-                            <span className="text-lg font-black">↻</span>
-                        </button>
-                    </div>
-                )}
+                {/* Top Right: Kills */}
+                <div className={`flex flex-col items-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                    <span className="text-4xl font-semibold text-white leading-none">
+                        {kills}
+                    </span>
+                    <span className="text-[10px] font-bold text-[#ff3333] tracking-widest uppercase">
+                        {t('ui.kills')}
+                    </span>
+                </div>
             </div>
 
-            {/* Bottom Interface */}
-            <div className={`absolute bottom-4 left-4 right-4 pointer-events-none flex flex-col items-start justify-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                {/* Active Weapon Details - MOVED TO ABOVE SLOT BAR */}
-                <div className={`flex flex-col items-start gap-1 transition-opacity duration-300 ${isDriving ? 'opacity-0' : 'opacity-100'}`}>
-                    {wep && (
-                        <>
-                            <div className="flex flex-col items-start">
-                                <h2 className={`text-[10px] font-black uppercase tracking-widest italic drop-shadow-md leading-none ${isRadioActive ? 'text-white' : 'text-zinc-200'}`}>
-                                    {isRadioActive ? t('weapons.radio') : t(wep.displayName)}
-                                </h2>
-                            </div>
+            {/* Boss / Wave Bar Center Top */}
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 flex flex-col items-center w-full px-12">
+                {isBossActive ? (
+                    <div className="w-full flex flex-col items-center">
+                        <h2 className="text-xs font-bold text-white tracking-widest uppercase mb-2 opacity-60">{t(boss!.name)}</h2>
+                        {renderSegments(boss!.hp, boss!.maxHp)}
+                    </div>
+                ) : sectorStats?.zombieWaveActive ? (
+                    <div className="w-full flex flex-col items-center">
+                        <h2 className="text-xs font-semibold text-[#ff3333] tracking-tighter uppercase mb-1">{t('zombie_wave')}</h2>
+                        {renderSegments(
+                            sectorStats.zombiesKilled || 0, 
+                            sectorStats.zombiesKillTarget || sectorStats.hordeTarget || 1
+                        )}
+                    </div>
+                ) : null}
+            </div>
 
-                            <div className={`relative bg-zinc-950 border-2 p-1 min-w-[70px] h-8 flex items-center justify-center shadow-2xl overflow-hidden skew-x-[-10deg]`}
-                                style={{ borderColor: wep.color }}>
-                                {isReloading && (
-                                    <div className="absolute inset-0 z-0 pointer-events-none">
-                                        <div className="w-full h-full origin-bottom transition-transform duration-100 ease-linear"
-                                            style={{
-                                                transform: `scaleY(${reloadProgress})`,
-                                                backgroundColor: wep.color,
-                                                opacity: 0.5
-                                            }}>
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="skew-x-[10deg] w-full text-center relative z-10">
-                                    {isRadioActive ? (
-                                        familyFound ? (
-                                            <div className="flex flex-col items-center leading-none">
-                                                <span className={`text-blue-300 font-black uppercase tracking-widest text-[7px] animate-pulse`}>{isBossActive ? t('ui.defeat_boss') : t('ui.target_located')}</span>
-                                            </div>
+            {/* Bottom Centered Action Bar */}
+            <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                
+                {/* Ammo Display */}
+                {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
+                    <div className="mb-2 flex items-baseline">
+                         <span className="text-xl font-semibold text-white">{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
+                         <span className="text-[10px] font-medium text-white/30 ml-1">/{magSize}</span>
+                    </div>
+                )}
+
+                <div className="flex gap-1.5 pointer-events-auto">
+                    {[
+                        { slot: '1', type: loadout.primary },
+                        { slot: '2', type: loadout.secondary },
+                        { slot: '3', type: loadout.throwable },
+                        { slot: '4', type: loadout.special },
+                        { slot: '5', type: WeaponType.RADIO }
+                    ].map(({ slot, type }) => {
+                        const wData = WEAPONS[type];
+                        const isActive = activeWeapon === type;
+                        return (
+                            <button 
+                                key={slot}
+                                onClick={() => onSelectWeapon && onSelectWeapon(slot)}
+                                onTouchStart={(e) => { e.stopPropagation(); onSelectWeapon && onSelectWeapon(slot); }}
+                                className={`hud-slot w-10 h-10 flex items-center justify-center relative ${isActive ? 'active' : 'opacity-40'}`}
+                            >
+                                {wData && (
+                                    <div className="w-6 h-6 flex items-center justify-center">
+                                        {wData.iconIsPng ? (
+                                            <img src={wData.icon} alt="" className="w-full h-full object-contain filter invert opacity-80" />
                                         ) : (
-                                            <div className="flex flex-col items-center justify-center">
-                                                {familySignal > 0.05 ? (
-                                                    <span className={`text-xs font-black text-white tracking-wider`}>{Math.floor(familySignal * 100)}%</span>
-                                                ) : (
-                                                    <span className={`text-[8px] font-bold text-blue-500/50 animate-pulse tracking-widest`}>{t('ui.scanning')}</span>
-                                                )}
-                                            </div>
-                                        )
-                                    ) : (
-                                        <div className="flex items-baseline justify-center">
-                                            <span className={`text-xl font-black text-white tracking-tighter leading-none`}>
-                                                <span>{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
-                                            </span>
-                                            {!isThrowableActive && !sectorStats?.unlimitedAmmo && (
-                                                <span className={`text-[10px] font-bold text-zinc-600 ml-1`}>
-                                                    /{magSize}
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                <div className={`flex justify-between items-end w-full mt-2`}>
-
-                    {/* Placeholder for Bottom-Left Action (Empty on Mobile for symmetry) */}
-                    <div className="w-4"></div>
-
-                    {/* Centered Action Bar (Weapons) -- MOVED TO BOTTOM LEFT FOR MOBILE */}
-                    <div className={`relative transform`}>
-                        {isDriving ? (
-                            <div className="flex flex-col items-center justify-end pb-4">
-                                {/* Speedometer Display */}
-                                <div className="bg-black/90 border-2 border-zinc-700 px-6 py-2 w-[140px] text-center skew-x-[-10deg] shadow-[0_0_10px_rgba(0,0,0,0.8)]">
-                                    <span className="text-3xl font-black text-white tracking-tighter block skew-x-[10deg] drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">
-                                        {speedKmH}
-                                    </span>
-                                    <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest block skew-x-[10deg] mt-1">KM/H</span>
-                                </div>
-                                {/* Pedals */}
-                                <div className="flex gap-2 mt-2">
-                                    <div className={`px-3 py-0.5 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState < 0 ? 'bg-red-600/30 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] text-red-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
-                                        <span className="text-[8px] font-black uppercase tracking-widest block skew-x-[10deg]">BRK</span>
+                                            <div className="w-full h-full text-white/80" dangerouslySetInnerHTML={{ __html: wData.icon }} />
+                                        )}
                                     </div>
-                                    <div className={`px-3 py-0.5 border-2 skew-x-[-10deg] transition-all duration-150 ${throttleState > 0 ? 'bg-emerald-600/30 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] text-emerald-100' : 'bg-black/80 border-zinc-800 text-zinc-600'}`}>
-                                        <span className="text-[8px] font-black uppercase tracking-widest block skew-x-[10deg]">GAS</span>
+                                )}
+                                {wData?.category === 'THROWABLE' && (
+                                    <div className="absolute bottom-0.5 left-0.5 right-0.5 flex justify-center gap-0.5">
+                                        {Array.from({ length: wData.magSize }).map((_, i) => (
+                                            <div key={i} className={`h-0.5 flex-1 ${i < (throwableAmmo || 0) ? 'bg-red-500' : 'bg-white/10'}`} />
+                                        ))}
                                     </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className={`gap-2 flex items-end pb-0 pointer-events-auto transition-opacity duration-300`}>
-                                {/* Clickable for mobile weapon switching */}
-                                {renderSlot('1', loadout.primary, activeWeapon === loadout.primary)}
-                                {renderSlot('2', loadout.secondary, activeWeapon === loadout.secondary)}
-                                {renderSlot('3', loadout.throwable, activeWeapon === loadout.throwable)}
-                                {renderSlot('4', loadout.special, activeWeapon === loadout.special)}
-                                {renderSlot('5', WeaponType.RADIO, activeWeapon === WeaponType.RADIO)}
-                            </div>
-                        )}
-                    </div>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
+
+            {/* Driving HUD */}
+            {isDriving && (
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                    <div className="hud-bar-container px-6 py-2">
+                         <span className="text-3xl font-semibold text-white">{speedKmH}</span>
+                         <span className="text-[8px] font-medium text-white/40 block text-center uppercase">KM/H</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 });

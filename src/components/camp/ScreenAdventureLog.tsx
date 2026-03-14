@@ -110,7 +110,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                             const isActive = activeTab === tab.id;
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
                                     style={{
                                         borderColor: isActive ? themeColor : 'transparent',
                                         backgroundColor: isActive ? themeColor : 'transparent',
@@ -147,13 +147,13 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                 return (
                     <Card key={key} isLocked={!isSeen} color={itemColor}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
-                            <h3 className="text-3xl font-black uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
+                            <h3 className="text-3xl font-semibold uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
                                 {isSeen ? key : '???'}
                             </h3>
                             {isSeen && (
                                 <div className="flex flex-col items-end">
                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('ui.kills')}</span>
-                                    <span className="text-xl font-black text-white">{stats.killsByType?.[key] || 0}</span>
+                                    <span className="text-xl font-semibold text-white">{stats.killsByType?.[key] || 0}</span>
                                 </div>
                             )}
                         </div>
@@ -162,15 +162,15 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                 <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
                                     <div className="text-center">
                                         <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.health')}</div>
-                                        <div className="text-2xl font-black text-white">{data.hp}</div>
+                                        <div className="text-2xl font-semibold text-white">{data.hp}</div>
                                     </div>
                                     <div className="text-center border-x border-gray-800">
                                         <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.damage')}</div>
-                                        <div className="text-2xl font-black text-white">{data.damage}</div>
+                                        <div className="text-2xl font-semibold text-white">{data.damage}</div>
                                     </div>
                                     <div className="text-center">
                                         <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
-                                        <div className="text-2xl font-black text-white">{data.speed.toFixed(1)}</div>
+                                        <div className="text-2xl font-semibold text-white">{data.speed.toFixed(1)}</div>
                                     </div>
                                 </div>
                                 <p className="text-base text-gray-300 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: itemColor }}>
@@ -211,7 +211,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                         <div className="flex flex-col h-full">
                             <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                                 <div className="flex flex-col">
-                                    <h3 className="text-3xl font-black uppercase tracking-tighter" style={{ color: isUnlocked ? itemColor : '#4b5563' }}>
+                                    <h3 className="text-3xl font-semibold uppercase tracking-tighter" style={{ color: isUnlocked ? itemColor : '#4b5563' }}>
                                         {isUnlocked ? t(boss.name) : t('ui.unknown_threat')}
                                     </h3>
                                     <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">{sectorName}</span>
@@ -223,15 +223,15 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                                     <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
                                         <div className="text-center">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
-                                            <div className="text-2xl font-black text-white">{boss.hp}</div>
+                                            <div className="text-2xl font-semibold text-white">{boss.hp}</div>
                                         </div>
                                         <div className="text-center border-x border-gray-800">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.damage')}</div>
-                                            <div className="text-2xl font-black text-white">{boss.damage}</div>
+                                            <div className="text-2xl font-semibold text-white">{boss.damage}</div>
                                         </div>
                                         <div className="text-center">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
-                                            <div className="text-2xl font-black text-white">{boss.speed.toFixed(1)}</div>
+                                            <div className="text-2xl font-semibold text-white">{boss.speed.toFixed(1)}</div>
                                         </div>
                                     </div>
                                     <div className="space-y-4">
@@ -275,7 +275,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
                 return (
                     <div key={sectorId} className="space-y-6">
                         <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-black uppercase tracking-tighter text-zinc-500">
+                            <h3 className="text-3xl font-semibold uppercase tracking-tighter text-zinc-500">
                                 {sectorName}
                             </h3>
                             <span className="text-sm font-mono text-zinc-600 font-bold uppercase mt-1">
@@ -328,7 +328,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                 return (
                     <div key={sectorId} className="space-y-6">
                         <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-black uppercase tracking-tighter text-zinc-500">
+                            <h3 className="text-3xl font-semibold uppercase tracking-tighter text-zinc-500">
                                 {sectorName}
                             </h3>
                         </div>
@@ -344,7 +344,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                     <Card key={clueId} isLocked={false} color={typeColor}>
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                                <span className="text-[10px] font-black px-2 py-0.5 rounded text-white uppercase tracking-widest skew-x-[-10deg]" style={{ backgroundColor: typeColor }}>
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest skew-x-[-10deg]" style={{ backgroundColor: typeColor }}>
                                                     {type}
                                                 </span>
                                             </div>
@@ -382,7 +382,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
                 return (
                     <div key={sectorId} className="space-y-6">
                         <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-black uppercase tracking-tighter text-zinc-500">
+                            <h3 className="text-3xl font-semibold uppercase tracking-tighter text-zinc-500">
                                 {sectorName}
                             </h3>
                         </div>
@@ -393,7 +393,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
                                     <Card key={poiId} isLocked={false} color={color}>
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-start border-b border-gray-800 pb-3">
-                                                <h3 className="text-2xl font-black uppercase tracking-tighter text-white">
+                                                <h3 className="text-2xl font-semibold uppercase tracking-tighter text-white">
                                                     {t(`poi.${poiId}_title`)}
                                                 </h3>
                                                 <span className="text-[10px] bg-blue-900/40 text-blue-400 px-3 py-1 rounded border border-blue-900 font-black tracking-widest skew-x-[-10deg]">POI</span>
@@ -461,7 +461,7 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobile?: b
 
             {/* Info Area */}
             <div className={`${isMobile ? 'p-2' : 'p-4'} flex-1 flex flex-col`}>
-                <h4 className={`${isMobile ? 'text-xs' : 'text-lg'} font-black uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
+                <h4 className={`${isMobile ? 'text-xs' : 'text-lg'} font-semibold uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
                     {isFound ? t(item.nameKey) : '???'}
                 </h4>
                 <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>

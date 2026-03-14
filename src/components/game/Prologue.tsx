@@ -65,10 +65,10 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
                 {/* Game Title Design (Only on first step) */}
                 {currentIndex === 0 && (
                     <div className="flex flex-col items-center mb-4 sm:mb-8 animate-title-drop select-none pointer-events-none">
-                        <h1 className="text-6xl sm:text-9xl font-black tracking-tighter text-white leading-[0.85] drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
+                        <h1 className="text-6xl sm:text-9xl font-bold tracking-tighter text-white leading-[0.85] drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
                             {t('ui.game_title_1')}
                         </h1>
-                        <h1 className="text-6xl sm:text-9xl font-black tracking-tighter text-red-600 leading-[0.85] -mt-1 sm:-mt-2 drop-shadow-[0_10px_30px_rgba(185,28,28,0.4)]">
+                        <h1 className="text-6xl sm:text-9xl font-bold tracking-tighter text-red-600 leading-[0.85] -mt-1 sm:-mt-2 drop-shadow-[0_10px_30px_rgba(185,28,28,0.4)]">
                             {t('ui.game_title_2')}
                         </h1>
                     </div>
@@ -124,14 +124,14 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
                         onClick={handleNext}
                         className={`group relative ${isMobileDevice ? 'px-8 py-3' : 'px-16 py-5'} bg-white text-black border-4 border-black hover:bg-black hover:text-white transition-all duration-300 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)]`}
                     >
-                        <span className={`${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase transition-colors relative z-10`}>
+                        <span className={`${isMobileDevice ? 'text-lg' : 'text-xl'} font-bold tracking-[0.2em] uppercase transition-colors relative z-10`}>
                             {currentIndex === prologueData.length - 1 ? t('ui.close') : t('ui.continue')}
                         </span>
                     </button>
 
                     <button
                         onClick={handleFinish}
-                        className="text-gray-500 hover:text-white transition-colors duration-200 uppercase tracking-[0.3em] text-xs font-black font-mono"
+                        className="text-gray-500 hover:text-white transition-colors duration-200 uppercase tracking-[0.3em] text-xs font-bold font-mono"
                     >
                         {t('ui.skip')}
                     </button>

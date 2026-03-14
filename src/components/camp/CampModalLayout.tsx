@@ -35,8 +35,8 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     debugAction
 }) => {
     // Reduced mb-8 to mb-4
-    const headerStyle = "text-3xl md:text-6xl font-black text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg]";
-    const buttonStyle = "px-4 md:px-8 py-2 md:py-3 font-black uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 border-2 shadow-lg text-xs md:text-base";
+    const headerStyle = "text-3xl md:text-6xl font-medium text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg] hud-text-glow";
+    const buttonStyle = "px-4 md:px-8 py-2 md:py-3 font-bold uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 border-2 shadow-lg text-xs md:text-base";
 
     const maxWidth = isSmall ? 'max-w-2xl' : 'max-w-7xl';
     const height = isSmall ? 'h-auto max-h-[85vh]' : 'h-[85vh] md:h-[90vh]';
@@ -75,10 +75,13 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     }, [onClose, onConfirm, canConfirm]);
 
     return (
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-[80] p-4 md:p-8 backdrop-blur-lg pointer-events-auto cursor-default">
-            <div className={`bg-black/95 border-4 border-gray-800 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)] relative`}>
+        <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-[80] p-4 md:p-8 backdrop-blur-2xl pointer-events-auto cursor-default">
+            <div className={`bg-black border border-white/10 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_100px_rgba(0,0,0,0.8)] relative`}>
+                {/* Gritty Overlay Decoration */}
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" 
+                     style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/dark-leather.png")' }} />
                 {/* Header */}
-                <div className="p-4 md:p-6 border-b-2 border-gray-800 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4">
+                <div className="p-4 md:p-6 border-b border-white/10 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4 relative z-10">
                     <h2 className={`${headerStyle} ${borderColorClass}`}>
                         {title}
                     </h2>
@@ -86,7 +89,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                         {debugAction && (
                             <button
                                 onClick={() => { soundManager.playUiClick(); debugAction.action(); }}
-                                className={`px-3 md:px-6 py-1.5 md:py-3 font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black whitespace-nowrap mr-2 md:mr-4 text-[10px] md:text-sm`}
+                                className={`px-3 md:px-6 py-1.5 md:py-3 font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black whitespace-nowrap mr-2 md:mr-4 text-[10px] md:text-sm`}
                             >
                                 <span className="block skew-x-[10deg]">{debugAction.label}</span>
                             </button>
@@ -126,7 +129,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-transparent touch-auto">
+                <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-transparent touch-auto relative z-10">
                     {children}
                 </div>
             </div>

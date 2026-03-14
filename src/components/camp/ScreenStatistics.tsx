@@ -46,7 +46,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, isM
                     {/* RANK BOX */}
                     <div className="bg-blue-900/20 border-2 border-blue-500/50 p-6 flex flex-col items-center text-center">
                         <span className="text-blue-400 text-sm font-bold uppercase tracking-widest mb-2">{t('ui.current_rank')}</span>
-                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter mb-4">{getRank(stats.level)}</h1>
+                        <h1 className="text-4xl font-semibold text-white uppercase tracking-tighter mb-4">{getRank(stats.level)}</h1>
                         <div className="w-full bg-black h-4 border border-blue-900 relative">
                             <div className="h-full bg-blue-500" style={{ width: `${(stats.currentXp / stats.nextLevelXp) * 100}%` }}></div>
                         </div>
@@ -58,7 +58,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, isM
 
                     {/* FAMILY BOX (Swapped to Left) */}
                     <div className="bg-black border border-gray-800 p-6 h-fit">
-                        <h3 className="text-xl font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.family_header')}</h3>
+                        <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.family_header')}</h3>
                         <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.rescued_family_members')}</span><span className="text-white font-mono text-lg">{stats.familyFoundCount}</span></div>
                             <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.clues_found')}</span><span className="text-white font-mono text-lg">{stats.cluesFound.length}</span></div>
@@ -70,7 +70,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, isM
                 <div className={`flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 content-start ${isMobileDevice ? 'shrink-0' : ''}`}>
                     {/* PERFORMANCE BOX */}
                     <div className="bg-black border border-gray-800 p-6">
-                        <h3 className="text-xl font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.performance')}</h3>
+                        <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.performance')}</h3>
                         <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.xp_earned')}</span><span className="text-blue-400 font-mono font-bold text-lg">{stats.currentXp + (stats.level * 1000)}</span></div>
                             <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.sp_earned')}</span><span className="text-purple-400 font-mono font-bold text-lg">{stats.totalSkillPointsEarned}</span></div>
@@ -89,7 +89,7 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, isM
 
                     {/* COMBAT BOX (Swapped to Right) */}
                     <div className="bg-black border border-gray-800 p-6 flex-1">
-                        <h3 className="text-xl font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.combat')}</h3>
+                        <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.combat')}</h3>
                         <div className="space-y-3 text-sm">
                             <div className="flex justify-between items-end"><span className="text-gray-500">{displayKillsLabel}</span><span className="text-white font-mono text-lg">{stats.kills}</span></div>
                             <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.deaths')}</span><span className="text-white font-mono text-lg">{stats.deaths}</span></div>

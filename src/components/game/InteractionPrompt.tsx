@@ -58,14 +58,19 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, scre
     return (
         <div
             style={style}
-            className="flex flex-col items-center gap-2 pointer-events-auto z-40 transition-opacity duration-200 cursor-pointer group"
+            className="flex flex-col items-center gap-2 pointer-events-auto z-40 transition-opacity duration-200 cursor-pointer"
             onClick={(e) => {
                 e.stopPropagation();
                 if (onInteract) onInteract();
             }}
         >
-            <div className={`bg-black/90 border-2 ${colorClass} px-4 py-1 font-bold uppercase tracking-wide text-sm group-hover:scale-105 group-active:scale-95 transition-transform shadow-lg shadow-black/50`}>
-                [{key}] {translatedText}
+            <div className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl ${colorClass}`}>
+                <span className="w-6 h-6 flex items-center justify-center bg-white/20 border border-white/40 text-[10px] font-black text-white">
+                    {key}
+                </span>
+                <span className="text-xs font-black tracking-widest uppercase hud-text-glow">
+                    {translatedText}
+                </span>
             </div>
         </div>
     );

@@ -55,7 +55,7 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                 {/* Header Section */}
                 <div className="col-span-full text-center mb-2 md:mb-4 mt-2 md:mt-4">
                     <span className="text-purple-500 font-bold uppercase tracking-widest text-xs md:text-sm block mb-1">{t('ui.available_skill_points')}</span>
-                    <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-black text-white leading-none`}>{tempStats.skillPoints}</span>
+                    <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white leading-none`}>{tempStats.skillPoints}</span>
                     <div className="mt-4">
                         <span className="text-purple-300 font-bold text-sm uppercase tracking-wider block max-w-2xl mx-auto">
                             {isMaxRank
@@ -78,7 +78,7 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
 
                     return (
                         <div key={skill.id} className={`${isMobileDevice ? 'p-2' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
-                            <h3 className={`${isMobileDevice ? 'text-lg mb-1' : 'text-3xl mb-4'} font-black text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
+                            <h3 className={`${isMobileDevice ? 'text-lg mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
                             {/* Reduced mb-6 to mb-2 */}
                             <p className={`${isMobileDevice ? 'text-[10px] h-8 mb-1 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
@@ -90,7 +90,7 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                             <button
                                 onClick={() => handleUpgradeSkill(skill.id, cost, skill.value)}
                                 disabled={!canAfford}
-                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-black uppercase tracking-wider border-2 transition-all ${canAfford ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' : 'bg-transparent border-gray-800 text-gray-700 cursor-not-allowed'}`}
+                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' : 'bg-transparent border-gray-800 text-gray-700 cursor-not-allowed'}`}
                             >
                                 <span className={`${isMobileDevice ? 'text-xs' : 'text-base'}`}>{t('ui.upgrade')} ({cost} SP)</span>
                             </button>

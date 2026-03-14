@@ -51,7 +51,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 {/* Language Selector */}
                 <div onClick={toggleLocale} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
                     <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.language')}</h3>
+                        <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.language')}</h3>
                         <p className="text-gray-400 text-xs font-mono">{t('ui.language_sub')}</p>
                     </div>
                     <div className="flex gap-2">
@@ -63,7 +63,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 {/* Resolution / Pixel Ratio */}
                 <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                     <div className="flex-1">
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.resolution')}</h3>
+                        <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.resolution')}</h3>
                         <p className="text-gray-400 text-xs font-mono">{t('ui.resolution_sub')}</p>
                     </div>
 
@@ -104,7 +104,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 {/* Shadow Quality */}
                 <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                     <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
+                        <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
                         <p className="text-gray-400 text-xs font-mono">{t('ui.shadow_sub')}</p>
                     </div>
                     <div className="flex gap-1 md:gap-2 flex-wrap">
@@ -134,7 +134,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 {/* Texture Quality */}
                 <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                     <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
+                        <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
                         <p className="text-gray-400 text-xs font-mono">{t('ui.texture_sub')}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -153,7 +153,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 {/* Antialiasing (Needs Refresh) */}
                 <div onClick={toggleAntialias} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg gap-4">
                     <div>
-                        <h3 className="text-xl font-black text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.antialias')}</h3>
+                        <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.antialias')}</h3>
                         <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                     </div>
                     <div className="flex gap-2">

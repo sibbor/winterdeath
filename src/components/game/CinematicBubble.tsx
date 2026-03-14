@@ -152,36 +152,34 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
             <div
                 className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
             >
-                {/* Dialogue Text Background */}
-                <div className="bg-[#111]/95 backdrop-blur-md border border-white/10 shadow-2xl p-6 md:p-8 min-h-[120px] relative overflow-hidden">
-                    {/* Subtle Top Gradient Line matching speaker color */}
+                {/* Dialogue Text Background - Gritty Style */}
+                <div className="hud-bar-container bg-black/95 backdrop-blur-xl p-6 md:p-8 min-h-[100px] relative shadow-2xl">
+                    {/* Speaker Accent Line */}
                     <div
-                        className="absolute top-0 left-0 w-full h-1 opacity-20"
-                        style={{
-                            background: `linear-gradient(90deg, ${bgColor} 0%, transparent 100%)`
-                        }}
+                        className="absolute top-0 left-0 w-2 h-full opacity-60"
+                        style={{ backgroundColor: bgColor }}
                     />
 
                     {/* Content */}
-                    <p className="text-white/90 text-sm md:text-lg font-mono leading-relaxed mt-1" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                    <p className="text-white/90 text-sm md:text-xl font-mono leading-relaxed ml-4" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
                         {speakerName && (
-                            <span className="font-bold mr-3 uppercase tracking-wider" style={{ color: bgColor }}>
-                                {speakerName}{text ? ':' : ''}
+                            <span className="font-black mr-3 uppercase tracking-widest text-xs md:text-sm block mb-1" style={{ color: bgColor }}>
+                                {speakerName}
                             </span>
                         )}
-                        {renderContent()}
+                        <span className="hud-text-glow">{renderContent()}</span>
                         {isVisible && visibleCount < fullTextLength && (
-                            <span className="inline-block w-2 md:w-3 h-4 md:h-5 bg-white/70 animate-pulse ml-1 align-middle" />
+                            <span className="inline-block w-2 md:w-3 h-5 md:h-6 bg-white/50 animate-pulse ml-1 align-middle" />
                         )}
                     </p>
 
                     {/* Progress Indicator */}
                     {isFinished && isVisible && (
-                        <div className="absolute bottom-3 right-4 flex items-center opacity-50 animate-bounce">
-                            <span className="text-white/50 text-[10px] uppercase tracking-widest mr-2 font-mono">
-                                {isMobileDevice ? 'Tap' : 'Click'}
+                        <div className="absolute bottom-4 right-6 flex items-center opacity-30 animate-pulse">
+                            <span className="text-white text-[9px] uppercase tracking-[0.3em] font-black mr-3">
+                                {isMobileDevice ? 'TAP' : 'CONTINUE'}
                             </span>
-                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white/70" />
+                            <div className="w-2 h-2 bg-white rotate-45" />
                         </div>
                     )}
                 </div>

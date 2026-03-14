@@ -85,7 +85,7 @@ const CampHUD: React.FC<CampHUDProps> = ({
                     className={`bg-slate-900/95 p-4 border-l-4 border-blue-500 shadow-2xl cursor-pointer pointer-events-auto hover:bg-slate-800 transition-colors w-[320px]`}
                     onClick={onOpenStats}
                 >
-                    <h1 className="text-4xl font-black text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem', fontWeight: 900 }}>{getRank(stats.level)}</h1>
+                    <h1 className="text-4xl font-semibold text-white tracking-tighter leading-none uppercase" style={{ fontSize: '2.25rem' }}>{getRank(stats.level)}</h1>
                     <div className="flex items-center gap-4 mt-2">
                         <span className="text-blue-400 font-bold text-sm">{t('ui.lvl')} {stats.level}</span>
                         <div className="flex-1 h-1.5 bg-blue-900"><div className="h-full bg-blue-400" style={{ width: `${(stats.currentXp / stats.nextLevelXp) * 100}%` }} /></div>
@@ -96,14 +96,14 @@ const CampHUD: React.FC<CampHUDProps> = ({
                     {/* Clicking SP now opens the Upgrade screen (via onOpenSkills theoretically, but here mapped to onOpenSkills call) */}
                     <div onClick={() => { if (debugMode) onDebugSkill(); else onOpenSkills(); }}
                         className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-purple-500 ${stats.skillPoints > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/80 border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-black ${stats.skillPoints > 0 ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                        <span className={`text-2xl font-black ${stats.skillPoints > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.skillPoints}</span>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.skillPoints > 0 ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
+                        <span className={`text-2xl font-semibold ${stats.skillPoints > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.skillPoints}</span>
                     </div>
 
                     <div onClick={() => { if (debugMode) onDebugScrap(); else onOpenArmory(); }}
                         className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-yellow-500 ${stats.scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 border-slate-700'}`}>
-                        <span className={`text-[10px] block uppercase font-black ${stats.scrap > 0 ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                        <span className={`text-2xl font-black ${stats.scrap > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.scrap}</span>
+                        <span className={`text-[10px] block uppercase font-bold ${stats.scrap > 0 ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
+                        <span className={`text-2xl font-semibold ${stats.scrap > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.scrap}</span>
                     </div>
                 </div>
             </div>
@@ -131,8 +131,8 @@ const CampHUD: React.FC<CampHUDProps> = ({
             {/* Top Right Logo */}
             <div className={`absolute top-0 right-0 p-8 flex flex-col items-end pointer-events-none z-30 transition-opacity duration-300 opacity-100 ${isMobileDevice ? 'scale-75 origin-top-right' : ''}`}>
                 <div className="mb-4 text-right">
-                    <h1 className="text-6xl font-black text-white italic tracking-tighter drop-shadow-lg leading-none">{t('ui.game_title_1')}</h1>
-                    <h1 className="text-6xl font-black text-red-600 italic tracking-tighter drop-shadow-lg leading-none">{t('ui.game_title_2')}</h1>
+                    <h1 className="text-6xl font-semibold text-white italic tracking-tighter drop-shadow-lg leading-none">{t('ui.game_title_1')}</h1>
+                    <h1 className="text-6xl font-semibold text-red-600 italic tracking-tighter drop-shadow-lg leading-none">{t('ui.game_title_2')}</h1>
                 </div>
             </div>
 

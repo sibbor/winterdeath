@@ -131,13 +131,14 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
         }
     };
 
-    const handleAction = (action: 'r' | 'space' | 'e', pressed: boolean) => {
-        const keyMap = { r: 'r', space: ' ', e: 'e' };
+    const handleAction = (action: 'r' | 'space' | 'e' | 'f', pressed: boolean) => {
+        const keyMap = { r: 'r', space: ' ', e: 'e', f: 'f' };
         const key = keyMap[action];
 
         if (action === 'r') inputState.r = pressed;
         if (action === 'space') inputState.space = pressed;
         if (action === 'e') inputState.e = pressed;
+        if (action === 'f') inputState.f = pressed;
 
         // Dispatch events for systems listening to keydown/keyup
         const eventType = pressed ? 'keydown' : 'keyup';
@@ -155,16 +156,16 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
             onTouchCancel={handleTouchEnd}
         >
             {/* System Buttons (Top Right - Pause Button Only) */}
-            <div className="absolute top-14 right-4 flex flex-col gap-3 pointer-events-auto z-[70]">
+            <div className="absolute top-8 right-6 flex flex-col gap-3 pointer-events-auto z-[70]">
                 <button
-                    className="w-14 h-14 rounded-full border-2 border-white/20 bg-white/5 text-white font-bold text-xs tracking-widest shadow-lg active:scale-95 active:bg-red-800 active:border-white transition-all backdrop-blur-sm flex items-center justify-center"
+                    className="w-14 h-14 rounded-full border border-white/10 bg-black/60 text-white font-bold text-xs tracking-widest shadow-2xl active:scale-95 transition-all backdrop-blur-sm flex items-center justify-center"
                     onTouchStart={(e) => { e.stopPropagation(); onPause?.(); }}
                 >
                     ||
                 </button>
             </div>
 
-            {/* Left Joystick (Visual) */}
+            {/* Joysticks... (Keep as is for functionality) */}
             {leftStick.active && (
                 <div
                     className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none"
@@ -187,7 +188,6 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 </div>
             )}
 
-            {/* Right Joystick (Visual) */}
             {rightStick.active && (
                 <div
                     className="absolute rounded-full border-2 border-red-500/20 bg-red-900/5 pointer-events-none"
@@ -210,28 +210,38 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 </div>
             )}
 
-            {/* Action Buttons (Bottom Right Cluster) */}
-            <div className="absolute bottom-40 right-6 pointer-events-auto flex flex-col items-end gap-3">
-                <div className="flex gap-2 items-end">
+            {/* Action Buttons (Bottom Right Cluster - Match Mockup) */}
+            <div className="absolute bottom-24 right-8 pointer-events-auto flex flex-col items-end gap-6">
+                
+                {/* Secondary row */}
+                <div className="flex gap-4 items-center">
                     {/* Reload (R) */}
                     <button
-                        className="w-14 h-14 rounded-full border-2 border-gray-500 bg-black/60 text-gray-200 font-bold text-lg active:bg-gray-700 active:border-white active:scale-95 transition-all mb-2 mr-2"
+                        className="hud-touch-btn text-xs font-black tracking-widest"
                         onTouchStart={(e) => { e.stopPropagation(); handleAction('r', true); }}
                         onTouchEnd={(e) => { e.stopPropagation(); handleAction('r', false); }}
                     >
-                        R
+                         RELOAD
                     </button>
 
-                    {/* Dash (Space) */}
+                    {/* Flashlight (F) */}
                     <button
-                        className="w-20 h-20 rounded-full border-2 border-white/80 bg-white/10 text-white font-black text-xs tracking-widest active:bg-white/30 active:scale-95 transition-all backdrop-blur-sm"
-                        onTouchStart={(e) => { e.stopPropagation(); handleAction('space', true); }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('space', false); }}
+                        className="hud-touch-btn text-xs font-black tracking-widest"
+                        onTouchStart={(e) => { e.stopPropagation(); handleAction('f', true); }}
+                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('f', false); }}
                     >
-                        DASH
+                         LIGHT
                     </button>
                 </div>
 
+                {/* Primary Button (DASH) */}
+                <button
+                    className="hud-touch-btn hud-touch-btn-lg text-sm font-black tracking-[0.2em] border-red-500/40 text-red-100 shadow-[0_0_20px_rgba(255,0,0,0.2)]"
+                    onTouchStart={(e) => { e.stopPropagation(); handleAction('space', true); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); handleAction('space', false); }}
+                >
+                    DASH
+                </button>
             </div>
         </div>
     );

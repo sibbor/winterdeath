@@ -95,19 +95,19 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
     const scrapYellow = '#eab308'; // Tailwind yellow-500
 
     const footerButtons = (
-        <div className="flex w-full gap-4">
+        <div className="flex w-full gap-6">
             <button
                 onClick={() => { soundManager.playUiClick(); onClose(); }}
-                className="flex-1 px-4 py-3 border-2 border-gray-600 text-gray-400 font-bold uppercase hover:text-white hover:border-white transition-colors"
+                className="hud-touch-btn flex-1 px-4 py-3 text-xs font-black tracking-widest uppercase transition-all"
             >
                 {t('ui.cancel')}
             </button>
             <button
                 onClick={handleConfirm}
                 disabled={!hasChanges}
-                className={`flex-1 px-4 py-3 border-2 font-bold uppercase transition-colors ${hasChanges
-                    ? 'border-yellow-500 bg-yellow-900/50 text-white hover:bg-yellow-800'
-                    : 'border-gray-800 bg-gray-900 text-gray-600 cursor-not-allowed'
+                className={`hud-touch-btn flex-1 px-4 py-3 text-xs font-black tracking-widest uppercase transition-all ${hasChanges
+                    ? 'border-yellow-500/50 text-yellow-100 shadow-[0_0_20px_rgba(234,179,8,0.2)]'
+                    : 'opacity-20 cursor-not-allowed grayscale'
                     }`}
             >
                 {t('ui.confirm_loadout')}

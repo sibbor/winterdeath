@@ -106,7 +106,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
                             return (
                                 <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap inline-block`}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap inline-block`}
                                     style={{
                                         borderColor: isActive ? catColor : 'transparent',
                                         backgroundColor: isActive ? catColor : 'transparent',
@@ -124,7 +124,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                     <div className="flex justify-between items-center bg-yellow-900/10 px-3 py-2 border border-yellow-500/30 shrink-0">
                         <span className="text-[10px] font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
                         <div className="flex items-center gap-2">
-                            <span className="text-lg font-black text-white">{tempStats.scrap}</span>
+                            <span className="text-lg font-semibold text-white">{tempStats.scrap}</span>
                         </div>
                     </div>
                 )}
@@ -170,7 +170,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                     </div>
 
                                     {isEquipped && (
-                                        <div className={`absolute bottom-0 left-0 w-full text-center ${isMobileDevice ? 'text-[8px] py-0.5' : 'text-[10px] py-1'} font-black uppercase tracking-tighter`} style={{ backgroundColor: categoryColor, color: '#000' }}>
+                                        <div className={`absolute bottom-0 left-0 w-full text-center ${isMobileDevice ? 'text-[8px] py-0.5' : 'text-[10px] py-1'} font-bold uppercase tracking-tighter`} style={{ backgroundColor: categoryColor, color: '#000' }}>
                                             {t('ui.equipped')}
                                         </div>
                                     )}
@@ -179,7 +179,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                 {/* Right Side (Stats & Actions) on Mobile, Bottom Side on Desktop */}
                                 <div className={`flex-1 flex flex-col justify-between ${isMobileDevice ? 'p-2 min-w-0' : 'p-5 gap-4'}`}>
                                     <div className="min-w-0">
-                                        <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-black uppercase tracking-tighter truncate mb-1`}
+                                        <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`}
                                             style={{ color: isEquipped ? categoryColor : 'white' }}>
                                             {t(weapon.displayName)}
                                         </h3>
@@ -213,7 +213,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                             <button
                                                 onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
                                                 disabled={!canAfford}
-                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-black uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95`}
+                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-bold uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95`}
                                                 style={{
                                                     borderColor: canAfford ? scrapYellow : '#1f2937',
                                                     color: canAfford ? '#fff' : '#4b5563',

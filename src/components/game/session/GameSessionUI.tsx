@@ -93,10 +93,10 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
             {uiState.zombieWaveActive && (
                 <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
                     <div className="relative text-center">
-                        <h2 className="text-white text-6xl md:text-8xl font-black italic tracking-tighter uppercase"
+                        <h2 className="text-white text-6xl md:text-8xl font-black italic tracking-tighter uppercase hud-text-glow"
                             style={{
                                 animation: 'slam 0.4s cubic-bezier(0.1, 0.9, 0.2, 1) forwards',
-                                textShadow: '0 0 20px rgba(255,0,0,0.5), 0 0 40px rgba(0,0,0,1)',
+                                textShadow: '0 0 40px rgba(0,0,0,1)',
                                 color: '#ff3333'
                             }}>
                             {t('zombie_wave')}

@@ -133,7 +133,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                         ${isMobileDevice ? 'border-l-0 border-b-4 min-w-[120px] py-3 px-4' : ''}
                                     `}
                                 >
-                                    <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-black uppercase tracking-wider ${isSel ? 'text-white' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
+                                    <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-semibold uppercase tracking-wider ${isSel ? 'text-white' : (locked ? 'text-gray-600' : 'text-gray-400')}`}>
                                         {locked ? `${t('ui.sector')} ${i + 1} - ${t('ui.locked')}` : t(map.name)}
                                     </h3>
                                     {isMobileDevice && isSel && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-500 animate-pulse" />}
@@ -157,7 +157,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
-                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-black uppercase tracking-tighter text-gray-400 mb-2`}>
+                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-medium uppercase tracking-tighter text-gray-400 mb-2`}>
                                 {t(sectorTheme.name)}
                             </h2>
                             {/* Stats Row */}
@@ -172,13 +172,13 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
                         <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start">
                             {/* Boss Status Check */}
-                            <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
+                            <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
                                 {t('ui.boss_status')}: {t(bossStatusKey)}
                             </div>
 
                             {/* Family Status Check */}
                             {selectedSectorIndex < 4 && (
-                                <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-black uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
+                                <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                     {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name || 'Unknown') : '???'}
                                     <span className="text-[10px] md:text-xs ml-1 md:ml-2 opacity-100">
                                         ({t(familyStatusKey)})
