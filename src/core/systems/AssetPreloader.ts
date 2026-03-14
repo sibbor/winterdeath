@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProce
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
-import { TreeType } from '../../types/enemy';
+import { TreeType } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
