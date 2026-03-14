@@ -99,12 +99,12 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
     return (
         <CampModalLayout
-            title={t('stations.sectors')}
-            borderColorClass="border-red-600"
+            titleColor="text-red-500"
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
             canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))} // Lock logic
+            showCancel={true}
             isMobile={isMobileDevice}
         >
             <div className={`flex h-full gap-4 md:gap-8 ${isMobileDevice ? 'flex-col overflow-y-auto touch-auto' : ''}`}>
@@ -128,8 +128,8 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                     onClick={() => handleSelect(i)}
                                     disabled={locked}
                                     className={`text-left p-4 md:p-6 border-l-4 transition-all group relative overflow-hidden shrink-0 whitespace-nowrap md:whitespace-normal snap-center
-                                        ${locked ? 'opacity-50 cursor-not-allowed bg-black border-gray-800' : 'cursor-pointer hover:bg-red-900/10'}
-                                        ${isSel ? 'bg-red-900/20 border-red-500' : 'border-gray-800'}
+                                        ${locked ? 'opacity-50 cursor-not-allowed bg-black border-zinc-900' : 'cursor-pointer hover:bg-zinc-900'}
+                                        ${isSel ? 'bg-red-900/40 border-red-500' : 'bg-black border-zinc-800'}
                                         ${isMobileDevice ? 'border-l-0 border-b-4 min-w-[120px] py-3 px-4' : ''}
                                     `}
                                 >
@@ -157,7 +157,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
-                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-4xl'} font-medium uppercase tracking-tighter text-gray-400 mb-2`}>
+                            <h2 className={`${isMobileDevice ? 'text-xl' : 'text-5xl'} font-light uppercase tracking-tighter text-white mb-2`}>
                                 {t(sectorTheme.name)}
                             </h2>
                             {/* Stats Row */}

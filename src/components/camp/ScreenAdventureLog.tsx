@@ -93,9 +93,11 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
     return (
         <CampModalLayout
-            title={t('ui.adventure_log')}
-            borderColorClass="border-green-600"
+            titleColor="text-green-500"
             onClose={onClose}
+            onConfirm={onClose}
+            confirmLabel={t('ui.close')}
+            showCancel={false}
             isMobile={isMobileDevice}
             debugAction={isDebugMode ? { label: '[DEBUG] SHOW ALL', action: handleDebugShowAll } : undefined}
         >
@@ -110,12 +112,10 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                             const isActive = activeTab === tab.id;
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap`}
-                                    style={{
-                                        borderColor: isActive ? themeColor : 'transparent',
-                                        backgroundColor: isActive ? themeColor : 'transparent',
-                                        color: isActive ? 'black' : '#6b7280'
-                                    }}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 whitespace-nowrap ${isActive
+                                        ? 'bg-white text-black border-white'
+                                        : 'bg-black text-green-600 border-green-800 hover:border-green-500 hover:text-green-300'
+                                    }`}
                                 >
                                     <span className="block skew-x-[10deg]">{tab.label}</span>
                                 </button>
@@ -142,12 +142,13 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
                 const isSeen = (stats.seenEnemies || []).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
+                if (!isSeen) return null;
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
 
                 return (
                     <Card key={key} isLocked={!isSeen} color={itemColor}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
-                            <h3 className="text-3xl font-semibold uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
+                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? 'white' : '#4b5563' }}>
                                 {isSeen ? key : '???'}
                             </h3>
                             {isSeen && (
@@ -157,31 +158,52 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                 </div>
                             )}
                         </div>
-                        {isSeen ? (
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
-                                    <div className="text-center">
-                                        <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.health')}</div>
-                                        <div className="text-2xl font-semibold text-white">{data.hp}</div>
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
+                                <div className="text-center">
+                                    <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.health')}</div>
+                                    <div className="text-2xl font-bold text-white font-mono">{data.hp}</div>
+                                </div>
+                                <div className="text-center border-x border-gray-800">
+                                    <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.damage')}</div>
+                                    <div className="text-2xl font-bold text-white font-mono">{data.damage}</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
+                                    <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)}</div>
+                                </div>
+                            </div>
+                            <p className="text-base text-gray-300 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: itemColor }}>
+                                "{getEnemyDescription(key)}"
+                            </p>
+
+                            {data.attacks && data.attacks.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                        <div className="h-[1px] flex-1 bg-gray-800"></div>
+                                        {t('ui.combat')}
+                                        <div className="h-[1px] flex-1 bg-gray-800"></div>
                                     </div>
-                                    <div className="text-center border-x border-gray-800">
-                                        <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.damage')}</div>
-                                        <div className="text-2xl font-semibold text-white">{data.damage}</div>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
-                                        <div className="text-2xl font-semibold text-white">{data.speed.toFixed(1)}</div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {data.attacks.map((attack, idx) => (
+                                            <div key={idx} className="flex justify-between items-center bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{attack.type}</span>
+                                                <div className="flex gap-4">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                        <span className="text-xs font-mono text-red-400">{attack.damage}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                        <span className="text-xs font-mono text-blue-400">{attack.range}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                                <p className="text-base text-gray-300 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: itemColor }}>
-                                    "{getEnemyDescription(key)}"
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="h-40 flex items-center justify-center text-gray-700 font-black text-sm uppercase tracking-[0.3em]">
-                                [ DATA LOCKED ]
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </Card>
                 );
             })}
@@ -201,6 +223,10 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                 const isSeen = (stats.seenBosses || []).includes(boss.name) || (stats.bossesDefeated || []).includes(sectorIndex);
                 const isDefeated = (stats.bossesDefeated || []).includes(sectorIndex);
                 const isUnlocked = isSeen || isDefeated;
+
+                // User requested: Only list data for encountered/discovered bosses
+                if (!isUnlocked) return null;
+
                 const itemColor = `#${boss.color.toString(16).padStart(6, '0')}`;
 
                 const theme = SECTOR_THEMES[sectorIndex];
@@ -211,42 +237,65 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                         <div className="flex flex-col h-full">
                             <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                                 <div className="flex flex-col">
-                                    <h3 className="text-3xl font-semibold uppercase tracking-tighter" style={{ color: isUnlocked ? itemColor : '#4b5563' }}>
+                                    <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isUnlocked ? 'white' : '#4b5563' }}>
                                         {isUnlocked ? t(boss.name) : t('ui.unknown_threat')}
                                     </h3>
                                     <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">{sectorName}</span>
                                 </div>
                             </div>
 
-                            {isUnlocked ? (
+                            {isUnlocked && (
                                 <div className="flex flex-col gap-6 flex-1">
                                     <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
                                         <div className="text-center">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
-                                            <div className="text-2xl font-semibold text-white">{boss.hp}</div>
+                                            <div className="text-2xl font-bold text-white font-mono">{boss.hp}</div>
                                         </div>
                                         <div className="text-center border-x border-gray-800">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.damage')}</div>
-                                            <div className="text-2xl font-semibold text-white">{boss.damage}</div>
+                                            <div className="text-2xl font-bold text-white font-mono">{boss.damage}</div>
                                         </div>
                                         <div className="text-center">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
-                                            <div className="text-2xl font-semibold text-white">{boss.speed.toFixed(1)}</div>
+                                            <div className="text-2xl font-bold text-white font-mono">{boss.speed.toFixed(1)}</div>
                                         </div>
                                     </div>
                                     <div className="space-y-4">
                                         <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(boss.name)}</p>
-                                        {isDefeated && (
-                                            <div className="bg-zinc-900/60 p-4 border-l-4 border-emerald-600 italic font-serif text-base leading-relaxed text-zinc-200">
-                                                "{t(boss.deathStory)}"
+
+                                        {boss.attacks && boss.attacks.length > 0 && (
+                                            <div className="space-y-2 mt-4">
+                                                <div className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex items-center gap-2">
+                                                    <div className="h-[1px] flex-1 bg-gray-800"></div>
+                                                    {t('ui.combat')}
+                                                    <div className="h-[1px] flex-1 bg-gray-800"></div>
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {boss.attacks.map((attack, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{attack.type}</span>
+                                                                {attack.effect && (
+                                                                    <span className="text-[8px] text-red-500/80 uppercase font-black">{attack.effect}</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex gap-4">
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                    <span className="text-xs font-mono text-red-400">{attack.damage}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                    <span className="text-xs font-mono text-blue-400">{attack.range}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
+
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="h-48 flex flex-col items-center justify-center text-gray-700 font-black text-sm uppercase tracking-[0.4em]">
-                                    <span className="text-4xl mb-4 grayscale opacity-10">💀</span>
-                                    [ DATA LOCKED ]
                                 </div>
                             )}
                         </div>
@@ -262,7 +311,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
     const viewedIds = stats.viewedCollectibles || [];
 
     // Group collectibles by sector for better organization - ascending
-    const sectors = [1, 2, 3, 4];
+    const sectors = [1, 2, 3, 4, 5];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
@@ -275,10 +324,10 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
                 return (
                     <div key={sectorId} className="space-y-6">
                         <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-semibold uppercase tracking-tighter text-zinc-500">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
                                 {sectorName}
                             </h3>
-                            <span className="text-sm font-mono text-zinc-600 font-bold uppercase mt-1">
+    <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
                                 {foundInSector} / {sectorCollectibles.length} {t('ui.collected')}
                             </span>
                         </div>
@@ -303,7 +352,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
 
 const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
     const cluesFound = stats.cluesFound || [];
-    const sectors = [1, 2, 3, 4];
+    const sectors = [1, 2, 3, 4, 5, 6];
 
     return (
         <div className="space-y-16 pb-12">
@@ -323,18 +372,16 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                     !id.endsWith('_story')
                 );
 
-                if (sectorClues.length === 0) return null;
-
                 return (
                     <div key={sectorId} className="space-y-6">
                         <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-semibold uppercase tracking-tighter text-zinc-500">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
                                 {sectorName}
                             </h3>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {sectorClues.map((clueId) => {
+                            {sectorClues.length > 0 ? sectorClues.map((clueId) => {
                                 // Default detection of THOUGHT vs SPEAK
                                 const isThought = clueId.includes('thought');
                                 const type = isThought ? 'THOUGHT' : 'SPEAK';
@@ -354,7 +401,11 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                         </div>
                                     </Card>
                                 );
-                            })}
+                            }) : (
+                                <div className="col-span-full h-24 flex items-center justify-center border-2 border-dashed border-gray-800 rounded">
+                                    <span className="text-gray-700 font-mono tracking-widest uppercase">???</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -366,7 +417,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
 // --- POI TAB ---
 const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
     const visitedList = stats.discoveredPOIs || [];
-    const sectors = [1, 2, 3, 4, 5];
+    const sectors = [1, 2, 3, 4, 5, 6];
 
     return (
         <div className="space-y-16 pb-12">
@@ -377,18 +428,16 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
                 // Filter POIs for this sector from visited list
                 const sectorPOIs = visitedList.filter(id => id.startsWith(`s${sectorId}_poi_`));
 
-                if (sectorPOIs.length === 0) return null;
-
                 return (
                     <div key={sectorId} className="space-y-6">
                         <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
-                            <h3 className="text-3xl font-semibold uppercase tracking-tighter text-zinc-500">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
                                 {sectorName}
                             </h3>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {sectorPOIs.map((poiId) => {
+                            {sectorPOIs.length > 0 ? sectorPOIs.map((poiId) => {
                                 return (
                                     <Card key={poiId} isLocked={false} color={color}>
                                         <div className="flex flex-col gap-4">
@@ -404,7 +453,11 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
                                         </div>
                                     </Card>
                                 );
-                            })}
+                            }) : (
+                                <div className="col-span-full h-24 flex items-center justify-center border-2 border-dashed border-gray-800 rounded">
+                                    <span className="text-gray-700 font-mono tracking-widest uppercase">???</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -414,10 +467,10 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
 };
 
 const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string }> = ({ children, isLocked, color = '#6b7280' }) => (
-    <div className={`p-6 border-l-8 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl skew-x-[-2deg] active:scale-[0.98] ${isLocked ? 'border-gray-800' : ''}`}
+    <div className={`p-6 border-l-8 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-gray-800' : ''}`}
         style={{ borderColor: isLocked ? '#1f2937' : color, boxShadow: isLocked ? 'none' : `inset 0 0 20px ${color}11` }}
     >
-        <div className="skew-x-[2deg]">
+        <div className="">
             {isLocked && (
                 <div className="absolute inset-0 z-10 bg-[url('/assets/noise.png')] opacity-10 pointer-events-none"></div>
             )}
@@ -465,7 +518,7 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobile?: b
                     {isFound ? t(item.nameKey) : '???'}
                 </h4>
                 <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                    {isFound ? t(item.descriptionKey) : 'Data locked. Item location unknown.'}
+                    {isFound ? t(item.descriptionKey) : ''}
                 </p>
                 {isFound && !isExpanded && !isMobile && (
                     <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>

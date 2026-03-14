@@ -39,7 +39,6 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
     return (
         <CampModalLayout
             title={t('ui.settings')}
-            borderColorClass="border-white"
             onClose={onClose}
             onConfirm={onClose}
             confirmLabel={t('ui.close')}
@@ -55,8 +54,8 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                         <p className="text-gray-400 text-xs font-mono">{t('ui.language_sub')}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'en' ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>EN</button>
-                        <button onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'sv' ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>SV</button>
+                        <button onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'en' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>EN</button>
+                        <button onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'sv' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>SV</button>
                     </div>
                 </div>
 
@@ -110,7 +109,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                     <div className="flex gap-1 md:gap-2 flex-wrap">
                         <button
                             onClick={() => { onUpdateGraphics({ ...graphics, ...SHADOW_PRESETS.OFF }); soundManager.playUiClick(); }}
-                            className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!graphics.shadows ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
+                            className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!graphics.shadows ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
                         >
                             {t('ui.off')}
                         </button>
@@ -123,7 +122,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                             <button
                                 key={q.label}
                                 onClick={() => { onUpdateGraphics({ ...graphics, ...q.preset }); soundManager.playUiClick(); }}
-                                className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}
+                                className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
                             >
                                 {q.label}
                             </button>
@@ -143,7 +142,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                             { val: 0.75, label: t('ui.quality_med') },
                             { val: 1.0, label: t('ui.quality_high') }
                         ].map(q => (
-                            <button key={q.val} onClick={() => { onUpdateGraphics({ ...graphics, textureQuality: q.val }); soundManager.playUiClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${graphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>
+                            <button key={q.val} onClick={() => { onUpdateGraphics({ ...graphics, textureQuality: q.val }); soundManager.playUiClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${graphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>
                                 {q.label}
                             </button>
                         ))}
@@ -157,8 +156,8 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                         <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${graphics.antialias ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                        <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!graphics.antialias ? 'bg-white text-black border-white' : 'bg-transparent text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                        <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${graphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
+                        <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!graphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
                     </div>
                 </div>
 

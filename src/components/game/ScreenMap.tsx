@@ -215,12 +215,17 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
             title={t('ui.tactical_map')}
             isMobile={isMobileDevice}
             onClose={onClose}
+            onConfirm={onClose}
+            confirmLabel={t('ui.close')}
             maxWidthClass="max-w-6xl"
             heightClass="h-[80vh]"
             contentClass="flex-1 flex flex-col min-h-0 overflow-hidden p-0"
-            titleColorClass="text-blue-500"
+            titleColorClass="text-white"
+            showCloseButton={false}
+            onCancel={onClose}
+            cancelLabel={t('ui.close')}
             footer={
-                <div className="gap-3">
+                <div className="flex flex-col gap-4 w-full">
                     <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
                         <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500"></span> {t('ui.player')}</div>
                         <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full"></span> {t('ui.family_member')}</div>
@@ -229,23 +234,21 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                         <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
                         <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
                     </div>
-                    <div className="mt-3">
-                        <div className="flex gap-4">
-                            <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
-                                <span className="text-[10px] text-blue-400 font-bold uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
+                    <div className="flex gap-4 justify-center">
+                        <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
+                            <span className="text-[10px] text-blue-400 font-bold uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
+                            <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
+                                {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                            </span>
+                        </div>
+                        {!isMobileDevice && (
+                            <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
                                 <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
-                                    {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                    {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
                                 </span>
                             </div>
-                            {!isMobileDevice && (
-                                <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
-                                    <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
-                                        {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
+                        )}
                     </div>
                 </div>
             }

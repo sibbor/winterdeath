@@ -268,37 +268,49 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                 className="h-full bg-[#ff3333] hud-bar-glow transition-all duration-300" 
                                 style={{ width: `${hpP}%`, boxShadow: '0 0 15px rgba(255, 51, 51, 0.6)' }} 
                             />
-                            <div className="absolute inset-0 flex items-center justify-end px-2 opacity-30 group-hover:opacity-100 transition-opacity">
-                                <span className="text-[10px] text-white font-bold tracking-tighter">HP</span>
+                            <div className="absolute inset-0 flex items-center justify-start px-2">
+                                <span className="text-[11px] text-white font-mono font-bold tracking-tighter">
+                                    {Math.ceil(hp)} / {maxHp}
+                                </span>
                             </div>
                         </div>
                     </div>
                     {/* Stamina Bar */}
-                    <div className="hud-bar-container h-3 w-[85%]">
+                    <div className="hud-bar-container h-3 w-full">
                         <div className="h-full bg-purple-900/20">
                             <div 
                                 className="h-full bg-[#a855f7] hud-bar-glow transition-all duration-300" 
                                 style={{ width: `${stP}%`, boxShadow: '0 0 10px rgba(168, 85, 247, 0.5)' }} 
                             />
+                            <div className="absolute inset-0 flex items-center justify-start px-2">
+                                <span className="text-[8px] text-purple-200 font-mono font-bold opacity-60">
+                                    {Math.ceil(stamina)}
+                                </span>
+                            </div>
                         </div>
                     </div>
                     {/* XP Bar */}
-                    <div className="hud-bar-container h-2 w-[70%]">
+                    <div className="hud-bar-container h-2 w-full">
                         <div className="h-full bg-cyan-900/20">
                             <div 
                                 className="h-full bg-[#06b6d4] hud-bar-glow transition-all duration-300" 
                                 style={{ width: `${xpP}%`, boxShadow: '0 0 8px rgba(6, 182, 212, 0.4)' }} 
                             />
+                            <div className="absolute inset-0 flex items-center justify-start px-2">
+                                <span className="text-[7px] text-cyan-200 font-mono font-bold opacity-60">
+                                    {currentXp}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 {/* 1.2 TOP-RIGHT: KILL COUNTER */}
-                <div className={`flex flex-col items-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                    <span className="text-7xl font-semibold text-white hud-kill-text drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+                <div className={`flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                    <span className="text-7xl font-bold text-white font-mono hud-kill-text drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] leading-none">
                         {kills}
                     </span>
-                    <span className="text-xl font-bold text-[#ff3333] tracking-[0.2em] -mt-1 uppercase">
+                    <span className="text-sm font-bold text-[#ff3333] tracking-[0.3em] uppercase opacity-80">
                         {t('ui.kills')}
                     </span>
                 </div>
@@ -329,11 +341,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 
                 {/* Ammo Count above active weapon */}
                 {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
-                    <div className="mb-4 text-center animate-fadeIn">
-                         <span className="text-3xl font-semibold text-white/90 tracking-tighter">
+                    <div className="mb-4 text-center animate-fadeIn font-mono">
+                         <span className="text-4xl font-bold text-white tracking-tighter">
                             {sectorStats?.unlimitedAmmo ? '∞' : ammo}
                         </span>
-                        <span className="text-lg font-medium text-white/30 ml-1">/ {magSize}</span>
+                        <span className="text-xl font-bold text-white/30 ml-1">/ {magSize}</span>
                     </div>
                 )}
 
@@ -369,26 +381,38 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             return (
                                 <div 
                                     key={slot}
-                                    className={`hud-slot w-20 h-20 flex flex-col items-center justify-center relative ${isActive ? 'active' : 'opacity-40'}`}
+                                    className={`hud-slot w-20 h-20 flex flex-col items-center justify-center relative border-2 transition-all overflow-hidden ${isActive ? 'scale-105 z-10 bg-zinc-950/80 shadow-[0_0_20px_rgba(0,0,0,0.5)]' : 'opacity-40 bg-black/40'}`}
+                                    style={{ borderColor: isActive ? (wData?.color || 'white') : 'rgba(255,255,255,0.1)' }}
                                 >
+                                    {/* Reload Progress Overlay */}
+                                    {isActive && isReloading && (
+                                        <div 
+                                            className="absolute bottom-0 left-0 w-full bg-white opacity-20 transition-all duration-100"
+                                            style={{ 
+                                                height: `${reloadProgress * 100}%`,
+                                                backgroundColor: wData?.color || 'white'
+                                            }}
+                                        />
+                                    )}
+
                                     {/* Icon */}
                                     {wData && (
-                                        <div className="w-10 h-10 flex items-center justify-center mb-1">
+                                        <div className="w-10 h-10 flex items-center justify-center mb-1 relative z-10">
                                             {wData.iconIsPng ? (
-                                                <img src={wData.icon} alt="" className="w-full h-full object-contain filter invert opacity-80" />
+                                                <img src={wData.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" />
                                             ) : (
-                                                <div className="w-full h-full text-white/80" dangerouslySetInnerHTML={{ __html: wData.icon }} />
+                                                <div className="w-full h-full text-white" dangerouslySetInnerHTML={{ __html: wData.icon }} />
                                             )}
                                         </div>
                                     )}
                                     {/* Slot Number */}
-                                    <span className="absolute bottom-1 right-2 text-[10px] font-bold text-white/20">{slot}</span>
+                                    <span className="absolute bottom-1 right-2 text-[10px] font-mono font-bold text-white/20 z-10">{slot}</span>
                                     
                                     {/* Throwable ammo dots */}
                                     {wData?.category === 'THROWABLE' && (
-                                        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 px-2">
+                                        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 px-2 z-10">
                                             {Array.from({ length: wData.magSize }).map((_, i) => (
-                                                <div key={i} className={`h-1 flex-1 ${i < (throwableAmmo || 0) ? 'bg-red-500 shadow-[0_0_5px_red]' : 'bg-white/10'}`} />
+                                                <div key={i} className={`h-1 flex-1 ${i < (throwableAmmo || 0) ? 'shadow-[0_0_5px_currentColor]' : 'bg-white/10'}`} style={{ backgroundColor: i < (throwableAmmo || 0) ? wData.color : undefined, color: wData.color }} />
                                             ))}
                                         </div>
                                     )}

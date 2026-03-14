@@ -94,36 +94,17 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
 
     const scrapYellow = '#eab308'; // Tailwind yellow-500
 
-    const footerButtons = (
-        <div className="flex w-full gap-6">
-            <button
-                onClick={() => { soundManager.playUiClick(); onClose(); }}
-                className="hud-touch-btn flex-1 px-4 py-3 text-xs font-black tracking-widest uppercase transition-all"
-            >
-                {t('ui.cancel')}
-            </button>
-            <button
-                onClick={handleConfirm}
-                disabled={!hasChanges}
-                className={`hud-touch-btn flex-1 px-4 py-3 text-xs font-black tracking-widest uppercase transition-all ${hasChanges
-                    ? 'border-yellow-500/50 text-yellow-100 shadow-[0_0_20px_rgba(234,179,8,0.2)]'
-                    : 'opacity-20 cursor-not-allowed grayscale'
-                    }`}
-            >
-                {t('ui.confirm_loadout')}
-            </button>
-        </div>
-    );
 
     return (
         <GameModalLayout
             title={t('stations.armory')}
-            titleColorClass="text-yellow-500"
             onClose={onClose}
+            onCancel={onClose}
             onConfirm={handleConfirm}
+            confirmLabel={t('ui.confirm_loadout')}
+            canConfirm={hasChanges}
             isMobile={isMobileDevice}
             maxWidthClass="max-w-7xl"
-            footer={footerButtons}
             transparent={true}
             showCloseButton={false}
         >
@@ -149,7 +130,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                         >
                             {tempSectorState.noReload && <span className="text-black font-black text-xs">✓</span>}
                         </div>
-                        <span className={`text-lg font-black uppercase tracking-wider ${tempSectorState.noReload ? 'text-yellow-500' : 'text-gray-500'}`}>
+                        <span className={`text-lg font-light uppercase tracking-wider ${tempSectorState.noReload ? 'text-yellow-500' : 'text-gray-500'}`}>
                             {t('ui.no_reloading')}
                         </span>
                     </label>

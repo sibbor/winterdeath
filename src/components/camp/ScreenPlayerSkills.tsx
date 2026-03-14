@@ -43,19 +43,20 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
 
     return (
         <CampModalLayout
-            title={t('stations.skills')} // PLAYER SKILLS
-            borderColorClass="border-purple-600"
+            titleColor="text-purple-500"
             onClose={onClose}
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_upgrades')}
+            closeLabel={tempStats.skillPoints !== stats.skillPoints ? t('ui.cancel') : t('ui.close')}
             canConfirm={tempStats.skillPoints !== stats.skillPoints}
+            showCancel={true}
             isMobile={isMobileDevice}
         >
             <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 h-full content-center ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
                 {/* Header Section */}
-                <div className="col-span-full text-center mb-2 md:mb-4 mt-2 md:mt-4">
+                <div className="col-span-full text-center mb-2 md:mb-4">
                     <span className="text-purple-500 font-bold uppercase tracking-widest text-xs md:text-sm block mb-1">{t('ui.available_skill_points')}</span>
-                    <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white leading-none`}>{tempStats.skillPoints}</span>
+                    <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-mono text-white leading-none font-bold`}>{tempStats.skillPoints}</span>
                     <div className="mt-4">
                         <span className="text-purple-300 font-bold text-sm uppercase tracking-wider block max-w-2xl mx-auto">
                             {isMaxRank
@@ -82,17 +83,23 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                             {/* Reduced mb-6 to mb-2 */}
                             <p className={`${isMobileDevice ? 'text-[10px] h-8 mb-1 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
-                            <div className={`flex items-baseline justify-center gap-2 ${isMobileDevice ? 'mb-2' : 'mb-8'}`}>
-                                <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-white font-bold`}>{displayBase}</span>
-                                <span className={`${isMobileDevice ? 'text-base' : 'text-3xl'} font-mono text-purple-400 font-bold`}>+ {displayUpgrade}</span>
+                            <div className={`flex flex-col items-center justify-center gap-0 ${isMobileDevice ? 'mb-2' : 'mb-8'}`}>
+                                <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-white font-bold leading-none`}>
+                                    {skill.id === 'speed' ? currentVal.toFixed(2) : currentVal}
+                                </span>
+                                <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-mono text-purple-400 font-bold opacity-80`}>
+                                    ({displayBase} + {displayUpgrade})
+                                </span>
                             </div>
 
                             <button
                                 onClick={() => handleUpgradeSkill(skill.id, cost, skill.value)}
                                 disabled={!canAfford}
-                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' : 'bg-transparent border-gray-800 text-gray-700 cursor-not-allowed'}`}
+                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all skew-x-[-10deg] ${canAfford 
+                                    ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' 
+                                    : 'bg-black border-gray-800 text-gray-600 cursor-not-allowed'}`}
                             >
-                                <span className={`${isMobileDevice ? 'text-xs' : 'text-base'}`}>{t('ui.upgrade')} ({cost} SP)</span>
+                                <span className={`${isMobileDevice ? 'text-xs' : 'text-base'} block skew-x-[10deg]`}>{t('ui.upgrade')} ({cost} SP)</span>
                             </button>
                         </div>
                     );

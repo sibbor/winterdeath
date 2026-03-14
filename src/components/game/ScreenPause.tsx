@@ -18,28 +18,28 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
     return (
         <GameModalLayout title={t('ui.paused')} isMobile={isMobileDevice} onClose={onResume} showCloseButton={false}>
             <div className="space-y-6">
-                <button onClick={() => { soundManager.playUiClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-slate-300`}>
+                <button onClick={() => { soundManager.playUiClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-gray-200`}>
                     <span className="block skew-x-[10deg]">{t('ui.continue')}</span>
                 </button>
                 <button
                     onClick={() => { soundManager.playUiClick(); onOpenAdventureLog(); }}
-                    className={`${buttonStyle} bg-slate-800 text-white border-slate-600 hover:bg-slate-700`}
+                    className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
                 >
                     <span className="block skew-x-[10deg]">{t('ui.adventure_log')}</span>
                 </button>
                 <button
                     onClick={() => { soundManager.playUiClick(); onOpenMap(); }}
-                    className={`${buttonStyle} bg-slate-800 text-white border-slate-600 hover:bg-slate-700`}
+                    className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
                 >
                     <span className="block skew-x-[10deg]">{t('ui.map_btn')}</span>
                 </button>
                 <button
                     onClick={() => { soundManager.playUiClick(); onOpenSettings(); }}
-                    className={`${buttonStyle} bg-slate-800 text-white border-slate-600 hover:bg-slate-700`}
+                    className={`${buttonStyle} bg-transparent text-gray-400 border-gray-600 hover:text-white hover:border-white`}
                 >
                     <span className="block skew-x-[10deg]">{t('ui.settings')}</span>
                 </button>
-                <button onClick={() => { soundManager.playUiClick(); onAbort(); }} className={`${buttonStyle} bg-black text-red-600 border-red-600 hover:bg-red-900/20`}>
+                <button onClick={() => { soundManager.playUiClick(); onAbort(); }} className={`${buttonStyle} bg-black text-red-600 border-red-600 hover:bg-red-900/10`}>
                     <span className="block skew-x-[10deg]">{t('ui.end_game')}</span>
                 </button>
             </div>

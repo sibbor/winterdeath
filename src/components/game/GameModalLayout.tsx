@@ -15,6 +15,10 @@ interface GameModalLayoutProps {
     onConfirm?: () => void; // Called when ENTER is pressed
     showCloseButton?: boolean;
     heightClass?: string;
+    onCancel?: () => void;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    canConfirm?: boolean;
 }
 
 import { soundManager } from '../../utils/SoundManager';
@@ -33,7 +37,11 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     transparent,
     onClose,
     onConfirm,
-    showCloseButton = true
+    onCancel,
+    showCloseButton = true,
+    confirmLabel,
+    cancelLabel,
+    canConfirm = true
 }) => {
     const borderColorClass = titleColorClass.replace('text-', 'border-').replace('white', 'gray-800'); // Simple derivation
 
@@ -66,26 +74,24 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" 
                      style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/dark-leather.png")' }} />
 
-                {/* Header */}
-                <div className="p-6 md:p-10 pb-0 relative z-10 shrink-0">
-                    <div className={`mb-4 md:mb-8 border-b border-white/10 pb-6 flex justify-between items-center`}>
-                        {typeof title === 'string' ? (
-                            <h2 className={`text-4xl md:text-6xl font-medium uppercase tracking-tighter hud-text-glow ${titleColorClass}`}>
-                                {title}
-                            </h2>
-                        ) : (
-                            title
-                        )}
+                {/* Header Row */}
+                <div className="p-6 md:p-10 relative z-20 shrink-0 bg-zinc-900 flex justify-between items-center">
+                    {typeof title === 'string' ? (
+                        <h2 className={`text-4xl md:text-6xl font-light uppercase tracking-tighter ${titleColorClass}`}>
+                            {title}
+                        </h2>
+                    ) : (
+                        title
+                    )}
 
-                        {onClose && showCloseButton && (
-                            <button
-                                onClick={() => { soundManager.playUiClick(); onClose(); }}
-                                className="hud-touch-btn px-6 py-2 text-xs font-bold tracking-widest uppercase transition-all"
-                            >
-                                {t('ui.close')}
-                            </button>
-                        )}
-                    </div>
+                    {onClose && showCloseButton && (
+                        <button
+                            onClick={() => { soundManager.playUiClick(); onClose(); }}
+                            className="px-6 py-2 border-2 border-white bg-white text-black font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-lg"
+                        >
+                            {t('ui.close')}
+                        </button>
+                    )}
                 </div>
 
                 {/* Content */}
@@ -94,9 +100,31 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                 </div>
 
                 {/* Footer */}
-                {footer && (
+                {(footer || onConfirm || onCancel) && (
                     <div className={`${isMobile ? 'p-6' : 'p-8'} bg-white/[0.02] border-t border-white/10 flex justify-center gap-4 relative z-10`}>
-                        {footer}
+                        {footer ? footer : (
+                            <>
+                                {onCancel && (
+                                    <button
+                                        onClick={() => { soundManager.playUiClick(); onCancel(); }}
+                                        className="px-6 py-3 border-2 border-gray-600 text-gray-400 bg-black font-bold uppercase transition-all hover:text-white hover:border-white"
+                                    >
+                                        {cancelLabel || t('ui.cancel')}
+                                    </button>
+                                )}
+                                {onConfirm && (
+                                    <button
+                                        onClick={() => { if (canConfirm) { soundManager.playUiConfirm(); onConfirm(); } }}
+                                        disabled={!canConfirm}
+                                        className={`px-8 py-3 border-2 font-bold uppercase transition-all ${canConfirm 
+                                            ? 'border-white bg-white text-black hover:bg-gray-200 shadow-xl' 
+                                            : 'border-gray-800 bg-black text-gray-600 cursor-not-allowed'}`}
+                                    >
+                                        {confirmLabel || t('ui.confirm')}
+                                    </button>
+                                )}
+                            </>
+                        )}
                     </div>
                 )}
             </div>

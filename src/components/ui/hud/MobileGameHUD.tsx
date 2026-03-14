@@ -191,14 +191,19 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                     <div className="hud-bar-container h-5 w-full">
                         <div className="h-full bg-red-900/20 relative">
                             <div className="h-full bg-[#ff3333] hud-bar-glow" style={{ width: `${hpP}%` }} />
+                            <div className="absolute inset-0 flex items-center justify-start px-2">
+                                <span className="text-[10px] text-white font-mono font-bold tracking-tighter">
+                                    {Math.ceil(hp)} / {maxHp}
+                                </span>
+                            </div>
                         </div>
                     </div>
-                    <div className="hud-bar-container h-2 w-[85%]">
+                    <div className="hud-bar-container h-2 w-full">
                         <div className="h-full bg-purple-900/20 relative">
                             <div className="h-full bg-[#a855f7] hud-bar-glow" style={{ width: `${stP}%` }} />
                         </div>
                     </div>
-                    <div className="hud-bar-container h-1.5 w-[70%]">
+                    <div className="hud-bar-container h-1.5 w-full">
                         <div className="h-full bg-cyan-900/20 relative">
                             <div className="h-full bg-[#06b6d4] hud-bar-glow" style={{ width: `${xpP}%` }} />
                         </div>
@@ -206,11 +211,11 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                 </div>
 
                 {/* Top Right: Kills */}
-                <div className={`flex flex-col items-end transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                    <span className="text-4xl font-semibold text-white leading-none">
+                <div className={`flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                    <span className="text-3xl font-bold text-white font-mono leading-none">
                         {kills}
                     </span>
-                    <span className="text-[10px] font-bold text-[#ff3333] tracking-widest uppercase">
+                    <span className="text-[9px] font-bold text-[#ff3333] tracking-[0.2em] uppercase opacity-80">
                         {t('ui.kills')}
                     </span>
                 </div>
@@ -239,9 +244,9 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                 
                 {/* Ammo Display */}
                 {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
-                    <div className="mb-2 flex items-baseline">
-                         <span className="text-xl font-semibold text-white">{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
-                         <span className="text-[10px] font-medium text-white/30 ml-1">/{magSize}</span>
+                    <div className="mb-2 flex items-baseline font-mono">
+                         <span className="text-2xl font-bold text-white leading-none">{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
+                         <span className="text-[10px] font-bold text-white/30 ml-1">/{magSize}</span>
                     </div>
                 )}
 
@@ -260,21 +265,33 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                 key={slot}
                                 onClick={() => onSelectWeapon && onSelectWeapon(slot)}
                                 onTouchStart={(e) => { e.stopPropagation(); onSelectWeapon && onSelectWeapon(slot); }}
-                                className={`hud-slot w-10 h-10 flex items-center justify-center relative ${isActive ? 'active' : 'opacity-40'}`}
+                                className={`hud-slot w-10 h-10 flex items-center justify-center relative border transition-all overflow-hidden ${isActive ? 'bg-zinc-950/80' : 'opacity-40 bg-black/40'}`}
+                                style={{ borderColor: isActive ? (wData?.color || 'white') : 'rgba(255,255,255,0.1)' }}
                             >
+                                {/* Reload Progress Overlay */}
+                                {isActive && isReloading && (
+                                    <div 
+                                        className="absolute bottom-0 left-0 w-full bg-white opacity-20 transition-all duration-100"
+                                        style={{ 
+                                            height: `${reloadProgress * 100}%`,
+                                            backgroundColor: wData?.color || 'white'
+                                        }}
+                                    />
+                                )}
+
                                 {wData && (
-                                    <div className="w-6 h-6 flex items-center justify-center">
+                                    <div className="w-6 h-6 flex items-center justify-center relative z-10">
                                         {wData.iconIsPng ? (
-                                            <img src={wData.icon} alt="" className="w-full h-full object-contain filter invert opacity-80" />
+                                            <img src={wData.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" />
                                         ) : (
-                                            <div className="w-full h-full text-white/80" dangerouslySetInnerHTML={{ __html: wData.icon }} />
+                                            <div className="w-full h-full text-white" dangerouslySetInnerHTML={{ __html: wData.icon }} />
                                         )}
                                     </div>
                                 )}
                                 {wData?.category === 'THROWABLE' && (
-                                    <div className="absolute bottom-0.5 left-0.5 right-0.5 flex justify-center gap-0.5">
+                                    <div className="absolute bottom-0.5 left-0.5 right-0.5 flex justify-center gap-0.5 z-10">
                                         {Array.from({ length: wData.magSize }).map((_, i) => (
-                                            <div key={i} className={`h-0.5 flex-1 ${i < (throwableAmmo || 0) ? 'bg-red-500' : 'bg-white/10'}`} />
+                                            <div key={i} className={`h-0.5 flex-1 ${i < (throwableAmmo || 0) ? 'shadow-[0_0_2px_currentColor]' : 'bg-white/10'}`} style={{ backgroundColor: i < (throwableAmmo || 0) ? wData.color : undefined, color: wData.color }} />
                                         ))}
                                     </div>
                                 )}

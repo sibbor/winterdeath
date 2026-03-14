@@ -36,8 +36,10 @@ const ScreenStatistics: React.FC<ScreenStatisticsProps> = ({ stats, onClose, isM
     return (
         <CampModalLayout
             title={t('stations.stats')} // STATISTICS
-            borderColorClass="border-blue-600"
             onClose={onClose}
+            onConfirm={onClose}
+            confirmLabel={t('ui.close')}
+            showCancel={false}
             isMobile={isMobileDevice}
         >
             <div className={`flex h-full gap-6 md:gap-12 ${isMobileDevice ? 'flex-col overflow-y-auto' : ''}`}>

@@ -49,30 +49,14 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
         onClose();
     };
 
-    const footer = (
-        <div className="flex w-full gap-4">
-            <button
-                onClick={() => { onClose(); }}
-                className="flex-1 px-4 py-3 border-2 border-gray-600 text-gray-400 font-bold uppercase hover:text-white hover:border-white transition-colors"
-            >
-                {t('ui.cancel')}
-            </button>
-            <button
-                onClick={handleSpawn}
-                className="flex-1 px-4 py-3 border-2 font-bold uppercase transition-colors border-red-500 bg-red-900/50 text-white hover:bg-red-800"
-            >
-                {t('ui.spawn')}
-            </button>
-        </div>
-    );
 
     return (
         <GameModalLayout
             title={t('ui.enemy_spawner')}
-            titleColorClass="text-red-500"
             onClose={onClose}
+            onCancel={onClose}
             onConfirm={handleSpawn}
-            footer={footer}
+            confirmLabel={t('ui.spawn')}
             transparent={true}
             showCloseButton={false}
         >

@@ -19,13 +19,13 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
 
     const titleNode = (
         <div className="flex flex-col items-center">
-            <span className={`text-base md:text-2xl text-white font-bold tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90`}>{t('ui.boss_killed')}</span>
-            <span className={`${isMobileDevice ? 'text-4xl' : 'text-5xl md:text-7xl'} font-black text-red-600 uppercase tracking-tighter skew-x-[-10deg] drop-shadow-lg`}>{bossName}</span>
+            <span className={`text-base md:text-2xl text-white font-light tracking-[0.2em] mb-1 md:mb-2 uppercase opacity-90`}>{t('ui.boss_killed')}</span>
+            <span className={`${isMobileDevice ? 'text-4xl' : 'text-5xl md:text-7xl'} font-light text-white uppercase tracking-tighter`}>{bossName}</span>
         </div>
     );
 
     return (
-        <GameModalLayout title={titleNode} titleColorClass="text-red-600" maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl" isMobile={isMobileDevice}>
+        <GameModalLayout title={titleNode} maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl" isMobile={isMobileDevice}>
             <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 skew-x-[-5deg]`}>
                 <div className="skew-x-[5deg]">
                     <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>

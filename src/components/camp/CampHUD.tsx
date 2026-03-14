@@ -95,15 +95,15 @@ const CampHUD: React.FC<CampHUDProps> = ({
                 <div className="flex gap-4 pointer-events-auto">
                     {/* Clicking SP now opens the Upgrade screen (via onOpenSkills theoretically, but here mapped to onOpenSkills call) */}
                     <div onClick={() => { if (debugMode) onDebugSkill(); else onOpenSkills(); }}
-                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-purple-500 ${stats.skillPoints > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black/80 border-slate-700'}`}>
+                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-purple-500 ${stats.skillPoints > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-black border-slate-700'}`}>
                         <span className={`text-[10px] block uppercase font-bold ${stats.skillPoints > 0 ? 'text-purple-500' : 'text-slate-500'}`}>{t('ui.sp')}</span>
-                        <span className={`text-2xl font-semibold ${stats.skillPoints > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.skillPoints}</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.skillPoints > 0 ? 'text-purple-400' : 'text-white'}`}>{stats.skillPoints}</span>
                     </div>
 
                     <div onClick={() => { if (debugMode) onDebugScrap(); else onOpenArmory(); }}
-                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-yellow-500 ${stats.scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 border-slate-700'}`}>
+                        className={`px-4 py-2 border backdrop-blur-sm cursor-pointer transition-all hover:scale-105 hover:border-yellow-500 ${stats.scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black border-slate-700'}`}>
                         <span className={`text-[10px] block uppercase font-bold ${stats.scrap > 0 ? 'text-yellow-500' : 'text-slate-500'}`}>{t('ui.scrap')}</span>
-                        <span className={`text-2xl font-semibold ${stats.scrap > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.scrap}</span>
+                        <span className={`text-2xl font-bold font-mono ${stats.scrap > 0 ? 'text-yellow-400' : 'text-white'}`}>{stats.scrap}</span>
                     </div>
                 </div>
             </div>
@@ -113,15 +113,15 @@ const CampHUD: React.FC<CampHUDProps> = ({
             <div className={`absolute bottom-10 left-1/2 -translate-x-1/2 z-40 pointer-events-auto flex flex-col items-center gap-4 ${uiFadeClass} ${isMobileDevice ? 'camp-hud-bottom-scale' : ''}`}>
 
                 <div className="flex gap-4">
-                    <div onClick={onOpenSettings} className="flex items-center gap-2 cursor-pointer bg-black/80 px-4 py-2 border border-gray-500 hover:border-white transition-colors">
+                    <div onClick={onOpenSettings} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-gray-500 hover:border-white transition-colors">
                         <span className="text-xs uppercase text-gray-300 font-bold tracking-widest">{t('ui.settings')}</span>
                     </div>
 
-                    <div onClick={() => { soundManager.playUiClick(); onToggleDebug(!debugMode); }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black/80 border-gray-500 hover:border-white'}`}>
+                    <div onClick={() => { soundManager.playUiClick(); onToggleDebug(!debugMode); }} className={`flex items-center gap-2 cursor-pointer px-4 py-2 border transition-colors ${debugMode ? 'bg-green-900/50 border-green-500' : 'bg-black border-gray-500 hover:border-white'}`}>
                         <span className={`text-xs uppercase font-bold tracking-widest ${debugMode ? 'text-green-400' : 'text-gray-300'}`}>{t('ui.debug_mode')}</span>
                     </div>
 
-                    <div onClick={() => { soundManager.playUiClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black/80 px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
+                    <div onClick={() => { soundManager.playUiClick(); onResetGame(); }} className="flex items-center gap-2 cursor-pointer bg-black px-4 py-2 border border-red-900 hover:border-red-500 hover:bg-red-900/20 transition-colors">
                         <span className="text-xs uppercase text-red-500 font-bold tracking-widest">{t('ui.delete_save_data')}</span>
                     </div>
 

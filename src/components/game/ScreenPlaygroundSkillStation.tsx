@@ -39,16 +39,17 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
     return (
         <GameModalLayout
             title={t('stations.skills')}
-            titleColorClass="text-green-500"
             onClose={onClose}
+            onCancel={onClose}
             onConfirm={handleConfirm}
+            confirmLabel={t('ui.apply_calibration')}
             isMobile={isMobileDevice}
             maxWidthClass="max-w-4xl"
         >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 pb-8">
                 {/* Stats Section */}
                 <div className="space-y-4">
-                    <h3 className="text-2xl font-black uppercase text-green-500 mb-4 tracking-tighter italic border-b border-green-900/50 pb-2 hud-text-glow">
+                    <h3 className="text-2xl font-light uppercase text-white mb-4 tracking-tighter border-b border-white/20 pb-2">
                         {t('ui.stat_calibration')}
                     </h3>
                     <div className="grid grid-cols-1 gap-4">
@@ -63,7 +64,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                                         <div className="text-white/30 text-[10px] uppercase font-bold">{t(skill.descKey)}</div>
                                     </div>
                                     <div className="flex items-center gap-6">
-                                        <div className="text-3xl font-mono font-black text-green-400 hud-text-glow">{displayVal}</div>
+                                        <div className="text-3xl font-mono font-light text-green-400">{displayVal}</div>
                                         <button
                                             onClick={() => handleUpgradeSkill(skill.id, skill.value)}
                                             className="hud-touch-btn w-10 h-10 flex items-center justify-center text-xl font-black transition-all active:scale-90"
@@ -79,7 +80,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
 
                 {/* Cheats / Temporary Effects Section */}
                 <div className="space-y-4">
-                    <h3 className="text-2xl font-black uppercase text-blue-500 mb-4 tracking-tighter italic border-b border-blue-900/50 pb-2 hud-text-glow">
+                    <h3 className="text-2xl font-light uppercase text-white mb-4 tracking-tighter border-b border-white/20 pb-2">
                         {t('ui.temporary_modifiers')}
                     </h3>
                     <div className="space-y-4">
@@ -93,7 +94,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                                     {tempSectorState.isInvincible && <div className="text-black font-black text-xs">✓</div>}
                                 </div>
                                 <div>
-                                    <div className={`font-black uppercase tracking-widest text-sm ${tempSectorState.isInvincible ? 'text-blue-400 hud-text-glow' : 'text-white/40'}`}>
+                                    <div className={`font-light uppercase tracking-widest text-sm ${tempSectorState.isInvincible ? 'text-blue-400' : 'text-white/40'}`}>
                                         {t('ui.invincible')}
                                     </div>
                                     <div className="text-[9px] text-white/20 uppercase font-bold mt-1">
@@ -113,7 +114,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                                     {tempSectorState.unlimitedAmmo && <div className="text-black font-black text-xs">✓</div>}
                                 </div>
                                 <div>
-                                    <div className={`font-black uppercase tracking-widest text-sm ${tempSectorState.unlimitedAmmo ? 'text-orange-400 hud-text-glow' : 'text-white/40'}`}>
+                                    <div className={`font-light uppercase tracking-widest text-sm ${tempSectorState.unlimitedAmmo ? 'text-orange-400' : 'text-white/40'}`}>
                                         {t('ui.unlimited_ammo_no_reload')}
                                     </div>
                                     <div className="text-[9px] text-white/20 uppercase font-bold mt-1">

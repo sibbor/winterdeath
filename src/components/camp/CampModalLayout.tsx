@@ -17,6 +17,7 @@ interface CampModalLayoutProps {
     isSmall?: boolean;
     isMobile?: boolean;
     debugAction?: { label: string; action: () => void };
+    titleColor?: string; // e.g. 'text-purple-500'
 }
 
 const CampModalLayout: React.FC<CampModalLayoutProps> = ({
@@ -32,10 +33,11 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
     showCancel = true,
     isSmall = false,
     isMobile = false,
-    debugAction
+    debugAction,
+    titleColor = 'text-white'
 }) => {
-    // Reduced mb-8 to mb-4
-    const headerStyle = "text-3xl md:text-6xl font-medium text-white uppercase tracking-tighter mb-4 border-b-8 pb-4 inline-block skew-x-[-10deg] hud-text-glow";
+    // Removed mb-8 to mb-4, removed skew and underline
+    const headerStyle = "text-3xl md:text-6xl font-light uppercase tracking-tighter shrink-0";
     const buttonStyle = "px-4 md:px-8 py-2 md:py-3 font-bold uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 border-2 shadow-lg text-xs md:text-base";
 
     const maxWidth = isSmall ? 'max-w-2xl' : 'max-w-7xl';
@@ -80,9 +82,9 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                 {/* Gritty Overlay Decoration */}
                 <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" 
                      style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/dark-leather.png")' }} />
-                {/* Header */}
-                <div className="p-4 md:p-6 border-b border-white/10 flex flex-col md:flex-row justify-between items-center bg-transparent shrink-0 gap-4 relative z-10">
-                    <h2 className={`${headerStyle} ${borderColorClass}`}>
+                {/* Header Row */}
+                <div className="p-4 md:p-6 flex flex-col md:flex-row justify-between items-center bg-zinc-900 shrink-0 gap-4 relative z-20">
+                    <h2 className={`${headerStyle} ${titleColor}`}>
                         {title}
                     </h2>
                     <div className="flex gap-2 md:gap-6 items-center">
@@ -98,7 +100,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                         {showCancel && (
                             <button
                                 onClick={() => { soundManager.playUiClick(); onClose(); }}
-                                className={`${buttonStyle} border-gray-600 text-gray-400 hover:text-white hover:border-white bg-transparent`}
+                                className={`${buttonStyle} border-gray-600 text-gray-400 hover:text-white hover:border-white bg-black`}
                             >
                                 {isSettings ? t('ui.cancel') : (closeLabel || t('ui.close'))}
                             </button>
@@ -115,11 +117,9 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                                     }
                                 }}
                                 disabled={!canConfirm}
-                                className={`${buttonStyle} ${isSettings
+                                className={`${buttonStyle} ${canConfirm
                                     ? 'border-white bg-white text-black hover:bg-gray-200'
-                                    : (canConfirm
-                                        ? 'border-red-600 bg-red-700/80 text-white hover:bg-red-600 hover:border-red-400'
-                                        : 'border-gray-800 text-gray-700 bg-gray-900 cursor-not-allowed')
+                                    : 'border-gray-800 text-gray-600 bg-black cursor-not-allowed'
                                     }`}
                             >
                                 {confirmLabel || t('ui.confirm_selection')}

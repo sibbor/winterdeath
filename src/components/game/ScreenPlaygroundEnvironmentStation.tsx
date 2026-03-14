@@ -92,7 +92,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
         <div className="flex w-full gap-4">
             <button
                 onClick={handleReset}
-                className="flex-1 px-4 py-3 border-2 border-red-900 bg-red-950/30 text-red-500 font-bold uppercase hover:bg-red-900/50 transition-colors"
+                className="flex-1 px-4 py-3 border-2 border-red-900 bg-red-950/20 text-red-500 font-bold uppercase hover:bg-red-900/40 transition-colors"
             >
                 {t('ui.reset')}
             </button>
@@ -104,7 +104,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
             </button>
             <button
                 onClick={handleApply}
-                className="flex-[2] px-4 py-3 border-2 font-bold uppercase transition-colors border-cyan-500 bg-cyan-900/50 text-white hover:bg-cyan-800"
+                className="flex-[2] px-4 py-3 border-2 border-white bg-white text-black font-bold uppercase transition-all hover:bg-gray-200 shadow-xl"
             >
                 {t('ui.apply')}
             </button>
@@ -114,7 +114,6 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     return (
         <GameModalLayout
             title={t('ui.environment_control')}
-            titleColorClass="text-cyan-500"
             onClose={onClose}
             onConfirm={handleApply}
             footer={footer}
@@ -194,7 +193,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
 
                 {/* FOG CONTROLS */}
                 <div className="flex flex-col gap-2">
-                    <label className="text-cyan-400 uppercase text-xs font-bold tracking-widest">{t('ui.fog_settings')}</label>
+                    <label className="text-cyan-400 uppercase text-xs font-light tracking-widest">{t('ui.fog_settings')}</label>
                     <div className="flex gap-4">
                         <div className="flex-1">
                             <label className="text-gray-500 text-xs uppercase">Color</label>
@@ -212,7 +211,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                 {/* SKY LIGHT CONTROLS */}
                 <div className="flex flex-col gap-4">
                     <div className="flex justify-between items-center">
-                        <label className="text-yellow-400 uppercase text-xs font-bold tracking-widest">{t('ui.sky_light_settings')}</label>
+                        <label className="text-yellow-400 uppercase text-xs font-light tracking-widest">{t('ui.sky_light_settings')}</label>
                         <input type="checkbox" checked={skyLightVisible} onChange={(e) => setSkyLightVisible(e.target.checked)} className="w-4 h-4 accent-yellow-500" />
                     </div>
 

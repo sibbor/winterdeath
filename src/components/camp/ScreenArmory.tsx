@@ -84,11 +84,11 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
     return (
         <CampModalLayout
-            title={t('stations.armory')}
-            borderColorClass="border-yellow-500"
+            titleColor="text-yellow-500"
             onClose={onClose}
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_loadout')}
+            closeLabel={hasChanges ? t('ui.cancel') : t('ui.close')}
             canConfirm={hasChanges}
             isMobile={isMobileDevice}
         >
@@ -106,12 +106,11 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
                             return (
                                 <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap inline-block`}
-                                    style={{
-                                        borderColor: isActive ? catColor : 'transparent',
-                                        backgroundColor: isActive ? catColor : 'transparent',
-                                        color: isActive ? 'black' : '#6b7280'
-                                    }}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 whitespace-nowrap inline-block ${isActive
+                                        ? 'bg-white text-black border-white'
+                                        : 'bg-black hover:text-gray-300'
+                                    }`}
+                                    style={{ borderColor: isActive ? 'white' : catColor, color: isActive ? 'black' : catColor }}
                                 >
                                     <span className="block skew-x-[10deg]">{t(catKey)}</span>
                                 </button>
@@ -170,7 +169,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                     </div>
 
                                     {isEquipped && (
-                                        <div className={`absolute bottom-0 left-0 w-full text-center ${isMobileDevice ? 'text-[8px] py-0.5' : 'text-[10px] py-1'} font-bold uppercase tracking-tighter`} style={{ backgroundColor: categoryColor, color: '#000' }}>
+                                        <div className={`absolute top-2 right-2 px-2 py-1 bg-white text-black font-bold uppercase tracking-tighter text-[10px] border border-black shadow-lg z-20`}>
                                             {t('ui.equipped')}
                                         </div>
                                     )}
@@ -184,22 +183,27 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                             {t(weapon.displayName)}
                                         </h3>
 
-                                        <div className={`grid grid-cols-2 gap-x-2 gap-y-1 ${isMobileDevice ? 'text-[9px]' : 'text-xs'} font-mono text-gray-400`}>
-                                            <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                        <div className={`flex flex-col gap-y-2 ${isMobileDevice ? 'text-xs' : 'text-sm'} font-mono text-gray-400`}>
+                                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                 <span className="opacity-60">{t('ui.damage')}</span>
-                                                <span className="text-white font-bold">{Math.floor(weapon.baseDamage * (1 + (level - 1) * 0.1))}</span>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-white font-bold text-lg leading-none">{Math.floor(weapon.baseDamage)}</span>
+                                                    {level > 1 && (
+                                                        <span className="text-yellow-500 text-[10px] font-bold">+ {Math.floor(weapon.baseDamage * (level - 1) * 0.1)}</span>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                 <span className="opacity-60">{t('ui.range')}</span>
                                                 <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                                             </div>
                                             {!isMobileDevice && (
                                                 <>
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                         <span className="opacity-60">{t('ui.magazine')}</span>
                                                         <span className="text-white font-bold">{weapon.magSize > 0 ? weapon.magSize : '-'}</span>
                                                     </div>
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                         <span className="opacity-60">{t('ui.reload')}</span>
                                                         <span className="text-white font-bold">{weapon.reloadTime > 0 ? `${(weapon.reloadTime / 1000).toFixed(1)}s` : '-'}</span>
                                                     </div>
@@ -213,16 +217,13 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                             <button
                                                 onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
                                                 disabled={!canAfford}
-                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-bold uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95`}
-                                                style={{
-                                                    borderColor: canAfford ? scrapYellow : '#1f2937',
-                                                    color: canAfford ? '#fff' : '#4b5563',
-                                                    cursor: canAfford ? 'pointer' : 'not-allowed',
-                                                    backgroundColor: canAfford ? `${scrapYellow}20` : 'transparent'
-                                                }}
+                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-bold uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95 skew-x-[-10deg] ${canAfford
+                                                    ? 'bg-yellow-900/20 text-yellow-500 border-yellow-500 hover:bg-yellow-900/40 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
+                                                    : 'bg-black text-gray-600 border-gray-800 cursor-not-allowed'
+                                                }`}
                                             >
-                                                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-sm'} leading-none`}>{t('ui.upgrade')}</span>
-                                                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} font-bold text-yellow-500`}>{cost}</span>
+                                                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-sm'} leading-none skew-x-[10deg]`}>{t('ui.upgrade')}</span>
+                                                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} font-bold text-yellow-500 skew-x-[10deg]`}>{cost}</span>
                                             </button>
                                         )}
                                     </div>

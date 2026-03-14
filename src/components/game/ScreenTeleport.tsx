@@ -31,12 +31,15 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
     return (
         <GameModalLayout 
             title={t('ui.teleport_title')} 
-            titleColorClass="text-white" 
             maxWidthClass="max-w-2xl" 
             isMobile={isMobileDevice} 
             onClose={onCancel} 
+            onCancel={onCancel}
+            cancelLabel={t('ui.cancel')}
             onConfirm={handleJump}
-            showCloseButton={false}
+            confirmLabel={t('ui.jump')}
+            canConfirm={coords.x !== "" && coords.z !== ""}
+            showCloseButton={true}
         >
             <div className="space-y-8">
                 <div className={`flex ${isMobileDevice ? 'flex-col sm:flex-row' : ''} gap-4 justify-center items-center`}>
@@ -63,21 +66,6 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
                     </div>
                 </div>
 
-                <div className="flex gap-4">
-                    <button onClick={onCancel} className={`${buttonStyle} bg-transparent text-gray-500 border-gray-700 hover:text-white hover:border-white`}>
-                        <span className="block skew-x-[10deg]">{t('ui.cancel')}</span>
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault(); // Prevent ghost clicks
-                            if (coords.x !== "" && coords.z !== "") handleJump();
-                        }}
-                        disabled={coords.x === "" || coords.z === ""}
-                        className={`${buttonStyle} ${coords.x !== "" && coords.z !== "" ? 'bg-blue-700 border-blue-500 text-white hover:bg-blue-600 shadow-[0_0_20px_rgba(37,99,235,0.5)]' : 'bg-gray-900 border-gray-800 text-gray-700 cursor-not-allowed'}`}
-                    >
-                        <span className="block skew-x-[10deg]">{t('ui.jump')}</span>
-                    </button>
-                </div>
             </div>
         </GameModalLayout>
     );

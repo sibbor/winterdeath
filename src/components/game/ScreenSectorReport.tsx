@@ -63,7 +63,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     const Footer = (
         <div className="w-full flex justify-end gap-6">
             {!showRespawn ? (
-                <button onClick={onReturnCamp} className={`${buttonStyle} bg-red-700 hover:bg-red-600 text-white border-red-500`}>
+                <button onClick={onReturnCamp} className={`${buttonStyle} bg-white hover:bg-gray-200 text-black border-white`}>
                     <span className="block skew-x-[10deg]">{t('ui.return_camp')}</span>
                 </button>
             ) : (
@@ -71,7 +71,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     <button onClick={onReturnCamp} className={`${buttonStyle} bg-transparent hover:bg-gray-900 text-gray-500 hover:text-white border-gray-700 hover:border-white shadow-none`}>
                         <span className="block skew-x-[10deg]">{t('ui.return_camp')}</span>
                     </button>
-                    <button onClick={onRetry} className={`${buttonStyle} bg-red-700 hover:bg-red-600 text-white border-red-500`}>
+                    <button onClick={onRetry} className={`${buttonStyle} bg-white hover:bg-gray-200 text-black border-white`}>
                         <span className="block skew-x-[10deg]">{t('ui.respawn')}</span>
                     </button>
                 </>
@@ -107,7 +107,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 1. Performance (Blue) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-blue-500 bg-blue-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.performance')}</h3>
+                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.performance')}</h3>
                     <div className="space-y-4 px-2">
                         {/* XP Box */}
                         <div className="bg-blue-900/20 p-4 border-l-4 border-blue-500 shadow-lg">
@@ -131,7 +131,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 2. Scavenging (Yellow) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-yellow-500 bg-yellow-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.scavenging')}</h3>
+                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.scavenging')}</h3>
                     <div className="space-y-4 flex flex-col px-2">
                         {/* Scrap Box */}
                         <div className="bg-yellow-900/20 p-4 border-l-4 border-yellow-500 shadow-lg">
@@ -196,7 +196,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 3. Combat (Red) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-red-500 bg-red-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.combat')}</h3>
+                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.combat')}</h3>
                     <div className="space-y-6 px-2">
 
                         {/* Damage Stats Row */}
@@ -237,7 +237,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                 {/* 4. Outcome (Green) */}
                 <div className="flex flex-col space-y-6">
-                    <h3 className="text-white font-semibold uppercase text-2xl border-b-4 border-green-500 bg-green-900/60 py-4 px-4 skew-x-[-10deg] tracking-tighter shadow-lg">{t('ui.outcome')}</h3>
+                    <h3 className="text-white font-light uppercase text-2xl border-b border-white py-2 tracking-tighter">{t('ui.outcome')}</h3>
                     <div className="space-y-6 px-2">
 
                         {/* Family Member Box */}
