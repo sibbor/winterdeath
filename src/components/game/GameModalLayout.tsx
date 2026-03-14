@@ -23,6 +23,7 @@ interface GameModalLayoutProps {
 
 import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
+import { useOrientation } from '../../hooks/useOrientation';
 
 const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     title,
@@ -43,6 +44,8 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     cancelLabel,
     canConfirm = true
 }) => {
+    const { isLandscapeMode } = useOrientation();
+    const effectiveLandscape = isLandscapeMode || !isMobile;
     const borderColorClass = titleColorClass.replace('text-', 'border-').replace('white', 'gray-800'); // Simple derivation
 
     React.useEffect(() => {
@@ -75,9 +78,9 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                      style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/dark-leather.png")' }} />
 
                 {/* Header Row */}
-                <div className="p-6 md:p-10 relative z-20 shrink-0 bg-zinc-900 flex justify-between items-center">
+                <div className={`p-6 md:p-10 relative z-20 shrink-0 bg-transparent flex ${effectiveLandscape ? 'flex-row' : 'flex-col'} justify-between items-center gap-4 pl-safe pr-safe`}>
                     {typeof title === 'string' ? (
-                        <h2 className={`text-4xl md:text-6xl font-light uppercase tracking-tighter ${titleColorClass}`}>
+                        <h2 className={`text-4xl md:text-6xl font-light uppercase tracking-tighter ${titleColorClass} ${effectiveLandscape ? '' : 'text-center'}`}>
                             {title}
                         </h2>
                     ) : (
@@ -87,7 +90,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                     {onClose && showCloseButton && (
                         <button
                             onClick={() => { soundManager.playUiClick(); onClose(); }}
-                            className="px-6 py-2 border-2 border-white bg-white text-black font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-lg"
+                            className={`px-6 py-2 border-2 border-white bg-white text-black font-bold text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-lg ${effectiveLandscape ? '' : 'w-full'}`}
                         >
                             {t('ui.close')}
                         </button>
@@ -95,19 +98,19 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                 </div>
 
                 {/* Content */}
-                <div className={`relative z-10 ${contentClass}`}>
+                <div className={`relative z-10 ${contentClass} px-safe`}>
                     {children}
                 </div>
 
                 {/* Footer */}
                 {(footer || onConfirm || onCancel) && (
-                    <div className={`${isMobile ? 'p-6' : 'p-8'} bg-white/[0.02] border-t border-white/10 flex justify-center gap-4 relative z-10`}>
+                    <div className={`${isMobile ? 'p-6' : 'p-8'} bg-white/[0.02] border-t border-white/10 flex justify-center gap-4 relative z-10 ${effectiveLandscape ? '' : 'grid grid-cols-2 w-full'}`}>
                         {footer ? footer : (
                             <>
                                 {onCancel && (
                                     <button
                                         onClick={() => { soundManager.playUiClick(); onCancel(); }}
-                                        className="px-6 py-3 border-2 border-gray-600 text-gray-400 bg-black font-bold uppercase transition-all hover:text-white hover:border-white"
+                                        className={`px-6 py-3 border-2 border-gray-600 text-gray-400 bg-black font-bold uppercase transition-all hover:text-white hover:border-white ${effectiveLandscape ? '' : 'w-full'}`}
                                     >
                                         {cancelLabel || t('ui.cancel')}
                                     </button>
@@ -116,7 +119,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
                                     <button
                                         onClick={() => { if (canConfirm) { soundManager.playUiConfirm(); onConfirm(); } }}
                                         disabled={!canConfirm}
-                                        className={`px-8 py-3 border-2 font-bold uppercase transition-all ${canConfirm 
+                                        className={`px-8 py-3 border-2 font-bold uppercase transition-all ${effectiveLandscape ? '' : 'w-full'} ${canConfirm 
                                             ? 'border-white bg-white text-black hover:bg-gray-200 shadow-xl' 
                                             : 'border-gray-800 bg-black text-gray-600 cursor-not-allowed'}`}
                                     >

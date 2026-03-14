@@ -144,6 +144,8 @@ export const EnemyManager = {
         e.deathTimer = 0;
         e.bloodSpawned = false;
         e.lastDamageType = 'standard';
+        e._accumulatedDamage = 0;
+        e._lastDamageTextTime = 0;
 
         const s = e.originalScale || 1.0;
         const w = e.widthScale || 1.0;
@@ -161,6 +163,7 @@ export const EnemyManager = {
         e.isInWater = false; e.isWading = false; e.isDrowning = false;
         e.drownTimer = 0; e.drownDmgTimer = 0;
         e.isAirborne = false; e.fallStartY = 0;
+        e._accumulatedDamage = 0; e._lastDamageTextTime = 0;
 
         e.mesh.userData.exploded = false;
         e.mesh.userData.gibbed = false;
@@ -391,7 +394,6 @@ export const EnemyManager = {
 
                     enemy.state = AIState.IDLE;
                     enemy.stunTimer = 1.5;
-                    enemy.attackCooldown = 2000;
 
                     const damage = 5;
                     enemy.hp -= damage;
@@ -446,9 +448,9 @@ export const EnemyManager = {
             return;
         }
 
-        if (enemy.state === AIState.BITING) {
+        if (enemy.state === AIState.ATTACK_CHARGE || enemy.state === AIState.ATTACKING) {
             enemy.state = AIState.IDLE;
-            enemy.attackCooldown = 1500;
+            enemy.attackTimer = 0;
         }
 
         const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));

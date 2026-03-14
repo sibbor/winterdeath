@@ -785,6 +785,7 @@ export const Sector1: SectorDef = {
             {
                 id: 'found_loke',
                 position: LOCATIONS.SPAWN.FAMILY,
+                familyId: 0,
                 radius: 5,
                 type: 'EVENT',
                 content: '',

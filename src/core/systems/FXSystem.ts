@@ -92,7 +92,11 @@ const PARTICLE_TTL: Record<string, number> = {
     enemy_effect_spark: 60,
     electric_beam: 15,
     ground_impact: 40,
+    shockwave: 40,
+    frost_nova: 40,
     screech_wave: 30,
+    magnetic_sparks: 60,
+    impact: 30,
     default: 30
 };
 
@@ -251,7 +255,8 @@ export const FXSystem = {
             t === 'glass' || t === 'enemy_effect_stun' || t === 'electric_flash' ||
             t === 'enemy_effect_flame' || t === 'enemy_effect_spark' ||
             t === 'gore' || t === 'splash' || t === 'blood_splat' || t === 'impact_splat' ||
-            t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'flamethrower_fire';
+            t === 'campfire_flame' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'flamethrower_fire' ||
+            t === 'ground_impact' || t === 'shockwave' || t === 'frost_nova' || t === 'screech_wave' || t === 'electric_beam' || t === 'magnetic_sparks' || t === 'impact';
 
         const p = FXSystem.getPooledState();
 
@@ -265,11 +270,11 @@ export const FXSystem = {
         if (p.color === undefined && isInstanced) {
             const st = t as string;
             if (st === 'flame' || st === 'fire' || st === 'large_fire' || st === 'campfire_flame' || st === 'enemy_effect_flame' || st === 'flamethrower_fire') p.color = 0xff7700;
-            else if (st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark') p.color = 0x00ffff;
-            else if (st === 'spark') p.color = 0xffcc00;
+            else if (st === 'enemy_effect_stun' || st === 'campfire_spark' || st === 'enemy_effect_spark' || st === 'magnetic_sparks') p.color = 0x00ffff;
+            else if (st === 'spark' || st === 'impact') p.color = 0xffcc00;
             else if (st === 'smoke' || st === 'large_smoke' || st === 'campfire_smoke') p.color = 0x555555;
-            else if (st === 'blood' || st === 'gore') p.color = 0x880000;
-            else if (st === 'glass' || st === 'flash' || st === 'electric_flash') p.color = 0xffffff;
+            else if (st === 'blood' || st === 'gore' || st === 'blood_splat') p.color = 0x880000;
+            else if (st === 'glass' || st === 'flash' || st === 'electric_flash' || st === 'shockwave' || st === 'frost_nova' || st === 'screech_wave') p.color = 0xffffff;
             else if (st === 'splash') p.color = 0x77bbcc;
             else p.color = 0x888888;
         }
@@ -301,8 +306,9 @@ export const FXSystem = {
             else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
             else if (t === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
             else if (t === 'electric_beam') { geo = GEOMETRY.shard; mat = MATERIALS.flashWhite; }
-            else if (t === 'ground_impact') { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
-            else if (t === 'screech_wave') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
+            else if (t === 'ground_impact' || t === 'impact') { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
+            else if (t === 'screech_wave' || t === 'shockwave' || t === 'frost_nova') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
+            else if (t === 'magnetic_sparks') { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
 
             p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, t, isInstanced);
         }
@@ -354,7 +360,7 @@ export const FXSystem = {
         else if (t === 'electric_beam') {
             p.mesh.scale.set(0.2, 0.2, 5.0); // Procedural laser-like shard
         }
-        else if (t === 'screech_wave') {
+        else if (t === 'screech_wave' || t === 'shockwave' || t === 'frost_nova') {
             p.mesh.scale.set(1, 1, 1); // Shockwave starts small and grows
         }
         else {
@@ -407,7 +413,12 @@ export const FXSystem = {
             MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
         }
 
-        const types = ['blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'blood_splat', 'impact_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire'];
+        const types = [
+            'blood', 'fire', 'large_fire', 'flash', 'electric_flash', 'flame', 'spark', 'smoke', 'debris', 'glass', 
+            'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'splash', 'blood_splat', 'impact_splat', 
+            'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire',
+            'electric_beam', 'screech_wave', 'ground_impact', 'shockwave', 'frost_nova', 'magnetic_sparks', 'impact'
+        ];
         for (let i = 0; i < types.length; i++) {
             const imesh = FXSystem._getInstancedMesh(scene, types[i]);
             if (imesh.parent !== scene) scene.add(imesh);
@@ -724,6 +735,10 @@ export const FXSystem = {
             else if (type === 'blood_splat') { geo = GEOMETRY.bloodSplat; mat = MATERIALS.bloodSplat; }
             else if (type === 'impact_splat') { geo = GEOMETRY.impactSplat; mat = MATERIALS.impactSplat; }
             else if (type === 'bullet_shell') { geo = GEOMETRY.bullet; mat = MATERIALS.bullet; }
+            else if (type === 'ground_impact' || type === 'impact') { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
+            else if (type === 'screech_wave' || type === 'shockwave' || type === 'frost_nova') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
+            else if (type === 'electric_beam') { geo = GEOMETRY.shard; mat = MATERIALS.flashWhite; }
+            else if (type === 'magnetic_sparks') { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
             else if (type === 'gore') {
                 geo = GEOMETRY.gore;
                 mat = MATERIALS.gore.clone();

@@ -61,6 +61,10 @@ export interface PlayerStats {
   mostUsedWeapon: string;
   chestsOpened: number;
   bigChestsOpened: number;
+
+  incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
+  outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
+
   prologueSeen?: boolean;
 }
 
@@ -90,6 +94,9 @@ export interface SectorStats {
   bigChestsOpened: number;
   spEarned?: number;
   aborted?: boolean;
+
+  incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
+  outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
 }
 
 export interface GraphicsSettings {
@@ -129,7 +136,8 @@ export interface Vector2 {
   y: number;
 }
 
-export type TriggerType = 'COLLECTIBLE' | 'THOUGHT' | 'SPEAK' | 'POI' | 'EVENT';
+export type TriggerType = 'COLLECTIBLE' | 'THOUGHT' | 'SPEAK' | 'POI' | 'EVENT' | 'INTERACT' | 'TERMINAL';
+
 
 export type TriggerActionType =
   | 'SPAWN_ENEMY'
@@ -170,7 +178,12 @@ export interface SectorTrigger {
   // Box Shape Support
   size?: { width: number, depth: number }; // For rectangular triggers
   rotation?: number; // Y-rotation of the box
+
+  // Dynamic Positioning
+  familyId?: number; // Attach to a specific family member by ID
+  ownerId?: string; // Attach to any mesh with this userData.id
 }
+
 
 export interface NotificationState {
   visible: boolean;

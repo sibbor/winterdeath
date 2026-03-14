@@ -191,7 +191,20 @@ export class CinematicSystem implements System {
             if (activeScriptLine.trigger) {
                 const triggers = activeScriptLine.trigger.split(',');
                 for (let i = 0; i < triggers.length; i++) {
-                    window.dispatchEvent(new CustomEvent(triggers[i].trim()));
+                    const rawTrigger = triggers[i].trim();
+                    let finalTrigger = rawTrigger;
+                    let payload: any = null;
+
+                    // Normalize shorthand triggers to engine events
+                    if (rawTrigger === 'boss_start') {
+                        finalTrigger = 'boss-spawn-trigger';
+                        payload = { type: 'BIG_ZOMBIE' }; // Default boss type
+                    } else if (rawTrigger === 'family_follow') {
+                        finalTrigger = 'family-follow';
+                        payload = { active: true };
+                    }
+
+                    window.dispatchEvent(new CustomEvent(finalTrigger, { detail: payload }));
                 }
             }
             this.callbacks.playCinematicLine(cinematic.lineIndex + 1);

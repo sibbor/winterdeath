@@ -507,6 +507,27 @@ export class SoundManager {
         this.playArcCannonZap();
         break;
 
+      case 'HIT':
+        this.playImpact('flesh');
+        break;
+
+      case 'BITE':
+        SoundBank.play(this.core, 'BITE', 0.5, 0.9 + Math.random() * 0.2);
+        break;
+
+      case 'jump_impact':
+        SoundBank.play(this.core, 'jump_impact', 0.6);
+        break;
+
+      case 'heavy_smash':
+        SoundBank.play(this.core, 'heavy_smash', 0.7);
+        break;
+
+      case 'ELECTRIC_BEAM_start':
+      case 'MAGNETIC_CHAIN_start':
+        this.playArcCannonZap();
+        break;
+
       case 'tank_roar': this.playTankRoar(); break;
       case 'tank_death': this.playTankDeath(); break;
       case 'bomber_beep': this.playBomberBeep(); break;

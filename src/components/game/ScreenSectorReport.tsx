@@ -254,6 +254,76 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
                     </div>
                 </div>
+
+                {/* 5. Damage Breakdown (Full Width) */}
+                <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-gray-800 pt-8 mt-4">
+                    {/* Incoming Breakdown */}
+                    <div className="flex flex-col h-full">
+                        <h4 className="text-red-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
+                             <div className="w-2 h-2 bg-red-500 skew-x-[-20deg]"></div>
+                             {t('ui.incoming_damage_breakdown')}
+                        </h4>
+                        <div className="space-y-2 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
+                            {Object.keys(stats.incomingDamageBreakdown || {}).length > 0 ? (
+                                Object.entries(stats.incomingDamageBreakdown!).map(([source, attacks]) => (
+                                    <div key={source} className="mb-3">
+                                        <div className="text-xs font-black text-white uppercase tracking-tighter mb-1 border-b border-gray-800 pb-1">
+                                            {source === 'Boss' ? bossName : (source === 'Other' ? t('ui.other') : (t(`enemies.${source.toUpperCase()}.name`) !== `enemies.${source.toUpperCase()}.name` ? t(`enemies.${source.toUpperCase()}.name`) : source))}
+                                        </div>
+                                        {Object.entries(attacks).map(([attack, amount]) => {
+                                            const attackKey = attack.toUpperCase();
+                                            const localizedAttack = t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack;
+                                            return (
+                                                <div key={attack} className="flex justify-between text-[10px] font-mono text-gray-400 ml-2">
+                                                    <span>{localizedAttack}</span>
+                                                    <span className="text-red-400">-{Math.floor(amount as any)}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-xs text-gray-700 font-mono uppercase italic">{t('ui.none')}</div>
+                            )}
+                        </div>
+                        {Object.keys(stats.incomingDamageBreakdown || {}).length > 0 && (
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-4 px-2">
+                                <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
+                                <span className="text-xl font-black text-red-500">-{Math.floor(stats.damageTaken || 0)}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Outgoing Breakdown */}
+                    <div className="flex flex-col h-full">
+                        <h4 className="text-green-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
+                             <div className="w-2 h-2 bg-green-500 skew-x-[-20deg]"></div>
+                             {t('ui.outgoing_damage_breakdown')}
+                        </h4>
+                        <div className="space-y-1 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
+                            {Object.keys(stats.outgoingDamageBreakdown || {}).length > 0 ? (
+                                Object.entries(stats.outgoingDamageBreakdown!)
+                                    .sort((a, b) => (b[1] as any) - (a[1] as any))
+                                    .map(([weapon, amount]) => (
+                                    <div key={weapon} className="flex justify-between items-center py-1 border-b border-gray-800/30 border-dashed">
+                                        <span className="text-xs font-bold text-white uppercase tracking-tighter">
+                                            {t(`weapons.${weapon.toLowerCase()}`) !== `weapons.${weapon.toLowerCase()}` ? t(`weapons.${weapon.toLowerCase()}`) : weapon}
+                                        </span>
+                                        <span className="text-sm font-mono text-green-400">+{Math.floor(amount as any)}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-xs text-gray-700 font-mono uppercase italic">{t('ui.none')}</div>
+                            )}
+                        </div>
+                        {Object.keys(stats.outgoingDamageBreakdown || {}).length > 0 && (
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-800 mt-4 px-2">
+                                <span className="text-xs font-black text-white uppercase">{t('ui.total')}</span>
+                                <span className="text-xl font-black text-green-500">+{Math.floor(stats.damageDealt || 0)}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </GameModalLayout>
     );

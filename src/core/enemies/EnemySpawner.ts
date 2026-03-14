@@ -41,16 +41,16 @@ export const EnemySpawner = {
         e.hp = typeData.hp;
         e.maxHp = typeData.hp;
         e.speed = typeData.speed;
-        e.damage = typeData.damage;
-        e.score = typeData.score;
         e.color = typeData.color;
+        e.attacks = typeData.attacks || [];
+        e.attackCooldowns = {};
 
         // Visual Transformation Data
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
 
         // [VINTERDÖD FIX] Ringen ska ALLTID vara dold när zombien spawnar.
-        // Den aktiveras enbart inuti AIState.EXPLODING i EnemyAI.
+        // Den aktiveras enbart inuti AIState.ATTACK_CHARGE i EnemyAI.
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
         } else if (typeKey === 'BOMBER' && e.mesh) {
@@ -111,9 +111,10 @@ export const EnemySpawner = {
             hp: typeData.hp,
             maxHp: typeData.hp,
             speed: typeData.speed,
-            damage: typeData.damage,
             score: typeData.score,
             color: typeData.color,
+            attacks: typeData.attacks || [],
+            attackCooldowns: {},
 
             originalScale: typeData.scale || 1.0,
             widthScale: typeData.widthScale || 1.0,
@@ -123,10 +124,9 @@ export const EnemySpawner = {
             state: AIState.IDLE,
             idleTimer: 1.0 + Math.random() * 2.0,
             searchTimer: 0,
-            attackCooldown: 0,
 
             spawnPos: new THREE.Vector3(x, 0, z),
-            lastSeenPos: null,
+            lastSeenPos: new THREE.Vector3(),
             lastSeenTime: 0,
             hearingThreshold: 1.0,
 
@@ -165,6 +165,8 @@ export const EnemySpawner = {
             drownTimer: 0, drownDmgTimer: 0,
             // Airborne / fall damage
             isAirborne: false, fallStartY: 0,
+            _accumulatedDamage: 0,
+            _lastDamageTextTime: 0,
         };
 
         const s = enemy.originalScale;
@@ -213,17 +215,17 @@ export const EnemySpawner = {
             hp: bossData.hp,
             maxHp: bossData.hp,
             speed: bossData.speed,
-            damage: bossData.damage,
             score: 3000,
             color: bossData.color,
+            attacks: bossData.attacks || [],
+            attackCooldowns: {},
             originalScale: scale,
             widthScale: widthMod,
             state: AIState.IDLE,
             idleTimer: 2.0,
             searchTimer: 0,
-            attackCooldown: 0,
             spawnPos: new THREE.Vector3(pos.x, 0, pos.z),
-            lastSeenPos: null,
+            lastSeenPos: new THREE.Vector3(),
             lastSeenTime: 0,
             hearingThreshold: 1.5,
             isBoss: true,
@@ -257,6 +259,8 @@ export const EnemySpawner = {
             drownTimer: 0, drownDmgTimer: 0,
             // Airborne / fall damage
             isAirborne: false, fallStartY: 0,
+            _accumulatedDamage: 0,
+            _lastDamageTextTime: 0,
         };
 
         boss.userData.entity = enemy;

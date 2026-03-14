@@ -8,6 +8,8 @@ export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
 export { SECTOR_THEMES } from './sectors/sector_themes';
 
+export const HEALTH_CRITICAL_THRESHOLD = 0.2;
+
 export const CAMERA_HEIGHT = 50;
 export const WEATHER = {
     PARTICLE_COUNT: 400,
@@ -104,6 +106,8 @@ export const INITIAL_STATS: PlayerStats = {
     mostUsedWeapon: '',
     chestsOpened: 0,
     bigChestsOpened: 0,
+    incomingDamageBreakdown: {},
+    outgoingDamageBreakdown: {},
     collectiblesDiscovered: [],
     viewedCollectibles: []
 };

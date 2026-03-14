@@ -7,17 +7,27 @@ import { PLAYER_CHARACTER } from '../../content/constants';
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
     killerName: string;
+    attackName?: string;
+    killedByEnemy?: boolean;
     isMobileDevice?: boolean;
 }
 
-const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerName, isMobileDevice }) => {
+const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerName, attackName, killedByEnemy, isMobileDevice }) => {
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
         soundManager.playUiConfirm();
-        // Trigger fade-in immediately (was 50ms)
         setTimeout(() => setIsVisible(true), 10);
     }, []);
+
+    // Get the correct phrasing based on cause of death
+    const deathPhrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
+    
+    // Format the attacker/cause display
+    // Example: WALKER (Biting) or DROWNING
+    const killerDisplayName = killedByEnemy && attackName 
+        ? `${killerName.toUpperCase()} (${t(`attacks.${attackName}.title`)})` 
+        : killerName.toUpperCase();
 
     return (
         <div
@@ -33,15 +43,15 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
                 {/* Header */}
                 <div className="flex flex-col gap-2">
                     <h2 className={`text-red-600 font-bold tracking-[0.3em] ${isMobileDevice ? 'text-lg' : 'text-xl'} uppercase animate-pulse`}>
-                        {PLAYER_CHARACTER.name} {t('ui.killed_by')}
+                        {PLAYER_CHARACTER.name} {deathPhrase}
                     </h2>
                     <div className="h-1 w-24 bg-red-600 mx-auto rounded-full" />
                 </div>
 
-                {/* Killer Name */}
+                {/* Killer Name / Death Cause */}
                 <div className="min-h-[100px] flex items-center justify-center px-4 relative w-full">
                     <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-6xl'} font-light italic leading-relaxed text-gray-200 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
-                        "{killerName}"
+                        {killerDisplayName}
                     </p>
                 </div>
 

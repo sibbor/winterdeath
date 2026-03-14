@@ -21,7 +21,10 @@ export const sv = {
         sectors_completed: "Klarade Sektorer",
         chests_opened: "Öppnade Kistor",
         incoming_damage: "Inkommande Skada",
+        incoming_damage_breakdown: "Nedbrytning Inkommande Skada",
         outgoing_damage: "Utgående Skada",
+        outgoing_damage_breakdown: "Nedbrytning Utgående Skada",
+        total: "Totalt",
         shots_fired: "Skott Avlossade",
         shots_hit: "Träffar",
         accuracy: "Pricksäkerhet",
@@ -98,7 +101,8 @@ export const sv = {
         return_camp: "TILL LÄGRET",
         respawn: "ÅTERUPPLIVA",
         kia: "STUPAD I STRID",
-        killed_by: "DÖDAD AV",
+        killed_by: "dödades av",
+        died_from: "dog av",
         time_elapsed: "TID",
         distance_traveled: "STRÄCKA",
         chests: "KISTOR PLUNDRADE",
@@ -219,6 +223,7 @@ export const sv = {
         unlimited_throwables: "OÄNDLIGA KASTVAPEN",
         no_reload: "INGEN OMLADDNING",
         TERMINAL_SKILLS: "FÄRDIGHETSSTATION",
+        other: "Övrigt",
     },
     camp_tooltips: {
         equipped: "VALD UTRUSTNING",
@@ -265,6 +270,31 @@ export const sv = {
             description: "Instabil biologisk last. Exploderar vid närhet. Håll säkert avstånd."
         },
         unknown: "Okänd biologisk anomali."
+    },
+    attacks: {
+        BITE: { title: "Biter", description: "Vassa tänder som sjunker in i köttet. Hög infektionsrisk." },
+        HIT: { title: "slag", description: "En trubbig stöt från en odöd hand." },
+        BLEEDING: { title: "Blödning", description: "Kontinuerlig blodförlust från ett öppet sår." },
+        CLAW: { title: "Klo", description: "Vassa naglar som slits genom kläder och hud." },
+        LUNGE: { title: "Utfall", description: "Ett snabbt hopp som överraskar offret." },
+        PUNCH: { title: "Knytnävsslag", description: "Ett massivt slag från en muterad jätte." },
+        GROUND_POUND: { title: "Markslag", description: "En chockvåg som skadar allt i närheten." },
+        EXPLODE: { title: "explosion", description: "Våldsam biologisk detonation vid dödsögonblicket." },
+        JUMP: { title: "Utfall", description: "Ett snabbt hopp som överraskar offret." },
+        FREEZE_JUMP: { title: "Frosthopp", description: "En iskall krasch som fryser allt i dess väg." },
+        FIRE_ZONE: { title: "Eld", description: "Extrem hetta från brinnande biologiska rester." },
+        ELECTRIC_BEAM: { title: "Elektrisk Stråle", description: "Högspänningsurladdning från ett modifierat verktyg." },
+        MAGNETIC_CHAIN: { title: "Magnetisk Kedja", description: "En länk som dränerar energi och begränsar rörlighet." },
+        MELEE: { title: "Närstrid", description: "Ett tungt slag med ett vapen eller en extremitet." },
+        DASH_ATTACK: { title: "Rusningsattack", description: "Ett blixtsnabbt slag under hög hastighet." },
+        SWIPE: { title: "Svep", description: "Ett brett, svepande slag som täcker ett stort område." },
+        SCREECH: { title: "Toxiskt Skrik", description: "En ljudvåg som vibrerar genom ben och själ." },
+        SMASH: { title: "Krossande Slag", description: "En överväldigande nedåtgående kraft från en gigantisk mutation." },
+        BURNING: { title: "Brinnande", description: "Extrem hetta som förtär köttet." },
+        ELECTRIFIED: { title: "Elektrifierad", description: "Högspänning som rusar genom kroppen." },
+        DROWNING: { title: "Drunkning", description: "Lungor som fylls med iskallt vatten." },
+        FALL: { title: "Fallskada", description: "Den plötsliga smällen i slutet av ett fall." },
+        BURN: { title: "Eld", description: "Direktkontakt med extrem hetta." }
     },
     skills: {
         vitality: "VITALITET",
@@ -406,7 +436,13 @@ export const sv = {
         son: "Son",
         daughter: "Dotter",
         wife: "Fru",
-        cat: "Katt"
+        cat: "Katt",
+        loke: "Loke",
+        jordan: "Jordan",
+        esmeralda: "Esmeralda",
+        nathalie: "Nathalie",
+        sotis: "Sotis",
+        panter: "Panter"
     },
     // DON'T AUTO-TRANSLATE 'chatter'
     chatter: {

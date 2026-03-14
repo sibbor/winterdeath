@@ -33,10 +33,14 @@ export class EnemySystem implements System {
             spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
             spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
             spawnBubble: (text: string, dur: number) => this.callbacks.spawnBubble(text, dur),
-            applyDamage: (dotDamage: number, e: any) => {
-                state.damageDealt += dotDamage;
-                if (e.isBoss) state.bossDamageDealt += dotDamage;
-                this.callbacks.gainXp(Math.ceil(dotDamage));
+            applyDamage: (enemy: any, amount: number, type: string, isHighImpact: boolean = false) => {
+                if (session.state.applyDamage) {
+                    session.state.applyDamage(enemy, amount, type, isHighImpact);
+                } else {
+                    // Fallback to basic tracking if applyDamage is missing
+                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    if (tracker) tracker.recordOutgoingDamage(session, amount, type, enemy.isBoss);
+                }
             }
         };
 

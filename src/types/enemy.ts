@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { AttackDefinition } from './combat';
 
+export const DEFAULT_ATTACK_RANGE = 2.5;
+
 /**
  * States for the Enemy AI State Machine
  */
@@ -9,10 +11,8 @@ export enum AIState {
     WANDER = 'WANDER',
     CHASE = 'CHASE',
     SEARCH = 'SEARCH',
-    BITING = 'BITING',
-    EXPLODING = 'EXPLODING',
     STUNNED = 'STUNNED',
-    CHARGING = 'CHARGING',
+    ATTACK_CHARGE = 'ATTACK_CHARGE',
     ATTACKING = 'ATTACKING'
 }
 
@@ -33,17 +33,6 @@ export enum EnemyDeathState {
 }
 
 /**
- * Standardized tree types for environment generation
- */
-export enum TreeType {
-    PINE = 'PINE',
-    SPRUCE = 'SPRUCE',
-    OAK = 'OAK',
-    DEAD = 'DEAD',
-    BIRCH = 'BIRCH'
-}
-
-/**
  * Standardized effect types for semantic visual feedback
  */
 export enum EnemyEffectType {
@@ -52,13 +41,13 @@ export enum EnemyEffectType {
     SPARK = 'SPARK'
 }
 
+
 /**
  * Static data definitions for different zombie types
  */
 export interface ZombieTypeData {
     hp: number;
     speed: number;
-    damage: number;
     score: number;
     color: number;
     scale: number;
@@ -85,7 +74,6 @@ export interface Enemy {
     hp: number;
     maxHp: number;
     speed: number;
-    damage: number;
     score: number;
     color: number;
 
@@ -97,7 +85,7 @@ export interface Enemy {
     state: AIState;
     idleTimer: number;       // Seconds before switching from IDLE to WANDER
     searchTimer: number;     // Seconds spent searching at last known position
-    attackCooldown: number;  // Milliseconds between individual attacks
+    attackCooldowns: Record<string, number>; // Individual timers for different attacks
     abilityCooldown?: number;
 
     // AI Knowledge & Sensors
@@ -163,4 +151,8 @@ export interface Enemy {
     // --- AIRBORNE / FALL DAMAGE ---
     isAirborne: boolean;   // True while enemy is launched into the air
     fallStartY: number;    // Peak Y reached while airborne (for fall damage calculation)
+
+    // --- DAMAGE TRACKING (Zero-GC) ---
+    _accumulatedDamage: number;    // Tracks damage between floating text ticks
+    _lastDamageTextTime: number;   // Timestamp of the last floating text spawn
 }

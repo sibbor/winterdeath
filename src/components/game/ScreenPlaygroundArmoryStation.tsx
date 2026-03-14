@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PlayerStats, SectorState } from '../../types';
-import { WeaponType, WeaponCategory, WEAPONS as WEAPON_DEFS } from '../../content/weapons';
+import { WeaponType, WeaponCategory, WEAPONS as WEAPON_DEFS, WeaponCategoryColors } from '../../content/weapons';
 import { t } from '../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../content/constants';
 import { soundManager } from '../../utils/SoundManager';
@@ -20,14 +20,6 @@ interface ScreenPlaygroundArmoryStationProps {
     onClose: () => void;
     isMobileDevice?: boolean;
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-    [WeaponCategory.PRIMARY]: '#ef4444',   // Red-500
-    [WeaponCategory.SECONDARY]: '#fbbf24', // Yellow-400
-    [WeaponCategory.THROWABLE]: '#10b981', // Emerald-500
-    [WeaponCategory.SPECIAL]: '#3b82f6',   // Blue-500
-    [WeaponCategory.TOOL]: '#3b82f6',      // Blue-500
-};
 
 const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps> = ({ stats, sectorState, currentLoadout, weaponLevels, onSave, onClose, isMobileDevice }) => {
     const [activeTab, setActiveTab] = useState<WeaponCategory>(WeaponCategory.PRIMARY);
@@ -143,7 +135,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                     <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth">
                         {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
                             const isActive = activeTab === cat;
-                            const catColor = CATEGORY_COLORS[cat] || '#ffffff';
+                            const catColor = WeaponCategoryColors[cat as keyof typeof WeaponCategoryColors] || '#ffffff';
                             const catKey = 'categories.' + cat.toLowerCase();
 
                             return (
@@ -169,7 +161,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                         const cost = SCRAP_COST_BASE * level;
                         const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
                         const canAfford = tempStats.scrap >= cost;
-                        const categoryColor = CATEGORY_COLORS[weapon.category];
+                        const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
                         const isEquippable = weapon.category !== WeaponCategory.TOOL;
                         const isUpgradeable = isEquippable;
 

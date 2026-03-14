@@ -22,7 +22,6 @@ import { ScreenPlaygroundEnvironmentStation } from './components/game/ScreenPlay
 import ScreenPlayerDied from './components/game/ScreenPlayerDied';
 import ScreenArmory from './components/camp/ScreenArmory';
 import ScreenPlayerSkills from './components/camp/ScreenPlayerSkills';
-import ScreenStatistics from './components/camp/ScreenStatistics';
 import ScreenSectorOverview from './components/camp/ScreenSectorOverview';
 import ScreenResetConfirm from './components/camp/ScreenResetConfirm';
 import Prologue from './components/game/Prologue';
@@ -667,7 +666,7 @@ const App: React.FC = () => {
             )}
 
             {activeOverlay === 'STATION_STATISTICS' && (
-                <ScreenStatistics
+                <ScreenAdventureLog
                     stats={gameState.stats}
                     onClose={() => setActiveOverlay(null)}
                     isMobileDevice={isMobileDevice}
@@ -682,6 +681,8 @@ const App: React.FC = () => {
                         setActiveOverlay(null);
                     }}
                     killerName={hudState.killerName || "UNKNOWN"}
+                    attackName={hudState.killerAttackName}
+                    killedByEnemy={hudState.killedByEnemy}
                     isMobileDevice={isMobileDevice}
                 />
             )}

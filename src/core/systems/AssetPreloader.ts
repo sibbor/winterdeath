@@ -149,7 +149,8 @@ export const AssetPreloader = {
                         'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
                         'step', 'step_snow', 'step_metal', 'step_wood', 'step_water', 'swimming',
                         'mech_mag_out', 'mech_mag_in', 'mech_empty_click', 'mech_holster',
-                        'owl_hoot', 'bird_ambience', 'ambient_rustle', 'ambient_metal', 'dash'
+                        'owl_hoot', 'bird_ambience', 'ambient_rustle', 'ambient_metal', 'dash',
+                        'BITE', 'jump_impact', 'heavy_smash'
                     ];
                     for (let i = 0; i < essentialSounds.length; i++) {
                         SoundBank.get(soundEngine, essentialSounds[i]);
@@ -625,7 +626,8 @@ export const AssetPreloader = {
                     'debris', 'glass', 'flash', 'splash',
                     'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat', 'impact_splat',
                     'campfire_flame', 'campfire_spark', 'campfire_smoke',
-                    'scrap'
+                    'scrap',
+                    'electric_beam', 'screech_wave', 'ground_impact', 'shockwave', 'frost_nova', 'magnetic_sparks', 'impact'
                 ];
                 for (let i = 0; i < fxTypes.length; i++) {
                     const realIMesh = FXSystem._getInstancedMesh(null as any, fxTypes[i]);

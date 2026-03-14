@@ -4,6 +4,7 @@ import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
 import CampModalLayout from './CampModalLayout';
 import { LEVEL_CAP } from '../../content/constants';
+import { useOrientation } from '../../hooks/useOrientation';
 
 const SKILLS_CONFIG = [
     { id: 'maxHp', labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
@@ -19,6 +20,7 @@ interface ScreenPlayerSkillsProps {
 }
 
 const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, onClose, isMobileDevice }) => {
+    const { isLandscapeMode } = useOrientation();
     const [tempStats, setTempStats] = useState({ ...stats });
 
     const handleUpgradeSkill = (skillId: string, cost: number, value: number) => {
@@ -43,16 +45,17 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
 
     return (
         <CampModalLayout
+            title={t('stations.skills')}
             titleColor="text-purple-500"
             onClose={onClose}
+            primaryClose={true}
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_upgrades')}
             closeLabel={tempStats.skillPoints !== stats.skillPoints ? t('ui.cancel') : t('ui.close')}
             canConfirm={tempStats.skillPoints !== stats.skillPoints}
             showCancel={true}
-            isMobile={isMobileDevice}
         >
-            <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 h-full content-center ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
+            <div className={`grid ${isLandscapeMode ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-3'} gap-4 md:gap-8 h-full ${isMobileDevice ? 'overflow-y-auto content-center' : ''}`}>
                 {/* Header Section */}
                 <div className="col-span-full text-center mb-2 md:mb-4">
                     <span className="text-purple-500 font-bold uppercase tracking-widest text-xs md:text-sm block mb-1">{t('ui.available_skill_points')}</span>

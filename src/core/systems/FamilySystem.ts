@@ -196,16 +196,38 @@ export class FamilySystem implements System {
             let fmIsRushing = false;
 
             if (familyMember.following && !isCinematicActive) {
-                _v1.copy(this.playerGroup.position);
+                // --- FORMATION LOGIC ---
+                // We want them to follow staggered behind the player
+                // Get player's forward/right vectors
+                const pRot = this.playerGroup.rotation.y;
+                const cos = Math.cos(pRot);
+                const sin = Math.sin(pRot);
 
-                // Stagger positions for a group of 6
-                if (i > 0) {
-                    const sign = i % 2 === 0 ? 1 : -1;
-                    const dist = 1.5 + i * 0.8; // Wider spread for large families
-                    _v1.x += sign * dist;
-                }
+                // Forward vector (approx): [sin, 0, cos]
+                // Right vector (approx): [cos, 0, -sin]
+                
+                // Staggering: 
+                // i=0 (Loke): Slightly left-behind
+                // i=1 (Jordan): Slightly right-behind
+                // i=2 (Esmeralda): Further left-behind
+                // etc.
+                const sideSign = i % 2 === 0 ? -1 : 1;
+                const row = Math.floor(i / 2) + 1; // 1, 2, 3...
+                
+                const backDist = 2.0 + row * 1.2;
+                const sideDist = 1.5 + (i % 2) * 0.5;
+
+                // Local offset relative to player (z is back, x is side)
+                const localX = sideSign * sideDist;
+                const localZ = -backDist;
+
+                // Rotate local offset to world space
+                _v1.copy(this.playerGroup.position);
+                _v1.x += localX * cos + localZ * sin;
+                _v1.z += -localX * sin + localZ * cos;
 
                 const distSq = fm.position.distanceToSquared(_v1);
+
 
                 if (distSq > 4.0) { // 2.0m threshold
                     fmIsMoving = true;

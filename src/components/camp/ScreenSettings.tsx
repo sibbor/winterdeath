@@ -4,6 +4,7 @@ import { t, setLocale, getLocale } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
 import { GraphicsSettings } from '../../types';
 import { SHADOW_PRESETS } from '../../content/constants';
+import { useOrientation } from '../../hooks/useOrientation';
 import CampModalLayout from './CampModalLayout';
 
 interface ScreenSettingsProps {
@@ -14,6 +15,7 @@ interface ScreenSettingsProps {
 }
 
 const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics, isMobileDevice }) => {
+    const { isLandscapeMode } = useOrientation();
     // Force update to re-render when language changes
     const [, setTick] = useState(0);
 
@@ -44,7 +46,6 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             confirmLabel={t('ui.close')}
             isSettings={true}
             showCancel={false}
-            isMobile={isMobileDevice}
         >
             <div className="flex flex-col items-center justify-start h-full max-w-2xl mx-auto space-y-6 overflow-y-auto pr-4 custom-scrollbar py-4 px-2">
                 {/* Language Selector */}

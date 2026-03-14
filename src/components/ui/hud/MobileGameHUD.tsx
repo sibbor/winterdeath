@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { WeaponType } from '../../../content/weapons';
+import { WeaponType, WeaponCategoryColors } from '../../../content/weapons';
 import { WEAPONS, RANKS } from '../../../content/constants';
 import { t } from '../../../utils/i18n';
+import { useOrientation } from '../../../hooks/useOrientation';
 
 interface MobileGameHUDProps {
     hp: number;
@@ -49,6 +50,9 @@ interface MobileGameHUDProps {
     onRotateCamera?: (dir: number) => void;
     statusEffects?: Array<{ type: string, duration: number, intensity: number }>;
     isDisoriented?: boolean;
+    activePassives?: string[];
+    activeBuffs?: string[];
+    activeDebuffs?: string[];
 }
 
 const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
@@ -59,8 +63,21 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
     isDriving = false, vehicleSpeed = 0, throttleState = 0,
     sectorStats,
     debugInfo, onTogglePause, onToggleMap, onSelectWeapon, onRotateCamera,
-    statusEffects = [], isDisoriented = false
+    statusEffects = [], isDisoriented = false,
+    activePassives = [], activeBuffs = [], activeDebuffs = []
 }) => {
+    const { isLandscapeMode } = useOrientation();
+    const [tooltipContent, setTooltipContent] = useState<string | null>(null);
+    const tooltipTimeout = useRef<any>(null);
+
+    const showTooltip = (text: string) => {
+        if (tooltipTimeout.current) clearTimeout(tooltipTimeout.current);
+        setTooltipContent(text);
+        tooltipTimeout.current = setTimeout(() => {
+            setTooltipContent(null);
+        }, 2000);
+    };
+
     const hpP = Math.max(0, (hp / maxHp) * 100);
     const stP = Math.max(0, (stamina / maxStamina) * 100);
     const xpP = Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100));
@@ -165,14 +182,38 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
     const isBossActive = boss && boss.active && !bossDefeated;
     const wep = WEAPONS[activeWeapon];
 
+    const getStatusIcon = (type: string) => {
+        switch (type) {
+            case 'FREEZING': return '❄️';
+            case 'BURNING': return '🔥';
+            case 'BLEEDING': return '🩸';
+            case 'ELECTRIFIED': return '⚡';
+            case 'SLOWED': return '🐌';
+            case 'DISORIENTED': return '😵';
+            default: return '❓';
+        }
+    };
+
+    const getPassiveIcon = (name: string) => {
+        switch (name.toLowerCase()) {
+            case 'loke': return '⚡';
+            case 'jordan': return '🎯';
+            case 'esmeralda': return '🔫';
+            case 'nathalie': return '🛡️';
+            case 'sotis':
+            case 'panter': return '🐱';
+            default: return '👤';
+        }
+    };
+
     const renderSegments = (current: number, max: number, colorClass: string = 'active') => {
         const totalSegments = 10;
         const activeSegments = Math.ceil((current / max) * totalSegments);
         return (
             <div className="flex gap-1 w-full max-w-[200px]">
                 {Array.from({ length: totalSegments }).map((_, i) => (
-                    <div 
-                        key={i} 
+                    <div
+                        key={i}
                         className={`h-1.5 flex-1 border border-white/10 transition-all ${i < activeSegments ? 'bg-[#fb923c] shadow-[0_0_5px_#fb923c]' : 'bg-white/5'}`}
                     />
                 ))}
@@ -182,10 +223,10 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
 
     return (
         <div className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
-            
+
             {/* Top Row */}
             <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
-                
+
                 {/* Top Left: Bars */}
                 <div className={`flex flex-col gap-1 w-40 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                     <div className="hud-bar-container h-5 w-full">
@@ -193,7 +234,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                             <div className="h-full bg-[#ff3333] hud-bar-glow" style={{ width: `${hpP}%` }} />
                             <div className="absolute inset-0 flex items-center justify-start px-2">
                                 <span className="text-[10px] text-white font-mono font-bold tracking-tighter">
-                                    {Math.ceil(hp)} / {maxHp}
+                                    {Math.max(0, Math.ceil(hp))} / {maxHp}
                                 </span>
                             </div>
                         </div>
@@ -208,17 +249,72 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                             <div className="h-full bg-[#06b6d4] hud-bar-glow" style={{ width: `${xpP}%` }} />
                         </div>
                     </div>
+                    {/* Passives - Small Circles */}
+                    {!isLandscapeMode && (
+                        <div className="flex gap-1 mt-1">
+                            {activePassives.map((name, i) => (
+                                <div
+                                    key={i}
+                                    className="w-5 h-5 rounded-full border border-green-500 bg-black/80 flex items-center justify-center text-[8px] pointer-events-auto"
+                                    onTouchStart={(e) => { e.stopPropagation(); showTooltip(t(`family.${name.toLowerCase()}`)); }}
+                                >
+                                    {getPassiveIcon(name)}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                {/* Top Right: Kills */}
-                <div className={`flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                    <span className="text-3xl font-bold text-white font-mono leading-none">
-                        {kills}
-                    </span>
-                    <span className="text-[9px] font-bold text-[#ff3333] tracking-[0.2em] uppercase opacity-80">
-                        {t('ui.kills')}
-                    </span>
+                {/* Top Right: Pause + Kills */}
+                <div className={`flex items-start gap-4 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                    <button
+                        className="w-12 h-12 rounded-full border border-white/10 bg-black/60 text-white font-bold text-lg backdrop-blur-sm flex items-center justify-center active:scale-95 transition-all pointer-events-auto mt-1"
+                        onTouchStart={(e) => { e.stopPropagation(); onTogglePause?.(); }}
+                    >
+                        ||
+                    </button>
+                    <div className="flex flex-col items-center">
+                        <span className="text-3xl font-bold text-white font-mono leading-none">
+                            {kills}
+                        </span>
+                        <span className="text-[9px] font-bold text-[#ff3333] tracking-[0.2em] uppercase opacity-80">
+                            {t('ui.kills')}
+                        </span>
+                    </div>
                 </div>
+
+                {/* Landscape Left Column: Passives & Buffs */}
+                {isLandscapeMode && (
+                    <div className="absolute top-24 left-0 flex flex-col gap-2 pl-safe">
+                        {activePassives.map((name, i) => (
+                            <div
+                                key={`pass-${i}`}
+                                className="w-10 h-10 rounded-full border-2 border-green-500/50 bg-black/80 flex items-center justify-center text-xl pointer-events-auto shadow-lg"
+                                onTouchStart={(e) => { e.stopPropagation(); showTooltip(t(`family.${name.toLowerCase()}`)); }}
+                            >
+                                {getPassiveIcon(name)}
+                            </div>
+                        ))}
+                        {activeBuffs.map((type, i) => (
+                            <div 
+                                key={`buff-L-${i}`} 
+                                className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 border-blue-500 rounded-lg text-lg pointer-events-auto shadow-lg"
+                                onTouchStart={(e) => { e.stopPropagation(); showTooltip(t(`attacks.${type}.title`)); }}
+                            >
+                                {getStatusIcon(type)}
+                            </div>
+                        ))}
+                        {activeDebuffs.map((type, i) => (
+                            <div 
+                                key={`debuff-L-${i}`} 
+                                className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 border-red-500 rounded-lg text-lg pointer-events-auto shadow-lg"
+                                onTouchStart={(e) => { e.stopPropagation(); showTooltip(t(`attacks.${type}.title`)); }}
+                            >
+                                {getStatusIcon(type)}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Boss / Wave Bar Center Top */}
@@ -232,7 +328,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                     <div className="w-full flex flex-col items-center">
                         <h2 className="text-xs font-semibold text-[#ff3333] tracking-tighter uppercase mb-1">{t('zombie_wave')}</h2>
                         {renderSegments(
-                            sectorStats.zombiesKilled || 0, 
+                            sectorStats.zombiesKilled || 0,
                             sectorStats.zombiesKillTarget || sectorStats.hordeTarget || 1
                         )}
                     </div>
@@ -241,12 +337,12 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
 
             {/* Bottom Centered Action Bar */}
             <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                
+
                 {/* Ammo Display */}
                 {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
-                    <div className="mb-2 flex items-baseline font-mono">
-                         <span className="text-2xl font-bold text-white leading-none">{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
-                         <span className="text-[10px] font-bold text-white/30 ml-1">/{magSize}</span>
+                    <div className="mb-2 flex items-baseline">
+                        <span className="text-2xl font-bold text-white leading-none font-mono">{sectorStats?.unlimitedAmmo ? '∞' : ammo}</span>
+                        <span className="text-[10px] font-bold text-white/30 ml-1 font-mono">/{magSize}</span>
                     </div>
                 )}
 
@@ -261,20 +357,20 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                         const wData = WEAPONS[type];
                         const isActive = activeWeapon === type;
                         return (
-                            <button 
+                            <button
                                 key={slot}
                                 onClick={() => onSelectWeapon && onSelectWeapon(slot)}
                                 onTouchStart={(e) => { e.stopPropagation(); onSelectWeapon && onSelectWeapon(slot); }}
-                                className={`hud-slot w-10 h-10 flex items-center justify-center relative border transition-all overflow-hidden ${isActive ? 'bg-zinc-950/80' : 'opacity-40 bg-black/40'}`}
-                                style={{ borderColor: isActive ? (wData?.color || 'white') : 'rgba(255,255,255,0.1)' }}
+                                className={`hud-slot w-16 h-16 flex items-center justify-center relative border transition-all overflow-hidden ${isActive ? 'bg-zinc-950/80' : 'opacity-60 bg-black/60'}`}
+                                style={{ borderColor: isActive ? (WeaponCategoryColors[wData.category as keyof typeof WeaponCategoryColors] || 'white') : 'rgba(255,255,255,0.1)' }}
                             >
                                 {/* Reload Progress Overlay */}
                                 {isActive && isReloading && (
-                                    <div 
+                                    <div
                                         className="absolute bottom-0 left-0 w-full bg-white opacity-20 transition-all duration-100"
-                                        style={{ 
+                                        style={{
                                             height: `${reloadProgress * 100}%`,
-                                            backgroundColor: wData?.color || 'white'
+                                            backgroundColor: WeaponCategoryColors[wData.category as keyof typeof WeaponCategoryColors] || 'white'
                                         }}
                                     />
                                 )}
@@ -290,9 +386,12 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                 )}
                                 {wData?.category === 'THROWABLE' && (
                                     <div className="absolute bottom-0.5 left-0.5 right-0.5 flex justify-center gap-0.5 z-10">
-                                        {Array.from({ length: wData.magSize }).map((_, i) => (
-                                            <div key={i} className={`h-0.5 flex-1 ${i < (throwableAmmo || 0) ? 'shadow-[0_0_2px_currentColor]' : 'bg-white/10'}`} style={{ backgroundColor: i < (throwableAmmo || 0) ? wData.color : undefined, color: wData.color }} />
-                                        ))}
+                                        {Array.from({ length: wData.magSize }).map((_, i) => {
+                                            const catColor = WeaponCategoryColors.THROWABLE;
+                                            return (
+                                                <div key={i} className={`h-0.5 flex-1 ${i < (throwableAmmo || 0) ? 'shadow-[0_0_2px_currentColor]' : 'bg-white/10'}`} style={{ backgroundColor: i < (throwableAmmo || 0) ? catColor : undefined, color: catColor }} />
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </button>
@@ -301,13 +400,38 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                 </div>
             </div>
 
-            {/* Driving HUD */}
-            {isDriving && (
-                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
-                    <div className="hud-bar-container px-6 py-2">
-                         <span className="text-3xl font-semibold text-white">{speedKmH}</span>
-                         <span className="text-[8px] font-medium text-white/40 block text-center uppercase">KM/H</span>
+            {/* Status Effects (Bottom Left - Portrait only) */}
+            {!isLandscapeMode && (
+                <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+                    <div className="flex gap-1 pointer-events-auto">
+                        {activeBuffs.map((type, i) => (
+                            <div 
+                                key={`buff-${i}`} 
+                                className="w-6 h-6 flex items-center justify-center bg-black/80 border border-green-500 rounded-sm"
+                                onTouchStart={(e) => { e.stopPropagation(); showTooltip(t(`attacks.${type}.title`)); }}
+                            >
+                                <span className="text-[10px]">{getStatusIcon(type)}</span>
+                            </div>
+                        ))}
+                        {activeDebuffs.map((type, i) => (
+                            <div 
+                                key={`debuff-${i}`} 
+                                className="w-6 h-6 flex items-center justify-center bg-black/80 border border-red-500 rounded-sm"
+                                onTouchStart={(e) => { e.stopPropagation(); showTooltip(t(`attacks.${type}.title`)); }}
+                            >
+                                <span className="text-[10px]">{getStatusIcon(type)}</span>
+                            </div>
+                        ))}
                     </div>
+                </div>
+            )}
+
+            {/* Tooltip Popup */}
+            {tooltipContent && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1000] px-6 py-3 bg-black/90 border-2 border-white/20 backdrop-blur-xl rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in duration-200">
+                    <span className="text-white font-bold uppercase tracking-widest text-sm whitespace-nowrap">
+                        {tooltipContent}
+                    </span>
                 </div>
             )}
         </div>

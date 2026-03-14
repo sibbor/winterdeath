@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { PlayerStats } from '../../types';
 import { t } from '../../utils/i18n';
-import { ZOMBIE_TYPES, BOSSES, SECTOR_THEMES } from '../../content/constants';
+import { ZOMBIE_TYPES, BOSSES, SECTOR_THEMES, RANKS } from '../../content/constants';
 import { soundManager } from '../../utils/SoundManager';
 import { COLLECTIBLES } from '../../content/collectibles';
+import { useOrientation } from '../../hooks/useOrientation';
 import CampModalLayout from './CampModalLayout';
 import CollectiblePreview from '../ui/core/CollectiblePreview';
 
@@ -16,10 +17,12 @@ interface ScreenAdventureLogProps {
 }
 
 
-type Tab = 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
+type Tab = 'stats' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
 const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode }) => {
-    const [activeTab, setActiveTab] = useState<Tab>('collectibles');
+    const { isLandscapeMode } = useOrientation();
+    const effectiveLandscape = isLandscapeMode || !isMobileDevice;
+    const [activeTab, setActiveTab] = useState<Tab>('stats');
 
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
@@ -38,6 +41,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     };
 
     const tabs: { id: Tab, label: string }[] = [
+        { id: 'stats', label: t('stations.stats') },
         { id: 'collectibles', label: t('ui.log_collectibles') },
         { id: 'clues', label: t('ui.log_clues') },
         { id: 'poi', label: t('ui.log_poi') },
@@ -93,29 +97,32 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
 
     return (
         <CampModalLayout
+            title={t('stations.adventure_log')}
             titleColor="text-green-500"
             onClose={onClose}
             onConfirm={onClose}
             confirmLabel={t('ui.close')}
             showCancel={false}
-            isMobile={isMobileDevice}
-            debugAction={isDebugMode ? { label: '[DEBUG] SHOW ALL', action: handleDebugShowAll } : undefined}
         >
-            <div className={`flex flex-col h-full ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
+            <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 {/* Tabs Bar */}
-                {/* Tabs Bar */}
-                <div className="relative shrink-0">
-                    <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
-                    <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
-                    <div className="flex gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end">
+                <div className={`relative shrink-0 ${effectiveLandscape ? 'w-48 border-r-2 border-gray-800 pr-4' : ''}`}>
+                    {!effectiveLandscape && (
+                        <>
+                            <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                        </>
+                    )}
+                    <div className={`flex ${effectiveLandscape ? 'flex-col gap-2' : 'gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end scrollbar-hide'}`}>
                         {tabs.map(tab => {
                             const isActive = activeTab === tab.id;
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                                     className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 whitespace-nowrap ${isActive
-                                        ? 'bg-white text-black border-white'
+                                        ? 'text-black border-white'
                                         : 'bg-black text-green-600 border-green-800 hover:border-green-500 hover:text-green-300'
-                                    }`}
+                                    } ${effectiveLandscape ? 'w-full text-left' : ''}`}
+                                    style={{ backgroundColor: isActive ? themeColor : 'black' }}
                                 >
                                     <span className="block skew-x-[10deg]">{tab.label}</span>
                                 </button>
@@ -125,15 +132,105 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pr-safe">
+                    {activeTab === 'stats' && <StatsTab stats={stats} isMobile={!effectiveLandscape} />}
                     {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} />}
                     {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} />}
-                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobile={isMobileDevice} />}
+                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobile={!effectiveLandscape} />}
                     {activeTab === 'clues' && <CluesTab stats={stats} color={'#eab308'} />}
                     {activeTab === 'poi' && <PoiTab stats={stats} color={'#3b82f6'} />}
                 </div>
             </div>
         </CampModalLayout>
+    );
+};
+
+const StatsTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({ stats, isMobile }) => {
+    const getRank = (level: number) => {
+        const rankKey = Math.min(Math.max(0, level - 1), 19);
+        const translated = t(`ranks.${rankKey}`);
+        if (translated.startsWith('ranks.')) return RANKS[rankKey];
+        return translated;
+    };
+
+    const accuracy = stats.totalBulletsFired > 0
+        ? ((stats.totalBulletsHit || 0) / stats.totalBulletsFired * 100).toFixed(1)
+        : "0.0";
+
+    const killsLabel = t('ui.kills');
+    const displayKillsLabel = killsLabel.charAt(0).toUpperCase() + killsLabel.slice(1).toLowerCase();
+
+    return (
+        <div className={`flex h-full gap-6 md:gap-12 pb-12 ${isMobile ? 'flex-col overflow-y-auto' : ''}`}>
+            {/* LEFT COLUMN */}
+            <div className={`${isMobile ? 'w-full shrink-0' : 'w-1/3'} flex flex-col gap-6`}>
+                {/* RANK BOX */}
+                <div className="bg-blue-900/20 border-2 border-blue-500/50 p-6 flex flex-col items-center text-center">
+                    <span className="text-blue-400 text-sm font-bold uppercase tracking-widest mb-2">{t('ui.current_rank')}</span>
+                    <h1 className="text-4xl font-semibold text-white uppercase tracking-tighter mb-4">{getRank(stats.level)}</h1>
+                    <div className="w-full bg-black h-4 border border-blue-900 relative">
+                        <div className="h-full bg-blue-500" style={{ width: `${(stats.currentXp / stats.nextLevelXp) * 100}%` }}></div>
+                    </div>
+                    <div className="flex justify-between w-full mt-2 text-xs font-mono text-blue-300">
+                        <span>{t('ui.lvl')} {stats.level}</span>
+                        <span>{stats.currentXp} / {stats.nextLevelXp} {t('ui.xp')}</span>
+                    </div>
+                </div>
+
+                {/* FAMILY BOX */}
+                <div className="bg-black border border-gray-800 p-6 h-fit">
+                    <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.family_header')}</h3>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.rescued_family_members')}</span><span className="text-white font-mono text-lg">{stats.familyFoundCount}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.clues_found')}</span><span className="text-white font-mono text-lg">{stats.cluesFound.length}</span></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* RIGHT COLUMN */}
+            <div className={`flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 content-start ${isMobile ? 'shrink-0' : ''}`}>
+                {/* PERFORMANCE BOX */}
+                <div className="bg-black border border-gray-800 p-6">
+                    <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.performance')}</h3>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.xp_earned')}</span><span className="text-blue-400 font-mono font-bold text-lg">{stats.currentXp + ((stats.level - 1) * 1000)}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.sp_earned')}</span><span className="text-purple-400 font-mono font-bold text-lg">{stats.totalSkillPointsEarned}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.scrap_scavenged')}</span><span className="text-yellow-500 font-mono text-lg">{stats.totalScrapCollected}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.sectors_completed')}</span><span className="text-white font-mono text-lg">{stats.sectorsCompleted}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.chests_opened')}</span><span className="text-white font-mono text-lg">{stats.chestsOpened + stats.bigChestsOpened}</span></div>
+                        <div className="h-px bg-gray-800 my-2"></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.incoming_damage')}</span><span className="text-white font-mono text-lg">{Math.floor(stats.totalDamageTaken)}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.outgoing_damage')}</span><span className="text-white font-mono text-lg">{stats.totalDamageDealt.toLocaleString()}</span></div>
+                        <div className="h-px bg-gray-800 my-2"></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.shots_fired')}</span><span className="text-white font-mono text-lg">{stats.totalBulletsFired.toLocaleString()}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.shots_hit')}</span><span className="text-white font-mono text-lg">{(stats.totalBulletsHit || 0).toLocaleString()}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.accuracy')}</span><span className="text-blue-300 font-mono text-lg">{accuracy}%</span></div>
+                    </div>
+                </div>
+
+                {/* COMBAT BOX */}
+                <div className="bg-black border border-gray-800 p-6 flex-1">
+                    <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.combat')}</h3>
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{displayKillsLabel}</span><span className="text-white font-mono text-lg">{stats.kills}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.deaths')}</span><span className="text-white font-mono text-lg">{stats.deaths}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.throwables_thrown')}</span><span className="text-white font-mono text-lg">{stats.totalThrowablesThrown || 0}</span></div>
+                    </div>
+
+                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mt-6 mb-2 border-b border-gray-800 pb-1">{t('ui.kill_log')}</h3>
+                    <div className="overflow-y-auto max-h-[350px] custom-scrollbar pr-2">
+                        {stats.killsByType && Object.entries(stats.killsByType).map(([type, count]) => (
+                            <div key={type} className="flex justify-between items-end text-xs py-1 border-b border-gray-900">
+                                <span className="text-gray-400 font-medium">
+                                    {type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()}
+                                </span>
+                                <span className="text-white font-mono text-lg">{count as number}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 
@@ -164,14 +261,11 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.health')}</div>
                                     <div className="text-2xl font-bold text-white font-mono">{data.hp}</div>
                                 </div>
-                                <div className="text-center border-x border-gray-800">
-                                    <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.damage')}</div>
-                                    <div className="text-2xl font-bold text-white font-mono">{data.damage}</div>
-                                </div>
-                                <div className="text-center">
+                                <div className="text-center border-l border-gray-800">
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
                                     <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)}</div>
                                 </div>
+                                <div></div> {/* Placeholder for 3-col grid alignment */}
                             </div>
                             <p className="text-base text-gray-300 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: itemColor }}>
                                 "{getEnemyDescription(key)}"
@@ -185,21 +279,34 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                         <div className="h-[1px] flex-1 bg-gray-800"></div>
                                     </div>
                                     <div className="grid grid-cols-1 gap-2">
-                                        {data.attacks.map((attack, idx) => (
-                                            <div key={idx} className="flex justify-between items-center bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
-                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{attack.type}</span>
-                                                <div className="flex gap-4">
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
-                                                        <span className="text-xs font-mono text-red-400">{attack.damage}</span>
+                                        {data.attacks.map((attack, idx) => {
+                                            const attackKey = attack.type.toUpperCase();
+                                            const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
+                                            return (
+                                                <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                                            {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
+                                                        </span>
+                                                        <div className="flex gap-4">
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                <span className="text-xs font-mono text-red-400">{attack.damage}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                <span className="text-xs font-mono text-blue-400">{attack.range}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
-                                                        <span className="text-xs font-mono text-blue-400">{attack.range}</span>
-                                                    </div>
+                                                    {hasDesc && (
+                                                        <p className="text-[10px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">
+                                                            {t(`attacks.${attackKey}.description`)}
+                                                        </p>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -251,14 +358,11 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
                                             <div className="text-2xl font-bold text-white font-mono">{boss.hp}</div>
                                         </div>
-                                        <div className="text-center border-x border-gray-800">
-                                            <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.damage')}</div>
-                                            <div className="text-2xl font-bold text-white font-mono">{boss.damage}</div>
-                                        </div>
-                                        <div className="text-center">
+                                        <div className="text-center border-l border-gray-800">
                                             <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
                                             <div className="text-2xl font-bold text-white font-mono">{boss.speed.toFixed(1)}</div>
                                         </div>
+                                        <div></div> {/* Placeholder for 3-col grid alignment */}
                                     </div>
                                     <div className="space-y-4">
                                         <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(boss.name)}</p>
@@ -271,26 +375,39 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color
                                                     <div className="h-[1px] flex-1 bg-gray-800"></div>
                                                 </div>
                                                 <div className="grid grid-cols-1 gap-2">
-                                                    {boss.attacks.map((attack, idx) => (
-                                                        <div key={idx} className="flex justify-between items-center bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{attack.type}</span>
-                                                                {attack.effect && (
-                                                                    <span className="text-[8px] text-red-500/80 uppercase font-black">{attack.effect}</span>
+                                                    {boss.attacks.map((attack, idx) => {
+                                                        const attackKey = attack.type.toUpperCase();
+                                                        const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
+                                                        return (
+                                                            <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
+                                                                <div className="flex justify-between items-center">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                                                            {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
+                                                                        </span>
+                                                                        {attack.effect && (
+                                                                            <span className="text-[8px] text-red-500/80 uppercase font-black">{attack.effect}</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex gap-4">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                            <span className="text-xs font-mono text-red-400">{attack.damage}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                            <span className="text-xs font-mono text-blue-400">{attack.range}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                {hasDesc && (
+                                                                    <p className="text-[10px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">
+                                                                        {t(`attacks.${attackKey}.description`)}
+                                                                    </p>
                                                                 )}
                                                             </div>
-                                                            <div className="flex gap-4">
-                                                                <div className="flex items-center gap-1">
-                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
-                                                                    <span className="text-xs font-mono text-red-400">{attack.damage}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1">
-                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
-                                                                    <span className="text-xs font-mono text-blue-400">{attack.range}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}

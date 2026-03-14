@@ -86,7 +86,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             spEarned: (state.level - props.stats.level) + (state.sessionCollectiblesDiscovered?.length || 0) + ((state.bossesDefeated?.length || 0) > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
             seenEnemies: state.seenEnemies || [],
             seenBosses: (state.seenBosses || []).concat(refs.stateRef.current.bossesDefeated || []),
-            discoveredPOIs: state.discoveredPOIs || []
+            discoveredPOIs: state.discoveredPOIs || [],
+            incomingDamageBreakdown: state.incomingDamageBreakdown || {},
+            outgoingDamageBreakdown: state.outgoingDamageBreakdown || {}
         };
     }, [props.stats.level, refs]);
 

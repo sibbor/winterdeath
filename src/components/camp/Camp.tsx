@@ -19,7 +19,6 @@ const _v1 = new THREE.Vector3();
 
 // Import UI Components
 import CampHUD from './CampHUD';
-import ScreenStatistics from './ScreenStatistics';
 import ScreenPlayerSkills from './ScreenPlayerSkills';
 import ScreenArmory from './ScreenArmory';
 import ScreenSectorOverview from './ScreenSectorOverview';
@@ -162,6 +161,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             // Consolidate interactables from both stations and family
             const allInteractables = [...interactables, ...familyInteractables];
 
+            // [VINTERDÖD] Adjust camera for Portrait Mode (Mobile/Narrow View)
+            const aspect = container.clientWidth / container.clientHeight;
+            if (aspect < 1.0) {
+                camera.set('fov', 68);
+                camera.setPosition(0, 10, 28, true);
+            } else {
+                camera.set('fov', 50);
+                camera.setPosition(0, 10, 22, true);
+            }
+
             // Store scene data for the interactivity loop
             sceneInteractablesRef.current = allInteractables;
             sceneOutlinesRef.current = outlines;
@@ -223,7 +232,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                         'armory': 'STATION_ARMORY',
                         'skills': 'STATION_SKILLS',
                         'sectors': 'STATION_SECTORS',
-                        'stats': 'STATION_STATISTICS',
+                        'stats': 'ADVENTURE_LOG',
                         'adventure_log': 'ADVENTURE_LOG',
                         'settings': 'SETTINGS'
                     };
@@ -259,7 +268,18 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         const onResize = () => {
             const width = container.clientWidth;
             const height = container.clientHeight;
-            camera.set('aspect', width / height);
+            const aspect = width / height;
+            camera.set('aspect', aspect);
+            
+            // [VINTERDÖD] Dynamic FOV/Position adjustment for Mobile Portrait
+            if (aspect < 1.0) {
+                camera.set('fov', 68);
+                camera.setPosition(0, 10, 28, false); // Smoothly slide back
+            } else {
+                camera.set('fov', 50);
+                camera.setPosition(0, 10, 22, false); // Smoothly slide forward
+            }
+            
             engine.renderer.setSize(width, height);
         };
 
@@ -484,7 +504,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
                     currentLoadoutNames={{ pri: t(WEAPONS[currentLoadout.primary].displayName), sec: t(WEAPONS[currentLoadout.secondary].displayName), thr: t(WEAPONS[currentLoadout.throwable].displayName) }}
-                    onOpenStats={() => onInteractionStateChange('STATION_STATISTICS')}
+                    onOpenStats={() => onInteractionStateChange('ADVENTURE_LOG')}
                     onOpenArmory={() => onInteractionStateChange('STATION_ARMORY')}
                     onOpenSkills={() => onInteractionStateChange('STATION_SKILLS')}
                     onOpenSettings={() => setActiveOverlay('SETTINGS')}

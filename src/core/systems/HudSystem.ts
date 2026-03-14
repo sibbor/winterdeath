@@ -101,6 +101,9 @@ export const HudSystem = {
         return {
             isDisoriented,
             statusEffects: activeEffects,
+            activePassives: state.activePassives || [],
+            activeBuffs: state.activeBuffs || [],
+            activeDebuffs: state.activeDebuffs || [],
             hp: state.hp,
             maxHp: state.maxHp,
             stamina: state.stamina,
@@ -142,6 +145,8 @@ export const HudSystem = {
             skillPoints: (props.stats?.skillPoints || 0) + spEarned, // Total SP: base + session (safely)
             isDead: state.isDead,
             killerName: state.killerName,
+            killerAttackName: state.killerAttackName,
+            killedByEnemy: state.killedByEnemy,
             debugInfo: {
                 aim: input.aimVector ? { x: parseFloat(input.aimVector.x.toFixed(2)), y: parseFloat(input.aimVector.y.toFixed(2)) } : { x: 0, y: 0 },
                 input: {

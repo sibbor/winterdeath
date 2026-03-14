@@ -8,6 +8,8 @@ import GameUI from '../GameUI';
 import { t } from '../../../utils/i18n';
 import { BOSSES } from '../../../content/constants';
 import DebugDisplay from '../../ui/core/DebugDisplay';
+import DamageVignette from '../../ui/hud/DamageVignette';
+import { HEALTH_CRITICAL_THRESHOLD } from '../../../content/constants';
 
 interface GameSessionUIProps {
     refs: any;
@@ -75,6 +77,13 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
                 speakerName={uiState.currentLine ? uiState.currentLine.speaker : ""}
                 isVisible={uiState.cinematicActive && uiState.currentLine !== null}
                 isMobileDevice={gameProps.isMobileDevice}
+            />
+
+            <DamageVignette 
+                hp={state.hp || 0} 
+                maxHp={state.maxHp || 100} 
+                threshold={HEALTH_CRITICAL_THRESHOLD} 
+                isDead={uiState.deathPhase !== 'NONE'}
             />
 
             {!uiState.isSectorLoading && !uiState.cinematicActive && !uiState.forceHideHUD && (

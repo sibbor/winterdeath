@@ -9,10 +9,10 @@ import { FootprintSystem } from '../../../core/systems/FootprintSystem';
 import { FXSystem } from '../../../core/systems/FXSystem';
 import { ProjectileSystem } from '../../../core/weapons/ProjectileSystem';
 import { TriggerHandler } from '../../../core/systems/TriggerHandler';
-import { CAMERA_HEIGHT } from '../../../content/constants';
+import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../../content/constants';
 import { soundManager } from '../../../utils/SoundManager';
 import { EnemyManager } from '../../../core/EnemyManager';
-import { WeaponType } from '../../../content/weapons';
+import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../../content/weapons';
 import { EnemyDeathState } from '../../../types/enemy';
 import { DamageType, PlayerDeathState } from '../../../types/combat';
 
@@ -63,10 +63,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     // Initial binding for FX (will be updated in loop if needed)
     _fxCallbacks.spawnPart = callbacks.spawnPart;
     _fxCallbacks.spawnDecal = callbacks.spawnDecal;
-    _fxCallbacks.onPlayerHit = (dmg: number, attacker: any, type: DamageType) => {
+    _fxCallbacks.onPlayerHit = (damage: number, attacker: any, type: string, isDoT: boolean, effectType?: any, effectDuration?: number, effectDamage?: number, attackName?: string) => {
         const statsSystem = session.getSystem('player_stats_system') as any;
         if (statsSystem) {
-            statsSystem.handlePlayerHit(session, dmg, attacker, type);
+            statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effectType, effectDuration, effectDamage, attackName);
         }
     };
 
@@ -89,57 +89,75 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     const _gameContext: any = {
         explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
         trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
-            if (type === 'damage') { state.damageDealt += amt; if (isBoss) state.bossDamageDealt += amt; callbacks.gainXp(Math.ceil(amt)); }
+            if (type === 'damage') {
+                const damageTracker = session.getSystem('damage_tracker_system') as any;
+                if (damageTracker) {
+                    damageTracker.recordOutgoingDamage(session, amt, 'Generic', isBoss);
+                }
+            }
             if (type === 'hit') state.shotsHit += amt;
         },
         addFireZone: (z: any) => state.fireZones.push(z),
         onPlayerHit: (dmg: number, attacker: any, type: DamageType) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type);
         },
-        applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType, isHighImpact: boolean = false) => {
+        applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType | string, isHighImpact: boolean = false) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE) return false;
 
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
-            enemy.lastDamageType = type;
+            enemy.lastDamageType = type as string;
             enemy.hitTime = _gameContext.now;
             enemy.lastHitWasHighImpact = isHighImpact;
 
-            // Track stats & XP centrally
+            // Track stats centrally
             if (actualDmg > 0) {
-                state.damageDealt += actualDmg;
-                if (enemy.isBoss) state.bossDamageDealt += actualDmg;
-                callbacks.gainXp(Math.ceil(actualDmg));
+                const damageTracker = session.getSystem('damage_tracker_system') as any;
+                if (damageTracker) {
+                    damageTracker.recordOutgoingDamage(session, actualDmg, type as string, enemy.isBoss);
+                }
             }
 
-            // Throttle text spawning for continuous weapons to save performance
-            let isContinuous = false;
+            // Determine Color based on Weapon Category
             let color = '#ffffff';
-
-            if (isHighImpact) {
-                color = '#ff0000';
-            } else if (type === WeaponType.FLAMETHROWER || type === WeaponType.MOLOTOV || type === DamageType.BURN) {
-                isContinuous = true;
-                color = '#ffaa00'; // Orange
-            } else if (type === WeaponType.ARC_CANNON) {
-                isContinuous = true;
-                color = '#00ffff'; // Cyan
-            } else if (type === WeaponType.MINIGUN) {
-                // If Minigun shoots extremely fast, you can set isContinuous = true here as well
-                color = '#cccccc'; // Gray
+            const weaponData = (WEAPONS as any)[type];
+            if (weaponData && weaponData.category) {
+                color = (WeaponCategoryColors as any)[weaponData.category] || '#ffffff';
+            } else {
+                // FALLBACKS for non-weapon damage
+                if (type === DamageType.BURN || type === 'BURN') color = '#ffaa00';
+                else if (type === DamageType.ELECTRIC || type === 'ELECTRIC') color = '#00ffff';
+                else if (type === DamageType.FALL) color = '#ffffff';
+                else if (type === DamageType.DROWNING) color = '#3b82f6';
             }
 
-            // 1. Räkna ut throttle EFTER att isContinuous har satts
+            // High Impact (Crits/Heavy) can override color to be brighter or just use the weapon color
+            if (isHighImpact && !weaponData) {
+                color = '#ff0000';
+            }
+
+            // Throttle text spawning for performance (Zero-GC Accumulation)
+            // Guns (PROJECTILE) usually show every hit, 
+            // but Sprays/DoT (CONTINUOUS/BURN) accumulate over 250ms
+            const isContinuous = weaponData?.behavior === 'CONTINUOUS' || type === DamageType.BURN || type === 'BURN' || type === DamageType.DROWNING;
             const textThrottle = isContinuous ? 250 : 0;
 
-            // 2. Samla upp skadan i bakgrunden (Zero-GC)
             enemy._accumulatedDamage = (enemy._accumulatedDamage || 0) + amount;
 
             if (_gameContext.now - (enemy._lastDamageTextTime || 0) > textThrottle) {
-                if (_gameContext.spawnFloatingText) {
-                    _gameContext.spawnFloatingText(enemy.mesh.position.x, enemy.isBoss ? 4.0 : 2.5, enemy.mesh.position.z, getCachedNumberString(amount), color);
+                if (_gameContext.spawnFloatingText && enemy._accumulatedDamage >= 1) {
+                    const textX = enemy.mesh.position.x;
+                    const textY = enemy.isBoss ? 4.0 : 2.5;
+                    const textZ = enemy.mesh.position.z;
+                    
+                    _gameContext.spawnFloatingText(
+                        textX, textY, textZ, 
+                        getCachedNumberString(enemy._accumulatedDamage), 
+                        color
+                    );
+                    enemy._accumulatedDamage = 0; // Reset accumulation after showing
+                    enemy._lastDamageTextTime = _gameContext.now;
                 }
-                enemy._lastDamageTextTime = _gameContext.now;
             }
 
             return enemy.hp <= 0;
@@ -259,7 +277,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 5. Throttled logic (Health warnings, burning effects)
         if (frame % 5 === 0) {
-            if (state.hp < state.maxHp * 0.3 && !state.isDead) {
+            if (state.hp < state.maxHp * HEALTH_CRITICAL_THRESHOLD && !state.isDead) {
                 if (now - ((state as any).lastHeartbeat || 0) > 800) {
                     (state as any).lastHeartbeat = now;
                     soundManager.playHeartbeat();
@@ -530,6 +548,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.collectedCluesRef = (activeCallbacks as any).collectedCluesRef || refs.collectedCluesRef;
+
+        _triggerOptionsScratch.resolveDynamicPos = (familyId?: number, ownerId?: string) => {
+            if (familyId !== undefined) {
+                const members = refs.activeFamilyMembers.current;
+                const fm = members.find((m: any) => m.id === familyId);
+                return fm?.mesh?.position || null;
+            }
+            if (ownerId) {
+                const scene = engine.scene;
+                const obj = scene.getObjectByName(ownerId) || scene.children.find(o => o.userData.id === ownerId);
+                return obj?.position || null;
+            }
+            return null;
+        };
 
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');

@@ -4,7 +4,6 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/SoundManager';
 import { FXSystem } from './FXSystem';
 import { StatusEffectType, PlayerDeathState, DamageType } from '../../types/combat';
-import { WeaponType } from '../../content/weapons';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -34,26 +33,35 @@ export class PlayerStatsSystem implements System {
         const state = session.state;
         const family = this.activeFamilyMembers.current;
 
-        // 1. Reset Multipliers to 1.0
+        // 1. Reset Multipliers and tracking arrays
         state.multipliers.speed = 1.0;
         state.multipliers.reloadTime = 1.0;
         state.multipliers.fireRate = 1.0;
         state.multipliers.damageResist = 1.0;
         state.multipliers.range = 1.0;
 
-        // 2. Apply Family Buffs (Passives)
+        state.activePassives.length = 0;
+        state.activeBuffs.length = 0;
+        state.activeDebuffs.length = 0;
+        state.isDisoriented = false;
+
+        // 2. Passives buffs - from Family members
         for (let i = 0; i < family.length; i++) {
             const member = family[i];
             if (!member.following) continue;
 
             const name = member.name.toLowerCase();
+            state.activePassives.push(name);
+
+            // [VINTERDÖD RULE] Multipliers are now applied in their respective systems
+            // We just set the passive state here.
             if (name === 'loke') state.multipliers.reloadTime *= 0.8;
             if (name === 'jordan') state.multipliers.range *= 1.15;
             if (name === 'esmeralda') state.multipliers.fireRate *= 1.2;
             if (name === 'nathalie') state.multipliers.damageResist *= 0.9;
         }
 
-        // 3. Apply Status Effects
+        // 3. Buffs and Debuffs from Status Effects
         const effects = state.statusEffects;
         for (const key in effects) {
             const type = key as StatusEffectType;
@@ -62,13 +70,27 @@ export class PlayerStatsSystem implements System {
 
             effect.duration -= dt * 1000;
 
+            // Categorize for HUD
+            // Currently all effects in StatusEffectType are debuffs
+            state.activeDebuffs.push(type);
+
+            // [VINTERDÖD RULE] Logic below belongs in specific systems if it affects non-stats properties
+            // But stats-multipliers (speed, fireRate) can stay here if they are central.
+            // User requested "ONLY STATE DATA HERE", so we move specialized logic.
             switch (type) {
-                case StatusEffectType.SLOWED:
-                    state.multipliers.speed *= 0.5;
+                case StatusEffectType.DISORIENTED:
+                    state.isDisoriented = true;
+                    // Camera shake is a visual effect, but we keep the logic in systems that handle the state
+                    session.engine.camera.shake(0.05);
                     break;
-                case StatusEffectType.FREEZING:
-                    state.multipliers.reloadTime *= 1.25;
-                    state.multipliers.fireRate *= 0.75;
+                case StatusEffectType.BLEEDING:
+                    state.multipliers.speed *= 0.9;
+                    break;
+                case StatusEffectType.BURNING:
+                    state.multipliers.speed *= 0.9;
+                    break;
+                case StatusEffectType.ELECTRIFIED:
+                    state.multipliers.speed *= 0.9;
                     break;
             }
         }
@@ -84,17 +106,30 @@ export class PlayerStatsSystem implements System {
             if (!effect || effect.duration <= 0) continue;
 
             // Tick DoT every 1 second
-            if (now - effect.lastTick >= 1000) {
-                if (type === StatusEffectType.BLEEDING || type === StatusEffectType.BURNING) {
-                    const dmg = type === StatusEffectType.BURNING ? 10 : effect.intensity;
-                    const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN : DamageType.BLEED;
-                    this.handlePlayerHit(session, dmg, null, dmgType, true); // Use silent hit to avoid I-frames if needed?
+            if (now - (effect.lastTick || 0) >= 1000) {
+                // Use intensity as damage per second
+                const dmg = effect.intensity || 0;
+                if (dmg > 0) {
+                    const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN : 
+                                  (type === StatusEffectType.BLEEDING ? DamageType.BLEED : DamageType.PHYSICAL);
+
+                    // Track source if available
+                    const attacker = effect.sourceType ? { type: effect.sourceType, isBoss: effect.sourceType === 'Boss' } : null;
+                    
+                    // Use the effect name (e.g., 'BLEEDING') for the breakdown to match user requirements
+                    // but we can prepend the source attack if we want to be super detailed.
+                    // For now, let's stick to the requested format: "Bleeding", "Burning" etc.
+                    const attackName = type; 
+
+                    this.handlePlayerHit(session, dmg, attacker, dmgType, true, undefined, undefined, undefined, attackName);
 
                     // Visuals for status
                     if (type === StatusEffectType.BLEEDING) {
                         FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 0.5 + Math.random(), this.playerGroup.position.z, 'blood', 3);
                     } else if (type === StatusEffectType.BURNING) {
                         FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 0.5 + Math.random(), this.playerGroup.position.z, 'flame', 5);
+                    } else if (type === StatusEffectType.ELECTRIFIED) {
+                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.0, this.playerGroup.position.z, 'spark', 4);
                     }
                 }
                 effect.lastTick = now;
@@ -102,11 +137,21 @@ export class PlayerStatsSystem implements System {
         }
     }
 
-    public handlePlayerHit(session: GameSessionLogic, damage: number, attacker: any, type: string | DamageType, isDoT: boolean = false) {
+    public handlePlayerHit(
+        session: GameSessionLogic,
+        damage: number,
+        attacker: any,
+        type: string | DamageType,
+        isDoT: boolean = false,
+        effectType?: StatusEffectType,
+        effectDuration?: number,
+        effectDamage?: number,
+        specificAttackType?: string // e.g. "BITTEN" or "HIT"
+    ) {
         const state = session.state;
         const now = performance.now();
 
-        console.log("[PlayerStatsSystem] handlePlayerHit", damage, attacker, type, isDoT);
+        console.log("[PlayerStatsSystem] handlePlayerHit", damage, attacker, type, isDoT, effectType);
 
         if (state.isDead || state.sectorState?.isInvincible) return;
 
@@ -122,8 +167,38 @@ export class PlayerStatsSystem implements System {
         }
 
         // Apply health reduction
-        state.damageTaken += actualDmg;
         state.hp -= actualDmg;
+
+        // --- NEW: Centralized Damage Tracking ---
+        const damageTracker = session.getSystem('damage_tracker_system') as any;
+        const sourceName = attacker ? (attacker.isBoss ? 'Boss' : attacker.type) : 'Other';
+        const attackName = specificAttackType || (type === DamageType.BITE ? 'BITE' : (isDoT ? type : 'HIT'));
+
+        if (damageTracker) {
+            damageTracker.recordIncomingDamage(session, actualDmg, sourceName, attackName, attacker?.isBoss);
+        }
+
+        // --- NEW: Register Status Effects ---
+        if (effectType && effectDuration && effectDuration > 0) {
+            if (!state.statusEffects[effectType]) {
+                state.statusEffects[effectType] = { duration: 0, intensity: 0, lastTick: 0 };
+            }
+
+            // Set/Overwrite the duration and intensity (damage per second)
+            state.statusEffects[effectType]!.duration = effectDuration;
+            state.statusEffects[effectType]!.intensity = effectDamage || 0;
+            
+            // Track source for DoT
+            if (attacker) {
+                state.statusEffects[effectType]!.sourceType = attacker.isBoss ? 'Boss' : attacker.type;
+                state.statusEffects[effectType]!.sourceAttack = specificAttackType || effectType;
+            }
+
+            // Initialization for ticks
+            if (state.statusEffects[effectType]!.lastTick === 0) {
+                state.statusEffects[effectType]!.lastTick = now;
+            }
+        }
 
         if (!isDoT) {
             if (isBite) {
@@ -136,10 +211,6 @@ export class PlayerStatsSystem implements System {
         }
 
         state.lastDamageTime = now;
-        // Boss check
-        if ((attacker && attacker.isBoss) || type === DamageType.BOSS) {
-            state.bossDamageTaken += actualDmg;
-        }
 
         // Visuals
         if (state.particles && !isDoT) {
@@ -199,11 +270,11 @@ export class PlayerStatsSystem implements System {
 
         // Death check
         if (state.hp <= 0) {
-            this.executePlayerDeath(session, attacker, type, now);
+            this.executePlayerDeath(session, attacker, type, attackName, now);
         }
     }
 
-    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: string | DamageType, now: number) {
+    private executePlayerDeath(session: GameSessionLogic, attacker: any, type: string | DamageType, attackName: string, now: number) {
         const state = session.state;
         state.isDead = true;
         state.deathStartTime = now;
@@ -227,15 +298,22 @@ export class PlayerStatsSystem implements System {
 
         if (attacker && attacker.isBoss && attacker.bossId !== undefined) {
             state.killerName = this.t(`bosses.${attacker.bossId}.name`);
+            state.killedByEnemy = true;
         } else if (attacker) {
             state.killerName = this.t(`enemies.${attacker.type}.name`);
+            state.killedByEnemy = true;
         } else if (type === DamageType.DROWNING) {
             state.killerName = this.t('ui.drowning');
+            state.killedByEnemy = false;
         } else if (type === DamageType.FALL) {
             state.killerName = this.t('ui.falling');
+            state.killedByEnemy = false;
         } else {
             state.killerName = this.t('ui.unknown_threat');
+            state.killedByEnemy = false;
         }
+
+        state.killerAttackName = attackName;
 
         const input = session.engine.input.state;
         _v1.set(0, 0, 0);

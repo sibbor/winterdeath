@@ -28,6 +28,7 @@ import { FamilySystem } from '../../../core/systems/FamilySystem';
 import { LightingSystem } from '../../../core/systems/LightingSystem';
 import { CinematicSystem } from '../../../core/systems/CinematicSystem';
 import { DeathSystem } from '../../../core/systems/DeathSystem';
+import { DamageTrackerSystem } from '../../../core/systems/DamageTrackerSystem';
 import { RuntimeState } from '../../../core/RuntimeState';
 
 const seededRandom = (seed: number) => {
@@ -208,9 +209,8 @@ export class GameSessionSetup {
                 gainXp: callbacks.gainXp,
                 trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
                     if (type === 'damage') {
-                        state.damageDealt += amt;
-                        if (isBoss) state.bossDamageDealt += amt;
-                        callbacks.gainXp(Math.ceil(amt));
+                        const tracker = session.getSystem('damage_tracker_system') as any;
+                        if (tracker) tracker.recordOutgoingDamage(session, amt, 'Generic', isBoss);
                     }
                     if (type === 'hit') state.shotsHit += amt;
                 },
@@ -316,7 +316,8 @@ export class GameSessionSetup {
                             const mesh = ModelFactory.createFamilyMember(fmData);
                             mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
                             this.addFamilyMarker(mesh, fmData, flickeringLights, scene);
-                            refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100 });
+                            const ring = mesh.children.find(c => c.userData.isRing);
+                            refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring });
                         }
                     }
                 }
@@ -331,7 +332,8 @@ export class GameSessionSetup {
                         const mesh = ModelFactory.createFamilyMember(fmData);
                         mesh.position.set(fSpawn.x, 0, fSpawn.z); if (fSpawn.y) mesh.position.y = fSpawn.y;
                         this.addFamilyMarker(mesh, fmData, flickeringLights, scene);
-                        const currentFM = { mesh, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100 };
+                        const ring = mesh.children.find(c => c.userData.isRing);
+                        const currentFM = { mesh, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring };
                         refs.activeFamilyMembers.current.push(currentFM);
                         refs.familyMemberRef.current = currentFM;
                     }
@@ -355,6 +357,7 @@ export class GameSessionSetup {
                 });
             }
 
+            session.addSystem(new DamageTrackerSystem());
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new VehicleMovementSystem(playerGroup));
 
@@ -363,8 +366,11 @@ export class GameSessionSetup {
                 playerGroup,
                 callbacks.concludeSector,
                 sectorCtx.collectibles,
+                refs.activeFamilyMembers,
+                scene,
                 callbacks.onCollectibleDiscovered
             ));
+
             const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
             session.addSystem(playerStatsSystem);
 
@@ -484,6 +490,7 @@ export class GameSessionSetup {
 
     private static addFamilyMarker(mesh: THREE.Group, fmData: any, flickeringLights: any[], scene: THREE.Scene) {
         const markerGroup = new THREE.Group();
+        markerGroup.userData.isRing = true; // [VINTERDÖD] Mark for FamilySystem visibility logic
         markerGroup.position.y = 0.2;
         const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
         const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));

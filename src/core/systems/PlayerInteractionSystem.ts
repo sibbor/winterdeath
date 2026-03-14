@@ -5,6 +5,7 @@ import { soundManager } from '../../utils/SoundManager';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../../content/collectibles';
 import { FXSystem } from './FXSystem';
+import type React from 'react';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
@@ -37,10 +38,13 @@ export class PlayerInteractionSystem implements System {
         private playerGroup: THREE.Group,
         private onSectorEnded: (isExtraction: boolean) => void,
         private collectibles: THREE.Group[],
+        private activeFamilyMembers?: React.MutableRefObject<any[]>,
+        private scene?: THREE.Scene,
         onCollectibleDiscovered?: (collectibleId: string) => void
     ) {
         this.onCollectibleDiscovered = onCollectibleDiscovered;
     }
+
 
     update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
@@ -311,9 +315,28 @@ export class PlayerInteractionSystem implements System {
             if (t.type === 'INTERACT' || t.type === 'TERMINAL') {
                 let inRange = false;
 
+                // --- DYNAMIC POSITIONING ---
+                let tx = t.position.x;
+                let tz = t.position.z;
+
+                if (t.familyId !== undefined && this.activeFamilyMembers) {
+                    const members = this.activeFamilyMembers.current;
+                    const fm = members.find((m: any) => m.id === t.familyId);
+                    if (fm && fm.mesh) {
+                        tx = fm.mesh.position.x;
+                        tz = fm.mesh.position.z;
+                    }
+                } else if (t.ownerId && this.scene) {
+                    const obj = this.scene.getObjectByName(t.ownerId) || this.scene.children.find(o => o.userData.id === t.ownerId);
+                    if (obj) {
+                        tx = obj.position.x;
+                        tz = obj.position.z;
+                    }
+                }
+
                 // Zero-GC manual squared distance (XZ plane mostly)
-                const dx = playerPos.x - t.position.x;
-                const dz = playerPos.z - t.position.z;
+                const dx = playerPos.x - tx;
+                const dz = playerPos.z - tz;
                 const distSq = dx * dx + dz * dz;
 
                 if (t.size) {
@@ -325,7 +348,7 @@ export class PlayerInteractionSystem implements System {
                 }
 
                 if (inRange) {
-                    _detectionResult.position.set(t.position.x, playerPos.y, t.position.z);
+                    _detectionResult.position.set(tx, playerPos.y, tz);
                     _detectionResult.type = 'sector_specific';
                     _detectionResult.id = t.id;
                     _detectionResult.object = null;

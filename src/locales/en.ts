@@ -27,7 +27,10 @@ export const en = {
         sectors_completed: "Sectors Completed",
         chests_opened: "Chests Opened",
         incoming_damage: "Incoming Damage",
+        incoming_damage_breakdown: "Incoming Damage Breakdown",
         outgoing_damage: "Outgoing Damage",
+        outgoing_damage_breakdown: "Outgoing Damage Breakdown",
+        total: "Total",
         shots_fired: "Shots Fired",
         shots_hit: "Shots Hit",
         accuracy: "Accuracy",
@@ -104,7 +107,8 @@ export const en = {
         return_camp: "RETURN TO CAMP",
         respawn: "RESPAWN",
         kia: "K.I.A.",
-        killed_by: "KILLED BY",
+        killed_by: "killed by",
+        died_from: "died from",
         time_elapsed: "TIME ELAPSED",
         distance_traveled: "DISTANCE TRAVELED",
         chests: "CHESTS LOOTED",
@@ -226,6 +230,7 @@ export const en = {
         unlimited_throwables: "UNLIMITED THROWABLES",
         no_reload: "NO RELOADING",
         TERMINAL_SKILLS: "SKILL STATION",
+        other: "Other",
     },
     camp_tooltips: {
         equipped: "EQUIPPED",
@@ -272,6 +277,31 @@ export const en = {
             description: "Unstable biological payload. Explodes on proximity. Keep safe distance."
         },
         unknown: "Unknown biological anomaly."
+    },
+    attacks: {
+        BITE: { title: "Biting", description: "Sharp teeth sinking into flesh. Highly infectious." },
+        HIT: { title: "hit", description: "A blunt strike from an undead hand." },
+        BLEEDING: { title: "Bleeding", description: "Continuous blood loss from an open wound." },
+        CLAW: { title: "Claw", description: "Sharp nails tearing through clothing and skin." },
+        LUNGE: { title: "Lunge", description: "A high-speed pounce that catches victims off guard." },
+        PUNCH: { title: "Punch", description: "A massive, heavy-handed blow from a mutated brute." },
+        GROUND_POUND: { title: "Ground Pound", description: "A shockwave that damages everything in proximity." },
+        EXPLODE: { title: "explosion", description: "Violent biological detonation upon death." },
+        JUMP: { title: "Lunge", description: "A high-speed pounce that catches victims off guard." },
+        FREEZE_JUMP: { title: "Freeze Jump", description: "A chilled impact that freezes everything in its path." },
+        FIRE_ZONE: { title: "Fire", description: "Extreme heat from burning biological residue." },
+        ELECTRIC_BEAM: { title: "Electric Beam", description: "High-voltage discharge from a modified tool." },
+        MAGNETIC_CHAIN: { title: "Magnetic Chain", description: "A tether that drains energy and limits movement." },
+        MELEE: { title: "Melee Strike", description: "A heavy strike with a primary weapon or appendage." },
+        DASH_ATTACK: { title: "Dash Attack", description: "A lightning-fast strike while moving at high velocity." },
+        SWIPE: { title: "Swipe", description: "A broad, sweeping attack that covers a wide area." },
+        SCREECH: { title: "Toxic Screech", description: "A sound wave that vibrates through bone and soul." },
+        SMASH: { title: "Crushing Smash", description: "An overwhelming downward force from a giant mutation." },
+        BURNING: { title: "Burning", description: "Screaming heat consuming flesh." },
+        ELECTRIFIED: { title: "Electrified", description: "High-voltage current coursing through the body." },
+        DROWNING: { title: "Drowning", description: "Lungs filling with icy water." },
+        FALL: { title: "Fall Damage", description: "The sudden stop at the end of a drop." },
+        BURN: { title: "Burning", description: "Direct exposure to intense heat." }
     },
     skills: {
         vitality: "VITALITY",
@@ -413,7 +443,13 @@ export const en = {
         son: "Son",
         daughter: "Daughter",
         wife: "Wife",
-        cat: "Cat"
+        cat: "Cat",
+        loke: "Loke",
+        jordan: "Jordan",
+        esmeralda: "Esmeralda",
+        nathalie: "Nathalie",
+        sotis: "Sotis",
+        panter: "Panter"
     },
     // DON'T CHANGE!
     chatter: {

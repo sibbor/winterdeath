@@ -31,6 +31,7 @@ export const TriggerHandler = {
             onAction: (action: TriggerAction) => void;
             collectedCluesRef: any;
             t: (key: string) => string;
+            resolveDynamicPos?: (familyId?: number, ownerId?: string) => THREE.Vector3 | null;
         }
     ) => {
         const triggers = state.triggers;
@@ -50,9 +51,21 @@ export const TriggerHandler = {
 
             let isInside = false;
 
+            // --- DYNAMIC POSITIONING ---
+            let tx = trig.position.x;
+            let tz = trig.position.z;
+
+            if ((trig.familyId !== undefined || trig.ownerId) && callbacks.resolveDynamicPos) {
+                const dPos = callbacks.resolveDynamicPos(trig.familyId, trig.ownerId);
+                if (dPos) {
+                    tx = dPos.x;
+                    tz = dPos.z;
+                }
+            }
+
             // Kalkylera avstånd tidigt (används av både cirklar och broadphase-boxar)
-            _dx = playerPos.x - trig.position.x;
-            _dz = playerPos.z - trig.position.z;
+            _dx = playerPos.x - tx;
+            _dz = playerPos.z - tz;
             _distSq = _dx * _dx + _dz * _dz;
 
             // 2. COLLISION CHECK

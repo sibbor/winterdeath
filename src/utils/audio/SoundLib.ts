@@ -482,6 +482,43 @@ const Generators = {
         }
         return buffer;
     },
+    bite: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.3;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const crunch = (Math.random() * 2 - 1) * 0.3 * Math.exp(-40 * t);
+            const squelch = Math.sin(2 * Math.PI * 200 * t) * 0.2 * Math.exp(-25 * t);
+            data[i] = crunch + squelch;
+        }
+        return buffer;
+    },
+    jump_impact: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.4;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const thud = Math.sin(2 * Math.PI * 60 * t) * 0.5 * Math.exp(-15 * t);
+            const grit = (Math.random() * 2 - 1) * 0.2 * Math.exp(-30 * t);
+            data[i] = thud + grit;
+        }
+        return buffer;
+    },
+    heavy_smash: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.8;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const boom = Math.sin(2 * Math.PI * 40 * t) * 0.6 * Math.exp(-5 * t);
+            const crack = (Math.random() * 2 - 1) * 0.4 * Math.exp(-40 * t);
+            const rubble = (Math.random() * 2 - 1) * 0.2 * Math.exp(-10 * t);
+            data[i] = boom + crack + rubble;
+        }
+        return buffer;
+    },
 };
 
 // --- HELPER GENERATORS ---
@@ -731,6 +768,11 @@ export function registerSoundGenerators() {
 
     // Movement
     SoundBank.register('dash', Generators.dash);
+
+    // Combat & Attacks
+    SoundBank.register('BITE', Generators.bite);
+    SoundBank.register('jump_impact', Generators.jump_impact);
+    SoundBank.register('heavy_smash', Generators.heavy_smash);
 }
 
 

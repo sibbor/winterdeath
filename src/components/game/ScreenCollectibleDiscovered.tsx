@@ -21,7 +21,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 </h2>
 
                 {/* Model Preview - 3D Render */}
-                <div className={`relative ${isMobileDevice ? 'w-40 h-40 mb-4' : 'w-80 h-80 mb-6'} flex items-center justify-center bg-zinc-900 border-2 border-zinc-800 rounded-lg shadow-inner overflow-hidden flex-shrink-0`}>
+                <div className={`relative ${isMobileDevice ? 'w-40 h-40 mb-4' : 'w-80 h-80 mb-6'} flex items-center justify-center bg-black border-2 border-zinc-800 rounded-lg shadow-inner overflow-hidden flex-shrink-0`}>
                     <CollectiblePreview type={collectible.modelType} />
                 </div>
 
@@ -44,7 +44,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
 
                 <button
                     onClick={onClose}
-                    className="group relative px-8 sm:px-12 py-3 sm:py-4 bg-zinc-900 hover:bg-yellow-600 text-yellow-500 hover:text-black font-black uppercase tracking-widest border-2 border-yellow-500 transition-all duration-300 active:scale-95 skew-x-[-5deg] flex-shrink-0">
+                    className="group relative px-8 sm:px-12 py-3 sm:py-4 bg-black hover:bg-yellow-600 text-yellow-500 hover:text-black font-black uppercase tracking-widest border-2 border-yellow-500 transition-all duration-300 active:scale-95 skew-x-[-5deg] flex-shrink-0">
                     <span className="block skew-x-[5deg]">{t('ui.continue')}</span>
 
                     {/* Button Glow */}

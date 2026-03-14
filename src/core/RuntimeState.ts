@@ -60,10 +60,13 @@ export interface RuntimeState {
     damageTaken: number;
     bossDamageDealt: number;
     bossDamageTaken: number;
+    incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
+    outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
     killsByType: Record<string, number>;
     applyDamage?: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
 
     // --- COMBAT & STATUS (Zero-GC) ---
+    isDisoriented: boolean;
     multipliers: {
         speed: number;
         reloadTime: number;
@@ -71,6 +74,9 @@ export interface RuntimeState {
         damageResist: number;
         range: number;
     };
+    activePassives: string[];
+    activeBuffs: StatusEffectType[];
+    activeDebuffs: StatusEffectType[];
     statusEffects: Partial<Record<StatusEffectType, ActiveStatusEffect>>;
     playerDeathState: PlayerDeathState;
 
@@ -109,6 +115,8 @@ export interface RuntimeState {
     deathStartTime: number;
     killerType: string;
     killerName: string;
+    killerAttackName: string;
+    killedByEnemy: boolean;
     playerBloodSpawned: boolean;
     playerAshSpawned: boolean;
     lastDrownTick: number;

@@ -36,7 +36,7 @@ export class GameSessionLogic {
     // Zero-GC: Single array. We reuse objects by toggling the 'active' flag.
     public noiseEvents: NoiseEvent[] = [];
 
-    constructor(engine: WinterEngine) { 
+    constructor(engine: WinterEngine) {
         this.engine = engine;
     }
 
@@ -88,6 +88,8 @@ export class GameSessionLogic {
             shotsFired: 0, shotsHit: 0, throwablesThrown: 0,
             damageDealt: 0, damageTaken: 0,
             bossDamageDealt: 0, bossDamageTaken: 0,
+            incomingDamageBreakdown: {} as Record<string, Record<string, number>>,
+            outgoingDamageBreakdown: {} as Record<string, number>,
             killsByType: {} as Record<string, number>,
             seenEnemies: props.stats.seenEnemies || [],
             seenBosses: props.stats.seenBosses || [],
@@ -119,6 +121,8 @@ export class GameSessionLogic {
             deathStartTime: 0,
             killerType: '',
             killerName: '',
+            killerAttackName: '',
+            killedByEnemy: false,
             playerBloodSpawned: false,
             playerAshSpawned: false,
             lastDrownTick: 0,
@@ -172,6 +176,10 @@ export class GameSessionLogic {
                 damageResist: 1.0,
                 range: 1.0
             },
+            isDisoriented: false,
+            activePassives: [],
+            activeBuffs: [],
+            activeDebuffs: [],
             statusEffects: {} as any,
             playerDeathState: PlayerDeathState.ALIVE
         };

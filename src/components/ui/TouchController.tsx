@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { InputState } from '../../core/engine/InputManager';
 import { t } from '../../utils/i18n';
+import { useOrientation } from '../../hooks/useOrientation';
 
 interface TouchControllerProps {
     inputState: InputState;
@@ -9,6 +10,7 @@ interface TouchControllerProps {
 }
 
 const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, onOpenMap }) => {
+    const { isLandscapeMode } = useOrientation();
     // Joystick States
     const [leftStick, setLeftStick] = useState({ active: false, center: { x: 0, y: 0 }, curr: { x: 0, y: 0 } });
     const [rightStick, setRightStick] = useState({ active: false, center: { x: 0, y: 0 }, curr: { x: 0, y: 0 } });
@@ -155,16 +157,6 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
         >
-            {/* System Buttons (Top Right - Pause Button Only) */}
-            <div className="absolute top-8 right-6 flex flex-col gap-3 pointer-events-auto z-[70]">
-                <button
-                    className="w-14 h-14 rounded-full border border-white/10 bg-black/60 text-white font-bold text-xs tracking-widest shadow-2xl active:scale-95 transition-all backdrop-blur-sm flex items-center justify-center"
-                    onTouchStart={(e) => { e.stopPropagation(); onPause?.(); }}
-                >
-                    ||
-                </button>
-            </div>
-
             {/* Joysticks... (Keep as is for functionality) */}
             {leftStick.active && (
                 <div
@@ -210,37 +202,33 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 </div>
             )}
 
-            {/* Action Buttons (Bottom Right Cluster - Match Mockup) */}
-            <div className="absolute bottom-24 right-8 pointer-events-auto flex flex-col items-end gap-6">
-                
-                {/* Secondary row */}
-                <div className="flex gap-4 items-center">
-                    {/* Reload (R) */}
-                    <button
-                        className="hud-touch-btn text-xs font-black tracking-widest"
-                        onTouchStart={(e) => { e.stopPropagation(); handleAction('r', true); }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('r', false); }}
-                    >
-                         RELOAD
-                    </button>
-
-                    {/* Flashlight (F) */}
-                    <button
-                        className="hud-touch-btn text-xs font-black tracking-widest"
-                        onTouchStart={(e) => { e.stopPropagation(); handleAction('f', true); }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('f', false); }}
-                    >
-                         LIGHT
-                    </button>
-                </div>
-
-                {/* Primary Button (DASH) */}
+            {/* Action Buttons (Bottom Right) */}
+            <div className={`absolute pointer-events-auto flex ${isLandscapeMode ? 'flex-col-reverse bottom-1/2 translate-y-1/2 right-6 gap-6 pr-safe' : 'bottom-24 right-8 flex-row items-end gap-3 md:gap-4'}`}>
+                {/* Dash (Space) */}
                 <button
-                    className="hud-touch-btn hud-touch-btn-lg text-sm font-black tracking-[0.2em] border-red-500/40 text-red-100 shadow-[0_0_20px_rgba(255,0,0,0.2)]"
+                    className={`hud-touch-btn ${isLandscapeMode ? 'w-24 h-24' : 'hud-touch-btn-lg'} flex items-center justify-center p-2 border-red-500/40 shadow-[0_0_20px_rgba(255,0,0,0.2)]`}
                     onTouchStart={(e) => { e.stopPropagation(); handleAction('space', true); }}
                     onTouchEnd={(e) => { e.stopPropagation(); handleAction('space', false); }}
                 >
-                    DASH
+                    <img src="/assets/ui/icon_dash.png" alt="Dash" className="w-full h-full object-contain" />
+                </button>
+
+                {/* Reload (R) */}
+                <button
+                    className={`hud-touch-btn ${isLandscapeMode ? 'w-20 h-20' : ''} flex items-center justify-center p-2`}
+                    onTouchStart={(e) => { e.stopPropagation(); handleAction('r', true); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); handleAction('r', false); }}
+                >
+                    <img src="/assets/ui/icon_reload.png" alt="R" className="w-full h-full object-contain" />
+                </button>
+
+                {/* Flashlight (F) */}
+                <button
+                    className={`hud-touch-btn ${isLandscapeMode ? 'w-16 h-16' : ''} flex items-center justify-center p-2`}
+                    onTouchStart={(e) => { e.stopPropagation(); handleAction('f', true); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); handleAction('f', false); }}
+                >
+                    <img src="/assets/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain" />
                 </button>
             </div>
         </div>
