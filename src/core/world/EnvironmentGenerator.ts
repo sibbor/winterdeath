@@ -3,7 +3,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MATERIALS } from '../../utils/assets/materials';
 import { SectorContext } from '../../types/SectorEnvironment';
 import { SectorGenerator } from './SectorGenerator';
-import { TreeType } from '../../types/enemy';
+import { TreeType } from '../../content/constants';
 
 // Pre-allocated math objects for fast matrix composition.
 // Blazing fast compared to using Object3D.updateMatrix().

@@ -11,7 +11,7 @@ import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
 import { WaterBodyType, WaterStyle, WaterBody } from '../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
-import { TreeType } from '../../types/enemy';
+import { TreeType } from '../../content/constants';
 
 // Shared Utilities for Sector Generation
 const _c1 = new THREE.Color();

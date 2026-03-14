@@ -141,3 +141,15 @@ export const CHATTER_LINES: Record<string, string[]> = {
     Esmeralda: ["The radio signal is weak.", "We should fix the generator.", "Dad, you look tired.", "I wish we could go home.", "Are we safe here?", "I hate this cold.", "Do you have any food?"],
     Nathalie: ["We are together, that's what matters.", "Hush now, try to sleep.", "I'll take the next watch.", "Robert, be careful out there.", "My brave family.", "Keep close to the warmth.", "I love you all."]
 };
+
+
+/**
+ * Standardized tree types for environment generation
+ */
+export enum TreeType {
+    PINE = 'PINE',
+    SPRUCE = 'SPRUCE',
+    OAK = 'OAK',
+    DEAD = 'DEAD',
+    BIRCH = 'BIRCH'
+}
