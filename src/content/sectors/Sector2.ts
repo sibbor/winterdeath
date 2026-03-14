@@ -8,12 +8,13 @@ import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
 import { soundManager } from '../../utils/SoundManager';
-import { BOSSES, CAMERA_HEIGHT } from '../../content/constants';
+import { CAMERA_HEIGHT } from '../../content/constants';
 import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
 
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: 0, z: 200, rot: Math.PI },
+        // When editing the mountain:
         //PLAYER: { x: 100, z: -60, rot: Math.PI },
         FAMILY: { x: 25, z: -193, y: 0 },
         BOSS: { x: 74, z: -210 }
@@ -140,20 +141,19 @@ export const Sector2: SectorDef = {
     id: 1,
     name: "sectors.sector_2_name",
     environment: {
-        bgColor: 0x050510,
+        bgColor: 0x020208,
         fogDensity: 0.02,
-        ambientIntensity: 0.3,
+        ambientIntensity: 0.4,
         ambientColor: 0x404050,
-        groundColor: 0x111111,
+        groundColor: 0xddddff,
         fov: 50,
-        skyLight: { visible: true, color: 0x8899aa, intensity: 1.0, position: { x: -40, y: 30, z: -20 } },
+        skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: 'snow',
         wind: {
-            strengthMin: 0.05,
+            strengthMin: 0.3,
             strengthMax: 1.0,
-            direction: { x: 1, z: 1 },
             angleVariance: Math.PI / 4
         }
     },
