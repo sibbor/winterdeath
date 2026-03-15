@@ -6,7 +6,7 @@ import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES
 import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
 import { ModelFactory } from '../../utils/assets';
-import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
+import { PlayerAnimator } from '../../core/animation/PlayerAnimator';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
@@ -270,7 +270,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             const height = container.clientHeight;
             const aspect = width / height;
             camera.set('aspect', aspect);
-            
+
             // [VINTERDÖD] Dynamic FOV/Position adjustment for Mobile Portrait
             if (aspect < 1.0) {
                 camera.set('fov', 68);
@@ -279,7 +279,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 camera.set('fov', 50);
                 camera.setPosition(0, 10, 22, false); // Smoothly slide forward
             }
-            
+
             engine.renderer.setSize(width, height);
         };
 
@@ -341,7 +341,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
 
                 // Animate the entire Group (fm.mesh) to prevent head/body splitting
-                PlayerAnimation.update(fm.mesh as any, {
+                PlayerAnimator.update(fm.mesh as any, {
                     isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
                     isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
                 }, now, dt);

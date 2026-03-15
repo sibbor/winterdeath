@@ -9,6 +9,7 @@ import { haptic } from '../../utils/HapticManager';
 import { soundManager } from '../../utils/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../systems/WaterSystem';
 import { PerformanceMonitor } from '../systems/PerformanceMonitor';
+import { EnemyAnimator } from '../animation/EnemyAnimator';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -411,6 +412,28 @@ export const EnemyAI = {
                 }
                 break;
 
+            case AIState.SEARCH:
+                e.searchTimer -= delta;
+                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) {
+                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid, _v6);
+                } else {
+                    e.mesh.rotation.y += delta * 2.5;
+                }
+
+                if (canSeePlayer) {
+                    logStateChange(e, AIState.CHASE);
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, playerPos, now);
+                } else if (heardNoise && noisePos) {
+                    logStateChange(e, AIState.CHASE);
+                    e.state = AIState.CHASE;
+                    updateLastSeen(e, noisePos, now);
+                } else if (e.searchTimer <= 0) {
+                    logStateChange(e, AIState.IDLE);
+                    e.state = AIState.IDLE;
+                }
+                break;
+
             case AIState.CHASE:
                 if (canSeePlayer) {
                     updateLastSeen(e, playerPos, now);
@@ -489,47 +512,12 @@ export const EnemyAI = {
                     e.attackTimer -= delta;
                     const att = e.attacks![e.currentAttackIndex!];
 
-                    // Face player during charge
+                    // Orient towards player logically
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
 
-                    // --- Visual feedback for charging (vibration/scaling) ---
-                    const totalChargeTime = (att.chargeTime || 1000) / 1000;
-                    const chargeProgress = 1.0 - (e.attackTimer / totalChargeTime);
-
-                    if (att.type === EnemyAttackType.EXPLODE) {
-                        const speed = 10.0 + chargeProgress * 20.0;
-                        const bounceHeight = 0.3 + chargeProgress * 0.2;
-                        const sineVal = Math.abs(Math.sin(now * 0.001 * speed));
-                        e.mesh.position.y = (e.mesh.userData.baseY || 0) + sineVal * bounceHeight;
-                        e.mesh.scale.setScalar(e.originalScale * (1.0 + sineVal * 0.4));
-
-                        if (e.indicatorRing) {
-                            e.indicatorRing.visible = true;
-                            e.indicatorRing.matrixAutoUpdate = true;
-                            e.indicatorRing.position.set(0, -e.mesh.position.y + 0.05, 0);
-
-                            const targetRadius = (att.radius || 10.0);
-                            e.indicatorRing.scale.setScalar(targetRadius / e.mesh.scale.x);
-
-                            const flashSpeed = chargeProgress * 30;
-                            const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
-                            if (e.indicatorRing.material) {
-                                const mat = e.indicatorRing.material as any;
-                                mat.opacity = 0.3 + chargeProgress * 0.6;
-                                mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
-                            }
-                        }
-                    } else if (att.type === EnemyAttackType.BITE || att.type === EnemyAttackType.HIT) {
-                        e.mesh.rotateX(-0.5 * chargeProgress);
-                    } else if (att.type === EnemyAttackType.JUMP) {
-                        e.mesh.position.y = (e.mesh.userData.baseY || 0) + Math.sin(chargeProgress * Math.PI) * 2.0;
-                        e.mesh.rotateX(0.2 * chargeProgress);
-                    } else {
-                        const jitter = 0.05 * chargeProgress;
-                        e.mesh.position.x += (Math.random() - 0.5) * jitter;
-                        e.mesh.position.z += (Math.random() - 0.5) * jitter;
-                    }
+                    // ALL VISUAL DEFORMATION AND TELEGRAPHING HAPPENS HERE
+                    EnemyAnimator.updateAttackAnim(e, now, delta);
 
                     if (e.attackTimer <= 0) {
                         logStateChange(e, AIState.ATTACKING);
@@ -545,7 +533,7 @@ export const EnemyAI = {
                     e.attackTimer -= delta;
                     const att = e.attacks?.[e.currentAttackIndex!];
 
-                    // Orient towards player
+                    // Orient towards player logically
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
 
@@ -554,32 +542,13 @@ export const EnemyAI = {
                         EnemyAttackHandler.updateContinuousAttack(e, att, delta, playerPos, callbacks);
                     }
 
+                    // ALL VISUAL DEFORMATION HAPPENS HERE
+                    EnemyAnimator.updateAttackAnim(e, now, delta);
+
                     if (e.attackTimer <= 0) {
                         logStateChange(e, AIState.CHASE);
                         e.state = AIState.CHASE;
                     }
-                }
-                break;
-
-            case AIState.SEARCH:
-                e.searchTimer -= delta;
-                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) {
-                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid, _v6);
-                } else {
-                    e.mesh.rotation.y += delta * 2.5;
-                }
-
-                if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE);
-                    e.state = AIState.CHASE;
-                    updateLastSeen(e, playerPos, now);
-                } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE);
-                    e.state = AIState.CHASE;
-                    updateLastSeen(e, noisePos, now);
-                } else if (e.searchTimer <= 0) {
-                    logStateChange(e, AIState.IDLE);
-                    e.state = AIState.IDLE;
                 }
                 break;
         }

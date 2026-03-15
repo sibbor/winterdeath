@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
 import { CameraSystem } from './CameraSystem';
-import { PlayerAnimation } from '../animation/PlayerAnimation';
+import { PlayerAnimator } from '../animation/PlayerAnimator';
 import { soundManager } from '../../utils/SoundManager';
 import { STORY_SCRIPTS } from '../../content/dialogues';
 
@@ -250,7 +250,7 @@ export class CinematicSystem implements System {
             const body = actor.userData.cachedBody;
             if (!body) continue;
 
-            PlayerAnimation.update(body as THREE.Mesh, {
+            PlayerAnimator.update(body as THREE.Mesh, {
                 isMoving: false, isRushing: false, isRolling: false,
                 rollStartTime: 0, staminaRatio: 1.0,
                 isSpeaking, isThinking, isIdleLong: false,

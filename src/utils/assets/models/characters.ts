@@ -128,7 +128,7 @@ export const CharacterModels = {
 
         body.position.y = baseY;
         body.castShadow = true;
-        // [VINTERDÖD MOD] Added metadata so PlayerAnimation.update can properly offset and pulse the body
+        // [VINTERDÖD MOD] Added metadata so PlayerAnimator.update can properly offset and pulse the body
         body.userData = { 
             isBody: true, 
             geometryHeight,
@@ -153,7 +153,7 @@ export const CharacterModels = {
             title: memberData.title,
             geometryHeight,
             isFamilyMember: true,
-            baseScale: scale, // Metadata for PlayerAnimation
+            baseScale: scale, // Metadata for PlayerAnimator
             baseY: 0          // Group sits at floor level
         };
 

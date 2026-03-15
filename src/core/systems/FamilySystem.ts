@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type React from 'react';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
-import { PlayerAnimation } from '../animation/PlayerAnimation';
+import { PlayerAnimator } from '../animation/PlayerAnimator';
 import { WinterEngine } from '../engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
 
@@ -154,7 +154,7 @@ export class FamilySystem implements System {
                     _animState.isSwimming = false;
                     _animState.isWading = false;
                     _animState.isIdleLong = false;
-                    PlayerAnimation.update(body, _animState, now, delta);
+                    PlayerAnimator.update(body, _animState, now, delta);
                 }
 
                 userData.wasInVehicle = true;
@@ -172,7 +172,7 @@ export class FamilySystem implements System {
                 fm.position.copy(this.playerGroup.position);
                 fm.position.x += spreadX;
                 fm.position.z += spreadZ;
-                
+
                 // [VINTERDÖD FIX] Don't force y=0 here, let the animation system handle floor alignment 
                 // based on buoyancy or ground checks in the next frame to prevent "pop" or sinking.
                 fm.rotation.set(0, 0, 0); // Reset rotation so they don't lean
@@ -205,7 +205,7 @@ export class FamilySystem implements System {
 
                 // Forward vector (approx): [sin, 0, cos]
                 // Right vector (approx): [cos, 0, -sin]
-                
+
                 // Staggering: 
                 // i=0 (Loke): Slightly left-behind
                 // i=1 (Jordan): Slightly right-behind
@@ -213,7 +213,7 @@ export class FamilySystem implements System {
                 // etc.
                 const sideSign = i % 2 === 0 ? -1 : 1;
                 const row = Math.floor(i / 2) + 1; // 1, 2, 3...
-                
+
                 const backDist = 2.0 + row * 1.2;
                 const sideDist = 1.5 + (i % 2) * 0.5;
 
@@ -312,7 +312,7 @@ export class FamilySystem implements System {
                     _animState.isWading = false;
                 }
 
-                PlayerAnimation.update(body, _animState, now, delta);
+                PlayerAnimator.update(body, _animState, now, delta);
             }
         }
     }

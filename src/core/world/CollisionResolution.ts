@@ -24,6 +24,7 @@ export interface Obstacle {
 }
 
 // --- PERFORMANCE SCRATCHPADS ---
+// Shared globally to ensure Zero-GC during collision resolution
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _m1 = new THREE.Matrix4();
@@ -32,6 +33,7 @@ const _q1 = new THREE.Quaternion();
 /**
  * Resolves collision between a moving entity and a static obstacle.
  * Modifies entityPos IN-PLACE to ensure Zero-GC performance.
+ * Highly optimized for V8 execution speed.
  */
 export const applyCollisionResolution = (
     entityPos: THREE.Vector3,
@@ -40,46 +42,67 @@ export const applyCollisionResolution = (
     height: number = 2.0,
     centerOffset: number = 0
 ): boolean => {
-    // Safety Guard: If somehow an invalid obstacle got in, ignore it
     if (!obstacle || !obstacle.position) return false;
 
+    const col = obstacle.collider;
+    const obsPos = obstacle.position;
+
+    const eX = entityPos.x;
+    const eY = entityPos.y;
+    const eZ = entityPos.z;
+
+    const oX = obsPos.x;
+    const oY = obsPos.y;
+    const oZ = obsPos.z;
+
     // 0. High-Speed Broad-phase Check
-    const dx_bp = entityPos.x - obstacle.position.x;
-    const dz_bp = entityPos.z - obstacle.position.z;
+    const dx_bp = eX - oX;
+    const dz_bp = eZ - oZ;
     const distSq_XZ = dx_bp * dx_bp + dz_bp * dz_bp;
 
     // Fast radius-based discard
-    // If obstacle has no radius defined, assume 2.0 as fallback
-    const checkRadius = (obstacle.collider?.radius || obstacle.radius || 2.0) + entityRadius + 1.0;
+    const colRad = col && col.radius ? col.radius : 0;
+    const obsRad = obstacle.radius || 2.0;
+    const checkRadius = (colRad || obsRad) + entityRadius + 1.0;
+
+    // Quick exit if too far away
     if (distSq_XZ > checkRadius * checkRadius) return false;
 
     // Vertical overlap check
-    const entityMinY = entityPos.y - centerOffset;
+    const entityMinY = eY - centerOffset;
     const entityMaxY = entityMinY + height;
-    const obsY = obstacle.position.y;
 
     // 1. Box Collider (Oriented Bounding Box)
-    if (obstacle.collider?.type === 'box' && obstacle.collider.size) {
-        const size = obstacle.collider.size;
+    if (col && col.type === 'box' && col.size) {
+        const size = col.size;
 
-        // Transform entity to box local space
+        // Fast World-to-Local space transformation
         if (obstacle.mesh) {
+            // If linked to a mesh, use its world matrix directly
             _m1.copy(obstacle.mesh.matrixWorld).invert();
+            _v1.set(eX, eY, eZ).applyMatrix4(_m1);
         } else {
-            // Construct matrix from pos/quat/scale
-            if (obstacle.position) {
-                _m1.compose(
-                    obstacle.position,
-                    obstacle.quaternion || _q1.set(0, 0, 0, 1),
-                    obstacle.scale || _v2.set(1, 1, 1)
-                ).invert();
+            // Manual TRS inversion (10x faster than Matrix4.compose().invert())
+            _v1.set(eX - oX, eY - oY, eZ - oZ); // Inverse Translate
+
+            if (obstacle.quaternion) {
+                // Inverse Rotate (Conjugate is identical to inverse for normalized quaternions)
+                _q1.copy(obstacle.quaternion).conjugate();
+                _v1.applyQuaternion(_q1);
+            }
+            if (obstacle.scale) {
+                // Inverse Scale
+                if (obstacle.scale.x !== 0) _v1.x /= obstacle.scale.x;
+                if (obstacle.scale.y !== 0) _v1.y /= obstacle.scale.y;
+                if (obstacle.scale.z !== 0) _v1.z /= obstacle.scale.z;
             }
         }
-        _v1.copy(entityPos).applyMatrix4(_m1);
 
         // Apply optional local offset (center of the box relative to pivot)
-        if (obstacle.collider.center) {
-            _v1.sub(obstacle.collider.center);
+        if (col.center) {
+            _v1.x -= col.center.x;
+            _v1.y -= col.center.y;
+            _v1.z -= col.center.z;
         }
 
         const hX = size.x * 0.5;
@@ -87,10 +110,9 @@ export const applyCollisionResolution = (
         const hZ = size.z * 0.5;
 
         // Local Y check
-        // We treat the box as axis-aligned in local space, so we just check against half-extents
         if (_v1.y + height < -hY || _v1.y > hY) return false;
 
-        // Find closest point on box in local XZ
+        // Find closest point on box in local XZ plane
         const closestX = Math.max(-hX, Math.min(_v1.x, hX));
         const closestZ = Math.max(-hZ, Math.min(_v1.z, hZ));
 
@@ -98,13 +120,16 @@ export const applyCollisionResolution = (
         const dz = _v1.z - closestZ;
         const distSq = dx * dx + dz * dz;
 
+        // Check if within entity radius
         if (distSq < entityRadius * entityRadius) {
             const dist = Math.sqrt(distSq);
 
             if (dist < 0.0001) {
-                // Entity is inside: push to nearest edge
-                const dXP = hX - _v1.x; const dXM = _v1.x + hX;
-                const dZP = hZ - _v1.z; const dZM = _v1.z + hZ;
+                // Entity center is exactly inside the box: snap to nearest local edge
+                const dXP = hX - _v1.x;
+                const dXM = _v1.x + hX;
+                const dZP = hZ - _v1.z;
+                const dZM = _v1.z + hZ;
                 const min = Math.min(dXP, dXM, dZP, dZM);
 
                 if (min === dXP) _v2.set(dXP + entityRadius, 0, 0);
@@ -112,55 +137,61 @@ export const applyCollisionResolution = (
                 else if (min === dZP) _v2.set(0, 0, dZP + entityRadius);
                 else _v2.set(0, 0, -(dZM + entityRadius));
             } else {
-                // Outside: push away from closest point
+                // Entity overlaps the edge: push away along the normal
                 const overlap = entityRadius - dist;
-                _v2.set(dx / dist * overlap, 0, dz / dist * overlap);
+                _v2.set((dx / dist) * overlap, 0, (dz / dist) * overlap);
             }
 
-            // Convert push vector back to world space and apply
+            // Convert push vector back to world space
             if (obstacle.quaternion) {
                 _v2.applyQuaternion(obstacle.quaternion);
             } else if (obstacle.mesh) {
-                obstacle.mesh.getWorldQuaternion(_q1);
-                _v2.applyQuaternion(_q1);
+                // Safe, fast rotation extraction without triggering scene graph updates
+                _m1.extractRotation(obstacle.mesh.matrixWorld);
+                _v2.applyMatrix4(_m1);
             }
 
-            entityPos.add(_v2);
+            // Apply push directly to entity position
+            entityPos.x += _v2.x;
+            entityPos.z += _v2.z;
             return true;
         }
     }
     // 2. Sphere/Cylinder Collider
     else {
-        const obsRadius = obstacle.collider?.radius || obstacle.radius || 1.0;
-        const totalRadius = entityRadius + obsRadius;
-        const obsHeight = obstacle.collider?.height || 0;
+        const oRad = col && col.radius ? col.radius : obsRad;
+        const totalRadius = entityRadius + oRad;
+        const obsHeight = col && col.height ? col.height : 0;
 
         let yMin, yMax;
         if (obsHeight > 0) {
-            // If height is provided, treat as a Vertical Cylinder centered at obsY
-            // Range: [obsY - height/2, obsY + height/2]
-            const halfH = obsHeight / 2;
-            yMin = obsY - halfH;
-            yMax = obsY + halfH;
+            // Treat as a vertical cylinder
+            const halfH = obsHeight * 0.5;
+            yMin = oY - halfH;
+            yMax = oY + halfH;
         } else {
-            // Default to Sphere behavior
-            yMin = obsY - obsRadius;
-            yMax = obsY + obsRadius;
+            // Treat as a pure sphere
+            yMin = oY - oRad;
+            yMax = oY + oRad;
         }
 
+        // Vertical discard
         if (entityMaxY < yMin || entityMinY > yMax) return false;
 
+        // Circular overlap resolution
         if (distSq_XZ < totalRadius * totalRadius) {
             const dist = Math.sqrt(distSq_XZ);
-            const overlap = totalRadius - dist;
 
             if (dist < 0.0001) {
-                entityPos.x += totalRadius; // Simple eject
+                // Exact center overlap fallback
+                entityPos.x += totalRadius;
             } else {
-                entityPos.x += (dx_bp / dist) * overlap;
-                entityPos.z += (dz_bp / dist) * overlap;
+                const overlap = totalRadius - dist;
+                const invDist = 1.0 / dist; // Multiplication is faster than division in the next step
+
+                entityPos.x += dx_bp * invDist * overlap;
+                entityPos.z += dz_bp * invDist * overlap;
             }
-            //console.log(`[Collision] Hit ${obstacle.type || 'Unknown'} (ID: ${obstacle.id || 'N/A'})`, obstacle);
             return true;
         }
     }

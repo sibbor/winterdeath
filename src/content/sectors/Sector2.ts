@@ -9,7 +9,7 @@ import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
 import { soundManager } from '../../utils/SoundManager';
 import { CAMERA_HEIGHT } from '../../content/constants';
-import { PlayerAnimation } from '../../core/animation/PlayerAnimation';
+import { PlayerAnimator } from '../../core/animation/PlayerAnimator';
 
 const LOCATIONS = {
     SPAWN: {
@@ -356,7 +356,7 @@ export const Sector2: SectorDef = {
                 member.children.find((c: any) => c.userData.isBody);
             member.userData.cachedBody = body;
             if (body) {
-                PlayerAnimation.update(body, {
+                PlayerAnimator.update(body, {
                     isMoving: familyObj.following,
                     isRushing: false, isRolling: false, rollStartTime: 0,
                     staminaRatio: 1.0,
@@ -454,7 +454,7 @@ export const Sector2: SectorDef = {
 
                     const body = jordan.userData.cachedBody || jordan.children.find((c: any) => c.userData.isBody);
                     if (body) {
-                        PlayerAnimation.update(body, {
+                        PlayerAnimator.update(body, {
                             isMoving: true, isRushing: false, isRolling: false, rollStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,

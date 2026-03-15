@@ -6,23 +6,22 @@ import { PerformanceMonitor } from './PerformanceMonitor';
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
-const _vTarget = new THREE.Vector3();
 
 export const EnemyAttackHandler = {
     /**
-     * Huvudfunktion som anropas när `chargeTime` är slut och attacken faktiskt utlöses.
+     * Main function called when `chargeTime` finishes and the attack executes.
      */
     executeAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: any) => {
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-            console.log(`[EnemyAttackHandler] ${e.type}_${e.id} performed attack ${att.type} for ${att.damage} dmg`);
+            console.log(`[EnemyAttackHandler] ${e.type}_${e.id} attacking with ${att.type} (${att.damage} dmg)`);
         }
 
-        // 1. Sätt cooldown direkt för denna specifika attack
+        // 1. Set cooldown immediately for this specific attack
         if (e.attackCooldowns) {
             e.attackCooldowns[att.type] = att.cooldown;
         }
 
-        // 2. Dela upp logiken
+        // 2. Route to appropriate handler
         if (att.type === EnemyAttackType.HIT) {
             EnemyAttackHandler.handleBasicHit(e, att, distSq, callbacks);
         } else {
@@ -31,7 +30,7 @@ export const EnemyAttackHandler = {
     },
 
     /**
-     * Hanterar vanliga melee-slag (Walkers, Runners etc).
+     * Handles basic melee strikes (Walkers, Runners, etc).
      */
     handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: any) => {
         const range = att.range || DEFAULT_ATTACK_RANGE;
@@ -39,18 +38,17 @@ export const EnemyAttackHandler = {
 
         if (distSq < rangeSq) {
             callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
-            callbacks.playSound(att.type)
+            callbacks.playSound(att.type);
         }
     },
 
     /**
-     * Hanterar engångs-specialattacker och AoE-attacker (Explosion, Smash, Jump).
+     * Handles one-off special attacks and AoE (Explosion, Smash, Jump).
      */
     handleSpecialAttack: (e: Enemy, att: AttackDefinition, distSq: number, playerPos: THREE.Vector3, callbacks: any) => {
         const pos = e.mesh.position;
-        _vTarget.copy(playerPos);
 
-        // Om attacken har en radius (AoE) använder vi den, annars range, annars default.
+        // Use defined radius (AoE), then range, then default fallback.
         const effectiveRange = att.radius || att.range || DEFAULT_ATTACK_RANGE;
         const inRange = distSq < (effectiveRange * effectiveRange);
 
@@ -58,7 +56,7 @@ export const EnemyAttackHandler = {
             case EnemyAttackType.BITE:
                 if (inRange) {
                     callbacks.onPlayerHit(att.damage, e, DamageType.BITE, false, att.effect, att.effectDuration, att.effectDamage, att.type);
-                    if (callbacks.spawnPart) callbacks.spawnPart(_vTarget.x, _vTarget.y + 1.0, _vTarget.z, 'blood', 3);
+                    if (callbacks.spawnPart) callbacks.spawnPart(playerPos.x, playerPos.y + 1.0, playerPos.z, 'blood', 3);
                 }
                 callbacks.playSound(att.type);
                 break;
@@ -76,23 +74,23 @@ export const EnemyAttackHandler = {
                 }
                 if (callbacks.spawnPart) callbacks.spawnPart(pos.x, 1.0, pos.z, 'large_fire', 5);
 
-                // BOMBERNS SJÄLVMORD - Måste döda zombien!
+                // BOMBER SUICIDE - Must kill the zombie!
                 e.hp = 0;
-                e.lastDamageType = 'EXPLOSION';
+                e.lastDamageType = DamageType.EXPLOSION;
                 if (callbacks.applyDamage) callbacks.applyDamage(e, 9999, DamageType.EXPLOSION, true);
                 break;
 
             case EnemyAttackType.SMASH:
             case EnemyAttackType.FREEZE_JUMP:
                 if (inRange) {
-                    const dType = att.type === EnemyAttackType.FREEZE_JUMP ? DamageType.PHYSICAL : DamageType.PHYSICAL; // Both are physical impact
+                    const dType = att.type === EnemyAttackType.FREEZE_JUMP ? DamageType.PHYSICAL : DamageType.PHYSICAL;
                     callbacks.onPlayerHit(att.damage, e, dType, false, att.effect, att.effectDuration, att.effectDamage, att.type);
                 }
                 if (callbacks.spawnPart) {
                     callbacks.spawnPart(pos.x, 0.2, pos.z, 'ground_impact', 12);
                     callbacks.spawnPart(pos.x, 0.1, pos.z, 'shockwave', 1);
                     if (att.type === EnemyAttackType.FREEZE_JUMP) {
-                        callbacks.spawnPart(pos.x, 0.5, pos.z, 'frost_nova', 8); // Speciell boss-effekt
+                        callbacks.spawnPart(pos.x, 0.5, pos.z, 'frost_nova', 8); // Special boss effect
                     }
                 }
                 callbacks.playSound('heavy_smash');
@@ -108,32 +106,41 @@ export const EnemyAttackHandler = {
 
             case EnemyAttackType.ELECTRIC_BEAM:
             case EnemyAttackType.MAGNETIC_CHAIN:
-                // Dessa är kontinuerliga. executeAttack körs bara när charge är klar (eller när attacken startar).
-                // Spelljud för uppstarten kan läggas här.
+                // These are continuous. executeAttack runs only when charge completes.
                 callbacks.playSound(`${att.type}_start`);
                 break;
         }
     },
 
     /**
-     * Körs VARJE frame under AIState.ATTACKING om attacken är kontinuerlig.
+     * Executes EVERY frame during AIState.ATTACKING for continuous attacks.
+     * Highly optimized for V8 execution speed.
      */
     updateContinuousAttack: (e: Enemy, att: AttackDefinition, delta: number, playerPos: THREE.Vector3, callbacks: any) => {
         const pos = e.mesh.position;
-        _v1.subVectors(playerPos, pos);
-        const currentDistSq = _v1.lengthSq();
-        const rangeSq = (att.range || 10.0) ** 2;
+
+        // Inlined vector subtraction and distance calculation
+        const dx = playerPos.x - pos.x;
+        const dy = playerPos.y - pos.y;
+        const dz = playerPos.z - pos.z;
+        const currentDistSq = dx * dx + dy * dy + dz * dz;
+
+        const r = att.range || 10.0;
+        const rangeSq = r * r;
 
         switch (att.type) {
             case EnemyAttackType.ELECTRIC_BEAM:
-                // Partiklar för beam
                 if (callbacks.spawnPart) {
-                    _v2.copy(_v1).normalize().multiplyScalar(5.0); // Riktning
-                    callbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'electric_beam', 1, undefined, _v2);
+                    const dist = Math.sqrt(currentDistSq);
+                    if (dist > 0.0001) {
+                        // Inlined normalize and multiplyScalar(5.0)
+                        const invDist = 5.0 / dist;
+                        _v2.set(dx * invDist, dy * invDist, dz * invDist);
+                        callbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'electric_beam', 1, undefined, _v2);
+                    }
 
                     if (currentDistSq < rangeSq) {
                         callbacks.spawnPart(playerPos.x, playerPos.y + 1.0, playerPos.z, 'electric_flash', 1);
-                        // Strålen delar ut skada över tid
                         callbacks.onPlayerHit(att.damage * delta, e, DamageType.ELECTRIC, true, att.effect, att.effectDuration, att.effectDamage, att.type);
                     }
                 }
@@ -145,13 +152,17 @@ export const EnemyAttackHandler = {
                         callbacks.spawnPart(pos.x, pos.y + 1.5, pos.z, 'magnetic_sparks', 2);
                     }
 
-                    // Skada över tid (5 dmg/sec)
+                    // Damage over time (5 dmg/sec)
                     callbacks.onPlayerHit(att.damage * delta, e, DamageType.PHYSICAL, true, att.effect, att.effectDuration, att.effectDamage, att.type);
 
-                    // Här dras spelaren framåt rent fysiskt (du måste implementera applyExternalForce i din callback eller PlayerStatsSystem)
                     if (callbacks.applyExternalForce) {
-                        _v2.copy(_v1).normalize().negate(); // Vektor från spelare MOT bossen
-                        callbacks.applyExternalForce(_v2, 0.9); // Dra med 90% styrka
+                        const dist = Math.sqrt(currentDistSq);
+                        if (dist > 0.0001) {
+                            // Inlined negated normalization (pull player towards boss)
+                            const invDist = -1.0 / dist;
+                            _v2.set(dx * invDist, dy * invDist, dz * invDist);
+                            callbacks.applyExternalForce(_v2, 0.9); // Pull with 90% strength
+                        }
                     }
                 }
                 break;

@@ -4,6 +4,8 @@ import { GameSessionLogic } from '../GameSessionLogic';
 import { soundManager } from '../../utils/SoundManager';
 import { FXSystem } from './FXSystem';
 import { StatusEffectType, PlayerDeathState, DamageType } from '../../types/combat';
+import { PerformanceMonitor } from './PerformanceMonitor';
+
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -151,12 +153,15 @@ export class PlayerStatsSystem implements System {
         const state = session.state;
         const now = performance.now();
 
-        console.log("[PlayerStatsSystem] handlePlayerHit", damage, attacker, type, isDoT, effectType);
-
         if (state.isDead || state.sectorState?.isInvincible) return;
 
         // Apply Damage Resistance Multiplier (Nathalie)
         let actualDmg = damage * state.multipliers.damageResist;
+
+        if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
+            console.log(`[PLAYER] HP: ${state.hp.toFixed(0)} | -${actualDmg.toFixed(1)} (${type}) from ${attacker?.type || 'Other'}${isDoT ? ' [DoT]' : ''}`);
+        }
+
 
         const isBite = type === DamageType.BITE;
 
@@ -279,7 +284,9 @@ export class PlayerStatsSystem implements System {
         state.isDead = true;
         state.deathStartTime = now;
 
-        console.log("[PlayerStatsSystem] Player died from " + type + ", attacker:", attacker);
+        if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
+            console.log(`[PLAYER] DIED from ${type} | Attacker: ${attacker?.type || 'Other'}`);
+        }
 
         // Setup killer name for UI
         state.killerType = type as string;

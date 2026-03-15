@@ -7,8 +7,7 @@ import { PLAYER_CHARACTER } from '../../content/constants';
 import { MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 import { HudSystem } from './HudSystem';
-import { PlayerAnimation } from '../animation/PlayerAnimation';
-import { FXSystem } from './FXSystem';
+import { PlayerAnimator } from '../animation/PlayerAnimator';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -216,7 +215,7 @@ export class DeathSystem implements System {
             }
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
-            PlayerAnimation.update(playerMesh as any, _deathAnimState, now, delta);
+            PlayerAnimator.update(playerMesh as any, _deathAnimState, now, delta);
         }
 
         // --- 4. Family Grief ---
@@ -235,7 +234,7 @@ export class DeathSystem implements System {
             }
             if (body) {
                 _griefAnimState.seed = fm.seed || 0;
-                PlayerAnimation.update(body, _griefAnimState, now, delta);
+                PlayerAnimator.update(body, _griefAnimState, now, delta);
             }
         }
     }

@@ -4,7 +4,7 @@ import { GameSessionLogic } from '../../../core/GameSessionLogic';
 import { RuntimeState } from '../../../core/RuntimeState';
 import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 import { HudSystem } from '../../../core/systems/HudSystem';
-import { PlayerAnimation } from '../../../core/animation/PlayerAnimation';
+import { PlayerAnimator } from '../../../core/animation/PlayerAnimator';
 import { FootprintSystem } from '../../../core/systems/FootprintSystem';
 import { FXSystem } from '../../../core/systems/FXSystem';
 import { ProjectileSystem } from '../../../core/weapons/ProjectileSystem';
@@ -149,14 +149,21 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     const textX = enemy.mesh.position.x;
                     const textY = enemy.isBoss ? 4.0 : 2.5;
                     const textZ = enemy.mesh.position.z;
-                    
+
                     _gameContext.spawnFloatingText(
-                        textX, textY, textZ, 
-                        getCachedNumberString(enemy._accumulatedDamage), 
+                        textX, textY, textZ,
+                        getCachedNumberString(enemy._accumulatedDamage),
                         color
                     );
                     enemy._accumulatedDamage = 0; // Reset accumulation after showing
                     enemy._lastDamageTextTime = _gameContext.now;
+                }
+            }
+
+            if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                // Throttled logging for continuous damage or rapid fire
+                if (!isContinuous || (frame % 10 === 0)) {
+                    console.log(`[ENEMY] ${enemy.type}_${enemy.id} HP: ${enemy.hp.toFixed(0)} | -${amount.toFixed(1)} (${type})`);
                 }
             }
 
@@ -268,7 +275,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
                 // Zero out rest to avoid closure recreation
-                PlayerAnimation.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
             lastTime = now;
@@ -424,7 +431,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
-                PlayerAnimation.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
                 monitor.end('player_animation');
             }
         }

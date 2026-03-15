@@ -19,10 +19,8 @@ export interface AnimState {
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
-const _q1 = new THREE.Quaternion();
-const _e1 = new THREE.Euler(0, 0, 0, 'YXZ');
 
-export const PlayerAnimation = {
+export const PlayerAnimator = {
     update: (
         mesh: THREE.Mesh,
         animState: AnimState,
@@ -43,6 +41,11 @@ export const PlayerAnimation = {
         const breatheSpeed = 0.003 + ((1.0 - animState.staminaRatio) * 0.012);
         const breatheAmp = 0.02 + ((1.0 - animState.staminaRatio) * 0.06);
 
+        // Variables needed later for footprints
+        let moveSpeed = 0;
+        let wadingFactor = 1.0;
+        let bob = 0;
+
         // --- 2. State Machine (Priority Order) ---
 
         // Death animation
@@ -57,32 +60,29 @@ export const PlayerAnimation = {
 
         // Rolling animation
         else if (animState.isRolling) {
-            // FIX: Clamp progress to prevent overshoot if state lingers
             const progress = Math.min(1.0, Math.max(0, (now - animState.rollStartTime) / 300));
             rotationX = progress * Math.PI * 2;
             const squashFactor = Math.sin(progress * Math.PI);
             scaleY = 1.0 - (squashFactor * 0.4);
             scaleXZ = 1.0 + (squashFactor * 0.4);
             positionY = 0.2;
-
         }
 
         // Swimming Animation: Heavy lean, deep bobbing
         else if (animState.isSwimming) {
             const swimSpeed = 0.008;
-            const bob = Math.sin(now * swimSpeed);
-            rotationX = 1.45; // [VINTERDÖD] Flatter "swimming" pose
-            positionY = -0.7 + bob * 0.15; // Bobbing in water (slightly deeper for better immersion)
+            bob = Math.sin(now * swimSpeed);
+            rotationX = 1.45; // Flatter "swimming" pose
+            positionY = -0.7 + bob * 0.15; // Bobbing in water
             scaleY = 1.0 + bob * 0.05;
             rotationZ = Math.sin(now * swimSpeed * 0.5) * 0.1;
-
         }
 
         // Moving animation
         else if (animState.isMoving) {
-            const moveSpeed = animState.isRushing ? 0.020 : 0.012;
-            const wadingFactor = animState.isWading ? 0.6 : 1.0;
-            const bob = Math.sin(now * moveSpeed * wadingFactor);
+            moveSpeed = animState.isRushing ? 0.020 : 0.012;
+            wadingFactor = animState.isWading ? 0.6 : 1.0;
+            bob = Math.sin(now * moveSpeed * wadingFactor);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;
 
             rotationX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2);
@@ -90,11 +90,10 @@ export const PlayerAnimation = {
             scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
             rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.05;
 
-            // [VINTERDÖD] Wading Bobbing
+            // Wading Bobbing
             if (animState.isWading) {
                 positionY = Math.abs(bob) * 0.2;
             }
-
         }
 
         // Stationary behaviors (Breathing, Speaking, Thinking)
@@ -115,14 +114,12 @@ export const PlayerAnimation = {
                 scaleY += talkWobble + 0.1;
                 scaleXZ -= talkWobble * 0.5;
             }
-
             // Thinking
             else if (animState.isThinking) {
                 const nod = Math.sin(now * 0.008);
                 rotationX = 0.3 + (nod * 0.1); // Pensive lean
                 rotationZ += Math.sin(now * 0.003) * 0.1;
             }
-
             // Long Idle Fidgeting (Shivering/Looking around)
             else if (animState.isIdleLong) {
                 const t = now * 0.001;
@@ -136,7 +133,6 @@ export const PlayerAnimation = {
                     rotationX += Math.sin(now * 0.005) * 0.05;
                 }
             }
-
             // Gentle idle bob
             else {
                 positionY = idleSine * 0.03;
@@ -148,45 +144,42 @@ export const PlayerAnimation = {
         const baseHeight = mesh.userData.baseY || 0;
 
         mesh.scale.set(scaleXZ * baseScale, scaleY * baseScale, scaleXZ * baseScale);
-        mesh.rotation.set(rotationX, rotationY, rotationZ);
+
+        // Only set X and Z rotations, Y is controlled by input/mouse
+        mesh.rotation.x = rotationX;
+        mesh.rotation.z = rotationZ;
 
         // Adjust pivot to keep feet on ground despite scaling
         mesh.position.y = (baseHeight * scaleY) + positionY;
 
         // --- 4. Equipment Aim Adjustment (Zero-GC) ---
-        // [VINTERDÖD FIX] Counter-rotate the weapon to keep it pointing forward despite body lean/tilt
         const children = mesh.children;
         const cLen = children.length;
         for (let i = 0; i < cLen; i++) {
             const child = children[i] as THREE.Object3D;
             if (child.name === 'gun' || child.userData.isLaserSight) {
-                // Keep the weapon horizontal regardless of the character's lean (swimming, moving, thinking)
+                // Keep the weapon horizontal regardless of the character's lean
                 child.rotation.x = -rotationX;
 
-                // Adjust position while swimming to look like it's held in front of the swimmer's head
                 if (animState.isSwimming) {
-                    child.position.y = 0.6; // Raise relative to tilted body
-                    child.position.z = 0.8; // Move further "forward" (which is UP in swimming pose)
+                    child.position.y = 0.6;
+                    child.position.z = 0.8;
                 } else {
-                    child.position.y = 0.4; // Default gun/laser height
-                    child.position.z = 0.5; // Default distance forward
+                    child.position.y = 0.4;
+                    child.position.z = 0.5;
                 }
             }
         }
 
-        // --- 4. Optimized Footprints (Zero-GC) ---
-        // FIX: Ensure footprints don't spawn if dead or rolling
-        if ((animState.isMoving || animState.isRushing) && !animState.isSwimming && !animState.isRolling && !animState.isDead) {
+        // --- 5. Optimized Footprints (Zero-GC) ---
+        if (animState.isMoving && !animState.isSwimming && !animState.isRolling && !animState.isDead) {
 
-            // FIX: Apply wadingFactor to footprint frequency so it perfectly matches visual bobbing
-            const wadingFactor = animState.isWading ? 0.6 : 1.0;
-            const moveFreq = (animState.isRushing ? 0.020 : 0.012) * wadingFactor;
-
+            // We reuse the `bob` and speed variables calculated in step 2!
+            const moveFreq = moveSpeed * wadingFactor;
             const sway = Math.cos(now * moveFreq);
             const lastSway = mesh.userData.lastSway || 0;
             const threshold = 0.8;
 
-            // Check if we hit a peak (weight shift fully over one foot)
             let triggered = false;
             let isRight = false;
 
@@ -197,12 +190,17 @@ export const PlayerAnimation = {
             }
 
             if (triggered) {
-                // Perform expensive world-space lookups only when a step is actually triggered
-                mesh.getWorldPosition(_v1);
-                mesh.getWorldQuaternion(_q1);
-                _e1.setFromQuaternion(_q1);
+                // Fast World Position fallback (assuming mesh.parent is the Scene or a static group)
+                if (mesh.parent) {
+                    _v1.set(mesh.position.x, mesh.position.y, mesh.position.z);
+                    _v1.applyMatrix4(mesh.parent.matrixWorld);
+                } else {
+                    _v1.copy(mesh.position);
+                }
 
-                FootprintSystem.addFootprint(_v1, _e1.y, isRight);
+                // Instead of Quaternion to Euler, we just read the local Y rotation of the mesh.
+                // Assuming the mesh is rotated horizontally towards the cursor by the PlayerMovementSystem.
+                FootprintSystem.addFootprint(_v1, mesh.rotation.y, isRight);
             }
 
             mesh.userData.lastSway = sway;
