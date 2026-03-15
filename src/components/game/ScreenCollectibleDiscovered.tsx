@@ -17,8 +17,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
     return (
         <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-[200] p-4 backdrop-blur-3xl animate-fade-in pointer-events-auto cursor-default">
             {/* Scanned Background Texture */}
-            <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-screen"
-                style={{ backgroundImage: 'url("/assets/textures/gritty_overlay.png")', backgroundSize: 'cover' }} />
+            <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-screen" />
 
             <div className="relative w-full max-w-2xl flex flex-col items-center text-center">
                 <div className="mb-4">
@@ -34,20 +33,20 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 <div className="w-48 h-48 sm:w-64 sm:h-64 my-4 relative">
                     <div className="absolute inset-0 bg-yellow-500/10 rounded-full blur-3xl animate-pulse"></div>
                     <div className="relative w-full h-full border border-white/10 p-4 bg-black/40 backdrop-blur-md">
-                         <CollectiblePreview type={def.type} size="xl" />
+                        <CollectiblePreview type={def.modelType} />
                     </div>
                 </div>
 
                 <div className="max-w-md px-4">
                     <p className="text-zinc-400 text-sm sm:text-base leading-relaxed font-medium italic">
-                        "{t(def.descKey)}"
+                        "{t(def.descriptionKey)}"
                     </p>
                     <div className="mt-4 flex items-center justify-center gap-2">
-                         <div className="h-[1px] w-8 bg-yellow-500/30"></div>
-                         <span className="text-[10px] uppercase font-bold tracking-widest text-yellow-500/40">
-                             {t(`ui.type_${def.type.toLowerCase()}`)}
-                         </span>
-                         <div className="h-[1px] w-8 bg-yellow-500/30"></div>
+                        <div className="h-[1px] w-8 bg-yellow-500/30"></div>
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-yellow-500/40">
+                            {t(`ui.type_${def.modelType.toLowerCase()}`)}
+                        </span>
+                        <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                     </div>
                 </div>
 

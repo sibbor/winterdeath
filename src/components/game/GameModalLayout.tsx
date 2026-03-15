@@ -69,8 +69,7 @@ const GameModalLayout: React.FC<GameModalLayoutProps> = ({
     return (
         <div className={`absolute inset-0 flex items-center justify-center z-[100] p-4 md:p-8 pointer-events-auto touch-auto ${transparent ? '' : 'bg-black/80 backdrop-blur-2xl'}`}>
             <div className={`relative flex flex-col w-full ${maxWidthClass} ${effectiveHeightClass} bg-black border border-white/10 shadow-[0_0_100px_rgba(0,0,0,1)] overflow-hidden`}>
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay"
-                    style={{ backgroundImage: 'url("/assets/textures/gritty_overlay.png")' }} />
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" />
 
                 <div className={`p-6 md:p-10 relative z-20 shrink-0 bg-transparent flex flex-col gap-4 pl-safe pr-safe`}>
                     <div className="flex justify-between items-center w-full">

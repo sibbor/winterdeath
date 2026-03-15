@@ -9,15 +9,37 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-.pl-safe { padding-left: var(--safe-left); }
-.pr-safe { padding-right: var(--safe-right); }
-.pt-safe { padding-top: var(--safe-top); }
-.pb-safe { padding-bottom: var(--safe-bottom); }
+.pl-safe {
+    padding-left: var(--safe-left);
+}
 
-.ml-safe { margin-left: var(--safe-left); }
-.mr-safe { margin-right: var(--safe-right); }
-.mt-safe { margin-top: var(--safe-top); }
-.mb-safe { margin-bottom: var(--safe-bottom); }
+.pr-safe {
+    padding-right: var(--safe-right);
+}
+
+.pt-safe {
+    padding-top: var(--safe-top);
+}
+
+.pb-safe {
+    padding-bottom: var(--safe-bottom);
+}
+
+.ml-safe {
+    margin-left: var(--safe-left);
+}
+
+.mr-safe {
+    margin-right: var(--safe-right);
+}
+
+.mt-safe {
+    margin-top: var(--safe-top);
+}
+
+.mb-safe {
+    margin-bottom: var(--safe-bottom);
+}
 
 /* Initial setup */
 html,
@@ -28,7 +50,8 @@ body,
     margin: 0;
     padding: 0;
     overflow: hidden;
-    touch-action: none; /* Reduce input latency by disabling browser gestures */
+    touch-action: none;
+    /* Reduce input latency by disabling browser gestures */
 }
 
 body {
@@ -47,7 +70,7 @@ canvas {
     display: block;
 }
 
-/* Custom scrollbar for gritty feel */
+/* Custom scrollbar for feel */
 ::-webkit-scrollbar {
     width: 8px;
 }
@@ -144,7 +167,7 @@ canvas {
     background: #6b7280;
 }
 
-/* --- VINTERDÖD GRITTY HUD SYSTEM --- */
+/* --- VINTERDÖD HUD SYSTEM --- */
 
 :root {
     --hud-red: #ff3333;
@@ -158,47 +181,79 @@ canvas {
 .hud-bar-container {
     background: var(--hud-dark);
     border: 1px solid var(--hud-border);
-    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
     overflow: hidden;
 }
 
 .hud-bar-glow {
     position: relative;
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 .hud-bar-glow::after {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.2), transparent);
     animation: bar-shine 3s infinite linear;
     pointer-events: none;
 }
 
 @keyframes bar-shine {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
 }
 
 @keyframes pulse-fast {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.7; transform: scale(1.05); }
+
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
 }
 
 @keyframes pulse-slow {
-    0%, 100% { opacity: 0.1; }
-    50% { opacity: 0.4; }
+
+    0%,
+    100% {
+        opacity: 0.1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
 }
 
 @keyframes tab-border-pulsate {
-  0% { box-shadow: 0 0 0 0 var(--pulse-color, rgba(239, 68, 68, 0.4)); }
-  50% { box-shadow: 0 0 0 4px var(--pulse-color, rgba(239, 68, 68, 0.6)); }
-  100% { box-shadow: 0 0 0 0 var(--pulse-color, rgba(239, 68, 68, 0.4)); }
+    0% {
+        box-shadow: 0 0 0 0 var(--pulse-color, rgba(239, 68, 68, 0.4));
+    }
+
+    50% {
+        box-shadow: 0 0 0 4px var(--pulse-color, rgba(239, 68, 68, 0.6));
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 var(--pulse-color, rgba(239, 68, 68, 0.4));
+    }
 }
 
 .animate-tab-pulsate {
-  animation: tab-border-pulsate 1.5s infinite ease-in-out;
+    animation: tab-border-pulsate 1.5s infinite ease-in-out;
 }
 
 .animate-pulse-fast {
@@ -262,13 +317,13 @@ canvas {
     align-items: center;
     justify-content: center;
     color: white;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     transition: transform 0.1s;
 }
 
 .hud-touch-btn:active {
     transform: scale(0.9);
-    background: rgba(30,30,30,1);
+    background: rgba(30, 30, 30, 1);
 }
 
 .hud-touch-btn-lg {

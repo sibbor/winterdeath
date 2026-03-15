@@ -135,7 +135,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                                         } 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
-                                    style={isActive ? { 
+                                    style={isActive ? {
                                         backgroundColor: darkenColor(pulseColor, 20), // 20% darker background
                                         '--pulse-color': pulseColor // Original color for pulse
                                     } as any : {}}
@@ -254,7 +254,7 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({ stats,
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean, effectiveLandscape?: boolean }> = ({ stats, color, isMobile, effectiveLandscape }) => {
     return (
         <div className={`grid ${isMobile ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
-        {/* Force 1x1 on mobile even if landscape for Enemy/Boss as requested */}
+            {/* Force 1x1 on mobile even if landscape for Enemy/Boss as requested */}
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
                 const isSeen = (stats.seenEnemies || []).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
                 if (!isSeen) return null;
@@ -338,8 +338,8 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean
 
 const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobile, effectiveLandscape, isDebug }) => {
     // Only four bosses (Sectors 1-4)
-    const sectors = [0, 1, 2, 3]; 
-    
+    const sectors = [0, 1, 2, 3];
+
     return (
         <div className="space-y-16 pb-12">
             {sectors.map(sectorIndex => {
@@ -347,7 +347,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean,
                 const theme = SECTOR_THEMES[sectorIndex];
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex + 1}`) : '???';
-                
+
                 const isSeen = boss && ((stats.seenBosses || []).includes(boss.name) || (stats.bossesDefeated || []).includes(sectorIndex));
                 const isDefeated = (stats.bossesDefeated || []).includes(sectorIndex);
                 const isBossUnlocked = boss && (isSeen || isDefeated || isDebug);
@@ -612,7 +612,7 @@ const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: st
     >
         <div className="">
             {isLocked && (
-                <div className="absolute inset-0 z-10 bg-[url('/assets/noise.png')] opacity-10 pointer-events-none"></div>
+                <div className="absolute inset-0 z-10 opacity-10 pointer-events-none"></div>
             )}
             {children}
         </div>

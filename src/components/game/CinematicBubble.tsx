@@ -152,7 +152,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
             <div
                 className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
             >
-                {/* Dialogue Text Background - Gritty Style */}
+                {/* Dialogue Text Background */}
                 <div className="hud-bar-container bg-black/95 backdrop-blur-xl p-6 md:p-8 min-h-[100px] relative shadow-2xl">
                     {/* Speaker Accent Line */}
                     <div
