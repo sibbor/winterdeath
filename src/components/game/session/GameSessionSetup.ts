@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GameCanvasProps, SectorStats, MapItem, SectorTrigger } from '../../../types';
-import { SectorContext } from '../../../types/SectorEnvironment';
+import { SectorContext } from '../../../types/sector';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
 import { GameSessionLogic } from '../../../core/GameSessionLogic';
 import { SectorGenerator } from '../../../core/world/SectorGenerator';

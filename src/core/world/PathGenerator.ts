@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorContext } from '../../types/SectorEnvironment';
+import { SectorContext } from '../../types/sector';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { ObjectGenerator } from './ObjectGenerator';
 import { SectorGenerator } from './SectorGenerator';

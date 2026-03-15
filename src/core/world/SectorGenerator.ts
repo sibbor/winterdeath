@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
-import { SectorContext } from '../../types/SectorEnvironment';
+import { SectorContext } from '../../types/sector';
 import { ObjectGenerator } from './ObjectGenerator';
 import { VehicleGenerator } from './VehicleGenerator';
 import { EnvironmentGenerator } from './EnvironmentGenerator';
@@ -1224,7 +1224,7 @@ export const SectorGenerator = {
         if (ambientLight) {
             ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbient, 0.05);
         }
-        
+
         const ground = scene.getObjectByName('GROUND') as THREE.Mesh;
         if (ground && ground.material) {
             (ground.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);

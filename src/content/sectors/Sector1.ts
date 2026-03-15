@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
+import { SectorDef, SectorContext } from '../../types/sector';
 import { MATERIALS, createTextSprite } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';

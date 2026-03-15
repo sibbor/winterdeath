@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FLASHLIGHT } from '../../content/constants';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
-import { SectorContext } from '../../types/SectorEnvironment';
+import { SectorContext } from '../../types/sector';
 
 interface FlickeringLight {
     light: THREE.PointLight;
@@ -41,7 +41,7 @@ export class LightingSystem implements System {
         session.engine.scene.traverse((obj) => {
             if ((obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight)) {
                 if (obj.name === FLASHLIGHT.name) return;
-                
+
                 // Register if not already present
                 if (!sectorCtx.dynamicLights.includes(obj)) {
                     sectorCtx.dynamicLights.push(obj);

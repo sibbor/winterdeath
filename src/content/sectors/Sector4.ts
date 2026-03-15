@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/SectorEnvironment';
+import { SectorDef, SectorContext } from '../../types/sector';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';

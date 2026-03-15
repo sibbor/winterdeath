@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext, AtmosphereZone } from '../../types/SectorEnvironment';
+import { SectorDef, SectorContext, AtmosphereZone } from '../../types/sector';
 import { MATERIALS, createTextSprite, GEOMETRY } from '../../utils/assets';
 import { t } from '../../utils/i18n';
 import { SectorGenerator } from '../../core/world/SectorGenerator';

@@ -1,7 +1,7 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { GameCanvasProps, DeathPhase, SectorTrigger } from '../../../types';
-import { SectorContext } from '../../../types/SectorEnvironment';
+import { SectorContext } from '../../../types/sector';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
 import { GameSessionLogic } from '../../../core/GameSessionLogic';
 import { CinematicBubbleHandle } from '../CinematicBubble';
@@ -81,7 +81,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     const familyMemberRef = useRef<{ mesh: THREE.Group; } | null>(null);
     const activeFamilyMembers = useRef<any[]>([]);
     const flashlightRef = useRef<THREE.Group | null>(null);
-    
+
     // Engine Control Refs
     const prevInputRef = useRef<boolean>(false);
     const cameraOverrideRef = useRef<any>(null);

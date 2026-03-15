@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
-import { SectorDef } from '../../types/SectorEnvironment';
+import { SectorDef } from '../../types/sector';
 import { EnemyManager } from '../EnemyManager';
 import { Sector1 } from '../../content/sectors/Sector1';
 import { Sector2 } from '../../content/sectors/Sector2';
