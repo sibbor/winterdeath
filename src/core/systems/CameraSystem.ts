@@ -5,6 +5,7 @@ import { CAMERA_HEIGHT } from '../../content/constants';
  * CameraSystem
  * Centralized manager for the PerspectiveCamera.
  * Handles FPS-independent smoothing, additive shaking, and panning.
+ * Optimized for Zero-GC during runtime.
  */
 export class CameraSystem {
     public threeCamera: THREE.PerspectiveCamera;
@@ -37,8 +38,10 @@ export class CameraSystem {
     private _targetHeightMod = 0;
 
     constructor() {
+        // Create the camera that WinterEngine will use
         this.threeCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2500);
         this.threeCamera.position.set(0, CAMERA_HEIGHT, 40);
+
         this._idealPos.copy(this.threeCamera.position);
         this._idealLookAt.set(0, 0, 0);
         this._currentLookAt.copy(this._idealLookAt);
@@ -142,7 +145,7 @@ export class CameraSystem {
         }
     }
 
-    public update(dt: number, now: number) {
+    public update(dt: number, _now: number) {
         if (!this._initialized && this.threeCamera) {
             this._idealPos.copy(this.threeCamera.position);
             this._initialized = true;
@@ -150,7 +153,7 @@ export class CameraSystem {
 
         // 1. Follow Logic
         if (!this._isCinematic && this._followTarget) {
-            // Mjuk interpolation av rotation/vinkel (flyttat från GameSession)
+            // Smooth interpolation of rotation/pitch
             const angleLerp = 1.0 - Math.exp(-8.0 * dt);
             this._followAngle += (this._targetAngle - this._followAngle) * angleLerp;
             this._followHeightMod += (this._targetHeightMod - this._followHeightMod) * angleLerp;
@@ -168,7 +171,10 @@ export class CameraSystem {
             this._idealPos.y += (targetY - this._idealPos.y) * lerpFactor;
             this._idealPos.z += (targetZ - this._idealPos.z) * lerpFactor;
 
-            this._idealLookAt.copy(this._followTarget);
+            // Direct assignment is faster than calling .copy() every frame (Zero-GC)
+            this._idealLookAt.x = this._followTarget.x;
+            this._idealLookAt.y = this._followTarget.y;
+            this._idealLookAt.z = this._followTarget.z;
         }
 
         // 2. Smooth LookAt
@@ -176,24 +182,30 @@ export class CameraSystem {
         this._currentLookAt.lerp(this._idealLookAt, lookLerpFactor);
 
         // 3. Shake Calculation
-        this._shakeOffset.set(0, 0, 0);
+        // Calculate shake separately to easily add it to the final position without allocating new vectors
+        let currentShakeX = 0;
+        let currentShakeZ = 0;
 
         if (this._hurtIntensity > 0) {
             this._hurtIntensity = Math.max(0, this._hurtIntensity - 4.0 * dt);
             const amt = this._hurtIntensity * 0.5;
-            this._shakeOffset.x += (Math.random() - 0.5) * amt;
-            this._shakeOffset.z += (Math.random() - 0.5) * amt;
+            currentShakeX += (Math.random() - 0.5) * amt;
+            currentShakeZ += (Math.random() - 0.5) * amt;
         }
 
         if (this._shakeIntensity > 0) {
             this._shakeIntensity = Math.max(0, this._shakeIntensity - 5.0 * dt);
             const amt = this._shakeIntensity * 0.5;
-            this._shakeOffset.x += (Math.random() - 0.5) * amt;
-            this._shakeOffset.z += (Math.random() - 0.5) * amt;
+            currentShakeX += (Math.random() - 0.5) * amt;
+            currentShakeZ += (Math.random() - 0.5) * amt;
         }
 
         // 4. Final Transform Application
-        this.threeCamera.position.copy(this._idealPos).add(this._shakeOffset);
+        // Apply position and additive shake directly to the Three.js camera
+        this.threeCamera.position.x = this._idealPos.x + currentShakeX;
+        this.threeCamera.position.y = this._idealPos.y;
+        this.threeCamera.position.z = this._idealPos.z + currentShakeZ;
+
         this.threeCamera.lookAt(this._currentLookAt);
     }
 
