@@ -466,7 +466,7 @@ export class GameSessionSetup {
             monitor.end('render_compile');
 
             // --- Buffer Frames ---
-            let framesToWait = 10;
+            let framesToWait = 30;
             const checkReady = () => {
                 if (framesToWait > 0) {
                     framesToWait--;

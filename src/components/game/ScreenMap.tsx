@@ -235,16 +235,16 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                         <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
                     </div>
                     <div className="flex gap-4 justify-center">
-                        <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30 skew-x-[-10deg]">
-                            <span className="text-[10px] text-blue-400 font-bold uppercase skew-x-[10deg] mr-2">{t('ui.player')}</span>
-                            <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
+                        <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30">
+                            <span className="text-[10px] text-blue-400 font-bold uppercase mr-2">{t('ui.player')}</span>
+                            <span className="text-sm font-mono text-white font-bold">
                                 {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
                             </span>
                         </div>
                         {!isMobileDevice && (
-                            <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50 skew-x-[-10deg]">
-                                <span className="text-[10px] text-gray-400 font-bold uppercase skew-x-[10deg] mr-2">{t('ui.coordinates')}</span>
-                                <span className="text-sm font-mono text-white font-bold skew-x-[10deg]">
+                            <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50">
+                                <span className="text-[10px] text-gray-400 font-bold uppercase mr-2">{t('ui.coordinates')}</span>
+                                <span className="text-sm font-mono text-white font-bold">
                                     {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
                                 </span>
                             </div>

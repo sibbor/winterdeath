@@ -29,8 +29,6 @@ const formatDistance = (meters: number) => {
 
 const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentSector, isMobileDevice }) => {
 
-    const buttonStyle = "flex-1 max-w-xs py-4 font-bold uppercase tracking-widest transition-colors skew-x-[-10deg] border-2 shadow-[0_0_20px_rgba(220,38,38,0.4)]";
-
     const accuracy = stats.shotsFired > 0
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
         : "0.0";
@@ -60,24 +58,6 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const showRespawn = !!deathDetails || !!stats.aborted;
 
-    const Footer = (
-        <div className="w-full flex justify-end gap-6">
-            {!showRespawn ? (
-                <button onClick={onReturnCamp} className={`${buttonStyle} bg-white hover:bg-gray-200 text-black border-white`}>
-                    <span className="block skew-x-[10deg]">{t('ui.return_camp')}</span>
-                </button>
-            ) : (
-                <>
-                    <button onClick={onReturnCamp} className={`${buttonStyle} bg-transparent hover:bg-gray-900 text-gray-500 hover:text-white border-gray-700 hover:border-white shadow-none`}>
-                        <span className="block skew-x-[10deg]">{t('ui.return_camp')}</span>
-                    </button>
-                    <button onClick={onRetry} className={`${buttonStyle} bg-white hover:bg-gray-200 text-black border-white`}>
-                        <span className="block skew-x-[10deg]">{t('ui.respawn')}</span>
-                    </button>
-                </>
-            )}
-        </div>
-    );
 
     // Helper for Stat Blocks (Time elapsed style)
     const StatBlock = ({ label, value, color }: { label: string, value: string | number, color: string }) => (
@@ -93,11 +73,20 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     }
 
     return (
-        <GameModalLayout title={t('ui.sector_report')} maxWidthClass="max-w-7xl" footer={Footer} isMobile={isMobileDevice}>
+        <GameModalLayout 
+            title={t('ui.sector_report')} 
+            maxWidthClass="max-w-7xl" 
+            isMobile={isMobileDevice}
+            onClose={showRespawn ? onReturnCamp : undefined}
+            cancelLabel={showRespawn ? t('ui.return_camp') : undefined}
+            onConfirm={showRespawn ? onRetry : onReturnCamp}
+            confirmLabel={showRespawn ? t('ui.respawn') : t('ui.return_camp')}
+            showCloseButton={showRespawn}
+        >
 
             {/* Aborted Banner */}
             {stats.aborted && !deathDetails && (
-                <div className={`mb-4 md:mb-6 w-full border-4 border-yellow-900 bg-yellow-900/20 ${isMobileDevice ? 'p-3' : 'p-6'} skew-x-[-5deg] text-center`}>
+                <div className={`mb-4 md:mb-6 w-full border-4 border-yellow-900 bg-yellow-900/20 ${isMobileDevice ? 'p-3' : 'p-6'} text-center`}>
                     <h3 className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold text-yellow-500 uppercase tracking-widest`}>{t('ui.sector_aborted')}</h3>
                 </div>
             )}
@@ -260,7 +249,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     {/* Incoming Breakdown */}
                     <div className="flex flex-col h-full">
                         <h4 className="text-red-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
-                             <div className="w-2 h-2 bg-red-500 skew-x-[-20deg]"></div>
+                             <div className="w-2 h-2 bg-red-500"></div>
                              {t('ui.incoming_damage_breakdown')}
                         </h4>
                         <div className="space-y-2 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
@@ -297,7 +286,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     {/* Outgoing Breakdown */}
                     <div className="flex flex-col h-full">
                         <h4 className="text-green-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
-                             <div className="w-2 h-2 bg-green-500 skew-x-[-20deg]"></div>
+                             <div className="w-2 h-2 bg-green-500"></div>
                              {t('ui.outgoing_damage_breakdown')}
                         </h4>
                         <div className="space-y-1 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">

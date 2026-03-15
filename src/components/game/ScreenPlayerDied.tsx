@@ -59,8 +59,8 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerN
                 <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-[fadeIn_0.6s_ease-out_forwards]`}>
                     <button
                         onClick={onContinue}
-                        className={`group relative ${isMobileDevice ? 'px-12 py-4' : 'px-16 py-5'} bg-white text-black border-4 border-black hover:bg-black hover:text-white transition-all duration-300 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
-                        <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase transition-colors`}>
+                        className={`group relative ${isMobileDevice ? 'px-12 py-4' : 'px-16 py-5'} bg-white text-black border-4 border-black transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
+                        <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
                             {t('ui.continue')}
                         </span>
                     </button>

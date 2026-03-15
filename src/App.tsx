@@ -165,6 +165,15 @@ const App: React.FC = () => {
     const [isPointerLocked, setIsPointerLocked] = useState(false);
 
     useEffect(() => {
+        // [VINTERDÖD] Try to lock orientation to landscape on mobile
+        if (typeof screen !== 'undefined' && (screen as any).orientation && (screen.orientation as any).lock) {
+            (screen.orientation as any).lock('landscape').catch((e: any) => {
+                console.warn("[App] Orientation lock failed (expected on some devices):", e);
+            });
+        }
+    }, []);
+
+    useEffect(() => {
         const checkMobile = () => setIsMobileDevice(isMobile());
         const handleLockChange = () => setIsPointerLocked(!!document.pointerLockElement);
 
@@ -581,7 +590,7 @@ const App: React.FC = () => {
                         weather={gameState.weather}
                     />
 
-                    {(!activeOverlay || activeOverlay === 'INTRO') && !hudState.isHidden && (
+                    {(!activeOverlay || activeOverlay === 'INTRO') && !hudState.isHidden && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && (
                         isMobileDevice ? (
                             <MobileGameHUD
                                 {...hudState}

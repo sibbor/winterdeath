@@ -4,6 +4,7 @@ import GameModalLayout from './GameModalLayout';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { EnvironmentOverride, WeatherType } from '../../types';
 import { Sector6 } from '../../content/sectors/Sector6';
+import { soundManager } from '../../utils/SoundManager';
 
 interface ScreenPlaygroundEnvironmentStationProps {
     onClose: () => void;
@@ -92,19 +93,19 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
         <div className="flex w-full gap-4">
             <button
                 onClick={handleReset}
-                className="flex-1 px-4 py-3 border-2 border-red-900 bg-red-950/20 text-red-500 font-bold uppercase hover:bg-red-900/40 transition-colors"
+                className="flex-1 px-4 py-3 border-2 border-red-900 bg-red-950/20 text-red-500 font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-red-900/40"
             >
                 {t('ui.reset')}
             </button>
             <button
                 onClick={onClose}
-                className="flex-1 px-4 py-3 border-2 border-gray-600 text-gray-400 font-bold uppercase hover:text-white hover:border-white transition-colors"
+                className="flex-1 px-4 py-3 border-2 border-gray-600 text-gray-400 font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 hover:text-white hover:border-white"
             >
                 {t('ui.cancel')}
             </button>
             <button
                 onClick={handleApply}
-                className="flex-[2] px-4 py-3 border-2 border-white bg-white text-black font-bold uppercase transition-all hover:bg-gray-200 shadow-xl"
+                className="flex-[2] px-4 py-3 border-2 border-white bg-white text-black font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 hover:bg-gray-200 shadow-xl"
             >
                 {t('ui.apply')}
             </button>
@@ -146,12 +147,14 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                 {/* Weather */}
                 <div className="flex flex-col gap-2">
                     <label className="text-gray-400 uppercase text-sm">{t('ui.weather')}</label>
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-2 flex-wrap pb-4">
                         {['none', 'rain', 'snow', 'ash', 'ember'].map((w) => (
                             <button
                                 key={w}
-                                onClick={() => onWeatherChange(w as WeatherType)}
-                                className={`px-4 py-2 border text-xs uppercase ${currentWeather === w ? 'bg-cyan-900 border-cyan-500 text-white' : 'border-gray-700 text-gray-500 hover:border-gray-500'}`}
+                                onClick={() => { soundManager.playUiClick(); onWeatherChange(w as WeatherType); }}
+                                className={`px-4 py-2 border-2 border-zinc-700 transition-all duration-200 hover:scale-105 active:scale-95 uppercase text-xs mx-2
+                                    ${currentWeather === w ? 'bg-zinc-800 text-black animate-tab-pulsate' : 'bg-black text-zinc-400 hover:border-gray-500'}
+                                `}
                             >
                                 {w}
                             </button>

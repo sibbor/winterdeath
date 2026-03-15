@@ -14,7 +14,7 @@ interface ScreenBossKilledProps {
 
 const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProceed, stats, isMobileDevice }) => {
     const bossData = BOSSES[sectorIndex];
-    const buttonStyle = "px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 skew-x-[-10deg]";
+    const buttonStyle = "px-8 py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95";
     const bossName = t(bossData?.name || "ui.boss").toUpperCase();
 
     const titleNode = (
@@ -26,8 +26,8 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
 
     return (
         <GameModalLayout title={titleNode} maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl" isMobile={isMobileDevice}>
-            <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10 skew-x-[-5deg]`}>
-                <div className="skew-x-[5deg]">
+            <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10`}>
+                <div className="">
                     <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>
                         "{t(bossData?.deathStory || "The target has been eliminated.")}"
                     </p>
@@ -77,7 +77,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
             </div>
             <div className="flex justify-center">
                 <button onClick={onProceed} className={`${buttonStyle} bg-white text-black border-white hover:bg-slate-200`}>
-                    <span className="block skew-x-[10deg]">{t('ui.continue')}</span>
+                    <span>{t('ui.continue')}</span>
                 </button>
             </div>
         </GameModalLayout>

@@ -122,9 +122,9 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
                 <div className="relative flex flex-col items-center gap-4 sm:gap-8 mt-6 sm:mt-12 w-full z-10">
                     <button
                         onClick={handleNext}
-                        className={`group relative ${isMobileDevice ? 'px-8 py-3' : 'px-16 py-5'} bg-white text-black border-4 border-black hover:bg-black hover:text-white transition-all duration-300 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)]`}
+                        className={`group relative ${isMobileDevice ? 'px-8 py-3' : 'px-16 py-5'} bg-white text-black border-4 border-black transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)]`}
                     >
-                        <span className={`${isMobileDevice ? 'text-lg' : 'text-xl'} font-bold tracking-[0.2em] uppercase transition-colors relative z-10`}>
+                        <span className={`${isMobileDevice ? 'text-lg' : 'text-xl'} font-bold tracking-[0.2em] uppercase relative z-10`}>
                             {currentIndex === prologueData.length - 1 ? t('ui.close') : t('ui.continue')}
                         </span>
                     </button>

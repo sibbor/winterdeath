@@ -16,7 +16,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
         z: initialCoords ? Math.round(initialCoords.z).toString() : ""
     });
 
-    const buttonStyle = "w-full py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95 skew-x-[-10deg]";
+    const buttonStyle = "w-full py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95";
 
     const handleJump = () => {
         const x = parseFloat(coords.x);

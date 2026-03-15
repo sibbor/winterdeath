@@ -203,33 +203,42 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
             )}
 
             {/* Action Buttons (Bottom Right) */}
-            <div className={`absolute pointer-events-auto flex ${isLandscapeMode ? 'flex-col-reverse bottom-1/2 translate-y-1/2 right-6 gap-6 pr-safe' : 'bottom-24 right-8 flex-row items-end gap-3 md:gap-4'}`}>
-                {/* Dash (Space) */}
-                <button
-                    className={`hud-touch-btn ${isLandscapeMode ? 'w-24 h-24' : 'hud-touch-btn-lg'} flex items-center justify-center p-2 border-red-500/40 shadow-[0_0_20px_rgba(255,0,0,0.2)]`}
-                    onTouchStart={(e) => { e.stopPropagation(); handleAction('space', true); }}
-                    onTouchEnd={(e) => { e.stopPropagation(); handleAction('space', false); }}
-                >
-                    <img src="/assets/ui/icon_dash.png" alt="Dash" className="w-full h-full object-contain" />
-                </button>
+            <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe
+                ${isLandscapeMode
+                    ? 'bottom-2 right-4 flex-col gap-2'
+                    : 'bottom-24 right-4 flex-col gap-2'}
+            `}>
+                {/* Row for Flashlight (Above Dash) */}
+                <div className="flex justify-end">
+                    <button
+                        className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity"
+                        onTouchStart={(e) => { e.stopPropagation(); handleAction('f', true); }}
+                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('f', false); }}
+                    >
+                        <img src="/assets/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain" />
+                    </button>
+                </div>
 
-                {/* Reload (R) */}
-                <button
-                    className={`hud-touch-btn ${isLandscapeMode ? 'w-20 h-20' : ''} flex items-center justify-center p-2`}
-                    onTouchStart={(e) => { e.stopPropagation(); handleAction('r', true); }}
-                    onTouchEnd={(e) => { e.stopPropagation(); handleAction('r', false); }}
-                >
-                    <img src="/assets/ui/icon_reload.png" alt="R" className="w-full h-full object-contain" />
-                </button>
+                {/* Row for Reload and Dash (Bottom Row) */}
+                <div className="flex items-end gap-2">
+                    {/* Reload (R) - 80% ish size of Dash */}
+                    <button
+                        className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity"
+                        onTouchStart={(e) => { e.stopPropagation(); handleAction('r', true); }}
+                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('r', false); }}
+                    >
+                        <img src="/assets/ui/icon_reload.png" alt="R" className="w-full h-full object-contain" />
+                    </button>
 
-                {/* Flashlight (F) */}
-                <button
-                    className={`hud-touch-btn ${isLandscapeMode ? 'w-16 h-16' : ''} flex items-center justify-center p-2`}
-                    onTouchStart={(e) => { e.stopPropagation(); handleAction('f', true); }}
-                    onTouchEnd={(e) => { e.stopPropagation(); handleAction('f', false); }}
-                >
-                    <img src="/assets/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain" />
-                </button>
+                    {/* Dash (Space) - Primary control */}
+                    <button
+                        className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity"
+                        onTouchStart={(e) => { e.stopPropagation(); handleAction('space', true); }}
+                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('space', false); }}
+                    >
+                        <img src="/assets/ui/icon_dash.png" alt="Dash" className="w-full h-full object-contain" />
+                    </button>
+                </div>
             </div>
         </div>
     );

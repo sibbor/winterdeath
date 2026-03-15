@@ -67,7 +67,7 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                                         <div className="text-3xl font-mono font-light text-green-400">{displayVal}</div>
                                         <button
                                             onClick={() => handleUpgradeSkill(skill.id, skill.value)}
-                                            className="hud-touch-btn w-10 h-10 flex items-center justify-center text-xl font-black transition-all active:scale-90"
+                                            className="hud-touch-btn w-10 h-10 flex items-center justify-center text-xl font-black transition-all duration-200 hover:scale-105 active:scale-95"
                                         >
                                             +
                                         </button>
@@ -86,18 +86,18 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
                     <div className="space-y-4">
                         {/* Invincibility */}
                         <div
-                            className={`hud-bar-container p-5 border transition-all cursor-pointer ${tempSectorState.isInvincible ? 'bg-blue-900/20 border-blue-500/50' : 'bg-black/60 border-white/5 hover:border-blue-900/50'}`}
+                            className={`hud-bar-container p-5 border-2 transition-all cursor-pointer !overflow-visible ${tempSectorState.isInvincible ? 'bg-zinc-800 border-zinc-700 text-black animate-tab-pulsate' : 'bg-black border-zinc-700 text-zinc-400 hover:bg-zinc-900'}`}
                             onClick={() => setTempSectorState({ ...tempSectorState, isInvincible: !tempSectorState.isInvincible })}
                         >
                             <div className="flex items-center gap-4">
-                                <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.isInvincible ? 'bg-blue-500 border-blue-500 shadow-[0_0_10px_#3b82f6]' : 'border-white/20'}`}>
-                                    {tempSectorState.isInvincible && <div className="text-black font-black text-xs">✓</div>}
+                                <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.isInvincible ? 'bg-black border-zinc-700 shadow-[0_0_10px_rgba(255,0,0,0.5)]' : 'border-zinc-800'}`}>
+                                    {tempSectorState.isInvincible && <div className="text-red-500 font-black text-xs">✓</div>}
                                 </div>
                                 <div>
-                                    <div className={`font-light uppercase tracking-widest text-sm ${tempSectorState.isInvincible ? 'text-blue-400' : 'text-white/40'}`}>
+                                    <div className={`font-bold uppercase tracking-widest text-sm ${tempSectorState.isInvincible ? 'text-black' : 'text-zinc-400'}`}>
                                         {t('ui.invincible')}
                                     </div>
-                                    <div className="text-[9px] text-white/20 uppercase font-bold mt-1">
+                                    <div className={`text-[9px] uppercase font-bold mt-1 ${tempSectorState.isInvincible ? 'text-black/60' : 'text-zinc-600'}`}>
                                         {t('ui.no_damage_hint')}
                                     </div>
                                 </div>
@@ -106,18 +106,18 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
 
                         {/* Unlimited Ammo / No Reload */}
                         <div
-                            className={`hud-bar-container p-5 border transition-all cursor-pointer ${tempSectorState.unlimitedAmmo ? 'bg-orange-900/20 border-orange-500/50' : 'bg-black/60 border-white/5 hover:border-orange-900/50'}`}
+                            className={`hud-bar-container p-5 border-2 transition-all cursor-pointer !overflow-visible ${tempSectorState.unlimitedAmmo ? 'bg-zinc-800 border-zinc-700 text-black animate-tab-pulsate' : 'bg-black border-zinc-700 text-zinc-400 hover:bg-zinc-900'}`}
                             onClick={() => setTempSectorState({ ...tempSectorState, unlimitedAmmo: !tempSectorState.unlimitedAmmo, noReload: !tempSectorState.unlimitedAmmo })}
                         >
                             <div className="flex items-center gap-4">
-                                <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.unlimitedAmmo ? 'bg-orange-500 border-orange-500 shadow-[0_0_10px_#f97316]' : 'border-white/20'}`}>
-                                    {tempSectorState.unlimitedAmmo && <div className="text-black font-black text-xs">✓</div>}
+                                <div className={`w-6 h-6 border flex items-center justify-center transition-all ${tempSectorState.unlimitedAmmo ? 'bg-black border-zinc-700 shadow-[0_0_10px_rgba(255,0,0,0.5)]' : 'border-zinc-800'}`}>
+                                    {tempSectorState.unlimitedAmmo && <div className="text-red-500 font-black text-xs">✓</div>}
                                 </div>
                                 <div>
-                                    <div className={`font-light uppercase tracking-widest text-sm ${tempSectorState.unlimitedAmmo ? 'text-orange-400' : 'text-white/40'}`}>
+                                    <div className={`font-bold uppercase tracking-widest text-sm ${tempSectorState.unlimitedAmmo ? 'text-black' : 'text-zinc-400'}`}>
                                         {t('ui.unlimited_ammo_no_reload')}
                                     </div>
-                                    <div className="text-[9px] text-white/20 uppercase font-bold mt-1">
+                                    <div className={`text-[9px] uppercase font-bold mt-1 ${tempSectorState.unlimitedAmmo ? 'text-black/60' : 'text-zinc-600'}`}>
                                         {t('ui.playground_only')}
                                     </div>
                                 </div>

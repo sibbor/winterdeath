@@ -1,67 +1,69 @@
 import React from 'react';
 import { t } from '../../utils/i18n';
-import { CollectibleDefinition } from '../../content/collectibles';
+import { soundManager } from '../../utils/SoundManager';
+import { getCollectibleById } from '../../content/collectibles';
 import CollectiblePreview from '../ui/core/CollectiblePreview';
 
 interface ScreenCollectibleDiscoveredProps {
-    collectible: CollectibleDefinition;
+    collectibleId: string;
     onClose: () => void;
-    isMobileDevice?: boolean;
 }
 
-const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectible, onClose, isMobileDevice }) => {
+const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose }) => {
+    const def = getCollectibleById(collectibleId);
+
+    if (!def) return null;
 
     return (
-        <div className="absolute inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 sm:p-8" onClick={(e) => e.stopPropagation()}>
-            <div className={`max-w-2xl w-full border-4 border-yellow-500/30 bg-black ${isMobileDevice ? 'p-6' : 'p-12'} shadow-[0_0_80px_rgba(255,215,0,0.15)] flex flex-col items-center text-center relative skew-x-[-1deg] overflow-y-auto max-h-[90vh]`}>
+        <div className="absolute inset-0 bg-black/90 flex items-center justify-center z-[200] p-4 backdrop-blur-3xl animate-fade-in pointer-events-auto cursor-default">
+            {/* Scanned Background Texture */}
+            <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-screen"
+                style={{ backgroundImage: 'url("/assets/textures/gritty_overlay.png")', backgroundSize: 'cover' }} />
 
-                {/* Title */}
-                <h2 className={`${isMobileDevice ? 'text-2xl mb-2' : 'text-4xl mb-6'} font-black uppercase tracking-tighter text-yellow-500`}>
-                    {t(collectible.nameKey)}
-                </h2>
-
-                {/* Model Preview - 3D Render */}
-                <div className={`relative ${isMobileDevice ? 'w-40 h-40 mb-4' : 'w-80 h-80 mb-6'} flex items-center justify-center bg-black border-2 border-zinc-800 rounded-lg shadow-inner overflow-hidden flex-shrink-0`}>
-                    <CollectiblePreview type={collectible.modelType} />
+            <div className="relative w-full max-w-2xl flex flex-col items-center text-center">
+                <div className="mb-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.5em] text-yellow-500/60 mb-2 block animate-pulse">
+                        {t('ui.collectible_discovered')}
+                    </span>
+                    <h2 className="text-4xl sm:text-6xl font-black uppercase italic tracking-tighter text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                        {t(def.nameKey)}
+                    </h2>
                 </div>
 
-                <div className="space-y-4 mb-8 sm:mb-10">
-                    <p className={`${isMobileDevice ? 'text-sm' : 'text-xl'} text-slate-200 font-mono italic leading-relaxed`}>
-                        {t(collectible.descriptionKey).split('\n').map((line, i) => (
-                            <React.Fragment key={i}>
-                                {line}
-                                {i < t(collectible.descriptionKey).split('\n').length - 1 && <br />}
-                            </React.Fragment>
-                        ))}
-                    </p>
+                {/* Collector Icon/Preview */}
+                <div className="w-48 h-48 sm:w-64 sm:h-64 my-4 relative">
+                    <div className="absolute inset-0 bg-yellow-500/10 rounded-full blur-3xl animate-pulse"></div>
+                    <div className="relative w-full h-full border border-white/10 p-4 bg-black/40 backdrop-blur-md">
+                         <CollectiblePreview type={def.type} size="xl" />
+                    </div>
+                </div>
 
-                    <div className="flex items-center justify-center gap-4 py-2 border-y border-yellow-500/10">
-                        <span className="text-yellow-500 font-black tracking-widest uppercase text-base sm:text-lg">
-                            +1 {t('ui.skill_point')}
-                        </span>
+                <div className="max-w-md px-4">
+                    <p className="text-zinc-400 text-sm sm:text-base leading-relaxed font-medium italic">
+                        "{t(def.descKey)}"
+                    </p>
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                         <div className="h-[1px] w-8 bg-yellow-500/30"></div>
+                         <span className="text-[10px] uppercase font-bold tracking-widest text-yellow-500/40">
+                             {t(`ui.type_${def.type.toLowerCase()}`)}
+                         </span>
+                         <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                     </div>
                 </div>
 
                 <button
-                    onClick={onClose}
-                    className="group relative px-8 sm:px-12 py-3 sm:py-4 bg-black hover:bg-yellow-600 text-yellow-500 hover:text-black font-black uppercase tracking-widest border-2 border-yellow-500 transition-all duration-300 active:scale-95 skew-x-[-5deg] flex-shrink-0">
-                    <span className="block skew-x-[5deg]">{t('ui.continue')}</span>
-
-                    {/* Button Glow */}
-                    <div className="absolute inset-0 bg-yellow-500/20 opacity-0 group-hover:opacity-100 blur-xl transition-opacity"></div>
+                    onClick={() => { soundManager.playUiClick(); onClose(); }}
+                    className="mt-8 px-12 py-4 bg-white text-black font-black uppercase tracking-widest transition-all duration-200 hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(255,255,255,0.3)]"
+                >
+                    {t('ui.continue')}
                 </button>
             </div>
 
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                .anim-fade-in {
-                    animation: fadeIn 0.4s ease-out forwards;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: scale(1.05); }
-                    to { opacity: 1; transform: scale(1); }
-                }
-            `}} />
+            {/* Corner Accents */}
+            <div className="absolute top-8 left-8 w-12 h-12 border-t-2 border-l-2 border-white/20"></div>
+            <div className="absolute top-8 right-8 w-12 h-12 border-t-2 border-r-2 border-white/20"></div>
+            <div className="absolute bottom-8 left-8 w-12 h-12 border-b-2 border-l-2 border-white/20"></div>
+            <div className="absolute bottom-8 right-8 w-12 h-12 border-b-2 border-r-2 border-white/20"></div>
         </div>
     );
 };

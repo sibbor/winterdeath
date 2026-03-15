@@ -75,9 +75,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         }, 3000);
     };
 
-    const hpP = Math.max(0, (hp / maxHp) * 100);
-    const stP = Math.max(0, (stamina / maxStamina) * 100);
-    const xpP = Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100));
+    const hpP = maxHp > 0 ? Math.max(0, (hp / maxHp) * 100) : 0;
+    const stP = maxStamina > 0 ? Math.max(0, (stamina / maxStamina) * 100) : 0;
+    const xpP = nextLevelXp > 0 ? Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100)) : 0;
     const speedKmH = Math.round(vehicleSpeed * 3.6);
 
     const [isShaking, setIsShaking] = useState(false);
@@ -177,7 +177,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     const renderSlot = (slot: string, weapon: WeaponType, isActive: boolean) => {
         const wData = WEAPONS[weapon];
-        if (!wData) return <div key={slot} className="w-24 h-24 border-2 border-zinc-800 bg-black/50 skew-x-[-10deg]"></div>;
+        if (!wData) return <div key={slot} className="w-24 h-24 border-2 border-zinc-800 bg-black/50"></div>;
 
         const isThrowable = wData.category === 'THROWABLE';
         const isRadio = weapon === WeaponType.RADIO;
@@ -204,7 +204,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     <div className="absolute bottom-0 left-0 w-full flex justify-center gap-0.5 px-1 pb-0.5">
                         {Array.from({ length: stackMax }).map((_, i) => (
                             <div key={i}
-                                className={`h-1.5 flex-1 skew-x-[10deg] ${i < stackCurrent ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
+                                className={`h-1.5 flex-1 ${i < stackCurrent ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
                                 style={{ 
                                     backgroundColor: i < stackCurrent ? WeaponCategoryColors.THROWABLE : undefined, 
                                     boxShadow: i < stackCurrent ? `0 0 5px ${WeaponCategoryColors.THROWABLE}` : undefined 
@@ -225,12 +225,12 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
         return (
             <div key={slot}
-                className={`w-24 h-24 border-2 flex flex-col items-center justify-center relative transition-all overflow-hidden skew-x-[-10deg] ${isActive ? 'bg-zinc-950 text-white shadow-lg z-10 scale-105' : 'bg-black/90 text-zinc-600'} ${isDisabled ? 'opacity-40 grayscale' : ''}`}
+                className={`w-24 h-24 border-2 flex flex-col items-center justify-center relative transition-all overflow-hidden ${isActive ? 'bg-zinc-950 text-white shadow-lg z-10 scale-105' : 'bg-black/90 text-zinc-600'} ${isDisabled ? 'opacity-40 grayscale' : ''}`}
                 style={{ borderColor: borderColor }}
             >
-                <div className="w-12 h-12 skew-x-[10deg] flex items-center justify-center"
+                <div className="w-12 h-12 flex items-center justify-center"
                     style={{
-                        filter: isActive ? 'drop-shadow(0 0 2px rgba(255,255,255,0.8))' : 'opacity(0.5)',
+                        filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,0.8))' : 'opacity(0.5)',
                         transform: isActive ? 'scale(1.1)' : 'scale(1.0)'
                     }}
                 >
@@ -241,13 +241,13 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     )}
                 </div>
 
-                <span className="text-[9px] uppercase font-black text-center w-full px-1 skew-x-[10deg] tracking-wider mb-3 leading-none whitespace-normal">{t(wData.displayName)}</span>
+                <span className="text-[9px] uppercase font-black text-center w-full px-1 tracking-wider mb-3 leading-none whitespace-normal">{t(wData.displayName)}</span>
 
-                <span className="text-[10px] absolute top-0.5 left-1.5 font-bold skew-x-[10deg] text-zinc-500">{slot}</span>
+                <span className="text-[10px] absolute top-0.5 left-1.5 font-bold text-zinc-500">{slot}</span>
 
-                <div className="skew-x-[10deg] w-full">{countDisplay}</div>
+                <div className="w-full">{countDisplay}</div>
 
-                {isRadio && signalText && <span className={`absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 skew-x-[10deg]`}>{signalText}</span>}
+                {isRadio && signalText && <span className={`absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300`}>{signalText}</span>}
             </div>
         );
     };
@@ -302,23 +302,23 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             <div className="absolute top-8 left-8 right-12 flex justify-between items-start">
                 
                 {/* 1.1 TOP-LEFT: HP, STAMINA, XP */}
-                <div className={`flex flex-col gap-1 w-64 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`flex flex-col gap-1.5 w-80 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                     {/* HP Bar */}
-                    <div className="hud-bar-container h-8 w-full group">
+                    <div className="hud-bar-container h-10 w-full group">
                         <div className="h-full bg-red-900/20 relative">
                             <div 
                                 className="h-full bg-[#ff3333] hud-bar-glow transition-all duration-300" 
                                 style={{ width: `${hpP}%`, boxShadow: '0 0 15px rgba(255, 51, 51, 0.6)' }} 
                             />
-                            <div className="absolute inset-0 flex items-center justify-start px-2">
-                                <span className="text-[11px] text-white font-mono font-bold tracking-tighter">
-                                    {Math.max(0, Math.ceil(hp))} / {maxHp}
+                            <div className="absolute inset-0 flex items-center justify-start px-3">
+                                <span className="text-[13px] text-white font-mono font-bold tracking-tighter">
+                                    {Math.max(0, Math.ceil(hp || 0))} / {Math.max(0, Math.ceil(maxHp || 0))}
                                 </span>
                             </div>
                         </div>
                     </div>
                     {/* Stamina Bar */}
-                    <div className="hud-bar-container h-3 w-full">
+                    <div className="hud-bar-container h-4 w-full">
                         <div className="h-full bg-purple-900/20">
                             <div 
                                 className="h-full bg-[#a855f7] hud-bar-glow transition-all duration-300" 
@@ -327,17 +327,12 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         </div>
                     </div>
                     {/* XP Bar */}
-                    <div className="hud-bar-container h-2 w-full mb-1">
+                    <div className="hud-bar-container h-2.5 w-full mb-1">
                         <div className="h-full bg-cyan-900/20">
                             <div 
                                 className="h-full bg-[#06b6d4] hud-bar-glow transition-all duration-300" 
                                 style={{ width: `${xpP}%`, boxShadow: '0 0 8px rgba(6, 182, 212, 0.4)' }} 
                             />
-                            <div className="absolute inset-0 flex items-center justify-start px-2">
-                                <span className="text-[7px] text-cyan-200 font-mono font-bold opacity-60">
-                                    {currentXp}
-                                </span>
-                            </div>
                         </div>
                     </div>
 
@@ -358,7 +353,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                 {/* 1.2 TOP-RIGHT: KILL COUNTER */}
                 <div className={`flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                    <span className="text-7xl font-bold text-white font-mono hud-kill-text drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] leading-none">
+                    <span className="text-7xl font-thin text-white font-mono hud-kill-text drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] leading-none">
                         {kills}
                     </span>
                     <span className="text-sm font-bold text-[#ff3333] tracking-[0.3em] uppercase opacity-80">

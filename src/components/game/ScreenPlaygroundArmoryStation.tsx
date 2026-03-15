@@ -92,13 +92,20 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             title={t('stations.armory')}
             onClose={onClose}
             onCancel={onClose}
-            onConfirm={handleConfirm}
-            confirmLabel={t('ui.confirm_loadout')}
+            onConfirm={onClose}
+            confirmLabel={t('ui.close')}
+            fullHeight={true}
             canConfirm={hasChanges}
             isMobile={isMobileDevice}
             maxWidthClass="max-w-7xl"
             transparent={true}
             showCloseButton={false}
+            extraHeaderContent={
+                <div className={`px-4 py-2 border bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] flex items-center gap-4`}>
+                    <span className={`text-[10px] block uppercase font-bold text-yellow-500`}>{t('ui.scrap')}</span>
+                    <span className={`text-2xl font-bold font-mono text-yellow-400`}>{(tempStats as any).collectedScrap !== undefined ? (tempStats as any).collectedScrap : tempStats.scrap}</span>
+                </div>
+            }
         >
             <div className={`flex flex-col h-full overflow-hidden ${isMobileDevice ? 'gap-4' : 'gap-8'}`}>
 
@@ -139,15 +146,17 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                             const catKey = 'categories.' + cat.toLowerCase();
 
                             return (
-                                <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-black uppercase tracking-widest transition-all skew-x-[-10deg] border-2 hover:brightness-110 whitespace-nowrap inline-block`}
-                                    style={{
-                                        borderColor: isActive ? catColor : 'transparent',
-                                        backgroundColor: isActive ? catColor : 'transparent',
-                                        color: isActive ? 'black' : '#6b7280'
-                                    }}
+                                <button 
+                                    key={cat} 
+                                    onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+                                    className={`px-4 md:px-8 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-3 group whitespace-nowrap
+                                        ${isActive 
+                                            ? 'bg-white text-black font-black italic' 
+                                            : 'bg-zinc-900/40 text-zinc-500 hover:bg-zinc-800'
+                                        }
+                                    `}
                                 >
-                                    <span className="block skew-x-[10deg]">{t(catKey)}</span>
+                                    <span className="text-[10px] md:text-sm uppercase tracking-widest">{cat}</span>
                                 </button>
                             );
                         })}
@@ -217,8 +226,6 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                                 <span className="opacity-60">{t('ui.range')}</span>
                                                 <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                                             </div>
-                                            {!isMobileDevice && (
-                                                <>
                                                     <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
                                                         <span className="opacity-60">{t('ui.magazine')}</span>
                                                         <span className="text-white font-bold">{weapon.magSize > 0 ? weapon.magSize : '-'}</span>
@@ -227,8 +234,6 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                                         <span className="opacity-60">{t('ui.reload')}</span>
                                                         <span className="text-white font-bold">{weapon.reloadTime > 0 ? `${(weapon.reloadTime / 1000).toFixed(1)}s` : '-'}</span>
                                                     </div>
-                                                </>
-                                            )}
                                         </div>
                                     </div>
 
@@ -237,16 +242,16 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                             <button
                                                 onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
                                                 disabled={!canAfford}
-                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-black uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95`}
-                                                style={{
-                                                    borderColor: canAfford ? scrapYellow : '#1f2937',
-                                                    color: canAfford ? '#fff' : '#4b5563',
-                                                    cursor: canAfford ? 'pointer' : 'not-allowed',
-                                                    backgroundColor: canAfford ? `${scrapYellow}20` : 'transparent'
-                                                }}
+                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-black uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95
+                                                    ${canAfford 
+                                                        ? 'bg-yellow-950/20 text-yellow-500 border-yellow-500 hover:bg-yellow-950/40 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
+                                                        : 'bg-black text-gray-600 border-gray-800 cursor-not-allowed'
+                                                    }
+                                                `}
                                             >
-                                                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-sm'} leading-none`}>{t('ui.upgrade')}</span>
-                                                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} font-bold text-yellow-500`}>{cost}</span>
+                                                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-sm'} leading-none`}>
+                                                    {t('ui.upgrade')} ({cost} {t('ui.scrap')})
+                                                </span>
                                             </button>
                                         )}
                                     </div>

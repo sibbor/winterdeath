@@ -116,9 +116,9 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
 
             <style>{`
             @keyframes slam {
-                0% { transform: scale(2) skewX(-5deg); opacity: 0; }
-                70% { transform: scale(1) skewX(-5deg); opacity: 1; }
-                100% { transform: scale(1) skewX(-5deg); opacity: 1; }
+                0% { transform: scale(2); opacity: 0; }
+                70% { transform: scale(1); opacity: 1; }
+                100% { transform: scale(1); opacity: 1; }
             }
             @keyframes fadeIn {
                 0% { opacity: 0; }

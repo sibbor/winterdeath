@@ -42,7 +42,14 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
 
     // Sticky "done" state to prevent "double-fade" flickers if flags overlap momentarily
     const [isActuallyDone, setIsActuallyDone] = useState(false);
-    if (isDone && !isActuallyDone) setIsActuallyDone(true);
+
+    useEffect(() => {
+        if (isDone) {
+            setIsActuallyDone(true);
+        } else {
+            setIsActuallyDone(false);
+        }
+    }, [isDone]);
 
     const finalOpacity = isActuallyDone ? 'opacity-0' : 'opacity-100';
 
@@ -62,7 +69,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
                     <h4 className="text-red-600 font-black tracking-[0.4em] uppercase text-sm animate-pulse">
                         {displayInfo.isInitialBoot ? t('ui.starting') : t('ui.loading')}
                     </h4>
-                    <h2 className={`${isMobileDevice ? 'text-3xl' : 'text-5xl md:text-6xl'} font-black italic tracking-tighter uppercase skew-x-[-10deg]`}>
+                    <h2 className={`${isMobileDevice ? 'text-3xl' : 'text-5xl md:text-6xl'} font-black italic tracking-tighter uppercase`}>
                         {displayInfo.isInitialBoot ? (
                             <div className="flex flex-col items-center">
                                 <span className="block leading-none">{t('ui.game_title_1')}</span>
@@ -86,7 +93,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
 
                 {/* Loading Bar */}
                 {!displayInfo.isInitialBoot && (
-                    <div className="w-full h-3 bg-gray-900 border border-black rounded-full overflow-hidden relative skew-x-[-10deg]">
+                    <div className="w-full h-3 bg-gray-900 border border-black rounded-full overflow-hidden relative">
                         <div className="h-full bg-red-600 animate-[loading-progress_3s_ease-in-out_infinite] shadow-[0_0_10px_rgba(220,38,38,0.5)]" />
                     </div>
                 )}

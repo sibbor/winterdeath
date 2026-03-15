@@ -77,6 +77,22 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
     const scrapYellow = '#eab308'; // Tailwind yellow-500
 
+    const scrapHeader = (
+        <div className={`px-4 py-1.5 border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] flex flex-col items-start gap-0`}>
+            <span className={`text-[9px] block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
+            <span className={`text-xl md:text-2xl font-bold font-mono text-yellow-400 leading-none`}>{tempStats.scrap}</span>
+        </div>
+    );
+
+    const darkenColor = (hex: string, percent: number) => {
+        const num = parseInt(hex.replace('#', ''), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) - amt;
+        const G = (num >> 8 & 0x00FF) - amt;
+        const B = (num & 0x0000FF) - amt;
+        return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
+    };
+
     return (
         <CampModalLayout
             title={t('stations.armory')}
@@ -86,17 +102,19 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
             confirmLabel={t('ui.confirm_loadout')}
             closeLabel={hasChanges ? t('ui.cancel') : t('ui.close')}
             canConfirm={hasChanges}
+            extraHeaderContent={scrapHeader}
+            fullHeight={true}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 {/* Tabs bar */}
-                <div className={`relative shrink-0 ${effectiveLandscape ? 'w-48 border-r-2 border-gray-800 pr-4' : ''}`}>
+                <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     {!effectiveLandscape && (
                         <>
-                            <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
-                            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black via-black/80 to-transparent z-10 pointer-events-none" />
+                            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black via-black/80 to-transparent z-10 pointer-events-none" />
                         </>
                     )}
-                    <div className={`flex ${effectiveLandscape ? 'flex-col gap-2' : 'gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto no-scrollbar pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end scroll-smooth'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-10 pt-2 min-h-[50px] md:min-h-[80px] items-end scrollbar-hide'}`}>
                         {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
                             const isActive = activeTab === cat;
                             const catColor = WeaponCategoryColors[cat as keyof typeof WeaponCategoryColors] || '#ffffff';
@@ -104,44 +122,29 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
 
                             return (
                                 <button key={cat} onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 whitespace-nowrap inline-block ${isActive
-                                        ? 'text-black border-white'
-                                        : 'bg-black hover:text-gray-300'
-                                        } ${effectiveLandscape ? 'w-full text-left' : ''}`}
-                                    style={{
-                                        borderColor: isActive ? 'white' : catColor,
-                                        color: isActive ? 'black' : catColor,
-                                        backgroundColor: isActive ? catColor : 'black'
-                                    }}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
+                                        ${isActive
+                                            ? 'text-white animate-tab-pulsate'
+                                            : 'bg-black text-zinc-400 hover:bg-zinc-900 shadow-none'
+                                        } 
+                                        ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
+                                    `}
+                                    style={isActive ? { 
+                                        backgroundColor: darkenColor(catColor, 20),
+                                        '--pulse-color': catColor 
+                                    } as any : {}}
                                 >
-                                    <span className="block skew-x-[10deg]">{t(catKey)}</span>
+                                    <span>{t(catKey)}</span>
+                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
                                 </button>
                             );
                         })}
                     </div>
                 </div>
 
-                <div className="flex-1 flex flex-col min-w-0 pr-safe">
-                    {effectiveLandscape && (
-                        <div className="flex justify-between items-center bg-yellow-900/10 px-4 py-2 border border-yellow-500/30 shrink-0 mb-4">
-                            <span className="text-xs font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
-                            <div className="flex items-center gap-2">
-                                <span className="text-2xl font-semibold text-white">{tempStats.scrap}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {!effectiveLandscape && (
-                        <div className="flex justify-between items-center bg-yellow-900/10 px-3 py-2 border border-yellow-500/30 shrink-0 mb-2">
-                            <span className="text-[10px] font-bold text-yellow-500 uppercase">{t('ui.scrap')}</span>
-                            <div className="flex items-center gap-2">
-                                <span className="text-lg font-semibold text-white">{tempStats.scrap}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Main Content Area */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 overflow-y-auto pb-4 pr-1 custom-scrollbar">
+                <div className="flex-1 flex flex-col min-w-0 pr-safe min-h-0">
+                     {/* Main Content Area */}
+                    <div className={`${isMobileDevice && !isLandscapeMode ? 'flex flex-col gap-10' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'} overflow-y-auto pb-8 pr-1 custom-scrollbar`}>
                     {Object.values(WEAPONS).filter(w => w.category === activeTab).map((weapon) => {
                         const level = tempWeaponLevels[weapon.name] || 1;
                         const cost = SCRAP_COST_BASE * level;
@@ -155,26 +158,41 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                             <div
                                 key={weapon.name}
                                 onClick={() => !isEquipped && isEquippable && handleEquip(weapon.name, weapon.category)}
-                                className={`relative border-2 transition-all group overflow-hidden flex ${isMobileDevice ? 'flex-row h-32' : 'flex-col min-h-[300px]'} 
+                                className={`relative border-2 transition-all group overflow-hidden flex self-start ${isMobileDevice && !isLandscapeMode ? 'flex-col w-full' : (isMobileDevice ? 'flex-col' : 'flex-col min-h-[300px]')} 
                                     ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}
                                 `}
                                 style={{
-                                    borderColor: isEquipped ? categoryColor : '#1f2937',
+                                    borderColor: isEquipped ? categoryColor : '#374151',
                                     backgroundColor: isEquipped ? `${categoryColor}15` : 'rgba(17, 24, 39, 0.4)',
+                                    boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none'
                                 }}
                             >
-                                {/* Left Side (Image) on Mobile, Top Side on Desktop */}
-                                <div
-                                    className={`${isMobileDevice ? 'w-32 h-full' : 'w-full h-40'} border-r md:border-r-0 md:border-b flex items-center justify-center relative shrink-0 bg-black/40`}
+                                {/* Left Side column on Mobile, Top Side on Desktop */}
+                                 <div
+                                    className={`${isMobileDevice && !isLandscapeMode ? 'w-full' : (isMobileDevice ? 'w-full' : 'w-full')} flex flex-col border-b relative shrink-0 bg-black/40`}
                                     style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
                                 >
-                                    <div className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} transition-transform group-hover:scale-110 duration-500 flex items-center justify-center`}>
+                                    <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
                                         {weapon.iconIsPng ? (
-                                            <img src={weapon.icon} alt="" className="w-full h-full object-contain" />
+                                            <img src={weapon.icon} alt="" className="w-full h-full object-contain p-4" />
                                         ) : (
-                                            <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                                            <div className="w-16 h-16 md:w-24 md:h-24" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
                                         )}
                                     </div>
+
+                                    {/* Upgrade Button UNDER image */}
+                                    {isUpgradeable && (
+                                        <button
+                                            onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
+                                            disabled={!canAfford}
+                                            className={`w-full py-2.5 px-2 text-[10px] font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center transform ${canAfford
+                                                ? 'bg-yellow-950/20 text-yellow-500 hover:bg-yellow-950/40 shadow-inner'
+                                                : 'bg-black text-gray-700 cursor-not-allowed'
+                                                }`}
+                                        >
+                                            {t('ui.upgrade')} ({cost})
+                                        </button>
+                                    )}
 
                                     <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
                                         {t('ui.lvl')} {level}
@@ -198,18 +216,20 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                         <div className={`flex flex-col gap-y-2 ${isMobileDevice ? 'text-xs' : 'text-sm'} font-mono text-gray-400`}>
                                             <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                 <span className="opacity-60">{t('ui.damage')}</span>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-white font-bold text-lg leading-none">{Math.floor(weapon.baseDamage)}</span>
-                                                    {level > 1 && (
-                                                        <span className="text-yellow-500 text-[10px] font-bold">+ {Math.floor(weapon.baseDamage * (level - 1) * 0.1)}</span>
-                                                    )}
+                                                <div className="flex items-baseline gap-1.5">
+                                                    <span className="text-yellow-500 font-bold text-lg leading-none">
+                                                        {Math.floor(weapon.baseDamage + (weapon.baseDamage * (level - 1) * 0.1))}
+                                                    </span>
+                                                    <span className="text-white text-[10px] font-bold opacity-80 whitespace-nowrap">
+                                                        ({Math.floor(weapon.baseDamage)} + <span className="text-yellow-500">{Math.floor(weapon.baseDamage * (level - 1) * 0.1)}</span>)
+                                                    </span>
                                                 </div>
                                             </div>
                                             <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                 <span className="opacity-60">{t('ui.range')}</span>
                                                 <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                                             </div>
-                                            {!isMobileDevice && (
+                                            {(isMobileDevice || weapon.category !== WeaponCategory.THROWABLE) && (
                                                 <>
                                                     <div className="flex justify-between border-b border-gray-800/50 pb-1">
                                                         <span className="opacity-60">{t('ui.magazine')}</span>
@@ -224,21 +244,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-2 items-center mt-auto">
-                                        {isUpgradeable && (
-                                            <button
-                                                onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
-                                                disabled={!canAfford}
-                                                className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-bold uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95 skew-x-[-10deg] ${canAfford
-                                                    ? 'bg-yellow-900/20 text-yellow-500 border-yellow-500 hover:bg-yellow-900/40 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
-                                                    : 'bg-black text-gray-600 border-gray-800 cursor-not-allowed'
-                                                    }`}
-                                            >
-                                                <span className={`${isMobileDevice ? 'text-[10px]' : 'text-sm'} leading-none skew-x-[10deg]`}>{t('ui.upgrade')}</span>
-                                                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[9px]'} font-bold text-yellow-500 skew-x-[10deg]`}>{cost}</span>
-                                            </button>
-                                        )}
-                                    </div>
+                                    {/* Desktop upgrade button removed from here, already placed under image */}
                                 </div>
                             </div>
                         );

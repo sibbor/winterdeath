@@ -78,9 +78,9 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
         }, 2000);
     };
 
-    const hpP = Math.max(0, (hp / maxHp) * 100);
-    const stP = Math.max(0, (stamina / maxStamina) * 100);
-    const xpP = Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100));
+    const hpP = maxHp > 0 ? Math.max(0, (hp / maxHp) * 100) : 0;
+    const stP = maxStamina > 0 ? Math.max(0, (stamina / maxStamina) * 100) : 0;
+    const xpP = nextLevelXp > 0 ? Math.min(100, Math.max(0, (currentXp / nextLevelXp) * 100)) : 0;
     const speedKmH = Math.round(vehicleSpeed * 3.6);
 
     const [isShaking, setIsShaking] = useState(false);
@@ -274,7 +274,7 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                         ||
                     </button>
                     <div className="flex flex-col items-center">
-                        <span className="text-3xl font-bold text-white font-mono leading-none">
+                        <span className="text-3xl font-thin text-white font-mono leading-none">
                             {kills}
                         </span>
                         <span className="text-[9px] font-bold text-[#ff3333] tracking-[0.2em] uppercase opacity-80">

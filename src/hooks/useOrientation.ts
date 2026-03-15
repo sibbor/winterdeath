@@ -1,20 +1,15 @@
 import { useState, useEffect } from 'react';
 
 export function useOrientation() {
-    const [isLandscapeMode, setIsLandscapeMode] = useState(false);
+    const [isLandscapeMode, setIsLandscapeMode] = useState(window.innerWidth > window.innerHeight);
 
     useEffect(() => {
-        const mql = window.matchMedia('(orientation: landscape)');
-
-        // Initial check
-        setIsLandscapeMode(mql.matches);
-
-        const handleChange = (e: MediaQueryListEvent) => {
-            setIsLandscapeMode(e.matches);
+        const checkOrientation = () => {
+            setIsLandscapeMode(window.innerWidth > window.innerHeight);
         };
 
-        mql.addEventListener('change', handleChange);
-        return () => mql.removeEventListener('change', handleChange);
+        window.addEventListener('resize', checkOrientation);
+        return () => window.removeEventListener('resize', checkOrientation);
     }, []);
 
     return { isLandscapeMode };

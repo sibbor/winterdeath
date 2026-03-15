@@ -95,36 +95,53 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         setTimeout(() => setActiveTab(current), 50);
     };
 
+    const darkenColor = (hex: string, percent: number) => {
+        const num = parseInt(hex.replace('#', ''), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) - amt;
+        const G = (num >> 8 & 0x00FF) - amt;
+        const B = (num & 0x0000FF) - amt;
+        return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
+    };
+
     return (
         <CampModalLayout
             title={t('stations.adventure_log')}
             titleColor="text-green-500"
             onClose={onClose}
-            onConfirm={onClose}
-            confirmLabel={t('ui.close')}
-            showCancel={false}
+            closeLabel={t('ui.close')}
+            fullHeight={true}
+            showCancel={true}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 {/* Tabs Bar */}
-                <div className={`relative shrink-0 ${effectiveLandscape ? 'w-48 border-r-2 border-gray-800 pr-4' : ''}`}>
+                <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     {!effectiveLandscape && (
                         <>
-                            <div className="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black via-black/50 to-transparent z-10 pointer-events-none" />
-                            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black via-black/50 to-transparent z-10 pointer-events-none" />
+                            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black via-black/80 to-transparent z-10 pointer-events-none" />
+                            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black via-black/80 to-transparent z-10 pointer-events-none" />
                         </>
                     )}
-                    <div className={`flex ${effectiveLandscape ? 'flex-col gap-2' : 'gap-2 md:gap-4 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto pl-2 pt-2 min-h-[50px] md:min-h-[80px] items-end scrollbar-hide'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-10 pt-2 min-h-[50px] md:min-h-[80px] items-end scrollbar-hide'}`}>
                         {tabs.map(tab => {
                             const isActive = activeTab === tab.id;
+                            const pulseColor = themeColor; // Green for Adventure Log station
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                                    className={`px-3 md:px-6 py-1.5 md:py-4 text-[10px] md:text-lg font-bold uppercase tracking-widest transition-all skew-x-[-10deg] border-2 whitespace-nowrap ${isActive
-                                        ? 'text-black border-white'
-                                        : 'bg-black text-green-600 border-green-800 hover:border-green-500 hover:text-green-300'
-                                    } ${effectiveLandscape ? 'w-full text-left' : ''}`}
-                                    style={{ backgroundColor: isActive ? themeColor : 'black' }}
+                                    className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
+                                        ${isActive
+                                            ? 'text-white animate-tab-pulsate'
+                                            : 'bg-black text-zinc-400 hover:bg-zinc-900'
+                                        } 
+                                        ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
+                                    `}
+                                    style={isActive ? { 
+                                        backgroundColor: darkenColor(pulseColor, 20), // 20% darker background
+                                        '--pulse-color': pulseColor // Original color for pulse
+                                    } as any : {}}
                                 >
-                                    <span className="block skew-x-[10deg]">{tab.label}</span>
+                                    <span>{tab.label}</span>
+                                    {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
                                 </button>
                             );
                         })}
@@ -134,11 +151,11 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pr-safe">
                     {activeTab === 'stats' && <StatsTab stats={stats} isMobile={!effectiveLandscape} />}
-                    {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} />}
-                    {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} />}
-                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobile={!effectiveLandscape} />}
-                    {activeTab === 'clues' && <CluesTab stats={stats} color={'#eab308'} />}
-                    {activeTab === 'poi' && <PoiTab stats={stats} color={'#3b82f6'} />}
+                    {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} isMobile={isMobileDevice} effectiveLandscape={effectiveLandscape} />}
+                    {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} isMobile={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
+                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobile={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
+                    {activeTab === 'clues' && <CluesTab stats={stats} color={'#eab308'} isMobile={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
+                    {activeTab === 'poi' && <PoiTab stats={stats} color={'#3b82f6'} isMobile={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
                 </div>
             </div>
         </CampModalLayout>
@@ -234,9 +251,10 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({ stats,
     );
 };
 
-const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
+const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean, effectiveLandscape?: boolean }> = ({ stats, color, isMobile, effectiveLandscape }) => {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className={`grid ${isMobile ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
+        {/* Force 1x1 on mobile even if landscape for Enemy/Boss as requested */}
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
                 const isSeen = (stats.seenEnemies || []).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
                 if (!isSeen) return null;
@@ -318,124 +336,130 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
     );
 };
 
-const BossTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
-    const sectors = [0, 1, 2, 3]; // Sectors with bosses
-
+const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobile, effectiveLandscape, isDebug }) => {
+    // Only four bosses (Sectors 1-4)
+    const sectors = [0, 1, 2, 3]; 
+    
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-12">
+        <div className="space-y-16 pb-12">
             {sectors.map(sectorIndex => {
                 const boss = BOSSES[sectorIndex];
-                if (!boss) return null;
-
-                const isSeen = (stats.seenBosses || []).includes(boss.name) || (stats.bossesDefeated || []).includes(sectorIndex);
-                const isDefeated = (stats.bossesDefeated || []).includes(sectorIndex);
-                const isUnlocked = isSeen || isDefeated;
-
-                // User requested: Only list data for encountered/discovered bosses
-                if (!isUnlocked) return null;
-
-                const itemColor = `#${boss.color.toString(16).padStart(6, '0')}`;
-
                 const theme = SECTOR_THEMES[sectorIndex];
-                const sectorName = theme ? t(theme.name) : `Sector ${sectorIndex + 1}`;
+                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
+                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex + 1}`) : '???';
+                
+                const isSeen = boss && ((stats.seenBosses || []).includes(boss.name) || (stats.bossesDefeated || []).includes(sectorIndex));
+                const isDefeated = (stats.bossesDefeated || []).includes(sectorIndex);
+                const isBossUnlocked = boss && (isSeen || isDefeated || isDebug);
 
                 return (
-                    <Card key={sectorIndex} isLocked={!isUnlocked} color={isUnlocked ? itemColor : '#4b5563'}>
-                        <div className="flex flex-col h-full">
-                            <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
-                                <div className="flex flex-col">
-                                    <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isUnlocked ? 'white' : '#4b5563' }}>
-                                        {isUnlocked ? t(boss.name) : t('ui.unknown_threat')}
-                                    </h3>
-                                    <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">{sectorName}</span>
-                                </div>
-                            </div>
+                    <div key={sectorIndex} className="space-y-6">
+                        <div className="flex flex-col border-b-2 border-zinc-800 pb-2">
+                            <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
+                                {sectorName}
+                            </h3>
+                        </div>
 
-                            {isUnlocked && (
-                                <div className="flex flex-col gap-6 flex-1">
-                                    <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
-                                        <div className="text-center">
-                                            <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
-                                            <div className="text-2xl font-bold text-white font-mono">{boss.hp}</div>
+                        <div className={`grid ${isMobile ? 'grid-cols-1 gap-4' : 'grid-cols-1 gap-8'}`}>
+                            {isBossUnlocked ? (
+                                <Card isLocked={false} color={boss ? `#${boss.color.toString(16).padStart(6, '0')}` : '#4b5563'}>
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
+                                            <div className="flex flex-col">
+                                                <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
+                                                    {t(boss.name)}
+                                                </h3>
+                                                {isDefeated && <span className="text-[10px] text-green-500 font-black uppercase tracking-widest mt-1">{t('ui.defeated')}</span>}
+                                            </div>
                                         </div>
-                                        <div className="text-center border-l border-gray-800">
-                                            <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
-                                            <div className="text-2xl font-bold text-white font-mono">{boss.speed.toFixed(1)}</div>
-                                        </div>
-                                        <div></div> {/* Placeholder for 3-col grid alignment */}
-                                    </div>
-                                    <div className="space-y-4">
-                                        <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(boss.name)}</p>
 
-                                        {boss.attacks && boss.attacks.length > 0 && (
-                                            <div className="space-y-2 mt-4">
-                                                <div className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex items-center gap-2">
-                                                    <div className="h-[1px] flex-1 bg-gray-800"></div>
-                                                    {t('ui.combat')}
-                                                    <div className="h-[1px] flex-1 bg-gray-800"></div>
+                                        <div className="flex flex-col gap-6 flex-1">
+                                            <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
+                                                <div className="text-center">
+                                                    <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
+                                                    <div className="text-2xl font-bold text-white font-mono">{boss.hp}</div>
                                                 </div>
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    {boss.attacks.map((attack, idx) => {
-                                                        const attackKey = attack.type.toUpperCase();
-                                                        const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
-                                                        return (
-                                                            <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
-                                                                <div className="flex justify-between items-center">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                                                                            {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
-                                                                        </span>
-                                                                        {attack.effect && (
-                                                                            <span className="text-[8px] text-red-500/80 uppercase font-black">{attack.effect}</span>
+                                                <div className="text-center border-l border-gray-800">
+                                                    <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.speed')}</div>
+                                                    <div className="text-2xl font-bold text-white font-mono">{boss.speed.toFixed(1)}</div>
+                                                </div>
+                                                <div></div>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <p className="text-gray-400 text-sm leading-relaxed">{getBossDescription(boss.name)}</p>
+
+                                                {boss.attacks && boss.attacks.length > 0 && (
+                                                    <div className="space-y-2 mt-4">
+                                                        <div className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex items-center gap-2">
+                                                            <div className="h-[1px] flex-1 bg-gray-800"></div>
+                                                            {t('ui.combat')}
+                                                            <div className="h-[1px] flex-1 bg-gray-800"></div>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 gap-2">
+                                                            {boss.attacks.map((attack, idx) => {
+                                                                const attackKey = attack.type.toUpperCase();
+                                                                const hasDesc = t(`attacks.${attackKey}.description`) !== `attacks.${attackKey}.description`;
+                                                                return (
+                                                                    <div key={idx} className="flex flex-col bg-zinc-900/40 px-3 py-2 rounded border border-gray-800/50">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <div className="flex flex-col">
+                                                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                                                                    {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="flex gap-4">
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                                    <span className="text-xs font-mono text-red-400">{attack.damage}</span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                                    <span className="text-xs font-mono text-blue-400">{attack.range}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        {hasDesc && (
+                                                                            <p className="text-[10px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">
+                                                                                {t(`attacks.${attackKey}.description`)}
+                                                                            </p>
                                                                         )}
                                                                     </div>
-                                                                    <div className="flex gap-4">
-                                                                        <div className="flex items-center gap-1">
-                                                                            <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
-                                                                            <span className="text-xs font-mono text-red-400">{attack.damage}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-1">
-                                                                            <span className="text-[8px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
-                                                                            <span className="text-xs font-mono text-blue-400">{attack.range}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                {hasDesc && (
-                                                                    <p className="text-[10px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">
-                                                                        {t(`attacks.${attackKey}.description`)}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-
+                                        </div>
                                     </div>
+                                </Card>
+                            ) : (
+                                <div className="h-48 flex items-center justify-center border-2 border-dashed border-gray-800 bg-black/20 rounded grayscale opacity-50">
+                                    <span className="text-gray-700 font-mono text-4xl tracking-[2rem] uppercase ml-8 mt-2">???</span>
                                 </div>
                             )}
                         </div>
-                    </Card>
+                    </div>
                 );
             })}
         </div>
     );
 };
 
-const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({ stats, isMobile }) => {
+const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, isMobile, effectiveLandscape, isDebug }) => {
     const foundIds = stats.collectiblesDiscovered || [];
     const viewedIds = stats.viewedCollectibles || [];
 
-    // Group collectibles by sector for better organization - ascending
-    const sectors = [1, 2, 3, 4, 5];
+    // Group collectibles by sector
+    const sectors = [1, 2, 3, 4, 5, 6];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {sectors.map(sectorId => {
                 const sectorCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sectorId);
                 const theme = SECTOR_THEMES[sectorId - 1];
-                const sectorName = theme ? t(theme.name) : `Sector ${sectorId}`;
+                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
+                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
                 const foundInSector = sectorCollectibles.filter(c => foundIds.includes(c.id)).length;
 
                 return (
@@ -444,17 +468,16 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
                             <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
                                 {sectorName}
                             </h3>
-    <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
+                            <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
                                 {foundInSector} / {sectorCollectibles.length} {t('ui.collected')}
                             </span>
                         </div>
 
-                        <div className={`grid ${isMobile ? 'grid-cols-2 gap-2' : 'grid-cols-1 md:grid-cols-2 gap-6'}`}>
+                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
                             {sectorCollectibles.map(item => {
                                 const isFound = foundIds.includes(item.id);
-                                const isNew = isFound && !viewedIds.includes(item.id);
                                 return (
-                                    <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'}`}>
+                                    <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobile ? 'mb-2' : ''}`}>
                                         <DescriptionExpansion item={item} isFound={isFound} isMobile={isMobile} />
                                     </div>
                                 );
@@ -467,7 +490,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobile?: boolean }> = ({
     );
 };
 
-const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
+const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobile, effectiveLandscape, isDebug }) => {
     const cluesFound = stats.cluesFound || [];
     const sectors = [1, 2, 3, 4, 5, 6];
 
@@ -475,10 +498,10 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
         <div className="space-y-16 pb-12">
             {sectors.map(sectorId => {
                 const theme = SECTOR_THEMES[sectorId - 1];
-                const sectorName = theme ? t(theme.name) : `Sector ${sectorId}`;
+                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
+                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
                 // Filter clues for this sector from cluesFound
-                // Clues shouldn't include collectibles, POI story keys, or event tags
                 const sectorClues = cluesFound.filter(id =>
                     id.startsWith(`s${sectorId}_`) &&
                     !id.includes('_collectible_') &&
@@ -497,9 +520,8 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                             </h3>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
                             {sectorClues.length > 0 ? sectorClues.map((clueId) => {
-                                // Default detection of THOUGHT vs SPEAK
                                 const isThought = clueId.includes('thought');
                                 const type = isThought ? 'THOUGHT' : 'SPEAK';
                                 const typeColor = isThought ? '#3b82f6' : '#eab308';
@@ -508,7 +530,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
                                     <Card key={clueId} isLocked={false} color={typeColor}>
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest skew-x-[-10deg]" style={{ backgroundColor: typeColor }}>
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: typeColor }}>
                                                     {type}
                                                 </span>
                                             </div>
@@ -532,7 +554,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, colo
 };
 
 // --- POI TAB ---
-const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color }) => {
+const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobile?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobile, effectiveLandscape, isDebug }) => {
     const visitedList = stats.discoveredPOIs || [];
     const sectors = [1, 2, 3, 4, 5, 6];
 
@@ -540,7 +562,8 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
         <div className="space-y-16 pb-12">
             {sectors.map(sectorId => {
                 const theme = SECTOR_THEMES[sectorId - 1];
-                const sectorName = theme ? t(theme.name) : `Sector ${sectorId}`;
+                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
+                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
                 // Filter POIs for this sector from visited list
                 const sectorPOIs = visitedList.filter(id => id.startsWith(`s${sectorId}_poi_`));
@@ -553,7 +576,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
                             </h3>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
                             {sectorPOIs.length > 0 ? sectorPOIs.map((poiId) => {
                                 return (
                                     <Card key={poiId} isLocked={false} color={color}>
@@ -562,7 +585,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string }> = ({ stats, color 
                                                 <h3 className="text-2xl font-semibold uppercase tracking-tighter text-white">
                                                     {t(`poi.${poiId}_title`)}
                                                 </h3>
-                                                <span className="text-[10px] bg-blue-900/40 text-blue-400 px-3 py-1 rounded border border-blue-900 font-black tracking-widest skew-x-[-10deg]">POI</span>
+                                                <span className="text-[10px] bg-blue-900/40 text-blue-400 px-3 py-1 rounded border border-blue-900 font-black tracking-widest">POI</span>
                                             </div>
                                             <p className="text-lg text-gray-200 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: color }}>
                                                 {t(`poi.${poiId}_story`)}

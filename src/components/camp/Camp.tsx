@@ -61,6 +61,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
     const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string, subText?: string } | null>(null);
+    const [idleTooltips, setIdleTooltips] = useState<Array<{ x: number, y: number, text: string, id: string }>>([]);
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
 
@@ -408,6 +409,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
             monitor.end('chatter');
 
             monitor.begin('raycasting');
+            const isMobileLabels = isMobileDevice && !isIdleRef.current;
 
             if (isRunning && !activeOverlayRef.current) {
                 frameRef.current++;
@@ -415,10 +417,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
                 if (shouldUpdateInteractions) {
                     scene.updateMatrixWorld();
+                    const width = container.clientWidth, height = container.clientHeight;
+
+                    // Standard raycast tooltip
                     raycaster.setFromCamera(mouse, camera.threeCamera);
                     const hits = raycaster.intersectObjects(interactables);
                     let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
-                    const width = container.clientWidth, height = container.clientHeight;
 
                     if (hits.length > 0) {
                         let target: any = hits[0].object;
@@ -450,6 +454,26 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
                     // Use the cached outline keys to avoid array allocation
                     for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
+
+                    // Mobile Labels: Project all stations
+                    if (isMobileLabels) {
+                        const idles: Array<{ x: number, y: number, text: string, id: string }> = [];
+                        for (let i = 0; i < CAMP_SCENE.stationPositions.length; i++) {
+                            const station = CAMP_SCENE.stationPositions[i];
+                            const vec = _v1.copy(station.pos);
+                            vec.y += 2.2; // A bit higher for idle labels
+                            vec.project(camera.threeCamera);
+                            idles.push({
+                                id: station.id,
+                                text: t(`stations.${station.id}`),
+                                x: (vec.x * 0.5 + 0.5) * width,
+                                y: (-(vec.y * 0.5) + 0.5) * height
+                            });
+                        }
+                        setIdleTooltips(idles);
+                    } else if (idleTooltips.length > 0) {
+                        setIdleTooltips([]);
+                    }
                 }
 
             } else {
@@ -484,9 +508,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
     return (
         <div className={`relative w-full h-full bg-black font-sans overflow-hidden`} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
             <div ref={containerRef} className="absolute inset-0" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }} />
-            <div ref={chatOverlayRef} className="absolute inset-0 pointer-events-none z-40 overflow-hidden" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 40 }} />
+            <div ref={chatOverlayRef} className={`absolute inset-0 pointer-events-none z-40 overflow-hidden transition-opacity duration-1000 ${isIdle ? 'opacity-0' : 'opacity-100'}`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 40 }} />
 
-            {tooltip && tooltip.text && (
+            {tooltip && tooltip.text && !isIdle && (
                 <div className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2" style={{ left: tooltip.x, top: tooltip.y }}>
                     <div className="bg-black/90 border-2 border-black px-4 py-1 text-white font-black uppercase tracking-wider text-lg md:text-xl shadow-2xl">
                         {tooltip.text}
@@ -500,6 +524,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                 </div>
             )}
 
+            {/* Mobile Station Labels (Floating Tooltips) - Visible when NOT idle */}
+            {!isIdle && isMobileDevice && idleTooltips.map(it => (
+                <div key={it.id} className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2 animate-[fadeIn_1s_ease-out_forwards]" style={{ left: it.x, top: it.y }}>
+                    <div className="bg-black/90 border-2 border-black px-3 py-1 text-white font-black uppercase tracking-wider text-sm shadow-2xl">
+                        {it.text}
+                    </div>
+                    <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-black mt-[-1px]"></div>
+                </div>
+            ))}
+
             {!activeOverlay && (
                 <CampHUD
                     stats={stats} hoveredStation={hoveredStation} currentSectorName={t(SECTOR_THEMES[currentSector]?.name || '')} hasCheckpoint={!!hasCheckpoint} isIdle={isIdle}
@@ -510,7 +544,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
                     onOpenSettings={() => setActiveOverlay('SETTINGS')}
                     onStartSector={() => { }}
                     debugMode={debugMode} onToggleDebug={onToggleDebug} onResetGame={() => setActiveOverlay('RESET_CONFIRM')}
-                    onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 10 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
+                    onDebugScrap={() => onSaveStats({ ...stats, scrap: stats.scrap + 100 })} onDebugSkill={() => onSaveStats({ ...stats, skillPoints: stats.skillPoints + 1 })}
                     isMobileDevice={isMobileDevice}
                 />
             )}

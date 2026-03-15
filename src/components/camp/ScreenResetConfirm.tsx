@@ -21,8 +21,8 @@ const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCa
             isSmall={true}
         >
             <div className="flex flex-col items-center justify-center py-4 max-w-xl mx-auto text-center space-y-8">
-                <div className="bg-red-900/40 border-2 border-red-600 p-6 skew-x-[-5deg] shadow-[inset_0_0_20px_rgba(220,38,38,0.2)]">
-                    <p className="text-red-100 text-lg font-semibold uppercase tracking-tight skew-x-[5deg] leading-tight">
+                <div className="bg-red-900/40 border-2 border-red-600 p-6 shadow-[inset_0_0_20px_rgba(220,38,38,0.2)]">
+                    <p className="text-red-100 text-lg font-semibold uppercase tracking-tight leading-tight">
                         {t('ui.reset_confirm_desc')}
                     </p>
                 </div>
