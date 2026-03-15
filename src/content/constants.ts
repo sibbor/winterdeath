@@ -17,6 +17,10 @@ export const WEATHER = {
     WIND_MAX: 0.05
 };
 
+// LightningSystem
+export const MAX_VISIBLE_LIGHTS = 12;
+export const MAX_SHADOW_CASTING_LIGHTS = 8;
+
 // Flashlight
 export const FLASHLIGHT = {
     name: 'flashlight',

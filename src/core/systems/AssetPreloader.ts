@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProce
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
-import { TreeType } from '../../content/constants';
+import { TreeType, MAX_VISIBLE_LIGHTS, MAX_SHADOW_CASTING_LIGHTS } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
@@ -67,61 +67,32 @@ export const AssetPreloader = {
                 if (yieldToMain) await yieldToMain();
 
                 beginInternal('asset_warmup_ui_images');
-                const uiIcons = [
-                    'pistol.png', 'revolver.png', 'smg.png', 'shotgun.png',
-                    'rifle.png', 'minigun.png', 'flamethrower.png', 'arc_cannon.png',
-                    'grenade.png', 'molotov.png', 'flashbang.png', 'radio.png'
+                const uiAssets = [
+                    '/assets/ui/icon_dash.png',
+                    '/assets/ui/icon_reload.png',
+                    '/assets/ui/icon_flashlight.png',
+                    '/assets/ui/icon_flashlight_off.png',
+                    '/assets/icons/weapons/pistol.png',
+                    '/assets/icons/weapons/revolver.png',
+                    '/assets/icons/weapons/smg.png',
+                    '/assets/icons/weapons/shotgun.png',
+                    '/assets/icons/weapons/rifle.png',
+                    '/assets/icons/weapons/minigun.png',
+                    '/assets/icons/weapons/flamethrower.png',
+                    '/assets/icons/weapons/arc_cannon.png',
+                    '/assets/icons/weapons/grenade.png',
+                    '/assets/icons/weapons/molotov.png',
+                    '/assets/icons/weapons/flashbang.png',
+                    '/assets/icons/weapons/radio.png'
                 ];
 
-                await Promise.all(uiIcons.map(file => new Promise<void>(resolve => {
+                await Promise.all(uiAssets.map(url => {
                     const img = new Image();
-                    img.crossOrigin = 'Anonymous';
-
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                        if (!ctx) {
-                            resolve();
-                            return;
-                        }
-
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        ctx.drawImage(img, 0, 0);
-
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const data = imageData.data;
-
-                        for (let i = 0; i < data.length; i += 4) {
-                            const r = data[i];
-                            const g = data[i + 1];
-                            const b = data[i + 2];
-
-                            const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-                            if (luminance < 60) {
-                                data[i + 3] = 0;
-                            } else {
-                                data[i] = 255;
-                                data[i + 1] = 255;
-                                data[i + 2] = 255;
-                                data[i + 3] = luminance;
-                            }
-                        }
-
-                        ctx.putImageData(imageData, 0, 0);
-                        TRANSPARENT_UI_ICONS[file] = canvas.toDataURL('image/png');
-                        resolve();
-                    };
-
-                    img.onerror = () => {
-                        console.warn(`[AssetPreloader] Missing UI icon: ${file}`);
-                        TRANSPARENT_UI_ICONS[file] = '';
-                        resolve();
-                    };
-
-                    img.src = `/assets/icons/weapons/${file}`;
-                })));
+                    img.src = url;
+                    return img.decode().catch(() => {
+                        console.warn(`[AssetPreloader] Failed to pre-decode UI image: ${url}`);
+                    });
+                }));
 
                 endInternal('asset_warmup_ui_images');
                 if (yieldToMain) await yieldToMain();
@@ -218,6 +189,17 @@ export const AssetPreloader = {
                     skyLight.shadow.camera.far = 300;
                     skyLight.shadow.bias = -0.0005;
                     scene.add(skyLight);
+                }
+            }
+
+            // [VINTERDÖD] Sync with LightingSystem's MAX_VISIBLE_LIGHTS
+            // Force WebGL to compile the shader permutation for exactly 12 PointLights upfront.
+            if (isSector || target === 'CORE') {
+                for (let i = 0; i < MAX_VISIBLE_LIGHTS; i++) {
+                    const dummyLight = new THREE.PointLight(0xffaa00, 1, 10);
+                    // Prep the shadow map permutation for the budget we set (8)
+                    if (i < MAX_SHADOW_CASTING_LIGHTS) dummyLight.castShadow = true;
+                    scene.add(dummyLight);
                 }
             }
 
