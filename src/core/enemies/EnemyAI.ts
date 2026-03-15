@@ -74,7 +74,11 @@ export const EnemyAI = {
 
         // --- 1. HANDLE INITIAL DEATH TRIGGER ---
         if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
-            const isWeapon = Object.values(WeaponType).includes(e.lastDamageType as WeaponType);
+            const dmgType = e.lastDamageType || '';
+            const weapon = WEAPONS[dmgType as WeaponType];
+
+            // O(1) Dictionary lookup instead of Object.values().includes()
+            const isWeapon = !!weapon;
             const cause = isWeapon ? `Weapon (${e.lastDamageType})` : `Effect (${e.lastDamageType})`;
             logAI(`[AI] ${e.type}_${e.id} killed by: ${cause}`);
             e.deathTimer = now;
@@ -83,10 +87,7 @@ export const EnemyAI = {
             const widthScale = e.widthScale || 1.0;
             e.mesh.scale.set(baseScale * widthScale, baseScale, baseScale * widthScale);
 
-            const dmgType = e.lastDamageType || '';
             const isHighImpact = e.lastHitWasHighImpact;
-            const weapon = WEAPONS[dmgType as WeaponType];
-
             let weaponImpact = EnemyDeathState.SHOT;
             if (weapon && weapon.impactType) {
                 weaponImpact = weapon.impactType;
@@ -115,7 +116,9 @@ export const EnemyAI = {
 
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
-                    const forwardMomentum = e.velocity.dot(_v1.clone().negate());
+                    // Eliminated .clone() hidden in dot product
+                    _v2.copy(_v1).negate();
+                    const forwardMomentum = e.velocity.dot(_v2);
                     e.fallForward = forwardMomentum > 1.5;
 
                     e.deathVel.copy(e.velocity).multiplyScalar(0.1);
@@ -129,7 +132,8 @@ export const EnemyAI = {
                 e.deathState = EnemyDeathState.GENERIC;
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
-                    const forwardMomentum = e.velocity.dot(_v1.clone().negate());
+                    _v2.copy(_v1).negate();
+                    const forwardMomentum = e.velocity.dot(_v2);
                     e.fallForward = forwardMomentum > 1.5;
                     e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
                 }
@@ -275,7 +279,9 @@ export const EnemyAI = {
                 e.mesh.quaternion.setFromEuler(e.mesh.rotation);
 
                 if (e.mesh.position.y <= 0.1) {
-                    e.mesh.userData.spinVel.multiplyScalar(Math.max(0, 1 - 6.0 * delta));
+                    e.mesh.userData.spinVel.x *= Math.max(0, 1 - 6.0 * delta);
+                    e.mesh.userData.spinVel.y *= Math.max(0, 1 - 6.0 * delta);
+                    e.mesh.userData.spinVel.z *= Math.max(0, 1 - 6.0 * delta);
                 }
 
                 if (e.stunTimer < 0.6) {
@@ -328,9 +334,10 @@ export const EnemyAI = {
 
                 if (odSq < separationRadiusSq && odSq > 0.001) {
                     const od = Math.sqrt(odSq);
+                    const invOd = 1.0 / od; // Inlined division optimization
                     const pushStrength = (separationRadius - od) / separationRadius;
-                    _v6.x += (odx / od) * pushStrength * 1.5;
-                    _v6.z += (odz / od) * pushStrength * 1.5;
+                    _v6.x += (odx * invOd) * pushStrength * 1.5;
+                    _v6.z += (odz * invOd) * pushStrength * 1.5;
                 }
             }
             if (_v6.lengthSq() > 9.0) _v6.normalize().multiplyScalar(3.0);
@@ -338,12 +345,22 @@ export const EnemyAI = {
 
         let heardNoise = false;
         let noisePos: THREE.Vector3 | null = null;
+
         if (!canSeePlayer && noiseEvents.length > 0) {
             for (let i = 0; i < noiseEvents.length; i++) {
                 const n = noiseEvents[i];
                 if (!n.active) continue;
-                if (e.mesh.position.distanceToSquared(n.pos) < (n.radius * n.radius)) {
-                    heardNoise = true; noisePos = n.pos; break;
+
+                // Inlined distanceToSquared to avoid V8 function call overhead
+                const ndx = e.mesh.position.x - n.pos.x;
+                const ndy = e.mesh.position.y - n.pos.y;
+                const ndz = e.mesh.position.z - n.pos.z;
+                const nDistSq = ndx * ndx + ndy * ndy + ndz * ndz;
+
+                if (nDistSq < (n.radius * n.radius)) {
+                    heardNoise = true;
+                    noisePos = n.pos;
+                    break;
                 }
             }
         }
@@ -372,7 +389,7 @@ export const EnemyAI = {
 
             case AIState.WANDER:
                 e.searchTimer -= delta;
-                _v1.copy(e.mesh.position).addScaledVector(e.velocity, delta);
+                _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
                 if (canSeePlayer) {
@@ -528,11 +545,11 @@ export const EnemyAI = {
                     e.attackTimer -= delta;
                     const att = e.attacks?.[e.currentAttackIndex!];
 
-                    // Roterar alltid mot spelaren
+                    // Orient towards player
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
 
-                    // Kör kontinuerlig logik för boss-attacker (Beam, Chain)
+                    // Continuous logic for boss attacks (Beam, Chain)
                     if (att && att.activeTime) {
                         EnemyAttackHandler.updateContinuousAttack(e, att, delta, playerPos, callbacks);
                     }
@@ -569,11 +586,14 @@ export const EnemyAI = {
 
         // --- 10. COOLDOWNS & BOUNCE ANIMATION ---
 
-        // Zero-GC: Decrement all individual attack timers
-        for (const key in e.attackCooldowns) {
-            if (e.attackCooldowns[key] > 0) {
-                e.attackCooldowns[key] -= delta * 1000;
-                if (e.attackCooldowns[key] < 0) e.attackCooldowns[key] = 0;
+        // Zero-GC: Using array iteration instead of slow for...in
+        if (e.attacks) {
+            for (let i = 0; i < e.attacks.length; i++) {
+                const atkType = e.attacks[i].type;
+                const cd = e.attackCooldowns[atkType];
+                if (cd !== undefined && cd > 0) {
+                    e.attackCooldowns[atkType] = Math.max(0, cd - delta * 1000);
+                }
             }
         }
 
@@ -593,7 +613,12 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     const dist = _v2.length();
     if (dist < 0.01) return;
 
-    _v2.divideScalar(dist);
+    // Inlined division
+    const invDist = 1.0 / dist;
+    _v2.x *= invDist;
+    _v2.y *= invDist;
+    _v2.z *= invDist;
+
     let curSpeed = speed * 10;
     if (e.slowTimer > 0) curSpeed *= 0.55;
 
@@ -604,7 +629,13 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     }
 
     e.velocity.copy(_v2).multiplyScalar(curSpeed);
-    _v4.copy(e.mesh.position).add(_v3);
+
+    // Inlined vector addition
+    _v4.set(
+        e.mesh.position.x + _v3.x,
+        e.mesh.position.y + _v3.y,
+        e.mesh.position.z + _v3.z
+    );
 
     const baseScale = e.originalScale || 1.0;
     const hitRadius = 0.5 * baseScale * (e.widthScale || 1.0);
