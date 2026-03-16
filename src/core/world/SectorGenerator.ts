@@ -1231,11 +1231,14 @@ export const SectorGenerator = {
         }
 
         // 5. Auto-Weather Sync
-        if (!override) {
+        if (!override && zones && zones.length > 0) {
             if (maxWeight > 0.5) {
                 events.setWeather(activeWeather, 1600);
             } else if (maxWeight < 0.2) {
-                events.setWeather('none', 0);
+                // Fallback to sector default if we have zones but have left them
+                const defWeather = defEnv.weather?.type || 'none';
+                const defCount = defEnv.weather?.particles || 0;
+                events.setWeather(defWeather, defCount);
             }
         }
     },
