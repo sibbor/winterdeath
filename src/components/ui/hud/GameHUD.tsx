@@ -205,9 +205,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         {Array.from({ length: stackMax }).map((_, i) => (
                             <div key={i}
                                 className={`h-1.5 flex-1 ${i < stackCurrent ? 'shadow-sm' : 'bg-zinc-800 border border-zinc-700'}`}
-                                style={{ 
-                                    backgroundColor: i < stackCurrent ? WeaponCategoryColors.THROWABLE : undefined, 
-                                    boxShadow: i < stackCurrent ? `0 0 5px ${WeaponCategoryColors.THROWABLE}` : undefined 
+                                style={{
+                                    backgroundColor: i < stackCurrent ? WeaponCategoryColors.THROWABLE : undefined,
+                                    boxShadow: i < stackCurrent ? `0 0 5px ${WeaponCategoryColors.THROWABLE}` : undefined
                                 }}
                             />
                         ))}
@@ -259,8 +259,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
         return (
             <div className="segmented-health-bar">
                 {Array.from({ length: totalSegments }).map((_, i) => (
-                    <div 
-                        key={i} 
+                    <div
+                        key={i}
                         className={`health-segment ${i < activeSegments ? colorClass : ''}`}
                     />
                 ))}
@@ -297,18 +297,18 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     return (
         <div className={`absolute inset-0 pointer-events-none transition-all duration-500 ease-in ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
-            
+
             {/* 1. TOP-ROW: STATUS & KILLS */}
             <div className="absolute top-8 left-8 right-12 flex justify-between items-start">
-                
+
                 {/* 1.1 TOP-LEFT: HP, STAMINA, XP */}
                 <div className={`flex flex-col gap-1.5 w-80 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
                     {/* HP Bar */}
                     <div className="hud-bar-container h-10 w-full group">
                         <div className="h-full bg-red-900/20 relative">
-                            <div 
-                                className="h-full bg-[#ff3333] hud-bar-glow transition-all duration-300" 
-                                style={{ width: `${hpP}%`, boxShadow: '0 0 15px rgba(255, 51, 51, 0.6)' }} 
+                            <div
+                                className="h-full bg-[#ff3333] hud-bar-glow transition-all duration-300"
+                                style={{ width: `${hpP}%`, boxShadow: '0 0 15px rgba(255, 51, 51, 0.6)' }}
                             />
                             <div className="absolute inset-0 flex items-center justify-start px-3">
                                 <span className="text-[13px] text-white font-mono font-bold tracking-tighter">
@@ -320,18 +320,18 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     {/* Stamina Bar */}
                     <div className="hud-bar-container h-4 w-full">
                         <div className="h-full bg-purple-900/20">
-                            <div 
-                                className="h-full bg-[#a855f7] hud-bar-glow transition-all duration-300" 
-                                style={{ width: `${stP}%`, boxShadow: '0 0 10px rgba(168, 85, 247, 0.5)' }} 
+                            <div
+                                className="h-full bg-[#a855f7] hud-bar-glow transition-all duration-300"
+                                style={{ width: `${stP}%`, boxShadow: '0 0 10px rgba(168, 85, 247, 0.5)' }}
                             />
                         </div>
                     </div>
                     {/* XP Bar */}
                     <div className="hud-bar-container h-2.5 w-full mb-1">
                         <div className="h-full bg-cyan-900/20">
-                            <div 
-                                className="h-full bg-[#06b6d4] hud-bar-glow transition-all duration-300" 
-                                style={{ width: `${xpP}%`, boxShadow: '0 0 8px rgba(6, 182, 212, 0.4)' }} 
+                            <div
+                                className="h-full bg-[#06b6d4] hud-bar-glow transition-all duration-300"
+                                style={{ width: `${xpP}%`, boxShadow: '0 0 8px rgba(6, 182, 212, 0.4)' }}
                             />
                         </div>
                     </div>
@@ -339,8 +339,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     {/* Passives (Family Boosts) - Small Circles under HP bars */}
                     <div className="flex gap-1.5 mt-1 ml-1">
                         {activePassives.map((name, i) => (
-                            <div 
-                                key={i} 
+                            <div
+                                key={i}
                                 className="w-6 h-6 rounded-full border-2 border-green-500 bg-black/80 flex items-center justify-center text-[10px] shadow-[0_0_5px_rgba(34,197,94,0.3)] pointer-events-auto cursor-help"
                                 onMouseEnter={() => showTooltip(t(`family.${name.toLowerCase()}`))}
                                 onMouseLeave={() => setTooltipContent(null)}
@@ -377,17 +377,17 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             {t('zombie_wave')}
                         </h2>
                         {/* Wave progress placeholder segment style */}
-                        {renderSegments(1, 1, 'active')} 
+                        {renderSegments(1, 1, 'active')}
                     </div>
                 ) : null}
             </div>
 
             {/* 3. BOTTOMBAR: ACTIONBAR */}
             <div className={`absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
-                
+
                 {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
                     <div className="mb-4 text-center animate-fadeIn">
-                         <span className="text-4xl font-bold text-white tracking-tighter font-mono">
+                        <span className="text-4xl font-bold text-white tracking-tighter font-mono">
                             {sectorStats?.unlimitedAmmo ? '∞' : ammo}
                         </span>
                         <span className="text-xl font-bold text-white/30 ml-1 font-mono">/ {magSize}</span>
@@ -398,10 +398,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 {isDriving ? (
                     <div className="flex flex-col items-center pt-8">
                         <div className="hud-bar-container px-12 py-4 shadow-2xl">
-                             <span className="text-6xl font-semibold text-white tracking-tighter block hud-text-glow">
+                            <span className="text-6xl font-semibold text-white tracking-tighter block hud-text-glow">
                                 {speedKmH}
                             </span>
-                             <span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] block text-center mt-1">KM/H</span>
+                            <span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] block text-center mt-1">KM/H</span>
                         </div>
                         <div className="flex gap-4 mt-6">
                             <div className={`px-6 py-2 border border-white/10 transition-all ${throttleState > 0 ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-cyan-200' : 'bg-black/80 text-white/20'}`}>
@@ -424,16 +424,16 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             const wData = WEAPONS[type];
                             const isActive = activeWeapon === type;
                             return (
-                                <div 
+                                <div
                                     key={slot}
                                     className={`hud-slot w-20 h-20 flex flex-col items-center justify-center relative border-2 transition-all overflow-hidden ${isActive ? 'scale-105 z-10 bg-zinc-950/80 shadow-[0_0_20px_rgba(0,0,0,0.5)]' : 'opacity-40 bg-black/40'}`}
                                     style={{ borderColor: isActive ? (WeaponCategoryColors[wData.category as keyof typeof WeaponCategoryColors] || 'white') : 'rgba(255,255,255,0.1)' }}
                                 >
                                     {/* Reload Progress Overlay */}
                                     {isActive && isReloading && (
-                                        <div 
+                                        <div
                                             className="absolute bottom-0 left-0 w-full bg-white opacity-20 transition-all duration-100"
-                                            style={{ 
+                                            style={{
                                                 height: `${reloadProgress * 100}%`,
                                                 backgroundColor: WeaponCategoryColors[wData.category as keyof typeof WeaponCategoryColors] || 'white'
                                             }}
@@ -452,7 +452,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                     )}
                                     {/* Slot Number */}
                                     <span className="absolute bottom-1 right-2 text-[10px] font-mono font-bold text-white/20 z-10">{slot}</span>
-                                    
+
                                     {/* Throwable ammo dots */}
                                     {wData?.category === 'THROWABLE' && (
                                         <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1 px-2 z-10">
@@ -477,8 +477,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 <div className="flex gap-2 mb-1">
                     {/* Buffs: Green Borders */}
                     {activeBuffs.map((type, i) => (
-                        <div 
-                            key={`buff-${i}`} 
+                        <div
+                            key={`buff-${i}`}
                             className="w-8 h-8 flex items-center justify-center bg-black/80 border-2 border-green-500 rounded-sm shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse pointer-events-auto cursor-help"
                             onMouseEnter={() => showTooltip(t(`attacks.${type}.title`))}
                             onMouseLeave={() => setTooltipContent(null)}
@@ -488,8 +488,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     ))}
                     {/* Debuffs: Red Borders */}
                     {activeDebuffs.map((type, i) => (
-                        <div 
-                            key={`debuff-${i}`} 
+                        <div
+                            key={`debuff-${i}`}
                             className="w-8 h-8 flex items-center justify-center bg-black/80 border-2 border-red-500 rounded-sm shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse pointer-events-auto cursor-help"
                             onMouseEnter={() => showTooltip(t(`attacks.${type}.title`))}
                             onMouseLeave={() => setTooltipContent(null)}
@@ -501,8 +501,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                 {/* Detailed timers for Debuffs (Original style) */}
                 {statusEffects.map((eff, i) => (
-                    <div 
-                        key={`timer-${i}`} 
+                    <div
+                        key={`timer-${i}`}
                         className="px-3 py-1 bg-black/60 border-l-2 border-red-500/50 flex items-center gap-2 animate-fadeIn max-w-[120px] pointer-events-auto cursor-help"
                         onMouseEnter={() => showTooltip(t(`attacks.${eff.type}.title`))}
                         onMouseLeave={() => setTooltipContent(null)}

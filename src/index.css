@@ -281,7 +281,6 @@ canvas {
 }
 
 .hud-kill-text {
-    font-family: 'Inter', sans-serif;
     font-weight: 900;
     letter-spacing: -0.05em;
     line-height: 0.8;
