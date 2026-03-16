@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { DEFAULT_GRAPHICS } from '../../content/constants';
 import { GraphicsSettings } from '../../types';
-export type { GraphicsSettings };
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../systems/CameraSystem';
 import { WindSystem } from '../systems/WindSystem';
@@ -9,6 +8,8 @@ import { WeatherSystem } from '../systems/WeatherSystem';
 import { WaterSystem } from '../systems/WaterSystem';
 import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
+
+export type { GraphicsSettings };
 
 /**
  * The Engine class acts as the central hub for the 3D environment.
@@ -162,7 +163,7 @@ export class WinterEngine {
         // [VINTERDÖD] Reset pause states on mount to ensure fresh state
         this.isRenderingPaused = false;
         this.isSimulationPaused = false;
-        
+
         this.start();
     }
 
