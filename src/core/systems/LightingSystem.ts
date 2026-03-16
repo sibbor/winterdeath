@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FLASHLIGHT, MAX_VISIBLE_LIGHTS, MAX_SHADOW_CASTING_LIGHTS } from '../../content/constants';
+import { FLASHLIGHT, LIGHTNING_SYSTEM } from '../../content/constants';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { System } from './System';
 import { SectorContext } from '../../types/sector';
@@ -198,7 +198,7 @@ export class LightingSystem implements System {
             const engineRenderer = sectorCtx.engine?.renderer;
             const maxTextures = engineRenderer?.capabilities?.maxTextures || 16;
             const baseTextureUnits = 13;
-            const SHADOW_BUDGET = Math.max(1, Math.min(MAX_SHADOW_CASTING_LIGHTS, maxTextures - baseTextureUnits));
+            const SHADOW_BUDGET = Math.max(1, Math.min(LIGHTNING_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, maxTextures - baseTextureUnits));
 
             let visibleAssigned = 0;
             let shadowsAssigned = 0;
@@ -211,7 +211,7 @@ export class LightingSystem implements System {
                 const influence = lightInfo.influence;
 
                 // Only the absolute top N lights are ALLOWED to be sent to the shader
-                const canBeVisibleToShader = visibleAssigned < MAX_VISIBLE_LIGHTS;
+                const canBeVisibleToShader = visibleAssigned < LIGHTNING_SYSTEM.MAX_VISIBLE_LIGHTS;
 
                 if (canBeVisibleToShader) {
                     light.visible = true;

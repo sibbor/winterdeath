@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WaterStyleConfig, createWaterMaterial, patchWaterVegetationMaterial } from '../../utils/assets/materials_water';
+import { WATER_SYSTEM } from '../../content/constants';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { MATERIALS } from '../../utils/assets/materials';
 import { PerformanceMonitor } from './PerformanceMonitor';
@@ -44,9 +45,6 @@ const WATER_BODY_PRESETS: Record<WaterBodyType, WaterBodyDef> = {
     stream: { style: 'nordic', shape: 'rect', buoyancyForce: 8, ambientRippleChance: 0.03, maxDepth: 1.5 },
     waterfall: { style: 'nordic', shape: 'rect', buoyancyForce: 15, ambientRippleChance: 0.05, maxDepth: 10.0 }
 };
-
-const MAX_RIPPLES = 16;
-const MAX_OBJECTS = 8;
 
 export class WaterSurface {
     mesh: THREE.Mesh;
@@ -150,8 +148,8 @@ export class WaterSystem {
     private spawnPartCb: ((x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: any, color?: number, scale?: number) => void) | null = null;
 
     constructor(private scene: THREE.Scene) {
-        for (let i = 0; i < MAX_RIPPLES; i++) this.rippleData.push(new THREE.Vector4(0, 0, -1000, 0));
-        for (let i = 0; i < MAX_OBJECTS; i++) this.objectPositions.push(new THREE.Vector4(0, 0, 0, 0));
+        for (let i = 0; i < WATER_SYSTEM.MAX_RIPPLES; i++) this.rippleData.push(new THREE.Vector4(0, 0, -1000, 0));
+        for (let i = 0; i < WATER_SYSTEM.MAX_FLOATING_OBJECTS; i++) this.objectPositions.push(new THREE.Vector4(0, 0, 0, 0));
     }
 
     public populateFlora(flora: LakeFloraInstance[]): void {
@@ -429,7 +427,7 @@ export class WaterSystem {
         for (let i = 0; i < bLen; i++) {
             const props = this.waterBodies[i].floatingProps;
             for (let j = 0; j < props.length; j++) {
-                if (objIdx < MAX_OBJECTS) {
+                if (objIdx < WATER_SYSTEM.MAX_FLOATING_OBJECTS) {
                     const p = props[j];
                     const vel = p.userData.velocity as THREE.Vector3;
                     const isMoving = vel && vel.lengthSq() > 0.01;
@@ -442,7 +440,7 @@ export class WaterSystem {
 
             const sources = this.waterBodies[i].splashSources;
             for (let j = 0; j < sources.length; j++) {
-                if (objIdx < MAX_OBJECTS) {
+                if (objIdx < WATER_SYSTEM.MAX_FLOATING_OBJECTS) {
                     const p = sources[j];
                     if (props.includes(p)) continue;
                     const radius = p.userData.radius || 3.0;
@@ -450,7 +448,7 @@ export class WaterSystem {
                 }
             }
         }
-        for (let i = objIdx; i < MAX_OBJECTS; i++) this.objectPositions[i].set(0, 0, 0, 0);
+        for (let i = objIdx; i < WATER_SYSTEM.MAX_FLOATING_OBJECTS; i++) this.objectPositions[i].set(0, 0, 0, 0);
 
         // --- 2. Update Surfaces ---
         for (let i = 0; i < this.surfaces.length; i++) {
@@ -609,7 +607,7 @@ export class WaterSystem {
 
     public spawnRipple(x: number, z: number, strength: number = 1.0): void {
         this.rippleData[this.rippleIndex].set(x, z, this.globalTime, strength);
-        this.rippleIndex = (this.rippleIndex + 1) % MAX_RIPPLES;
+        this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
     }
 
     private updateInstancedLilies(dt: number): void {
@@ -677,7 +675,7 @@ export class WaterSystem {
     public spawnExplosionRipple(x: number, z: number, strength: number = 1.0): void {
         this.spawnRipple(x, z, strength);
         this.rippleData[this.rippleIndex].set(x, z, this.globalTime * 2.0, strength / 2.0);
-        this.rippleIndex = (this.rippleIndex + 1) % MAX_RIPPLES;
+        this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
     }
 
     public checkBuoyancy(x: number, y: number, z: number): void {

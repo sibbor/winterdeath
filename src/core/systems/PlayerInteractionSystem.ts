@@ -22,7 +22,9 @@ const _detectionResult = {
 
 interface ActiveAnimation {
     obj: THREE.Group;
-    startPos: THREE.Vector3;
+    startX: number;
+    startY: number;
+    startZ: number;
     progress: number;
     duration: number;
     collectibleId?: string;
@@ -120,11 +122,12 @@ export class PlayerInteractionSystem implements System {
             const easeOut = 1.0 - Math.pow(1.0 - anim.progress, 3);
 
             // Keep the main group fixed. By zeroing the rotation, local offsets perfectly match world offsets.
-            anim.obj.position.copy(anim.startPos);
+            _v1.set(anim.startX, anim.startY, anim.startZ);
+            anim.obj.position.copy(_v1);
             anim.obj.rotation.set(0, 0, 0);
 
-            const targetX = (this.playerGroup.position.x - anim.startPos.x) * easeOut;
-            const targetZ = (this.playerGroup.position.z - anim.startPos.z) * easeOut;
+            const targetX = (this.playerGroup.position.x - anim.startX) * easeOut;
+            const targetZ = (this.playerGroup.position.z - anim.startZ) * easeOut;
 
             const fxTargetY = anim.progress * 15.0; // Shoot up 15 meters
 
@@ -236,12 +239,16 @@ export class PlayerInteractionSystem implements System {
         sectorState: any,
         state: any
     ): void {
+        _detectionResult.type = null;
+        _detectionResult.id = null;
+        _detectionResult.object = null;
 
         // --- 1. Check Collectibles (3.5m radius) ---
         const cLen = this.collectibles.length;
         for (let i = 0; i < cLen; i++) {
             const c = this.collectibles[i];
-            if (playerPos.distanceToSquared(c.position) < 12.25) {
+            // [VINTERDÖD FIX] Ignore collectibles already being picked up
+            if (!c.userData.pickedUp && playerPos.distanceToSquared(c.position) < 12.25) {
                 _detectionResult.position.copy(c.position);
                 _detectionResult.type = 'collectible';
                 _detectionResult.object = c;
@@ -452,7 +459,9 @@ export class PlayerInteractionSystem implements System {
 
         this.activeAnimations.push({
             obj: collectible,
-            startPos: collectible.position.clone(),
+            startX: collectible.position.x,
+            startY: collectible.position.y,
+            startZ: collectible.position.z,
             progress: 0,
             duration: 1.2,
             collectibleId: collectibleId

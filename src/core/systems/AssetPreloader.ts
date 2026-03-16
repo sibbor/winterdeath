@@ -1,16 +1,16 @@
 import * as THREE from 'three';
+import { WinterEngine } from '../engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures } from '../../utils/assets';
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
-import { TreeType, MAX_VISIBLE_LIGHTS, MAX_SHADOW_CASTING_LIGHTS } from '../../content/constants';
+import { TreeType, LIGHTNING_SYSTEM } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { CampWorld, CAMP_SCENE, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
 import { SectorSystem } from '../systems/SectorSystem';
-import { CameraSystem } from '../systems/CameraSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { FXSystem } from '../systems/FXSystem';
@@ -24,22 +24,20 @@ export const TRANSPARENT_UI_ICONS: Record<string, string> = {};
 
 export const AssetPreloader = {
 
-    warmupAsync: async (renderer: THREE.WebGLRenderer, target: 'CORE' | 'CAMP' | number, envConfigBase: any = null, yieldToMain?: () => Promise<void>, overrideCamera?: THREE.Camera) => {
-        const moduleKey = typeof target === 'number' ? `SECTOR_${target}` : (typeof target === 'string' ? target : 'UNKNOWN');
+    warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', envConfigBase: any = null, yieldToMain?: () => Promise<void>, sectorId?: number) => {
+        const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
         if (warmedModules.has(moduleKey)) return;
         if (activePromises.has(moduleKey)) return activePromises.get(moduleKey);
 
         const warmupLogic = async () => {
             const isCamp = target === 'CAMP';
-            const isSector = typeof target === 'number';
+            const isSector = target === 'SECTOR';
 
             let envConfig = envConfigBase;
             if (isSector && !envConfig) {
-                const sectorId = Number(target);
-                if (!isNaN(sectorId)) {
-                    const sector = SectorSystem.getSector(sectorId);
-                    if (sector) envConfig = sector.environment;
-                }
+                const sId = sectorId ?? 0;
+                const sector = SectorSystem.getSector(sId);
+                if (sector) envConfig = sector.environment;
             } else if (isCamp && !envConfig) {
                 envConfig = CAMP_SCENE;
             }
@@ -57,12 +55,14 @@ export const AssetPreloader = {
 
             beginInternal('asset_warmup_total');
 
+            const engine = WinterEngine.getInstance();
+
             // 0. PROCEDURAL TEXTURE CACHE WARMUP
             if (target === 'CORE') {
                 beginInternal('asset_warmup_procedural');
                 const procedural = createProceduralDiffuse();
                 const texs = Object.values(procedural);
-                for (let i = 0; i < texs.length; i++) renderer.initTexture(texs[i]);
+                for (let i = 0; i < texs.length; i++) engine.renderer.initTexture(texs[i]);
                 endInternal('asset_warmup_procedural');
                 if (yieldToMain) await yieldToMain();
 
@@ -71,18 +71,17 @@ export const AssetPreloader = {
                     '/assets/ui/icon_dash.png',
                     '/assets/ui/icon_reload.png',
                     '/assets/ui/icon_flashlight.png',
-                    '/assets/ui/icon_flashlight_off.png',
-                    '/assets/icons/weapons/pistol.png',
-                    '/assets/icons/weapons/revolver.png',
                     '/assets/icons/weapons/smg.png',
                     '/assets/icons/weapons/shotgun.png',
                     '/assets/icons/weapons/rifle.png',
-                    '/assets/icons/weapons/minigun.png',
-                    '/assets/icons/weapons/flamethrower.png',
-                    '/assets/icons/weapons/arc_cannon.png',
+                    '/assets/icons/weapons/pistol.png',
+                    '/assets/icons/weapons/revolver.png',
                     '/assets/icons/weapons/grenade.png',
                     '/assets/icons/weapons/molotov.png',
                     '/assets/icons/weapons/flashbang.png',
+                    '/assets/icons/weapons/minigun.png',
+                    '/assets/icons/weapons/flamethrower.png',
+                    '/assets/icons/weapons/arc_cannon.png',
                     '/assets/icons/weapons/radio.png'
                 ];
 
@@ -144,14 +143,6 @@ export const AssetPreloader = {
 
             const scene = new THREE.Scene();
 
-            const warmupCamera = new CameraSystem();
-            if (!overrideCamera) {
-                warmupCamera.setPosition(0, 5, 20, true);
-                warmupCamera.lookAt(0, 0, 0, true);
-            } else {
-                warmupCamera.threeCamera.copy(overrideCamera as any);
-            }
-
             // 3. SHADER PERMUTATION SETUP
             beginInternal('asset_warmup_permutations');
             if (envConfig) {
@@ -195,10 +186,10 @@ export const AssetPreloader = {
             // [VINTERDÖD] Sync with LightingSystem's MAX_VISIBLE_LIGHTS
             // Force WebGL to compile the shader permutation for exactly 12 PointLights upfront.
             if (isSector || target === 'CORE') {
-                for (let i = 0; i < MAX_VISIBLE_LIGHTS; i++) {
+                for (let i = 0; i < LIGHTNING_SYSTEM.MAX_VISIBLE_LIGHTS; i++) {
                     const dummyLight = new THREE.PointLight(0xffaa00, 1, 10);
                     // Prep the shadow map permutation for the budget we set (8)
-                    if (i < MAX_SHADOW_CASTING_LIGHTS) dummyLight.castShadow = true;
+                    if (i < LIGHTNING_SYSTEM.MAX_SHADOW_CASTING_LIGHTS) dummyLight.castShadow = true;
                     scene.add(dummyLight);
                 }
             }
@@ -269,7 +260,7 @@ export const AssetPreloader = {
                     const bumpMaps = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'concrete_bump', 'brick_bump', 'bark_rough_bump'];
                     for (let i = 0; i < bumpMaps.length; i++) {
                         const tex = (TEXTURES as any)[bumpMaps[i]];
-                        if (tex) renderer.initTexture(tex);
+                        if (tex) engine.renderer.initTexture(tex);
                         if (yieldToMain) await yieldToMain();
                     }
 
@@ -303,7 +294,7 @@ export const AssetPreloader = {
                     if (['road', 'asphalt', 'mountain'].includes(k as string)) continue;
                     const mat = MATERIALS[k] as THREE.Material;
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, mat));
-                    if ((mat as any).map) renderer.initTexture((mat as any).map);
+                    if ((mat as any).map) engine.renderer.initTexture((mat as any).map);
                 }
 
                 // No shadows for FX
@@ -453,7 +444,7 @@ export const AssetPreloader = {
             }
 
             if (isSector) {
-                const sectorIndex = target as number;
+                const sectorIndex = sectorId ?? 0;
 
                 try {
                     addToWarmup(ObjectGenerator.createBuilding(10, 8, 10, 0xffffff, true, true, 0.2));
@@ -514,7 +505,7 @@ export const AssetPreloader = {
                 const dummyTextures = createProceduralTextures();
                 const dummyWeather = 'snow';
 
-                const { envState: campState } = await CampWorld.setupCampScene(renderer, scene, warmupCamera as any, dummyTextures as any, dummyWeather, true);
+                const { envState: campState } = await CampWorld.setupCampScene(scene, dummyTextures as any, dummyWeather, true);
 
                 if (campState.starSystem) {
                     ownedGeometries.push(campState.starSystem.geometry);
@@ -647,17 +638,17 @@ export const AssetPreloader = {
                 const children = dummyRoot.children;
                 for (let i = 0; i < children.length; i++) children[i].visible = true;
 
-                if ((renderer as any).compileAsync) {
-                    await (renderer as any).compileAsync(scene, warmupCamera.threeCamera);
+                if ((engine.renderer as any).compileAsync) {
+                    await (engine.renderer as any).compileAsync(scene, engine.camera.threeCamera);
                 } else {
-                    renderer.compile(scene, warmupCamera.threeCamera);
+                    engine.renderer.compile(scene, engine.camera.threeCamera);
                 }
 
                 const originalViewport = new THREE.Vector4();
-                renderer.getViewport(originalViewport);
-                renderer.setViewport(0, 0, 1, 1);
-                renderer.render(scene, warmupCamera.threeCamera);
-                renderer.setViewport(originalViewport);
+                engine.renderer.getViewport(originalViewport);
+                engine.renderer.setViewport(0, 0, 1, 1);
+                engine.renderer.render(scene, engine.camera.threeCamera);
+                engine.renderer.setViewport(originalViewport);
 
                 for (let i = 0; i < children.length; i++) children[i].visible = false;
                 if (yieldToMain) await yieldToMain();
@@ -673,7 +664,7 @@ export const AssetPreloader = {
             }
 
             scene.clear();
-            if ((renderer as any).renderLists) (renderer as any).renderLists.dispose();
+            if ((engine.renderer as any).renderLists) (engine.renderer as any).renderLists.dispose();
 
             warmedModules.add(moduleKey);
             endInternal('asset_warmup_total');

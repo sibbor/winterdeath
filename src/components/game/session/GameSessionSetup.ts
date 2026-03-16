@@ -9,10 +9,9 @@ import { ProjectileSystem } from '../../../core/weapons/ProjectileSystem';
 import { FXSystem } from '../../../core/systems/FXSystem';
 import { EnemyManager } from '../../../core/EnemyManager';
 import { AssetPreloader } from '../../../core/systems/AssetPreloader';
-import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LEVEL_CAP, FLASHLIGHT } from '../../../content/constants';
+import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, WIND_SYSTEM, WEATHER_SYSTEM } from '../../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../../utils/assets';
 import { soundManager } from '../../../utils/SoundManager';
-import { FootprintSystem } from '../../../core/systems/FootprintSystem';
 import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 
 // Systems
@@ -97,7 +96,7 @@ export class GameSessionSetup {
         state.startTime = performance.now();
 
         try {
-            const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0); // Passed directly from orchestrator
+            const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
             const rng = seededRandom(props.currentSector + 4242);
             const env = currentSector.environment;
 
@@ -111,16 +110,49 @@ export class GameSessionSetup {
                 }
             };
 
-            await AssetPreloader.warmupAsync(engine.renderer, props.currentSector, camera, yielder);
+            await AssetPreloader.warmupAsync('SECTOR', env, yielder, props.currentSector);
+
+            const monitor = PerformanceMonitor.getInstance();
+            camera.reset();
+            camera.set('fov', env.fov);
+            camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
+
+            // --- ENVIRONMENT SYNC (Zero-GC) ---
+            if (!props.isWarmup) {
+                // WndSystem
+                if (env.wind) {
+                    const dir = env.wind?.direction || { x: 0, z: 1 };
+                    const windAngle = Math.atan2(dir.z, dir.x);
+                    engine.wind.setRandomWind(
+                        env.wind?.strengthMin ?? WIND_SYSTEM.MIN_STRENGTH,
+                        env.wind?.strengthMax ?? WIND_SYSTEM.MAX_STRENGTH,
+                        windAngle,
+                        env.wind?.angleVariance || WIND_SYSTEM.ANGLE_VARIANCE
+                    );
+                } else {
+                    engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
+                }
+
+                // WeatherSystem
+                if (engine.weather) {
+                    const activeWeather = env.weather?.type || 'none';
+                    const weatherDensity = env.weatherDensity ?? 1.0;
+                    const baseWeatherCount = WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES;
+                    const finalCount = Math.min(Math.floor(baseWeatherCount * weatherDensity),
+                        WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES);
+
+                    engine.weather.reAttach(scene);
+                    engine.weather.sync(activeWeather, finalCount, 120);
+                }
+
+                // WaterSystem
+                if (engine.water) engine.water.reAttach(scene);
+            }
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             scene.background = new THREE.Color(env.bgColor);
             scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
-
-            camera.reset();
-            camera.set('fov', env.fov);
-            camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
             camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z, true);
 
             ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
@@ -457,7 +489,6 @@ export class GameSessionSetup {
 
             // --- Final WebGL Preparation ---
             FXSystem.preload(scene);
-            const monitor = PerformanceMonitor.getInstance();
             monitor.begin('render_compile');
 
             // Force castShadow for budget before compile
@@ -505,8 +536,8 @@ export class GameSessionSetup {
     }
 
     // THE WEBGL BLACK HOLE FIX
-    static disposeSector(engine: WinterEngine, session: GameSessionLogic, state: RuntimeState) {
-        const scene = engine.scene;
+    static disposeSector(session: GameSessionLogic, state: RuntimeState) {
+        const scene = WinterEngine.getInstance().scene;
         EnemyManager.clear();
 
         // 1. Manually tear down GPU memory to avoid the WebGL Black Hole Context leak
@@ -514,8 +545,9 @@ export class GameSessionSetup {
         const sharedMats = Object.values(MATERIALS);
 
         scene.traverse((obj: any) => {
-            // DO NOT dispose if tagged as static or shared
-            if (obj.userData?.isEngineStatic || obj.userData?.isSharedAsset) return;
+            // [VINTERDÖD FIX] Expand protection to persistent engine systems (Weather/Water)
+            if (obj.userData?.isEngineStatic || obj.userData?.isSharedAsset || obj.userData?.isPersistent) return;
+            if (obj.name.includes('Weather') || obj.name.includes('Water')) return; // Explicit safeguard
 
             if (obj.isMesh && obj.geometry) {
                 // DO NOT dispose shared library geometries
@@ -535,23 +567,23 @@ export class GameSessionSetup {
             }
         });
 
-        // 2. Clear out scene children manually
-        while (scene.children.length > 0) {
-            scene.remove(scene.children[0]);
+        // 2. Clear out scene children manually, but PRESERVE the engine systems
+        for (let i = scene.children.length - 1; i >= 0; i--) {
+            const child = scene.children[i];
+            const isPersistent = child.userData?.isPersistent || child.name.includes('Weather') || child.name.includes('Water');
+
+            if (!isPersistent) {
+                scene.remove(child);
+            }
         }
 
-        if (engine.water) {
-            engine.water.clear();
-        }
-
-        // DO NOT engine.stop() here as it halts the renderer singleton for the next scene (e.g. Camp)
-        // engine.stop(); 
-        engine.input.disable();
+        WinterEngine.getInstance().input.disable();
 
         soundManager.setReverb(0);
         soundManager.stopAll();
 
         ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
+
         if (session) session.dispose();
         EnemyManager.clear();
         FXSystem.reset();
@@ -569,4 +601,5 @@ export class GameSessionSetup {
         if (m.emissiveMap) m.emissiveMap.dispose();
         if (m.envMap) m.envMap.dispose();
     }
+
 }

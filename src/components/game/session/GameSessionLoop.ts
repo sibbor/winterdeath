@@ -14,7 +14,7 @@ import { soundManager } from '../../../utils/SoundManager';
 import { EnemyManager } from '../../../core/EnemyManager';
 import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../../content/weapons';
 import { EnemyDeathState } from '../../../types/enemy';
-import { DamageType, PlayerDeathState } from '../../../types/combat';
+import { DamageType } from '../../../types/combat';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -485,18 +485,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         lastTime = now;
 
-        // 12. Interaction Screen Pos
+        // 12. Interaction Logic (Event-Driven)
         const currentInter = state.interactionType;
-        if (currentInter !== refs.interactionTypeRef.current) {
-            refs.interactionTypeRef.current = currentInter;
-
-            // This is fine to keep as a React callback since it only triggers once 
-            // when entering/exiting an interaction zone, not every frame.
-            if (callbacks.setInteractionType) {
-                callbacks.setInteractionType(currentInter);
-            }
-        }
-
+        const currentLabel = state.interactionLabel;
+        const lastType = refs.interactionTypeRef.current;
         if (currentInter && (state as any).currentInteraction) {
             if ((state as any).currentInteraction.position) {
                 _vInteraction.copy((state as any).currentInteraction.position);
@@ -511,22 +503,32 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const screenY = Math.round((1 - vector.y) / 2 * 100);
 
             const lastPos = refs.lastInteractionPosRef.current;
-            if (!lastPos || Math.abs(lastPos.x - screenX) > 0.5 || Math.abs(lastPos.y - screenY) > 0.5) {
+            const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 0.5 || Math.abs(lastPos.y - screenY) > 0.5;
+            const typeChanged = currentInter !== lastType;
+            const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
+
+            if (posChanged || typeChanged || labelChanged) {
                 _interactionScreenPosScratch.x = screenX;
                 _interactionScreenPosScratch.y = screenY;
                 refs.lastInteractionPosRef.current = _interactionScreenPosScratch;
+                refs.interactionTypeRef.current = currentInter;
+                (state as any).lastInteractionLabel = currentLabel;
 
-                // PERFORMANCE FIX: Dispatch event directly instead of forcing a React re-render
-                window.dispatchEvent(new CustomEvent('update_interaction_pos', {
-                    detail: { x: screenX, y: screenY }
+                window.dispatchEvent(new CustomEvent('update_interaction', {
+                    detail: {
+                        type: currentInter,
+                        label: currentLabel,
+                        pos: { x: screenX, y: screenY }
+                    }
                 }));
             }
         } else {
-            if (refs.lastInteractionPosRef.current !== null) {
+            if (refs.interactionTypeRef.current !== null) {
+                refs.interactionTypeRef.current = null;
                 refs.lastInteractionPosRef.current = null;
+                (state as any).lastInteractionLabel = null;
 
-                // PERFORMANCE FIX: Dispatch null to hide the UI without a re-render
-                window.dispatchEvent(new CustomEvent('update_interaction_pos', {
+                window.dispatchEvent(new CustomEvent('update_interaction', {
                     detail: null
                 }));
             }

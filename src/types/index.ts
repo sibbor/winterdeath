@@ -291,6 +291,7 @@ export interface GameCanvasProps {
   onInteractionStateChange?: (type: string | null) => void;
   isMobileDevice?: boolean;
   disableInput?: boolean;
+  isWarmup?: boolean;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

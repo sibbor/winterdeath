@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { WinterEngine } from '../../core/engine/WinterEngine';
-import { WEATHER } from '../../content/constants';
+import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
 import { WeatherType } from '../../types';
 
 // ============================================================================
@@ -131,7 +131,7 @@ export const CONST_MAT = {
     })
 };
 
-// [VINTERDÖD] Tag materials as shared assets to prevent disposal during clearActiveScene
+// Tag materials as shared assets to prevent disposal during clearActiveScene
 Object.values(CONST_MAT).forEach(m => { m.userData = { isSharedAsset: true }; });
 
 // --- PROCEDURAL TEXTURES ---
@@ -182,7 +182,7 @@ export const stationMaterials: Record<string, THREE.MeshStandardMaterial> = {
     medkitRed: new THREE.MeshStandardMaterial({ color: 0xcc0000 })
 };
 
-// [VINTERDÖD] Tag station materials as shared assets
+// Tag station materials as shared assets
 Object.values(stationMaterials).forEach(m => { m.userData = { isSharedAsset: true }; });
 
 // ============================================================================
@@ -410,11 +410,14 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures) => {
 export const CampWorld = {
 
     setupSky, // Renamed for consistency
-    setupCampScene: async (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: any, textures: Textures, weather: WeatherType, isWarmup = false) => {
+    setupCampScene: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
         // 1. Scene Reset
         if (!isWarmup) scene.clear();
 
-        // Always use CameraSystem directly.
+        // Always use CameraSystem directly from the Engine Singleton.
+        const engine = WinterEngine.getInstance();
+        const camera = engine.camera;
+
         camera.reset();
         camera.setPosition(0, 10, 22, true);
         camera.set('fov', 50);
@@ -438,7 +441,7 @@ export const CampWorld = {
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
 
         // 5. Effects (Sky, Campfire, Weather)
-        const envState = CampWorld.initEffects(scene, camera, textures, weather, isWarmup);
+        const envState = CampWorld.initEffects(scene, textures, weather, isWarmup);
 
         return { interactables, outlines, envState };
     },
@@ -492,12 +495,10 @@ export const CampWorld = {
                 if ((c as any).isMesh) {
                     const m = c as THREE.Mesh;
                     m.castShadow = true;
-                    // Tag the group so it can be handled as a single unit in raycasting/highlights
                     m.userData.groupId = member.userData.id;
                     m.userData.id = member.userData.id;
                     m.userData.name = member.userData.name;
                     m.userData.type = 'family';
-                    // [VINTERDÖD] Tag family materials as shared (they are reused models)
                     if (m.material) {
                         const mats = Array.isArray(m.material) ? m.material : [m.material];
                         for (let i = 0; i < mats.length; i++) {
@@ -542,7 +543,6 @@ export const CampWorld = {
         const outlines: Record<string, THREE.LineSegments> = {};
         const { warmWood: warmWoodMat, darkerWood: darkerWoodMat, metal: metalMat, ammoGreen: ammoGreenMat } = stationMaterials;
 
-        // 1. STATION: ARMORY
         const rackGroup = new THREE.Group();
         const p1 = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); p1.scale.set(0.2, 4.0, 0.2); p1.position.set(-1.8, 2, -0.4); rackGroup.add(p1);
         const p2 = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); p2.scale.set(0.2, 4.0, 0.2); p2.position.set(1.8, 2, -0.4); rackGroup.add(p2);
@@ -571,7 +571,6 @@ export const CampWorld = {
         const c2 = new THREE.Mesh(GEOMETRY.box, ammoGreenMat); c2.scale.set(0.8, 0.5, 0.6); c2.position.set(-0.9, 0.25, 0.4); c2.rotation.y = 1.4; rackGroup.add(c2);
         const c3 = new THREE.Mesh(GEOMETRY.box, ammoGreenMat); c3.scale.set(0.8, 0.5, 0.6); c3.position.set(-1.8, 0.75, 0.65); c3.rotation.y = 0.6; rackGroup.add(c3);
 
-        // 2. STATION: ADVENTURE LOG
         const deskGroup = new THREE.Group();
         const dW = 2.4, dD = 1.4, dH = 1.1;
         const dTop = new THREE.Mesh(GEOMETRY.box, warmWoodMat);
@@ -602,7 +601,6 @@ export const CampWorld = {
         const pageR = new THREE.Mesh(GEOMETRY.box, paperMat); pageR.scale.set(0.42, 0.03, 0.65); pageR.position.set(0.2, 0.15, 0); pageR.rotation.z = -0.15; openBook.add(pageR);
         openBook.position.set(0.6, dH + 0.02, 0.3); openBook.rotation.y = -0.3; deskGroup.add(openBook);
 
-        // 3. STATION: SECTOR OVERVIEW
         const mapGroup = new THREE.Group();
         const bW = 3.5, bH = 2.2;
         const mL = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); mL.scale.set(0.2, 4.0, 0.2); mL.position.set(-bW / 2, 2, 0); mapGroup.add(mL);
@@ -623,7 +621,6 @@ export const CampWorld = {
             mapGroup.add(note);
         }
 
-        // 4. STATION SKILLS
         const medGroup = new THREE.Group();
         const cH = 5.0, cW = 2.0, cD = 0.8, th = 0.1;
         const back = new THREE.Mesh(GEOMETRY.box, warmWoodMat); back.scale.set(cW, cH, th); back.position.set(0, cH / 2, -cD / 2 + th / 2); medGroup.add(back);
@@ -654,14 +651,12 @@ export const CampWorld = {
         const crossH = new THREE.Mesh(GEOMETRY.box, crossMat); crossH.scale.set(0.35, 0.15, 0.42); crossH.position.set(0, 0, 0.01); medkit.add(crossH);
         medkit.position.set(0.5, cH * 0.4 + 0.25, 0); medGroup.add(medkit);
 
-        // PLACERING
         const rad = 7.5;
         rackGroup.position.set(-rad * 0.8, 0, -rad * 0.5); rackGroup.lookAt(0, 0, 0); scene.add(rackGroup);
         deskGroup.position.set(-rad * 0.3, 0, -rad * 0.95); deskGroup.lookAt(0, 0, 0); scene.add(deskGroup);
         mapGroup.position.set(rad * 0.3, 0, -rad * 0.95); mapGroup.lookAt(0, 0, 0); scene.add(mapGroup);
         medGroup.position.set(rad * 0.8, 0, -rad * 0.5); medGroup.lookAt(0, 0, 0); scene.add(medGroup);
 
-        // INTERACTION & OUTLINES
         const rackInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
         rackInteract.position.y = 2; rackInteract.userData = { id: 'armory', name: 'armory' }; rackGroup.add(rackInteract); interactables.push(rackInteract);
         const rackOutline = createOutline(new THREE.BoxGeometry(4, 4, 2), CAMP_SCENE.colors.gold); rackOutline.position.y = 2; rackGroup.add(rackOutline); outlines['armory'] = rackOutline;
@@ -680,10 +675,9 @@ export const CampWorld = {
 
         const stationGroups = [rackGroup, deskGroup, mapGroup, medGroup];
         for (let i = 0; i < stationGroups.length; i++) {
-            stationGroups[i].traverse(c => { 
+            stationGroups[i].traverse(c => {
                 if ((c as THREE.Mesh).isMesh) {
                     c.castShadow = true;
-                    // [VINTERDÖD] Tag station parts as shared assets to protect their materials
                     c.userData = c.userData || {};
                     c.userData.isSharedAsset = true;
                 }
@@ -693,18 +687,14 @@ export const CampWorld = {
         return { interactables, outlines };
     },
 
-    initEffects: (scene: THREE.Scene, camera: any, textures: Textures, weatherType: WeatherType, isWarmup = false): CampEffectsState => {
+    initEffects: (scene: THREE.Scene, textures: Textures, weatherType: WeatherType, isWarmup = false): CampEffectsState => {
         const engine = WinterEngine.getInstance();
-        engine.wind.setRandomWind(WEATHER.WIND_MIN, WEATHER.WIND_MAX);
 
-        // Prevent "theft" of engine singletons during warmup.
-        // We only want to re-attach if we are actually loading the real camp.
         if (!isWarmup) {
+            engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
             engine.weather.reAttach(scene);
-            engine.water.reAttach(scene);
+            engine.weather.sync(weatherType, WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES, 60);
         }
-
-        engine.weather.sync(weatherType, WEATHER.PARTICLE_COUNT, 60);
 
         const { objects: skyObjects } = CampWorld.setupSky(scene, textures);
         const starSystem = skyObjects.stars;
@@ -743,13 +733,15 @@ export const CampWorld = {
 
         // Pre-warm the simulation
         for (let i = 0; i < 20; i++) {
-            CampWorld.updateEffects(scene, camera.threeCamera, state, 0.016, i * 0.016, i);
+            CampWorld.updateEffects(scene, state, 0.016, i * 0.016, i);
         }
         return state;
     },
 
-    updateEffects: (scene: THREE.Scene, camera: THREE.Camera, state: CampEffectsState, delta: number, now: number, frame: number) => {
-        const wind = WinterEngine.getInstance().wind.current;
+    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {
+        const engine = WinterEngine.getInstance();
+        const wind = engine.wind.current;
+        const camera = engine.camera.threeCamera;
 
         if (state.starSystem) {
             (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = frame * 0.05;
@@ -891,12 +883,14 @@ export const CampWorld = {
         if (smokes.instanceColor) smokes.instanceColor.needsUpdate = true;
     },
 
-    warmupStationAssets: (renderer: THREE.WebGLRenderer) => {
+    warmupStationAssets: () => {
+        const engine = WinterEngine.getInstance();
         const t1 = getCachedCanvasTexture(256, 256, 'map');
         const t2 = getCachedCanvasTexture(128, 128, 'note');
-        if (renderer) {
-            renderer.initTexture(t1);
-            renderer.initTexture(t2);
+
+        if (engine.renderer) {
+            engine.renderer.initTexture(t1);
+            engine.renderer.initTexture(t2);
         }
 
         if (!stationGeometries.barrel) stationGeometries.barrel = new THREE.CylinderGeometry(0.03, 0.03, 1.2);

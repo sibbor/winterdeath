@@ -34,8 +34,7 @@ import { getCollectibleById, getCollectiblesBySector } from './content/collectib
 import { isMobile } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
 import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
-import { FXSystem } from './core/systems/FXSystem';
-import { DEFAULT_GRAPHICS, SECTOR_THEMES } from './content/constants';
+import { SECTOR_THEMES } from './content/constants';
 
 const getCursorHidden = (isMobileDevice: boolean, isOverlayActive: boolean, screen: GameScreen, hudIsDead: boolean) =>
     isMobileDevice || (screen === GameScreen.SECTOR && !isOverlayActive && !hudIsDead);
@@ -54,6 +53,7 @@ const App: React.FC = () => {
     const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE);
     const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(isLoadingSector || isLoadingCamp);
+    const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(gameState.screen === GameScreen.CAMP);
     const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
 
@@ -73,10 +73,9 @@ const App: React.FC = () => {
 
     const triggerLoadingTransition = useCallback(async (
         type: 'CAMP' | 'SECTOR' | 'PROLOGUE',
-        task: () => Promise<void> | void,
-        skipCleanup: boolean = false
+        task: () => Promise<void> | void
     ) => {
-        console.log(`[App] triggerLoadingTransition (type: ${type}, skipCleanup: ${skipCleanup})`);
+        console.log(`[App] triggerLoadingTransition (type: ${type})`);
 
         transitionTaskRef.current = true;
         sceneReadyRef.current = false;
@@ -84,17 +83,16 @@ const App: React.FC = () => {
         // 1. Instant UI Feedback
         if (type === 'CAMP') setIsLoadingCamp(true);
         else setIsLoadingSector(true);
+
+        setLoadingTargetIsCamp(type === 'CAMP');
         setShowLoadingOverlay(true);
 
         // 2. Double-Buffer Wait: Let the browser paint the loading screen before we block the thread
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-        // 3. Global Resource Cleanup
-        const engine = WinterEngine.getInstance();
-        if (engine.scene && !skipCleanup) engine.clearActiveScene(false);
-        if (!skipCleanup) FXSystem.reset();
-
-        // 4. Run Task (Includes State Update + Warmup)
+        // 3. Run Task (Includes State Update + Warmup)
+        // Note: Scene cleanup is now handled by the unmounting of GameSession/Camp components
+        // via their respective dispose functions (e.g. GameSessionSetup.disposeSector)
         try {
             await task();
         } catch (e) {
@@ -109,7 +107,6 @@ const App: React.FC = () => {
 
             tryDismissLoading();
         }
-
     }, [tryDismissLoading]);
 
     // Boot Warmup: Pre-compiles shaders to prevent startup stalls
@@ -136,13 +133,13 @@ const App: React.FC = () => {
                     engine.updateSettings(gameState.graphics);
 
                     // 1. Core sets the baseline
-                    await AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera);
+                    await AssetPreloader.warmupAsync('CORE', envConfig, yieldToMain);
 
                     // 2. Module specific
                     if (isCamp) {
-                        await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', envConfig, yieldToMain, engine.camera.threeCamera);
+                        await AssetPreloader.warmupAsync('CAMP', envConfig, yieldToMain);
                     } else {
-                        await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+                        await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
                     }
                 } catch (e) {
                     console.error("[App] Warmup Error:", e);
@@ -333,11 +330,11 @@ const App: React.FC = () => {
             const envConfig = isCamp ? CAMP_SCENE : SECTOR_THEMES[sectorIndex];
 
             // Trigger re-warm in background
-            AssetPreloader.warmupAsync(engine.renderer, 'CORE', envConfig, yieldToMain, engine.camera.threeCamera).then(() => {
+            AssetPreloader.warmupAsync('CORE', envConfig, yieldToMain).then(() => {
                 if (isCamp) {
-                    AssetPreloader.warmupAsync(engine.renderer, 'CAMP', envConfig, yieldToMain, engine.camera.threeCamera);
+                    AssetPreloader.warmupAsync('CAMP', envConfig, yieldToMain);
                 } else {
-                    AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+                    AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
                 }
             });
         }
@@ -366,7 +363,7 @@ const App: React.FC = () => {
             setActiveOverlay(null);
 
             // Modular Warmup: Trigger sector-specific assets (Boss, Vehicles, unique props)
-            await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+            await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
         });
     }, [gameState.currentSector, triggerLoadingTransition]);
 
@@ -541,6 +538,7 @@ const App: React.FC = () => {
                 <>
                     <GameSession
                         ref={gameCanvasRef}
+                        isWarmup={isLoadingSector}
                         stats={gameState.stats}
                         loadout={gameState.loadout}
                         weaponLevels={gameState.weaponLevels}
@@ -668,7 +666,7 @@ const App: React.FC = () => {
 
             {activeOverlay === 'COLLECTIBLE' && activeCollectible && (
                 <ScreenCollectibleDiscovered
-                    collectible={getCollectibleById(activeCollectible)!}
+                    collectibleId={activeCollectible}
                     onClose={handleCollectibleClose}
                     isMobileDevice={isMobileDevice}
                 />
@@ -861,9 +859,8 @@ const App: React.FC = () => {
                             });
 
                             // Warmup Camp assets during transition
-                            const engine = WinterEngine.getInstance();
                             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-                            await AssetPreloader.warmupAsync(engine.renderer, 'CAMP', CAMP_SCENE, yieldToMain, engine.camera.threeCamera);
+                            await AssetPreloader.warmupAsync('CAMP', CAMP_SCENE, yieldToMain);
                         });
                     }}
                     onRetry={() => {
@@ -881,9 +878,8 @@ const App: React.FC = () => {
                             // Warmup Sector assets during transition
                             const sectorIndex = gameState.currentSector;
                             const envConfig = SECTOR_THEMES[sectorIndex];
-                            const engine = WinterEngine.getInstance();
                             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-                            await AssetPreloader.warmupAsync(engine.renderer, sectorIndex, envConfig, yieldToMain, engine.camera.threeCamera);
+                            await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
                         });
                     }}
                     isMobileDevice={isMobileDevice}
@@ -935,7 +931,7 @@ const App: React.FC = () => {
             <ScreenLoading
                 isDone={!showLoadingOverlay}
                 sectorIndex={gameState.currentSector}
-                isCamp={gameState.screen === GameScreen.CAMP}
+                isCamp={loadingTargetIsCamp}
                 isInitialBoot={isInitialBoot}
                 isMobileDevice={isMobileDevice}
             />

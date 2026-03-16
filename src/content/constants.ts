@@ -11,15 +11,32 @@ export { SECTOR_THEMES } from './sectors/sector_themes';
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;
 
 export const CAMERA_HEIGHT = 50;
-export const WEATHER = {
-    PARTICLE_COUNT: 400,
-    WIND_MIN: 0.02,
-    WIND_MAX: 0.05
+
+// WindSystem
+export const WIND_SYSTEM = {
+    MIN_STRENGTH: 0.02,
+    MAX_STRENGTH: 0.05,
+    DIRECTION: { x: 0, z: 1 },
+    ANGLE_VARIANCE: Math.PI / 4,
 };
 
+// WeatherSystem
+export const WEATHER_SYSTEM = {
+    MAX_NUM_PARTICLES: 5000,
+    DEFAULT_NUM_PARTICLES: 400
+}
+
+// WaterSystem
+export const WATER_SYSTEM = {
+    MAX_RIPPLES: 16,
+    MAX_FLOATING_OBJECTS: 8
+}
+
 // LightningSystem
-export const MAX_VISIBLE_LIGHTS = 12;
-export const MAX_SHADOW_CASTING_LIGHTS = 8;
+export const LIGHTNING_SYSTEM = {
+    MAX_VISIBLE_LIGHTS: 12,
+    MAX_SHADOW_CASTING_LIGHTS: 8
+}
 
 // Flashlight
 export const FLASHLIGHT = {
@@ -38,25 +55,6 @@ export const FLASHLIGHT = {
     shadowBias: -0.0001
 };
 
-/*
-// Vehicle Headlight
-export const VEHICLE_HEADLIGHT = {
-    name: 'vehicleLight',
-    color: 0xffeedd,
-    intensity: 250.0,
-    distance: 100,
-    angle: Math.PI / 2.5,
-    penumbra: 0.3,
-    decay: 1.0,
-    position: { x: 0, y: 3.5, z: 0.5 },
-    targetPosition: { x: 0, y: 0, z: 10 },
-    castShadows: true,
-    cameraNear: 1,
-    cameraFar: 80,
-    shadowBias: -0.0001
-};
-*/
-
 export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';
 
 export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMapType: THREE.ShadowMapType; shadowResolution: number; weatherCount: number }> = {
@@ -73,7 +71,7 @@ export const DEFAULT_GRAPHICS: GraphicsSettings = {
     shadows: true,
     shadowMapType: 1,
     shadowResolution: 256,
-    weatherCount: 250,
+    weatherCount: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES,
     textureQuality: 1.0
 };
 

@@ -89,9 +89,6 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
             {!uiState.isSectorLoading && !uiState.cinematicActive && !uiState.forceHideHUD && (
                 <GameUI
                     onCloseClue={() => { }}
-                    interactionType={uiState.interactionType}
-                    interactionLabel={state.interactionLabel || undefined}
-                    interactionScreenPos={uiState.interactionScreenPos}
                     isMobileDevice={gameProps.isMobileDevice}
                     onInteract={callbacks.onInteract}
                 />

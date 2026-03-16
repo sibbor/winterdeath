@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { WindSystem } from './WindSystem';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { WeatherType } from '../../types';
+import { WinterEngine } from '../engine/WinterEngine';
+import { WEATHER_SYSTEM } from '../../content/constants';
 
 /**
- * [VINTERDÖD] WeatherSystem
+ * WeatherSystem
  * Handles millions of particles with zero GC and high-performance buffer manipulation.
  */
 export class WeatherSystem {
@@ -21,38 +23,38 @@ export class WeatherSystem {
     private wind: WindSystem;
     private maxCount: number;
 
-    // [VINTERDÖD] Cached physics multiplier to avoid string checks in hot loop
+    // Cached physics multiplier to avoid string checks in hot loop
     private swayMult: number = 0.0;
 
-    // Fix 6: Pre-generated random LUT — avoids Math.random() inside the 2000-particle hot loop
+    // Pre-generated random LUT — avoids Math.random() inside the hot loop
     private _randLUT: Float32Array = new Float32Array(512);
     private _randIdx: number = 0;
 
-    constructor(scene: THREE.Scene, wind: WindSystem, maxCount: number = 2000) {
+    constructor(scene: THREE.Scene, wind: WindSystem, maxCount: number = WEATHER_SYSTEM.MAX_NUM_PARTICLES) {
         this.scene = scene;
         this.wind = wind;
+        // Use a safe, high default maxCount to prevent out-of-bounds issues during transitions
         this.maxCount = maxCount;
 
         // Pre-allocate flat memory buffers
-        this.positions = new Float32Array(maxCount * 3);
-        this.velocities = new Float32Array(maxCount * 3);
+        this.positions = new Float32Array(this.maxCount * 3);
+        this.velocities = new Float32Array(this.maxCount * 3);
+
+        for (let i = 0; i < this._randLUT.length; i++) {
+            this._randLUT[i] = Math.random();
+        }
     }
 
     /**
      * Synchronizes weather state. Switches materials and re-initializes buffers if needed.
      */
-    public sync(type: WeatherType, count: number, areaSize: number = 100) {
-        const needsResync = this.type !== type || this.count !== count || this.areaSize !== areaSize;
+    public sync(type: WeatherType, targetCount: number, areaSize: number = 100) {
+        // Safety cap against configuration mistakes
+        const actualCount = Math.min(targetCount, this.maxCount);
 
-        if (!needsResync) {
-            if (this.instancedMesh) {
-                if (!this.instancedMesh.parent) this.scene.add(this.instancedMesh);
-                this.instancedMesh.visible = type !== 'none' && count > 0;
-            }
-            return;
-        }
+        // We check if the material needs changing
+        const isNewMaterial = this.type !== type;
 
-        const actualCount = Math.min(count, this.maxCount);
         this.type = type;
         this.count = actualCount;
         this.areaSize = areaSize;
@@ -80,17 +82,26 @@ export class WeatherSystem {
 
         // Setup or update InstancedMesh
         if (!this.instancedMesh) {
+            // ALWAYS allocate the maximum possible buffer size to prevent reallocation crashes
             this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, selectedMaterial, this.maxCount);
+
+            // FIX: Skydda partiklarna från The WebGL Black Hole i städningen!
+            this.instancedMesh.name = 'WeatherSystem_Particles';
+            this.instancedMesh.userData = { isPersistent: true, isEngineStatic: true };
+
             this.instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
             this.instancedMesh.frustumCulled = false;
             this.instancedMesh.renderOrder = 999;
             this.scene.add(this.instancedMesh);
-        } else {
+        } else if (isNewMaterial) {
             this.instancedMesh.material = selectedMaterial;
-            this.instancedMesh.visible = true;
-            if (!this.instancedMesh.parent) this.scene.add(this.instancedMesh);
         }
 
+        // We always make it visible and ensure it's in the scene
+        this.instancedMesh.visible = true;
+        if (!this.instancedMesh.parent) this.scene.add(this.instancedMesh);
+
+        // Tell the GPU how many items to actually draw this frame
         this.instancedMesh.count = actualCount;
 
         const pos = this.positions;
@@ -103,12 +114,30 @@ export class WeatherSystem {
         const sZ = 1.0;
         const areaHalf = areaSize * 0.5;
 
-        // [VINTERDÖD] Buffer Initialization
-        for (let i = 0; i < actualCount; i++) {
+        // FIX: Använd threeCamera för att undvika NaN-krasch!
+        const engineCamera = WinterEngine.getInstance().camera;
+        const centerX = engineCamera?.threeCamera?.position?.x || 0;
+        const centerZ = engineCamera?.threeCamera?.position?.z || 0;
+
+        // Buffer Initialization
+        // We iterate over maxCount instead of actualCount to ensure the trailing unused matrices 
+        // are scaled to 0, preventing ghost particles or corruption from previous sectors.
+        // THIS ALWAYS RUNS NOW, relocating the storm to the player immediately on Sector load.
+        for (let i = 0; i < this.maxCount; i++) {
             const i3 = i * 3;
-            const x = (Math.random() * areaSize) - areaHalf;
+            const matIdx = i * 16;
+
+            // If beyond the requested count, scale to 0 to hide it
+            if (i >= actualCount) {
+                matrixArray[matIdx + 0] = 0;
+                matrixArray[matIdx + 5] = 0;
+                matrixArray[matIdx + 10] = 0;
+                continue;
+            }
+
+            const x = centerX + (Math.random() * areaSize) - areaHalf;
             const y = Math.random() * 40;
-            const z = (Math.random() * areaSize) - areaHalf;
+            const z = centerZ + (Math.random() * areaSize) - areaHalf;
 
             pos[i3 + 0] = x;
             pos[i3 + 1] = y;
@@ -133,18 +162,31 @@ export class WeatherSystem {
             }
 
             // Direct matrix mutation (Column-major 4x4)
-            const matIdx = i * 16;
-            matrixArray[matIdx + 0] = sX;
-            matrixArray[matIdx + 5] = sY;
-            matrixArray[matIdx + 10] = sZ;
-            matrixArray[matIdx + 12] = x;
-            matrixArray[matIdx + 13] = y;
-            matrixArray[matIdx + 14] = z;
-            matrixArray[matIdx + 15] = 1;
+            // Essential to write all 16 values explicitly at least once to clear NaN/Undefined
+            matrixArray[matIdx + 0] = sX;   // Scale X
+            matrixArray[matIdx + 1] = 0;
+            matrixArray[matIdx + 2] = 0;
+            matrixArray[matIdx + 3] = 0;
+
+            matrixArray[matIdx + 4] = 0;
+            matrixArray[matIdx + 5] = sY;   // Scale Y
+            matrixArray[matIdx + 6] = 0;
+            matrixArray[matIdx + 7] = 0;
+
+            matrixArray[matIdx + 8] = 0;
+            matrixArray[matIdx + 9] = 0;
+            matrixArray[matIdx + 10] = sZ;  // Scale Z
+            matrixArray[matIdx + 11] = 0;
+
+            matrixArray[matIdx + 12] = x;   // Position X
+            matrixArray[matIdx + 13] = y;   // Position Y
+            matrixArray[matIdx + 14] = z;   // Position Z
+            matrixArray[matIdx + 15] = 1;   // W (Required for visibility)
         }
+
         this.instancedMesh.instanceMatrix.needsUpdate = true;
 
-        // Fix 6: Refill random LUT on weather change so wrapping uses fresh values immediately
+        // Refill random LUT on weather change so wrapping uses fresh values immediately
         for (let i = 0; i < this._randLUT.length; i++) this._randLUT[i] = Math.random();
         this._randIdx = 0;
     }
@@ -153,9 +195,9 @@ export class WeatherSystem {
      * Updates particles based on wind and velocity.
      */
     public update(dt: number, time: number) {
-        if (!this.instancedMesh || !this.instancedMesh.visible) return;
+        if (!this.instancedMesh || !this.instancedMesh.visible || this.count === 0) return;
 
-        // [VINTERDÖD] Using cached sway multiplier and direct wind access
+        // Using cached sway multiplier and direct wind access
         const windVec = this.wind.current;
         const wx = windVec.x * this.swayMult;
         const wy = windVec.y * this.swayMult;
@@ -165,6 +207,12 @@ export class WeatherSystem {
         const vel = this.velocities;
         const areaSize = this.areaSize;
         const areaHalf = areaSize * 0.5;
+
+        // FIX: Använd threeCamera för att undvika NaN-krasch i uppdateringen!
+        const engineCamera = WinterEngine.getInstance().camera;
+        const centerX = engineCamera?.threeCamera?.position?.x || 0;
+        const centerZ = engineCamera?.threeCamera?.position?.z || 0;
+
         const yTop = 40.0;
         const matrixArray = this.instancedMesh.instanceMatrix.array;
 
@@ -176,20 +224,30 @@ export class WeatherSystem {
             let y = pos[i3 + 1] + vel[i3 + 1] * dt;
             let z = pos[i3 + 2] + (vel[i3 + 2] + wy) * dt;
 
-            // Fix 6: Wrap uses LUT instead of Math.random() — two reads advance the ring index
+            // Wrap uses LUT instead of Math.random() — two reads advance the ring index
             if (y < 0.0) {
                 y = yTop;
                 const r0 = this._randLUT[this._randIdx++ & 511];
                 const r1 = this._randLUT[this._randIdx++ & 511];
-                x = r0 * areaSize - areaHalf;
-                z = r1 * areaSize - areaHalf;
+                x = centerX + (r0 * areaSize - areaHalf);
+                z = centerZ + (r1 * areaSize - areaHalf);
             } else if (y > yTop) {
                 y = 0.0;
                 const r0 = this._randLUT[this._randIdx++ & 511];
                 const r1 = this._randLUT[this._randIdx++ & 511];
-                x = r0 * areaSize - areaHalf;
-                z = r1 * areaSize - areaHalf;
+                x = centerX + (r0 * areaSize - areaHalf);
+                z = centerZ + (r1 * areaSize - areaHalf);
             }
+
+            // X/Z Axis Wrapping relative to camera
+            const dx = x - centerX;
+            const dz = z - centerZ;
+
+            if (dx < -areaHalf) x += areaSize;
+            else if (dx > areaHalf) x -= areaSize;
+
+            if (dz < -areaHalf) z += areaSize;
+            else if (dz > areaHalf) z -= areaSize;
 
             pos[i3 + 0] = x;
             pos[i3 + 1] = y;

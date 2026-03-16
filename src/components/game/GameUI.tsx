@@ -16,31 +16,38 @@ const GameUI: React.FC<GameUIProps> = ({
     isMobileDevice,
     onInteract
 }) => {
-    // Local state for the interaction position. 
+    // Local state for the interaction. 
     // Updating this only re-renders this tiny component, not the massive GameSession.
-    const [screenPos, setScreenPos] = useState<{ x: number, y: number } | null>(null);
+    const [interaction, setInteraction] = useState<{
+        type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | 'sector_specific' | 'vehicle' | null,
+        label: string | null,
+        pos: { x: number, y: number } | null
+    } | null>(null);
 
     useEffect(() => {
         // High-performance event listener hooked up to the engine's direct dispatches
-        const handleUpdatePos = (e: CustomEvent<{ x: number, y: number } | null>) => {
-            setScreenPos(e.detail);
+        const handleUpdateInteraction = (e: CustomEvent<{
+            type: any,
+            label: string | null,
+            pos: { x: number, y: number } | null
+        } | null>) => {
+            setInteraction(e.detail);
         };
 
-        window.addEventListener('update_interaction_pos', handleUpdatePos as EventListener);
+        window.addEventListener('update_interaction', handleUpdateInteraction as EventListener);
 
         return () => {
-            window.removeEventListener('update_interaction_pos', handleUpdatePos as EventListener);
+            window.removeEventListener('update_interaction', handleUpdateInteraction as EventListener);
         };
     }, []);
 
-    // 1. Dialogue: CinematicBubble is handled in GameSession currently
-    // 2. Interactions
-    // These render *on top* of the game but don't block input usually.
+    if (!interaction) return null;
+
     return (
         <InteractionPrompt
-            type={interactionType}
-            label={interactionLabel}
-            screenPos={screenPos}
+            type={interaction.type}
+            label={interaction.label || interactionLabel}
+            screenPos={interaction.pos}
             isMobileDevice={isMobileDevice}
             onInteract={onInteract}
         />

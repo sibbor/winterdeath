@@ -5,8 +5,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GameSessionLogic } from '../core/GameSessionLogic';
 import { soundManager } from '../utils/SoundManager';
 import { t } from '../utils/i18n';
-import { WEAPONS, LEVEL_CAP, BOSSES } from '../content/constants';
-
+import { WEAPONS, LEVEL_CAP, BOSSES, WEATHER_SYSTEM, WIND_SYSTEM } from '../content/constants';
 import { useGameSessionState } from './game/session/useGameSessionState';
 import { useGameInput } from './game/session/useGameInput';
 import { GameSessionSetup } from './game/session/GameSessionSetup';
@@ -15,6 +14,7 @@ import GameSessionUI from './game/session/GameSessionUI';
 import { requestWakeLock, releaseWakeLock } from '../utils/device';
 import { FXSystem } from '../core/systems/FXSystem';
 import { aggregateStats } from '../core/ProgressionManager';
+import { SectorSystem } from '../core/systems/SectorSystem';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -660,11 +660,53 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             window.removeEventListener('open_station', handleOpenStation);
 
             if (refs.engineRef.current && refs.gameSessionRef.current) {
-                GameSessionSetup.disposeSector(refs.engineRef.current, refs.gameSessionRef.current, refs.stateRef.current);
+                GameSessionSetup.disposeSector(refs.gameSessionRef.current, refs.stateRef.current);
             }
         };
 
     }, [props.currentSector, props.currentSectorData]);
+
+    // Environmental Sync Transition
+    // When loading finishes (isWarmup: true -> false), we re-sync engine singletons.
+    useEffect(() => {
+        if (!props.isWarmup && refs.engineRef.current) {
+            const engine = refs.engineRef.current;
+            const sector = SectorSystem.getSector(props.currentSector);
+            const env = sector?.environment;
+            const overrides = props.environmentOverrides?.[props.currentSector];
+
+            if (env) {
+                // 1. WindSystem
+                if (env.wind || overrides?.windStrength !== undefined) {
+                    const dir = (overrides as any)?.wind?.direction || env.wind?.direction || WIND_SYSTEM.DIRECTION;
+                    const windAngle = overrides?.windDirection ?? Math.atan2(dir.z, dir.x);
+
+                    engine.wind.setRandomWind(
+                        overrides?.windStrength ?? env.wind?.strengthMin ?? WIND_SYSTEM.MIN_STRENGTH,
+                        overrides?.windStrength ?? env.wind?.strengthMax ?? WIND_SYSTEM.MAX_STRENGTH,
+                        windAngle,
+                        env.wind?.angleVariance || WIND_SYSTEM.ANGLE_VARIANCE
+                    );
+                } else {
+                    engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
+                }
+
+                // 2. WaterSystem
+                if (engine.water) engine.water.reAttach(engine.scene);
+
+                if (engine.weather) {
+                    // 3. WeatherSystem
+                    const weatherType = overrides?.weather?.type || env?.weather?.type || (typeof props?.weather === 'string' ? props.weather : 'none');
+                    const requestedParticles = overrides?.weather?.particles || env?.weather?.particles || WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES;
+                    const maxAllocated = WEATHER_SYSTEM.MAX_NUM_PARTICLES;
+                    const finalWeatherCount = Math.max(0, Math.min(requestedParticles, maxAllocated));
+
+                    engine.weather.reAttach(engine.scene);
+                    engine.weather.sync(weatherType, finalWeatherCount, 120);
+                }
+            }
+        }
+    }, [props.isWarmup, props.currentSector, props.environmentOverrides, props.weather]);
 
     return <GameSessionUI refs={refs} uiState={uiState} gameProps={props} callbacks={uiCallbacks} />;
 });

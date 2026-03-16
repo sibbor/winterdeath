@@ -33,7 +33,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     const [skyLightZ, setSkyLightZ] = useState(currentOverride?.skyLightPosition?.z ?? 50);
 
     // Weather Density
-    const [weatherDensity, setWeatherDensity] = useState(currentOverride?.weatherDensity ?? 0.5);
+    const [weatherDensity, setWeatherDensity] = useState(currentOverride?.weather.particles ?? 500);
 
     // Wind
     const [windStrength, setWindStrength] = useState(currentOverride?.windStrength ?? 1.0);
@@ -83,7 +83,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
             setSkyLightZ(def.skyLight.position.z);
         }
         onWeatherChange(def.weather);
-        setWeatherDensity(def.weatherDensity ?? 0.5);
+        setWeatherDensity(def.weather.particles ?? 500);
         setWindStrength(1.0);
         setWindDirection(0);
         setWindRandomized(false);
