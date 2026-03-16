@@ -7,9 +7,10 @@ import CollectiblePreview from '../ui/core/CollectiblePreview';
 interface ScreenCollectibleDiscoveredProps {
     collectibleId: string;
     onClose: () => void;
+    isMobileDevice?: boolean;
 }
 
-const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose }) => {
+const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose, isMobileDevice }) => {
     const def = getCollectibleById(collectibleId);
 
     if (!def) return null;
