@@ -10,9 +10,8 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 
 const LOCATIONS = {
     SPAWN: {
-        //DON'T REMOVE:
-        //PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
-        PLAYER: { x: 138, z: 313, rot: Math.PI / 1.25 },
+        PLAYER: { x: -21, z: 15, rot: Math.PI / 1.25 },
+        //DONT'REMOVE:PLAYER: { x: 138, z: 313, rot: Math.PI / 1.25 },
         FAMILY: { x: 144, z: 400, y: 4 },
         BOSS: { x: 174, z: 380 }
     },
@@ -62,8 +61,6 @@ const LOCATIONS = {
 const _busPos = new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z);
 const _trainYardPos = new THREE.Vector3(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
 const _viewPos = new THREE.Vector3();
-const _camTarget = new THREE.Vector3();
-const _lookAt = new THREE.Vector3();
 const _camOverrideTarget = new THREE.Vector3();
 const _camOverrideLookAt = new THREE.Vector3();
 
@@ -93,9 +90,12 @@ export const Sector1: SectorDef = {
         skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
-        weather: 'snow',
+        weather: {
+            type: 'snow',
+            particles: 2000
+        },
         wind: {
-            strengthMin: 0.05,
+            strengthMin: 0.5,
             strengthMax: 1.0,
             direction: { x: 1, z: 1 },
             angleVariance: Math.PI / 4

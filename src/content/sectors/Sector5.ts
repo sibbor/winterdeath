@@ -16,7 +16,10 @@ export const Sector5: SectorDef = {
         fov: 50,
         skyLight: { visible: false, color: 0x445566, intensity: 0.2 },
         cameraOffsetZ: 40,
-        weather: 'none',
+        weather: {
+            type: 'ash',
+            particles: 2000
+        },
     },
     // Automatic Content
     groundType: 'SNOW',

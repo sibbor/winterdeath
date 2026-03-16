@@ -23,8 +23,10 @@ export interface SectorEnvironment {
     };
     cameraOffsetZ: number;
     cameraHeight?: number;
-    weather: WeatherType;
-    weatherDensity?: number;
+    weather: {
+        type: WeatherType,
+        particles: number
+    };
     wind?: {
         strengthMin?: number;
         strengthMax?: number;
