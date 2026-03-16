@@ -240,7 +240,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             const hudMesh = refs.familyMemberRef.current?.mesh || null;
 
+            monitor.begin('hud_sync');
             const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
+            monitor.end('hud_sync');
+
             hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
 
             // Expose performance metrics implicitly onto state struct (updated by renderer)
@@ -486,7 +489,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const currentInter = state.interactionType;
         if (currentInter !== refs.interactionTypeRef.current) {
             refs.interactionTypeRef.current = currentInter;
-            callbacks.setInteractionType(currentInter);
+
+            // This is fine to keep as a React callback since it only triggers once 
+            // when entering/exiting an interaction zone, not every frame.
+            if (callbacks.setInteractionType) {
+                callbacks.setInteractionType(currentInter);
+            }
         }
 
         if (currentInter && (state as any).currentInteraction) {
@@ -507,12 +515,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _interactionScreenPosScratch.x = screenX;
                 _interactionScreenPosScratch.y = screenY;
                 refs.lastInteractionPosRef.current = _interactionScreenPosScratch;
-                callbacks.setInteractionScreenPos({ x: screenX, y: screenY });
+
+                // PERFORMANCE FIX: Dispatch event directly instead of forcing a React re-render
+                window.dispatchEvent(new CustomEvent('update_interaction_pos', {
+                    detail: { x: screenX, y: screenY }
+                }));
             }
         } else {
             if (refs.lastInteractionPosRef.current !== null) {
                 refs.lastInteractionPosRef.current = null;
-                callbacks.setInteractionScreenPos(null);
+
+                // PERFORMANCE FIX: Dispatch null to hide the UI without a re-render
+                window.dispatchEvent(new CustomEvent('update_interaction_pos', {
+                    detail: null
+                }));
             }
         }
 
@@ -555,7 +571,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.collectedCluesRef = (activeCallbacks as any).collectedCluesRef || refs.collectedCluesRef;
-
         _triggerOptionsScratch.resolveDynamicPos = (familyId?: number, ownerId?: string) => {
             if (familyId !== undefined) {
                 const members = refs.activeFamilyMembers.current;
