@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
 import { createProceduralDiffuse } from './procedural'
-import { WaterStyleConfig, createWaterMaterial, patchCutoutMaterial, patchWaterVegetationMaterial } from './materials_water';
+import { patchCutoutMaterial, patchWaterVegetationMaterial } from './materials_water';
 import { patchWindMaterial } from './materials_wind';
 
 // Pre-define common colors
