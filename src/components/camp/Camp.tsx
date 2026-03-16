@@ -19,12 +19,6 @@ const _v1 = new THREE.Vector3();
 
 // Import UI Components
 import CampHUD from './CampHUD';
-import ScreenPlayerSkills from './ScreenPlayerSkills';
-import ScreenArmory from './ScreenArmory';
-import ScreenSectorOverview from './ScreenSectorOverview';
-import ScreenSettings from './ScreenSettings';
-import ScreenResetConfirm from './ScreenResetConfirm';
-import ScreenAdventureLog from './ScreenAdventureLog';
 
 interface CampProps {
     stats: PlayerStats;
@@ -54,7 +48,7 @@ interface CampProps {
     onInteractionStateChange: (type: string | null) => void;
 }
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSaveStats, onSaveLoadout, onSelectSector, onStartSector, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, isSectorLoaded, deadBossIndices, onResetGame, onSaveGraphics, initialGraphics, onCampLoaded, onUpdateHUD, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, initialGraphics, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const lastDrawCallsRef = useRef(0);
@@ -144,7 +138,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
             // Setup Scene via CampWorld
-            const { interactables, outlines, envState } = await CampWorld.setupCampScene(renderer, scene, camera, textures, weather);
+            const { interactables, outlines, envState } = await CampWorld.setupCampScene(scene, textures, weather);
 
             // Race condition check: If another setup started, abort this one
             if (setupCounterRef.current !== currentSetupId || !container.parentElement) return;
@@ -302,7 +296,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, weaponLevels, onSave
 
             monitor.begin('env_camera');
             if (envStateRef.current) {
-                CampWorld.updateEffects(scene, camera.threeCamera, envStateRef.current, dt, now, frameCount);
+                CampWorld.updateEffects(scene, envStateRef.current, dt, now, frameCount);
             }
 
             const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
