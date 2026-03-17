@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { WindSystem } from './WindSystem';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { WeatherType } from '../../types';
-import { WinterEngine } from '../engine/WinterEngine';
 import { WEATHER_SYSTEM } from '../../content/constants';
 
 /**
@@ -21,6 +20,7 @@ export class WeatherSystem {
     private count: number = 0;
     private areaSize: number = 100;
     private wind: WindSystem;
+    private camera: THREE.Camera;
     private maxCount: number;
 
     // Cached physics multiplier to avoid string checks in hot loop
@@ -30,9 +30,11 @@ export class WeatherSystem {
     private _randLUT: Float32Array = new Float32Array(512);
     private _randIdx: number = 0;
 
-    constructor(scene: THREE.Scene, wind: WindSystem, maxCount: number = WEATHER_SYSTEM.MAX_NUM_PARTICLES) {
+    constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera, maxCount: number = WEATHER_SYSTEM.MAX_NUM_PARTICLES) {
         this.scene = scene;
         this.wind = wind;
+        this.camera = camera;
+
         // Use a safe, high default maxCount to prevent out-of-bounds issues during transitions
         this.maxCount = maxCount;
 
@@ -85,7 +87,7 @@ export class WeatherSystem {
             // ALWAYS allocate the maximum possible buffer size to prevent reallocation crashes
             this.instancedMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, selectedMaterial, this.maxCount);
 
-            // FIX: Skydda partiklarna från The WebGL Black Hole i städningen!
+            // Protect particles from the WebGL Black Hole during clean-up
             this.instancedMesh.name = 'WeatherSystem_Particles';
             this.instancedMesh.userData = { isPersistent: true, isEngineStatic: true };
 
@@ -114,10 +116,9 @@ export class WeatherSystem {
         const sZ = 1.0;
         const areaHalf = areaSize * 0.5;
 
-        // FIX: Använd threeCamera för att undvika NaN-krasch!
-        const engineCamera = WinterEngine.getInstance().camera;
-        const centerX = engineCamera?.threeCamera?.position?.x || 0;
-        const centerZ = engineCamera?.threeCamera?.position?.z || 0;
+        // Use the camera to avoid NaN crashes
+        const centerX = this.camera.position?.x || 0;
+        const centerZ = this.camera.position?.z || 0;
 
         // Buffer Initialization
         // We iterate over maxCount instead of actualCount to ensure the trailing unused matrices 
@@ -208,10 +209,9 @@ export class WeatherSystem {
         const areaSize = this.areaSize;
         const areaHalf = areaSize * 0.5;
 
-        // FIX: Använd threeCamera för att undvika NaN-krasch i uppdateringen!
-        const engineCamera = WinterEngine.getInstance().camera;
-        const centerX = engineCamera?.threeCamera?.position?.x || 0;
-        const centerZ = engineCamera?.threeCamera?.position?.z || 0;
+        // Use the camera to avoid NaN crashes
+        const centerX = this.camera.position?.x || 0;
+        const centerZ = this.camera.position?.z || 0;
 
         const yTop = 40.0;
         const matrixArray = this.instancedMesh.instanceMatrix.array;

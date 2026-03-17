@@ -18,6 +18,14 @@ export class PerformanceMonitor {
     private _aiLoggingEnabled: boolean = true;
     private _shaderLoggingEnabled: boolean = true;
 
+    // --- GAME STATE CACHE (Raw data, updated 60fps, Zero-GC) ---
+    public gameState = {
+        playerCoords: { x: 0, z: 0 },
+        cameraPos: { x: 0, y: 0, z: 0 },
+        enemyCount: 0,
+        objectCount: 0
+    };
+
     constructor() {
         // Load initial state from localStorage
         const savedEng = localStorage.getItem('vinterdod_debug_console_logging');
@@ -41,6 +49,7 @@ export class PerformanceMonitor {
     private gcDroppedMB: number = 0;
     private heapUsedMB: number = 0;
     private heapLimitMB: number = 0;
+    private _lastGcTime: number = 0;
 
     // Renderer Stat Tracking (set externally from WinterEngine after each render)
     private _drawCalls: number = 0;
@@ -77,20 +86,32 @@ export class PerformanceMonitor {
         const mem = (performance as any).memory;
         if (mem) {
             const currentHeap = mem.usedJSHeapSize;
-            this.heapUsedMB = +(currentHeap / 1048576).toFixed(1);
-            this.heapLimitMB = +(mem.jsHeapSizeLimit / 1048576).toFixed(0);
+            this.heapUsedMB = currentHeap / 1048576;
+            this.heapLimitMB = mem.jsHeapSizeLimit / 1048576;
             if (this.lastHeapSize > 0) {
                 const diff = this.lastHeapSize - currentHeap;
                 if (diff > 1048576) {
                     this.gcDetected = true;
                     this.gcDroppedMB = diff / 1048576;
+                    this._lastGcTime = now;
                 } else {
                     this.gcDetected = false;
-                    this.gcDroppedMB = 0;
+                    // We don't reset droppedMB so the UI can linger on the value
                 }
             }
             this.lastHeapSize = currentHeap;
         }
+    }
+
+    // --- GAME STATE UPDATERS ---
+    public updateGameState(playerX: number, playerZ: number, camX: number, camY: number, camZ: number, enemies: number, objects: number) {
+        this.gameState.playerCoords.x = playerX;
+        this.gameState.playerCoords.z = playerZ;
+        this.gameState.cameraPos.x = camX;
+        this.gameState.cameraPos.y = camY;
+        this.gameState.cameraPos.z = camZ;
+        this.gameState.enemyCount = enemies;
+        this.gameState.objectCount = objects;
     }
 
     /**
@@ -147,25 +168,56 @@ export class PerformanceMonitor {
         this._shaderPrograms = programCount;
     }
 
-    public getRendererStats() {
+    // ============================================================================
+    // UI GETTERS (FORMATS ON DEMAND TO PREVENT CONSTANT GC SPIKES)
+    // ============================================================================
+
+    public getFormattedGameState() {
         return {
-            drawCalls: this._drawCalls,
-            triangles: this._triangles,
-            textures: this._textures,
-            geometries: this._geometries,
-            shaderPrograms: this._shaderPrograms,
-            shaderRecompiles: this._shaderRecompileCount,
+            playerX: this.gameState.playerCoords.x.toFixed(1),
+            playerZ: this.gameState.playerCoords.z.toFixed(1),
+            camX: this.gameState.cameraPos.x.toFixed(1),
+            camY: this.gameState.cameraPos.y.toFixed(1),
+            camZ: this.gameState.cameraPos.z.toFixed(1),
+            enemies: this.gameState.enemyCount.toString(),
+            objects: this.gameState.objectCount.toString()
         };
     }
 
-    public getGcInfo() {
+    public getFormattedRendererStats() {
         return {
-            detected: this.gcDetected,
-            droppedMB: this.gcDroppedMB,
-            heapUsedMB: this.heapUsedMB,
-            heapLimitMB: this.heapLimitMB,
+            drawCalls: this._drawCalls.toString(),
+            triangles: (this._triangles / 1000).toFixed(1) + 'k',
+            shaderPrograms: this._shaderPrograms.toString(),
+            shaderRecompiles: this._shaderRecompileCount, // Int (used for coloring)
+            textures: this._textures.toString(),
+            geometries: this._geometries.toString()
         };
     }
+
+    public getFormattedGcInfo() {
+        return {
+            timeSinceDetection: performance.now() - this._lastGcTime,
+            droppedMB: this.gcDroppedMB.toFixed(1),
+            heapUsedMB: this.heapUsedMB.toFixed(1),
+            heapLimitMB: this.heapLimitMB.toFixed(0),
+        };
+    }
+
+    public getFormattedTimings() {
+        const formatted: Record<string, string> = {};
+        let total = 0;
+        for (const key in this.timings) {
+            formatted[key] = this.timings[key].toFixed(2);
+            total += this.timings[key];
+        }
+        return {
+            breakdown: formatted,
+            total: total.toFixed(2)
+        };
+    }
+
+    // ============================================================================
 
     /**
      * Mark the start of a block to track.

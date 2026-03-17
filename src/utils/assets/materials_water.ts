@@ -1,21 +1,6 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
 
-export interface WaterStyleConfig {
-    color: number;
-    shallowColor?: number;
-    opacity: number;
-    roughness: number;
-    metalness: number;
-    fresnelStrength?: number;
-    clarity?: number;
-}
-
-export const WATER_STYLES: Record<'nordic' | 'ice', WaterStyleConfig> = {
-    nordic: { color: 0x10479a, shallowColor: 0xaaccff, opacity: 0.7, roughness: 0.2, metalness: 0.1, fresnelStrength: 1.8, clarity: 0.85 },
-    ice: { color: 0x8ba6b5, shallowColor: 0xcfffff, opacity: 0.85, roughness: 0.1, metalness: 0.1, fresnelStrength: 2.0, clarity: 1.0 }
-};
-
 const MAX_RIPPLES = 16;
 const MAX_OBJECTS = 8;
 
@@ -29,19 +14,15 @@ dummyNoise.needsUpdate = true;
  * where water bodies exist, preventing Z-fighting and allowing water depth.
  */
 export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
-    // Pre-declare uniform object to permanently anchor it to the material instance
     mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
 
     mat.onBeforeCompile = (shader) => {
-        // Safeguard: If .clone() corrupted userData using JSON.stringify, reconstruct the Vector4s
         if (!mat.userData.uWaterBodies || !mat.userData.uWaterBodies.value || typeof mat.userData.uWaterBodies.value[0].isVector4 === 'undefined') {
             mat.userData.uWaterBodies = { value: Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) };
         }
 
-        // Guarantee we pass the exact referenced pointer to the shader
         shader.uniforms.uWaterBodies = mat.userData.uWaterBodies;
 
-        // 1. Inject Varying and calculation into Vertex Shader
         shader.vertexShader = shader.vertexShader.replace(
             '#include <common>',
             `varying vec3 vWorldPos_Cutout;\n#include <common>`
@@ -55,7 +36,6 @@ export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
             vWorldPos_Cutout = (modelMatrix * cutoutWorldPosition).xyz;`
         );
 
-        // 2. Inject Uniform & Logic into Fragment Shader
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <common>',
             `uniform vec4 uWaterBodies[8];\nvarying vec3 vWorldPos_Cutout;\n#include <common>`
@@ -76,7 +56,6 @@ export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
         );
     };
 
-    // Ensure unique cache key so multiple ground types don't share the same shader map and crash
     mat.customProgramCacheKey = () => 'ground_cutout_material_' + mat.uuid;
     mat.needsUpdate = true;
     return mat;
@@ -84,33 +63,30 @@ export function patchCutoutMaterial<T extends THREE.Material>(mat: T): T {
 
 /**
  * Creates an advanced, interactive water shader material.
+ * Highly optimized: Removed unused styles, clamped physics, and reduced texture lookups.
  */
 export function createWaterMaterial(
-    styleName: 'nordic' | 'ice',
     width: number,
     depth: number,
     ripples: THREE.Vector4[],
     objectPositions: THREE.Vector4[],
     shape: 'rect' | 'circle' = 'rect'
 ): THREE.ShaderMaterial {
-    const config = WATER_STYLES[styleName];
-    const colors = { base: config.color, shallow: config.shallowColor || config.color };
+    // Hardcoded "Nordic" style for max performance and consistency
+    const baseColor = new THREE.Color(0x10479a);
+    const shallowColor = new THREE.Color(0xaaccff);
+    const foamColor = new THREE.Color(0xffffff);
 
     return new THREE.ShaderMaterial({
         uniforms: {
             uTime: { value: 0.0 },
             uWaveStrength: { value: 1.0 },
-            uBaseColor: { value: new THREE.Color(colors.base) },
-            uShallowColor: { value: new THREE.Color(colors.shallow) },
-            uFoamColor: { value: new THREE.Color(0xffffff) },
-            uOpacity: { value: config.opacity },
-            uRoughness: { value: config.roughness },
-            uMetalness: { value: config.metalness },
-            uFresnelStrength: { value: config.fresnelStrength || 1.8 },
+            uBaseColor: { value: baseColor },
+            uShallowColor: { value: shallowColor },
+            uFoamColor: { value: foamColor },
             uPlaneSize: { value: new THREE.Vector2(width, depth) },
             uIsCircle: { value: shape === 'circle' ? 1.0 : 0.0 },
             uWaterDepth: { value: 2.0 },
-            uClarity: { value: config.clarity !== undefined ? config.clarity : 1.0 },
             uRipples: { value: ripples },
             uObjectPositions: { value: objectPositions },
             uLightPosition: { value: new THREE.Vector3(10, 20, 10) },
@@ -169,12 +145,15 @@ export function createWaterMaterial(
                         if (abs(d - radius) < 1.0) {
                             float decay = max(0.0, 1.0 - (t / 3.0));
                             float ringNoise = texture2D(uNoiseTexture, worldPosition.xz * 0.05 + uTime * 0.1).r;
-                            rippleSum += max(0.0, sin((d - radius) * 6.0 + ringNoise * 2.0)) * rip.w * decay;
+                            // Clamp physics to avoid grenade explosions creating mountains of water
+                            float safeStrength = clamp(rip.w, 0.0, 1.5); 
+                            rippleSum += max(0.0, sin((d - radius) * 6.0 + ringNoise * 2.0)) * safeStrength * decay;
                         }
                     }
                 }
 
-                vWaveHeight = baseWave + ((rippleSum * 0.25) + (noiseDetail * 0.05)) * edgeDampen;
+                // Hard clamp to protect physics from wild math spikes
+                vWaveHeight = baseWave + clamp(rippleSum * 0.25, -0.6, 0.6) + (noiseDetail * 0.05) * edgeDampen;
                 worldPosition.y += vWaveHeight;
 
                 vWorldPos = worldPosition.xyz;
@@ -191,16 +170,11 @@ export function createWaterMaterial(
             uniform vec3 uBaseColor;
             uniform vec3 uShallowColor;
             uniform vec3 uFoamColor;
-            uniform float uOpacity;
-            uniform float uRoughness;
-            uniform float uMetalness;
-            uniform float uFresnelStrength;
             uniform vec3 uLightPosition;
             uniform vec4 uObjectPositions[${MAX_OBJECTS}];
             uniform vec2 uPlaneSize;
             uniform float uIsCircle;
             uniform float uWaterDepth;
-            uniform float uClarity;
             uniform sampler2D uNoiseTexture;
             
             varying vec2 vUV;
@@ -221,77 +195,71 @@ export function createWaterMaterial(
 
                 float depthFactor = smoothstep(0.0, uWaterDepth, distToEdge);
                 
-                // Fog and opacity calculations
-                float fogStartDepth = mix(0.0, uWaterDepth * 2.0, uClarity); 
-                float fogFactor = smoothstep(fogStartDepth, uWaterDepth * 2.5, distToEdge) * (1.0 - uClarity);
-                
-                float defaultOpacity = mix(0.15, uOpacity, depthFactor);
-                float finalOpacity = mix(defaultOpacity, 1.0, fogFactor);
-
-                // Calculate procedural normals based on world position derivatives
+                // Calculate procedural normals based on world position derivatives (Low Poly look)
                 vec3 fdx = dFdx(vWorldPos);
                 vec3 fdy = dFdy(vWorldPos);
                 vec3 normal = normalize(cross(fdx, fdy));
-                vec3 viewDir = normalize(cameraPosition - vWorldPos);
                 
+                vec3 viewDir = normalize(cameraPosition - vWorldPos);
                 vec3 lightDir = normalize(uLightPosition);
                 vec3 halfDir = normalize(lightDir + viewDir);
                 
-                float noise = texture2D(uNoiseTexture, vWorldPos.xz * 0.1).r;
+                // LIGHTING
+                float lightDot = max(dot(normal, lightDir), 0.0);
+                float faceGlow = pow(lightDot, 5.0) * 0.3; 
+                float spec = pow(max(dot(normal, halfDir), 0.0), 32.0) * 0.8;
+                float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 4.0) * 1.5; // Fresnel
                 
-                // Lighting
-                float lightDot = dot(normal, lightDir);
-                float faceGlow = step(0.4, lightDot) * 0.85; 
-                float spec = pow(max(dot(normal, halfDir), 0.0), 24.0) * (0.6 + 0.5 * noise);
-                float rim = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0) * uFresnelStrength;
+                vec3 specularCol = vec3(1.0) * (faceGlow + spec + rim * 0.5);
                 
-                vec3 specularCol = vec3(1.0, 1.0, 1.0) * (faceGlow + spec * 2.0 + rim * 0.6);
-                float scatter = clamp(vWaveHeight * 2.5, 0.0, 0.4) * max(0.0, dot(normal, lightDir));
-                
-                vec3 clearWater = mix(uShallowColor, uBaseColor, depthFactor);
-                vec3 muddyWater = vec3(0.12, 0.18, 0.10); 
-                vec3 waterColor = mix(clearWater, muddyWater, fogFactor);
+                // Base Color interpolation
+                vec3 waterColor = mix(uShallowColor, uBaseColor, depthFactor);
 
-                waterColor = mix(waterColor, waterColor + scatter, 0.6);
-                float skyCatch = max(0.0, normal.y * 0.1); 
-                waterColor += skyCatch * uShallowColor * (1.0 - depthFactor);
-                waterColor = mix(waterColor, waterColor + specularCol, 0.9);
+                // Add specular additively
+                waterColor += specularCol;
 
-                // Shoreline and dynamic object foam
-                float breathe = sin(uTime * 1.2) * 0.2;
-                float shoreStroke = step(0.96, 1.0 - (distToEdge / (1.8 + breathe)));
+                // --- Wave Crest Lines (Vågtoppar) ---
+                float normalizedHeight = vWaveHeight;
+                float crestLine = smoothstep(0.35, 0.48, normalizedHeight);
+                float crestNoise = texture2D(uNoiseTexture, vWorldPos.xz * 0.15 - uTime * 0.05).r;
+                crestLine *= smoothstep(0.2, 0.8, crestNoise);
                 
-                float objFoam = 0.0;
-                float pulseTime = uTime * 0.24; 
+                // Mix in a bright turquoise/white color strictly at the peaks
+                vec3 crestColor = mix(uShallowColor, vec3(1.0), 0.8);
+                waterColor += crestColor * crestLine * max(0.2, lightDot);
                 
+                // --- OPTIMIZED FOAM CALCULATION ---
+                // Calculate combined object proximity FIRST (Fast O(1) inside loop)
+                float objProximity = 0.0;
                 for(int i = 0; i < ${MAX_OBJECTS}; i++) {
                     vec4 op = uObjectPositions[i];
                     if (op.w > 0.0) {
-                        vec2 localPos = vWorldPos.xz - op.xy;
-                        float dist = length(localPos);
-                        
-                        float peakPos = mod(pulseTime * 12.0, 24.0);
-                        float uvScale = 1.0 / (peakPos * 0.5 + 1.0);
-                        vec2 objUV = localPos * uvScale + 0.5;
-                        
-                        float edgeMask = smoothstep(0.5, 0.45, length(objUV - 0.5));
-                        float foamTex = texture2D(uNoiseTexture, objUV).r * edgeMask;
-                        
-                        float organicDist = dist + foamTex * 1.5;
-                        float ringMask = smoothstep(2.5, 0.0, abs(organicDist - peakPos));
-                        
-                        float proximity = 1.0 - smoothstep(op.z, op.z + 10.0 + breathe, dist);
-                        float pulseFade = 1.0 - smoothstep(18.0, 24.0, peakPos);
-                        
-                        float stylizedRings = step(0.15, ringMask * proximity * pulseFade * foamTex);
-                        objFoam = max(objFoam, stylizedRings * op.w);
+                        float dist = distance(vWorldPos.xz, op.xy);
+                        // op.z is radius. Create a soft proximity gradient
+                        float prox = 1.0 - smoothstep(op.z * 0.2, op.z * 1.5, dist);
+                        objProximity += prox * op.w;
                     }
                 }
+
+                // ONE single texture lookup for all foam (Objects + Shore)
+                float foamNoise = texture2D(uNoiseTexture, vWorldPos.xz * 0.15 - uTime * 0.05).r;
                 
-                float finalFoam = clamp(shoreStroke + objFoam, 0.0, 1.0);
-                vec3 finalColor = mix(waterColor, uFoamColor, finalFoam * 0.95);
+                // Calculate Object Foam
+                float objFoam = smoothstep(0.3, 0.7, objProximity * foamNoise);
+
+                // Calculate Shoreline Foam
+                float breathe = sin(uTime * 1.2) * 0.2;
+                float shoreStroke = step(0.96, 1.0 - (distToEdge / (1.8 + breathe)));
+                float shoreFoam = shoreStroke * smoothstep(0.2, 0.8, foamNoise);
                 
-                gl_FragColor = vec4(finalColor, finalOpacity);
+                // Combine and apply Foam
+                float finalFoam = clamp(shoreFoam + objFoam, 0.0, 1.0);
+                vec3 finalColor = mix(waterColor, uFoamColor, finalFoam);
+                
+                // Fixed Opacity mapping
+                float defaultOpacity = mix(0.3, 0.8, depthFactor);
+                
+                gl_FragColor = vec4(finalColor, defaultOpacity);
             }
         `,
         transparent: true,
@@ -373,7 +341,6 @@ export const patchWaterVegetationMaterial = <T extends THREE.Material>(material:
         );
     };
 
-    // Ensure unique cache key so vegetation doesn't crash the material system
     material.customProgramCacheKey = () => 'water_veg_mat_' + material.uuid;
     material.needsUpdate = true;
     return material;

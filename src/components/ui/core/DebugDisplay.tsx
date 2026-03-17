@@ -2,206 +2,136 @@ import React, { useState, useEffect } from 'react';
 import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
 
 interface DebugDisplayProps {
-    fps?: number; // Kept for compat but will prioritize PerformanceMonitor
     debugMode: boolean;
     systems?: { id: string; enabled: boolean }[];
     onToggleSystem?: (id: string, enabled: boolean) => void;
-    debugInfo?: {
-        aim?: { x: number; y: number };
-        cam?: { x: number; y: number; z: number };
-        camera?: {
-            x: number;
-            y: number;
-            z: number;
-            rotX: number;
-            rotY: number;
-            rotZ: number;
-            fov: number;
-        };
-        modes?: string;
-        enemies?: number;
-        objects?: number;
-        drawCalls?: number;
-        coords?: { x: number; z: number };
-        performance?: {
-            cpu?: Record<string, number>;
-            memory?: {
-                heapLimit: number;
-                heapTotal: number;
-                heapUsed: number;
-            } | null;
-        };
-    };
 }
 
-const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, debugInfo, systems, onToggleSystem }) => {
-    const [isMinimized, setIsMinimized] = useState(() => {
-        const saved = localStorage.getItem('vinterdod_debug_minimized');
-        return saved === 'true';
-    });
-
-    const [fps, setFps] = useState(0);
-    const [engineLogging, setEngineLogging] = useState(() => {
-        const saved = localStorage.getItem('vinterdod_debug_console_logging');
-        return saved !== 'false';
-    });
-    const [aiLogging, setAiLogging] = useState(() => {
-        const saved = localStorage.getItem('vinterdod_debug_ai_logging');
-        return saved !== 'false';
-    });
-    const [shaderLogging, setShaderLogging] = useState(() => {
-        const saved = localStorage.getItem('vinterdod_debug_shader_logging');
-        return saved !== 'false';
-    });
+const DebugDisplay: React.FC<DebugDisplayProps> = ({ debugMode, systems, onToggleSystem }) => {
+    const [isMinimized, setIsMinimized] = useState(() => localStorage.getItem('vinterdod_debug_minimized') === 'true');
     const [systemsExpanded, setSystemsExpanded] = useState(true);
 
-    // Update FPS and renderer/GC stats from PerformanceMonitor
-    const [rendererStats, setRendererStats] = useState(() => PerformanceMonitor.getInstance().getRendererStats());
-    const [gcInfo, setGcInfo] = useState(() => PerformanceMonitor.getInstance().getGcInfo());
-    // Track when GC was last detected so its message lingers for 2 s
-    const [gcLastDetectedAt, setGcLastDetectedAt] = useState(0);
-    const [gcLastDropMB, setGcLastDropMB] = useState(0);
+    // En enda state-box för all formaterad data (uppdateras 15 ggr/sek)
+    const [stats, setStats] = useState<any>(null);
 
     useEffect(() => {
+        if (!debugMode) return;
+
+        const monitor = PerformanceMonitor.getInstance();
+
+        // 66ms = ~15 uppdateringar per sekund. "Realtid" för ögat, men skonsamt för React.
         const interval = setInterval(() => {
-            const now = performance.now();
-            setFps(PerformanceMonitor.getInstance().getFps());
-            const rs = PerformanceMonitor.getInstance().getRendererStats();
-            setRendererStats(rs);
-            const gc = PerformanceMonitor.getInstance().getGcInfo();
-            setGcInfo(gc);
-            if (gc.detected) {
-                setGcLastDetectedAt(now);
-                setGcLastDropMB(gc.droppedMB);
-            }
-        }, 500);
+            setStats({
+                fps: Math.round(monitor.getFps()),
+                gameState: monitor.getFormattedGameState(),
+                renderer: monitor.getFormattedRendererStats(),
+                gc: monitor.getFormattedGcInfo(),
+                timings: monitor.getFormattedTimings(),
+                logging: {
+                    engine: monitor.consoleLoggingEnabled,
+                    ai: monitor.aiLoggingEnabled,
+                    shader: monitor.shaderLoggingEnabled
+                }
+            });
+        }, 66);
+
         return () => clearInterval(interval);
-    }, []);
-
-    // Sync logging states to PerformanceMonitor
-    useEffect(() => {
-        PerformanceMonitor.getInstance().consoleLoggingEnabled = engineLogging;
-    }, [engineLogging]);
-
-    useEffect(() => {
-        PerformanceMonitor.getInstance().aiLoggingEnabled = aiLogging;
-    }, [aiLogging]);
-
-    useEffect(() => {
-        PerformanceMonitor.getInstance().shaderLoggingEnabled = shaderLogging;
-    }, [shaderLogging]);
+    }, [debugMode]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
-        if (!debugMode) return;
         e.stopPropagation();
         const next = !isMinimized;
         setIsMinimized(next);
         localStorage.setItem('vinterdod_debug_minimized', String(next));
     };
 
-    // --- Mode: OFF - Simple FPS in top-left ---
+    // Mode: OFF
     if (!debugMode) {
         return (
             <div className="fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] pointer-events-none select-none backdrop-blur-[2px] border border-white/5 rounded-sm">
-                {Math.round(fps)} FPS
+                {stats?.fps ?? 0} FPS
             </div>
         );
     }
 
-
-    // Minimized State (Simple View in top-right)
+    // Minimized State
     if (isMinimized) {
         return (
-            <div
-                onClick={toggleMinimized}
-                className="fixed top-0 right-0 z-[9998] bg-black/40 px-2 py-0.5 cursor-pointer shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 backdrop-blur-md"
-            >
-                <div className="font-mono font-bold text-white text-[12px]">
-                    {Math.round(fps)} FPS
-                </div>
+            <div onClick={toggleMinimized} className="fixed top-0 right-0 z-[9998] bg-black/40 px-2 py-0.5 cursor-pointer shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 backdrop-blur-md">
+                <div className="font-mono font-bold text-white text-[12px]">{stats?.fps ?? 0} FPS</div>
             </div>
         );
     }
 
-    // Expanded State (Right Side Panel)
+    if (!stats) return null; // Väntar på första ticken
+
+    // Expanded State
     return (
-        <div
-            onClick={toggleMinimized}
-            className="fixed top-0 bottom-0 right-0 w-56 bg-black/85 backdrop-blur-md border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden"
-        >
-            {/* Static top section — never scrolls */}
+        <div onClick={toggleMinimized} className="fixed top-0 bottom-0 right-0 w-56 bg-black/85 backdrop-blur-md border-l border-white/10 shadow-2xl z-[9998] font-mono text-[11px] text-green-400 pointer-events-auto cursor-pointer hover:border-green-500/20 transition-all flex flex-col overflow-hidden">
             <div className="p-3 shrink-0 space-y-2">
                 <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
                     <span className="font-bold text-white uppercase tracking-wider">Debug Monitor</span>
-                    <span className="bg-green-500 text-black px-1 rounded font-bold">{Math.round(fps)} FPS</span>
+                    <span className="bg-green-500 text-black px-1 rounded font-bold">{stats.fps} FPS</span>
                 </div>
 
                 <div className="flex items-center justify-between">
                     <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Player</div>
                     <span className="text-white tabular-nums">
-                        X: {debugInfo?.coords?.x?.toFixed(1) ?? '0.0'}, Y: {debugInfo?.coords?.z?.toFixed(1) ?? '0.0'}
+                        X: {stats.gameState.playerX}, Z: {stats.gameState.playerZ}
                     </span>
                 </div>
 
                 <div className="flex items-center justify-between">
                     <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Camera</div>
                     <span className="text-white tabular-nums text-[10px]">
-                        {debugInfo?.camera?.x?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.y?.toFixed(1) ?? '0.0'}, {debugInfo?.camera?.z?.toFixed(1) ?? '0.0'}
+                        {stats.gameState.camX}, {stats.gameState.camY}, {stats.gameState.camZ}
                     </span>
                 </div>
 
                 <div>
                     <div className="text-white/40 uppercase text-[10px] mb-0.5">Renderer</div>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                        <div>Calls: <span className="text-white">{rendererStats.drawCalls}</span></div>
-                        <div>Tris: <span className="text-white">{(rendererStats.triangles / 1000).toFixed(1)}k</span></div>
-                        <div>Shaders: <span className="text-white">{rendererStats.shaderPrograms}</span></div>
-                        <div>Recomp: <span className={rendererStats.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white'}>{rendererStats.shaderRecompiles}</span></div>
-                        <div>Tex: <span className="text-white">{rendererStats.textures}</span></div>
-                        <div>Geo: <span className="text-white">{rendererStats.geometries}</span></div>
+                        <div>Calls: <span className="text-white">{stats.renderer.drawCalls}</span></div>
+                        <div>Tris: <span className="text-white">{stats.renderer.triangles}</span></div>
+                        <div>Shaders: <span className="text-white">{stats.renderer.shaderPrograms}</span></div>
+                        <div>Recomp: <span className={stats.renderer.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white'}>{stats.renderer.shaderRecompiles}</span></div>
+                        <div>Tex: <span className="text-white">{stats.renderer.textures}</span></div>
+                        <div>Geo: <span className="text-white">{stats.renderer.geometries}</span></div>
                     </div>
-                    {/* GC row — always visible; yellow lingers 2 s after detection */}
                     <div className="mt-1 flex items-center justify-between">
                         <span className="text-white/40">GC</span>
-                        <span className={(performance.now() - gcLastDetectedAt) < 2000 ? 'text-yellow-400 font-bold' : 'text-white/20'}>
-                            {(performance.now() - gcLastDetectedAt) < 2000 ? `⚠️ ~${gcLastDropMB.toFixed(1)}MB freed` : '—'}
+                        <span className={stats.gc.timeSinceDetection < 2000 ? 'text-yellow-400 font-bold' : 'text-white/20'}>
+                            {stats.gc.timeSinceDetection < 2000 ? `⚠️ ~${stats.gc.droppedMB}MB freed` : '—'}
                         </span>
                     </div>
                 </div>
 
-                {gcInfo.heapUsedMB > 0 && (
+                {parseFloat(stats.gc.heapUsedMB) > 0 && (
                     <div>
                         <div className="text-white/40 uppercase text-[10px] mb-0.5">World / Memory</div>
                         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                            <div>Enemies: <span className="text-white">{debugInfo?.enemies ?? 0}</span></div>
-                            <div>Obj: <span className="text-white">{debugInfo?.objects ?? 0}</span></div>
-                            <div>Heap: <span className="text-white">{gcInfo.heapUsedMB}MB</span></div>
-                            <div className="text-white/40">/ {gcInfo.heapLimitMB}MB</div>
+                            <div>Enemies: <span className="text-white">{stats.gameState.enemies}</span></div>
+                            <div>Obj: <span className="text-white">{stats.gameState.objects}</span></div>
+                            <div>Heap: <span className="text-white">{stats.gc.heapUsedMB}MB</span></div>
+                            <div className="text-white/40">/ {stats.gc.heapLimitMB}MB</div>
                         </div>
                     </div>
                 )}
 
                 {systems && systems.length > 0 && (
                     <div>
-                        <div
-                            onClick={(e) => { e.stopPropagation(); setSystemsExpanded(v => !v); }}
-                            className="flex items-center justify-between text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white/70 select-none"
-                        >
+                        <div onClick={(e) => { e.stopPropagation(); setSystemsExpanded(v => !v); }} className="flex items-center justify-between text-white/40 uppercase text-[10px] mb-0.5 cursor-pointer hover:text-white/70 select-none">
                             <span>Systems</span>
                             <span className="text-[8px]">{systemsExpanded ? '▾' : '▸'}</span>
                         </div>
                         {systemsExpanded && (
                             <div className="space-y-0.5">
                                 {systems.map(sys => {
-                                    const timing = debugInfo?.performance?.cpu?.[sys.id];
+                                    const timing = stats.timings.breakdown[sys.id];
                                     return (
-                                        <div
-                                            key={sys.id}
-                                            onClick={(e) => { e.stopPropagation(); onToggleSystem?.(sys.id, !sys.enabled); }}
-                                            className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}
-                                        >
+                                        <div key={sys.id} onClick={(e) => { e.stopPropagation(); onToggleSystem?.(sys.id, !sys.enabled); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
                                             <span className="truncate mr-2">{sys.id}</span>
-                                            <span className="text-white/40">{timing !== undefined ? `${timing.toFixed(2)}ms` : '–'}</span>
+                                            <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
                                         </div>
                                     );
                                 })}
@@ -212,55 +142,37 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ fps: propFps, debugMode, de
 
                 <div className="border-t border-white/10 pt-1 space-y-0.5">
                     <div className="text-white/40 uppercase text-[10px] mb-1">Logging</div>
-                    <div
-                        onClick={(e) => { e.stopPropagation(); setEngineLogging(!engineLogging); }}
-                        className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
-                    >
+                    <div onClick={(e) => { e.stopPropagation(); PerformanceMonitor.getInstance().consoleLoggingEnabled = !stats.logging.engine; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                         <span className="text-white/60">Engine Perf</span>
-                        <span className={`font-bold ${engineLogging ? 'text-green-400' : 'text-red-400'}`}>
-                            {engineLogging ? 'ON' : 'OFF'}
-                        </span>
+                        <span className={`font-bold ${stats.logging.engine ? 'text-green-400' : 'text-red-400'}`}>{stats.logging.engine ? 'ON' : 'OFF'}</span>
                     </div>
-                    <div
-                        onClick={(e) => { e.stopPropagation(); setAiLogging(!aiLogging); }}
-                        className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
-                    >
+                    <div onClick={(e) => { e.stopPropagation(); PerformanceMonitor.getInstance().aiLoggingEnabled = !stats.logging.ai; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                         <span className="text-white/60">AI</span>
-                        <span className={`font-bold ${aiLogging ? 'text-green-400' : 'text-red-400'}`}>
-                            {aiLogging ? 'ON' : 'OFF'}
-                        </span>
+                        <span className={`font-bold ${stats.logging.ai ? 'text-green-400' : 'text-red-400'}`}>{stats.logging.ai ? 'ON' : 'OFF'}</span>
                     </div>
-                    <div
-                        onClick={(e) => { e.stopPropagation(); setShaderLogging(!shaderLogging); }}
-                        className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
-                    >
+                    <div onClick={(e) => { e.stopPropagation(); PerformanceMonitor.getInstance().shaderLoggingEnabled = !stats.logging.shader; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                         <span className="text-white/60">Shaders</span>
-                        <span className={`font-bold ${shaderLogging ? 'text-green-400' : 'text-red-400'}`}>
-                            {shaderLogging ? 'ON' : 'OFF'}
-                        </span>
+                        <span className={`font-bold ${stats.logging.shader ? 'text-green-400' : 'text-red-400'}`}>{stats.logging.shader ? 'ON' : 'OFF'}</span>
                     </div>
                 </div>
             </div>
 
-            {/* CPU Timings — pinned at bottom, fills remaining height, inner list scrolls */}
-            {debugInfo?.performance?.cpu && (
-                <div className="flex flex-col flex-1 min-h-0 border-t border-white/10 p-3">
-                    <div className="flex justify-between items-center mb-1 shrink-0">
-                        <div className="text-white/40 uppercase text-[10px]">CPU Timings</div>
-                        <div className="text-green-400 text-[10px] font-bold">
-                            {(Object.values(debugInfo.performance.cpu) as number[]).reduce((acc: number, val: number) => acc + val, 0).toFixed(2)}ms
-                        </div>
-                    </div>
-                    <div className="overflow-y-auto flex-1 space-y-0.5 pr-1">
-                        {Object.entries(debugInfo.performance.cpu).map(([key, val]) => (
-                            <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
-                                <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
-                                <span>{(val as number).toFixed(2)}ms</span>
-                            </div>
-                        ))}
+            <div className="flex flex-col flex-1 min-h-0 border-t border-white/10 p-3">
+                <div className="flex justify-between items-center mb-1 shrink-0">
+                    <div className="text-white/40 uppercase text-[10px]">CPU Timings</div>
+                    <div className="text-green-400 text-[10px] font-bold">
+                        {stats.timings.total}ms
                     </div>
                 </div>
-            )}
+                <div className="overflow-y-auto flex-1 space-y-0.5 pr-1">
+                    {Object.entries(stats.timings.breakdown).map(([key, val]) => (
+                        <div key={key} className="flex justify-between border-b border-white/5 py-0.5">
+                            <span className="text-white/60 truncate mr-2">{key.replace('render_', '')}</span>
+                            <span>{val as string}ms</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 };

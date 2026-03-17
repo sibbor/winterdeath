@@ -35,7 +35,6 @@ interface LoopContext {
 }
 
 // Zero-GC Pre-allocations for the loop
-const _vLightOffset = new THREE.Vector3();
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
@@ -163,7 +162,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
                 // Throttled logging for continuous damage or rapid fire
                 if (!isContinuous || (frame % 10 === 0)) {
-                    console.log(`[ENEMY] ${enemy.type}_${enemy.id} HP: ${enemy.hp.toFixed(0)} | -${amount.toFixed(1)} (${type})`);
+                    console.log(`[GameSessionLoop.applyDamage()] ${enemy.type}_${enemy.id} HP: ${enemy.hp} | -${amount} (${type})`);
                 }
             }
 
@@ -173,7 +172,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
     state.applyDamage = _gameContext.applyDamage;
 
-
     return (dt: number) => {
         if (!refs.isMounted.current || refs.isBuildingSectorRef.current) return;
 
@@ -181,7 +179,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         let delta = dt;
         if (delta > 0.1) delta = 0.016; // Prevent physics explosions after alt-tab
 
-        // Added propsRef.current.isClueOpen so the game loop pauses when a collectible is read
+        // Pause guard
         if (propsRef.current.isPaused || propsRef.current.isClueOpen) {
             engine.isSimulationPaused = true;
             engine.isRenderingPaused = true;
@@ -195,17 +193,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const monitor = PerformanceMonitor.getInstance();
         frame++;
 
-        // 1. Sky Light Shadow Tracking
-        if (refs.skyLightRef.current && refs.playerGroupRef.current) {
-            const sky = refs.skyLightRef.current;
-            const pPos = refs.playerGroupRef.current.position;
-            _vLightOffset.set(80, 50, 50);
-            sky.position.copy(pPos).add(_vLightOffset);
-            sky.target.position.copy(pPos);
-            sky.target.updateMatrixWorld();
-        }
-
-        // 2. Interaction Input
+        // 1. Interaction Input
         if (input.e && !refs.prevInputRef.current) {
             if ((state as any).currentInteraction && (state as any).currentInteraction.action) {
                 (state as any).currentInteraction.action();
@@ -229,7 +217,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const playerGroup = refs.playerGroupRef.current;
         if (!playerGroup || playerGroup.children.length === 0) return;
 
-        // 3. UI Throttling (Zero-GC Update to React props)
+        // 2. UI Throttling (Zero-GC Update to React props)
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         state.framesSinceHudUpdate++;
         uiSyncTimer += delta;
@@ -260,7 +248,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
 
-        // 4. Boss Intro overrides
+        // 3. Boss Intro overrides
         if (isBossIntro && refs.bossIntroRef.current.bossMesh) {
             const bossMesh = refs.bossIntroRef.current.bossMesh;
             const bossPos = bossMesh.position;
@@ -277,7 +265,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (refs.playerMeshRef.current) {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
-                // Zero out rest to avoid closure recreation
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -285,7 +272,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             return;
         }
 
-        // 5. Throttled logic (Health warnings, burning effects)
+        // 4. Throttled logic (Health warnings, burning effects)
         if (frame % 5 === 0) {
             if (state.hp < state.maxHp * HEALTH_CRITICAL_THRESHOLD && !state.isDead) {
                 if (now - ((state as any).lastHeartbeat || 0) > 800) {
@@ -331,7 +318,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             monitor.end('burning_effects');
         }
 
-        // 6. Sector Flow (Boss Defeated, End Sector)
+        // 5. Sector Flow (Boss Defeated, End Sector)
         if (state.bossDefeatedTime > 0) {
             if (now - state.bossDefeatedTime < 10000) {
                 state.invulnerableUntil = now + 10000;
@@ -355,7 +342,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             return;
         }
 
-        // 7. Teleport Logic
+        // 6. Teleport Logic
         if (!isCinematic && !isBossIntro) {
             if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > refs.lastTeleportRef.current) {
                 const tgt = propsRef.current.teleportTarget;
@@ -388,7 +375,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
 
-        // 8. Session updates
+        // 7. Session updates
         if (isCinematic || isBossIntro) {
             session.inputDisabled = true;
         } else {
@@ -403,7 +390,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         session.update(delta, propsRef.current.mapId || 0);
         monitor.end('session_update');
 
-        // 9. Standard Gameplay State Updates
+        // 8. Standard Gameplay State Updates
         if (!isCinematic && !isBossIntro) {
             const isMoving = state.isMoving;
             if (refs.hasSetPrevPosRef.current && playerGroup) {
@@ -416,7 +403,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
 
             if (refs.playerMeshRef.current) {
-                // Safe stamina calculation to prevent invisible player (NaN scaling)
                 const safeStamina = state.stamina ?? 100;
                 const safeMaxStamina = state.maxStamina ?? 100;
                 _animStateScratch.staminaRatio = safeStamina / safeMaxStamina;
@@ -439,7 +425,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
 
-        // 10. Secondary Systems
+        // 9. Secondary Systems
         monitor.begin('footprints');
         FootprintSystem.update(delta);
         monitor.end('footprints');
@@ -450,7 +436,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             monitor.end('fx');
         }
 
-        // 11. Camera Processing
+        // 10. Camera Processing
         if (!isCinematic && !isBossIntro) {
             if (refs.cameraOverrideRef.current && refs.cameraOverrideRef.current.active) {
                 const override = refs.cameraOverrideRef.current;
@@ -472,7 +458,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     state.cameraShake = Math.max(0, state.cameraShake - 5.0 * delta);
                 }
 
-                // Default camera Z-offset changed from 0 to 25 to prevent Gimbal Lock on sector load
                 const envCameraZ = propsRef.current.currentSectorData?.environment.cameraOffsetZ || 25;
                 const envCameraY = propsRef.current.currentSectorData?.environment.cameraHeight || CAMERA_HEIGHT;
                 engine.camera.setCinematic(false);
@@ -480,6 +465,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         } else {
             engine.camera.setCinematic(true);
+        }
+
+        // --- 11. TRACKING SHADOW CAMERA (Zero-GC) ---
+        // Center the shadow map over the player to prevent the game from becoming dark at the edges
+        if (refs.skyLightRef?.current && refs.skyLightOffsetRef?.current && playerGroup) {
+            let shadowTarget = playerGroup.position;
+
+            if (refs.cameraOverrideRef.current && refs.cameraOverrideRef.current.active) {
+                shadowTarget = refs.cameraOverrideRef.current.lookAtPos;
+            }
+
+            refs.skyLightRef.current.target.position.copy(shadowTarget);
+            refs.skyLightRef.current.position.copy(shadowTarget).add(refs.skyLightOffsetRef.current);
+            refs.skyLightRef.current.target.updateMatrixWorld();
         }
 
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -503,7 +502,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const screenY = Math.round((1 - vector.y) / 2 * 100);
 
             const lastPos = refs.lastInteractionPosRef.current;
-            const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 0.5 || Math.abs(lastPos.y - screenY) > 0.5;
+            const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 3.0;
             const typeChanged = currentInter !== lastType;
             const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
 
@@ -591,7 +590,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         monitor.end('triggers');
 
         // 14. Bubbles Update
-        // V8 Zero-GC Swap-and-Pop: Uses a forward loop with decrement to avoid missing elements
         for (let i = 0; i < refs.activeBubbles.current.length; i++) {
             const b = refs.activeBubbles.current[i];
             const age = now - b.startTime;
@@ -602,7 +600,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 refs.activeBubbles.current[i] = refs.activeBubbles.current[refs.activeBubbles.current.length - 1];
                 refs.activeBubbles.current.pop();
 
-                i--; // Decrement to re-evaluate swapped element
+                i--;
                 continue;
             }
 
@@ -616,19 +614,15 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             b.element.style.left = `${x}px`;
             b.element.style.top = `${y}px`;
 
-            // String allocation optimization (.toFixed(2) prevents long floats in DOM)
-            let opacity = '1';
-            if (age < 200) opacity = (age / 200).toFixed(2);
-            else if (age > b.duration - 500) opacity = ((b.duration - age) / 500).toFixed(2);
+            let opacity = 1.0;
+            if (age < 200) opacity = age / 200;
+            else if (age > b.duration - 500) opacity = (b.duration - age) / 500;
 
-            let transform = `translate(-50%, -100%)`;
-            if (age < 200) {
-                const slide = ((1 - (age / 200)) * 20).toFixed(2);
-                transform += ` translateY(${slide}px)`;
-            }
+            let slideY = 0;
+            if (age < 200) slideY = (1 - (age / 200)) * 20;
 
-            b.element.style.transform = transform;
-            b.element.style.opacity = opacity;
+            b.element.style.transform = `translate(-50%, calc(-100% + ${slideY}px))`;
+            b.element.style.opacity = opacity as unknown as string;
             b.element.style.zIndex = `${1000 - stackIndex}`;
             b.element.style.transition = 'top 0.3s ease-out';
         }
@@ -665,6 +659,17 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
         monitor.end('active_effects');
+
+        // 16. Update PerformanceMonitor
+        monitor.updateGameState(
+            playerGroup.position.x,
+            playerGroup.position.z,
+            engine.camera.position.x,
+            engine.camera.position.y,
+            engine.camera.position.z,
+            state.enemies.length,
+            state.obstacles ? state.obstacles.length : 0
+        );
 
     };
 }

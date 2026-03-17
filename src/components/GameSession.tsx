@@ -666,8 +666,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     }, [props.currentSector, props.currentSectorData]);
 
-    // Environmental Sync Transition
-    // When loading finishes (isWarmup: true -> false), we re-sync engine singletons.
+    // Environmental Sync Transition (RUNTIME ONLY)
+    // Updates values dynamically (e.g., Sector 6 zones) WITHOUT altering the scene graph
     useEffect(() => {
         if (!props.isWarmup && refs.engineRef.current) {
             const engine = refs.engineRef.current;
@@ -676,7 +676,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             const overrides = props.environmentOverrides?.[props.currentSector];
 
             if (env) {
-                // 1. WindSystem
+                // 1. WindSystem (updating parameters)
                 if (env.wind || overrides?.windStrength !== undefined) {
                     const dir = (overrides as any)?.wind?.direction || env.wind?.direction || WIND_SYSTEM.DIRECTION;
                     const windAngle = overrides?.windDirection ?? Math.atan2(dir.z, dir.x);
@@ -691,17 +691,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
                 }
 
-                // 2. WaterSystem
-                if (engine.water) engine.water.reAttach(engine.scene);
-
+                // 2. WeatherSystem (updating parameters)
                 if (engine.weather) {
-                    // 3. WeatherSystem
                     const weatherType = overrides?.weather?.type || env?.weather?.type || (typeof props?.weather === 'string' ? props.weather : 'none');
                     const requestedParticles = overrides?.weather?.particles || env?.weather?.particles || WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES;
-                    const maxAllocated = WEATHER_SYSTEM.MAX_NUM_PARTICLES;
-                    const finalWeatherCount = Math.max(0, Math.min(requestedParticles, maxAllocated));
+                    const finalWeatherCount = Math.max(0, Math.min(requestedParticles, WEATHER_SYSTEM.MAX_NUM_PARTICLES));
 
-                    engine.weather.reAttach(engine.scene);
                     engine.weather.sync(weatherType, finalWeatherCount, 120);
                 }
             }

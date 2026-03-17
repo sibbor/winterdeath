@@ -183,12 +183,10 @@ export const AssetPreloader = {
                 }
             }
 
-            // [VINTERDÖD] Sync with LightingSystem's MAX_VISIBLE_LIGHTS
-            // Force WebGL to compile the shader permutation for exactly 12 PointLights upfront.
+            // Sync with LightingSystem's MAX_VISIBLE_LIGHTS
             if (isSector || target === 'CORE') {
                 for (let i = 0; i < LIGHTNING_SYSTEM.MAX_VISIBLE_LIGHTS; i++) {
                     const dummyLight = new THREE.PointLight(0xffaa00, 1, 10);
-                    // Prep the shadow map permutation for the budget we set (8)
                     if (i < LIGHTNING_SYSTEM.MAX_SHADOW_CASTING_LIGHTS) dummyLight.castShadow = true;
                     scene.add(dummyLight);
                 }
@@ -199,8 +197,6 @@ export const AssetPreloader = {
             const ownedGeometries: THREE.BufferGeometry[] = [];
             const ownedMaterials: THREE.Material[] = [];
 
-            // [VINTERDÖD FIX] forceShadow-flag added. Default is true for static geometry, false for FX.
-            // Explicitly kills castShadow on auxiliary lights inside objects (like car headlights) to protect WebGL limits.
             const addToWarmup = (obj: THREE.Object3D, instancing: boolean = true, forceShadow: boolean = true) => {
                 obj.visible = false;
                 obj.traverse((child) => {
@@ -264,15 +260,16 @@ export const AssetPreloader = {
                         if (yieldToMain) await yieldToMain();
                     }
 
-                    const dummyRipples: THREE.Vector4[] = [];
-                    const dummyObjects: THREE.Vector4[] = [];
-                    for (let i = 0; i < 16; i++) dummyRipples.push(new THREE.Vector4(0, 0, -1000, 0));
-                    for (let i = 0; i < 8; i++) dummyObjects.push(new THREE.Vector4(0, 0, 0, 0));
-                    createWaterMaterial('nordic', 10, 10, dummyRipples, dummyObjects);
-                    createWaterMaterial('ice', 10, 10, dummyRipples, dummyObjects);
+                    // Pre-compile WaterShader
+                    const dummyRipples = new Array(16).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
+                    const dummyObjects = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
+                    const coreWaterMat = createWaterMaterial(10, 10, dummyRipples, dummyObjects, 'rect');
+                    ownedMaterials.push(coreWaterMat);
+                    addToWarmup(new THREE.Mesh(GEOMETRY.box, coreWaterMat), false);
 
                     EnvironmentGenerator.createWaterLily();
                     EnvironmentGenerator.createSeaweed();
+
                     EnvironmentGenerator.createRock(2, 2);
                     ObjectGenerator.createHedge();
                     ObjectGenerator.createWheatStalk();
@@ -392,15 +389,12 @@ export const AssetPreloader = {
 
                 // Collectibles
                 try {
-                    // Extract unique modelTypes dynamically from the COLLECTIBLES data source
                     const warmedModels: string[] = [];
-                    // Using Object.values ensures this works whether COLLECTIBLES is an Array or a Record/Object
                     const allCollectibles = Object.values(COLLECTIBLES) as any[];
 
                     for (let i = 0; i < allCollectibles.length; i++) {
                         const mType = allCollectibles[i].modelType;
 
-                        // Only warm up the model if we haven't already processed it
                         if (mType && warmedModels.indexOf(mType) === -1) {
                             warmedModels.push(mType);
                             addToWarmup(ModelFactory.createCollectible(mType));
@@ -427,13 +421,12 @@ export const AssetPreloader = {
                     addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
                 }
 
-                const dummyVec4: THREE.Vector4[] = Array(16).fill(null).map(() => new THREE.Vector4());
-                const waterNordic = createWaterMaterial('nordic', 20, 20, dummyVec4, dummyVec4, 'rect');
-                const waterIce = createWaterMaterial('ice', 20, 20, dummyVec4, dummyVec4, 'rect');
-                ownedMaterials.push(waterNordic, waterIce);
+                const dummyRipples = new Array(16).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
+                const dummyObjects = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
+                const waterNordic = createWaterMaterial(20, 20, dummyRipples, dummyObjects, 'rect');
+                ownedMaterials.push(waterNordic);
 
                 addToWarmup(new THREE.Mesh(GEOMETRY.box, waterNordic), false);
-                addToWarmup(new THREE.Mesh(GEOMETRY.box, waterIce), false);
 
                 addInstancedWarmup(GEOMETRY.scrap, MATERIALS.scrap);
 
@@ -474,20 +467,18 @@ export const AssetPreloader = {
                     }
                 }
 
-                const dummyRipples = new Array(16).fill(0).map(() => new THREE.Vector4(0, 0, -1000, 0));
-                const dummyObjects = new Array(8).fill(0).map(() => new THREE.Vector4(0, 0, 0, 0));
-                const nordicWater = createWaterMaterial('nordic', 10, 10, dummyRipples, dummyObjects, 'circle');
-                const iceWater = createWaterMaterial('ice', 10, 10, dummyRipples, dummyObjects, 'rect');
-                ownedMaterials.push(nordicWater, iceWater);
+                const dummyRipplesCircle = new Array(16).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
+                const dummyObjectsCircle = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
+                const nordicWaterCircle = createWaterMaterial(10, 10, dummyRipplesCircle, dummyObjectsCircle, 'circle');
+                ownedMaterials.push(nordicWaterCircle);
 
                 const waterSurfaceGeo = new THREE.PlaneGeometry(10, 10, 16, 16);
                 waterSurfaceGeo.rotateX(-Math.PI / 2);
                 ownedGeometries.push(waterSurfaceGeo);
 
-                const nwMesh = new THREE.Mesh(waterSurfaceGeo, nordicWater);
-                const iwMesh = new THREE.Mesh(waterSurfaceGeo, iceWater);
-                nwMesh.visible = false; iwMesh.visible = false;
-                dummyRoot.add(nwMesh, iwMesh);
+                const nwMesh = new THREE.Mesh(waterSurfaceGeo, nordicWaterCircle);
+                nwMesh.visible = false;
+                dummyRoot.add(nwMesh);
 
                 const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
                 const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);

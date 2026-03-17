@@ -8,31 +8,33 @@ import { patchWindMaterial } from './materials_wind';
 const DIFFUSE = createProceduralDiffuse();
 
 export const MATERIALS = {
-    // ---- WEATHER PARTICLES (EJ PATCHADE - RÖRS VIA CPU) ----
-    particle_snow: new THREE.MeshStandardMaterial({
-        color: 0xffee00,
-        transparent: false,
-        emissive: 0xffffff,
-        depthWrite: false,
-        side: THREE.DoubleSide
-    }),
-    particle_rain: new THREE.MeshStandardMaterial({
-        color: 0xaaaaff,
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false,
-        side: THREE.DoubleSide
-    }),
-    particle_ash: new THREE.MeshStandardMaterial({
-        color: 0x222222,
+    // ---- WEATHER PARTICLES (not patched - the CPU handle these) ----
+    particle_snow: new THREE.MeshBasicMaterial({
+        color: 0xffffff,
         transparent: true,
         opacity: 0.8,
         depthWrite: false,
         side: THREE.DoubleSide
     }),
-    particle_ember: new THREE.MeshStandardMaterial({
+    particle_rain: new THREE.MeshBasicMaterial({
+        color: 0xaaaaff,
+        transparent: true,
+        opacity: 0.6,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    }),
+    particle_ash: new THREE.MeshBasicMaterial({
+        color: 0x333333,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    }),
+    particle_ember: new THREE.MeshBasicMaterial({
         color: 0xff4400,
-        transparent: false,
+        transparent: true,
+        opacity: 1.0,
+        depthWrite: false,
         side: THREE.DoubleSide
     }),
 

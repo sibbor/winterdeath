@@ -184,7 +184,6 @@ const App: React.FC = () => {
     }, []);
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
     const [currentMapItems, setCurrentSectorMapItems] = useState<MapItem[]>([]);
-    const [fps, setFps] = useState(0);
     const [debugSystems, setDebugSystems] = useState<{ id: string; enabled: boolean }[]>([]);
 
     // Sector Results
@@ -204,7 +203,6 @@ const App: React.FC = () => {
 
     const handleUpdateHUD = useCallback((data: any) => {
         setHudState(data);
-        if (data.fps !== undefined) setFps(data.fps);
         if (data.mapItems) setCurrentSectorMapItems(data.mapItems);
         // Refresh system list for debug panel at same cadence as HUD (10Hz)
         if (gameState.debugMode) {
@@ -212,10 +210,6 @@ const App: React.FC = () => {
             if (systems) setDebugSystems(systems);
         }
     }, [gameState.debugMode]);
-
-    const handleFPSUpdate = useCallback((val: number) => {
-        setFps(val);
-    }, []);
 
     const handleDie = useCallback((stats: SectorStats, killer: string) => {
         setDeathDetails({ killer });
@@ -914,9 +908,7 @@ const App: React.FC = () => {
 
             {gameState.debugMode && (
                 <DebugDisplay
-                    fps={fps}
                     debugMode={gameState.debugMode}
-                    debugInfo={hudState.debugInfo}
                     systems={debugSystems}
                     onToggleSystem={(id, enabled) => {
                         const success = gameCanvasRef.current?.setSystemEnabled(id, enabled);

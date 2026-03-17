@@ -61,7 +61,7 @@ export class WinterEngine {
         // Initialize persistent environmental systems
         this.camera = new CameraSystem();
         this.wind = new WindSystem();
-        this.weather = new WeatherSystem(this.scene, this.wind);
+        this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
 
         window.addEventListener('resize', this.handleResize);

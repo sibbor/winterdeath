@@ -1,9 +1,7 @@
 import * as THREE from 'three';
-import { WaterStyleConfig, createWaterMaterial, patchWaterVegetationMaterial } from '../../utils/assets/materials_water';
+import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { WATER_SYSTEM } from '../../content/constants';
-import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { MATERIALS } from '../../utils/assets/materials';
-import { PerformanceMonitor } from './PerformanceMonitor';
 
 interface WaterBind {
     uTime: { value: number };
@@ -27,11 +25,9 @@ const _sharedDummy = new THREE.Object3D();
 const _sharedDummyFlower = new THREE.Object3D();
 const _sharedWhiteColor = new THREE.Color(0xffffff);
 
-export type WaterStyle = 'nordic' | 'ice';
 export type WaterBodyType = 'lake' | 'pond' | 'pool' | 'stream' | 'waterfall';
 
 export interface WaterBodyDef {
-    style: WaterStyle;
     shape: 'rect' | 'circle';
     buoyancyForce: number;
     ambientRippleChance: number;
@@ -39,11 +35,11 @@ export interface WaterBodyDef {
 }
 
 const WATER_BODY_PRESETS: Record<WaterBodyType, WaterBodyDef> = {
-    lake: { style: 'nordic', shape: 'circle', buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 8.0 },
-    pond: { style: 'nordic', shape: 'circle', buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 3.5 },
-    pool: { style: 'ice', shape: 'rect', buoyancyForce: 12, ambientRippleChance: 0.005, maxDepth: 2.0 },
-    stream: { style: 'nordic', shape: 'rect', buoyancyForce: 8, ambientRippleChance: 0.03, maxDepth: 1.5 },
-    waterfall: { style: 'nordic', shape: 'rect', buoyancyForce: 15, ambientRippleChance: 0.05, maxDepth: 10.0 }
+    lake: { shape: 'circle', buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 8.0 },
+    pond: { shape: 'circle', buoyancyForce: 10, ambientRippleChance: 0.0, maxDepth: 3.5 },
+    pool: { shape: 'rect', buoyancyForce: 12, ambientRippleChance: 0.005, maxDepth: 2.0 },
+    stream: { shape: 'rect', buoyancyForce: 8, ambientRippleChance: 0.03, maxDepth: 1.5 },
+    waterfall: { shape: 'rect', buoyancyForce: 15, ambientRippleChance: 0.05, maxDepth: 10.0 }
 };
 
 export class WaterSurface {
@@ -54,7 +50,7 @@ export class WaterSurface {
 
     constructor(
         x: number, z: number, width: number, depth: number,
-        style: WaterStyle, shape: 'rect' | 'circle',
+        shape: 'rect' | 'circle',
         rippleData: THREE.Vector4[], objectPositions: THREE.Vector4[]
     ) {
         this.bounds = { x, z, width, depth };
@@ -71,8 +67,8 @@ export class WaterSurface {
 
         geometry.rotateX(-Math.PI / 2);
 
-        this.material = createWaterMaterial(style, width, depth, rippleData, objectPositions, shape);
-        this.material.uniforms.uNoiseTexture.value = TEXTURES.water_ripple;
+        this.material = createWaterMaterial(width, depth, rippleData, objectPositions, shape);
+
         this.mesh = new THREE.Mesh(geometry, this.material);
         this.mesh.position.set(x, 0.35, z);
         this.mesh.renderOrder = 1;
@@ -100,6 +96,8 @@ export class WaterBody {
 
     public registerFloatingProp(obj: THREE.Object3D): void {
         if (!obj.userData.velocity) obj.userData.velocity = new THREE.Vector3();
+        // Zero-GC Marker: Fast O(1) lookup to replace .includes() in hot loop
+        obj.userData.isRegisteredWaterProp = true;
         this.floatingProps.push(obj);
     }
 
@@ -129,6 +127,9 @@ export class WaterSystem {
     private grounds: THREE.Mesh[] = [];
     private boundUniforms: WaterBind[] = [];
 
+    // Pre-allocated array to prevent GC during ground uniform updates
+    private _groundUniformData: THREE.Vector4[] = [];
+
     // Instanced Vegetation
     private lilyPads: THREE.InstancedMesh | null = null;
     private lilyStems: THREE.InstancedMesh | null = null;
@@ -150,6 +151,7 @@ export class WaterSystem {
     constructor(private scene: THREE.Scene) {
         for (let i = 0; i < WATER_SYSTEM.MAX_RIPPLES; i++) this.rippleData.push(new THREE.Vector4(0, 0, -1000, 0));
         for (let i = 0; i < WATER_SYSTEM.MAX_FLOATING_OBJECTS; i++) this.objectPositions.push(new THREE.Vector4(0, 0, 0, 0));
+        for (let i = 0; i < 8; i++) this._groundUniformData.push(new THREE.Vector4(0, 0, 0, -1));
     }
 
     public populateFlora(flora: LakeFloraInstance[]): void {
@@ -273,16 +275,14 @@ export class WaterSystem {
 
     public addWaterBody(type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: any): WaterBody {
         const preset = WATER_BODY_PRESETS[type];
-        const style = options?.style ?? preset.style;
         const shape = options?.shape ?? preset.shape;
 
-        const surface = new WaterSurface(x, z, width, depth, style, shape, this.rippleData, this.objectPositions);
+        const surface = new WaterSurface(x, z, width, depth, shape, this.rippleData, this.objectPositions);
         this.surfaces.push(surface);
         this.scene.add(surface.mesh);
 
         const body = new WaterBody(type, surface, {
             ...preset,
-            style,
             shape,
             maxDepth: options?.maxDepth ?? preset.maxDepth
         });
@@ -326,19 +326,18 @@ export class WaterSystem {
     }
 
     private updateGroundUniforms(): void {
-        const data: THREE.Vector4[] = [];
-        // Fill with current water bodies
+        // Zero-GC: Mutate the pre-allocated cache array instead of creating a new one
         for (let i = 0; i < 8; i++) {
             if (i < this.waterBodies.length) {
                 const b = this.waterBodies[i];
-                data.push(new THREE.Vector4(
+                this._groundUniformData[i].set(
                     b.surface.bounds.x,
                     b.surface.bounds.z,
                     b.surface.bounds.width * 0.5, // radius
                     b.def.shape === 'circle' ? 1.0 : 0.0
-                ));
+                );
             } else {
-                data.push(new THREE.Vector4(0, 0, 0, -1)); // Inactive
+                this._groundUniformData[i].set(0, 0, 0, -1); // Inactive
             }
         }
 
@@ -348,7 +347,7 @@ export class WaterSystem {
                 // VERY IMPORTANT: Mutate the existing array to not break Three.js uniform binding!
                 const targetArray = mat.userData.uWaterBodies.value as THREE.Vector4[];
                 for (let i = 0; i < 8; i++) {
-                    targetArray[i].copy(data[i]);
+                    targetArray[i].copy(this._groundUniformData[i]);
                 }
             }
         }
@@ -389,14 +388,11 @@ export class WaterSystem {
 
     public update(dt: number, now: number): void {
         this.globalTime += dt;
-        let t0 = performance.now();
 
         // Bind strictly aquatic vegetation shaders
         if (this.boundUniforms.length === 0) {
-            if (!MATERIALS.waterLily.userData.waterUniforms) patchWaterVegetationMaterial(MATERIALS.waterLily);
-            if (!MATERIALS.seaweed.userData.waterUniforms) patchWaterVegetationMaterial(MATERIALS.seaweed);
-
             this.bindMaterial(MATERIALS.waterLily);
+            this.bindMaterial(MATERIALS.waterLilyFlower);
             this.bindMaterial(MATERIALS.seaweed);
         }
 
@@ -442,7 +438,9 @@ export class WaterSystem {
             for (let j = 0; j < sources.length; j++) {
                 if (objIdx < WATER_SYSTEM.MAX_FLOATING_OBJECTS) {
                     const p = sources[j];
-                    if (props.includes(p)) continue;
+                    // O(1) Check replacing O(N) array includes
+                    if (p.userData.isRegisteredWaterProp) continue;
+
                     const radius = p.userData.radius || 3.0;
                     this.objectPositions[objIdx++].set(p.position.x, p.position.z, radius, 1.0);
                 }
@@ -464,8 +462,6 @@ export class WaterSystem {
                 this.surfaces[i].material.uniforms.uWaterDirection.value.copy(this.waterDirection);
             }
         }
-        PerformanceMonitor.getInstance().addTime('water_surfaces', performance.now() - t0);
-        t0 = performance.now();
 
         // --- 3. Body Physics & Splashes ---
         for (let i = 0; i < bLen; i++) {
@@ -475,12 +471,8 @@ export class WaterSystem {
         }
 
         if (this.playerGroup) this.updatePlayerLogic(dt);
-        PerformanceMonitor.getInstance().addTime('water_physics', performance.now() - t0);
-        t0 = performance.now();
 
         this.updateInstancedLilies(dt);
-        PerformanceMonitor.getInstance().addTime('water_flora', performance.now() - t0);
-        t0 = performance.now();
 
         // Ripples and splashes for moving objects
         for (let i = 0; i < bLen; i++) {
@@ -508,7 +500,6 @@ export class WaterSystem {
                 }
             }
         }
-        PerformanceMonitor.getInstance().addTime('water_particles', performance.now() - t0);
     }
 
     private updateBodyPhysics(body: WaterBody, dt: number): void {

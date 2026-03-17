@@ -158,25 +158,45 @@ export class GameSessionSetup {
             ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
             EnemyManager.init(scene);
 
+            // --- AMBIENT LIGHT SETUP ---
             const ambientLight = new THREE.AmbientLight((env as any).ambientColor || 0x404050, env.ambientIntensity);
             ambientLight.name = 'AMBIENT_LIGHT';
             scene.add(ambientLight);
 
-            if (env.skyLight && env.skyLight.visible) {
+            // --- TRACKING SHADOW CAMERA SETUP ---
+            if (env.skyLight) {
                 const lightPos = env.skyLight.position || { x: 80, y: 50, z: 50 };
-                const skyLight = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
+                // Zero-GC Swap: Always DirectionalLight, but intensity=0 if !visible
+                const intensity = env.skyLight.visible ? env.skyLight.intensity : 0;
+
+                const skyLight = new THREE.DirectionalLight(env.skyLight.color, intensity);
                 skyLight.name = 'SKY_LIGHT';
                 skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
+
+                // Always castShadow to reserve the uniform slot in the GPU program
                 skyLight.castShadow = true;
-                skyLight.shadow.camera.left = -100; skyLight.shadow.camera.right = 100;
-                skyLight.shadow.camera.top = 100; skyLight.shadow.camera.bottom = -100;
+                skyLight.shadow.camera.left = -100;
+                skyLight.shadow.camera.right = 100;
+                skyLight.shadow.camera.top = 100;
+                skyLight.shadow.camera.bottom = -100;
                 skyLight.shadow.camera.far = 300;
                 skyLight.shadow.bias = -0.0005;
+
+                // FIX FOR iOS/IPHONE: Force the projection matrix to update 
+                // BEFORE the first render so the shadow map bounds are correctly calculated.
+                skyLight.shadow.camera.updateProjectionMatrix();
+
                 const shadowRes = engine.getSettings().shadowResolution;
                 skyLight.shadow.mapSize.width = shadowRes * 2;
                 skyLight.shadow.mapSize.height = shadowRes * 2;
+
                 scene.add(skyLight);
+                scene.add(skyLight.target); // MUST be added to scene for tracking to work
+
+                // Save references for the game loop
                 refs.skyLightRef.current = skyLight;
+                if (!refs.skyLightOffsetRef) refs.skyLightOffsetRef = { current: new THREE.Vector3() };
+                refs.skyLightOffsetRef.current.copy(skyLight.position);
             }
 
             const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
