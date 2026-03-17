@@ -54,7 +54,8 @@ export const CharacterModels = {
             FLASHLIGHT.distance,
             FLASHLIGHT.angle,
             FLASHLIGHT.penumbra,
-            FLASHLIGHT.decay);
+            FLASHLIGHT.decay
+        );
         flashlight.name = FLASHLIGHT.name;
         flashlight.position.set(FLASHLIGHT.position.x, FLASHLIGHT.position.y, FLASHLIGHT.position.z);
         flashlight.target.position.set(FLASHLIGHT.targetPosition.x, FLASHLIGHT.targetPosition.y, FLASHLIGHT.targetPosition.z);
@@ -129,12 +130,12 @@ export const CharacterModels = {
         body.position.y = baseY;
         body.castShadow = true;
         // [VINTERDÖD MOD] Added metadata so PlayerAnimator.update can properly offset and pulse the body
-        body.userData = { 
-            isBody: true, 
+        body.userData = {
+            isBody: true,
             geometryHeight,
             baseY: baseY,
-            baseScale: 1.0 
-        }; 
+            baseScale: 1.0
+        };
 
         group.scale.setScalar(scale);
 

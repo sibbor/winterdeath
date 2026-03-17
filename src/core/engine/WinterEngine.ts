@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_GRAPHICS } from '../../content/constants';
+import { DEFAULT_GRAPHICS, LIGHT_SYSTEM } from '../../content/constants';
 import { GraphicsSettings } from '../../types';
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../systems/CameraSystem';
@@ -22,6 +22,10 @@ export class WinterEngine {
         if (!this.instance) this.instance = new WinterEngine();
         return this.instance;
     }
+
+    // Max safe shadows & visible lights
+    public maxSafeShadows: number = 0;
+    public maxVisibleLights: number = 0;
 
     // Core Systems
     public scene: THREE.Scene;
@@ -67,6 +71,21 @@ export class WinterEngine {
         window.addEventListener('resize', this.handleResize);
     }
 
+    private _calculateHardwareLimits() {
+        const maxTextures = this.renderer.capabilities.maxTextures;
+
+        // [VINTERDÖD] SUPER-SAFE BUDGET:
+        // We reserve 12 textures for extremely heavy materials (water, PBR, envMaps etc).
+        // This leaves (maxTextures - 12) textures for PointLight shadows.
+        // On a graphics card with 16 textures, this results in a maximum of 4 PointLight shadows.
+        const safeShadowLimit = Math.max(0, maxTextures - 12);
+
+        this.maxSafeShadows = Math.min(LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, safeShadowLimit);
+        this.maxVisibleLights = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
+
+        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Safe Shadows capped at: ${this.maxSafeShadows}`);
+    }
+
     /**
      * Initializes the WebGLRenderer with high-performance parameters.
      * Hard-caps pixel ratio to prevent GPU burnout on Retina/4K mobile screens.
@@ -83,6 +102,7 @@ export class WinterEngine {
         };
 
         this.renderer = new THREE.WebGLRenderer(params);
+        this._calculateHardwareLimits();
 
         // --- RESOLUTION MULTIPLIER LOGIC ---
         // devicePixelRatio can be 2.0 or 3.0 on modern devices.

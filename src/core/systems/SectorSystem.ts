@@ -10,6 +10,7 @@ import { Sector4 } from '../../content/sectors/Sector4';
 import { Sector5 } from '../../content/sectors/Sector5';
 import { Sector6 } from '../../content/sectors/Sector6';
 import { SectorGenerator } from '../world/SectorGenerator';
+import { LIGHT_SYSTEM } from '@/src/content/constants';
 
 const SECTORS: Record<number, SectorDef> = {
     0: Sector1,
@@ -26,7 +27,7 @@ export class SectorSystem implements System {
     private lastChimeTime = 0;
     private waterInitialized = false;
 
-    // --- LÄGG TILL CACHE-VARIABELN HÄR ---
+    // Cache the event object to strictly prevent garbage collection overhead during the 60fps loop
     private cachedEvents: any = null;
 
     constructor(
@@ -77,8 +78,8 @@ export class SectorSystem implements System {
             for (let i = 0; i < itemsLen; i++) {
                 const item = items[i];
                 if (item.type === 'TRIGGER' && item.id.startsWith('collectible_')) {
-                    // FIX: Substring(12) klipper bort "collectible_". 
-                    // V8-motorn hanterar detta som en "Sliced String" vilket är en minnespekare, inte en ny sträng.
+                    // FIX: Substring(12) safely slices off "collectible_". 
+                    // V8 handles this internally as a "Sliced String" (a pointer), averting large allocations.
                     const realId = item.id.substring(12);
                     if (state.collectiblesDiscovered.includes(realId)) continue;
 
@@ -94,7 +95,7 @@ export class SectorSystem implements System {
 
         // 2. Define Events Object (Hoisted / Zero-GC)
         if (!this.cachedEvents) {
-            // Skapas bara EN gång per Sektor-laddning!
+            // Created exactly once per sector load to prevent per-frame Object instantiation
             this.cachedEvents = {
                 spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
                     const newEnemy = EnemyManager.spawn(
@@ -117,17 +118,32 @@ export class SectorSystem implements System {
                 resetWind: () => session.engine.wind.clearOverride(),
                 setWindRandomized: (active: boolean) => session.engine.wind.setRandomWind(0.02, 0.05),
                 setWeather: (type: any, count?: number) => session.engine.weather.sync(type, count || 100),
+
+                // Safe Lighting Adjustments
                 setLight: (params: any) => {
-                    const skyLight = scene.getObjectByName('SKY_LIGHT') as THREE.DirectionalLight;
+                    const skyLight = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
                     if (skyLight) {
                         if (params.skyLightColor) skyLight.color.copy(params.skyLightColor);
-                        if (params.skyLightIntensity !== undefined) skyLight.intensity = params.skyLightIntensity;
                         if (params.skyLightPosition) skyLight.position.set(params.skyLightPosition.x, params.skyLightPosition.y, params.skyLightPosition.z);
-                        if (params.skyLightVisible !== undefined) skyLight.visible = params.skyLightVisible;
+
+                        // FIX: Zero-GC approach. We never touch 'skyLight.visible' during runtime 
+                        // to prevent WebGL shader re-compilations. We manipulate intensity instead.
+                        if (params.skyLightVisible !== undefined) {
+                            if (params.skyLightVisible === false) {
+                                skyLight.intensity = 0;
+                            } else {
+                                // Restore to requested intensity, or default back to 1.0
+                                skyLight.intensity = params.skyLightIntensity !== undefined ? params.skyLightIntensity : 1.0;
+                            }
+                        } else if (params.skyLightIntensity !== undefined) {
+                            skyLight.intensity = params.skyLightIntensity;
+                        }
                     }
-                    const amb = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
+
+                    const amb = scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
                     if (amb && params.ambientIntensity !== undefined) amb.intensity = params.ambientIntensity;
                 },
+
                 setBackgroundColor: (color: number) => { scene.background = new THREE.Color(color); },
                 setGroundColor: (color: number) => {
                     const ground = scene.getObjectByName('GROUND') as THREE.Mesh;

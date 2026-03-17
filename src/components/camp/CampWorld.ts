@@ -185,6 +185,11 @@ export const stationMaterials: Record<string, THREE.MeshStandardMaterial> = {
 // Tag station materials as shared assets
 Object.values(stationMaterials).forEach(m => { m.userData = { isSharedAsset: true }; });
 
+const CAMP_ENV_CACHE = {
+    sky: null as any,
+    fire: null as any
+};
+
 // ============================================================================
 // INTERNAL HELPERS
 // ============================================================================
@@ -272,10 +277,10 @@ const setupTrees = async (scene: THREE.Scene) => {
 
         if (inst.darken < 0.5) {
             if (!darkMatrices[key]) darkMatrices[key] = [];
-            darkMatrices[key].push(dummy.matrix.clone());
+            darkMatrices[key].push(new THREE.Matrix4().copy(dummy.matrix));
         } else {
             if (!normalMatrices[key]) normalMatrices[key] = [];
-            normalMatrices[key].push(dummy.matrix.clone());
+            normalMatrices[key].push(new THREE.Matrix4().copy(dummy.matrix));
         }
     }
 
@@ -284,62 +289,44 @@ const setupTrees = async (scene: THREE.Scene) => {
     for (const key in darkMatrices) EnvironmentGenerator.addInstancedTrees({ scene } as any, key, darkMatrices[key], silhouetteMat);
 };
 
-const setupSky = (scene: THREE.Object3D, textures: Textures) => {
-    const skyGeo = new THREE.SphereGeometry(15, 32, 32);
-    const skyMat = new THREE.MeshBasicMaterial({ color: CAMP_SCENE.colors.moon, fog: false });
-    const skyBody = new THREE.Mesh(skyGeo, skyMat);
-    skyBody.position.set(-120, 80, -350);
-    scene.add(skyBody);
+const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) => {
+    // 1. Generate or reuse cached heavy assets (Zero-GC approach)
+    if (!CAMP_ENV_CACHE.sky) {
+        const skyGeo = new THREE.SphereGeometry(15, 32, 32);
+        const skyMat = new THREE.MeshBasicMaterial({ color: CAMP_SCENE.colors.moon, fog: false });
 
-    const skyLight = new THREE.DirectionalLight(CAMP_SCENE.skyLight.color, CAMP_SCENE.skyLight.intensity);
-    skyLight.name = 'SKY_LIGHT';
-    skyLight.position.set(-80, 150, -100);
-    skyLight.castShadow = true;
-    skyLight.shadow.mapSize.width = 1024;
-    skyLight.shadow.mapSize.height = 1024;
-    skyLight.shadow.camera.near = 0.5;
-    skyLight.shadow.camera.far = 1000;
-    skyLight.shadow.camera.left = -100;
-    skyLight.shadow.camera.right = 100;
-    skyLight.shadow.camera.top = 100;
-    skyLight.shadow.camera.bottom = -100;
-    skyLight.shadow.bias = CAMP_SCENE.dirLight.bias;
-    scene.add(skyLight);
+        const moonHaloMat = new THREE.SpriteMaterial({
+            map: textures.halo, color: CAMP_SCENE.colors.moonHalo, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false
+        });
 
-    const moonHaloMat = new THREE.SpriteMaterial({
-        map: textures.halo, color: CAMP_SCENE.colors.moonHalo, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false
-    });
-    const moonHaloSprite = new THREE.Sprite(moonHaloMat);
-    moonHaloSprite.scale.set(120, 120, 1);
-    moonHaloSprite.position.copy(skyBody.position);
-    scene.add(moonHaloSprite);
+        // Pre-calculate stars once
+        const starCount = CAMP_SCENE.starCount;
+        const starGeo = new THREE.BufferGeometry();
+        const positions = new Float32Array(starCount * 3);
+        const sizes = new Float32Array(starCount);
+        const phases = new Float32Array(starCount);
+        const twinkleSpeeds = new Float32Array(starCount);
 
-    const starCount = CAMP_SCENE.starCount;
-    const starGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(starCount * 3);
-    const sizes = new Float32Array(starCount);
-    const phases = new Float32Array(starCount);
-    const twinkleSpeeds = new Float32Array(starCount);
+        for (let i = 0; i < starCount; i++) {
+            const r = 1800 + Math.random() * 200;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = (Math.PI / 2) - Math.random() * 1.2;
+            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+            positions[i * 3 + 1] = r * Math.cos(phi);
+            positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+            sizes[i] = Math.random() > 0.95 ? 3.0 : (Math.random() > 0.85 ? 2.5 : 2.0);
+            phases[i] = Math.random() * Math.PI * 2;
+            twinkleSpeeds[i] = Math.random() > 0.9 ? 0.3 + Math.random() * 0.4 : 0.0;
+        }
 
-    for (let i = 0; i < starCount; i++) {
-        const r = 1800 + Math.random() * 200;
-        const theta = Math.random() * Math.PI * 2;
-        const phi = (Math.PI / 2) - Math.random() * 1.2;
-        positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-        positions[i * 3 + 1] = r * Math.cos(phi);
-        positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-        sizes[i] = Math.random() > 0.95 ? 3.0 : (Math.random() > 0.85 ? 2.5 : 2.0);
-        phases[i] = Math.random() * Math.PI * 2;
-        twinkleSpeeds[i] = Math.random() > 0.9 ? 0.3 + Math.random() * 0.4 : 0.0;
-    }
-    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    starGeo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
-    starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
+        starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        starGeo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+        starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
 
-    const starMat = new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0 } },
-        vertexShader: `
+        const starMat = new THREE.ShaderMaterial({
+            uniforms: { uTime: { value: 0 } },
+            vertexShader: `
                 attribute float size; attribute float phase; attribute float twinkleSpeed; varying float vAlpha; uniform float uTime;
                 void main() {
                     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
@@ -348,13 +335,54 @@ const setupSky = (scene: THREE.Object3D, textures: Textures) => {
                     vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
                 }
             `,
-        fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
-        transparent: true, depthWrite: false,
-    });
+            fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
+            transparent: true, depthWrite: false,
+        });
+
+        // Tag to prevent disposal sweeps if any global GC runs
+        skyGeo.userData = { isSharedAsset: true };
+        skyMat.userData = { isSharedAsset: true };
+        starGeo.userData = { isSharedAsset: true };
+        starMat.userData = { isSharedAsset: true };
+
+        CAMP_ENV_CACHE.sky = { skyGeo, skyMat, moonHaloMat, starGeo, starMat };
+    }
+
+    const { skyGeo, skyMat, moonHaloMat, starGeo, starMat } = CAMP_ENV_CACHE.sky;
+
+    // 2. Assemble Scene
+    const skyBody = new THREE.Mesh(skyGeo, skyMat);
+    skyBody.position.set(-120, 80, -350);
+    scene.add(skyBody);
+
+    const moonHaloSprite = new THREE.Sprite(moonHaloMat);
+    moonHaloSprite.scale.set(120, 120, 1);
+    moonHaloSprite.position.copy(skyBody.position);
+    scene.add(moonHaloSprite);
 
     const starSystem = new THREE.Points(starGeo, starMat);
     starSystem.rotation.z = 0.1;
     scene.add(starSystem);
+
+    let skyLight: THREE.DirectionalLight | null = null;
+
+    // 3. ONLY add lights if we are NOT warming up!
+    if (!isWarmup) {
+        skyLight = new THREE.DirectionalLight(CAMP_SCENE.skyLight.color, CAMP_SCENE.skyLight.intensity);
+        skyLight.name = 'SKY_LIGHT';
+        skyLight.position.set(-80, 150, -100);
+        skyLight.castShadow = true;
+        skyLight.shadow.mapSize.width = 1024;
+        skyLight.shadow.mapSize.height = 1024;
+        skyLight.shadow.camera.near = 0.5;
+        skyLight.shadow.camera.far = 1000;
+        skyLight.shadow.camera.left = -100;
+        skyLight.shadow.camera.right = 100;
+        skyLight.shadow.camera.top = 100;
+        skyLight.shadow.camera.bottom = -100;
+        skyLight.shadow.bias = CAMP_SCENE.dirLight.bias;
+        scene.add(skyLight);
+    }
 
     return {
         objects: { moon: skyBody, halo: moonHaloSprite, stars: starSystem, light: skyLight },
@@ -363,43 +391,74 @@ const setupSky = (scene: THREE.Object3D, textures: Textures) => {
     };
 };
 
-const setupCampfire = (scene: THREE.Scene, textures: Textures) => {
+const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false) => {
 
-    const fireLight = new THREE.PointLight(
-        CAMP_SCENE.campfireLight.color,
-        CAMP_SCENE.campfireLight.intensity,
-        CAMP_SCENE.campfireLight.distance);
-    fireLight.position.set(0, 3, 0);
-    fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
-    fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
-    fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
-    fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
-    fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
-    scene.add(fireLight);
+    // 1. Cache Geometries and Materials (Zero-GC)
+    if (!CAMP_ENV_CACHE.fire) {
+        CAMP_ENV_CACHE.fire = {
+            ashGeo: new THREE.CircleGeometry(1.8, 16),
+            ashMat: new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireAsh }),
+            stoneGeo: new THREE.DodecahedronGeometry(0.4),
+            stoneMat: new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireStone, roughness: 0.9 }),
+            logGeo: new THREE.CylinderGeometry(0.15, 0.15, 2.2),
+            logMat: new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireLog })
+        };
+    }
 
+    const cache = CAMP_ENV_CACHE.fire;
+
+    // Assign textures if not already done
+    if (!cache.stoneMat.map) {
+        cache.stoneMat.map = textures.stone;
+        cache.stoneMat.needsUpdate = true;
+    }
+    if (!cache.logMat.map) {
+        cache.logMat.map = textures.wood;
+        cache.logMat.needsUpdate = true;
+    }
+
+    // 2. Build the visual meshes
     const fireGroup = new THREE.Group();
-    const ash = new THREE.Mesh(new THREE.CircleGeometry(1.8, 16), new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireAsh }));
-    ash.rotation.x = -Math.PI / 2; ash.position.y = 0.02; fireGroup.add(ash);
 
-    const stoneGeo = new THREE.DodecahedronGeometry(0.4);
-    const stoneMat = new THREE.MeshStandardMaterial({ map: textures.stone, color: CAMP_SCENE.colors.campfireStone, roughness: 0.9 });
+    const ash = new THREE.Mesh(cache.ashGeo, cache.ashMat);
+    ash.rotation.x = -Math.PI / 2;
+    ash.position.y = 0.02;
+    fireGroup.add(ash);
 
     for (let i = 0; i < 15; i++) {
-        const s = new THREE.Mesh(stoneGeo, stoneMat);
+        const s = new THREE.Mesh(cache.stoneGeo, cache.stoneMat);
         const angle = (i / 15) * Math.PI * 2;
         s.position.set(Math.cos(angle) * 1.5, 0.15, Math.sin(angle) * 1.5);
         s.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
         fireGroup.add(s);
     }
 
-    const logGeo = new THREE.CylinderGeometry(0.15, 0.15, 2.2);
-    const logMat = new THREE.MeshStandardMaterial({ map: textures.wood, color: CAMP_SCENE.colors.campfireLog });
     for (let i = 0; i < 4; i++) {
-        const log = new THREE.Mesh(logGeo, logMat);
-        log.position.y = 0.25; log.rotation.z = Math.PI / 2; log.rotation.y = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const log = new THREE.Mesh(cache.logGeo, cache.logMat);
+        log.position.y = 0.25;
+        log.rotation.z = Math.PI / 2;
+        log.rotation.y = (i / 4) * Math.PI * 2 + Math.PI / 4;
         fireGroup.add(log);
     }
+
     scene.add(fireGroup);
+
+    // 3. ONLY add PointLight if NOT warming up
+    let fireLight: THREE.PointLight | null = null;
+    if (!isWarmup) {
+        fireLight = new THREE.PointLight(
+            CAMP_SCENE.campfireLight.color,
+            CAMP_SCENE.campfireLight.intensity,
+            CAMP_SCENE.campfireLight.distance
+        );
+        fireLight.position.set(0, 3, 0);
+        fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
+        fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
+        fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
+        fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
+        fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
+        scene.add(fireLight);
+    }
 
     return fireLight;
 };
@@ -409,128 +468,65 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures) => {
 // ============================================================================
 export const CampWorld = {
 
-    setupSky, // Renamed for consistency
+    setupSky,
+
     setupCampScene: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
-        // 1. Scene Reset
-        if (!isWarmup) scene.clear();
+        let interactables: any[] = [];
+        let outlines: Record<string, THREE.LineSegments> = {};
 
-        // Always use CameraSystem directly from the Engine Singleton.
-        const engine = WinterEngine.getInstance();
-        const camera = engine.camera;
+        // 1. Only construct the structural scene if this is NOT a warmup
+        if (!isWarmup) {
+            scene.clear();
 
-        camera.reset();
-        camera.setPosition(0, 10, 22, true);
-        camera.set('fov', 50);
-        camera.set('far', 2500);
-        camera.lookAt(CAMP_SCENE.cameraBaseLookAt.x, CAMP_SCENE.cameraBaseLookAt.y, CAMP_SCENE.cameraBaseLookAt.z, true);
+            // Always use CameraSystem directly from the Engine Singleton.
+            const engine = WinterEngine.getInstance();
+            const camera = engine.camera;
 
-        scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
-        scene.background = new THREE.Color(CAMP_SCENE.bgColor);
+            camera.reset();
+            camera.setPosition(0, 10, 22, true);
+            camera.set('fov', 50);
+            camera.set('far', 2500);
+            camera.lookAt(CAMP_SCENE.cameraBaseLookAt.x, CAMP_SCENE.cameraBaseLookAt.y, CAMP_SCENE.cameraBaseLookAt.z, true);
 
-        // 2. Base Lighting
-        const hemiLight = new THREE.HemisphereLight(
-            CAMP_SCENE.hemiLight.sky,
-            CAMP_SCENE.hemiLight.ground,
-            CAMP_SCENE.hemiLight.intensity);
-        scene.add(hemiLight);
+            scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
+            scene.background = new THREE.Color(CAMP_SCENE.bgColor);
 
-        // 3. Terrain & Trees
-        CampWorld.setupTerrain(scene, textures);
+            // 2. Base Lighting
+            const hemiLight = new THREE.HemisphereLight(
+                CAMP_SCENE.hemiLight.sky,
+                CAMP_SCENE.hemiLight.ground,
+                CAMP_SCENE.hemiLight.intensity
+            );
+            scene.add(hemiLight);
 
-        // 4. Stations
-        const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
+            // 3. Terrain & Trees
+            CampWorld.setupTerrain(scene, textures);
+
+            // 4. Stations
+            const stationsData = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
+            interactables = stationsData.interactables;
+            outlines = stationsData.outlines;
+        }
 
         // 5. Effects (Sky, Campfire, Weather)
+        // We ALWAYS run this, even on warmup, because AssetPreloader needs 
+        // to harvest envState (starSystem, particles) to explicitly compile them.
         const envState = CampWorld.initEffects(scene, textures, weather, isWarmup);
 
         return { interactables, outlines, envState };
     },
 
-    setupFamilyMembers: (scene: THREE.Scene, rescuedIndices: number[], debugMode: boolean, playerCharacter: any, familyMembersData: any[]) => {
-        const familyGroup = new THREE.Group();
-        const interactables: THREE.Mesh[] = [];
-        const familyMembers: any[] = [];
-        const activeMembers: any[] = [playerCharacter];
-
-        if (debugMode) {
-            for (let i = 0; i < familyMembersData.length; i++) activeMembers.push(familyMembersData[i]);
-        } else {
-            const indices = rescuedIndices || [];
-            for (let i = 0; i < indices.length; i++) {
-                const sectorId = indices[i];
-                if (sectorId < 4) activeMembers.push(familyMembersData[sectorId]);
-                else if (sectorId === 4) { activeMembers.push(familyMembersData[4]); activeMembers.push(familyMembersData[5]); }
-            }
-        }
-
-        const humans = activeMembers.filter(m => m.race === 'human');
-        const animals = activeMembers.filter(m => m.race === 'animal');
-
-        for (let globalIdx = 0; globalIdx < activeMembers.length; globalIdx++) {
-            const memberData = activeMembers[globalIdx];
-            const member = ModelFactory.createFamilyMember(memberData);
-
-            if (memberData.id === 'player') {
-                member.userData.id = `player_${memberData.name}`;
-                member.userData.type = 'family';
-            }
-            let angle = 0, radius = memberData.race === 'animal' ? 5.2 : 5.0;
-
-            if (memberData.race === 'animal') {
-                angle = 1.2 + animals.indexOf(memberData) * 0.25;
-            } else {
-                const idx = humans.indexOf(memberData);
-                angle = -(humans.length - 1) * 0.25 / 2 + idx * 0.25;
-            }
-
-            member.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
-            member.lookAt(0, 0, 0);
-
-            const bodyMesh = member.children.find(c => c.userData.isBody);
-            if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
-
-            const emissiveMaterials: THREE.MeshStandardMaterial[] = [];
-
-            member.traverse(c => {
-                if ((c as any).isMesh) {
-                    const m = c as THREE.Mesh;
-                    m.castShadow = true;
-                    m.userData.groupId = member.userData.id;
-                    m.userData.id = member.userData.id;
-                    m.userData.name = member.userData.name;
-                    m.userData.type = 'family';
-                    if (m.material) {
-                        const mats = Array.isArray(m.material) ? m.material : [m.material];
-                        for (let i = 0; i < mats.length; i++) {
-                            mats[i].userData = mats[i].userData || {};
-                            mats[i].userData.isSharedAsset = true;
-                        }
-                    }
-
-                    if (m.material) {
-                        const mats = Array.isArray(m.material) ? m.material : [m.material];
-                        for (let i = 0; i < mats.length; i++) {
-                            if ('emissive' in mats[i]) {
-                                emissiveMaterials.push(mats[i] as THREE.MeshStandardMaterial);
-                            }
-                        }
-                    }
-                }
-            });
-            familyGroup.add(member);
-
-            let baseY = member.userData.baseY ?? 0;
-            familyMembers.push({ mesh: member, baseY, phase: Math.random() * Math.PI * 2, bounce: 0, name: memberData.name, seed: Math.random() * 100, emissiveMaterials });
-        }
-        scene.add(familyGroup);
-        return { familyMembers, interactables, activeMembers };
-    },
-
     setupTerrain: (scene: THREE.Scene, textures: Textures) => {
-        const groundMat = MATERIALS.dirt.clone();
+        // Optimization: Use .copy() instead of .clone() to avoid deep clone overhead
+        // creating a new material instance safely for the terrain repetition.
+        const groundMat = new THREE.MeshStandardMaterial().copy(MATERIALS.dirt as THREE.MeshStandardMaterial);
+
         if (groundMat.map) groundMat.map.repeat.set(60, 60);
         if (groundMat.bumpMap) groundMat.bumpMap.repeat.set(60, 60);
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat);
+
+        const groundGeo = new THREE.PlaneGeometry(120, 120);
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
@@ -696,9 +692,9 @@ export const CampWorld = {
             engine.weather.sync(weatherType, WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES, 60);
         }
 
-        const { objects: skyObjects } = CampWorld.setupSky(scene, textures);
+        const { objects: skyObjects } = CampWorld.setupSky(scene, textures, isWarmup);
         const starSystem = skyObjects.stars;
-        const fireLight = setupCampfire(scene, textures);
+        const fireLight = setupCampfire(scene, textures, isWarmup);
 
         const flameCount = 40;
         const flames = new THREE.InstancedMesh(CONST_GEO.flame, CONST_MAT.flame, flameCount);
@@ -728,7 +724,8 @@ export const CampWorld = {
 
         const state: CampEffectsState = {
             particles: { flames, sparkles, smokes, flameData, sparkleData, smokeData },
-            starSystem, fireLight
+            starSystem,
+            fireLight: fireLight as THREE.PointLight
         };
 
         // Pre-warm the simulation
@@ -896,5 +893,101 @@ export const CampWorld = {
         if (!stationGeometries.barrel) stationGeometries.barrel = new THREE.CylinderGeometry(0.03, 0.03, 1.2);
         if (!stationGeometries.map_plane) stationGeometries.map_plane = new THREE.PlaneGeometry(2.0, 1.4);
         if (!stationGeometries.note_plane) stationGeometries.note_plane = new THREE.PlaneGeometry(0.4, 0.5);
-    }
+    },
+
+    setupFamilyMembers: (scene: THREE.Scene, rescuedIndices: number[], debugMode: boolean, playerCharacter: any, familyMembersData: any[]) => {
+        const familyGroup = new THREE.Group();
+        const interactables: THREE.Mesh[] = [];
+        const familyMembers: any[] = [];
+        const activeMembers: any[] = [playerCharacter];
+
+        if (debugMode) {
+            for (let i = 0; i < familyMembersData.length; i++) activeMembers.push(familyMembersData[i]);
+        } else {
+            const indices = rescuedIndices || [];
+            for (let i = 0; i < indices.length; i++) {
+                const sectorId = indices[i];
+                if (sectorId < 4) activeMembers.push(familyMembersData[sectorId]);
+                else if (sectorId === 4) { activeMembers.push(familyMembersData[4]); activeMembers.push(familyMembersData[5]); }
+            }
+        }
+
+        const humans = activeMembers.filter(m => m.race === 'human');
+        const animals = activeMembers.filter(m => m.race === 'animal');
+
+        for (let globalIdx = 0; globalIdx < activeMembers.length; globalIdx++) {
+            const memberData = activeMembers[globalIdx];
+            const member = ModelFactory.createFamilyMember(memberData);
+
+            if (memberData.id === 'player') {
+                member.userData.id = `player_${memberData.name}`;
+                member.userData.type = 'family';
+            }
+            let angle = 0, radius = memberData.race === 'animal' ? 5.2 : 5.0;
+
+            if (memberData.race === 'animal') {
+                angle = 1.2 + animals.indexOf(memberData) * 0.25;
+            } else {
+                const idx = humans.indexOf(memberData);
+                angle = -(humans.length - 1) * 0.25 / 2 + idx * 0.25;
+            }
+
+            member.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
+            member.lookAt(0, 0, 0);
+
+            // Din ursprungliga raycast-logik!
+            const bodyMesh = member.children.find(c => c.userData.isBody);
+            if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
+
+            const emissiveMaterials: THREE.MeshStandardMaterial[] = [];
+
+            member.traverse(c => {
+                if ((c as any).isMesh) {
+                    const m = c as THREE.Mesh;
+                    m.castShadow = true;
+                    m.userData.groupId = member.userData.id;
+                    m.userData.id = member.userData.id;
+                    m.userData.name = member.userData.name;
+                    m.userData.type = 'family';
+
+                    if (m.material) {
+                        const mats = Array.isArray(m.material) ? m.material : [m.material];
+                        const clonedMats = [];
+
+                        for (let i = 0; i < mats.length; i++) {
+                            // [VINTERDÖD OPTIMIZATION] Vi separerar material med 'emissive'
+                            // för hover-effekten utan att använda dyr .clone()
+                            if ('emissive' in mats[i]) {
+                                const newMat = new THREE.MeshStandardMaterial().copy(mats[i] as THREE.MeshStandardMaterial);
+                                newMat.userData = newMat.userData || {};
+                                newMat.userData.isSharedAsset = true;
+                                emissiveMaterials.push(newMat);
+                                clonedMats.push(newMat);
+                            } else {
+                                mats[i].userData = mats[i].userData || {};
+                                mats[i].userData.isSharedAsset = true;
+                                clonedMats.push(mats[i]);
+                            }
+                        }
+                        m.material = Array.isArray(m.material) ? clonedMats : clonedMats[0];
+                    }
+                }
+            });
+            familyGroup.add(member);
+
+            let baseY = member.userData.baseY ?? 0;
+            familyMembers.push({
+                mesh: member,
+                baseY,
+                phase: Math.random() * Math.PI * 2,
+                bounce: 0,
+                name: memberData.name,
+                seed: Math.random() * 100,
+                emissiveMaterials
+            });
+        }
+        scene.add(familyGroup);
+        return { familyMembers, interactables, activeMembers };
+    },
+
 };

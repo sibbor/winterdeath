@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { TEXTURES } from './AssetLoader';
+import { WATER_SYSTEM } from '../../content/constants';
 
-const MAX_RIPPLES = 16;
-const MAX_OBJECTS = 8;
 
 // Safe fallback texture to satisfy WebGL samplers before the image loads
 const dummyNoise = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
@@ -97,7 +96,7 @@ export function createWaterMaterial(
             uniform float uTime;
             uniform float uWaveStrength;
             uniform vec2 uWaterDirection;
-            uniform vec4 uRipples[${MAX_RIPPLES}];
+            uniform vec4 uRipples[${WATER_SYSTEM.MAX_RIPPLES}];
             uniform sampler2D uNoiseTexture; 
             uniform vec2 uPlaneSize;
             uniform float uIsCircle;
@@ -134,7 +133,7 @@ export function createWaterMaterial(
                 
                 // Process dynamic ripples
                 float rippleSum = 0.0;
-                for(int i = 0; i < ${MAX_RIPPLES}; i++) {
+                for(int i = 0; i < ${WATER_SYSTEM.MAX_RIPPLES}; i++) {
                     vec4 rip = uRipples[i];
                     if (rip.z < -100.0) continue; 
                     
@@ -171,7 +170,7 @@ export function createWaterMaterial(
             uniform vec3 uShallowColor;
             uniform vec3 uFoamColor;
             uniform vec3 uLightPosition;
-            uniform vec4 uObjectPositions[${MAX_OBJECTS}];
+            uniform vec4 uObjectPositions[${WATER_SYSTEM.MAX_FLOATING_OBJECTS}];
             uniform vec2 uPlaneSize;
             uniform float uIsCircle;
             uniform float uWaterDepth;
@@ -231,7 +230,7 @@ export function createWaterMaterial(
                 // --- OPTIMIZED FOAM CALCULATION ---
                 // Calculate combined object proximity FIRST (Fast O(1) inside loop)
                 float objProximity = 0.0;
-                for(int i = 0; i < ${MAX_OBJECTS}; i++) {
+                for(int i = 0; i < ${WATER_SYSTEM.MAX_FLOATING_OBJECTS}; i++) {
                     vec4 op = uObjectPositions[i];
                     if (op.w > 0.0) {
                         float dist = distance(vWorldPos.xz, op.xy);

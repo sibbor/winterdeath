@@ -32,15 +32,17 @@ export const WATER_SYSTEM = {
     MAX_FLOATING_OBJECTS: 8
 }
 
-// LightningSystem
-export const LIGHTNING_SYSTEM = {
-    MAX_VISIBLE_LIGHTS: 12,
-    MAX_SHADOW_CASTING_LIGHTS: 8
-}
+// LightSystem
+export const LIGHT_SYSTEM = {
+    MAX_VISIBLE_LIGHTS: 16,
+    MAX_SHADOW_CASTING_LIGHTS: 12,
+    SKY_LIGHT: 'SKY_LIGHT',
+    AMBIENT_LIGHT: 'AMBIENT_LIGHT'
+};
 
 // Flashlight
 export const FLASHLIGHT = {
-    name: 'flashlight',
+    name: 'FLASHLIGHT',
     color: 0xffffee,
     intensity: 250.0,
     distance: 60,
@@ -152,7 +154,7 @@ export const CHATTER_LINES: Record<string, string[]> = {
 /**
  * Standardized tree types for environment generation
  */
-export enum TreeType {
+export enum TREE_TYPE {
     PINE = 'PINE',
     SPRUCE = 'SPRUCE',
     OAK = 'OAK',

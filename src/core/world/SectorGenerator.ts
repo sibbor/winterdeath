@@ -9,9 +9,9 @@ import { EffectManager } from '../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
-import { WaterBodyType, WaterStyle, WaterBody } from '../systems/WaterSystem';
+import { WaterBodyType, WaterBody } from '../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
-import { TreeType } from '../../content/constants';
+import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 
 // Shared Utilities for Sector Generation
 const _c1 = new THREE.Color();
@@ -137,6 +137,7 @@ export const SectorGenerator = {
 
         // Sync water lighting with sector moon/sun
         const skyLight = def.environment?.skyLight;
+        skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
         if (skyLight?.visible && skyLight.position && engine?.water) {
             _v1_sg.set(skyLight.position.x, skyLight.position.y || 100, skyLight.position.z);
             engine.water.setLightPosition(_v1_sg);
@@ -731,9 +732,10 @@ export const SectorGenerator = {
      * Create a typed water body through the engine-owned WaterSystem.
      * Returns a WaterBody that can have floating props and splash sources registered.
      */
-    addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: {
-        style?: WaterStyle; shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number;
-    }): WaterBody | null => {
+    addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number,
+        options?: {
+            shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number;
+        }): WaterBody | null => {
         const engine = WinterEngine.getInstance();
         if (!engine?.water) return null;
         return engine.water.addWaterBody(type, x, z, width, depth, options);
@@ -1042,9 +1044,9 @@ export const SectorGenerator = {
 
     spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
         // Map legacy types to new procedural types
-        let genType: TreeType = TreeType.PINE;
-        if (type === 'birch') genType = TreeType.BIRCH;
-        if (type === 'spruce') genType = TreeType.SPRUCE;
+        let genType: TREE_TYPE = TREE_TYPE.PINE;
+        if (type === 'birch') genType = TREE_TYPE.BIRCH;
+        if (type === 'spruce') genType = TREE_TYPE.SPRUCE;
         // 'pine' maps to 'PINE' (default)
 
         const tree = EnvironmentGenerator.createTree(genType, scaleMultiplier);
@@ -1220,7 +1222,7 @@ export const SectorGenerator = {
             scene.fog.density = THREE.MathUtils.lerp(scene.fog.density, effectiveDensity, 0.05);
         }
 
-        const ambientLight = scene.getObjectByName('AMBIENT_LIGHT') as THREE.AmbientLight;
+        const ambientLight = scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
         if (ambientLight) {
             ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbient, 0.05);
         }

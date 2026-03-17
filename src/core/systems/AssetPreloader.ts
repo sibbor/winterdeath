@@ -4,7 +4,7 @@ import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProce
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
-import { TreeType, LIGHTNING_SYSTEM } from '../../content/constants';
+import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
@@ -32,6 +32,7 @@ export const AssetPreloader = {
         const warmupLogic = async () => {
             const isCamp = target === 'CAMP';
             const isSector = target === 'SECTOR';
+            const engine = WinterEngine.getInstance();
 
             let envConfig = envConfigBase;
             if (isSector && !envConfig) {
@@ -54,8 +55,6 @@ export const AssetPreloader = {
             };
 
             beginInternal('asset_warmup_total');
-
-            const engine = WinterEngine.getInstance();
 
             // 0. PROCEDURAL TEXTURE CACHE WARMUP
             if (target === 'CORE') {
@@ -183,11 +182,14 @@ export const AssetPreloader = {
                 }
             }
 
-            // Sync with LightingSystem's MAX_VISIBLE_LIGHTS
+            // Sync with dynamic hardware limits calculated by the Engine
             if (isSector || target === 'CORE') {
-                for (let i = 0; i < LIGHTNING_SYSTEM.MAX_VISIBLE_LIGHTS; i++) {
+                const safeVisible = engine.maxVisibleLights || LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
+                const safeShadows = engine.maxSafeShadows || LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS;
+
+                for (let i = 0; i < safeVisible; i++) {
                     const dummyLight = new THREE.PointLight(0xffaa00, 1, 10);
-                    if (i < LIGHTNING_SYSTEM.MAX_SHADOW_CASTING_LIGHTS) dummyLight.castShadow = true;
+                    if (i < safeShadows) dummyLight.castShadow = true;
                     scene.add(dummyLight);
                 }
             }
@@ -217,6 +219,7 @@ export const AssetPreloader = {
                                 iMesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
                             }
                             iMesh.visible = false;
+                            iMesh.setMatrixAt(0, new THREE.Matrix4());
                             dummyRoot.add(iMesh);
                         }
                     }
@@ -260,7 +263,7 @@ export const AssetPreloader = {
                         if (yieldToMain) await yieldToMain();
                     }
 
-                    // Pre-compile WaterShader
+                    // Pre-compile Water Material
                     const dummyRipples = new Array(16).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
                     const dummyObjects = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
                     const coreWaterMat = createWaterMaterial(10, 10, dummyRipples, dummyObjects, 'rect');
@@ -269,7 +272,6 @@ export const AssetPreloader = {
 
                     EnvironmentGenerator.createWaterLily();
                     EnvironmentGenerator.createSeaweed();
-
                     EnvironmentGenerator.createRock(2, 2);
                     ObjectGenerator.createHedge();
                     ObjectGenerator.createWheatStalk();
@@ -294,7 +296,6 @@ export const AssetPreloader = {
                     if ((mat as any).map) engine.renderer.initTexture((mat as any).map);
                 }
 
-                // No shadows for FX
                 addToWarmup(new THREE.Mesh(GEOMETRY.splash, MATERIALS.splash), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.bloodSplat, MATERIALS.bloodSplat), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.impactSplat, MATERIALS.impactSplat), false, false);
@@ -313,11 +314,9 @@ export const AssetPreloader = {
                 const dummyPos = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
                 const dummyNorm = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]);
                 const dummyCol = new Float32Array([1, 1, 1, 1, 1, 1, 1, 1, 1]);
-
                 dummyMountainGeo.setAttribute('position', new THREE.BufferAttribute(dummyPos, 3));
                 dummyMountainGeo.setAttribute('normal', new THREE.BufferAttribute(dummyNorm, 3));
                 dummyMountainGeo.setAttribute('color', new THREE.BufferAttribute(dummyCol, 3));
-
                 addToWarmup(new THREE.Mesh(dummyMountainGeo, MATERIALS.mountain));
                 ownedGeometries.push(dummyMountainGeo);
 
@@ -368,9 +367,9 @@ export const AssetPreloader = {
                 addInstancedWarmup(GEOMETRY.stone, sunflowerHeadMat);
                 addInstancedWarmup(GEOMETRY.stone, sunflowerCenterMat);
 
-                const treeTypes: TreeType[] = [TreeType.PINE, TreeType.SPRUCE, TreeType.OAK, TreeType.DEAD, TreeType.BIRCH];
-                for (let i = 0; i < treeTypes.length; i++) {
-                    addToWarmup(EnvironmentGenerator.createTree(treeTypes[i], 1.0, 0));
+                const TREE_TYPEs: TREE_TYPE[] = [TREE_TYPE.PINE, TREE_TYPE.SPRUCE, TREE_TYPE.OAK, TREE_TYPE.DEAD, TREE_TYPE.BIRCH];
+                for (let i = 0; i < TREE_TYPEs.length; i++) {
+                    addToWarmup(EnvironmentGenerator.createTree(TREE_TYPEs[i], 1.0, 0));
                 }
 
                 const zombieKeys = Object.keys(ZOMBIE_TYPES);
@@ -387,98 +386,58 @@ export const AssetPreloader = {
                     });
                 }
 
-                // Collectibles
                 try {
                     const warmedModels: string[] = [];
                     const allCollectibles = Object.values(COLLECTIBLES) as any[];
-
                     for (let i = 0; i < allCollectibles.length; i++) {
                         const mType = allCollectibles[i].modelType;
-
                         if (mType && warmedModels.indexOf(mType) === -1) {
                             warmedModels.push(mType);
                             addToWarmup(ModelFactory.createCollectible(mType));
                         }
                     }
-                } catch (e) {
-                    console.warn('[AssetPreloader] Collectible warmup failed', e);
-                }
+                } catch (e) { console.warn('[AssetPreloader] Collectible warmup failed', e); }
 
-                // Weather particles without shadows
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow, false);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain, false);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash, false);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember, false);
 
                 const windMats = [MATERIALS.grass, MATERIALS.flower, MATERIALS.treeTrunkBirch, MATERIALS.treeTrunk];
-                for (let i = 0; i < windMats.length; i++) {
-                    const m = windMats[i];
-                    addToWarmup(new THREE.Mesh(GEOMETRY.box, m));
-                }
+                for (let i = 0; i < windMats.length; i++) addToWarmup(new THREE.Mesh(GEOMETRY.box, windMats[i]));
 
                 const waterMats = [MATERIALS.waterLily, MATERIALS.waterLilyFlower, MATERIALS.seaweed];
-                for (let i = 0; i < waterMats.length; i++) {
-                    addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
-                }
-
-                const dummyRipples = new Array(16).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
-                const dummyObjects = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
-                const waterNordic = createWaterMaterial(20, 20, dummyRipples, dummyObjects, 'rect');
-                ownedMaterials.push(waterNordic);
-
-                addToWarmup(new THREE.Mesh(GEOMETRY.box, waterNordic), false);
+                for (let i = 0; i < waterMats.length; i++) addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
 
                 addInstancedWarmup(GEOMETRY.scrap, MATERIALS.scrap);
 
                 addToWarmup(ModelFactory.createPlayer());
-                for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
-                    addToWarmup(ModelFactory.createFamilyMember(FAMILY_MEMBERS[i]));
-                }
+                for (let i = 0; i < FAMILY_MEMBERS.length; i++) addToWarmup(ModelFactory.createFamilyMember(FAMILY_MEMBERS[i]));
             }
 
             if (isSector) {
                 const sectorIndex = sectorId ?? 0;
-
                 try {
                     addToWarmup(ObjectGenerator.createBuilding(10, 8, 10, 0xffffff, true, true, 0.2));
                 } catch (e) { console.warn('[AssetPreloader] Building warmup failed', e); }
 
                 try {
                     const bossData = BOSSES[sectorIndex] || BOSSES[0];
-                    if (bossData) {
-                        const bossMesh = ModelFactory.createBoss('Boss', bossData);
-                        addToWarmup(bossMesh);
-                    }
-                } catch (e) {
-                    console.warn('[AssetPreloader] Boss warmup failed', e);
-                }
+                    if (bossData) addToWarmup(ModelFactory.createBoss('Boss', bossData));
+                } catch (e) { console.warn('[AssetPreloader] Boss warmup failed', e); }
 
-                const flashlight = ModelFactory.createFlashlight();
-                addToWarmup(flashlight);
-                scene.add(flashlight);
+                addToWarmup(ModelFactory.createFlashlight());
 
                 const vehicleTypes = Object.keys(VEHICLES) as VehicleType[];
                 for (let i = 0; i < vehicleTypes.length; i++) {
                     const vType = vehicleTypes[i];
-                    if (vType === 'boat') {
-                        addToWarmup(VehicleGenerator.createBoat());
-                    } else {
-                        addToWarmup(VehicleGenerator.createVehicle(vType));
-                    }
+                    if (vType === 'boat') addToWarmup(VehicleGenerator.createBoat());
+                    else addToWarmup(VehicleGenerator.createVehicle(vType));
                 }
-
-                const dummyRipplesCircle = new Array(16).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
-                const dummyObjectsCircle = new Array(8).fill(null).map(() => new THREE.Vector4(0, 0, 0, 0));
-                const nordicWaterCircle = createWaterMaterial(10, 10, dummyRipplesCircle, dummyObjectsCircle, 'circle');
-                ownedMaterials.push(nordicWaterCircle);
 
                 const waterSurfaceGeo = new THREE.PlaneGeometry(10, 10, 16, 16);
                 waterSurfaceGeo.rotateX(-Math.PI / 2);
                 ownedGeometries.push(waterSurfaceGeo);
-
-                const nwMesh = new THREE.Mesh(waterSurfaceGeo, nordicWaterCircle);
-                nwMesh.visible = false;
-                dummyRoot.add(nwMesh);
 
                 const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
                 const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
@@ -494,39 +453,27 @@ export const AssetPreloader = {
 
             if (isCamp) {
                 const dummyTextures = createProceduralTextures();
-                const dummyWeather = 'snow';
+                const { envState: campState } = await CampWorld.setupCampScene(scene, dummyTextures as any, 'snow', true);
 
-                const { envState: campState } = await CampWorld.setupCampScene(scene, dummyTextures as any, dummyWeather, true);
-
-                if (campState.starSystem) {
-                    ownedGeometries.push(campState.starSystem.geometry);
-                    ownedMaterials.push(campState.starSystem.material as THREE.Material);
-                }
-                if (campState.particles) {
-                    const p = campState.particles;
-                    ownedGeometries.push(p.flames.geometry, p.sparkles.geometry, p.smokes.geometry);
-                    ownedMaterials.push(p.flames.material as THREE.Material, p.sparkles.material as THREE.Material, p.smokes.material as THREE.Material);
+                // Setup Station Outlines (Sync with single-source-of-truth colors)
+                const dummyEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+                ownedGeometries.push(dummyEdges);
+                const outlineColors = [CAMP_SCENE.colors.gold, CAMP_SCENE.colors.green, CAMP_SCENE.colors.red, CAMP_SCENE.colors.purple];
+                for (let i = 0; i < outlineColors.length; i++) {
+                    const mat = new THREE.LineBasicMaterial({ color: outlineColors[i], linewidth: 2 });
+                    addToWarmup(new THREE.LineSegments(dummyEdges, mat), false);
+                    ownedMaterials.push(mat);
                 }
 
                 const dummyActionSpriteMat = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, depthTest: false });
-                const dummyActionSprite = new THREE.Sprite(dummyActionSpriteMat);
                 ownedMaterials.push(dummyActionSpriteMat);
-                dummyRoot.add(dummyActionSprite);
+                dummyRoot.add(new THREE.Sprite(dummyActionSpriteMat));
 
                 const dummyActionBasicMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false });
-                const dummyActionMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dummyActionBasicMat);
                 ownedMaterials.push(dummyActionBasicMat);
-                addToWarmup(dummyActionMesh, false);
+                addToWarmup(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dummyActionBasicMat), false);
 
                 if (yieldToMain) await yieldToMain();
-
-                const rangeCircle = new THREE.Mesh(
-                    new THREE.RingGeometry(4.8, 5.0, 32),
-                    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
-                );
-                addToWarmup(rangeCircle);
-                ownedMaterials.push(rangeCircle.material as THREE.Material);
-                ownedGeometries.push(rangeCircle.geometry);
 
                 const campfireFlame = new THREE.Mesh(CAMP_GEO.flame, CAMP_MAT.flame);
                 const campfireSpark = new THREE.Mesh(CAMP_GEO.spark, CAMP_MAT.spark);
@@ -534,12 +481,6 @@ export const AssetPreloader = {
                 addToWarmup(campfireFlame);
                 addToWarmup(campfireSpark);
                 addToWarmup(campfireSmoke);
-
-                const dummyEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-                const dummyLine = new THREE.LineSegments(dummyEdges, new THREE.LineBasicMaterial({ color: 0xffffff }));
-                addToWarmup(dummyLine);
-                ownedMaterials.push(dummyLine.material as THREE.Material);
-                ownedGeometries.push(dummyEdges);
 
                 const campGeos = [
                     new THREE.CircleGeometry(1.8, 16),
@@ -549,73 +490,50 @@ export const AssetPreloader = {
                     new THREE.BoxGeometry(0.15, 0.4, 0.15),
                     new THREE.PlaneGeometry(2.0, 1.4),
                     new THREE.PlaneGeometry(0.4, 0.5),
-                    CAMP_GEO.flame,
-                    CAMP_GEO.spark,
-                    CAMP_GEO.smoke
+                    CAMP_GEO.flame, CAMP_GEO.spark, CAMP_GEO.smoke
                 ];
 
                 for (let i = 0; i < campGeos.length; i++) {
-                    const geo = campGeos[i];
-                    if (geo !== CAMP_GEO.flame && geo !== CAMP_GEO.spark && geo !== CAMP_GEO.smoke) {
-                        ownedGeometries.push(geo);
-                    }
+                    const geo = campGeos[i] as THREE.BufferGeometry;
+                    const isCampFixedGeo = (geo === (CAMP_GEO.flame as any)) || (geo === (CAMP_GEO.spark as any)) || (geo === (CAMP_GEO.smoke as any));
+                    if (!isCampFixedGeo) ownedGeometries.push(geo);
                     addToWarmup(new THREE.Mesh(geo, stationMaterials.warmWood), false);
                     addToWarmup(new THREE.Mesh(geo, stationMaterials.medkitRed), false);
-
-                    addToWarmup(new THREE.Mesh(geo, CAMP_MAT.flame), false);
-                    addToWarmup(new THREE.Mesh(geo, CAMP_MAT.spark), false);
-                    addToWarmup(new THREE.Mesh(geo, CAMP_MAT.smoke), false);
                 }
 
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeSilhouette);
                 addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeSilhouette);
 
-                if (yieldToMain) await yieldToMain();
-
-                const groundMat = MATERIALS.dirt;
                 const groundGeo = new THREE.PlaneGeometry(120, 120);
                 groundGeo.rotateX(-Math.PI / 2);
                 ownedGeometries.push(groundGeo);
-                const ground = new THREE.Mesh(groundGeo, groundMat);
+                const ground = new THREE.Mesh(groundGeo, MATERIALS.dirt);
                 ground.receiveShadow = true;
                 addToWarmup(ground, false);
 
-                const campPlayer = ModelFactory.createFamilyMember(PLAYER_CHARACTER);
-                addToWarmup(campPlayer);
+                addToWarmup(ModelFactory.createFamilyMember(PLAYER_CHARACTER));
             }
 
             if (isSector || target === 'CORE') {
-                const fxTypes = [
-                    'blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke',
-                    'debris', 'glass', 'flash', 'splash',
-                    'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat', 'impact_splat',
-                    'campfire_flame', 'campfire_spark', 'campfire_smoke',
-                    'scrap',
-                    'electric_beam', 'screech_wave', 'ground_impact', 'shockwave', 'frost_nova', 'magnetic_sparks', 'impact'
-                ];
+                const fxTypes = ['blood', 'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'debris', 'scrap', 'glass', 'flash', 'splash', 'enemy_effect_stun', 'enemy_effect_flame', 'enemy_effect_spark', 'gore', 'blood_splat', 'impact_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'electric_beam', 'screech_wave', 'ground_impact', 'shockwave', 'frost_nova', 'magnetic_sparks', 'impact'];
                 for (let i = 0; i < fxTypes.length; i++) {
                     const realIMesh = FXSystem._getInstancedMesh(null as any, fxTypes[i]);
-
                     const dummyIMesh = new THREE.InstancedMesh(realIMesh.geometry, realIMesh.material, 1);
                     dummyIMesh.visible = false;
+                    dummyIMesh.setMatrixAt(0, new THREE.Matrix4());
                     dummyRoot.add(dummyIMesh);
-
-                    if (fxTypes[i] === 'debris' || fxTypes[i] === 'scrap' || fxTypes[i] === 'glass' || fxTypes[i] === 'gore') {
+                    if (['debris', 'scrap', 'glass', 'gore'].includes(fxTypes[i])) {
                         dummyIMesh.castShadow = true;
                         const mat = dummyIMesh.material as any;
                         dummyIMesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
-                    } else {
-                        dummyIMesh.castShadow = false;
-                        dummyIMesh.receiveShadow = false;
                     }
                 }
-
                 addToWarmup(new THREE.Mesh(GEOMETRY.bullet, MATERIALS.bullet));
                 addToWarmup(new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov));
                 addToWarmup(new THREE.Mesh(GEOMETRY.flashbang, MATERIALS.flashbang));
                 addToWarmup(new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade));
 
-                const corpseMatWarmup = MATERIALS.zombie.clone() as THREE.MeshStandardMaterial;
+                const corpseMatWarmup = new THREE.MeshStandardMaterial().copy(MATERIALS.zombie as THREE.MeshStandardMaterial);
                 corpseMatWarmup.color.setHex(0xffffff);
                 addToWarmup(new THREE.InstancedMesh(GEOMETRY.zombie, corpseMatWarmup, 1));
                 ownedMaterials.push(corpseMatWarmup);
@@ -623,17 +541,14 @@ export const AssetPreloader = {
 
             if (yieldToMain) await yieldToMain();
 
-            // 6. SINGLE FINAL COMPILATION PASS
+            // 6. FINAL GPU COMPILATION
             beginInternal('asset_warmup_compilation');
             try {
                 const children = dummyRoot.children;
                 for (let i = 0; i < children.length; i++) children[i].visible = true;
 
-                if ((engine.renderer as any).compileAsync) {
-                    await (engine.renderer as any).compileAsync(scene, engine.camera.threeCamera);
-                } else {
-                    engine.renderer.compile(scene, engine.camera.threeCamera);
-                }
+                if ((engine.renderer as any).compileAsync) await (engine.renderer as any).compileAsync(scene, engine.camera.threeCamera);
+                else engine.renderer.compile(scene, engine.camera.threeCamera);
 
                 const originalViewport = new THREE.Vector4();
                 engine.renderer.getViewport(originalViewport);
@@ -646,39 +561,27 @@ export const AssetPreloader = {
             } catch (e) { console.warn("Compilation warmup failed", e); }
             endInternal('asset_warmup_compilation');
 
-            // SAFE VRAM FLUSH & SCENE CLEANUP
-            for (let i = 0; i < ownedGeometries.length; i++) {
-                if (ownedGeometries[i]) ownedGeometries[i].dispose();
-            }
-            for (let i = 0; i < ownedMaterials.length; i++) {
-                if (ownedMaterials[i]) ownedMaterials[i].dispose();
-            }
+            // CLEANUP VRAM
+            for (let i = 0; i < ownedGeometries.length; i++) if (ownedGeometries[i]) ownedGeometries[i].dispose();
+            for (let i = 0; i < ownedMaterials.length; i++) if (ownedMaterials[i]) ownedMaterials[i].dispose();
 
             scene.clear();
             if ((engine.renderer as any).renderLists) (engine.renderer as any).renderLists.dispose();
 
             warmedModules.add(moduleKey);
             endInternal('asset_warmup_total');
-
-            console.log(`[AssetPreloader] Warmup Module [${moduleKey}] Complete. Details:`, warmupTimings);
+            console.log(`[AssetPreloader] Module [${moduleKey}] Warmed up in ${warmupTimings['asset_warmup_total'].toFixed(2)}ms`);
         };
 
-        const promise = warmupLogic().finally(() => {
-            activePromises.delete(moduleKey);
-        });
+        const promise = warmupLogic().finally(() => { activePromises.delete(moduleKey); });
         activePromises.set(moduleKey, promise);
         return promise;
     },
 
     isWarmedUp: (module: string = 'CORE') => warmedModules.has(module),
-    reset: () => {
-        warmedModules.clear();
-        activePromises.clear();
-        lastSectorIndex = -1;
-    },
+    reset: () => { warmedModules.clear(); activePromises.clear(); lastSectorIndex = -1; },
     getLastSectorIndex: () => lastSectorIndex,
     setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; },
-
     releaseSectorAssets: (index: number) => {
         const moduleKey = `SECTOR_${index}`;
         if (warmedModules.has(moduleKey)) {

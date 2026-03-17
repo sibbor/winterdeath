@@ -54,8 +54,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     const lastDrawCallsRef = useRef(0);
 
     const [hoveredStation, setHoveredStation] = useState<string | null>(null);
-    const [tooltip, setTooltip] = useState<{ x: number, y: number, text: string, subText?: string } | null>(null);
-    const [idleTooltips, setIdleTooltips] = useState<Array<{ x: number, y: number, text: string, id: string }>>([]);
+
+    // Note: We only store text data in state now. Coordinates are handled via DOM Refs to prevent re-renders.
+    const [tooltipData, setTooltipData] = useState<{ text: string, subText?: string } | null>(null);
+    const tooltipDOMRef = useRef<HTMLDivElement>(null);
+
+    const [showIdleTooltips, setShowIdleTooltips] = useState(false);
+    const showIdleTooltipsRef = useRef(false);
+    const idleTooltipDOMRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
 
@@ -91,7 +97,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     useEffect(() => { isIdleRef.current = isIdle; }, [isIdle]);
     useEffect(() => { activeOverlayRef.current = activeOverlay; }, [activeOverlay]);
 
-
     useEffect(() => {
         if (isRunning) {
             soundManager.resume();
@@ -107,9 +112,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         const idleTimer = setInterval(() => { if (!isIdle && Date.now() - lastInputRef.current > 10000) setIsIdle(true); }, 1000);
         return () => { window.removeEventListener('mousemove', handleInput); window.removeEventListener('mousedown', handleInput); window.removeEventListener('keydown', handleInput); window.removeEventListener('touchstart', handleInput); clearInterval(idleTimer); };
     }, [isIdle]);
-
-    // --- KEYBOARD LISTENERS REMOVED (NOW GLOBAL) ---
-
 
     const setupCounterRef = useRef(0);
 
@@ -137,7 +139,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
-            // Setup Scene via CampWorld
             const { interactables, outlines, envState } = await CampWorld.setupCampScene(scene, textures, weather);
 
             // Race condition check: If another setup started, abort this one
@@ -150,13 +151,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 scene, rescuedFamilyIndices, debugMode, PLAYER_CHARACTER, FAMILY_MEMBERS
             );
 
-            // Final check inside the async scope
             if (setupCounterRef.current !== currentSetupId) return;
 
-            // Consolidate interactables from both stations and family
             const allInteractables = [...interactables, ...familyInteractables];
 
-            // [VINTERDÖD] Adjust camera for Portrait Mode (Mobile/Narrow View)
             const aspect = container.clientWidth / container.clientHeight;
             if (aspect < 1.0) {
                 camera.set('fov', 68);
@@ -166,7 +164,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 camera.setPosition(0, 10, 22, true);
             }
 
-            // Store scene data for the interactivity loop
             sceneInteractablesRef.current = allInteractables;
             sceneOutlinesRef.current = outlines;
             sceneOutlineKeysRef.current = Object.keys(outlines);
@@ -176,7 +173,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         setup();
 
-        // Buffer frames to ensure campfire and particles are fully initialized
         let framesToWait = 10;
         const checkReady = () => {
             if (framesToWait > 0) {
@@ -222,7 +218,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     if (fmWrapper) { fmWrapper.bounce = 1; soundManager.playVoice(fmWrapper.mesh.userData.name); }
                 } else {
                     soundManager.playUiConfirm();
-                    // Map local Camp station IDs to Global OverlayTypes
                     const typeMap: Record<string, string> = {
                         'armory': 'STATION_ARMORY',
                         'skills': 'STATION_SKILLS',
@@ -243,12 +238,10 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             mouse.x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((touch.clientY - rect.top) / rect.height) * 2 + 1;
 
-            // Force raycast update for touch
             raycaster.setFromCamera(mouse, camera.threeCamera);
             const hits = raycaster.intersectObjects(sceneInteractablesRef.current);
             if (hits.length > 0) {
                 let target: any = hits[0].object;
-                // Use groupId to find the root family member group
                 if (target.userData.groupId) {
                     hoveredRef.current = target.userData.groupId;
                 } else {
@@ -266,13 +259,12 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             const aspect = width / height;
             camera.set('aspect', aspect);
 
-            // [VINTERDÖD] Dynamic FOV/Position adjustment for Mobile Portrait
             if (aspect < 1.0) {
                 camera.set('fov', 68);
-                camera.setPosition(0, 10, 28, false); // Smoothly slide back
+                camera.setPosition(0, 10, 28, false);
             } else {
                 camera.set('fov', 50);
-                camera.setPosition(0, 10, 22, false); // Smoothly slide forward
+                camera.setPosition(0, 10, 22, false);
             }
 
             engine.renderer.setSize(width, height);
@@ -288,7 +280,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         engine.onUpdate = (dt: number) => {
             const now = performance.now();
 
-            // Late init for wildlife sounds (15-45s after load)
             if (nextWildlifeTime.current === 0) {
                 nextWildlifeTime.current = now + 5000 + Math.random() * 10000;
             }
@@ -309,20 +300,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
             frameCount++;
 
-            // Access scene data directly via .current inside the loop
             const familyMembers = sceneFamilyMembersRef.current;
             const interactables = sceneInteractablesRef.current;
             const outlines = sceneOutlinesRef.current;
             const outlineKeys = sceneOutlineKeysRef.current;
 
             monitor.begin('family_anim');
-            // Zero-GC: Avoid Set creation and .map/.filter in the loop
             const chats = activeChats.current;
             for (let i = 0; i < familyMembers.length; i++) {
                 const fm = familyMembers[i];
                 let isSpeaking = fm.bounce > 0;
 
-                // Check if this member is currently speaking in any active chat
                 if (!isSpeaking) {
                     for (let j = 0; j < chats.length; j++) {
                         const c = chats[j];
@@ -335,13 +323,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
                 if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
 
-                // Animate the entire Group (fm.mesh) to prevent head/body splitting
                 PlayerAnimator.update(fm.mesh as any, {
                     isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
                     isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
                 }, now, dt);
 
-                // Emissive highlight logic utilizing pre-cached materials to avoid traverse
                 const isHov = hoveredRef.current === (fm.mesh.userData.id);
                 const emissiveIntensity = isHov ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
 
@@ -354,7 +340,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             monitor.end('family_anim');
 
             monitor.begin('chatter');
-            // Gated chatter by isRunning to avoid noise during loading
             if (isRunning && now > nextChatterTime.current && sceneActiveMembersRef.current.length > 1) {
                 const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
                 let delayOffset = 0;
@@ -375,22 +360,17 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
             }
 
-            // Wildlife Sounds
             if (now > nextWildlifeTime.current) {
-                if (Math.random() > 0.5) {
-                    soundManager.playOwlHoot();
-                }
+                if (Math.random() > 0.5) soundManager.playOwlHoot();
                 nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
             }
 
-            // Chat movement & opacity logic
             for (let i = activeChats.current.length - 1; i >= 0; i--) {
                 const c = activeChats.current[i];
                 if (now > c.startTime + c.duration) {
                     if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
                     activeChats.current.splice(i, 1);
                 } else if (now >= c.startTime) {
-                    // Only play chatter sound if running
                     if (!c.playedSound) { c.playedSound = true; if (isRunning) soundManager.playUiConfirm(); }
                     c.element.style.opacity = now < c.startTime + 500 ? String((now - c.startTime) / 500) : (now > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - now) / 500) : '1');
                     const vec = _v1; c.mesh.getWorldPosition(vec); vec.y += 2.2; vec.project(camera.threeCamera);
@@ -413,7 +393,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                     scene.updateMatrixWorld();
                     const width = container.clientWidth, height = container.clientHeight;
 
-                    // Standard raycast tooltip
                     raycaster.setFromCamera(mouse, camera.threeCamera);
                     const hits = raycaster.intersectObjects(interactables);
                     let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
@@ -443,39 +422,50 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                         }
                     }
 
-                    if (newHover !== hoveredRef.current) { if (newHover) soundManager.playUiHover(); hoveredRef.current = newHover; setHoveredStation(newHover); }
-                    setTooltip(newHover ? { text: toolTipText, subText: toolTipSubText, x: tooltipX, y: tooltipY } : null);
+                    // --- DIRECT DOM MANIPULATION FOR PERFORMANCE ---
+                    // Only trigger a React state change if the actual hover target changed
+                    if (newHover !== hoveredRef.current) {
+                        if (newHover) soundManager.playUiHover();
+                        hoveredRef.current = newHover;
+                        setHoveredStation(newHover);
+                        setTooltipData(newHover ? { text: toolTipText, subText: toolTipSubText } : null);
+                    }
 
-                    // Use the cached outline keys to avoid array allocation
+                    // Update coordinates directly on the DOM element via ref (Bypasses React completely = Zero GC / Re-render)
+                    if (newHover && tooltipDOMRef.current) {
+                        tooltipDOMRef.current.style.left = `${tooltipX}px`;
+                        tooltipDOMRef.current.style.top = `${tooltipY}px`;
+                    }
+
                     for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
 
-                    // Mobile Labels: Project all stations
-                    if (isMobileLabels) {
-                        const idles: Array<{ x: number, y: number, text: string, id: string }> = [];
+                    // --- MOBILE LABELS DOM MANIPULATION ---
+                    if (isMobileLabels !== showIdleTooltipsRef.current) {
+                        showIdleTooltipsRef.current = !!isMobileLabels;
+                        setShowIdleTooltips(!!isMobileLabels);
+                    }
+
+                    if (isMobileLabels && showIdleTooltipsRef.current) {
                         for (let i = 0; i < CAMP_SCENE.stationPositions.length; i++) {
                             const station = CAMP_SCENE.stationPositions[i];
                             const vec = _v1.copy(station.pos);
-                            vec.y += 2.2; // A bit higher for idle labels
+                            vec.y += 2.2;
                             vec.project(camera.threeCamera);
-                            idles.push({
-                                id: station.id,
-                                text: t(`stations.${station.id}`),
-                                x: (vec.x * 0.5 + 0.5) * width,
-                                y: (-(vec.y * 0.5) + 0.5) * height
-                            });
+
+                            const el = idleTooltipDOMRefs.current[i];
+                            if (el) {
+                                el.style.left = `${(vec.x * 0.5 + 0.5) * width}px`;
+                                el.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`;
+                            }
                         }
-                        setIdleTooltips(idles);
-                    } else if (idleTooltips.length > 0) {
-                        setIdleTooltips([]);
                     }
                 }
 
             } else {
-                // Not running or Modal open: Clean up
                 if (hoveredRef.current !== null) {
                     hoveredRef.current = null;
                     setHoveredStation(null);
-                    setTooltip(null);
+                    setTooltipData(null);
                     for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = false; }
                 }
             }
@@ -504,25 +494,30 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             <div ref={containerRef} className="absolute inset-0" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }} />
             <div ref={chatOverlayRef} className={`absolute inset-0 pointer-events-none z-40 overflow-hidden transition-opacity duration-1000 ${isIdle ? 'opacity-0' : 'opacity-100'}`} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 40 }} />
 
-            {tooltip && tooltip.text && !isIdle && (
-                <div className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2" style={{ left: tooltip.x, top: tooltip.y }}>
+            {/* Standard Hover Tooltip - Position driven by ref to avoid re-renders */}
+            {tooltipData && tooltipData.text && !isIdle && (
+                <div ref={tooltipDOMRef} className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2">
                     <div className="bg-black/90 border-2 border-black px-4 py-1 text-white font-black uppercase tracking-wider text-lg md:text-xl shadow-2xl">
-                        {tooltip.text}
+                        {tooltipData.text}
                     </div>
-                    {tooltip.subText && (
+                    {tooltipData.subText && (
                         <div className="bg-black/80 border-x-2 border-b-2 border-black px-3 py-1 text-slate-400 font-bold uppercase text-[10px] md:text-xs whitespace-nowrap shadow-xl">
-                            {tooltip.subText}
+                            {tooltipData.subText}
                         </div>
                     )}
                     <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-black mt-[-1px]"></div>
                 </div>
             )}
 
-            {/* Mobile Station Labels (Floating Tooltips) - Visible when NOT idle */}
-            {!isIdle && isMobileDevice && idleTooltips.map(it => (
-                <div key={it.id} className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2 animate-[fadeIn_1s_ease-out_forwards]" style={{ left: it.x, top: it.y }}>
+            {/* Mobile Station Labels (Floating Tooltips) - Position driven by refs */}
+            {showIdleTooltips && CAMP_SCENE.stationPositions.map((station, i) => (
+                <div
+                    key={station.id}
+                    ref={el => idleTooltipDOMRefs.current[i] = el}
+                    className="absolute pointer-events-none z-50 flex flex-col items-center -translate-x-1/2 -translate-y-full mb-2 animate-[fadeIn_1s_ease-out_forwards]"
+                >
                     <div className="bg-black/90 border-2 border-black px-3 py-1 text-white font-black uppercase tracking-wider text-sm shadow-2xl">
-                        {it.text}
+                        {t(`stations.${station.id}`)}
                     </div>
                     <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-black mt-[-1px]"></div>
                 </div>

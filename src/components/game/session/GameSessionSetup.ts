@@ -9,7 +9,7 @@ import { ProjectileSystem } from '../../../core/weapons/ProjectileSystem';
 import { FXSystem } from '../../../core/systems/FXSystem';
 import { EnemyManager } from '../../../core/EnemyManager';
 import { AssetPreloader } from '../../../core/systems/AssetPreloader';
-import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, WIND_SYSTEM, WEATHER_SYSTEM } from '../../../content/constants';
+import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, WIND_SYSTEM, WEATHER_SYSTEM, LIGHT_SYSTEM } from '../../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../../utils/assets';
 import { soundManager } from '../../../utils/SoundManager';
 import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
@@ -24,7 +24,7 @@ import { PlayerInteractionSystem } from '../../../core/systems/PlayerInteraction
 import { EnemySystem } from '../../../core/systems/EnemySystem';
 import { SectorSystem } from '../../../core/systems/SectorSystem';
 import { FamilySystem } from '../../../core/systems/FamilySystem';
-import { LightingSystem } from '../../../core/systems/LightingSystem';
+import { LightSystem } from '../../../core/systems/LightSystem';
 import { CinematicSystem } from '../../../core/systems/CinematicSystem';
 import { DeathSystem } from '../../../core/systems/DeathSystem';
 import { DamageTrackerSystem } from '../../../core/systems/DamageTrackerSystem';
@@ -160,35 +160,35 @@ export class GameSessionSetup {
 
             // --- AMBIENT LIGHT SETUP ---
             const ambientLight = new THREE.AmbientLight((env as any).ambientColor || 0x404050, env.ambientIntensity);
-            ambientLight.name = 'AMBIENT_LIGHT';
+            ambientLight.name = LIGHT_SYSTEM.AMBIENT_LIGHT;
             scene.add(ambientLight);
 
-            // --- TRACKING SHADOW CAMERA SETUP ---
+            // --- SKY LIGHT SETUP - WITH TRACKING SHADOW CAMERA ---
             if (env.skyLight) {
                 const lightPos = env.skyLight.position || { x: 80, y: 50, z: 50 };
                 // Zero-GC Swap: Always DirectionalLight, but intensity=0 if !visible
                 const intensity = env.skyLight.visible ? env.skyLight.intensity : 0;
 
                 const skyLight = new THREE.DirectionalLight(env.skyLight.color, intensity);
-                skyLight.name = 'SKY_LIGHT';
+                skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
                 skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
 
-                // Always castShadow to reserve the uniform slot in the GPU program
-                skyLight.castShadow = true;
+                // Shadows:
+                const shadowRes = engine.getSettings().shadowResolution;
+
+                skyLight.castShadow = true; // castShadow to reserve the uniform slot in the GPU program
                 skyLight.shadow.camera.left = -100;
                 skyLight.shadow.camera.right = 100;
                 skyLight.shadow.camera.top = 100;
                 skyLight.shadow.camera.bottom = -100;
                 skyLight.shadow.camera.far = 300;
                 skyLight.shadow.bias = -0.0005;
+                skyLight.shadow.mapSize.width = shadowRes * 2;
+                skyLight.shadow.mapSize.height = shadowRes * 2;
 
                 // FIX FOR iOS/IPHONE: Force the projection matrix to update 
                 // BEFORE the first render so the shadow map bounds are correctly calculated.
                 skyLight.shadow.camera.updateProjectionMatrix();
-
-                const shadowRes = engine.getSettings().shadowResolution;
-                skyLight.shadow.mapSize.width = shadowRes * 2;
-                skyLight.shadow.mapSize.height = shadowRes * 2;
 
                 scene.add(skyLight);
                 scene.add(skyLight.target); // MUST be added to scene for tracking to work
@@ -367,7 +367,7 @@ export class GameSessionSetup {
                         if (fmData) {
                             const mesh = ModelFactory.createFamilyMember(fmData);
                             mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
-                            this.addFamilyMarker(mesh, fmData, flickeringLights, scene);
+                            this.addFamilyMarker(mesh, fmData, scene);
                             const ring = mesh.children.find(c => c.userData.isRing);
                             refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring });
                         }
@@ -383,7 +383,7 @@ export class GameSessionSetup {
                     if (fmData) {
                         const mesh = ModelFactory.createFamilyMember(fmData);
                         mesh.position.set(fSpawn.x, 0, fSpawn.z); if (fSpawn.y) mesh.position.y = fSpawn.y;
-                        this.addFamilyMarker(mesh, fmData, flickeringLights, scene);
+                        this.addFamilyMarker(mesh, fmData, scene);
                         const ring = mesh.children.find(c => c.userData.isRing);
                         const currentFM = { mesh, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring };
                         refs.activeFamilyMembers.current.push(currentFM);
@@ -467,9 +467,11 @@ export class GameSessionSetup {
                 startCinematic: callbacks.startCinematic
             }));
 
-            const lightingSystem = new LightingSystem(flickeringLights, refs.sectorContextRef, refs.playerGroupRef);
-            session.addSystem(lightingSystem);
+            // LightSystem
+            const lightSystem = new LightSystem(flickeringLights, refs.sectorContextRef, refs.playerGroupRef);
+            session.addSystem(lightSystem);
 
+            // CinematicSystem
             session.addSystem(new CinematicSystem({
                 cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
                 bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
@@ -480,6 +482,7 @@ export class GameSessionSetup {
                 }
             }));
 
+            // DeathSystem
             session.addSystem(new DeathSystem({
                 playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any,
                 fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
@@ -512,7 +515,7 @@ export class GameSessionSetup {
             monitor.begin('render_compile');
 
             // Force castShadow for budget before compile
-            lightingSystem.update(session as any, 16, performance.now());
+            lightSystem.update(session as any, 16, performance.now());
             engine.renderer.compile(scene, camera.threeCamera);
             monitor.end('render_compile');
 
@@ -539,19 +542,19 @@ export class GameSessionSetup {
         }
     }
 
-    private static addFamilyMarker(mesh: THREE.Group, fmData: any, flickeringLights: any[], scene: THREE.Scene) {
+    private static addFamilyMarker(mesh: THREE.Group, fmData: any, scene: THREE.Scene) {
         const markerGroup = new THREE.Group();
-        markerGroup.userData.isRing = true; // [VINTERDÖD] Mark for FamilySystem visibility logic
+        markerGroup.userData.isRing = true;
         markerGroup.position.y = 0.2;
+
         const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
         const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+
         fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
         const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
         border.rotation.x = -Math.PI / 2; markerGroup.add(border);
         mesh.add(markerGroup);
-        const fLight = new THREE.PointLight(fmData.color, 2, 8);
-        fLight.position.y = 2; fLight.userData.baseIntensity = 2; fLight.userData.isCulled = false; mesh.add(fLight);
-        flickeringLights.push({ light: fLight, baseInt: 2, flickerRate: 0.1 });
+
         scene.add(mesh);
     }
 

@@ -74,10 +74,6 @@ export const Sector6: SectorDef = {
         plaza.receiveShadow = true;
         scene.add(plaza);
 
-        const ambient = new THREE.AmbientLight(0xffffee, 0.4);
-        ambient.name = 'AMBIENT_LIGHT';
-        scene.add(ambient);
-
         // Add some lights to the plaza - SHADOWS DISABLED TO PREVENT TEXTURE LIMIT CRASH
         const pl = new THREE.PointLight(0xffaa00, 50, 30);
         pl.position.set(0, 8, 0);
