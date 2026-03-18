@@ -30,6 +30,10 @@ export interface GameSessionHandle {
     spawnEnemies: (newEnemies: any[]) => void;
 }
 
+// Zero-GC fallback constants to prevent allocating new objects/arrays on every stat fetch
+const EMPTY_ARRAY: any[] = [];
+const EMPTY_OBJECT: any = {};
+
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
 
     // 1. Core State and References
@@ -61,14 +65,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [refs]);
 
     const getSectorStats = useCallback((isExtraction: boolean = false, aborted: boolean = false): SectorStats => {
-        const state = refs.gameSessionRef.current?.state || {} as any;
+        const state = refs.gameSessionRef.current?.state || EMPTY_OBJECT;
         const now = performance.now();
         return {
             timeElapsed: now - (state.startTime || now),
             shotsFired: state.shotsFired || 0,
             shotsHit: state.shotsHit || 0,
             throwablesThrown: state.throwablesThrown || 0,
-            killsByType: state.killsByType || {},
+            killsByType: state.killsByType || EMPTY_OBJECT,
             scrapLooted: state.collectedScrap || 0,
             xpGained: state.score || 0,
             familyFound: state.familyFound || refs.stateRef.current.familyFound,
@@ -81,15 +85,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             bigChestsOpened: state.bigChestsOpened || 0,
             distanceTraveled: refs.distanceTraveledRef.current,
             cluesFound: refs.collectedCluesRef.current,
-            collectiblesDiscovered: state.sessionCollectiblesDiscovered || [],
+            collectiblesDiscovered: state.sessionCollectiblesDiscovered || EMPTY_ARRAY,
             isExtraction,
             aborted,
             spEarned: (state.level - props.stats.level) + (state.sessionCollectiblesDiscovered?.length || 0) + ((state.bossesDefeated?.length || 0) > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
-            seenEnemies: state.seenEnemies || [],
-            seenBosses: (state.seenBosses || []).concat(refs.stateRef.current.bossesDefeated || []),
-            discoveredPOIs: state.discoveredPOIs || [],
-            incomingDamageBreakdown: state.incomingDamageBreakdown || {},
-            outgoingDamageBreakdown: state.outgoingDamageBreakdown || {}
+            seenEnemies: state.seenEnemies || EMPTY_ARRAY,
+            seenBosses: (state.seenBosses || EMPTY_ARRAY).concat(refs.stateRef.current.bossesDefeated || EMPTY_ARRAY),
+            discoveredPOIs: state.discoveredPOIs || EMPTY_ARRAY,
+            incomingDamageBreakdown: state.incomingDamageBreakdown || EMPTY_OBJECT,
+            outgoingDamageBreakdown: state.outgoingDamageBreakdown || EMPTY_OBJECT
         };
     }, [props.stats.level, refs]);
 
@@ -187,7 +191,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 soundManager.playUiConfirm();
                 setTimeout(() => {
                     props.onSectorEnded({
-                        timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {}, scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, familyExtracted: false, damageDealt: 0, damageTaken: 0, bossDamageDealt: 0, bossDamageTaken: 0, chestsOpened: 0, bigChestsOpened: 0, distanceTraveled: refs.distanceTraveledRef.current, cluesFound: [], collectiblesDiscovered: [], isExtraction: false, spEarned: 0, seenEnemies: [], discoveredPOIs: [], aborted: true, seenBosses: []
+                        timeElapsed: 0, shotsFired: 0, shotsHit: 0, throwablesThrown: 0, killsByType: {}, scrapLooted: 0, xpGained: 0, bonusXp: 0, familyFound: false, familyExtracted: false, damageDealt: 0, damageTaken: 0, bossDamageDealt: 0, bossDamageTaken: 0, chestsOpened: 0, bigChestsOpened: 0, distanceTraveled: refs.distanceTraveledRef.current, cluesFound: [], collectiblesDiscovered: [], isExtraction: false, spEarned: 0, seenEnemies: [], discoveredPOIs: [], aborted: true, seenBosses: [], incomingDamageBreakdown: {}, outgoingDamageBreakdown: {}
                     });
                 }, 1000);
             } else {
@@ -477,11 +481,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
                 setCurrentLine: (val: any) => {
                     updateUiState({ currentLine: val });
-                    HudStore.update({ ...HudStore.getData(), currentLine: val, cinematicActive: refs.gameSessionRef.current ? refs.gameSessionRef.current.getSystem('cinematic').cinematicRef.current.active : false });
+                    // Zero-GC HudStore update
+                    const hData = HudStore.getData();
+                    hData.currentLine = val;
+                    hData.cinematicActive = refs.gameSessionRef.current ? refs.gameSessionRef.current.getSystem('cinematic').cinematicRef.current.active : false;
+                    HudStore.update(hData);
                 },
                 setCinematicActive: (val: boolean) => {
                     updateUiState({ cinematicActive: val });
-                    HudStore.update({ ...HudStore.getData(), cinematicActive: val });
+                    // Zero-GC HudStore update
+                    const hData = HudStore.getData();
+                    hData.cinematicActive = val;
+                    HudStore.update(hData);
                     if (props.onDialogueStateChange) props.onDialogueStateChange(val);
                 },
                 setInteractionType: (val: any) => updateUiState({ interactionType: val }),
@@ -635,8 +646,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs,
             propsRef: refs.propsRef,
             callbacks: {
-                setInteractionType: (val: any) => updateUiState({ interactionType: val }),
-                setInteractionScreenPos: (val: any) => updateUiState({ interactionScreenPos: val }),
                 concludeSector,
                 gainXp,
                 spawnPart,

@@ -24,8 +24,6 @@ interface LoopContext {
     refs: any; // GameSessionState refs
     propsRef: any;
     callbacks: {
-        setInteractionType: (val: any) => void;
-        setInteractionScreenPos: (val: any) => void;
         concludeSector: (val: boolean) => void;
         gainXp: (val: number) => void;
         spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
