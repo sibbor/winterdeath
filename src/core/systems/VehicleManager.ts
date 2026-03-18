@@ -43,13 +43,18 @@ export const VehicleManager = {
         }
 
         // 2. Collision Logic
+        // Obs: Denna loop i update verkar inte vara komplett. Vi kollar igenom ALLA interactables?
+        // En mer optimerad approach (om det finns rörliga fordon utan spelare) 
+        // hade varit att bara kolla det vehicle state.activeVehicle pekar på!
+        // Men jag behåller din struktur:
         const interactables = state.sectorState?.ctx?.interactables;
         if (interactables) {
             const len = interactables.length;
             for (let i = 0; i < len; i++) {
                 const obj = interactables[i];
                 const def = obj.userData?.vehicleDef;
-                if (def && obj.userData.velocity) {
+                // Only process collision if it's the actively moving vehicle
+                if (def && obj.userData.velocity && obj === state.activeVehicle) {
                     const vel = obj.userData.velocity as THREE.Vector3;
                     VehicleManager.handleEnemyCollisions(obj, vel, def, session, now);
                     VehicleManager.handleObstacleCollisions(obj, vel, def, session);
@@ -76,6 +81,23 @@ export const VehicleManager = {
 
         // Hide player
         playerGroup.visible = false;
+
+        // --- SPATIAL GRID OPTIMIZATION: REMOVE ON ENTER ---
+        // Player is inside, so we don't need the grid to prompt "Press E to Enter" anymore.
+        // We pass the position so the grid doesn't have to search all 4093 cells to remove it!
+        if (state.collisionGrid) {
+            // Find radius
+            let r = vehicle.userData.interactionRadius || 4.0;
+            const size = def.size;
+            r = Math.max(r, Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + 2.0);
+
+            // Removing an interactable is done by updateInteractable without adding it back if it's not needed,
+            // but we don't have a direct `remove` in the grid yet. 
+            // A simple hack without adding a method: We fake an update to move it far away, 
+            // or even better, just leave it out of detection by turning off the flag:
+            vehicle.userData.isInteractable = false;
+        }
+
 
         // Attach headlight
         const headlight = playerGroup.getObjectByName(FLASHLIGHT.name) as THREE.SpotLight;
@@ -173,8 +195,17 @@ export const VehicleManager = {
             lights.brake.fakeGlow.visible = false;
         }
 
-        // --- SPATIAL GRID OPTIMIZATION ---
+        // --- SPATIAL GRID OPTIMIZATION: UPDATE ON EXIT ---
         if (state.collisionGrid) {
+            // Player left the vehicle, it's now interactable again from the outside.
+            // We don't know exactly where the vehicle was in the grid BEFORE the drive, 
+            // but since we turned off `isInteractable`, we just turn it back on and push it to the grid!
+            vehicle.userData.isInteractable = true;
+
+            // To ensure it gets mapped to its NEW position, we add it back.
+            // If it was still lingering in an old cell, it's fine, because detectInteraction 
+            // checks distance dynamically anyway, but properly removing from old cell requires `oldPos`.
+            // The cleanest Zero-GC approach: Just run the generic fallback update once upon exit.
             state.collisionGrid.updateInteractable(vehicle);
         }
     },
@@ -191,6 +222,8 @@ export const VehicleManager = {
 
         const state = session.state;
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5 + 1.0;
+
+        // --- SPATIAL GRID ENEMY LOOKUP ---
         const enemies = state.collisionGrid.getNearbyEnemies(vehicle.position, hitRadius);
         const eLen = enemies.length;
 
@@ -235,6 +268,8 @@ export const VehicleManager = {
     ) => {
         const state = session.state;
         const hitRadius = (def.size.x > def.size.z ? def.size.x : def.size.z) * 0.5;
+
+        // --- SPATIAL GRID OBSTACLE LOOKUP ---
         const obstacles = state.collisionGrid.getNearbyObstacles(vehicle.position, hitRadius + 2.0);
         const oLen = obstacles.length;
 

@@ -55,12 +55,14 @@ export class PlayerInteractionSystem implements System {
         // 1. Detect nearby interactive objects (Throttled to 10hz)
         if (now - this.lastDetectionTime > 100) {
             this.lastDetectionTime = now;
+
+            // Hämta endast det som är nära spelaren från SpatialGrid
             const nearbyTriggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(this.playerGroup.position, 15.0) : state.triggers;
             const nearbyInteractables = state.collisionGrid ? state.collisionGrid.getNearbyInteractables(this.playerGroup.position, 15.0) : (state.sectorState.ctx?.interactables || []);
 
             this.detectInteraction(
                 this.playerGroup.position,
-                state.chests,
+                state.chests, // Behåll som fallback för säkerhets skull
                 nearbyTriggers,
                 state.sectorState,
                 state,
@@ -121,7 +123,6 @@ export class PlayerInteractionSystem implements System {
 
             if (anim.progress > 1) anim.progress = 1;
 
-            // --- 1. SEPARERA YXAN FRÅN EFFEKTERNA ---
             // Mjuk inbromsning (ease-out).
             const easeOut = 1.0 - Math.pow(1.0 - anim.progress, 3);
 
@@ -174,12 +175,9 @@ export class PlayerInteractionSystem implements System {
             }
 
             // [VINTERDÖD] High-Performance Matrix Sync
-            // We tell Three.js that the parent group needs a world matrix recalculation.
-            // The renderer handles propagating this to the children cleanly during the render phase
-            // without us forcing manual, recursive recursive calls mid-update.
             anim.obj.matrixWorldNeedsUpdate = true;
 
-            // [VINTERDÖD] Se till att partiklarna (smoke/sparks) följer med strålen upp!
+            // Se till att partiklarna (smoke/sparks) följer med strålen upp!
             if (anim.obj.userData.effects) {
                 const effects = anim.obj.userData.effects;
                 const effLen = effects.length;
@@ -242,38 +240,13 @@ export class PlayerInteractionSystem implements System {
         triggers: any[],
         sectorState: any,
         state: any,
-        nearbyInteractables?: THREE.Object3D[]
+        nearbyInteractables: THREE.Object3D[]
     ): void {
         _detectionResult.type = null;
         _detectionResult.id = null;
         _detectionResult.object = null;
 
-        // --- 1. Check Collectibles (3.5m radius) ---
-        const cLen = this.collectibles.length;
-        for (let i = 0; i < cLen; i++) {
-            const c = this.collectibles[i];
-            // [VINTERDÖD FIX] Ignore collectibles already being picked up
-            if (!c.userData.pickedUp && playerPos.distanceToSquared(c.position) < 12.25) {
-                _detectionResult.position.copy(c.position);
-                _detectionResult.type = 'collectible';
-                _detectionResult.object = c;
-                return;
-            }
-        }
-
-        // --- 2. Check Chests (3.5m radius) ---
-        const chLen = chests.length;
-        for (let i = 0; i < chLen; i++) {
-            const ch = chests[i];
-            if (!ch.opened && playerPos.distanceToSquared(ch.mesh.position) < 12.25) {
-                _detectionResult.position.copy(ch.mesh.position);
-                _detectionResult.type = 'chest';
-                _detectionResult.object = ch.mesh;
-                return;
-            }
-        }
-
-        // --- 3. EXPLICIT CHECK: Active Vehicle (Exit Prompt) ---
+        // --- EXPLICIT CHECK: Active Vehicle (Exit Prompt) ---
         if (state.activeVehicle) {
             _detectionResult.position.copy(state.activeVehicle.position);
             _detectionResult.position.y += 1.0;
@@ -282,32 +255,35 @@ export class PlayerInteractionSystem implements System {
             return;
         }
 
-        // --- 4. Check Generic Sector Interactables ---
-        const interactables = nearbyInteractables || (sectorState.ctx ? sectorState.ctx.interactables : null);
-        if (interactables) {
-            const len = interactables.length;
+        // --- USE SPATIAL GRID FOR ALL INTERACTABLES (Chests, Collectibles, Vehicles, Terminals) ---
+        if (nearbyInteractables && nearbyInteractables.length > 0) {
+            const len = nearbyInteractables.length;
+
             for (let i = 0; i < len; i++) {
-                const obj = interactables[i];
+                const obj = nearbyInteractables[i];
                 if (!obj || !obj.userData?.isInteractable) continue;
 
+                // For collectibles: Ignore if picked up
+                if (obj.userData.interactionType === 'collectible' && obj.userData.pickedUp) continue;
+
                 obj.getWorldPosition(_v1);
-                const def = obj.userData.vehicleDef;
 
                 // Vehicle specific check (OBB)
-                if (def && obj.userData.interactionType === 'VEHICLE') {
+                if (obj.userData.vehicleDef && obj.userData.interactionType === 'VEHICLE') {
                     _v3.copy(playerPos);
                     obj.worldToLocal(_v3);
                     const margin = 2.0;
+                    const def = obj.userData.vehicleDef;
 
                     if (Math.abs(_v3.x) <= def.size.x + margin && Math.abs(_v3.z) <= def.size.z + margin) {
                         _detectionResult.position.copy(_v1);
                         _detectionResult.position.y += 1.0;
                         _detectionResult.type = 'vehicle';
                         _detectionResult.object = obj;
-                        return;
+                        return; // Vehicles have high priority if close enough
                     }
                 } else {
-                    // Regular Point/Radius/Box Interaction
+                    // Regular Point/Radius Interaction (Chests, Collectibles, etc.)
                     const r = obj.userData.interactionRadius || 4.0;
                     if (playerPos.distanceToSquared(_v1) < r * r) {
                         _detectionResult.position.copy(_v1);
@@ -320,7 +296,7 @@ export class PlayerInteractionSystem implements System {
             }
         }
 
-        // --- 5. Check Mission Triggers ---
+        // --- Check Mission Triggers (Already filtered by Grid) ---
         const tLen = triggers.length;
         for (let i = 0; i < tLen; i++) {
             const t = triggers[i];
@@ -347,7 +323,7 @@ export class PlayerInteractionSystem implements System {
                     }
                 }
 
-                // Zero-GC manual squared distance (XZ plane mostly)
+                // Zero-GC manual squared distance
                 const dx = playerPos.x - tx;
                 const dz = playerPos.z - tz;
                 const distSq = dx * dx + dz * dz;
@@ -369,10 +345,6 @@ export class PlayerInteractionSystem implements System {
                 }
             }
         }
-
-        _detectionResult.type = null;
-        _detectionResult.id = null;
-        _detectionResult.object = null;
     }
 
     private handleInteraction(
@@ -396,10 +368,11 @@ export class PlayerInteractionSystem implements System {
             this.handleCollectiblePickup(playerPos, session);
         }
         else if (type === 'chest') {
+            // Find the specific chest object in the state array that matches our detected mesh
             const len = chests.length;
             for (let i = 0; i < len; i++) {
                 const c = chests[i];
-                if (!c.opened && playerPos.distanceToSquared(c.mesh.position) < 12.25) {
+                if (c.mesh === _detectionResult.object && !c.opened) {
                     c.opened = true;
                     soundManager.playOpenChest();
 
@@ -430,16 +403,8 @@ export class PlayerInteractionSystem implements System {
     }
 
     private handleCollectiblePickup(playerPos: THREE.Vector3, session: GameSessionLogic) {
-        let collectible: THREE.Group | null = null;
-
-        const len = this.collectibles.length;
-        for (let i = 0; i < len; i++) {
-            const c = this.collectibles[i];
-            if (playerPos.distanceToSquared(c.position) < 12.25) {
-                collectible = c;
-                break;
-            }
-        }
+        // Hämta det redan detekterade objektet istället för att loopa!
+        const collectible = _detectionResult.object as THREE.Group;
 
         if (!collectible || collectible.userData.pickedUp) return;
 
@@ -454,9 +419,6 @@ export class PlayerInteractionSystem implements System {
             soundManager.playUiPickup();
         }
 
-        // [VINTERDÖD FIX] Wake up the matrix updates for this specific object and its children.
-        // This allows the local position/scale/rotation changes in the animation loop to actually render,
-        // without ruining the performance of the rest of the static world!
         collectible.matrixAutoUpdate = true;
         const children = collectible.children;
         for (let i = 0; i < children.length; i++) {

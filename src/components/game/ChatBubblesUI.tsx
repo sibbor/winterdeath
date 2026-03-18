@@ -5,15 +5,16 @@ const ChatBubblesUI: React.FC = () => {
     const [bubbles, setBubbles] = useState<any[]>([]);
 
     useEffect(() => {
+        // Zero-GC Subscription: Binds once and reacts to all HUD updates
         const unsubscribe = HudStore.subscribe((data) => {
-            if (data.activeBubbles) {
+            if (data.activeBubbles && data.activeBubbles.length > 0) {
                 setBubbles(data.activeBubbles);
-            } else if (bubbles.length > 0) {
-                setBubbles([]);
+            } else {
+                setBubbles(prev => prev.length > 0 ? [] : prev);
             }
         });
         return unsubscribe;
-    }, [bubbles.length]);
+    }, []); // Empty array! We only want to subscribe once.
 
     if (bubbles.length === 0) return null;
 

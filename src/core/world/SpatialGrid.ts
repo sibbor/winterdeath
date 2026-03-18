@@ -14,6 +14,13 @@ export class SpatialGrid {
     // --- ZERO-GC SCRATCHPADS ---
     private obstacleQueryResults: Obstacle[] = [];
     private enemyQueryResults: Enemy[] = [];
+    private triggerQueryResults: any[] = [];
+    private interactableQueryResults: THREE.Object3D[] = [];
+    private _vWorld = new THREE.Vector3();
+
+    // NYTT: Scratchpad för att helt undvika funktions-allokeringar i loopar
+    private _hashScratchpad = new Int32Array(256); // 256 celler är mer än tillräckligt för ett objekt
+    private _hashCount = 0;
 
     // Frame counters replace Set allocations for lightning-fast dedup
     private _queryFrame: number = 0;
@@ -21,11 +28,9 @@ export class SpatialGrid {
     // Tracks only populated cells to avoid clearing entire grid every frame
     private _touchedEnemyCells: Enemy[][] = [];
 
-    // --- TRIGGER & INTERACTABLE EXTENSIONS (Zero-GC) ---
+    // --- TRIGGER & INTERACTABLE EXTENSIONS ---
     private triggerCells: any[][];
     private interactableCells: THREE.Object3D[][];
-    private triggerQueryResults: any[] = [];
-    private interactableQueryResults: THREE.Object3D[] = [];
     private dynamicTriggers: any[] = []; // Triggers with familyId/ownerId
 
     constructor(cellSize: number = 15) {
@@ -45,11 +50,21 @@ export class SpatialGrid {
         }
     }
 
-    private getHash(x: number, z: number): number {
-        const cx = Math.floor(x / this.cellSize);
-        const cz = Math.floor(z / this.cellSize);
-        // Ensure strictly positive indices within bounds
-        return Math.abs((cx * 73856093) ^ (cz * 19349663)) % HASH_SIZE;
+    // NYTT: Beräknar hashes utan callbacks och lägger i scratchpad
+    private computeHashesInRange(x: number, z: number, radius: number) {
+        this._hashCount = 0;
+        const sX = Math.floor((x - radius) / this.cellSize);
+        const eX = Math.floor((x + radius) / this.cellSize);
+        const sZ = Math.floor((z - radius) / this.cellSize);
+        const eZ = Math.floor((z + radius) / this.cellSize);
+
+        for (let ix = sX; ix <= eX; ix++) {
+            for (let iz = sZ; iz <= eZ; iz++) {
+                // Inline hash calculation
+                const hash = Math.abs((ix * 73856093) ^ (iz * 19349663)) % HASH_SIZE;
+                this._hashScratchpad[this._hashCount++] = hash;
+            }
+        }
     }
 
     // --- OBSTACLE MANAGEMENT ---
@@ -58,25 +73,36 @@ export class SpatialGrid {
         const pos = obstacle.position;
         const radius = obstacle.radius || 2.0;
 
-        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
-            this.obstacleCells[hash].push(obstacle);
-        });
+        this.computeHashesInRange(pos.x, pos.z, radius);
+        for (let i = 0; i < this._hashCount; i++) {
+            this.obstacleCells[this._hashScratchpad[i]].push(obstacle);
+        }
     }
 
-    // Allow obstacles to move in the grid (Zero-GC)
-    updateObstacle(obstacle: Obstacle) {
+    updateObstacle(obstacle: Obstacle, oldPos?: THREE.Vector3, oldRadius?: number) {
         if (!obstacle || !obstacle.position) return;
 
-        // Iterate flat array to find and remove the obstacle.
-        // Avoids Map.values() which creates a MapIterator object (GC leak).
-        for (let i = 0; i < HASH_SIZE; i++) {
-            const cell = this.obstacleCells[i];
-            if (cell.length > 0) {
+        // OPTIMERING: Om vi vet den gamla positionen behöver vi inte loopa 4093 gånger!
+        if (oldPos && oldRadius !== undefined) {
+            this.computeHashesInRange(oldPos.x, oldPos.z, oldRadius);
+            for (let i = 0; i < this._hashCount; i++) {
+                const cell = this.obstacleCells[this._hashScratchpad[i]];
                 const index = cell.indexOf(obstacle);
                 if (index !== -1) {
-                    // Swap-and-pop removal for O(1) performance
                     cell[index] = cell[cell.length - 1];
                     cell.pop();
+                }
+            }
+        } else {
+            // Fallback (Flat iteration)
+            for (let i = 0; i < HASH_SIZE; i++) {
+                const cell = this.obstacleCells[i];
+                if (cell.length > 0) {
+                    const index = cell.indexOf(obstacle);
+                    if (index !== -1) {
+                        cell[index] = cell[cell.length - 1];
+                        cell.pop();
+                    }
                 }
             }
         }
@@ -87,19 +113,19 @@ export class SpatialGrid {
 
     getNearbyObstacles(pos: THREE.Vector3, radius: number): Obstacle[] {
         this.obstacleQueryResults.length = 0;
-        this._queryFrame++; // Reusing query frame trick for obstacles!
+        this._queryFrame++;
 
-        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
-            const cell = this.obstacleCells[hash];
+        this.computeHashesInRange(pos.x, pos.z, radius);
+        for (let c = 0; c < this._hashCount; c++) {
+            const cell = this.obstacleCells[this._hashScratchpad[c]];
             for (let i = 0; i < cell.length; i++) {
                 const obs = cell[i];
-                // Integer compare instead of Set.has() - extremely fast
                 if ((obs as any)._sqf !== this._queryFrame) {
                     (obs as any)._sqf = this._queryFrame;
                     this.obstacleQueryResults.push(obs);
                 }
             }
-        });
+        }
 
         return this.obstacleQueryResults;
     }
@@ -107,7 +133,6 @@ export class SpatialGrid {
     // --- ENEMY MANAGEMENT ---
 
     updateEnemyGrid(enemies: Enemy[]) {
-        // Clear only cells that were touched last frame, then reset tracking array.
         for (let i = 0; i < this._touchedEnemyCells.length; i++) {
             this._touchedEnemyCells[i].length = 0;
         }
@@ -115,43 +140,37 @@ export class SpatialGrid {
 
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
-
-            // Only index enemies that are actually alive
             if (e.dead || e.deathState !== EnemyDeathState.ALIVE) continue;
 
             const hitRadius = 1.0 * (e.originalScale || 1.0) * (e.widthScale || 1.0);
 
-            this.forEachCellInRange(e.mesh.position.x, e.mesh.position.z, hitRadius, (hash) => {
-                const cell = this.enemyCells[hash];
+            this.computeHashesInRange(e.mesh.position.x, e.mesh.position.z, hitRadius);
+            for (let c = 0; c < this._hashCount; c++) {
+                const cell = this.enemyCells[this._hashScratchpad[c]];
 
-                // First insertion into this cell this frame — track it for clearing next frame
                 if (cell.length === 0) {
                     this._touchedEnemyCells.push(cell);
                 }
-
                 cell.push(e);
-            });
+            }
         }
     }
 
-    /**
-     * Optimized Enemy Lookup (Zero-GC)
-     */
     getNearbyEnemies(pos: THREE.Vector3, radius: number): Enemy[] {
         this.enemyQueryResults.length = 0;
         this._queryFrame++;
 
-        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
-            const cell = this.enemyCells[hash];
+        this.computeHashesInRange(pos.x, pos.z, radius);
+        for (let c = 0; c < this._hashCount; c++) {
+            const cell = this.enemyCells[this._hashScratchpad[c]];
             for (let i = 0; i < cell.length; i++) {
                 const e = cell[i];
-                // Frame stamp check ensures deduplication without Set or indexOf
                 if ((e as any)._sqf !== this._queryFrame) {
                     (e as any)._sqf = this._queryFrame;
                     this.enemyQueryResults.push(e);
                 }
             }
-        });
+        }
         return this.enemyQueryResults;
     }
 
@@ -168,17 +187,19 @@ export class SpatialGrid {
             radius = Math.max(radius, Math.sqrt((t.size.width / 2) ** 2 + (t.size.depth / 2) ** 2));
         }
 
-        this.forEachCellInRange(t.position.x, t.position.z, radius, (hash) => {
-            this.triggerCells[hash].push(t);
-        });
+        this.computeHashesInRange(t.position.x, t.position.z, radius);
+        for (let i = 0; i < this._hashCount; i++) {
+            this.triggerCells[this._hashScratchpad[i]].push(t);
+        }
     }
 
     getNearbyTriggers(pos: THREE.Vector3, radius: number): any[] {
         this.triggerQueryResults.length = 0;
         this._queryFrame++;
 
-        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
-            const cell = this.triggerCells[hash];
+        this.computeHashesInRange(pos.x, pos.z, radius);
+        for (let c = 0; c < this._hashCount; c++) {
+            const cell = this.triggerCells[this._hashScratchpad[c]];
             for (let i = 0; i < cell.length; i++) {
                 const t = cell[i];
                 if ((t as any)._sqf !== this._queryFrame) {
@@ -186,9 +207,8 @@ export class SpatialGrid {
                     this.triggerQueryResults.push(t);
                 }
             }
-        });
+        }
 
-        // Always include dynamic triggers since they move
         for (let i = 0; i < this.dynamicTriggers.length; i++) {
             const dt = this.dynamicTriggers[i];
             if ((dt as any)._sqf !== this._queryFrame) {
@@ -209,22 +229,35 @@ export class SpatialGrid {
             radius = Math.max(radius, Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + 2.0);
         }
 
-        obj.getWorldPosition(obj.position); // Ensure world pos is accurate
-        this.forEachCellInRange(obj.position.x, obj.position.z, radius, (hash) => {
-            this.interactableCells[hash].push(obj);
-        });
+        obj.getWorldPosition(this._vWorld);
+        this.computeHashesInRange(this._vWorld.x, this._vWorld.z, radius);
+        for (let i = 0; i < this._hashCount; i++) {
+            this.interactableCells[this._hashScratchpad[i]].push(obj);
+        }
     }
 
-    updateInteractable(obj: THREE.Object3D) {
+    updateInteractable(obj: THREE.Object3D, oldPos?: THREE.Vector3, oldRadius?: number) {
         if (!obj || !obj.position) return;
 
-        for (let i = 0; i < HASH_SIZE; i++) {
-            const cell = this.interactableCells[i];
-            if (cell.length > 0) {
+        if (oldPos && oldRadius !== undefined) {
+            this.computeHashesInRange(oldPos.x, oldPos.z, oldRadius);
+            for (let i = 0; i < this._hashCount; i++) {
+                const cell = this.interactableCells[this._hashScratchpad[i]];
                 const index = cell.indexOf(obj);
                 if (index !== -1) {
                     cell[index] = cell[cell.length - 1];
                     cell.pop();
+                }
+            }
+        } else {
+            for (let i = 0; i < HASH_SIZE; i++) {
+                const cell = this.interactableCells[i];
+                if (cell.length > 0) {
+                    const index = cell.indexOf(obj);
+                    if (index !== -1) {
+                        cell[index] = cell[cell.length - 1];
+                        cell.pop();
+                    }
                 }
             }
         }
@@ -236,8 +269,9 @@ export class SpatialGrid {
         this.interactableQueryResults.length = 0;
         this._queryFrame++;
 
-        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
-            const cell = this.interactableCells[hash];
+        this.computeHashesInRange(pos.x, pos.z, radius);
+        for (let c = 0; c < this._hashCount; c++) {
+            const cell = this.interactableCells[this._hashScratchpad[c]];
             for (let i = 0; i < cell.length; i++) {
                 const obj = cell[i];
                 if ((obj as any)._sqf !== this._queryFrame) {
@@ -245,26 +279,9 @@ export class SpatialGrid {
                     this.interactableQueryResults.push(obj);
                 }
             }
-        });
+        }
 
         return this.interactableQueryResults;
-    }
-
-    // --- HELPERS ---
-
-    private forEachCellInRange(x: number, z: number, radius: number, callback: (hash: number) => void) {
-        const sX = Math.floor((x - radius) / this.cellSize);
-        const eX = Math.floor((x + radius) / this.cellSize);
-        const sZ = Math.floor((z - radius) / this.cellSize);
-        const eZ = Math.floor((z + radius) / this.cellSize);
-
-        for (let ix = sX; ix <= eX; ix++) {
-            for (let iz = sZ; iz <= eZ; iz++) {
-                // Inline hash calculation
-                const hash = Math.abs((ix * 73856093) ^ (iz * 19349663)) % HASH_SIZE;
-                callback(hash);
-            }
-        }
     }
 
     clear() {

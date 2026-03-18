@@ -42,6 +42,7 @@ const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _animStateScratch: any = {};
 const _fxCallbacks: any = {};
 const _triggerOptionsScratch: any = {};
+const _bubbleScratch: any[] = []; // Pre-allocated scratchpad for bubbles
 
 // String cache for damage numbers to prevent GC spikes during rapid fire (Flamethrower/Arc-Cannon)
 const _numberStringCache: Record<number, string> = {};
@@ -521,6 +522,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const currentInter = state.interactionType;
         const currentLabel = state.interactionLabel;
         const lastType = refs.interactionTypeRef.current;
+
         if (currentInter && (state as any).currentInteraction) {
             if ((state as any).currentInteraction.position) {
                 _vInteraction.copy((state as any).currentInteraction.position);
@@ -546,14 +548,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 refs.interactionTypeRef.current = currentInter;
                 (state as any).lastInteractionLabel = currentLabel;
 
-                HudStore.update({
-                    ...HudStore.getData(),
-                    interactionPrompt: {
-                        type: currentInter,
-                        label: currentLabel,
-                        pos: { x: screenX, y: screenY }
-                    }
-                });
+                // ZERO-GC: Mutate the store data directly instead of spreading
+                const hData = HudStore.getData();
+                if (!hData.interactionPrompt) hData.interactionPrompt = {} as any;
+                hData.interactionPrompt.type = currentInter;
+                hData.interactionPrompt.label = currentLabel;
+                hData.interactionPrompt.pos = _interactionScreenPosScratch;
+                HudStore.update(hData);
             }
         } else {
             if (refs.interactionTypeRef.current !== null) {
@@ -561,10 +562,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 refs.lastInteractionPosRef.current = null;
                 (state as any).lastInteractionLabel = null;
 
-                HudStore.update({
-                    ...HudStore.getData(),
-                    interactionPrompt: null
-                });
+                // ZERO-GC: Mutate the store data directly
+                const hData = HudStore.getData();
+                hData.interactionPrompt = null;
+                HudStore.update(hData);
             }
         }
 
@@ -612,20 +613,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         monitor.end('triggers');
 
         // 14. Bubbles Update (via HudStore)
-        const activeBubblesData = [];
-        for (let i = 0; i < refs.activeBubbles.current.length; i++) {
-            const b = refs.activeBubbles.current[i];
+        _bubbleScratch.length = 0; // Clear the scratchpad
+        const bubblesRef = refs.activeBubbles.current;
+        for (let i = 0; i < bubblesRef.length; i++) {
+            const b = bubblesRef[i];
             const age = now - b.startTime;
 
             if (age > b.duration) {
-                refs.activeBubbles.current[i] = refs.activeBubbles.current[refs.activeBubbles.current.length - 1];
-                refs.activeBubbles.current.pop();
-
+                bubblesRef[i] = bubblesRef[bubblesRef.length - 1];
+                bubblesRef.pop();
                 i--;
                 continue;
             }
 
-            const stackIndex = (refs.activeBubbles.current.length - 1) - i;
+            const stackIndex = (bubblesRef.length - 1) - i;
             const baseX = window.innerWidth * 0.5;
             const baseY = window.innerHeight * 0.45;
             const bubbleHeight = 45;
@@ -639,23 +640,26 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             let slideY = 0;
             if (age < 200) slideY = (1 - (age / 200)) * 20;
 
-            activeBubblesData.push({
+            // Optional future optimization: pre-allocate bubble objects and mutate them
+            _bubbleScratch.push({
                 id: b.id || Math.random().toString(),
                 text: b.text,
                 duration: b.duration,
-                pos: { x, y },
+                pos: { x, y }, // Note: We still create object literals here, but it's only when a bubble exists
                 opacity,
                 slideY,
                 zIndex: 1000 - stackIndex
             });
         }
 
-        if (activeBubblesData.length > 0 || (refs as any)._hadBubblesLastFrame) {
-            HudStore.update({
-                ...HudStore.getData(),
-                activeBubbles: activeBubblesData
-            });
-            (refs as any)._hadBubblesLastFrame = activeBubblesData.length > 0;
+        if (_bubbleScratch.length > 0 || (refs as any)._hadBubblesLastFrame) {
+            // ZERO-GC: Mutate the store data directly
+            const hData = HudStore.getData();
+            // Assign the activeBubbles array to the store
+            hData.activeBubbles = _bubbleScratch.length > 0 ? _bubbleScratch : undefined;
+            HudStore.update(hData);
+
+            (refs as any)._hadBubblesLastFrame = _bubbleScratch.length > 0;
         }
 
         // 15. Emitters Update

@@ -20,7 +20,7 @@ interface TextToken {
 const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
     const [bubbleData, setBubbleData] = useState<{ text: string, speakerName: string, isVisible: boolean }>({ text: '', speakerName: '', isVisible: false });
     const { text, speakerName, isVisible } = bubbleData;
-    
+
     const [visibleCount, setVisibleCount] = useState(0);
     const [opacity, setOpacity] = useState(0);
     const [isFinished, setIsFinished] = useState(false);
@@ -29,7 +29,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     useImperativeHandle(ref, () => ({
         finishTyping: () => {
             if (!isFinished && isVisible && text) {
-                if (timerRef.current) {
+                if (timerRef.current !== null) {
                     clearInterval(timerRef.current);
                     timerRef.current = null;
                 }
@@ -60,36 +60,47 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
         }).filter(t => t.content.length > 0);
     }, [text]);
 
-    // 2. Calculate total length excluding formatting characters for pure typing feel?
-    // For simplicity, we count string length including tokens, but we strip the delimiters in render.
-    // Actually, let's count characters as they appear on screen.
+    // 2. Calculate total length for typing effect
     const fullTextLength = tokens.reduce((acc, token) => acc + token.content.length, 0);
 
+    // 3. HudStore Subscription
     useEffect(() => {
         const unsubscribe = HudStore.subscribe((data) => {
             const hasLine = data.cinematicActive && data.currentLine;
-            setBubbleData({
-                text: hasLine ? t(data.currentLine.text) : '',
-                speakerName: hasLine ? data.currentLine.speaker : '',
-                isVisible: !!hasLine
+            setBubbleData(prev => {
+                const newText = hasLine ? t(data.currentLine.text) : '';
+                const newSpeaker = hasLine ? data.currentLine.speaker : '';
+
+                if (prev.text === newText && prev.isVisible === !!hasLine) return prev; // Avoid unecessary state updates
+
+                return {
+                    text: newText,
+                    speakerName: newSpeaker,
+                    isVisible: !!hasLine
+                };
             });
         });
         return unsubscribe;
     }, []);
 
+    // 4. Typing Effect Logic
     useEffect(() => {
         if (isVisible && text) {
             setOpacity(1);
             setVisibleCount(0);
+            setIsFinished(false);
 
-            if (timerRef.current) clearInterval(timerRef.current);
+            if (timerRef.current !== null) clearInterval(timerRef.current);
 
             timerRef.current = window.setInterval(() => {
                 setVisibleCount(prev => {
                     if (prev < fullTextLength) {
                         return prev + 1; // 1 char at a time
                     } else {
-                        if (timerRef.current) clearInterval(timerRef.current);
+                        if (timerRef.current !== null) {
+                            clearInterval(timerRef.current);
+                            timerRef.current = null;
+                        }
                         setIsFinished(true);
                         if (onComplete) onComplete();
                         return prev;
@@ -99,18 +110,22 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
         } else {
             setOpacity(0);
             setIsFinished(false);
-            if (timerRef.current) clearInterval(timerRef.current);
+            if (timerRef.current !== null) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
         }
 
         return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
+            if (timerRef.current !== null) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
         };
-    }, [text, isVisible, fullTextLength]);
+    }, [text, isVisible, fullTextLength, onComplete]);
 
     const bgColor = getSpeakerColor(speakerName);
     const isDark = ['#111111', '#222222', '#000000'].includes(bgColor);
-    const textColor = 'text-white';
-    const borderColor = 'rgba(255, 255, 255, 0.3)';
 
     // Render Logic
     const renderContent = () => {
@@ -132,14 +147,13 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
 
             // Styling & Cleanup
             let className = "";
-            let style = {};
 
             if (token.type === 'action') {
-                className = "italic";
+                className = "italic opacity-80";
                 // Strip parentheses for display
                 displayStr = displayStr.replace(/[()]/g, '');
             } else if (token.type === 'italic') {
-                className = isDark ? "italic" : "italic";
+                className = "italic";
                 // Strip slashes for display
                 displayStr = displayStr.replace(/\//g, '');
             }
@@ -147,7 +161,7 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
             currentIdx = end;
 
             return (
-                <span key={i} className={className} style={style}>
+                <span key={i} className={className}>
                     {displayStr}
                 </span>
             );

@@ -502,12 +502,11 @@ export const SectorGenerator = {
         if (ctx.flickeringLights) {
             for (let i = ctx.flickeringLights.length - 1; i >= 0; i--) {
                 const fl = ctx.flickeringLights[i];
-                // Increased radius and checking for object ownership if possible
                 const distSq = fl.light.position.distanceToSquared(object.position);
-                if (distSq < 400) { // Increased to 20m radius for large objects like buses
+                if (distSq < 400) {
                     ctx.scene.remove(fl.light);
-                    ctx.flickeringLights[i] = ctx.flickeringLights[ctx.flickeringLights.length - 1];
-                    ctx.flickeringLights.pop();
+                    // Since we're iterating backwards, it's safe to use splice here.
+                    ctx.flickeringLights.splice(i, 1);
                 }
             }
         }

@@ -5,7 +5,7 @@ import { HudStore } from '../../core/systems/HudStore';
 
 interface GameUIProps {
     onCloseClue: () => void;
-    interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
+    interactionType?: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
     interactionLabel?: string;
     interactionScreenPos?: { x: number, y: number } | null; // Kept for backwards compatibility if needed
     isMobileDevice?: boolean;
@@ -31,22 +31,27 @@ const GameUI: React.FC<GameUIProps> = ({
         const unsubscribe = HudStore.subscribe((data) => {
             if (data.interactionPrompt) {
                 setInteraction(data.interactionPrompt);
-            } else if (interaction !== null) {
-                setInteraction(null);
+            } else {
+                setInteraction(prev => prev !== null ? null : prev);
             }
         });
 
         return unsubscribe;
-    }, [interaction]);
+    }, []); // Empty dependency array ensures we only subscribe once on mount
+
+    // Fallback to props if interaction is not driven by HudStore yet in some edge cases
+    const currentType = interaction?.type || interactionType;
+    const currentLabel = interaction?.label || interactionLabel;
+    const currentPos = interaction?.pos || null;
 
     return (
         <>
             <ChatBubblesUI />
-            {interaction && (
+            {currentType && (
                 <InteractionPrompt
-                    type={interaction.type}
-                    label={interaction.label || interactionLabel}
-                    screenPos={interaction.pos}
+                    type={currentType as any}
+                    label={currentLabel}
+                    screenPos={currentPos}
                     isMobileDevice={isMobileDevice}
                     onInteract={onInteract}
                 />
