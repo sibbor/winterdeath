@@ -762,9 +762,7 @@ export const Sector1: SectorDef = {
     },
 
     setupContent: (ctx: SectorContext) => {
-        const { triggers } = ctx;
-
-        triggers.push(
+        SectorGenerator.addTriggers(ctx, [
             { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: 'THOUGHT', content: "clues.s1_start_tracks", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: 'THOUGHT', content: "clues.s1_blood_stains", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_they_must_be_scared', position: LOCATIONS.TRIGGERS.CHAOS_HERE, radius: 8, type: 'THOUGHT', content: "clues.s1_they_must_be_scared", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -792,7 +790,7 @@ export const Sector1: SectorDef = {
                 triggered: false,
                 actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
-        );
+        ]);
 
         /* TODO: FIX THIS  DO NOT REMOVE
         const homeFlowers = [

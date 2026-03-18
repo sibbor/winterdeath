@@ -177,13 +177,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [refs, gainXp, spawnBubble]);
 
-    const handleSpawnBubble = useCallback((e: any) => {
-        if (e.detail && e.detail.text) {
-            const { text, duration } = e.detail;
-            refs.activeBubbles.current.push({ id: Math.random().toString(), text, startTime: performance.now(), duration: duration || 3000 });
-        }
-    }, [refs]);
-
     const uiCallbacks = React.useMemo(() => ({
         onContinue: () => {
             if (uiState.deathPhase === 'CONTINUE') {
@@ -451,7 +444,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (id) updateUiState({ stationOverlay: id });
         };
 
-        window.addEventListener('spawn-bubble', handleSpawnBubble);
         window.addEventListener('boss-spawn-trigger', handleBossSpawn);
         window.addEventListener('family-follow', handleFamilyFollow);
         window.addEventListener('family-member-found', handleFamilyMemberFound);
@@ -513,7 +505,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 },
                 spawnBubble: (text: string, duration?: number) => {
-                    handleSpawnBubble({ detail: { text, duration } });
+                    // Fire and forget: Send to React and move on
+                    window.dispatchEvent(new CustomEvent('spawn-bubble', {
+                        detail: { text, duration: duration || 3000 }
+                    }));
                 },
                 spawnPart: (x, y, z, type, count, customMesh, customVel, color, scale) => {
                     FXSystem.spawnPart(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
@@ -651,14 +646,18 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 spawnPart,
                 spawnDecal,
                 spawnFloatingText,
-                t
+                t,
+                spawnBubble: (text: string, duration?: number) => {
+                    window.dispatchEvent(new CustomEvent('spawn-bubble', {
+                        detail: { text, duration: duration || 3000 }
+                    }));
+                }
             }
         });
 
         // Cleanup
         return () => {
             refs.isMounted.current = false;
-            window.removeEventListener('spawn-bubble', handleSpawnBubble);
             window.removeEventListener('boss-spawn-trigger', handleBossSpawn);
             window.removeEventListener('family-follow', handleFamilyFollow);
             window.removeEventListener('family-member-found', handleFamilyMemberFound);

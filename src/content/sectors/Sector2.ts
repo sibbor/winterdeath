@@ -280,9 +280,10 @@ export const Sector2: SectorDef = {
     },
 
     setupContent: async (ctx: SectorContext) => {
-        const { scene, triggers } = ctx;
+        const { scene } = ctx;
 
-        triggers.push(
+        // Triggers
+        SectorGenerator.addTriggers(ctx, [
             { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHT', content: "clues.s2_start", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEAK', content: "clues.s2_combat", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEAK', content: "clues.s2_cave_lights", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -294,7 +295,7 @@ export const Sector2: SectorDef = {
             { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'POI', content: "clues.s2_train_tunnel", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: 'POI', content: "clues.s2_cave_watch_out", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'POI', content: "clues.s2_cave_shelter_port_room", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
-        );
+        ]);
 
         // CAVE SYSTEM
         const innerCave = new THREE.Group();

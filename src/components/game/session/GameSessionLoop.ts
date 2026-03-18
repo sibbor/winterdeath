@@ -30,6 +30,7 @@ interface LoopContext {
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
         spawnFloatingText: (x: number, y: number, z: number, text: string, color?: string) => void;
         t: (k: string) => string;
+        spawnBubble: (text: string, duration?: number) => void;
     };
 }
 
@@ -40,7 +41,6 @@ const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _animStateScratch: any = {};
 const _fxCallbacks: any = {};
 const _triggerOptionsScratch: any = {};
-const _bubbleScratch: any[] = []; // Pre-allocated scratchpad for bubbles
 
 // String cache for damage numbers to prevent GC spikes during rapid fire (Flamethrower/Arc-Cannon)
 const _numberStringCache: Record<number, string> = {};
@@ -574,7 +574,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _gameContext.enemies = state.enemies;
         _gameContext.obstacles = state.obstacles;
         _gameContext.collisionGrid = state.collisionGrid;
-
         _gameContext.spawnPart = activeCallbacks.spawnPart || callbacks.spawnPart;
         _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
         _gameContext.spawnFloatingText = activeCallbacks.spawnFloatingText || callbacks.spawnFloatingText;
@@ -594,10 +593,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             session.makeNoise(playerGroup.position, noiseRadius, 'footstep');
         }
 
+        // 14. ProjectileSystem
         monitor.begin('projectiles');
         ProjectileSystem.update(delta, now, _gameContext, state.projectiles, state.fireZones);
         monitor.end('projectiles');
 
+        // 15. TriggerSystem
         monitor.begin('triggers');
         _triggerOptionsScratch.t = activeCallbacks.t || callbacks.t;
         _triggerOptionsScratch.spawnBubble = activeCallbacks.spawnBubble;
@@ -609,56 +610,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
-
-        // 14. Bubbles Update (via HudStore)
-        _bubbleScratch.length = 0; // Clear the scratchpad
-        const bubblesRef = refs.activeBubbles.current;
-        for (let i = 0; i < bubblesRef.length; i++) {
-            const b = bubblesRef[i];
-            const age = now - b.startTime;
-
-            if (age > b.duration) {
-                bubblesRef[i] = bubblesRef[bubblesRef.length - 1];
-                bubblesRef.pop();
-                i--;
-                continue;
-            }
-
-            const stackIndex = (bubblesRef.length - 1) - i;
-            const baseX = window.innerWidth * 0.5;
-            const baseY = window.innerHeight * 0.45;
-            const bubbleHeight = 45;
-            const x = baseX;
-            const y = baseY - (stackIndex * bubbleHeight + 10);
-
-            let opacity = 1.0;
-            if (age < 200) opacity = age / 200;
-            else if (age > b.duration - 500) opacity = (b.duration - age) / 500;
-
-            let slideY = 0;
-            if (age < 200) slideY = (1 - (age / 200)) * 20;
-
-            // Optional future optimization: pre-allocate bubble objects and mutate them
-            _bubbleScratch.push({
-                id: b.id || Math.random().toString(),
-                text: b.text,
-                duration: b.duration,
-                pos: { x, y }, // Note: We still create object literals here, but it's only when a bubble exists
-                opacity,
-                slideY,
-                zIndex: 1000 - stackIndex
-            });
-        }
-
-        if (_bubbleScratch.length > 0 || (refs as any)._hadBubblesLastFrame) {
-            // ZERO-GC: Mutate the store data directly
-            const hData = HudStore.getData();
-            // Assign the activeBubbles array to the store
-            hData.activeBubbles = _bubbleScratch.length > 0 ? _bubbleScratch : undefined;
-            HudStore.update(hData);
-
-            (refs as any)._hadBubblesLastFrame = _bubbleScratch.length > 0;
-        }
 
         // 15. Emitters Update
         monitor.begin('active_effects');

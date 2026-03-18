@@ -364,21 +364,15 @@ export const Sector3: SectorDef = {
     },
 
     setupContent: async (ctx: SectorContext) => {
-        const { triggers } = ctx;
-
-        triggers.push(
-            { id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, familyId: 2, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
-            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'SPEAK', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'POI', content: "clues.s3_poi_the_mast", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: 'POI', content: "clues.s3_dead_bodies", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: 'SPEAK', content: "clues.s3_tractor", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_poi_farmhouse', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: 'POI', content: "clues.s3_poi_burning_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: 'POI', content: "clues.s3_poi_the_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
-        );
-
-        if (ctx.debugMode) {
-            SectorGenerator.visualizeTriggers(ctx);
-        }
+        // Triggers:
+        SectorGenerator.addTriggers(ctx, [{ id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, familyId: 2, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
+        { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'SPEAK', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+        { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'POI', content: "clues.s3_poi_the_mast", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+        { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: 'POI', content: "clues.s3_dead_bodies", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+        { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: 'SPEAK', content: "clues.s3_tractor", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+        { id: 's3_poi_farmhouse', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: 'POI', content: "clues.s3_poi_burning_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+        { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: 'POI', content: "clues.s3_poi_the_farm", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
+        ]);
     },
 
     setupZombies: async (ctx: SectorContext) => {

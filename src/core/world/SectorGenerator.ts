@@ -1334,20 +1334,36 @@ export const SectorGenerator = {
         return PathGenerator.createGuardrail(ctx, points, floating);
     },
 
+    addTriggers: (ctx: SectorContext, triggers: any[]) => {
+        for (let i = 0; i < triggers.length; i++) {
+            const trigger = triggers[i] as any;
+            ctx.triggers.push(trigger);
+            ctx.collisionGrid.addTrigger(trigger);
+        }
+
+        if (ctx.debugMode) {
+            SectorGenerator.visualizeTriggers(ctx);
+        }
+    },
+
     visualizeTriggers: (ctx: SectorContext) => {
         for (let i = 0; i < ctx.triggers.length; i++) {
             const trig = ctx.triggers[i];
-            SectorGenerator.spawnDebugMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase());
-            const ringGeo = new THREE.RingGeometry(trig.radius - 0.2, trig.radius, 32);
+
+            // Auto-calculate radius for visualization if it's a box
+            let drawRadius = trig.radius;
+            if (!drawRadius && trig.size) {
+                drawRadius = Math.max(trig.size.width, trig.size.depth);
+            }
+            if (!drawRadius) drawRadius = 2.0; // Sista utväg
+
+            const ringGeo = new THREE.RingGeometry(drawRadius - 0.2, drawRadius, 32);
             const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
             const ring = new THREE.Mesh(ringGeo, ringMat);
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(trig.position.x, 0.1, trig.position.z);
             ctx.scene.add(ring);
         }
-    },
-
-    generatePlaceholder: async (ctx: SectorContext) => {
     },
 
     attachEffect: (ctx: SectorContext, parent: THREE.Object3D, eff: { type: string, color?: number, intensity?: number, offset?: { x: number, y: number, z: number } }) => {

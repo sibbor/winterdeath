@@ -141,18 +141,13 @@ export const Sector4: SectorDef = {
     },
 
     setupContent: async (ctx: SectorContext) => {
-        const { triggers } = ctx;
-
-        triggers.push(
+        // Triggers
+        SectorGenerator.addTriggers(ctx, [
             { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHT', content: "clues.s4_noise", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's4_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'POI', content: "clues.s4_shed", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 'found_nathalie', position: LOCATIONS.TRIGGERS.FOUND_NATHALIE, familyId: 3, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
             { id: 's4_poi_scrapyard', position: { x: 0, z: -100 }, radius: 100, type: 'POI', content: '', triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
-        );
-
-        if (ctx.debugMode) {
-            SectorGenerator.visualizeTriggers(ctx);
-        }
+        ]);
     },
 
     setupZombies: async (ctx: SectorContext) => {
