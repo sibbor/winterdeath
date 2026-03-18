@@ -34,7 +34,7 @@ export const TriggerHandler = {
             resolveDynamicPos?: (familyId?: number, ownerId?: string) => THREE.Vector3 | null;
         }
     ) => {
-        const triggers = state.triggers;
+        const triggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(playerPos, 40.0) : state.triggers;
         if (!triggers) return;
 
         // Wait for GameSession runSetup to finish populating the trigger scratchpad

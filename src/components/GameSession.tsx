@@ -175,16 +175,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const handleSpawnBubble = useCallback((e: any) => {
         if (e.detail && e.detail.text) {
             const { text, duration } = e.detail;
-            const el = document.createElement('div');
-            el.className = 'absolute text-center px-4 py-2 pointer-events-none rounded bg-black bg-opacity-80 border border-teal-500 text-teal-300 font-bold shadow-[0_0_15px_rgba(20,184,166,0.5)] z-50 animate-pulse';
-            el.style.fontSize = props.isMobileDevice ? '12px' : '16px';
-            el.style.minWidth = '200px';
-            el.style.transform = 'translate(-50%, -100%)';
-            el.innerText = text;
-            if (refs.chatOverlayRef.current) refs.chatOverlayRef.current.appendChild(el);
-            refs.activeBubbles.current.push({ element: el, startTime: performance.now(), duration: duration || 3000 });
+            refs.activeBubbles.current.push({ id: Math.random().toString(), text, startTime: performance.now(), duration: duration || 3000 });
         }
-    }, [props.isMobileDevice, refs]);
+    }, [refs]);
 
     const uiCallbacks = React.useMemo(() => ({
         onContinue: () => {

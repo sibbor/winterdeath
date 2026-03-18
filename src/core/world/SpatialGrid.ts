@@ -21,16 +21,27 @@ export class SpatialGrid {
     // Tracks only populated cells to avoid clearing entire grid every frame
     private _touchedEnemyCells: Enemy[][] = [];
 
+    // --- TRIGGER & INTERACTABLE EXTENSIONS (Zero-GC) ---
+    private triggerCells: any[][];
+    private interactableCells: THREE.Object3D[][];
+    private triggerQueryResults: any[] = [];
+    private interactableQueryResults: THREE.Object3D[] = [];
+    private dynamicTriggers: any[] = []; // Triggers with familyId/ownerId
+
     constructor(cellSize: number = 15) {
         this.cellSize = cellSize;
 
         // Pre-allocate the entire grid to force V8 into PACKED_ELEMENTS mode
         this.obstacleCells = new Array(HASH_SIZE);
         this.enemyCells = new Array(HASH_SIZE);
+        this.triggerCells = new Array(HASH_SIZE);
+        this.interactableCells = new Array(HASH_SIZE);
 
         for (let i = 0; i < HASH_SIZE; i++) {
             this.obstacleCells[i] = [];
             this.enemyCells[i] = [];
+            this.triggerCells[i] = [];
+            this.interactableCells[i] = [];
         }
     }
 
@@ -144,6 +155,101 @@ export class SpatialGrid {
         return this.enemyQueryResults;
     }
 
+    // --- TRIGGER MANAGEMENT ---
+
+    addTrigger(t: any) {
+        if (t.familyId !== undefined || t.ownerId !== undefined) {
+            this.dynamicTriggers.push(t);
+            return;
+        }
+
+        let radius = t.radius || 2.0;
+        if (t.size) {
+            radius = Math.max(radius, Math.sqrt((t.size.width / 2) ** 2 + (t.size.depth / 2) ** 2));
+        }
+
+        this.forEachCellInRange(t.position.x, t.position.z, radius, (hash) => {
+            this.triggerCells[hash].push(t);
+        });
+    }
+
+    getNearbyTriggers(pos: THREE.Vector3, radius: number): any[] {
+        this.triggerQueryResults.length = 0;
+        this._queryFrame++;
+
+        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
+            const cell = this.triggerCells[hash];
+            for (let i = 0; i < cell.length; i++) {
+                const t = cell[i];
+                if ((t as any)._sqf !== this._queryFrame) {
+                    (t as any)._sqf = this._queryFrame;
+                    this.triggerQueryResults.push(t);
+                }
+            }
+        });
+
+        // Always include dynamic triggers since they move
+        for (let i = 0; i < this.dynamicTriggers.length; i++) {
+            const dt = this.dynamicTriggers[i];
+            if ((dt as any)._sqf !== this._queryFrame) {
+                (dt as any)._sqf = this._queryFrame;
+                this.triggerQueryResults.push(dt);
+            }
+        }
+
+        return this.triggerQueryResults;
+    }
+
+    // --- INTERACTABLE MANAGEMENT ---
+
+    addInteractable(obj: THREE.Object3D) {
+        let radius = obj.userData.interactionRadius || 4.0;
+        if (obj.userData.vehicleDef) {
+            const size = obj.userData.vehicleDef.size;
+            radius = Math.max(radius, Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + 2.0);
+        }
+
+        obj.getWorldPosition(obj.position); // Ensure world pos is accurate
+        this.forEachCellInRange(obj.position.x, obj.position.z, radius, (hash) => {
+            this.interactableCells[hash].push(obj);
+        });
+    }
+
+    updateInteractable(obj: THREE.Object3D) {
+        if (!obj || !obj.position) return;
+
+        for (let i = 0; i < HASH_SIZE; i++) {
+            const cell = this.interactableCells[i];
+            if (cell.length > 0) {
+                const index = cell.indexOf(obj);
+                if (index !== -1) {
+                    cell[index] = cell[cell.length - 1];
+                    cell.pop();
+                }
+            }
+        }
+
+        this.addInteractable(obj);
+    }
+
+    getNearbyInteractables(pos: THREE.Vector3, radius: number): THREE.Object3D[] {
+        this.interactableQueryResults.length = 0;
+        this._queryFrame++;
+
+        this.forEachCellInRange(pos.x, pos.z, radius, (hash) => {
+            const cell = this.interactableCells[hash];
+            for (let i = 0; i < cell.length; i++) {
+                const obj = cell[i];
+                if ((obj as any)._sqf !== this._queryFrame) {
+                    (obj as any)._sqf = this._queryFrame;
+                    this.interactableQueryResults.push(obj);
+                }
+            }
+        });
+
+        return this.interactableQueryResults;
+    }
+
     // --- HELPERS ---
 
     private forEachCellInRange(x: number, z: number, radius: number, callback: (hash: number) => void) {
@@ -165,7 +271,10 @@ export class SpatialGrid {
         for (let i = 0; i < HASH_SIZE; i++) {
             this.obstacleCells[i].length = 0;
             this.enemyCells[i].length = 0;
+            this.triggerCells[i].length = 0;
+            this.interactableCells[i].length = 0;
         }
         this._touchedEnemyCells.length = 0;
+        this.dynamicTriggers.length = 0;
     }
 }

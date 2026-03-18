@@ -65,6 +65,7 @@ export const SectorGenerator = {
         if (ctx.interactables && !ctx.interactables.includes(object)) {
             ctx.interactables.push(object);
         }
+        ctx.collisionGrid.addInteractable(object);
     },
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
@@ -417,6 +418,7 @@ export const SectorGenerator = {
             rotation: rotation
         };
         ctx.triggers.push(trigger);
+        ctx.collisionGrid.addTrigger(trigger);
 
         if (ctx.debugMode) {
             SectorGenerator.spawnDebugMarker(ctx, x, z, 2, id);

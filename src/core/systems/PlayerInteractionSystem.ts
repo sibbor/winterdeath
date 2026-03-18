@@ -55,12 +55,16 @@ export class PlayerInteractionSystem implements System {
         // 1. Detect nearby interactive objects (Throttled to 10hz)
         if (now - this.lastDetectionTime > 100) {
             this.lastDetectionTime = now;
+            const nearbyTriggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(this.playerGroup.position, 15.0) : state.triggers;
+            const nearbyInteractables = state.collisionGrid ? state.collisionGrid.getNearbyInteractables(this.playerGroup.position, 15.0) : (state.sectorState.ctx?.interactables || []);
+
             this.detectInteraction(
                 this.playerGroup.position,
                 state.chests,
-                state.triggers,
+                nearbyTriggers,
                 state.sectorState,
-                state
+                state,
+                nearbyInteractables
             );
 
             state.interactionType = _detectionResult.type;
@@ -237,7 +241,8 @@ export class PlayerInteractionSystem implements System {
         chests: any[],
         triggers: any[],
         sectorState: any,
-        state: any
+        state: any,
+        nearbyInteractables?: THREE.Object3D[]
     ): void {
         _detectionResult.type = null;
         _detectionResult.id = null;
@@ -278,10 +283,11 @@ export class PlayerInteractionSystem implements System {
         }
 
         // --- 4. Check Generic Sector Interactables ---
-        if (sectorState.ctx && sectorState.ctx.interactables) {
-            const len = sectorState.ctx.interactables.length;
+        const interactables = nearbyInteractables || (sectorState.ctx ? sectorState.ctx.interactables : null);
+        if (interactables) {
+            const len = interactables.length;
             for (let i = 0; i < len; i++) {
-                const obj = sectorState.ctx.interactables[i];
+                const obj = interactables[i];
                 if (!obj || !obj.userData?.isInteractable) continue;
 
                 obj.getWorldPosition(_v1);

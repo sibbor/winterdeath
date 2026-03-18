@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import InteractionPrompt from './InteractionPrompt';
+import ChatBubblesUI from './ChatBubblesUI';
+import { HudStore } from '../../core/systems/HudStore';
 
 interface GameUIProps {
     onCloseClue: () => void;
@@ -25,32 +27,31 @@ const GameUI: React.FC<GameUIProps> = ({
     } | null>(null);
 
     useEffect(() => {
-        // High-performance event listener hooked up to the engine's direct dispatches
-        const handleUpdateInteraction = (e: CustomEvent<{
-            type: any,
-            label: string | null,
-            pos: { x: number, y: number } | null
-        } | null>) => {
-            setInteraction(e.detail);
-        };
+        // High-performance HudStore subscriber
+        const unsubscribe = HudStore.subscribe((data) => {
+            if (data.interactionPrompt) {
+                setInteraction(data.interactionPrompt);
+            } else if (interaction !== null) {
+                setInteraction(null);
+            }
+        });
 
-        window.addEventListener('update_interaction', handleUpdateInteraction as EventListener);
-
-        return () => {
-            window.removeEventListener('update_interaction', handleUpdateInteraction as EventListener);
-        };
-    }, []);
-
-    if (!interaction) return null;
+        return unsubscribe;
+    }, [interaction]);
 
     return (
-        <InteractionPrompt
-            type={interaction.type}
-            label={interaction.label || interactionLabel}
-            screenPos={interaction.pos}
-            isMobileDevice={isMobileDevice}
-            onInteract={onInteract}
-        />
+        <>
+            <ChatBubblesUI />
+            {interaction && (
+                <InteractionPrompt
+                    type={interaction.type}
+                    label={interaction.label || interactionLabel}
+                    screenPos={interaction.pos}
+                    isMobileDevice={isMobileDevice}
+                    onInteract={onInteract}
+                />
+            )}
+        </>
     );
 };
 

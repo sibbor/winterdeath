@@ -546,13 +546,14 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 refs.interactionTypeRef.current = currentInter;
                 (state as any).lastInteractionLabel = currentLabel;
 
-                window.dispatchEvent(new CustomEvent('update_interaction', {
-                    detail: {
+                HudStore.update({
+                    ...HudStore.getData(),
+                    interactionPrompt: {
                         type: currentInter,
                         label: currentLabel,
                         pos: { x: screenX, y: screenY }
                     }
-                }));
+                });
             }
         } else {
             if (refs.interactionTypeRef.current !== null) {
@@ -560,9 +561,10 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 refs.lastInteractionPosRef.current = null;
                 (state as any).lastInteractionLabel = null;
 
-                window.dispatchEvent(new CustomEvent('update_interaction', {
-                    detail: null
-                }));
+                HudStore.update({
+                    ...HudStore.getData(),
+                    interactionPrompt: null
+                });
             }
         }
 
@@ -609,14 +611,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
 
-        // 14. Bubbles Update
+        // 14. Bubbles Update (via HudStore)
+        const activeBubblesData = [];
         for (let i = 0; i < refs.activeBubbles.current.length; i++) {
             const b = refs.activeBubbles.current[i];
             const age = now - b.startTime;
 
             if (age > b.duration) {
-                if (b.element.parentNode) b.element.parentNode.removeChild(b.element);
-
                 refs.activeBubbles.current[i] = refs.activeBubbles.current[refs.activeBubbles.current.length - 1];
                 refs.activeBubbles.current.pop();
 
@@ -631,9 +632,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const x = baseX;
             const y = baseY - (stackIndex * bubbleHeight + 10);
 
-            b.element.style.left = `${x}px`;
-            b.element.style.top = `${y}px`;
-
             let opacity = 1.0;
             if (age < 200) opacity = age / 200;
             else if (age > b.duration - 500) opacity = (b.duration - age) / 500;
@@ -641,10 +639,23 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             let slideY = 0;
             if (age < 200) slideY = (1 - (age / 200)) * 20;
 
-            b.element.style.transform = `translate(-50%, calc(-100% + ${slideY}px))`;
-            b.element.style.opacity = opacity as unknown as string;
-            b.element.style.zIndex = `${1000 - stackIndex}`;
-            b.element.style.transition = 'top 0.3s ease-out';
+            activeBubblesData.push({
+                id: b.id || Math.random().toString(),
+                text: b.text,
+                duration: b.duration,
+                pos: { x, y },
+                opacity,
+                slideY,
+                zIndex: 1000 - stackIndex
+            });
+        }
+
+        if (activeBubblesData.length > 0 || (refs as any)._hadBubblesLastFrame) {
+            HudStore.update({
+                ...HudStore.getData(),
+                activeBubbles: activeBubblesData
+            });
+            (refs as any)._hadBubblesLastFrame = activeBubblesData.length > 0;
         }
 
         // 15. Emitters Update

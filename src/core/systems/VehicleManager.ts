@@ -172,6 +172,11 @@ export const VehicleManager = {
         if (lights?.brake?.fakeGlow) {
             lights.brake.fakeGlow.visible = false;
         }
+
+        // --- SPATIAL GRID OPTIMIZATION ---
+        if (state.collisionGrid) {
+            state.collisionGrid.updateInteractable(vehicle);
+        }
     },
 
     handleEnemyCollisions: (
