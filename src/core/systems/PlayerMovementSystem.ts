@@ -57,7 +57,7 @@ export class PlayerMovementSystem implements System {
             this.playerGroup,
             input,
             state,
-            session.isMobile,
+            session.isMobileDevice,
             disableInput,
             isMoving,
             session
@@ -378,11 +378,11 @@ export class PlayerMovementSystem implements System {
     }
 
 
-    private handleRotation(playerGroup: THREE.Group, input: any, state: any, isMobile: boolean, disableInput: boolean, isMoving: boolean, session: GameSessionLogic) {
+    private handleRotation(playerGroup: THREE.Group, input: any, state: any, isMobileDevice: boolean, disableInput: boolean, isMoving: boolean, session: GameSessionLogic) {
         if (disableInput) return;
         const angle = session.cameraAngle || 0;
 
-        if (isMobile) {
+        if (isMobileDevice) {
             const stick = (input.joystickAim?.lengthSq() > 0.25) ? input.joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
             if (stick) {
                 _v1.set(stick.x, 0, stick.y);

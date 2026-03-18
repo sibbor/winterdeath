@@ -1,15 +1,11 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { MapItem, MapItemType } from '../../types';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
 import GameModalLayout from './GameModalLayout';
+import { HudStore } from '../../core/systems/HudStore';
 
 interface ScreenMapProps {
-    items: MapItem[];
-    playerPos: { x: number, z: number } | undefined;
-    familyPos?: { x: number, z: number };
-    bossPos?: { x: number, z: number };
     onClose: () => void;
     onSelectCoords: (x: number, z: number) => void;
     isMobileDevice?: boolean;
@@ -58,6 +54,37 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
         };
     }, [bounds]);
 
+    // Zero-GC Input Handlers
+    const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const px = ((e.clientX - rect.left) / rect.width) * 100;
+        const py = ((e.clientY - rect.top) / rect.height) * 100;
+        const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
+        const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
+        onMouseMove(x, z);
+    }, [bounds, onMouseMove]);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (isMobileDevice) return; // PC only
+        const rect = e.currentTarget.getBoundingClientRect();
+        const px = ((e.clientX - rect.left) / rect.width) * 100;
+        const py = ((e.clientY - rect.top) / rect.height) * 100;
+        const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
+        const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
+        onClickImmediate(x, z);
+    }, [bounds, onClickImmediate, isMobileDevice]);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+        const touch = e.touches[0];
+        const rect = e.currentTarget.getBoundingClientRect();
+        const px = ((touch.clientX - rect.left) / rect.width) * 100;
+        const py = ((touch.clientY - rect.top) / rect.height) * 100;
+        const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
+        const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
+        onInteractionStart(x, z);
+    }, [bounds, onInteractionStart]);
+
+
     // Render Grid Lines
     const gridLines = useMemo(() => {
         const lines = [];
@@ -87,34 +114,9 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
     return (
         <div
             className="relative bg-slate-900 border-2 border-blue-900/50 cursor-crosshair w-full h-full overflow-hidden"
-            onMouseMove={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const px = ((e.clientX - rect.left) / rect.width) * 100;
-                const py = ((e.clientY - rect.top) / rect.height) * 100;
-                const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
-                const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
-                onMouseMove({ x, z });
-            }}
-            onMouseDown={(e) => {
-                if (isMobileDevice) return; // PC only
-                const rect = e.currentTarget.getBoundingClientRect();
-                const px = ((e.clientX - rect.left) / rect.width) * 100;
-                const py = ((e.clientY - rect.top) / rect.height) * 100;
-                const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
-                const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
-                onClickImmediate({ x, z });
-            }}
-            onMouseUp={() => { }}
-            onMouseLeave={() => { }}
-            onTouchStart={(e) => {
-                const touch = e.touches[0];
-                const rect = e.currentTarget.getBoundingClientRect();
-                const px = ((touch.clientX - rect.left) / rect.width) * 100;
-                const py = ((touch.clientY - rect.top) / rect.height) * 100;
-                const x = bounds.minX + (px / 100) * (bounds.maxX - bounds.minX);
-                const z = bounds.minZ + (py / 100) * (bounds.maxZ - bounds.minZ);
-                onInteractionStart({ x, z });
-            }}
+            onMouseMove={handleMouseMove}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
             onTouchEnd={onInteractionEnd}
         >
             <div className="absolute inset-0 pointer-events-none">{gridLines}</div>
@@ -154,7 +156,14 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
 
 const LONG_PRESS_DURATION = 600;
 
-export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPos, bossPos, onClose, onSelectCoords, isMobileDevice }) => {
+export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, isMobileDevice }) => {
+    const [hud, setHud] = useState<any>(HudStore.getData());
+
+    useEffect(() => {
+        return HudStore.subscribe((data) => setHud(data));
+    }, []);
+
+    const { playerPos, familyPos, bossPos, mapItems: items = [] } = hud;
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
     const [tooltipData, setTooltipData] = useState<any>(null);
     const longPressTimer = useRef<any>(null);
@@ -176,7 +185,13 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
             if (!groups[key]) groups[key] = [];
             groups[key].push(item);
         }
-        return Object.values(groups).map(g => g.sort((a, b) => getItemPriority(b.type) - getItemPriority(a.type)));
+
+        const result = [];
+        for (const key in groups) {
+            const sorted = groups[key].sort((a, b) => getItemPriority(b.type) - getItemPriority(a.type));
+            result.push(sorted);
+        }
+        return result;
     }, [allEntities]);
 
     const bounds = useMemo(() => {
@@ -191,8 +206,13 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
         return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
     }, [allEntities]);
 
-    const handleInteractionStart = (coords: { x: number, z: number }) => {
-        pressCoords.current = coords;
+    // Zero-GC Interaction Callbacks
+    const handleSetMouseCoords = useCallback((x: number, z: number) => {
+        setMouseCoords({ x, z });
+    }, []);
+
+    const handleInteractionStart = useCallback((x: number, z: number) => {
+        pressCoords.current = { x, z };
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
         longPressTimer.current = setTimeout(() => {
             if (pressCoords.current) {
@@ -201,19 +221,25 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                 longPressTimer.current = null;
             }
         }, LONG_PRESS_DURATION);
-    };
+    }, [onSelectCoords]);
 
-    const handleInteractionEnd = () => {
+    const handleInteractionEnd = useCallback(() => {
         if (longPressTimer.current) {
             clearTimeout(longPressTimer.current);
             longPressTimer.current = null;
         }
-    };
+    }, []);
+
+    const handleClickImmediate = useCallback((x: number, z: number) => {
+        soundManager.playUiConfirm();
+        onSelectCoords(x, z);
+    }, [onSelectCoords]);
+
 
     return (
         <GameModalLayout
             title={t('ui.tactical_map')}
-            isMobile={isMobileDevice}
+            isMobileDevice={isMobileDevice}
             onClose={onClose}
             onConfirm={onClose}
             confirmLabel={t('ui.close')}
@@ -258,13 +284,10 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ items, playerPos, familyPo
                     bounds={bounds}
                     groupedEntities={groupedEntities}
                     setTooltipData={setTooltipData}
-                    onMouseMove={setMouseCoords}
+                    onMouseMove={handleSetMouseCoords}
                     onInteractionStart={handleInteractionStart}
                     onInteractionEnd={handleInteractionEnd}
-                    onClickImmediate={(coords: { x: number, z: number }) => {
-                        soundManager.playUiConfirm();
-                        onSelectCoords(coords.x, coords.z);
-                    }}
+                    onClickImmediate={handleClickImmediate}
                     isMobileDevice={isMobileDevice}
                 />
             </div>

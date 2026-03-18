@@ -31,13 +31,11 @@ import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/SoundManager';
 import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
-import { isMobile } from './utils/device';
+import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
 import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
 import { SECTOR_THEMES } from './content/constants';
-
-const getCursorHidden = (isMobileDevice: boolean, isOverlayActive: boolean, screen: GameScreen, hudIsDead: boolean) =>
-    isMobileDevice || (screen === GameScreen.SECTOR && !isOverlayActive && !hudIsDead);
+import { HudStore } from './core/systems/HudStore';
 
 export type OverlayType =
     | 'PAUSE' | 'SETTINGS' | 'MAP' | 'TELEPORT' | 'COLLECTIBLE' | 'DIALOGUE'
@@ -55,7 +53,7 @@ const App: React.FC = () => {
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(isLoadingSector || isLoadingCamp);
     const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(gameState.screen === GameScreen.CAMP);
     const [isInitialBoot, setIsInitialBoot] = useState(true);
-    const [isMobileDevice, setIsMobileDevice] = useState(isMobile());
+    const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
 
     // Sync references for the loading screen rendezvous
     const transitionTaskRef = useRef(false);
@@ -100,7 +98,7 @@ const App: React.FC = () => {
         } finally {
             transitionTaskRef.current = false;
 
-            // [VINTERDÖD] Safety: Reset engine pause flags after ANY transition
+            // Safety: Reset engine pause flags after ANY transition
             const engine = WinterEngine.getInstance();
             engine.isRenderingPaused = false;
             engine.isSimulationPaused = false;
@@ -158,11 +156,10 @@ const App: React.FC = () => {
         return () => { };
     }, []);
 
-    const [hudState, setHudState] = useState<any>({});
     const [isPointerLocked, setIsPointerLocked] = useState(false);
 
     useEffect(() => {
-        // [VINTERDÖD] Try to lock orientation to landscape on mobile
+        // Try to lock orientation to landscape on mobile
         if (typeof screen !== 'undefined' && (screen as any).orientation && (screen.orientation as any).lock) {
             (screen.orientation as any).lock('landscape').catch((e: any) => {
                 console.warn("[App] Orientation lock failed (expected on some devices):", e);
@@ -171,7 +168,7 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const checkMobile = () => setIsMobileDevice(isMobile());
+        const checkMobile = () => setIsMobileDevice(isMobileDevice());
         const handleLockChange = () => setIsPointerLocked(!!document.pointerLockElement);
 
         window.addEventListener('resize', checkMobile);
@@ -183,7 +180,6 @@ const App: React.FC = () => {
         };
     }, []);
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
-    const [currentMapItems, setCurrentSectorMapItems] = useState<MapItem[]>([]);
     const [debugSystems, setDebugSystems] = useState<{ id: string; enabled: boolean }[]>([]);
 
     // Sector Results
@@ -200,16 +196,6 @@ const App: React.FC = () => {
         (window as any).setGameScreen = (screen: GameScreen) => setGameState(prev => ({ ...prev, screen }));
     }, [gameState]);
 
-
-    const handleUpdateHUD = useCallback((data: any) => {
-        setHudState(data);
-        if (data.mapItems) setCurrentSectorMapItems(data.mapItems);
-        // Refresh system list for debug panel at same cadence as HUD (10Hz)
-        if (gameState.debugMode) {
-            const systems = gameCanvasRef.current?.getSystems();
-            if (systems) setDebugSystems(systems);
-        }
-    }, [gameState.debugMode]);
 
     const handleDie = useCallback((stats: SectorStats, killer: string) => {
         setDeathDetails({ killer });
@@ -351,8 +337,6 @@ const App: React.FC = () => {
         await triggerLoadingTransition('SECTOR', async () => {
             setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
             setTeleportTarget(null);
-            setHudState({});
-            setCurrentSectorMapItems([]);
             setActiveCollectible(null);
             setActiveOverlay(null);
 
@@ -396,7 +380,7 @@ const App: React.FC = () => {
         window.location.reload();
     };
 
-    const cursorHidden = isMobileDevice || isPointerLocked || (gameState.screen === GameScreen.SECTOR && !activeOverlay && !hudState.isDead);
+    const cursorHidden = isMobileDevice || isPointerLocked || (gameState.screen === GameScreen.SECTOR && !activeOverlay);
 
     const handleCollectibleClose = useCallback(() => {
         // CALL Pointer Lock BEFORE setting state to null to preserve user gesture context
@@ -487,9 +471,8 @@ const App: React.FC = () => {
         onCollectibleClose: handleCollectibleClose
     }), [handleCollectibleClose, isMobileDevice]);
 
-    // Global Input Hook (ESC, M)
+    // Global Input Hook (ESC, M) - HP removed since HudStore handles it
     useGlobalInput(activeOverlay, {
-        hp: hudState.hp || 100,
         screen: gameState.screen
     }, globalInputActions);
 
@@ -510,7 +493,6 @@ const App: React.FC = () => {
                     onSelectSector={handleSelectSector}
                     onStartSector={handleStartSector}
                     onToggleDebug={(val) => setGameState(prev => ({ ...prev, debugMode: val }))}
-                    onUpdateHUD={handleUpdateHUD}
                     onResetGame={handleResetGame}
                     onSaveGraphics={handleSaveGraphics}
                     initialGraphics={gameState.graphics}
@@ -541,7 +523,6 @@ const App: React.FC = () => {
                         isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
                         isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE}
                         disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
-                        onUpdateHUD={handleUpdateHUD}
                         onDie={handleDie}
                         onSectorEnded={handleSectorEnded}
                         onPauseToggle={(val) => setActiveOverlay(val ? 'PAUSE' : null)}
@@ -582,18 +563,13 @@ const App: React.FC = () => {
                         weather={gameState.weather}
                     />
 
-                    {(!activeOverlay || activeOverlay === 'INTRO') && !hudState.isHidden && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && (
+                    {(!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && (
                         isMobileDevice ? (
                             <MobileGameHUD
-                                {...hudState}
                                 loadout={gameState.loadout}
                                 weaponLevels={gameState.weaponLevels}
                                 debugMode={gameState.debugMode}
                                 isBossIntro={activeOverlay === 'INTRO'}
-                                isDriving={hudState.isDriving}
-                                vehicleSpeed={hudState.vehicleSpeed}
-                                throttleState={hudState.throttleState}
-                                isMobileDevice={true}
                                 onTogglePause={() => { setActiveOverlay('PAUSE'); soundManager.playUiClick(); }}
                                 onToggleMap={() => { setActiveOverlay('MAP'); soundManager.playUiConfirm(); }}
                                 onSelectWeapon={(slot) => { gameCanvasRef.current?.triggerInput(slot as any); }}
@@ -601,14 +577,10 @@ const App: React.FC = () => {
                             />
                         ) : (
                             <GameHUD
-                                {...hudState}
                                 loadout={gameState.loadout}
                                 weaponLevels={gameState.weaponLevels}
                                 debugMode={gameState.debugMode}
                                 isBossIntro={activeOverlay === 'INTRO'}
-                                isDriving={hudState.isDriving}
-                                vehicleSpeed={hudState.vehicleSpeed}
-                                throttleState={hudState.throttleState}
                                 onTogglePause={() => { setActiveOverlay('PAUSE'); soundManager.playUiClick(); }}
                                 onToggleMap={() => { setActiveOverlay('MAP'); soundManager.playUiConfirm(); }}
                                 onSelectWeapon={(slot) => { gameCanvasRef.current?.triggerInput(slot as any); }}
@@ -678,12 +650,10 @@ const App: React.FC = () => {
                 <ScreenPlayerDied
                     onContinue={() => {
                         const stats = gameCanvasRef.current?.getSectorStats() || sectorStats;
-                        handleDie(stats, hudState.killerName);
+                        const finalHud = HudStore.getData();
+                        handleDie(stats, finalHud.killerName);
                         setActiveOverlay(null);
                     }}
-                    killerName={hudState.killerName || "UNKNOWN"}
-                    attackName={hudState.killerAttackName}
-                    killedByEnemy={hudState.killedByEnemy}
                     isMobileDevice={isMobileDevice}
                 />
             )}
@@ -798,7 +768,6 @@ const App: React.FC = () => {
                         setActiveOverlay(null);
                     }}
                     isMobileDevice={isMobileDevice}
-                    playerPos={hudState.playerPos}
                     onSpawnEnemies={(enemies) => {
                         gameCanvasRef.current?.spawnEnemies(enemies);
                     }}
@@ -807,10 +776,6 @@ const App: React.FC = () => {
 
             {activeOverlay === 'MAP' && (
                 <ScreenMap
-                    items={currentMapItems}
-                    playerPos={hudState.playerPos}
-                    familyPos={hudState.familyPos || undefined}
-                    bossPos={hudState.bossPos || undefined}
                     onClose={() => {
                         if (gameState.screen === GameScreen.SECTOR && !isMobileDevice) gameCanvasRef.current?.requestPointerLock();
                         setActiveOverlay(null);
@@ -864,8 +829,6 @@ const App: React.FC = () => {
                             setGameState(prev => ({ ...prev, ...nextState }));
                             setSectorStats(null);
                             setDeathDetails(null);
-                            setHudState({});
-                            setCurrentSectorMapItems([]);
                             setActiveCollectible(null);
                             setActiveOverlay(null);
 

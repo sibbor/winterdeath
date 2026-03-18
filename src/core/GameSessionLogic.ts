@@ -23,7 +23,7 @@ export interface NoiseEvent {
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
-    public isMobile: boolean = false;
+    public isMobileDevice: boolean = false;
     public debugMode: boolean = false;
     public cameraAngle: number = 0;
     public mapId: number = 0;

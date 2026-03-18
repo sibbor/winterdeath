@@ -38,7 +38,6 @@ interface CampProps {
     onSaveGraphics: (graphics: GraphicsSettings) => void;
     initialGraphics?: GraphicsSettings;
     onCampLoaded?: () => void;
-    onUpdateHUD: (data: any) => void;
     isMobileDevice?: boolean;
     weather: WeatherType;
     hasCheckpoint?: boolean;

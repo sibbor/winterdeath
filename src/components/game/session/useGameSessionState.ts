@@ -1,6 +1,6 @@
-import { useRef, useState, useMemo, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps, DeathPhase, SectorTrigger } from '../../../types';
+import { GameCanvasProps, DeathPhase } from '../../../types';
 import { SectorContext } from '../../../types/sector';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
 import { GameSessionLogic } from '../../../core/GameSessionLogic';
@@ -20,17 +20,7 @@ export interface UIState {
     interactionScreenPos: { x: number, y: number } | null;
     forceHideHUD: boolean;
     stationOverlay: string | null;
-
-    // Fast-updating UI state, throttled by the orchestrator (filled in later if needed by UI)
-    hp: number;
-    staminaRatio: number;
-    ammo: number;
-    reserveAmmo: number;
-    drawCalls: number;
-    triangles: number;
-    renderCpuTime: number;
-    debugInfo?: any;
-    systems?: { id: string; enabled: boolean }[];
+    zombieWaveActive?: boolean; // Just in case any legacy component expects it to exist in the UIState
 }
 
 export const useGameSessionState = (props: GameCanvasProps) => {
@@ -78,6 +68,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     const playerMeshRef = useRef<THREE.Object3D | null>(null);
     const bubbleRef = useRef<CinematicBubbleHandle>(null);
     const skyLightRef = useRef<THREE.DirectionalLight | null>(null);
+    const skyLightOffsetRef = useRef<THREE.Vector3 | null>(null);
     const familyMemberRef = useRef<{ mesh: THREE.Group; } | null>(null);
     const activeFamilyMembers = useRef<any[]>([]);
     const flashlightRef = useRef<THREE.Group | null>(null);
@@ -126,13 +117,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
         interactionScreenPos: null,
         forceHideHUD: false,
         stationOverlay: null,
-        hp: 100,
-        staminaRatio: 1.0,
-        ammo: 0,
-        reserveAmmo: 0,
-        drawCalls: 0,
-        triangles: 0,
-        renderCpuTime: 0
+        zombieWaveActive: false
     });
 
     // We can use a partial update function tailored for the loop to just push changes
@@ -169,7 +154,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
             lastInteractionPosRef, activeBubbles, hasEndedSector, collectedCluesRef, distanceTraveledRef,
             lastTeleportRef, lastDrawCallsRef, hasPlayedIntroRef, lastHeartbeatRef, bossIntroTimerRef,
             gameContextRef, setupIdRef, prevPosRef, hasSetPrevPosRef, playerGroupRef, playerMeshRef, bubbleRef, cinematicRef,
-            skyLightRef, prevInputRef, cameraOverrideRef, bossIntroRef, familyMemberRef, activeFamilyMembers,
+            skyLightRef, skyLightOffsetRef, prevInputRef, cameraOverrideRef, bossIntroRef, familyMemberRef, activeFamilyMembers,
             flashlightRef, isMounted
         },
         uiState,

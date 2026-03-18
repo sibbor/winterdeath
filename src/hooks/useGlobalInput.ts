@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { soundManager } from '../utils/SoundManager';
 import { OverlayType } from '../App';
 import { GameScreen } from '../types';
+import { HudStore } from '../core/systems/HudStore';
 
 interface UIActions {
     setActiveOverlay: (val: OverlayType | null) => void;
@@ -12,18 +13,25 @@ interface UIActions {
 
 export const useGlobalInput = (
     activeOverlay: OverlayType | null,
-    state: { hp: number, screen: GameScreen },
+    state: { screen: GameScreen },
     actions: UIActions
 ) => {
     // Stable ref to prevent listener re-registration on every toggle.
     const overlayRef = useRef<OverlayType | null>(activeOverlay);
-    overlayRef.current = activeOverlay;
     const lastEscTimeRef = useRef<number>(0);
+
+    // Safely update the ref without triggering re-renders or mutating during render phase
+    useEffect(() => {
+        overlayRef.current = activeOverlay;
+    }, [activeOverlay]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const now = Date.now();
             const current = overlayRef.current;
+
+            // Read death state synchronously from the store to avoid dependency triggers
+            const isDead = HudStore.getData().isDead;
 
             // ESC Logic
             if (e.key === 'Escape') {
@@ -57,7 +65,7 @@ export const useGlobalInput = (
                         actions.requestPointerLock?.();
                     }
                     soundManager.playUiClick();
-                } else if (!current && state.hp > 0) {
+                } else if (!current && !isDead) {
                     if (state.screen === GameScreen.CAMP) {
                         actions.setActiveOverlay('SETTINGS');
                     } else {
@@ -69,7 +77,7 @@ export const useGlobalInput = (
             }
             // Map Logic (M)
             else if (e.key.toLowerCase() === 'm') {
-                if (!current && state.hp > 0) {
+                if (!current && !isDead) {
                     actions.setActiveOverlay('MAP');
                     if (document.pointerLockElement) document.exitPointerLock();
                     soundManager.playUiConfirm();
@@ -83,5 +91,5 @@ export const useGlobalInput = (
 
         window.addEventListener('keydown', handleKeyDown, { capture: true });
         return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    }, [actions, state.hp, state.screen]);
+    }, [actions, state.screen]);
 };

@@ -1,52 +1,82 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { t } from '../../utils/i18n';
 import GameModalLayout from './GameModalLayout';
 import { EnemyManager } from '../../core/EnemyManager';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import * as THREE from 'three';
 import { soundManager } from '../../utils/SoundManager';
+import { HudStore } from '../../core/systems/HudStore';
 
 interface ScreenPlaygroundEnemyStationProps {
     onClose: () => void;
-    playerPos: { x: number, z: number };
     onSpawnEnemies?: (enemies: any[]) => void;
     isMobileDevice?: boolean;
 }
 
-export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStationProps> = ({ onClose, playerPos, onSpawnEnemies, isMobileDevice }) => {
+const ENEMY_TYPES = ['WALKER', 'RUNNER', 'TANK', 'BOMBER'];
+const SPAWN_LOCATIONS = ['NEAR', 'FOREST', 'FARM', 'VILLAGE'];
+
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+// Used during spawning to prevent creating 100+ Vector3 objects
+const _centerPos = new THREE.Vector3();
+const _spawnPos = new THREE.Vector3();
+const _playerPosRef = new THREE.Vector3();
+
+export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStationProps> = ({ onClose, onSpawnEnemies, isMobileDevice }) => {
     const [selectedType, setSelectedType] = useState('WALKER');
     const [countVal, setCountVal] = useState(1);
     const [spread, setSpread] = useState(5);
     const [biome, setBiome] = useState<'NEAR' | 'FOREST' | 'FARM' | 'VILLAGE'>('NEAR');
 
-    const handleSpawn = () => {
+    const handleSpawn = useCallback(() => {
+        const hud = HudStore.getData();
+        const playerPos = hud.playerPos || { x: 0, z: 0 };
         const scene = WinterEngine.getInstance().scene;
-        // Determine spawn center
-        let center = new THREE.Vector3(playerPos.x, 0, playerPos.z);
-        if (biome === 'FOREST') center.set(30, 0, -30);
-        if (biome === 'FARM') center.set(-30, 0, -30);
-        if (biome === 'VILLAGE') center.set(0, 0, -100);
 
-        // Offset so they don't spawn on top of player
+        // Use pre-allocated vectors to avoid GC hit when spawning multiples
+        _playerPosRef.set(playerPos.x, 0, playerPos.z);
+        _centerPos.copy(_playerPosRef);
+
+        if (biome === 'FOREST') _centerPos.set(30, 0, -30);
+        if (biome === 'FARM') _centerPos.set(-30, 0, -30);
+        if (biome === 'VILLAGE') _centerPos.set(0, 0, -100);
+
         if (biome === 'NEAR') {
-            center.z -= 20;
+            _centerPos.z -= 20;
         }
 
         const spawned: any[] = [];
         for (let i = 0; i < countVal; i++) {
-            const spawnPos = new THREE.Vector3(
-                center.x + (Math.random() - 0.5) * spread,
+            _spawnPos.set(
+                _centerPos.x + (Math.random() - 0.5) * spread,
                 0,
-                center.z + (Math.random() - 0.5) * spread
+                _centerPos.z + (Math.random() - 0.5) * spread
             );
-            const newEnemy = EnemyManager.spawn(scene, new THREE.Vector3(playerPos.x, 0, playerPos.z), selectedType, spawnPos);
+
+            const newEnemy = EnemyManager.spawn(scene, _playerPosRef, selectedType, _spawnPos);
             if (newEnemy) spawned.push(newEnemy);
         }
 
         if (onSpawnEnemies) onSpawnEnemies(spawned);
         onClose();
-    };
+    }, [biome, countVal, spread, selectedType, onSpawnEnemies, onClose]);
 
+    // Zero-GC Input Handlers
+    const handleTypeClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        soundManager.playUiClick();
+        const type = e.currentTarget.dataset.type;
+        if (type) setSelectedType(type);
+    }, []);
+
+    const handleLocationClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+        soundManager.playUiClick();
+        const loc = e.currentTarget.dataset.loc;
+        if (loc) setBiome(loc as any);
+    }, []);
+
+    const handleCountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        setCountVal(parseInt(e.target.value));
+    }, []);
 
     return (
         <GameModalLayout
@@ -63,10 +93,11 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                 <div className="flex flex-col gap-2">
                     <label className="text-gray-400 uppercase text-sm">{t('ui.enemy_type')}</label>
                     <div className="flex gap-2 flex-wrap pb-2">
-                        {['WALKER', 'RUNNER', 'TANK', 'BOMBER'].map(type => (
+                        {ENEMY_TYPES.map(type => (
                             <button
                                 key={type}
-                                onClick={() => { soundManager.playUiClick(); setSelectedType(type); }}
+                                data-type={type}
+                                onClick={handleTypeClick}
                                 className={`px-4 py-2 border-2 border-zinc-700 transition-all duration-200 hover:scale-105 active:scale-95 mx-2 ${selectedType === type ? 'bg-zinc-800 text-black animate-tab-pulsate' : 'bg-black text-zinc-400 hover:border-gray-500'}`}
                             >
                                 {type}
@@ -83,7 +114,7 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                         min="1"
                         max="100"
                         value={countVal}
-                        onChange={(e) => setCountVal(parseInt(e.target.value))}
+                        onChange={handleCountChange}
                         className="w-full h-4 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-600 my-2"
                     />
                 </div>
@@ -92,10 +123,11 @@ export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStation
                 <div className="flex flex-col gap-2">
                     <label className="text-gray-400 uppercase text-sm">{t('ui.spawn_location')}</label>
                     <div className="grid grid-cols-2 gap-2 pb-2">
-                        {['NEAR', 'FOREST', 'FARM', 'VILLAGE'].map(loc => (
+                        {SPAWN_LOCATIONS.map(loc => (
                             <button
                                 key={loc}
-                                onClick={() => { soundManager.playUiClick(); setBiome(loc as any); }}
+                                data-loc={loc}
+                                onClick={handleLocationClick}
                                 className={`px-4 py-2 border-2 border-zinc-700 transition-all duration-200 hover:scale-105 active:scale-95 mx-2 ${biome === loc ? 'bg-zinc-800 text-black animate-tab-pulsate' : 'bg-black text-zinc-400 hover:border-gray-500'}`}
                             >
                                 {loc}

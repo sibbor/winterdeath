@@ -1,5 +1,69 @@
 import { WeaponType } from '../content/weapons';
 
+// --- HUD & ZERO-GC TYPES ---
+export interface HudVector2 {
+  x: number;
+  z: number;
+}
+
+export interface HudBossInfo {
+  active: boolean;
+  name: string;
+  hp: number;
+  maxHp: number;
+}
+
+export interface HudState {
+  hp: number;
+  maxHp: number;
+  stamina: number;
+  maxStamina: number;
+  ammo: number;
+  magSize: number;
+  score: number;
+  scrap: number;
+  multiplier: number;
+  activeWeapon: WeaponType;
+  isReloading: boolean;
+  boss: HudBossInfo | null;
+  bossSpawned: boolean;
+  bossDefeated: boolean;
+  familyFound: boolean;
+  familySignal: number;
+  level: number;
+  currentXp: number;
+  nextLevelXp: number;
+  throwableAmmo: number;
+  reloadProgress: number;
+  playerPos: HudVector2;
+  familyPos: HudVector2 | null;
+  bossPos: HudVector2 | null;
+  distanceTraveled: number;
+  kills: number;
+  spEarned: number;
+  skillPoints: number;
+  isDead: boolean;
+  isDriving: boolean;
+  vehicleSpeed: number;
+  throttleState: number;
+  sectorStats?: SectorState;
+  fps: number;
+  debugInfo?: any;
+  statusEffects: any[];
+  isDisoriented: boolean;
+  activePassives: string[];
+  activeBuffs: string[];
+  activeDebuffs: string[];
+  killerName?: string;
+  killerAttackName?: string;
+  killedByEnemy?: boolean;
+  mapItems?: any[];
+  debugMode?: boolean;
+  systems?: any[];
+}
+
+// --- CORE TYPES ---
+
 export enum GameScreen {
   CAMP = 'CAMP',
   BRIEFING = 'BRIEFING',
@@ -46,17 +110,17 @@ export interface PlayerStats {
   killsByType: Record<string, number>;
   totalScrapCollected: number;
   totalBulletsFired: number;
-  totalBulletsHit: number; // New
-  totalThrowablesThrown: number; // New
+  totalBulletsHit: number;
+  totalThrowablesThrown: number;
   totalDamageDealt: number;
   totalDamageTaken: number;
-  totalDistanceTraveled: number; // New: In meters
+  totalDistanceTraveled: number; // In meters
   cluesFound: string[]; // List of collected clue names (IDs)
-  collectiblesDiscovered: string[]; // New: List of collected 3D items
-  viewedCollectibles: string[]; // New: List of collectibles seen in Adventure Log
-  seenEnemies: string[]; // New: List of enemy types seen
-  seenBosses: string[]; // New: List of bosses seen
-  discoveredPOIs: string[]; // New: List of POI IDs visited
+  collectiblesDiscovered: string[]; // List of collected 3D items
+  viewedCollectibles: string[]; // List of collectibles seen in Adventure Log
+  seenEnemies: string[]; // List of enemy types seen
+  seenBosses: string[]; // List of bosses seen
+  discoveredPOIs: string[]; // List of POI IDs visited
   deaths: number;
   mostUsedWeapon: string;
   chestsOpened: number;
@@ -154,7 +218,7 @@ export type TriggerActionType =
 
 export interface TriggerAction {
   type: TriggerActionType;
-  payload?: any; // Flexible payload (e.g., { enemyType: 'TANK', count: 1 } or { soundId: 'scream' })
+  payload?: any; // Flexible payload
   delay?: number; // Delay in ms before execution
 }
 
@@ -259,7 +323,6 @@ export interface GameCanvasProps {
   loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType };
   weaponLevels: Record<WeaponType, number>;
   onDie: (stats: SectorStats, killer: string) => void;
-  onUpdateHUD: (data: any) => void;
   currentSector: number;
   debugMode: boolean;
   onSectorEnded: (stats: SectorStats) => void;

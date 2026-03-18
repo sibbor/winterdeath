@@ -8,11 +8,13 @@ import { MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../animation/PlayerAnimator';
+import { HudStore } from './HudStore';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _zeroV = new THREE.Vector3(0, 0, 0);
+const _blackColor = new THREE.Color(0x000000); // Used for safe color lerping without GC
 
 const _deathAnimState = {
     isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
@@ -78,7 +80,7 @@ export class DeathSystem implements System {
         const camera = this.cameraRef();
         const props = this.propsRef.current;
 
-        // Extrahera positionen en gång för att spara prestanda och göra koden renare
+        // Extract position once to save performance and clean up code
         const pgPos = playerGroup ? playerGroup.position : _zeroV;
 
         // --- 1. Phase Management ---
@@ -87,10 +89,11 @@ export class DeathSystem implements System {
             this.setDeathPhase('ANIMATION');
             soundManager.playPlayerDeath(PLAYER_CHARACTER.name);
 
+            // Fetch HUD data once for death state to avoid GC hits
             const hudData = HudSystem.getHudData(state, pgPos, fmMesh, input, now, props, this.distanceTraveledRef.current, camera) as any;
             hudData.hp = 0;
             hudData.isDead = true;
-            props.onUpdateHUD(hudData);
+            HudStore.update(hudData);
 
         } else if (this.deathPhaseRef.current === 'ANIMATION') {
             if (now - state.deathStartTime > 800) {
@@ -143,7 +146,7 @@ export class DeathSystem implements System {
                 this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'blood', 20);
             }
 
-            // [VINTERDÖD] Specialized Death Visuals
+            // Specialized Death Visuals
             if (isBurning && now % 500 < 50) {
                 this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'smoke', 1);
                 this.fxCallbacks.spawnPart(pgPos.x, 0.5, pgPos.z, 'spark', 1);
@@ -158,7 +161,7 @@ export class DeathSystem implements System {
                 }
             }
 
-            // [VINTERDÖD] Enhanced DROWNED & BURNED Visuals
+            // Enhanced DROWNED & BURNED Visuals
             if (state.playerDeathState === PlayerDeathState.DROWNED) {
                 // Sinking logic
                 state.deathVel.y = -0.5; // Slow sink
@@ -188,10 +191,10 @@ export class DeathSystem implements System {
                 const shrink = 1.0 - progress;
                 playerMesh.scale.setScalar(shrink);
 
-                // Lerp color to black (assuming we can access materials)
+                // Lerp color to black using the pre-allocated _blackColor
                 playerMesh.traverse((child: any) => {
                     if (child.isMesh && child.material && child.material.color) {
-                        child.material.color.lerp(_zeroV, progress * 0.1); // _zeroV is black essentially
+                        child.material.color.lerp(_blackColor, progress * 0.1);
                     }
                 });
 

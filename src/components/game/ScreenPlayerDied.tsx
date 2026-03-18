@@ -1,33 +1,40 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
 import { PLAYER_CHARACTER } from '../../content/constants';
+import { HudStore } from '../../core/systems/HudStore';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
-    killerName: string;
-    attackName?: string;
-    killedByEnemy?: boolean;
     isMobileDevice?: boolean;
 }
 
-const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, killerName, attackName, killedByEnemy, isMobileDevice }) => {
+const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobileDevice }) => {
     const [isVisible, setIsVisible] = useState(false);
+
+    // Fetch data once on mount. Use fallbacks to prevent .toUpperCase() crashes on undefined.
+    const hud = HudStore.getData();
+    const {
+        killerName = 'UNKNOWN',
+        killerAttackName: attackName = '',
+        killedByEnemy = false
+    } = hud;
 
     useEffect(() => {
         soundManager.playUiConfirm();
-        setTimeout(() => setIsVisible(true), 10);
+        const tId = setTimeout(() => setIsVisible(true), 10);
+        return () => clearTimeout(tId);
     }, []);
 
-    // Get the correct phrasing based on cause of death
-    const deathPhrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
-    
-    // Format the attacker/cause display
-    // Example: WALKER (Biting) or DROWNING
-    const killerDisplayName = killedByEnemy && attackName 
-        ? `${killerName.toUpperCase()} (${t(`attacks.${attackName}.title`)})` 
-        : killerName.toUpperCase();
+    // Zero-GC: Memoize string formatting so it doesn't reallocate if the component re-renders (e.g. on resize)
+    const { deathPhrase, killerDisplayName } = useMemo(() => {
+        const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
+        const displayName = killedByEnemy && attackName
+            ? `${killerName.toUpperCase()} (${t(`attacks.${attackName}.title`)})`
+            : killerName.toUpperCase();
+
+        return { deathPhrase: phrase, killerDisplayName: displayName };
+    }, [killedByEnemy, killerName, attackName]);
 
     return (
         <div

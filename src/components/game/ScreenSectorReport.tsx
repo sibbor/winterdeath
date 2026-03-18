@@ -73,10 +73,10 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     }
 
     return (
-        <GameModalLayout 
-            title={t('ui.sector_report')} 
-            maxWidthClass="max-w-7xl" 
-            isMobile={isMobileDevice}
+        <GameModalLayout
+            title={t('ui.sector_report')}
+            maxWidthClass="max-w-7xl"
+            isMobileDevice={isMobileDevice}
             onClose={showRespawn ? onReturnCamp : undefined}
             cancelLabel={showRespawn ? t('ui.return_camp') : undefined}
             onConfirm={showRespawn ? onRetry : onReturnCamp}
@@ -249,8 +249,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     {/* Incoming Breakdown */}
                     <div className="flex flex-col h-full">
                         <h4 className="text-red-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
-                             <div className="w-2 h-2 bg-red-500"></div>
-                             {t('ui.incoming_damage_breakdown')}
+                            <div className="w-2 h-2 bg-red-500"></div>
+                            {t('ui.incoming_damage_breakdown')}
                         </h4>
                         <div className="space-y-2 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
                             {Object.keys(stats.incomingDamageBreakdown || {}).length > 0 ? (
@@ -286,21 +286,21 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     {/* Outgoing Breakdown */}
                     <div className="flex flex-col h-full">
                         <h4 className="text-green-500 font-bold uppercase text-sm tracking-widest mb-4 flex items-center gap-2">
-                             <div className="w-2 h-2 bg-green-500"></div>
-                             {t('ui.outgoing_damage_breakdown')}
+                            <div className="w-2 h-2 bg-green-500"></div>
+                            {t('ui.outgoing_damage_breakdown')}
                         </h4>
                         <div className="space-y-1 overflow-y-auto max-h-48 custom-scrollbar pr-2 flex-1">
                             {Object.keys(stats.outgoingDamageBreakdown || {}).length > 0 ? (
                                 Object.entries(stats.outgoingDamageBreakdown!)
                                     .sort((a, b) => (b[1] as any) - (a[1] as any))
                                     .map(([weapon, amount]) => (
-                                    <div key={weapon} className="flex justify-between items-center py-1 border-b border-gray-800/30 border-dashed">
-                                        <span className="text-xs font-bold text-white uppercase tracking-tighter">
-                                            {t(`weapons.${weapon.toLowerCase()}`) !== `weapons.${weapon.toLowerCase()}` ? t(`weapons.${weapon.toLowerCase()}`) : weapon}
-                                        </span>
-                                        <span className="text-sm font-mono text-green-400">+{Math.floor(amount as any)}</span>
-                                    </div>
-                                ))
+                                        <div key={weapon} className="flex justify-between items-center py-1 border-b border-gray-800/30 border-dashed">
+                                            <span className="text-xs font-bold text-white uppercase tracking-tighter">
+                                                {t(`weapons.${weapon.toLowerCase()}`) !== `weapons.${weapon.toLowerCase()}` ? t(`weapons.${weapon.toLowerCase()}`) : weapon}
+                                            </span>
+                                            <span className="text-sm font-mono text-green-400">+{Math.floor(amount as any)}</span>
+                                        </div>
+                                    ))
                             ) : (
                                 <div className="text-xs text-gray-700 font-mono uppercase italic">{t('ui.none')}</div>
                             )}

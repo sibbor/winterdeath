@@ -96,7 +96,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             confirmLabel={t('ui.close')}
             fullHeight={true}
             canConfirm={hasChanges}
-            isMobile={isMobileDevice}
+            isMobileDevice={isMobileDevice}
             maxWidthClass="max-w-7xl"
             transparent={true}
             showCloseButton={false}
@@ -146,12 +146,12 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                             const catKey = 'categories.' + cat.toLowerCase();
 
                             return (
-                                <button 
-                                    key={cat} 
+                                <button
+                                    key={cat}
                                     onClick={() => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
                                     className={`px-4 md:px-8 py-2 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-3 group whitespace-nowrap
-                                        ${isActive 
-                                            ? 'bg-white text-black font-black italic' 
+                                        ${isActive
+                                            ? 'bg-white text-black font-black italic'
                                             : 'bg-zinc-900/40 text-zinc-500 hover:bg-zinc-800'
                                         }
                                     `}
@@ -226,14 +226,14 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                                 <span className="opacity-60">{t('ui.range')}</span>
                                                 <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                                             </div>
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
-                                                        <span className="opacity-60">{t('ui.magazine')}</span>
-                                                        <span className="text-white font-bold">{weapon.magSize > 0 ? weapon.magSize : '-'}</span>
-                                                    </div>
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
-                                                        <span className="opacity-60">{t('ui.reload')}</span>
-                                                        <span className="text-white font-bold">{weapon.reloadTime > 0 ? `${(weapon.reloadTime / 1000).toFixed(1)}s` : '-'}</span>
-                                                    </div>
+                                            <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                                <span className="opacity-60">{t('ui.magazine')}</span>
+                                                <span className="text-white font-bold">{weapon.magSize > 0 ? weapon.magSize : '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                                <span className="opacity-60">{t('ui.reload')}</span>
+                                                <span className="text-white font-bold">{weapon.reloadTime > 0 ? `${(weapon.reloadTime / 1000).toFixed(1)}s` : '-'}</span>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -243,7 +243,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                                 onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
                                                 disabled={!canAfford}
                                                 className={`flex-1 ${isMobileDevice ? 'h-8' : 'h-12'} font-black uppercase border-2 transition-all flex flex-col items-center justify-center transform active:scale-95
-                                                    ${canAfford 
+                                                    ${canAfford
                                                         ? 'bg-yellow-950/20 text-yellow-500 border-yellow-500 hover:bg-yellow-950/40 shadow-[0_0_15px_rgba(234,179,8,0.2)]'
                                                         : 'bg-black text-gray-600 border-gray-800 cursor-not-allowed'
                                                     }

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { InputState } from '../../core/engine/InputManager';
 import { t } from '../../utils/i18n';
 import { useOrientation } from '../../hooks/useOrientation';
@@ -8,6 +8,9 @@ interface TouchControllerProps {
     onPause?: () => void;
     onOpenMap?: () => void;
 }
+
+const STICK_RADIUS = 60; // Slightly larger for better control
+const MAX_DIST = 50;
 
 const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
@@ -20,25 +23,49 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
     const rightTouchId = useRef<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const STICK_RADIUS = 60; // Slightly larger for better control
-    const MAX_DIST = 50;
-
     // Helper to check if a touch is within a button's bounding rect
     const isInteractiveElement = (target: EventTarget) => {
         return (target as HTMLElement).tagName === 'BUTTON';
     };
 
-    // --- React Event Handlers (Safe with touch-action: none) ---
+    const handleAction = useCallback((action: 'r' | 'space' | 'e' | 'f', pressed: boolean) => {
+        const keyMap = { r: 'r', space: ' ', e: 'e', f: 'f' };
+        const key = keyMap[action];
 
-    const handleTouchStart = (e: React.TouchEvent) => {
+        if (action === 'r') inputState.r = pressed;
+        if (action === 'space') inputState.space = pressed;
+        if (action === 'e') inputState.e = pressed;
+        if (action === 'f') inputState.f = pressed;
+
+        // Dispatch events for systems listening to keydown/keyup
+        const eventType = pressed ? 'keydown' : 'keyup';
+        window.dispatchEvent(new KeyboardEvent(eventType, { key, bubbles: true }));
+    }, [inputState]);
+
+    // Zero-GC React Event Handlers
+
+    const handleActionTouchStart = useCallback((e: React.TouchEvent<HTMLButtonElement>) => {
+        e.stopPropagation();
+        const action = e.currentTarget.dataset.action as 'r' | 'space' | 'e' | 'f';
+        if (action) handleAction(action, true);
+    }, [handleAction]);
+
+    const handleActionTouchEnd = useCallback((e: React.TouchEvent<HTMLButtonElement>) => {
+        e.stopPropagation();
+        const action = e.currentTarget.dataset.action as 'r' | 'space' | 'e' | 'f';
+        if (action) handleAction(action, false);
+    }, [handleAction]);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
         if (e.cancelable) e.preventDefault();
 
-        const touches = Array.from(e.changedTouches);
+        // Iterate TouchList directly instead of Array.from to avoid GC allocation
+        const touches = e.changedTouches;
         const w = window.innerWidth;
         const h = window.innerHeight;
 
         for (let i = 0; i < touches.length; i++) {
-            const t: any = touches[i];
+            const t = touches[i];
             if (isInteractiveElement(t.target)) return;
 
             const x = t.clientX;
@@ -55,97 +82,87 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 setRightStick({ active: true, center: { x, y }, curr: { x, y } });
             }
         }
-    };
+    }, []);
 
-    const handleTouchMove = (e: React.TouchEvent) => {
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
         // CRITICAL: This prevents the browser from intercepting the dual-touch as a zoom/scroll
         if (e.cancelable) e.preventDefault();
 
-        const touches = Array.from(e.changedTouches);
+        const touches = e.changedTouches;
 
         for (let i = 0; i < touches.length; i++) {
-            const t: any = touches[i];
+            const t = touches[i];
+
             if (t.identifier === leftTouchId.current) {
-                // We use the state's center. 
-                const center = leftStick.center;
-                let dx = t.clientX - center.x;
-                let dy = t.clientY - center.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                setLeftStick(prev => {
+                    const center = prev.center;
+                    let dx = t.clientX - center.x;
+                    let dy = t.clientY - center.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist > MAX_DIST) {
-                    const angle = Math.atan2(dy, dx);
-                    dx = Math.cos(angle) * MAX_DIST;
-                    dy = Math.sin(angle) * MAX_DIST;
-                }
+                    if (dist > MAX_DIST) {
+                        const angle = Math.atan2(dy, dx);
+                        dx = Math.cos(angle) * MAX_DIST;
+                        dy = Math.sin(angle) * MAX_DIST;
+                    }
 
-                setLeftStick(prev => ({ ...prev, curr: { x: center.x + dx, y: center.y + dy } }));
+                    const nx = dx / MAX_DIST;
+                    const ny = dy / MAX_DIST;
+                    inputState.joystickMove.set(nx, ny);
 
-                const nx = dx / MAX_DIST;
-                const ny = dy / MAX_DIST;
-                inputState.joystickMove.set(nx, ny);
+                    return { active: true, center, curr: { x: center.x + dx, y: center.y + dy } };
+                });
             }
 
             if (t.identifier === rightTouchId.current) {
-                const center = rightStick.center;
-                let dx = t.clientX - center.x;
-                let dy = t.clientY - center.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                setRightStick(prev => {
+                    const center = prev.center;
+                    let dx = t.clientX - center.x;
+                    let dy = t.clientY - center.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist > MAX_DIST) {
-                    const angle = Math.atan2(dy, dx);
-                    dx = Math.cos(angle) * MAX_DIST;
-                    dy = Math.sin(angle) * MAX_DIST;
-                }
+                    if (dist > MAX_DIST) {
+                        const angle = Math.atan2(dy, dx);
+                        dx = Math.cos(angle) * MAX_DIST;
+                        dy = Math.sin(angle) * MAX_DIST;
+                    }
 
-                setRightStick(prev => ({ ...prev, curr: { x: center.x + dx, y: center.y + dy } }));
+                    const nx = dx / MAX_DIST;
+                    const ny = dy / MAX_DIST;
+                    inputState.joystickAim.set(nx, ny);
 
-                const nx = dx / MAX_DIST;
-                const ny = dy / MAX_DIST;
-                inputState.joystickAim.set(nx, ny);
+                    if (dist > 5) {
+                        inputState.fire = true;
+                    } else {
+                        inputState.fire = false;
+                    }
 
-                if (dist > 5) {
-                    inputState.fire = true;
-                } else {
-                    inputState.fire = false;
-                }
+                    return { active: true, center, curr: { x: center.x + dx, y: center.y + dy } };
+                });
             }
         }
-    };
+    }, [inputState]);
 
-    const handleTouchEnd = (e: React.TouchEvent) => {
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
         if (e.cancelable) e.preventDefault();
 
-        const touches = Array.from(e.changedTouches);
+        const touches = e.changedTouches;
 
         for (let i = 0; i < touches.length; i++) {
-            const t: any = touches[i];
+            const t = touches[i];
             if (t.identifier === leftTouchId.current) {
                 leftTouchId.current = null;
-                setLeftStick(prev => ({ ...prev, active: false, curr: prev.center }));
+                setLeftStick(prev => ({ active: false, center: prev.center, curr: prev.center }));
                 inputState.joystickMove.set(0, 0);
             }
             if (t.identifier === rightTouchId.current) {
                 rightTouchId.current = null;
-                setRightStick(prev => ({ ...prev, active: false, curr: prev.center }));
+                setRightStick(prev => ({ active: false, center: prev.center, curr: prev.center }));
                 inputState.joystickAim.set(0, 0);
                 inputState.fire = false;
             }
         }
-    };
-
-    const handleAction = (action: 'r' | 'space' | 'e' | 'f', pressed: boolean) => {
-        const keyMap = { r: 'r', space: ' ', e: 'e', f: 'f' };
-        const key = keyMap[action];
-
-        if (action === 'r') inputState.r = pressed;
-        if (action === 'space') inputState.space = pressed;
-        if (action === 'e') inputState.e = pressed;
-        if (action === 'f') inputState.f = pressed;
-
-        // Dispatch events for systems listening to keydown/keyup
-        const eventType = pressed ? 'keydown' : 'keyup';
-        window.dispatchEvent(new KeyboardEvent(eventType, { key, bubbles: true }));
-    };
+    }, [inputState]);
 
     return (
         <div
@@ -157,7 +174,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
             onTouchEnd={handleTouchEnd}
             onTouchCancel={handleTouchEnd}
         >
-            {/* Joysticks... (Keep as is for functionality) */}
+            {/* Joysticks */}
             {leftStick.active && (
                 <div
                     className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none"
@@ -211,11 +228,12 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 {/* Row for Flashlight (Above Dash) */}
                 <div className="flex justify-end">
                     <button
+                        data-action="f"
                         className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity"
-                        onTouchStart={(e) => { e.stopPropagation(); handleAction('f', true); }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('f', false); }}
+                        onTouchStart={handleActionTouchStart}
+                        onTouchEnd={handleActionTouchEnd}
                     >
-                        <img src="/assets/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain" />
+                        <img src="/assets/ui/icon_flashlight.png" alt="F" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>
 
@@ -223,20 +241,22 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 <div className="flex items-end gap-2">
                     {/* Reload (R) - 80% ish size of Dash */}
                     <button
+                        data-action="r"
                         className="w-16 h-16 md:w-20 md:h-20 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 opacity-60 active:opacity-100 transition-opacity"
-                        onTouchStart={(e) => { e.stopPropagation(); handleAction('r', true); }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('r', false); }}
+                        onTouchStart={handleActionTouchStart}
+                        onTouchEnd={handleActionTouchEnd}
                     >
-                        <img src="/assets/ui/icon_reload.png" alt="R" className="w-full h-full object-contain" />
+                        <img src="/assets/ui/icon_reload.png" alt="R" className="w-full h-full object-contain pointer-events-none" />
                     </button>
 
                     {/* Dash (Space) - Primary control */}
                     <button
+                        data-action="space"
                         className="w-20 h-20 md:w-24 md:h-24 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-[0_0_20px_rgba(255,0,0,0.4)] opacity-80 active:opacity-100 transition-opacity"
-                        onTouchStart={(e) => { e.stopPropagation(); handleAction('space', true); }}
-                        onTouchEnd={(e) => { e.stopPropagation(); handleAction('space', false); }}
+                        onTouchStart={handleActionTouchStart}
+                        onTouchEnd={handleActionTouchEnd}
                     >
-                        <img src="/assets/ui/icon_dash.png" alt="Dash" className="w-full h-full object-contain" />
+                        <img src="/assets/ui/icon_dash.png" alt="Dash" className="w-full h-full object-contain pointer-events-none" />
                     </button>
                 </div>
             </div>

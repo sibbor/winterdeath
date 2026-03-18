@@ -3,7 +3,7 @@
  * Utility function to check if the current device is a mobile device.
  * Checks both user agent and screen width.
  */
-export const isMobile = (): boolean => {
+export const checkIsMobileDevice = (): boolean => {
     if (typeof window === 'undefined') return false;
 
     // Check user agent for common mobile patterns

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { GameCanvasProps } from '../../../types';
 import { UIState } from './useGameSessionState';
 
@@ -6,10 +6,6 @@ import TouchController from '../../ui/TouchController';
 import CinematicBubble from '../CinematicBubble';
 import GameUI from '../GameUI';
 import { t } from '../../../utils/i18n';
-import { BOSSES } from '../../../content/constants';
-import DebugDisplay from '../../ui/core/DebugDisplay';
-import DamageVignette from '../../ui/hud/DamageVignette';
-import { HEALTH_CRITICAL_THRESHOLD } from '../../../content/constants';
 
 interface GameSessionUIProps {
     refs: any;
@@ -34,28 +30,41 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
 
     const state = refs.stateRef.current || {} as any;
 
+    // Zero-GC Callbacks to prevent re-allocating inline functions on every render
+    const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        if (uiState.cinematicActive && uiState.currentLine) {
+            e.stopPropagation();
+            callbacks.triggerCinematicNext();
+            return;
+        }
+        if (gameProps.isRunning && refs.containerRef.current && uiState.deathPhase === 'NONE') {
+            callbacks.requestPointerLock();
+        }
+    }, [uiState.cinematicActive, uiState.currentLine, uiState.deathPhase, gameProps.isRunning, callbacks, refs]);
+
+    const handlePauseTouch = useCallback(() => {
+        callbacks.onPauseToggle(true);
+    }, [callbacks]);
+
+    const handleOpenMapTouch = useCallback(() => {
+        callbacks.openMap();
+    }, [callbacks]);
+
     return (
-        <div className="absolute inset-0 w-full h-full">
+        <div className="absolute inset-0 w-full h-full pointer-events-none">
+            {/* The main click-catcher for pointer lock / cinematic advance */}
             <div
                 ref={refs.containerRef}
-                className={`absolute inset-0`}
-                onClick={(e) => {
-                    if (uiState.cinematicActive && uiState.currentLine) {
-                        e.stopPropagation();
-                        callbacks.triggerCinematicNext();
-                        return;
-                    }
-                    if (gameProps.isRunning && refs.containerRef.current && uiState.deathPhase === 'NONE') {
-                        callbacks.requestPointerLock();
-                    }
-                }}
+                className="absolute inset-0 pointer-events-auto"
+                onClick={handleContainerClick}
             />
 
+            {/* Mobile Touch Controls */}
             {gameProps.isMobileDevice && gameProps.isRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && refs.engineRef.current && (
                 <TouchController
                     inputState={refs.engineRef.current.input.state}
-                    onPause={() => callbacks.onPauseToggle(true)}
-                    onOpenMap={() => callbacks.openMap()}
+                    onPause={handlePauseTouch}
+                    onOpenMap={handleOpenMapTouch}
                 />
             )}
 
@@ -79,13 +88,6 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
                 isMobileDevice={gameProps.isMobileDevice}
             />
 
-            <DamageVignette 
-                hp={state.hp || 0} 
-                maxHp={state.maxHp || 100} 
-                threshold={HEALTH_CRITICAL_THRESHOLD} 
-                isDead={uiState.deathPhase !== 'NONE'}
-            />
-
             {!uiState.isSectorLoading && !uiState.cinematicActive && !uiState.forceHideHUD && (
                 <GameUI
                     onCloseClue={() => { }}
@@ -94,29 +96,7 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
                 />
             )}
 
-
-            /** TODO: add UI support for zombie waves */
-            {uiState.zombieWaveActive && (
-                <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-                    <div className="relative text-center">
-                        <h2 className="text-white text-6xl md:text-8xl font-black italic tracking-tighter uppercase hud-text-glow"
-                            style={{
-                                animation: 'slam 0.4s cubic-bezier(0.1, 0.9, 0.2, 1) forwards',
-                                textShadow: '0 0 40px rgba(0,0,0,1)',
-                                color: '#ff3333'
-                            }}>
-                            {t('zombie_wave')}
-                        </h2>
-                    </div>
-                </div>
-            )}
-
             <style>{`
-            @keyframes slam {
-                0% { transform: scale(2); opacity: 0; }
-                70% { transform: scale(1); opacity: 1; }
-                100% { transform: scale(1); opacity: 1; }
-            }
             @keyframes fadeIn {
                 0% { opacity: 0; }
                 100% { opacity: 1; }

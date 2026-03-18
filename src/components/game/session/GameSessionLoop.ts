@@ -15,6 +15,7 @@ import { EnemyManager } from '../../../core/EnemyManager';
 import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../../content/weapons';
 import { EnemyDeathState } from '../../../types/enemy';
 import { DamageType } from '../../../types/combat';
+import { HudStore } from '../../../core/systems/HudStore';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -71,7 +72,19 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
     _triggerOptionsScratch.removeVisual = (id: string) => {
         const scene = engine.scene;
-        const visual = scene.getObjectByName(`clue_visual_${id}`) || scene.children.find(o => o.userData.id === id && o.userData.type === 'clue_visual');
+        let visual = scene.getObjectByName(`clue_visual_${id}`);
+
+        // Zero-GC replacement for .find()
+        if (!visual) {
+            for (let i = 0; i < scene.children.length; i++) {
+                const child = scene.children[i];
+                if (child.userData.id === id && child.userData.type === 'clue_visual') {
+                    visual = child;
+                    break;
+                }
+            }
+        }
+
         if (visual) {
             visual.traverse((child) => {
                 if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight || child instanceof THREE.DirectionalLight) {
@@ -172,6 +185,28 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
     state.applyDamage = _gameContext.applyDamage;
 
+    // Hoist dynamic pos resolution to avoid allocating a new function every frame
+    _triggerOptionsScratch.resolveDynamicPos = (familyId?: number, ownerId?: string) => {
+        if (familyId !== undefined) {
+            const members = refs.activeFamilyMembers.current;
+            for (let i = 0; i < members.length; i++) {
+                if (members[i].id === familyId) return members[i].mesh?.position || null;
+            }
+            return null;
+        }
+        if (ownerId) {
+            const scene = engine.scene;
+            const obj = scene.getObjectByName(ownerId);
+            if (obj) return obj.position;
+
+            for (let i = 0; i < scene.children.length; i++) {
+                if (scene.children[i].userData.id === ownerId) return scene.children[i].position;
+            }
+            return null;
+        }
+        return null;
+    };
+
     return (dt: number) => {
         if (!refs.isMounted.current || refs.isBuildingSectorRef.current) return;
 
@@ -239,13 +274,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             state.drawCalls = engine.renderer.info.render.calls;
             state.triangles = engine.renderer.info.render.triangles;
 
-            if (propsRef.current.onUpdateHUD) {
-                propsRef.current.onUpdateHUD({
-                    ...hudData,
-                    debugMode: propsRef.current.debugMode,
-                    systems: session.getSystems()
-                });
-            }
+            // Append data directly to avoid Object Spread allocation
+            (hudData as any).debugMode = propsRef.current.debugMode;
+            (hudData as any).systems = session.getSystems();
+
+            HudStore.update(hudData);
         }
 
         // 3. Boss Intro overrides
@@ -382,7 +415,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             session.inputDisabled = !!propsRef.current.disableInput || (!!refs.cameraOverrideRef.current?.active);
         }
 
-        session.isMobile = !!propsRef.current.isMobileDevice;
+        session.isMobileDevice = !!propsRef.current.isMobileDevice;
         session.debugMode = propsRef.current.debugMode;
         session.cameraAngle = engine.camera.angle;
 
@@ -572,19 +605,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.collectedCluesRef = (activeCallbacks as any).collectedCluesRef || refs.collectedCluesRef;
-        _triggerOptionsScratch.resolveDynamicPos = (familyId?: number, ownerId?: string) => {
-            if (familyId !== undefined) {
-                const members = refs.activeFamilyMembers.current;
-                const fm = members.find((m: any) => m.id === familyId);
-                return fm?.mesh?.position || null;
-            }
-            if (ownerId) {
-                const scene = engine.scene;
-                const obj = scene.getObjectByName(ownerId) || scene.children.find(o => o.userData.id === ownerId);
-                return obj?.position || null;
-            }
-            return null;
-        };
 
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
