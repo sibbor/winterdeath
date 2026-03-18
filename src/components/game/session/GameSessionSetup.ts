@@ -195,7 +195,12 @@ export class GameSessionSetup {
 
                 // Save references for the game loop
                 refs.skyLightRef.current = skyLight;
-                if (!refs.skyLightOffsetRef) refs.skyLightOffsetRef = { current: new THREE.Vector3() };
+
+                // Check if .current is null, not the ref object itself
+                if (!refs.skyLightOffsetRef.current) {
+                    refs.skyLightOffsetRef.current = new THREE.Vector3();
+                }
+
                 refs.skyLightOffsetRef.current.copy(skyLight.position);
             }
 
