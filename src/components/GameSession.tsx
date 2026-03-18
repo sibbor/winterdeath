@@ -15,6 +15,7 @@ import { requestWakeLock, releaseWakeLock } from '../utils/device';
 import { FXSystem } from '../core/systems/FXSystem';
 import { aggregateStats } from '../core/ProgressionManager';
 import { SectorSystem } from '../core/systems/SectorSystem';
+import { HudStore } from '../core/systems/HudStore';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -474,9 +475,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (props.onBossIntroStateChange) props.onBossIntroStateChange(val);
                 },
                 setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
-                setCurrentLine: (val: any) => updateUiState({ currentLine: val }),
+                setCurrentLine: (val: any) => {
+                    updateUiState({ currentLine: val });
+                    HudStore.update({ ...HudStore.getData(), currentLine: val, cinematicActive: refs.gameSessionRef.current ? refs.gameSessionRef.current.getSystem('cinematic').cinematicRef.current.active : false });
+                },
                 setCinematicActive: (val: boolean) => {
                     updateUiState({ cinematicActive: val });
+                    HudStore.update({ ...HudStore.getData(), cinematicActive: val });
                     if (props.onDialogueStateChange) props.onDialogueStateChange(val);
                 },
                 setInteractionType: (val: any) => updateUiState({ interactionType: val }),

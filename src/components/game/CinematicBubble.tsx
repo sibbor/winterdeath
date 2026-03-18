@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { t } from '../../utils/i18n';
+import { HudStore } from '../../core/systems/HudStore';
 import { getSpeakerColor } from '../../utils/assets';
 
 interface CinematicBubbleProps {
-    text: string;
-    speakerName: string;
-    isVisible: boolean;
     isMobileDevice?: boolean;
     onComplete?: () => void;
 }
@@ -18,7 +17,10 @@ interface TextToken {
     content: string;
 }
 
-const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ text, speakerName, isVisible, isMobileDevice, onComplete }, ref) => {
+const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
+    const [bubbleData, setBubbleData] = useState<{ text: string, speakerName: string, isVisible: boolean }>({ text: '', speakerName: '', isVisible: false });
+    const { text, speakerName, isVisible } = bubbleData;
+    
     const [visibleCount, setVisibleCount] = useState(0);
     const [opacity, setOpacity] = useState(0);
     const [isFinished, setIsFinished] = useState(false);
@@ -62,6 +64,18 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     // For simplicity, we count string length including tokens, but we strip the delimiters in render.
     // Actually, let's count characters as they appear on screen.
     const fullTextLength = tokens.reduce((acc, token) => acc + token.content.length, 0);
+
+    useEffect(() => {
+        const unsubscribe = HudStore.subscribe((data) => {
+            const hasLine = data.cinematicActive && data.currentLine;
+            setBubbleData({
+                text: hasLine ? t(data.currentLine.text) : '',
+                speakerName: hasLine ? data.currentLine.speaker : '',
+                isVisible: !!hasLine
+            });
+        });
+        return unsubscribe;
+    }, []);
 
     useEffect(() => {
         if (isVisible && text) {

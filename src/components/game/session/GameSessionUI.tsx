@@ -82,9 +82,6 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
 
             <CinematicBubble
                 ref={refs.bubbleRef}
-                text={uiState.currentLine ? t(uiState.currentLine.text) : ""}
-                speakerName={uiState.currentLine ? uiState.currentLine.speaker : ""}
-                isVisible={uiState.cinematicActive && uiState.currentLine !== null}
                 isMobileDevice={gameProps.isMobileDevice}
             />
 
