@@ -364,9 +364,18 @@ export class GameSessionSetup {
 
             // --- Family Member Spawning ---
             const fSpawn = currentSector.familySpawn;
-            if (props.rescuedFamilyIndices) {
-                for (let i = 0; i < props.rescuedFamilyIndices.length; i++) {
-                    const idx = props.rescuedFamilyIndices[i];
+            const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
+            
+            // Debug Mode Override: Automatically rescue previous family members for testing
+            if (props.debugMode && props.currentSector >= 1 && rescuedIndices.length === 0) {
+                for (let i = 0; i < props.currentSector; i++) {
+                    if (!rescuedIndices.includes(i)) rescuedIndices.push(i);
+                }
+            }
+
+            if (rescuedIndices.length > 0) {
+                for (let i = 0; i < rescuedIndices.length; i++) {
+                    const idx = rescuedIndices[i];
                     const theme = SECTOR_THEMES[idx];
                     if (theme && theme.familyMemberId !== undefined) {
                         const fmData = FAMILY_MEMBERS[theme.familyMemberId];
@@ -384,7 +393,7 @@ export class GameSessionSetup {
             if (!props.familyAlreadyRescued) {
                 const theme = SECTOR_THEMES[props.currentSector];
                 const fmId = theme ? theme.familyMemberId : 0;
-                if (!props.rescuedFamilyIndices.includes(props.currentSector)) {
+                if (!rescuedIndices.includes(props.currentSector)) {
                     const fmData = FAMILY_MEMBERS[fmId];
                     if (fmData) {
                         const mesh = ModelFactory.createFamilyMember(fmData);
