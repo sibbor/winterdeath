@@ -26,6 +26,13 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
         return () => clearTimeout(tId);
     }, []);
 
+    // Allow pressing Enter to continue
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') onContinue(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onContinue]);
+
     // Zero-GC: Memoize string formatting so it doesn't reallocate if the component re-renders (e.g. on resize)
     const { deathPhrase, killerDisplayName } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');

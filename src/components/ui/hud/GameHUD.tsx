@@ -415,10 +415,22 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     )}
                 </div>
 
-                {/* Status Effects (Bottom Left) */}
+                {/* Status Effects (Bottom Left) — Passives → Buffs → Debuffs, always left-anchored */}
                 <div className="absolute bottom-8 left-8 flex flex-col gap-3">
                     <div className="flex gap-2 mb-1">
-                        {/* Buffs */}
+                        {/* Passives (purple, no pulse — permanent) */}
+                        {activePassives.map((type: string, i: number) => (
+                            <div
+                                key={`passive-${i}`}
+                                className="w-8 h-8 flex items-center justify-center bg-black/80 border-2 border-purple-500 rounded-sm shadow-[0_0_8px_rgba(168,85,247,0.4)] pointer-events-auto cursor-help"
+                                data-tooltip={t(`attacks.${type}.title`)}
+                                onMouseEnter={handleMouseEnter}
+                                onMouseLeave={handleMouseLeave}
+                            >
+                                <span className="text-sm">{getStatusIcon(type)}</span>
+                            </div>
+                        ))}
+                        {/* Buffs (green) */}
                         {activeBuffs.map((type: string, i: number) => (
                             <div
                                 key={`buff-${i}`}
@@ -430,7 +442,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                                 <span className="text-sm">{getStatusIcon(type)}</span>
                             </div>
                         ))}
-                        {/* Debuffs */}
+                        {/* Debuffs (red) */}
                         {activeDebuffs.map((type: string, i: number) => (
                             <div
                                 key={`debuff-${i}`}
@@ -444,7 +456,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         ))}
                     </div>
 
-                    {/* Detailed timers for Debuffs */}
+                    {/* Detailed timers for active Debuffs */}
                     {statusEffects.map((eff: any, i: number) => (
                         <div
                             key={`timer-${i}`}
@@ -462,6 +474,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         </div>
                     ))}
                 </div>
+
 
                 {/* Tooltip Popup */}
                 {tooltipContent && (
