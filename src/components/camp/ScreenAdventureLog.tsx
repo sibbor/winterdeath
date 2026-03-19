@@ -125,7 +125,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
                         {tabs.map(tab => {
                             const isActive = activeTab === tab.id;
-                            const pulseColor = themeColor; 
+                            const pulseColor = themeColor;
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                                     className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
@@ -136,8 +136,8 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
                                     style={isActive ? {
-                                        backgroundColor: darkenColor(pulseColor, 20), 
-                                        '--pulse-color': pulseColor 
+                                        backgroundColor: darkenColor(pulseColor, 20),
+                                        '--pulse-color': pulseColor
                                     } as any : {}}
                                 >
                                     <span>{tab.label}</span>
@@ -273,7 +273,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                             )}
                         </div>
                         <div className="space-y-6">
-                            <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
+                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-4 rounded border border-gray-800">
                                 <div className="text-center">
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.health')}</div>
                                     <div className="text-2xl font-bold text-white font-mono">{data.hp}</div>
@@ -284,13 +284,13 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                 </div>
                                 <div></div>
                             </div>
-                            <p className="text-base text-gray-300 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: itemColor }}>
+                            <p className="text-sm text-gray-300 italic leading-relaxed pl-4 py-1">
                                 "{getEnemyDescription(key)}"
                             </p>
 
                             {data.attacks && data.attacks.length > 0 && (
                                 <div className="space-y-2">
-                                    <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                    <div className="text-xs font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
                                         <div className="h-[1px] flex-1 bg-gray-800"></div>
                                         {t('ui.combat')}
                                         <div className="h-[1px] flex-1 bg-gray-800"></div>
@@ -305,19 +305,19 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                                         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                                                             {t(`attacks.${attackKey}.title`) !== `attacks.${attackKey}.title` ? t(`attacks.${attackKey}.title`) : attack.type}
                                                         </span>
-                                                        <div className="flex gap-4">
+                                                        <div className="flex gap-2">
                                                             <div className="flex items-center gap-1">
-                                                                <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.damage')}</span>
+                                                                <span className="text-xs text-gray-600 uppercase font-black">{t('ui.damage')}</span>
                                                                 <span className="text-xs font-mono text-red-400">{attack.damage}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1">
-                                                                <span className="text-[9px] text-gray-600 uppercase font-black">{t('ui.range')}</span>
+                                                                <span className="text-xs text-gray-600 uppercase font-black">{t('ui.range')}</span>
                                                                 <span className="text-xs font-mono text-blue-400">{attack.range}</span>
                                                             </div>
                                                         </div>
                                                     </div>
                                                     {hasDesc && (
-                                                        <p className="text-[10px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">
+                                                        <p className="text-[12px] text-gray-500 italic mt-1 line-clamp-3 leading-tight">
                                                             {t(`attacks.${attackKey}.description`)}
                                                         </p>
                                                     )}
@@ -372,7 +372,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                         </div>
 
                                         <div className="flex flex-col gap-6 flex-1">
-                                            <div className="grid grid-cols-3 gap-3 bg-black/40 p-4 rounded border border-gray-800">
+                                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-4 rounded border border-gray-800">
                                                 <div className="text-center">
                                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">{t('ui.health')}</div>
                                                     <div className="text-2xl font-bold text-white font-mono">{boss.hp}</div>

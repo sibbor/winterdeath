@@ -17,11 +17,12 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
     const buttonStyle = `w-full ${isMobileDevice ? 'py-3 text-sm' : 'py-4'} font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95`;
 
     return (
-        <ScreenModalLayout 
-            title={t('ui.paused')} 
-            isMobileDevice={isMobileDevice} 
+        <ScreenModalLayout
+            title={t('ui.paused')}
+            isMobileDevice={isMobileDevice}
             onClose={onResume}
             showCloseButton={false}
+            isSmallScreen={true}
         >
             <div className="space-y-6">
                 <button onClick={() => { soundManager.playUiClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-gray-200`}>
