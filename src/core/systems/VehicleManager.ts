@@ -17,6 +17,7 @@ const _forward = new THREE.Vector3();
 const _dismountDir = new THREE.Vector3();
 
 export const VehicleManager = {
+
     update: (session: GameSessionLogic, delta: number, now: number, playerGroup: THREE.Group) => {
         const state = session.state;
         const input = session.engine.input.state;
@@ -40,25 +41,13 @@ export const VehicleManager = {
             if (def && input && input.e && !state.eDepressed && state.vehicleEngineState !== 'OFF') {
                 VehicleManager.exitVehicle(playerGroup, vehicle, state, def);
             }
-        }
 
-        // 2. Collision Logic
-        // Obs: Denna loop i update verkar inte vara komplett. Vi kollar igenom ALLA interactables?
-        // En mer optimerad approach (om det finns rörliga fordon utan spelare) 
-        // hade varit att bara kolla det vehicle state.activeVehicle pekar på!
-        // Men jag behåller din struktur:
-        const interactables = state.sectorState?.ctx?.interactables;
-        if (interactables) {
-            const len = interactables.length;
-            for (let i = 0; i < len; i++) {
-                const obj = interactables[i];
-                const def = obj.userData?.vehicleDef;
-                // Only process collision if it's the actively moving vehicle
-                if (def && obj.userData.velocity && obj === state.activeVehicle) {
-                    const vel = obj.userData.velocity as THREE.Vector3;
-                    VehicleManager.handleEnemyCollisions(obj, vel, def, session, now);
-                    VehicleManager.handleObstacleCollisions(obj, vel, def, session);
-                }
+            // 2. Collision Logic (OPTIMIZED)
+            // Vi kollar BARA fysik/kollisioner på det fordon som spelaren faktiskt kör just nu!
+            if (def && vehicle.userData.velocity && state.vehicleEngineState !== 'OFF') {
+                const vel = vehicle.userData.velocity as THREE.Vector3;
+                VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, now);
+                VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
             }
         }
     },

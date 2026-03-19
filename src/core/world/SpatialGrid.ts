@@ -18,8 +18,8 @@ export class SpatialGrid {
     private interactableQueryResults: THREE.Object3D[] = [];
     private _vWorld = new THREE.Vector3();
 
-    // NYTT: Scratchpad för att helt undvika funktions-allokeringar i loopar
-    private _hashScratchpad = new Int32Array(256); // 256 celler är mer än tillräckligt för ett objekt
+    // Scratchpad to completely avoid function allocations in loops
+    private _hashScratchpad = new Int32Array(1024);
     private _hashCount = 0;
 
     // Frame counters replace Set allocations for lightning-fast dedup
@@ -50,7 +50,7 @@ export class SpatialGrid {
         }
     }
 
-    // NYTT: Beräknar hashes utan callbacks och lägger i scratchpad
+    // Computes hashes without callbacks and puts them in the scratchpad
     private computeHashesInRange(x: number, z: number, radius: number) {
         this._hashCount = 0;
         const sX = Math.floor((x - radius) / this.cellSize);
@@ -60,9 +60,11 @@ export class SpatialGrid {
 
         for (let ix = sX; ix <= eX; ix++) {
             for (let iz = sZ; iz <= eZ; iz++) {
-                // Inline hash calculation
                 const hash = Math.abs((ix * 73856093) ^ (iz * 19349663)) % HASH_SIZE;
-                this._hashScratchpad[this._hashCount++] = hash;
+                // FIX: Säkerställ att vi inte skriver utanför minnet
+                if (this._hashCount < 1024) {
+                    this._hashScratchpad[this._hashCount++] = hash;
+                }
             }
         }
     }
@@ -87,10 +89,11 @@ export class SpatialGrid {
             this.computeHashesInRange(oldPos.x, oldPos.z, oldRadius);
             for (let i = 0; i < this._hashCount; i++) {
                 const cell = this.obstacleCells[this._hashScratchpad[i]];
-                const index = cell.indexOf(obstacle);
-                if (index !== -1) {
+                let index = cell.indexOf(obstacle);
+                while (index !== -1) {
                     cell[index] = cell[cell.length - 1];
                     cell.pop();
+                    index = cell.indexOf(obstacle);
                 }
             }
         } else {
@@ -98,10 +101,11 @@ export class SpatialGrid {
             for (let i = 0; i < HASH_SIZE; i++) {
                 const cell = this.obstacleCells[i];
                 if (cell.length > 0) {
-                    const index = cell.indexOf(obstacle);
-                    if (index !== -1) {
+                    let index = cell.indexOf(obstacle);
+                    while (index !== -1) {
                         cell[index] = cell[cell.length - 1];
                         cell.pop();
+                        index = cell.indexOf(obstacle);
                     }
                 }
             }
@@ -229,7 +233,9 @@ export class SpatialGrid {
             radius = Math.max(radius, Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + 2.0);
         }
 
+        obj.updateMatrixWorld(true);
         obj.getWorldPosition(this._vWorld);
+
         this.computeHashesInRange(this._vWorld.x, this._vWorld.z, radius);
         for (let i = 0; i < this._hashCount; i++) {
             this.interactableCells[this._hashScratchpad[i]].push(obj);
@@ -243,20 +249,22 @@ export class SpatialGrid {
             this.computeHashesInRange(oldPos.x, oldPos.z, oldRadius);
             for (let i = 0; i < this._hashCount; i++) {
                 const cell = this.interactableCells[this._hashScratchpad[i]];
-                const index = cell.indexOf(obj);
-                if (index !== -1) {
+                let index = cell.indexOf(obj);
+                while (index !== -1) {
                     cell[index] = cell[cell.length - 1];
                     cell.pop();
+                    index = cell.indexOf(obj);
                 }
             }
         } else {
             for (let i = 0; i < HASH_SIZE; i++) {
                 const cell = this.interactableCells[i];
                 if (cell.length > 0) {
-                    const index = cell.indexOf(obj);
-                    if (index !== -1) {
+                    let index = cell.indexOf(obj);
+                    while (index !== -1) {
                         cell[index] = cell[cell.length - 1];
                         cell.pop();
+                        index = cell.indexOf(obj);
                     }
                 }
             }

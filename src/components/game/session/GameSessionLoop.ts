@@ -109,8 +109,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (type === 'hit') state.shotsHit += amt;
         },
         addFireZone: (z: any) => state.fireZones.push(z),
-        onPlayerHit: (dmg: number, attacker: any, type: DamageType) => {
-            if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type);
+        onPlayerHit: (dmg: number, attacker: any, type: DamageType, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+            if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
         applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType | string, isHighImpact: boolean = false) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE) return false;
@@ -168,13 +168,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     );
                     enemy._accumulatedDamage = 0; // Reset accumulation after showing
                     enemy._lastDamageTextTime = _gameContext.now;
-                }
-            }
-
-            if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-                // Throttled logging for continuous damage or rapid fire
-                if (!isContinuous || (frame % 10 === 0)) {
-                    console.log(`[GameSessionLoop.applyDamage()] ${enemy.type}_${enemy.id} HP: ${enemy.hp} | -${amount} (${type})`);
                 }
             }
 
@@ -512,7 +505,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const currentLabel = state.interactionLabel;
         const lastType = refs.interactionTypeRef.current;
 
-        // FIX: Lyssna på det nya PlayerInteractionSystemets output
+        // FIX: Listen to the new PlayerInteractionSystem output
         if (currentInter && state.hasInteractionTarget && state.interactionTargetPos) {
             _vInteraction.copy(state.interactionTargetPos);
             _vInteraction.y += 1.5; // Offset so that [E] hovers a bit above the object
@@ -520,8 +513,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             // Calculate screen coordinates
             const vector = _vInteraction.project(engine.camera.threeCamera);
 
-            // Safety check: vector.z must be less than 1, otherwise the object is behind the camera!
-            if (vector.z < 1) {
+            // FIX 1: Z-check. Tillåt lite marginal (1.05 istället för < 1) för kamera-jitter inuti fordon!
+            if (vector.z >= -1.0 && vector.z <= 1.05) {
                 const screenX = Math.round((vector.x + 1) / 2 * 100); // 0-100 for CSS %
                 const screenY = Math.round((1 - vector.y) / 2 * 100);
 
@@ -537,16 +530,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     refs.interactionTypeRef.current = currentInter;
                     (state as any).lastInteractionLabel = currentLabel;
 
-                    // ZERO-GC: Mutate the store data directly
                     const hData = HudStore.getData();
-                    if (!hData.interactionPrompt) hData.interactionPrompt = {} as any;
-                    hData.interactionPrompt.type = currentInter;
-                    hData.interactionPrompt.label = currentLabel;
-                    hData.interactionPrompt.pos = _interactionScreenPosScratch;
+
+                    // FIX 2: För att React ska trigga en uppdatering (Shallow Compare) MÅSTE vi 
+                    // ge 'pos' ett nytt objekt. Annars tror React att UI:t står stilla!
+                    hData.interactionPrompt = {
+                        type: currentInter,
+                        label: currentLabel,
+                        pos: { x: screenX, y: screenY }
+                    };
+
                     HudStore.update(hData);
                 }
             } else {
-                // Object is behind camera, clear HUD
+                // Object is TRULY behind camera, clear HUD
                 if (refs.interactionTypeRef.current !== null) {
                     refs.interactionTypeRef.current = null;
                     const hData = HudStore.getData();
@@ -561,7 +558,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 refs.lastInteractionPosRef.current = null;
                 (state as any).lastInteractionLabel = null;
 
-                // ZERO-GC: Mutate the store data directly
                 const hData = HudStore.getData();
                 hData.interactionPrompt = null;
                 HudStore.update(hData);
