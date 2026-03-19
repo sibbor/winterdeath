@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { t } from '../../utils/i18n';
 import { SectorStats } from '../../types';
-import GameModalLayout from './GameModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 import { BOSSES } from '../../content/constants';
 import { getCollectibleById, getCollectiblesBySector } from '../../content/collectibles';
 
@@ -33,7 +32,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
         : "0.0";
 
-    const totalKills = (Object.values(stats.killsByType) as number[]).reduce((a, b) => a + b, 0);
+    const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
 
     const bossKilled = (stats.killsByType && (stats.killsByType['Boss'] as number) > 0);
     const bossName = t(BOSSES[currentSector]?.name || "Boss");
@@ -67,22 +66,17 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         </div>
     );
 
-    let displayKiller = deathDetails ? deathDetails.killer : "";
-    if (displayKiller === 'Boss') {
-        displayKiller = bossName;
-    }
-
     return (
-        <GameModalLayout
+        <ScreenModalLayout
             title={t('ui.sector_report')}
             isMobileDevice={isMobileDevice}
             onClose={showRespawn ? onReturnCamp : undefined}
+            onCancel={showRespawn ? onReturnCamp : undefined}
             cancelLabel={showRespawn ? t('ui.return_camp') : undefined}
             onConfirm={showRespawn ? onRetry : onReturnCamp}
             confirmLabel={showRespawn ? t('ui.respawn') : t('ui.return_camp')}
             showCloseButton={showRespawn}
         >
-
             {/* Aborted Banner */}
             {stats.aborted && !deathDetails && (
                 <div className={`mb-4 md:mb-6 w-full border-4 border-yellow-900 bg-yellow-900/20 ${isMobileDevice ? 'p-3' : 'p-6'} text-center`}>
@@ -91,7 +85,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
             )}
 
             {/* Responsive Grid Layout */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8 mb-6 ${isMobileDevice ? 'overflow-y-auto' : ''}`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8 mb-6">
 
                 {/* 1. Performance (Blue) */}
                 <div className="flex flex-col space-y-6">
@@ -139,7 +133,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 value={`${stats.collectiblesDiscovered?.length || 0} / ${getCollectiblesBySector(currentSector + 1).length}`}
                                 color="text-yellow-400"
                             />
-                            <StatBlock label={t('ui.clues_found')} value={stats.cluesFound.length} color="text-yellow-400" />
+                            <StatBlock label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} color="text-yellow-400" />
                         </div>
 
                         {/* Two column list for Clues and Collectibles */}
@@ -178,7 +172,6 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                 )}
                             </div>
                         </div>
-
                     </div>
                 </div>
 
@@ -313,7 +306,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                     </div>
                 </div>
             </div>
-        </GameModalLayout>
+        </ScreenModalLayout>
     );
 };
 

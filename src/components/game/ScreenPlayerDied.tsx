@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
 import { PLAYER_CHARACTER } from '../../content/constants';
-import { HudStore } from '../../core/systems/HudStore';
+import { useHudStore } from '../../hooks/useHudStore';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
@@ -12,13 +12,10 @@ interface ScreenPlayerDiedProps {
 const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobileDevice }) => {
     const [isVisible, setIsVisible] = useState(false);
 
-    // Fetch data once on mount. Use fallbacks to prevent .toUpperCase() crashes on undefined.
-    const hud = HudStore.getData();
-    const {
-        killerName = 'UNKNOWN',
-        killerAttackName: attackName = '',
-        killedByEnemy = false
-    } = hud;
+    // Fetch data using optimized selectors
+    const killerName = useHudStore(s => s.killerName || 'UNKNOWN');
+    const killerAttackName = useHudStore(s => s.killerAttackName || '');
+    const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
 
     useEffect(() => {
         soundManager.playUiConfirm();
@@ -33,15 +30,15 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
         return () => window.removeEventListener('keydown', onKey);
     }, [onContinue]);
 
-    // Zero-GC: Memoize string formatting so it doesn't reallocate if the component re-renders (e.g. on resize)
+    // Zero-GC: Memoize death details
     const { deathPhrase, killerDisplayName } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
-        const displayName = killedByEnemy && attackName
-            ? `${killerName.toUpperCase()} (${t(`attacks.${attackName}.title`)})`
+        const displayName = killedByEnemy && killerAttackName
+            ? `${killerName.toUpperCase()} (${t(`attacks.${killerAttackName}.title`)})`
             : killerName.toUpperCase();
 
         return { deathPhrase: phrase, killerDisplayName: displayName };
-    }, [killedByEnemy, killerName, attackName]);
+    }, [killedByEnemy, killerName, killerAttackName]);
 
     return (
         <div
@@ -53,7 +50,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
                 <div className="w-full h-full bg-[radial-gradient(circle_at_center,_transparent_0%,_black_95%)]" />
             </div>
 
-            <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center animate-[fadeIn_0.6s_ease-out_forwards]`}>
+            <div className={`relative z-10 max-w-4xl w-full flex flex-col items-center ${isMobileDevice ? 'gap-6' : 'gap-12'} text-center animate-deathFadeIn`}>
                 {/* Header */}
                 <div className="flex flex-col gap-2">
                     <h2 className={`text-red-600 font-bold tracking-[0.3em] ${isMobileDevice ? 'text-lg' : 'text-xl'} uppercase animate-pulse`}>
@@ -70,7 +67,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
                 </div>
 
                 {/* Action Button */}
-                <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-[fadeIn_0.6s_ease-out_forwards]`}>
+                <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-deathFadeIn`}>
                     <button
                         onClick={onContinue}
                         className={`group relative ${isMobileDevice ? 'px-12 py-4' : 'px-16 py-5'} bg-white text-black border-4 border-black transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
@@ -80,6 +77,14 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
                     </button>
                 </div>
             </div>
+
+            <style>{`
+                @keyframes deathFadeIn {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .animate-deathFadeIn { animation: deathFadeIn 0.6s ease-out forwards; }
+            `}</style>
         </div>
     );
 };

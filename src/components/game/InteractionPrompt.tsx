@@ -1,72 +1,65 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { t } from '../../utils/i18n';
 
 interface InteractionPromptProps {
     type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | 'sector_specific' | 'vehicle' | null;
     label?: string | null;
-    screenPos?: { x: number, y: number } | null;
+    screenPos?: { x: number, y: number } | null; // Kept for backwards compatibility
     isMobileDevice?: boolean;
     onInteract?: () => void;
 }
 
-const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, screenPos, isMobileDevice, onInteract }) => {
+// ============================================================================
+// PERFORMANCE: Static Configuration Dictionary
+// Moved outside the component to prevent recreation on render. Lookups are O(1).
+// ============================================================================
+const TYPE_CONFIG: Record<string, { key: string, color: string }> = {
+    collectible: { key: 'ui.interact_pickup_collectible', color: 'border-green-400 text-green-100' },
+    chest: { key: 'ui.interact_open_chest', color: 'border-yellow-500 text-yellow-100' },
+    plant_explosive: { key: 'ui.interact_plant_explosive', color: 'border-red-500 text-red-100' },
+    knock_on_port: { key: 'ui.interact_knock_on_port', color: 'border-gray-400 text-white' },
+    vehicle: { key: 'ui.enter_vehicle', color: 'border-blue-400 text-blue-100' }
+};
+
+const DEFAULT_CONFIG = { key: 'ui.interact', color: 'border-gray-400 text-white' };
+
+const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
+    type,
+    label,
+    isMobileDevice,
+    onInteract
+}) => {
     if (!type) return null;
 
-    let key = (isMobileDevice ? "TAP" : "E");
-    let textKey = '';
-    let colorClass = '';
+    const inputKey = isMobileDevice ? "TAP" : "E";
 
-    // Välj färg och textnyckel beroende på interaktion
-    if (type === 'collectible') {
-        textKey = 'ui.interact_pickup_collectible';
-        colorClass = 'border-green-400 text-green-100';
-    } else if (type === 'chest') {
-        textKey = 'ui.interact_open_chest';
-        colorClass = 'border-yellow-500 text-yellow-100';
-    } else if (type === 'plant_explosive') {
-        textKey = 'ui.interact_plant_explosive';
-        colorClass = 'border-red-500 text-red-100';
-    } else if (type === 'knock_on_port') {
-        textKey = 'ui.interact_knock_on_port';
-        colorClass = 'border-gray-400 text-white';
-    } else if (type === 'vehicle') {
-        textKey = label || 'ui.enter_vehicle';
-        colorClass = 'border-blue-400 text-blue-100';
-    } else {
-        textKey = label || 'ui.interact';
-        colorClass = 'border-gray-400 text-white';
-    }
+    // Select color and text key based on interaction type
+    const config = TYPE_CONFIG[type] || DEFAULT_CONFIG;
 
-    const style: React.CSSProperties = screenPos ? {
-        left: `${screenPos.x + 4}%`,
-        top: `${screenPos.y + 5}%`,
-        transform: 'translate(-50%, -50%)',
-        position: 'absolute'
-    } : {
-        bottom: '12rem',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        position: 'absolute'
-    };
+    // Overrides logic
+    const textKey = (type === 'vehicle' || type === 'sector_specific') && label ? label : config.key;
+    const colorClass = config.color;
 
-    // Failsafe: Om i18n inte hittar ordet, visa "textKey" istället för en tom textbox
+    // Failsafe: If i18n cannot find the word, show 'textKey' instead of an empty text box
     let translatedText = t(textKey);
     if (!translatedText || translatedText.trim() === '') {
         translatedText = textKey;
     }
 
+    // ZERO-GC: Stable callback to prevent inline function allocation on every render
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onInteract) onInteract();
+    }, [onInteract]);
+
     return (
         <div
-            style={style}
-            className="flex flex-col items-center gap-2 pointer-events-auto z-40 transition-opacity duration-200 cursor-pointer"
-            onClick={(e) => {
-                e.stopPropagation();
-                if (onInteract) onInteract();
-            }}
+            className="absolute flex flex-col items-center gap-2 pointer-events-auto z-40 transition-opacity duration-200 cursor-pointer"
+            onClick={handleClick}
         >
             <div className={`hud-bar-container bg-black/80 backdrop-blur-md px-4 py-2 border flex items-center gap-3 shadow-2xl ${colorClass}`}>
                 <span className="w-6 h-6 flex items-center justify-center bg-white/20 border border-white/40 text-[10px] font-black text-white">
-                    {key}
+                    {inputKey}
                 </span>
                 <span className="text-xs font-black tracking-widest uppercase hud-text-glow">
                     {translatedText}
@@ -74,6 +67,6 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = ({ type, label, scre
             </div>
         </div>
     );
-};
+});
 
 export default InteractionPrompt;

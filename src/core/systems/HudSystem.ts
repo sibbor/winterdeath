@@ -4,6 +4,108 @@ import { WeaponType } from '../../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../../types/combat';
 
+// ============================================================================
+// ZERO-GC DOUBLE BUFFERING
+// We allocate two identical state trees (A and B) on load.
+// By swapping between them each frame, we force React's strict equality (===)
+// to detect a change and re-render, without ever allocating new objects.
+// ============================================================================
+
+const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: '', duration: 0, intensity: 0 }));
+
+const createDebugInfo = () => ({
+    aim: { x: 0, y: 0 },
+    input: { w: 0, a: 0, s: 0, d: 0, fire: 0, reload: 0 },
+    cam: { x: 0, y: 0, z: 0 },
+    camera: { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0, fov: 0 },
+    modes: 'Standard',
+    enemies: 0,
+    objects: 0,
+    drawCalls: 0,
+    coords: { x: 0, z: 0 },
+    performance: {
+        cpu: null as any,
+        memory: { heapLimit: 0, heapTotal: 0, heapUsed: 0 },
+        renderer: null as any
+    }
+});
+
+const createHudBuffer = () => ({
+    isDisoriented: false,
+    statusEffects: [] as any[],
+    _statusPool: createStatusPool(), // Internal pool to avoid inline {} allocs
+    activePassives: [] as string[],
+    activeBuffs: [] as string[],
+    activeDebuffs: [] as string[],
+    hp: 0,
+    maxHp: 0,
+    stamina: 0,
+    maxStamina: 0,
+    ammo: 0,
+    magSize: 0,
+    score: 0,
+    scrap: 0,
+    multiplier: 1,
+    activeWeapon: WeaponType.PISTOL,
+    isReloading: false,
+
+    // Internal mutable structs linked dynamically to avoid allocations
+    boss: null as any,
+    _bossInfo: { active: false, name: '', hp: 0, maxHp: 0 },
+
+    bossSpawned: false,
+    bossDefeated: false,
+    familyFound: false,
+    familySignal: 0,
+    level: 1,
+    currentXp: 0,
+    nextLevelXp: 0,
+    throwableAmmo: 0,
+    reloadProgress: 0,
+
+    playerPos: { x: 0, z: 0 },
+
+    familyPos: null as any,
+    _familyPos: { x: 0, z: 0 },
+
+    bossPos: null as any,
+    _bossPos: { x: 0, z: 0 },
+
+    distanceTraveled: 0,
+    kills: 0,
+
+    sectorStats: null as any,
+    _sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0 },
+
+    isDriving: false,
+    vehicleSpeed: 0,
+    throttleState: 0,
+    spEarned: 0,
+    skillPoints: 0,
+    isDead: false,
+    killerName: '',
+    killerAttackName: '',
+    killedByEnemy: false,
+    debugInfo: createDebugInfo(),
+    mapItems: [] as any[],
+    fps: 0,
+
+    // --- ZERO-GC FIX: Pre-allocate missing properties to lock V8 Hidden Class ---
+    debugMode: false,
+    systems: [] as any[],
+    currentLine: null as any,
+    cinematicActive: false,
+    interactionPrompt: null as any
+});
+
+const _bufferA = createHudBuffer();
+const _bufferB = createHudBuffer();
+let _useBufferA = true;
+
+// Math helper for quick decimal truncation (much faster than .toFixed())
+const truncate1 = (val: number) => Math.round(val * 10) / 10;
+const truncate2 = (val: number) => Math.round(val * 100) / 100;
+
 export const HudSystem = {
     getHudData: (
         state: any,
@@ -15,174 +117,184 @@ export const HudSystem = {
         distanceTraveled: number,
         camera: THREE.Camera
     ) => {
-        let bossInfo = null;
-        let activeBoss = null;
-        const activeBossObj = state.enemies.find((e: any) => e.isBoss);
+        // Swap active buffer
+        _useBufferA = !_useBufferA;
+        const _current = _useBufferA ? _bufferA : _bufferB;
+
+        // Fast-path for boss detection
+        let activeBossObj = null;
+        const enemies = state.enemies;
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].isBoss) {
+                activeBossObj = enemies[i];
+                break;
+            }
+        }
 
         if (activeBossObj) {
-            activeBoss = activeBossObj;
-            const bossId = activeBossObj.bossId;
-            bossInfo = {
-                active: true,
-                name: (bossId !== undefined && BOSSES[bossId]) ? BOSSES[bossId].name : 'BOSS',
-                hp: activeBossObj.hp,
-                maxHp: activeBossObj.maxHp
-            };
+            _current._bossInfo.active = true;
+            _current._bossInfo.name = (activeBossObj.bossId !== undefined && BOSSES[activeBossObj.bossId]) ? BOSSES[activeBossObj.bossId].name : 'BOSS';
+            _current._bossInfo.hp = activeBossObj.hp;
+            _current._bossInfo.maxHp = activeBossObj.maxHp;
+            _current.boss = _current._bossInfo;
         } else if (state.sectorState && state.sectorState.hordeTarget > 0 && state.sectorState.zombiesKilled < state.sectorState.zombiesKillTarget) {
-            // Visualize Zombie Wave as a Boss Bar
-            const remaining = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
-            bossInfo = {
-                active: true,
-                name: 'ui.zombie_wave',
-                hp: remaining,
-                maxHp: state.sectorState.hordeTarget
-            };
+            _current._bossInfo.active = true;
+            _current._bossInfo.name = 'ui.zombie_wave';
+            _current._bossInfo.hp = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
+            _current._bossInfo.maxHp = state.sectorState.hordeTarget;
+            _current.boss = _current._bossInfo;
+        } else {
+            _current.boss = null;
         }
 
         let famSignal = 0;
         if (state.activeWeapon === WeaponType.RADIO && familyMemberMesh) {
-            const dist = playerPos.distanceTo(familyMemberMesh.position);
-            famSignal = Math.max(0, 1 - (dist / 200));
-        }
-
-        let fPos = null;
-        if (familyMemberMesh) {
-            fPos = { x: familyMemberMesh.position.x, z: familyMemberMesh.position.z };
-        }
-        let bPos = null;
-        if (activeBoss) {
-            bPos = { x: activeBoss.mesh.position.x, z: activeBoss.mesh.position.z };
-        }
-
-        const wep = WEAPONS[state.activeWeapon];
-        const reloadProgress = state.isReloading
-            ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
-            : 0;
-
-        // Calculate potential SP earned in this run, excluding what's already been saved to global stats
-        const sessionCollectibles = state.sessionCollectiblesDiscovered || [];
-        const globalCollectibles = (props.stats && props.stats.collectiblesDiscovered) || [];
-        const newCollectiblesCount = (state.sessionCollectiblesDiscovered || []).length;
-
-        // SP from levels gained in this specific run
-        const levelGained = Math.max(0, state.level - (props.stats?.level || 1));
-
-        let spEarned = levelGained + newCollectiblesCount;
-
-        // 1. Family Found (if not previously rescued)
-        if (state.familyFound && !props.familyAlreadyRescued) {
-            spEarned++;
-        }
-        // 2. Boss Defeated (if not previously defeated)
-        const bossKilled = state.bossesDefeated?.length > 0;
-        if (bossKilled && !props.bossPermanentlyDefeated) {
-            spEarned++;
-        }
-
-        // Trace SP changes for debugging (throttled to once per change)
-        const totalSP = (props.stats?.skillPoints || 0) + spEarned;
-        const lastTotal = (state as any)._lastLoggedSP || 0;
-        // Status Effects
-        const activeEffects = [];
-        const statusEffects = state.statusEffects;
-        for (const key in statusEffects) {
-            const effect = statusEffects[key];
-            if (effect && effect.duration > 0) {
-                activeEffects.push({
-                    type: key,
-                    duration: effect.duration,
-                    intensity: effect.intensity
-                });
+            const distSq = playerPos.distanceToSquared(familyMemberMesh.position);
+            if (distSq < 40000) {
+                famSignal = Math.max(0, 1 - (Math.sqrt(distSq) / 200));
             }
         }
 
-        const isDisoriented = !!statusEffects[StatusEffectType.DISORIENTED] && statusEffects[StatusEffectType.DISORIENTED].duration > 0;
+        if (familyMemberMesh) {
+            _current._familyPos.x = familyMemberMesh.position.x;
+            _current._familyPos.z = familyMemberMesh.position.z;
+            _current.familyPos = _current._familyPos;
+        } else {
+            _current.familyPos = null;
+        }
 
-        return {
-            isDisoriented,
-            statusEffects: activeEffects,
-            activePassives: state.activePassives || [],
-            activeBuffs: state.activeBuffs || [],
-            activeDebuffs: state.activeDebuffs || [],
-            hp: state.hp,
-            maxHp: state.maxHp,
-            stamina: state.stamina,
-            maxStamina: state.maxStamina,
-            ammo: state.weaponAmmo[state.activeWeapon],
-            magSize: (wep || {}).magSize || 0,
-            score: state.score,
-            scrap: (props.stats.scrap || 0) + state.collectedScrap,
-            multiplier: 1,
-            activeWeapon: state.activeWeapon,
-            isReloading: state.isReloading,
-            boss: bossInfo,
-            bossSpawned: state.bossSpawned,
-            bossDefeated: activeBoss && activeBoss.dead,
-            familyFound: state.familyFound,
-            familySignal: famSignal,
-            level: state.level,
-            currentXp: state.currentXp,
-            nextLevelXp: state.nextLevelXp,
-            throwableAmmo: state.weaponAmmo[props.loadout.throwable],
-            reloadProgress: reloadProgress,
-            playerPos: { x: playerPos.x, z: playerPos.z },
-            familyPos: fPos,
-            bossPos: bPos,
-            distanceTraveled: Math.floor(distanceTraveled),
-            kills: state.killsInRun,
-            sectorStats: state.sectorState ? {
-                unlimitedAmmo: !!state.sectorState.unlimitedAmmo,
-                unlimitedThrowables: !!state.sectorState.unlimitedThrowables,
-                isInvincible: !!state.sectorState.isInvincible,
-                hordeTarget: state.sectorState.hordeTarget || 0,
-                zombiesKilled: state.sectorState.zombiesKilled || 0,
-                zombiesKillTarget: state.sectorState.zombiesKillTarget || 0
-            } : null,
-            isDriving: !!state.activeVehicleType,
-            vehicleSpeed: state.vehicleSpeed || 0,
-            throttleState: state.vehicleThrottle || 0,
-            spEarned: spEarned,
-            skillPoints: (props.stats?.skillPoints || 0) + spEarned, // Total SP: base + session (safely)
-            isDead: state.isDead,
-            killerName: state.killerName,
-            killerAttackName: state.killerAttackName,
-            killedByEnemy: state.killedByEnemy,
-            debugInfo: {
-                aim: input.aimVector ? { x: parseFloat(input.aimVector.x.toFixed(2)), y: parseFloat(input.aimVector.y.toFixed(2)) } : { x: 0, y: 0 },
-                input: {
-                    w: input.w ? 1 : 0,
-                    a: input.a ? 1 : 0,
-                    s: input.s ? 1 : 0,
-                    d: input.d ? 1 : 0,
-                    fire: input.fire ? 1 : 0,
-                    reload: input.reload ? 1 : 0
-                },
-                cam: { x: parseFloat(camera.position.x.toFixed(1)), y: parseFloat(camera.position.y.toFixed(1)), z: parseFloat(camera.position.z.toFixed(1)) },
-                camera: {
-                    x: parseFloat(camera.position.x.toFixed(1)),
-                    y: parseFloat(camera.position.y.toFixed(1)),
-                    z: parseFloat(camera.position.z.toFixed(1)),
-                    rotX: camera.rotation.x,
-                    rotY: camera.rotation.y,
-                    rotZ: camera.rotation.z,
-                    fov: (camera as THREE.PerspectiveCamera).fov
-                },
-                modes: state.interactionType || 'Standard',
-                enemies: state.enemies.length,
-                objects: state.obstacles.length,
-                drawCalls: 0, // Injected by GameSession
-                coords: { x: playerPos.x, z: playerPos.z },
-                performance: {
-                    cpu: PerformanceMonitor.getInstance().getTimings(),
-                    memory: (performance as any).memory ? {
-                        heapLimit: Math.round((performance as any).memory.jsHeapSizeLimit / 1048576),
-                        heapTotal: Math.round((performance as any).memory.totalJSHeapSize / 1048576),
-                        heapUsed: Math.round((performance as any).memory.usedJSHeapSize / 1048576)
-                    } : null,
-                    renderer: (window as any).gameEngine?.getRendererStats() || null
+        if (activeBossObj) {
+            _current._bossPos.x = activeBossObj.mesh.position.x;
+            _current._bossPos.z = activeBossObj.mesh.position.z;
+            _current.bossPos = _current._bossPos;
+        } else {
+            _current.bossPos = null;
+        }
+
+        const wep = WEAPONS[state.activeWeapon];
+        _current.reloadProgress = state.isReloading
+            ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
+            : 0;
+
+        const newCollectiblesCount = (state.sessionCollectiblesDiscovered || []).length;
+        const levelGained = Math.max(0, state.level - (props.stats?.level || 1));
+        let spEarned = levelGained + newCollectiblesCount;
+
+        if (state.familyFound && !props.familyAlreadyRescued) spEarned++;
+        if (state.bossesDefeated?.length > 0 && !props.bossPermanentlyDefeated) spEarned++;
+
+        // Status Effects (Zero-GC Pool Extraction into the active buffer)
+        _current.statusEffects.length = 0;
+        const statusEffects = state.statusEffects;
+        let effectIndex = 0;
+        for (const key in statusEffects) {
+            const effect = statusEffects[key];
+            if (effect && effect.duration > 0) {
+                const poolItem = _current._statusPool[effectIndex];
+                if (poolItem) {
+                    poolItem.type = key;
+                    poolItem.duration = effect.duration;
+                    poolItem.intensity = effect.intensity;
+                    _current.statusEffects.push(poolItem);
+                    effectIndex++;
                 }
-            },
-            mapItems: state.mapItems || []
-        };
+            }
+        }
+
+        _current.playerPos.x = playerPos.x;
+        _current.playerPos.z = playerPos.z;
+
+        _current.isDisoriented = !!statusEffects[StatusEffectType.DISORIENTED] && statusEffects[StatusEffectType.DISORIENTED].duration > 0;
+        _current.activePassives = state.activePassives || [];
+        _current.activeBuffs = state.activeBuffs || [];
+        _current.activeDebuffs = state.activeDebuffs || [];
+        _current.hp = state.hp;
+        _current.maxHp = state.maxHp;
+        _current.stamina = state.stamina;
+        _current.maxStamina = state.maxStamina;
+        _current.ammo = state.weaponAmmo[state.activeWeapon] || 0;
+        _current.magSize = wep?.magSize || 0;
+        _current.score = state.score;
+        _current.scrap = (props.stats?.scrap || 0) + state.collectedScrap;
+        _current.activeWeapon = state.activeWeapon;
+        _current.isReloading = state.isReloading;
+        _current.bossSpawned = state.bossSpawned;
+        _current.bossDefeated = activeBossObj ? activeBossObj.dead : false;
+        _current.familyFound = state.familyFound;
+        _current.familySignal = famSignal;
+        _current.level = state.level;
+        _current.currentXp = state.currentXp;
+        _current.nextLevelXp = state.nextLevelXp;
+        _current.throwableAmmo = state.weaponAmmo[props.loadout.throwable] || 0;
+        _current.distanceTraveled = Math.floor(distanceTraveled);
+        _current.kills = state.killsInRun;
+
+        if (state.sectorState) {
+            _current._sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
+            _current._sectorStats.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
+            _current._sectorStats.isInvincible = !!state.sectorState.isInvincible;
+            _current._sectorStats.hordeTarget = state.sectorState.hordeTarget || 0;
+            _current._sectorStats.zombiesKilled = state.sectorState.zombiesKilled || 0;
+            _current._sectorStats.zombiesKillTarget = state.sectorState.zombiesKillTarget || 0;
+            _current.sectorStats = _current._sectorStats;
+        } else {
+            _current.sectorStats = null;
+        }
+
+        _current.isDriving = !!state.activeVehicleType;
+        _current.vehicleSpeed = state.vehicleSpeed || 0;
+        _current.throttleState = state.vehicleThrottle || 0;
+        _current.spEarned = spEarned;
+        _current.skillPoints = (props.stats?.skillPoints || 0) + spEarned;
+        _current.isDead = state.isDead;
+        _current.killerName = state.killerName;
+        _current.killerAttackName = state.killerAttackName;
+        _current.killedByEnemy = state.killedByEnemy;
+        _current.mapItems = state.mapItems || [];
+        _current.fps = PerformanceMonitor.getInstance().getFps();
+
+        // Debug Info Mapping
+        if (input.aimVector) {
+            _current.debugInfo.aim.x = truncate2(input.aimVector.x);
+            _current.debugInfo.aim.y = truncate2(input.aimVector.y);
+        } else {
+            _current.debugInfo.aim.x = 0; _current.debugInfo.aim.y = 0;
+        }
+
+        _current.debugInfo.input.w = input.w ? 1 : 0;
+        _current.debugInfo.input.a = input.a ? 1 : 0;
+        _current.debugInfo.input.s = input.s ? 1 : 0;
+        _current.debugInfo.input.d = input.d ? 1 : 0;
+        _current.debugInfo.input.fire = input.fire ? 1 : 0;
+        _current.debugInfo.input.reload = input.reload ? 1 : 0;
+
+        _current.debugInfo.cam.x = truncate1(camera.position.x);
+        _current.debugInfo.cam.y = truncate1(camera.position.y);
+        _current.debugInfo.cam.z = truncate1(camera.position.z);
+
+        _current.debugInfo.camera.x = _current.debugInfo.cam.x;
+        _current.debugInfo.camera.y = _current.debugInfo.cam.y;
+        _current.debugInfo.camera.z = _current.debugInfo.cam.z;
+        _current.debugInfo.camera.rotX = camera.rotation.x;
+        _current.debugInfo.camera.rotY = camera.rotation.y;
+        _current.debugInfo.camera.rotZ = camera.rotation.z;
+        _current.debugInfo.camera.fov = (camera as THREE.PerspectiveCamera).fov;
+
+        _current.debugInfo.coords.x = truncate1(playerPos.x);
+        _current.debugInfo.coords.z = truncate1(playerPos.z);
+
+        _current.debugInfo.performance.cpu = PerformanceMonitor.getInstance().getTimings();
+        const perfMem = (performance as any).memory;
+        if (perfMem) {
+            _current.debugInfo.performance.memory.heapLimit = Math.round(perfMem.jsHeapSizeLimit / 1048576);
+            _current.debugInfo.performance.memory.heapTotal = Math.round(perfMem.totalJSHeapSize / 1048576);
+            _current.debugInfo.performance.memory.heapUsed = Math.round(perfMem.usedJSHeapSize / 1048576);
+        }
+
+        _current.debugInfo.modes = state.interactionType || 'Standard';
+        _current.debugInfo.enemies = enemies.length;
+        _current.debugInfo.objects = state.obstacles?.length || 0;
+
+        return _current;
     }
 };

@@ -4,7 +4,7 @@ import { SECTOR_THEMES, BOSSES, FAMILY_MEMBERS } from '../../content/constants';
 import { getCollectiblesBySector } from '../../content/collectibles';
 import { useOrientation } from '../../hooks/useOrientation';
 import { en } from '../../locales/en';
-import CampModalLayout from './CampModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 import { PlayerStats } from '../../types';
 import { soundManager } from '../../utils/SoundManager';
 
@@ -111,31 +111,28 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     };
 
     return (
-        <CampModalLayout
+        <ScreenModalLayout
             title={t('stations.sectors')}
-            titleColor="text-red-500"
+            isMobileDevice={isMobileDevice}
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
-            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))} // Lock logic
+            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))} 
             showCancel={true}
-            fullHeight={true}
+            titleColorClass="text-red-600"
+            tabs={SECTOR_THEMES.map((_, i) => i)}
+            activeTab={selectedSectorIndex}
+            onTabChange={handleSelect}
+            tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
             <div className={`flex h-full gap-4 md:gap-8 ${effectiveLandscape ? 'flex-row' : 'flex-col overflow-y-auto touch-auto'}`}>
                 {/* LEFT: Sector List */}
                 <div className={`${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : 'w-full shrink-0 relative'}`}>
-                    {!effectiveLandscape && (
-                        <>
-                            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black via-black/80 to-transparent z-10 pointer-events-none" />
-                            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black via-black/80 to-transparent z-10 pointer-events-none" />
-                        </>
-                    )}
-                    <div className={`${!effectiveLandscape ? 'flex gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide' : 'flex flex-col gap-4 pt-4 pr-10'}`} style={!effectiveLandscape ? { WebkitOverflowScrolling: 'touch' } : {}}>
+                    <div className={`${!effectiveLandscape ? 'flex gap-2 overflow-x-auto pb-4 px-10 snap-x snap-mandatory pt-2 scrollbar-hide' : 'flex flex-col gap-4 pt-4 pr-10'}`}>
                         {SECTOR_THEMES.map((map, i) => {
                             const isSel = selectedSectorIndex === i;
-                            // re-eval locked for list
                             const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
-                            const pulseColor = '#ef4444'; // Red for Sector Overview station
+                            const pulseColor = '#ef4444'; 
 
                             return (
                                 <button
@@ -164,17 +161,8 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     </div>
                 </div>
 
-                {/* Mobile Paging Indicators */}
-                {!effectiveLandscape && (
-                    <div className="flex justify-center gap-1 mb-2">
-                        {SECTOR_THEMES.map((_, i) => (
-                            <div key={i} className={`h-1 w-4 transition-colors ${selectedSectorIndex === i ? 'bg-red-500' : 'bg-gray-800'}`} />
-                        ))}
-                    </div>
-                )}
-
                 {/* RIGHT: Detail View */}
-                <div className={`flex-1 flex flex-col bg-black/40 border-2 border-gray-800 p-4 md:p-8 relative pr-safe ${!effectiveLandscape ? 'min-h-[300px] overflow-visible' : (isMobileDevice ? 'overflow-y-auto' : '')}`}>
+                <div className={`flex-1 flex flex-col bg-black/40 border-2 border-gray-800 p-4 md:p-8 relative pr-safe ${!effectiveLandscape ? 'min-h-[300px]' : ''}`}>
                     {/* Header */}
                     <div className="flex flex-col gap-4 mb-6 border-b border-gray-800 pb-4">
                         <div>
@@ -210,13 +198,13 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                     </div>
 
                     {/* Briefing Text */}
-                    <div className={`flex-1 bg-black ${(!effectiveLandscape || isMobileDevice) ? 'overflow-visible' : 'overflow-y-auto'} mb-4 md:mb-6 shadow-inner font-mono text-sm md:text-xl leading-relaxed text-gray-300 whitespace-pre-wrap`}>
+                    <div className={`flex-1 bg-black p-4 mb-4 md:mb-6 shadow-inner font-mono text-sm md:text-xl leading-relaxed text-gray-300 whitespace-pre-wrap ${!effectiveLandscape ? 'min-h-[150px]' : 'overflow-y-auto'}`}>
                         {briefingText}
                         <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
                     </div>
                 </div>
             </div>
-        </CampModalLayout>
+        </ScreenModalLayout>
     );
 };
 

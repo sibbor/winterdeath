@@ -6,7 +6,7 @@ import { soundManager } from '../../utils/SoundManager';
 import { COLLECTIBLES } from '../../content/collectibles';
 import { useOrientation } from '../../hooks/useOrientation';
 import { EnemyType } from '../../types/enemy';
-import CampModalLayout from './CampModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 import CollectiblePreview from '../ui/core/CollectiblePreview';
 
 interface ScreenAdventureLogProps {
@@ -34,7 +34,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         if (newIds.length > 0 && onMarkCollectiblesViewed) {
             onMarkCollectiblesViewed(newIds);
         }
-    }, []); // Only run on mount
+    }, [stats.collectiblesDiscovered, stats.viewedCollectibles, onMarkCollectiblesViewed]);
 
     const handleTabChange = (tab: Tab) => {
         soundManager.playUiClick();
@@ -106,27 +106,26 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     };
 
     return (
-        <CampModalLayout
+        <ScreenModalLayout
             title={t('stations.adventure_log')}
-            titleColor="text-green-500"
+            isMobileDevice={isMobileDevice}
             onClose={onClose}
-            closeLabel={t('ui.close')}
-            fullHeight={true}
-            showCancel={true}
+            onCancel={onClose}
+            cancelLabel={t('ui.close')}
+            titleColorClass="text-green-600"
+            debugAction={isDebugMode ? { label: "SHOW ALL (DEBUG)", action: handleDebugShowAll } : undefined}
+            tabs={tabs.map(t => t.id)}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
-            <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
+            <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 {/* Tabs Bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    {!effectiveLandscape && (
-                        <>
-                            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black via-black/80 to-transparent z-10 pointer-events-none" />
-                            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black via-black/80 to-transparent z-10 pointer-events-none" />
-                        </>
-                    )}
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-10 pt-2 min-h-[50px] md:min-h-[80px] items-end scrollbar-hide'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
                         {tabs.map(tab => {
                             const isActive = activeTab === tab.id;
-                            const pulseColor = themeColor; // Green for Adventure Log station
+                            const pulseColor = themeColor; 
                             return (
                                 <button key={tab.id} onClick={() => handleTabChange(tab.id)}
                                     className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
@@ -137,8 +136,8 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
                                     style={isActive ? {
-                                        backgroundColor: darkenColor(pulseColor, 20), // 20% darker background
-                                        '--pulse-color': pulseColor // Original color for pulse
+                                        backgroundColor: darkenColor(pulseColor, 20), 
+                                        '--pulse-color': pulseColor 
                                     } as any : {}}
                                 >
                                     <span>{tab.label}</span>
@@ -150,7 +149,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar pr-safe">
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     {activeTab === 'stats' && <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />}
                     {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />}
                     {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
@@ -159,7 +158,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     {activeTab === 'poi' && <PoiTab stats={stats} color={'#3b82f6'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
                 </div>
             </div>
-        </CampModalLayout>
+        </ScreenModalLayout>
     );
 };
 
@@ -255,7 +254,6 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = ({ 
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape }) => {
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
-            {/* Force 1x1 on mobile even if landscape for Enemy/Boss as requested */}
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
                 const isSeen = (stats.seenEnemies || []).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
                 if (!isSeen) return null;
@@ -284,7 +282,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
                                     <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)}</div>
                                 </div>
-                                <div></div> {/* Placeholder for 3-col grid alignment */}
+                                <div></div>
                             </div>
                             <p className="text-base text-gray-300 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: itemColor }}>
                                 "{getEnemyDescription(key)}"
@@ -338,7 +336,6 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 };
 
 const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
-    // Only four bosses (Sectors 1-4)
     const sectors = [0, 1, 2, 3];
 
     return (
@@ -449,9 +446,6 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = stats.collectiblesDiscovered || [];
-    const viewedIds = stats.viewedCollectibles || [];
-
-    // Group collectibles by sector
     const sectors = [1, 2, 3, 4, 5, 6];
 
     return (
@@ -502,7 +496,6 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
-                // Filter clues for this sector from cluesFound
                 const sectorClues = cluesFound.filter(id =>
                     id.startsWith(`s${sectorId}_`) &&
                     !id.includes('_collectible_') &&
@@ -554,7 +547,6 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
     );
 };
 
-// --- POI TAB ---
 const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = stats.discoveredPOIs || [];
     const sectors = [1, 2, 3, 4, 5, 6];
@@ -566,7 +558,6 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
-                // Filter POIs for this sector from visited list
                 const sectorPOIs = visitedList.filter(id => id.startsWith(`s${sectorId}_poi_`));
 
                 return (
@@ -612,20 +603,15 @@ const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: st
         style={{ borderColor: isLocked ? '#1f2937' : color, boxShadow: isLocked ? 'none' : `inset 0 0 20px ${color}11` }}
     >
         <div className="">
-            {isLocked && (
-                <div className="absolute inset-0 z-10 opacity-10 pointer-events-none"></div>
-            )}
             {children}
         </div>
     </div>
 );
 
-// --- Helpers for Lore ---
 const getEnemyDescription = (type: string) => {
     const key = `enemies.${type}.description`;
     const loc = t(key);
     if (loc === key) {
-        // Fallback for types not strictly in the en.enemies map
         switch (type) {
             case EnemyType.WALKER: return "Standard reanimated combatant. Low threat individually, dangerous in swarms.";
             case EnemyType.RUNNER: return "Hyper-aggressive mutation. Closing speed is extreme.";
@@ -638,7 +624,6 @@ const getEnemyDescription = (type: string) => {
 };
 
 const getBossDescription = (bossNameKey: string) => {
-    // BossNameKey is like 'bosses.0.name'
     const index = bossNameKey.split('.')[1];
     return t(`bosses.${index}.lore`);
 };
@@ -648,12 +633,10 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
 
     return (
         <div className="flex flex-col h-full cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-            {/* 3D Preview Area */}
             <div className={`w-full bg-zinc-900 relative border-b border-zinc-800/50 ${isMobileDevice ? 'h-24' : 'aspect-square'}`}>
                 <CollectiblePreview type={item.modelType} isLocked={!isFound} />
             </div>
 
-            {/* Info Area */}
             <div className={`${isMobileDevice ? 'p-2' : 'p-4'} flex-1 flex flex-col`}>
                 <h4 className={`${isMobileDevice ? 'text-xs' : 'text-lg'} font-semibold uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
                     {isFound ? t(item.nameKey) : '???'}
@@ -665,11 +648,6 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
                     <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>
                 )}
             </div>
-
-            {/* Hover Overlay */}
-            {!isFound && (
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors pointer-events-none"></div>
-            )}
         </div>
     );
 };

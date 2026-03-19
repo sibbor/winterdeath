@@ -86,7 +86,7 @@ export const Sector5: SectorDef = {
         const { triggers } = ctx;
 
         // --- FIND PETS EVENT ---
-        triggers.push(
+        SectorGenerator.addTriggers(ctx, [
             {
                 id: 'found_pets',
                 position: { x: 0, z: 15 }, // Inside Villa
@@ -105,7 +105,7 @@ export const Sector5: SectorDef = {
                 triggered: false,
                 actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }]
             }
-        );
+        ]);
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {

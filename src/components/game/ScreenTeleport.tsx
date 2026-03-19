@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { t } from '../../utils/i18n';
-import GameModalLayout from './GameModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 
 interface ScreenTeleportProps {
     onJump: (x: number, z: number) => void;
@@ -16,8 +15,6 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
         z: initialCoords ? Math.round(initialCoords.z).toString() : ""
     });
 
-    const buttonStyle = "w-full py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95";
-
     const handleJump = () => {
         const x = parseFloat(coords.x);
         const z = parseFloat(coords.z);
@@ -26,10 +23,8 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
         }
     };
 
-
-
     return (
-        <GameModalLayout
+        <ScreenModalLayout
             title={t('ui.teleport_title')}
             isMobileDevice={isMobileDevice}
             onClose={onCancel}
@@ -39,8 +34,9 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
             confirmLabel={t('ui.jump')}
             canConfirm={coords.x !== "" && coords.z !== ""}
             showCloseButton={true}
+            isSmall={true}
         >
-            <div className="space-y-8">
+            <div className="space-y-8 py-4">
                 <div className={`flex ${isMobileDevice ? 'flex-col sm:flex-row' : ''} gap-4 justify-center items-center`}>
                     <div className="flex flex-col items-start gap-2">
                         <label className="text-xs uppercase font-bold text-blue-400 tracking-widest">{t('ui.teleport_x')}</label>
@@ -50,7 +46,7 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
                             onChange={(e) => setCoords({ ...coords, x: e.target.value })}
                             className={`bg-black/80 border-2 border-blue-900 text-white ${isMobileDevice ? 'p-3 text-lg w-32' : 'p-4 text-xl w-40'} font-mono focus:border-blue-500 outline-none text-center shadow-[0_0_15px_rgba(37,99,235,0.3)]`}
                             placeholder="0"
-                            autoFocus={!initialCoords && !isMobileDevice} // No autoFocus on mobile to avoid keyboard pop-up
+                            autoFocus={!initialCoords && !isMobileDevice}
                         />
                     </div>
                     <div className="flex flex-col items-start gap-2">
@@ -64,9 +60,8 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
                         />
                     </div>
                 </div>
-
             </div>
-        </GameModalLayout>
+        </ScreenModalLayout>
     );
 };
 

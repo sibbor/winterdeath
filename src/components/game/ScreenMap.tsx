@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { MapItem, MapItemType } from '../../types';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
-import GameModalLayout from './GameModalLayout';
-import { HudStore } from '../../core/systems/HudStore';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
+import { useHudStore } from '../../hooks/useHudStore';
 
 interface ScreenMapProps {
     onClose: () => void;
@@ -111,6 +111,8 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
         return lines;
     }, [bounds]);
 
+    const mapItems = useHudStore(s => s.mapItems);
+
     return (
         <div
             className="relative bg-slate-900 border-2 border-blue-900/50 cursor-crosshair w-full h-full overflow-hidden"
@@ -120,6 +122,45 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
             onTouchEnd={onInteractionEnd}
         >
             <div className="absolute inset-0 pointer-events-none">{gridLines}</div>
+
+            {/* Polygon Layer (Terrain/Buildings) */}
+            <svg className="absolute inset-0 pointer-events-none w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {mapItems.filter(item => item.points && item.points.length > 0).map(poly => (
+                    <polygon
+                        key={poly.id}
+                        points={poly.points!.map(p => {
+                            const pos = toMapPercent(p.x, p.z);
+                            return `${pos.x},${pos.y}`;
+                        }).join(' ')}
+                        fill={poly.color || 'gray'}
+                        fillOpacity={poly.type === 'BUILDING' ? 0.8 : 0.4}
+                        stroke={poly.color || 'gray'}
+                        strokeOpacity={0.6}
+                        strokeWidth="0.2"
+                    />
+                ))}
+                {/* Circular Lakes (Fallback for radius without points) */}
+                {mapItems.filter(item => item.type === 'LAKE' && !item.points).map(lake => {
+                    const pos = toMapPercent(lake.x, lake.z);
+                    const rx = (lake.radius! / (bounds.maxX - bounds.minX)) * 100;
+                    const ry = (lake.radius! / (bounds.maxZ - bounds.minZ)) * 100;
+                    return (
+                        <ellipse
+                            key={lake.id}
+                            cx={pos.x}
+                            cy={pos.y}
+                            rx={rx}
+                            ry={ry}
+                            fill={lake.color || '#3b82f6'}
+                            fillOpacity={0.4}
+                            stroke={lake.color || '#3b82f6'}
+                            strokeOpacity={0.6}
+                            strokeWidth="0.2"
+                        />
+                    );
+                })}
+            </svg>
+
             <div className="absolute left-1/2 top-0 bottom-0 border-l border-blue-500/10 pointer-events-none"></div>
             <div className="absolute top-1/2 left-0 right-0 border-t border-blue-500/10 pointer-events-none"></div>
             {groupedEntities.map((group: any, i: number) => {
@@ -157,25 +198,28 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
 const LONG_PRESS_DURATION = 600;
 
 export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, isMobileDevice }) => {
-    const [hud, setHud] = useState<any>(HudStore.getData());
+    const px = useHudStore(s => s.playerPos.x);
+    const pz = useHudStore(s => s.playerPos.z);
+    const fx = useHudStore(s => s.familyPos?.x || 0);
+    const fz = useHudStore(s => s.familyPos?.z || 0);
+    const bx = useHudStore(s => s.bossPos?.x || 0);
+    const bz = useHudStore(s => s.bossPos?.z || 0);
+    const hasFamily = useHudStore(s => !!s.familyPos);
+    const hasBoss = useHudStore(s => !!s.bossPos);
+    const mapItems = useHudStore(s => s.mapItems);
 
-    useEffect(() => {
-        return HudStore.subscribe((data) => setHud(data));
-    }, []);
-
-    const { playerPos, familyPos, bossPos, mapItems: items = [] } = hud;
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
     const [tooltipData, setTooltipData] = useState<any>(null);
     const longPressTimer = useRef<any>(null);
     const pressCoords = useRef<{ x: number, z: number } | null>(null);
 
     const allEntities = useMemo(() => {
-        const ent = [...items];
-        if (playerPos) ent.push({ id: 'player', x: playerPos.x, z: playerPos.z, type: 'PLAYER', label: 'ui.player', color: '#3b82f6' });
-        if (familyPos) ent.push({ id: 'family', x: familyPos.x, z: familyPos.z, type: 'FAMILY', label: 'ui.family_member', color: '#22c55e' });
-        if (bossPos) ent.push({ id: 'boss', x: bossPos.x, z: bossPos.z, type: 'BOSS', label: 'ui.boss', color: '#ef4444' });
+        const ent = [...mapItems];
+        ent.push({ id: 'player', x: px, z: pz, type: 'PLAYER', label: 'ui.player', color: '#3b82f6', icon: null, radius: null });
+        if (hasFamily) ent.push({ id: 'family', x: fx, z: fz, type: 'FAMILY', label: 'ui.family_member', color: '#22c55e', icon: null, radius: null });
+        if (hasBoss) ent.push({ id: 'boss', x: bx, z: bz, type: 'BOSS', label: 'ui.boss', color: '#ef4444', icon: null, radius: null });
         return ent;
-    }, [items, playerPos, familyPos, bossPos]);
+    }, [mapItems, px, pz, fx, fz, bx, bz, hasFamily, hasBoss]);
 
     const groupedEntities = useMemo(() => {
         const groups: Record<string, MapItem[]> = {};
@@ -206,7 +250,6 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
         return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
     }, [allEntities]);
 
-    // Zero-GC Interaction Callbacks
     const handleSetMouseCoords = useCallback((x: number, z: number) => {
         setMouseCoords({ x, z });
     }, []);
@@ -235,20 +278,15 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
         onSelectCoords(x, z);
     }, [onSelectCoords]);
 
-
     return (
-        <GameModalLayout
-            title={t('ui.tactical_map')}
+        <ScreenModalLayout
+            title={t('ui.map')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
-            onConfirm={onClose}
-            confirmLabel={t('ui.close')}
-            heightClass="h-[80vh]"
-            contentClass="flex-1 flex flex-col min-h-0 overflow-hidden p-0"
-            titleColorClass="text-white"
-            showCloseButton={true}
             onCancel={onClose}
             cancelLabel={t('ui.close')}
+            fullHeight={true}
+            contentClass="flex flex-col p-0 !px-0 !pb-0 overflow-hidden"
             footer={
                 <div className="flex flex-col gap-4 w-full">
                     <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
@@ -263,7 +301,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                         <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30">
                             <span className="text-[10px] text-blue-400 font-bold uppercase mr-2">{t('ui.player')}</span>
                             <span className="text-sm font-mono text-white font-bold">
-                                {playerPos ? `${Math.round(playerPos.x)}, ${Math.round(playerPos.z)}` : '--, --'}
+                                {`${Math.round(px)}, ${Math.round(pz)}`}
                             </span>
                         </div>
                         {!isMobileDevice && (
@@ -278,20 +316,32 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                 </div>
             }
         >
-            <div className="w-full relative bg-black/40 h-full min-h-0">
-                <MapCanvas
-                    bounds={bounds}
-                    groupedEntities={groupedEntities}
-                    setTooltipData={setTooltipData}
-                    onMouseMove={handleSetMouseCoords}
-                    onInteractionStart={handleInteractionStart}
-                    onInteractionEnd={handleInteractionEnd}
-                    onClickImmediate={handleClickImmediate}
-                    isMobileDevice={isMobileDevice}
-                />
+            <div className="relative flex-1 w-full bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
+                <div 
+                    className="relative shadow-2xl"
+                    style={{ 
+                        aspectRatio: `${(bounds.maxX - bounds.minX) / (bounds.maxZ - bounds.minZ)}`,
+                        width: '100%',
+                        height: 'auto',
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        display: 'flex'
+                    }}
+                >
+                    <MapCanvas
+                        bounds={bounds}
+                        groupedEntities={groupedEntities}
+                        setTooltipData={setTooltipData}
+                        onMouseMove={handleSetMouseCoords}
+                        onInteractionStart={handleInteractionStart}
+                        onInteractionEnd={handleInteractionEnd}
+                        onClickImmediate={handleClickImmediate}
+                        isMobileDevice={isMobileDevice}
+                    />
+                </div>
             </div>
             <TooltipOverlay data={tooltipData} />
-        </GameModalLayout>
+        </ScreenModalLayout>
     );
 };
 

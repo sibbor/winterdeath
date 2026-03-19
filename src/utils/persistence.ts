@@ -31,7 +31,14 @@ export const DEFAULT_STATE: GameState = {
     deadBossIndices: [],
     graphics: DEFAULT_GRAPHICS,
     weather: 'snow',
-    environmentOverrides: {}
+    environmentOverrides: {},
+    midRunCheckpoint: null,
+    sectorState: {
+        unlimitedAmmo: false,
+        noReload: false,
+        unlimitedThrowables: false,
+        isInvincible: false
+    }
 };
 
 export const getPersistentState = (state: GameState) => {
@@ -46,7 +53,8 @@ export const getPersistentState = (state: GameState) => {
         deadBossIndices: state.deadBossIndices,
         graphics: state.graphics,
         weather: state.weather,
-        environmentOverrides: state.environmentOverrides
+        environmentOverrides: state.environmentOverrides,
+        sectorState: state.sectorState
     };
 };
 
@@ -68,7 +76,8 @@ export const loadGameState = (): GameState => {
                 showFps: loaded.showFps || false,
                 graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) },
                 weather: loaded.weather || DEFAULT_STATE.weather,
-                environmentOverrides: loaded.environmentOverrides || {}
+                environmentOverrides: loaded.environmentOverrides || {},
+                sectorState: loaded.sectorState || DEFAULT_STATE.sectorState
             };
             // Compatibility checks
             if (mergedState.stats.totalDistanceTraveled === undefined) mergedState.stats.totalDistanceTraveled = 0;

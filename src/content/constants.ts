@@ -72,6 +72,7 @@ export const DEFAULT_GRAPHICS: GraphicsSettings = {
     pixelRatio: 0.75,
     antialias: false,
     shadows: true,
+    bloom: true,
     shadowMapType: 1,
     shadowResolution: 256,
     weatherCount: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES,
@@ -83,6 +84,7 @@ export const LEVEL_CAP = 20;
 
 export const INITIAL_STATS: PlayerStats = {
     level: 1,
+    xp: 0,
     currentXp: 0,
     nextLevelXp: 1500,
     maxHp: 100,

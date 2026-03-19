@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { soundManager } from '../utils/SoundManager';
 import { OverlayType } from '../App';
 import { GameScreen } from '../types';
-import { HudStore } from '../core/systems/HudStore';
+import { HudStore } from '../store/HudStore';
 
 interface UIActions {
     setActiveOverlay: (val: OverlayType | null) => void;
@@ -11,85 +11,108 @@ interface UIActions {
     onCollectibleClose?: () => void;
 }
 
+/**
+ * High-performance Global Input Hook.
+ * Utilizes a Bind-Once listener pattern with Ref-syncing to eliminate 
+ * GC overhead and prevent listener thrashing during gameplay.
+ */
 export const useGlobalInput = (
     activeOverlay: OverlayType | null,
     state: { screen: GameScreen },
     actions: UIActions
 ) => {
-    // Stable ref to prevent listener re-registration on every toggle.
+    // --- PERFORMANCE: Zero-GC Event Listener Pattern ---
+    // Mutable refs allow the event listener to access the latest state 
+    // without requiring the listener itself to be re-registered.
+    const stateRef = useRef(state.screen);
     const overlayRef = useRef<OverlayType | null>(activeOverlay);
+    const actionsRef = useRef(actions);
     const lastEscTimeRef = useRef<number>(0);
 
-    // Safely update the ref without triggering re-renders or mutating during render phase
+    // Sync state to refs quietly without triggering re-renders
     useEffect(() => {
+        stateRef.current = state.screen;
         overlayRef.current = activeOverlay;
-    }, [activeOverlay]);
+        actionsRef.current = actions;
+    }, [state.screen, activeOverlay, actions]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            const now = Date.now();
+            // high-resolution monotonic timer for input throttling
+            const now = performance.now();
             const current = overlayRef.current;
-
-            // Read death state synchronously from the store to avoid dependency triggers
-            const isDead = HudStore.getData().isDead;
+            const screen = stateRef.current;
+            const acts = actionsRef.current;
 
             // ESC Logic
             if (e.key === 'Escape') {
+                // Throttle ESC to prevent double-toggle on rapid presses
                 if (now - lastEscTimeRef.current < 150) return;
                 lastEscTimeRef.current = now;
 
+                // Disable ESC during critical cutscenes
                 if (current === 'DIALOGUE' || current === 'INTRO') return;
 
                 e.preventDefault();
                 e.stopPropagation();
 
+                // Read death state synchronously from the store to bypass React cycle
+                const isDead = HudStore.getState().isDead;
+
                 if (current === 'TELEPORT') {
-                    actions.setTeleportInitialCoords(null);
-                    actions.setActiveOverlay('MAP');
+                    acts.setTeleportInitialCoords(null);
+                    acts.setActiveOverlay('MAP');
                     soundManager.playUiClick();
                 } else if (current === 'RESET_CONFIRM') {
-                    actions.setActiveOverlay('SETTINGS');
+                    acts.setActiveOverlay('SETTINGS');
                     soundManager.playUiClick();
                 } else if (current === 'SETTINGS' || current === 'ADVENTURE_LOG') {
-                    if (state.screen === GameScreen.CAMP) {
-                        actions.setActiveOverlay(null);
+                    if (screen === GameScreen.CAMP) {
+                        acts.setActiveOverlay(null);
                     } else {
-                        actions.setActiveOverlay('PAUSE');
+                        acts.setActiveOverlay('PAUSE');
                     }
                     soundManager.playUiClick();
-                } else if (current === 'PAUSE' || current === 'MAP' || current === 'COLLECTIBLE' || current?.startsWith('STATION_')) {
-                    if (current === 'COLLECTIBLE' && actions.onCollectibleClose) {
-                        actions.onCollectibleClose();
+                } else if (current === 'PAUSE' || current === 'MAP' || current === 'COLLECTIBLE' || (current && current.startsWith('STATION_'))) {
+                    if (current === 'COLLECTIBLE' && acts.onCollectibleClose) {
+                        acts.onCollectibleClose();
                     } else {
-                        actions.setActiveOverlay(null);
-                        actions.requestPointerLock?.();
+                        acts.setActiveOverlay(null);
+                        acts.requestPointerLock?.();
                     }
                     soundManager.playUiClick();
                 } else if (!current && !isDead) {
-                    if (state.screen === GameScreen.CAMP) {
-                        actions.setActiveOverlay('SETTINGS');
+                    if (screen === GameScreen.CAMP) {
+                        acts.setActiveOverlay('SETTINGS');
                     } else {
-                        actions.setActiveOverlay('PAUSE');
+                        acts.setActiveOverlay('PAUSE');
+                        // Always release pointer lock when entering menu
                         if (document.pointerLockElement) document.exitPointerLock();
                     }
                     soundManager.playUiClick();
                 }
             }
             // Map Logic (M)
-            else if (e.key.toLowerCase() === 'm') {
+            // Manual character check avoids .toLowerCase() heap allocation
+            else if (e.key === 'm' || e.key === 'M') {
+                const isDead = HudStore.getState().isDead;
                 if (!current && !isDead) {
-                    actions.setActiveOverlay('MAP');
+                    acts.setActiveOverlay('MAP');
                     if (document.pointerLockElement) document.exitPointerLock();
                     soundManager.playUiConfirm();
                 } else if (current === 'MAP') {
-                    actions.setActiveOverlay(null);
-                    actions.requestPointerLock?.();
+                    acts.setActiveOverlay(null);
+                    acts.requestPointerLock?.();
                     soundManager.playUiClick();
                 }
             }
         };
 
+        // Standard capture: true ensures we catch input before other UI elements consume it.
         window.addEventListener('keydown', handleKeyDown, { capture: true });
-        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    }, [actions, state.screen]);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+        };
+    }, []); // Bound exactly once on mount
 };

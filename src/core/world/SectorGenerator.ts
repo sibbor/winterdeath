@@ -14,10 +14,23 @@ import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { EnemyType } from '../../types/enemy';
 
-// Shared Utilities for Sector Generation
+// Shared Utilities for Zero-GC Operations
 const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _v1_sg = new THREE.Vector3();
+
+// Zero-GC Payload object for light updates in the render loop
+const _lightOverrideCmd = {
+    skyLightColor: undefined as THREE.Color | undefined,
+    skyLightIntensity: undefined as number | undefined,
+    skyLightPosition: undefined as THREE.Vector3 | undefined,
+    skyLightVisible: undefined as boolean | undefined
+};
+
+// Caching to prevent O(N) scene graph traversals every frame
+let _cachedSceneId: number = -1;
+let _cachedAmbientLight: THREE.AmbientLight | null = null;
+let _cachedGround: THREE.Mesh | null = null;
 
 export const SectorGenerator = {
 
@@ -77,9 +90,10 @@ export const SectorGenerator = {
             await SectorGenerator.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
         }
 
-        // Auto-Spawn Collectibles
+        // Auto-Spawn Collectibles (Zero-GC Loop iteration)
         if (def.collectibles) {
-            for (const c of def.collectibles) {
+            for (let i = 0; i < def.collectibles.length; i++) {
+                const c = def.collectibles[i];
                 const meta = getCollectibleById(c.id);
                 if (meta) {
                     // Auto-resolve ID and Type from metadata
@@ -142,7 +156,7 @@ export const SectorGenerator = {
 
         // Sync water lighting with sector moon/sun
         const skyLight = def.environment?.skyLight;
-        skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
+        if (skyLight) skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
         if (skyLight?.visible && skyLight.position && engine?.water) {
             _v1_sg.set(skyLight.position.x, skyLight.position.y || 100, skyLight.position.z);
             engine.water.setLightPosition(_v1_sg);
@@ -222,7 +236,6 @@ export const SectorGenerator = {
     },
 
     generateBoundaries: (ctx: SectorContext, bounds: { width: number, depth: number }) => {
-        const wallMat = new THREE.MeshBasicMaterial({ visible: false });
         const h = 50;
         const w = bounds.width;
         const d = bounds.depth;
@@ -312,14 +325,14 @@ export const SectorGenerator = {
 
         SectorGenerator.addObstacle(ctx, { mesh: chest, position: chest.position, collider: { type: 'sphere', radius: 2 } });
 
-        // --- INTERAKTIONS-FIX: Säg till SpatialGrid att kistan finns! ---
+        // --- INTERACTION FIX: Tell SpatialGrid the chest exists! ---
         SectorGenerator.addInteractable(ctx, chest, {
-            type: 'CHEST',
+            type: 'chest',
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             radius: 3.0
         });
 
-        // (Frivilligt) Spara datan i userData så interaktionssystemet lätt kan läsa scrap-värdet
+        // (Optional) Save data in userData so the interaction system can easily read the scrap value
         chest.userData.chestData = obs;
 
         ctx.mapItems.push({
@@ -328,7 +341,8 @@ export const SectorGenerator = {
             type: 'CHEST',
             label: isBig ? 'ui.large_chest' : 'ui.chest',
             icon: '📦',
-            color: isBig ? '#ffd700' : '#8b4513'
+            color: isBig ? '#ffd700' : '#8b4513',
+            radius: null
         });
     },
 
@@ -419,7 +433,15 @@ export const SectorGenerator = {
             type: 'TRIGGER',
             label: 'ui.collectible',
             icon: '🎁',
-            color: '#ffd700'
+            color: '#ffd700',
+            radius: null
+        });
+
+        // Register as interactable so PlayerInteractionSystem can detect it!
+        SectorGenerator.addInteractable(ctx, group, {
+            type: 'collectible',
+            label: 'ui.interact_pickup_collectible',
+            radius: 4.0
         });
     },
 
@@ -464,7 +486,8 @@ export const SectorGenerator = {
             type: 'POI',
             label: label,
             icon: '📍',
-            color: '#ffffff'
+            color: '#ffffff',
+            radius: null
         });
     },
 
@@ -601,11 +624,33 @@ export const SectorGenerator = {
         // Get dimensions from userData if available
         const sizeY = building.userData.size ? building.userData.size.y : (createRoof ? height * 1.5 : height);
 
+        // Map Registration (Polygon)
+        const hw = width / 2;
+        const hd = depth / 2;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
+
+        ctx.mapItems.push({
+            id: `building_${x}_${z}`,
+            x, z,
+            type: 'BUILDING',
+            label: 'ui.building',
+            icon: null,
+            color: '#1e293b', // Slate-800
+            radius: null,
+            points: [
+                { x: x + (-hw * cos - -hd * sin), z: z + (-hw * sin + -hd * cos) },
+                { x: x + (hw * cos - -hd * sin), z: z + (hw * sin + -hd * cos) },
+                { x: x + (hw * cos - hd * sin), z: z + (hw * sin + hd * cos) },
+                { x: x + (-hw * cos - hd * sin), z: z + (-hw * sin + hd * cos) }
+            ]
+        });
+
         // Collision
         SectorGenerator.addObstacle(ctx, {
             mesh: building,
             position: building.position,
-            quaternion: building.quaternion, // FIX
+            quaternion: building.quaternion,
             collider: {
                 type: 'box' as const,
                 size: (building.userData.size as THREE.Vector3).clone(),
@@ -705,7 +750,7 @@ export const SectorGenerator = {
         vehicleRoot.userData.suspY = 0;
         vehicleRoot.userData.suspVelY = 0;
 
-        // Använd de nya exakta dimensionerna
+        // Use precise exact dimensions
         const interactionRad = Math.max(def.size.x, def.size.z) * 0.5 + 2.0;
         vehicleRoot.userData.interactionRadius = interactionRad;
         vehicleRoot.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
@@ -832,6 +877,17 @@ export const SectorGenerator = {
     addLake: (ctx: SectorContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
         const water = SectorGenerator.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle', maxDepth: floorDepth });
         SectorGenerator.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, 'circle');
+
+        ctx.mapItems.push({
+            id: `lake_${x}_${z}`,
+            x, z,
+            type: 'LAKE',
+            label: 'ui.lake',
+            icon: null,
+            color: '#3b82f6', // Blue-500
+            radius,
+            points: null // Circular
+        });
 
         // Spawn lake bed props
         const numProps = Math.floor(radius * radius * 0.05);
@@ -1081,7 +1137,7 @@ export const SectorGenerator = {
     spawnEnemy: (ctx: SectorContext, type: string, x: number, z: number) => {
         ctx.mapItems.push({
             id: `enemy_spawn_${Math.random()}`,
-            x, z, type: 'ENEMY', label: type, color: '#f00', radius: 1
+            x, z, type: 'ENEMY', label: type, color: '#f00', radius: 1, icon: null
         });
     },
 
@@ -1095,6 +1151,7 @@ export const SectorGenerator = {
     /**
      * Centralized Atmosphere Orchestrator.
      * Handles biome blending, weather syncing, and manual overrides.
+     * ZERO-GC OPTIMIZED for the render loop.
      */
     updateAtmosphere: (
         dt: number,
@@ -1106,10 +1163,18 @@ export const SectorGenerator = {
         sectorDef: any,
         zones?: any[]
     ) => {
-        const weatherSystem = WinterEngine.getInstance().weather;
-        const windSystem = WinterEngine.getInstance().wind;
+        const engine = WinterEngine.getInstance();
+        const weatherSystem = engine.weather;
+        const windSystem = engine.wind;
         const scene = events.scene;
         if (!playerPos || !weatherSystem || !scene) return;
+
+        // Invalidate and refresh cached lookups if the scene has changed
+        if (_cachedSceneId !== scene.id) {
+            _cachedSceneId = scene.id;
+            _cachedAmbientLight = scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+            _cachedGround = scene.getObjectByName('GROUND') as THREE.Mesh;
+        }
 
         const px = playerPos.x;
         const pz = playerPos.z;
@@ -1188,13 +1253,12 @@ export const SectorGenerator = {
             if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
             if (override.groundColor !== undefined) targetGroundColor = override.groundColor;
 
-            // Lights Override
-            events.setLight({
-                skyLightColor: override.skyLightColor !== undefined ? _c2.setHex(override.skyLightColor) : undefined,
-                skyLightIntensity: override.skyLightIntensity !== undefined ? override.skyLightIntensity : undefined,
-                skyLightPosition: override.skyLightPosition,
-                skyLightVisible: override.skyLightVisible
-            });
+            // Zero-GC Lights Override: Mutate pre-allocated static payload instead of creating new {}
+            _lightOverrideCmd.skyLightColor = override.skyLightColor !== undefined ? _c2.setHex(override.skyLightColor) : undefined;
+            _lightOverrideCmd.skyLightIntensity = override.skyLightIntensity !== undefined ? override.skyLightIntensity : undefined;
+            _lightOverrideCmd.skyLightPosition = override.skyLightPosition;
+            _lightOverrideCmd.skyLightVisible = override.skyLightVisible;
+            events.setLight(_lightOverrideCmd);
 
             if (override.bgColor !== undefined) events.setBackgroundColor(override.bgColor);
             if (override.groundColor !== undefined) events.setGroundColor(override.groundColor);
@@ -1221,30 +1285,28 @@ export const SectorGenerator = {
         }
 
         // 4. Apply Atmosphere to Scene (Lerped for smoothness)
-        if (scene.fog instanceof THREE.FogExp2) {
-            scene.fog.color.lerp(targetFogColor, 0.05);
+        // Optimization: Use Three.js internal prototype flag instead of 'instanceof'
+        if (scene.fog && (scene.fog as any).isFogExp2) {
+            (scene.fog as THREE.FogExp2).color.lerp(targetFogColor, 0.05);
 
             // Camera-height fog correction: FogExp2 measures 3D distance from camera,
             // so a top-down camera at Y=100 makes the entire ground invisible.
             // Scale density toward 0 as camera height rises above the normal play range.
-            const engine = WinterEngine.getInstance();
             const camY = engine?.camera?.position?.y ?? 20;
             const FOG_HEIGHT_MIN = 25; // below this, fog is at full density
             const FOG_HEIGHT_MAX = 90; // above this, fog is effectively 0
             const heightFactor = 1.0 - Math.max(0, Math.min(1, (camY - FOG_HEIGHT_MIN) / (FOG_HEIGHT_MAX - FOG_HEIGHT_MIN)));
             const effectiveDensity = targetFogDensity * heightFactor;
 
-            scene.fog.density = THREE.MathUtils.lerp(scene.fog.density, effectiveDensity, 0.05);
+            (scene.fog as THREE.FogExp2).density = THREE.MathUtils.lerp((scene.fog as THREE.FogExp2).density, effectiveDensity, 0.05);
         }
 
-        const ambientLight = scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
-        if (ambientLight) {
-            ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbient, 0.05);
+        if (_cachedAmbientLight) {
+            _cachedAmbientLight.intensity = THREE.MathUtils.lerp(_cachedAmbientLight.intensity, targetAmbient, 0.05);
         }
 
-        const ground = scene.getObjectByName('GROUND') as THREE.Mesh;
-        if (ground && ground.material) {
-            (ground.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);
+        if (_cachedGround && _cachedGround.material) {
+            (_cachedGround.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);
         }
 
         // 5. Auto-Weather Sync
@@ -1281,6 +1343,18 @@ export const SectorGenerator = {
         if (ctx.debugMode) {
             SectorGenerator.visualizePolygon(ctx, polygon, 0xffff00);
         }
+
+        ctx.mapItems.push({
+            id: `wheat_${polygon[0].x}_${polygon[0].z}`,
+            x: polygon[0].x, z: polygon[0].z,
+            type: 'WHEAT',
+            label: 'ui.field',
+            icon: null,
+            color: '#eab308', // Yellow-600
+            radius: null,
+            points: polygon.map(p => ({ x: p.x, z: p.z }))
+        });
+
         await EnvironmentGenerator.fillWheatField(ctx, polygon, density);
     },
 
@@ -1303,6 +1377,18 @@ export const SectorGenerator = {
         if (ctx.debugMode) {
             SectorGenerator.visualizePath(ctx, points, 0xffffff);
         }
+
+        ctx.mapItems.push({
+            id: `mountain_${points[0].x}_${points[0].z}`,
+            x: points[0].x, z: points[0].z,
+            type: 'MOUNTAIN',
+            label: 'ui.mountain',
+            icon: null,
+            color: '#64748b', // Slate-500
+            radius: null,
+            points: points.map(p => ({ x: p.x, z: p.z }))
+        });
+
         EnvironmentGenerator.createMountain(ctx, points, depth, height, caveConfig);
     },
 
@@ -1314,6 +1400,17 @@ export const SectorGenerator = {
         if (ctx.debugMode) {
             SectorGenerator.visualizePolygon(ctx, polygon, 0x00ff00);
         }
+
+        ctx.mapItems.push({
+            id: `forest_${polygon[0].x}_${polygon[0].z}`,
+            x: polygon[0].x, z: polygon[0].z,
+            type: 'FOREST',
+            label: 'ui.forest',
+            icon: null,
+            color: '#16a34a', // Green-600
+            radius: null,
+            points: polygon.map(p => ({ x: p.x, z: p.z }))
+        });
 
         let genType = type;
         if (typeof type === 'string') {
@@ -1353,6 +1450,34 @@ export const SectorGenerator = {
             const trigger = triggers[i] as any;
             ctx.triggers.push(trigger);
             ctx.collisionGrid.addTrigger(trigger);
+
+            // Register POIs to the map automatically
+            if (trigger.type === 'POI') {
+                ctx.mapItems.push({
+                    id: trigger.id || `poi_${Math.random()}`,
+                    x: trigger.position.x,
+                    z: trigger.position.z,
+                    type: 'POI',
+                    label: trigger.content || trigger.id,
+                    icon: '📍',
+                    color: '#f59e0b', // Amber-500
+                    radius: trigger.radius || 10
+                });
+            }
+
+            // Register Family Members to the map
+            if (trigger.type === 'EVENT' && trigger.familyId !== undefined) {
+                ctx.mapItems.push({
+                    id: trigger.id || `family_${trigger.familyId}`,
+                    x: trigger.position.x,
+                    z: trigger.position.z,
+                    type: 'FAMILY',
+                    label: 'ui.family_hint',
+                    icon: '❤️',
+                    color: '#ef4444', 
+                    radius: 12
+                });
+            }
         }
 
         if (ctx.debugMode) {
@@ -1369,7 +1494,7 @@ export const SectorGenerator = {
             if (!drawRadius && trig.size) {
                 drawRadius = Math.max(trig.size.width, trig.size.depth);
             }
-            if (!drawRadius) drawRadius = 2.0; // Sista utväg
+            if (!drawRadius) drawRadius = 2.0; // Last resort
 
             const ringGeo = new THREE.RingGeometry(drawRadius - 0.2, drawRadius, 32);
             const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });

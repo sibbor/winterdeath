@@ -15,7 +15,7 @@ import { EnemyManager } from '../../../core/EnemyManager';
 import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../../content/weapons';
 import { EnemyDeathState } from '../../../types/enemy';
 import { DamageType } from '../../../types/combat';
-import { HudStore } from '../../../core/systems/HudStore';
+import { HudStore } from '../../../store/HudStore';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -34,15 +34,38 @@ interface LoopContext {
     };
 }
 
-// Zero-GC Pre-allocations for the loop
+// ============================================================================
+// ZERO-GC GLOBALS
+// ============================================================================
+const EMPTY_ARRAY: any[] = [];
+const EMPTY_OBJECT: any = {};
+
 const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _animStateScratch: any = {};
-const _fxCallbacks: any = {};
-const _triggerOptionsScratch: any = {};
 
-// String cache for damage numbers to prevent GC spikes during rapid fire (Flamethrower/Arc-Cannon)
+// Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
+const _fxCallbacks: any = {
+    spawnPart: null,
+    spawnDecal: null,
+    onPlayerHit: null
+};
+
+// Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
+const _triggerOptionsScratch: any = {
+    t: null,
+    spawnBubble: null,
+    onClueDiscovered: null,
+    onPOIdiscovered: null,
+    onTrigger: null,
+    onAction: null,
+    collectedCluesRef: null,
+    removeVisual: null,
+    resolveDynamicPos: null
+};
+
+// String cache for damage numbers to prevent GC spikes during rapid fire
 const _numberStringCache: Record<number, string> = {};
 function getCachedNumberString(num: number): string {
     const rounded = Math.round(num);
@@ -57,7 +80,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
     let frame = 0;
     let lastTime = performance.now();
 
-    const getActiveCallbacks = () => state.callbacks || callbacks || {};
+    const getActiveCallbacks = () => state.callbacks || callbacks || EMPTY_OBJECT;
 
     // Initial binding for FX (will be updated in loop if needed)
     _fxCallbacks.spawnPart = callbacks.spawnPart;
@@ -95,9 +118,17 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
     };
 
-    // Allocate the GameContext once to achieve true Zero-GC. 
-    // We update its properties dynamically inside the loop instead of creating a new object `{}` every frame.
+    // Pre-declare ALL properties to lock V8 memory shape and avoid dynamic property allocations
     const _gameContext: any = {
+        scene: null,
+        enemies: null,
+        obstacles: null,
+        collisionGrid: null,
+        spawnPart: null,
+        spawnDecal: null,
+        spawnFloatingText: null,
+        now: 0,
+        playerPos: null,
         explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
         trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
             if (type === 'damage') {
@@ -148,8 +179,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
 
             // Throttle text spawning for performance (Zero-GC Accumulation)
-            // Guns (PROJECTILE) usually show every hit, 
-            // but Sprays/DoT (CONTINUOUS/BURN) accumulate over 250ms
             const isContinuous = weaponData?.behavior === 'CONTINUOUS' || type === DamageType.BURN || type === 'BURN' || type === DamageType.DROWNING;
             const textThrottle = isContinuous ? 250 : 0;
 
@@ -235,7 +264,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const playerGroup = refs.playerGroupRef.current;
         if (!playerGroup || playerGroup.children.length === 0) return;
 
-        // 2. UI Throttling (Zero-GC Update to React props)
+        // 2. UI Throttling
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         state.framesSinceHudUpdate++;
         uiSyncTimer += delta;
@@ -252,7 +281,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
             hudData.debugInfo.drawCalls = refs.lastDrawCallsRef.current;
 
-            // Expose performance metrics implicitly onto state struct (updated by renderer)
+            // Expose performance metrics implicitly onto state struct
             state.renderCpuTime = engine.renderer.info.render.frame || 0;
             state.drawCalls = engine.renderer.info.render.calls;
             state.triangles = engine.renderer.info.render.triangles;
@@ -260,7 +289,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             // Append data directly to avoid Object Spread allocation
             (hudData as any).debugMode = propsRef.current.debugMode;
             (hudData as any).systems = session.getSystems();
-            (hudData as any).interactionPrompt = HudStore.getData().interactionPrompt;
+
+            // Ensure interaction prompt exists in the payload buffer to prevent allocation later
+            if (!(hudData as any).interactionPrompt) {
+                (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
+            }
 
             HudStore.update(hudData);
         }
@@ -299,7 +332,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
 
             monitor.begin('burning_effects');
-            const burningObjects = refs.sectorContextRef.current?.burningObjects || [];
+            const burningObjects = refs.sectorContextRef.current?.burningObjects || EMPTY_ARRAY;
             for (let i = 0; i < burningObjects.length; i++) {
                 const mesh = burningObjects[i];
                 if (!mesh.userData.effects) continue;
@@ -484,8 +517,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             engine.camera.setCinematic(true);
         }
 
-        // --- 11. TRACKING SHADOW CAMERA (Zero-GC) ---
-        // Center the shadow map over the player to prevent the game from becoming dark at the edges
+        // 11. TRACKING SHADOW CAMERA
         if (refs.skyLightRef?.current && refs.skyLightOffsetRef?.current && playerGroup) {
             let shadowTarget = playerGroup.position;
 
@@ -506,17 +538,14 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const currentLabel = state.interactionLabel;
         const lastType = refs.interactionTypeRef.current;
 
-        // FIX: Listen to the new PlayerInteractionSystem output
         if (currentInter && state.hasInteractionTarget && state.interactionTargetPos) {
             _vInteraction.copy(state.interactionTargetPos);
-            _vInteraction.y += 1.5; // Offset so that [E] hovers a bit above the object
+            _vInteraction.y += 1.5;
 
-            // Calculate screen coordinates
             const vector = _vInteraction.project(engine.camera.threeCamera);
 
-            // FIX 1: Z-check. Tillåt lite marginal (1.05 istället för < 1) för kamera-jitter inuti fordon!
             if (vector.z >= -1.0 && vector.z <= 1.05) {
-                const screenX = Math.round((vector.x + 1) / 2 * 100); // 0-100 for CSS %
+                const screenX = Math.round((vector.x + 1) / 2 * 100);
                 const screenY = Math.round((1 - vector.y) / 2 * 100);
 
                 const lastPos = refs.lastInteractionPosRef.current;
@@ -531,42 +560,49 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     refs.interactionTypeRef.current = currentInter;
                     (state as any).lastInteractionLabel = currentLabel;
 
-                    const hData = HudStore.getData();
+                    const hData = HudStore.getState();
 
-                    // FIX 2: För att React ska trigga en uppdatering (Shallow Compare) MÅSTE vi 
-                    // ge 'pos' ett nytt objekt. Annars tror React att UI:t står stilla!
-                    hData.interactionPrompt = {
-                        type: currentInter,
-                        label: currentLabel,
-                        pos: { x: screenX, y: screenY }
-                    };
+                    // ZERO-GC: Mutate the prompt inside the HudStore buffer instead of allocating new objects
+                    if (!hData.interactionPrompt) {
+                        hData.interactionPrompt = {
+                            type: currentInter,
+                            label: currentLabel,
+                            pos: { x: screenX, y: screenY }
+                        };
+                    } else {
+                        hData.interactionPrompt.type = currentInter;
+                        hData.interactionPrompt.label = currentLabel;
+                        hData.interactionPrompt.pos.x = screenX;
+                        hData.interactionPrompt.pos.y = screenY;
+                    }
 
+                    // Because our React UI uses primitive selectors for the interaction prompt, 
+                    // this update is completely invisible to React and will only trigger the 
+                    // GPU-transform mutator we set up in GameUI.
                     HudStore.update(hData);
                 }
             } else {
-                // Object is TRULY behind camera, clear HUD
                 if (refs.interactionTypeRef.current !== null) {
                     refs.interactionTypeRef.current = null;
-                    const hData = HudStore.getData();
+                    const hData = HudStore.getState();
                     hData.interactionPrompt = null;
                     HudStore.update(hData);
                 }
             }
         } else {
-            // No object in range, clear HUD
             if (refs.interactionTypeRef.current !== null) {
                 refs.interactionTypeRef.current = null;
                 refs.lastInteractionPosRef.current = null;
                 (state as any).lastInteractionLabel = null;
 
-                const hData = HudStore.getData();
+                const hData = HudStore.getState();
                 hData.interactionPrompt = null;
                 HudStore.update(hData);
             }
         }
 
-        // 13. Game Context (Zero-GC property updates instead of Object reassignment)
-        const activeCallbacks = getActiveCallbacks() as any;
+        // 13. Game Context
+        const activeCallbacks = getActiveCallbacks();
 
         _gameContext.scene = engine.scene;
         _gameContext.enemies = state.enemies;
@@ -576,7 +612,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
         _gameContext.spawnFloatingText = activeCallbacks.spawnFloatingText || callbacks.spawnFloatingText;
 
-        // Only assign these if they are explicitly overridden (otherwise keep default)
         if (activeCallbacks.explodeEnemy) _gameContext.explodeEnemy = activeCallbacks.explodeEnemy;
         if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
         if (activeCallbacks.addFireZone) _gameContext.addFireZone = activeCallbacks.addFireZone;
@@ -609,7 +644,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
 
-        // 15. Emitters Update
+        // 16. Emitters Update
         monitor.begin('active_effects');
         if (state.activeEffects) {
             for (let i = 0; i < state.activeEffects.length; i++) {
@@ -642,7 +677,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
         monitor.end('active_effects');
 
-        // 16. Update PerformanceMonitor
+        // 17. Update PerformanceMonitor
         monitor.updateGameState(
             playerGroup.position.x,
             playerGroup.position.z,

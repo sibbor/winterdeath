@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PlayerStats } from '../../types';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
-import CampModalLayout from './CampModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 import { LEVEL_CAP } from '../../content/constants';
 import { useOrientation } from '../../hooks/useOrientation';
 
@@ -44,20 +44,20 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
     const isMaxRank = stats.level >= LEVEL_CAP;
 
     return (
-        <CampModalLayout
+        <ScreenModalLayout
             title={t('stations.skills')}
-            titleColor="text-purple-500"
+            isMobileDevice={isMobileDevice}
             onClose={onClose}
-            primaryClose={true}
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_upgrades')}
             closeLabel={tempStats.skillPoints !== stats.skillPoints ? t('ui.cancel') : t('ui.close')}
             canConfirm={tempStats.skillPoints !== stats.skillPoints}
             showCancel={true}
+            titleColorClass="text-purple-600"
         >
-            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-3' : 'grid-cols-1'} gap-4 md:gap-8 h-full ${isMobileDevice ? 'overflow-y-auto content-center' : ''}`}>
+            <div className={`grid ${(!isMobileDevice || isLandscapeMode) ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4 md:gap-8 h-full ${isMobileDevice ? 'overflow-y-auto content-center' : ''}`}>
                 {/* Header Section */}
-                <div className="col-span-full text-center">
+                <div className="col-span-full text-center mb-4 md:mb-8">
                     <span className="text-purple-500 font-bold uppercase tracking-widest text-xs md:text-sm block mb-1">{t('ui.available_skill_points')}</span>
                     <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-mono text-white leading-none font-bold`}>{tempStats.skillPoints}</span>
                     <div className="">
@@ -81,10 +81,9 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                     const displayUpgrade = skill.id === 'speed' ? upgradeVal.toFixed(2) : upgradeVal;
 
                     return (
-                        <div key={skill.id} className={`${isMobileDevice ? 'p-2' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
-                            <h3 className={`${isMobileDevice ? 'text-lg mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
-                            {/* Reduced mb-6 to mb-2 */}
-                            <p className={`${isMobileDevice ? 'text-[10px] h-8 mb-1 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
+                        <div key={skill.id} className={`${isMobileDevice ? 'p-4' : 'p-8'} bg-gray-900/40 border-2 border-purple-900/50 flex flex-col items-center text-center hover:border-purple-600/50 transition-colors relative group`}>
+                            <h3 className={`${isMobileDevice ? 'text-xl mb-1' : 'text-3xl mb-4'} font-semibold text-white uppercase tracking-tighter`}>{t(skill.labelKey)}</h3>
+                            <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
                             <div className={`flex flex-col items-center justify-center gap-0 mt-0 mb-4`}>
                                 <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-purple-500 font-bold leading-none`}>
@@ -108,7 +107,7 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                     );
                 })}
             </div>
-        </CampModalLayout>
+        </ScreenModalLayout>
     );
 };
 

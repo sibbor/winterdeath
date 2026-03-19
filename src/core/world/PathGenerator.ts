@@ -158,7 +158,7 @@ export const PathGenerator = {
         const railPts = curve.getSpacedPoints(20);
         for (let i = 0; i < railPts.length; i++) {
             const p = railPts[i];
-            ctx.mapItems.push({ id: `rail_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: 2, color: '#333' });
+            ctx.mapItems.push({ id: `rail_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', label: null, icon: null, radius: 2, color: '#333' });
         }
         return curve;
     },
@@ -221,7 +221,7 @@ export const PathGenerator = {
 
         for (let i = 0; i < pts.length; i += 10) {
             const p = pts[i];
-            ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', radius: width / 2, color: type === 'ROAD' ? '#222' : '#4a3a2a' });
+            ctx.mapItems.push({ id: `path_${Math.random()}`, x: p.x, z: p.z, type: 'ROAD', label: null, icon: null, radius: width / 2, color: type === 'ROAD' ? '#444' : '#6b5a4a' });
         }
         return curve;
     },

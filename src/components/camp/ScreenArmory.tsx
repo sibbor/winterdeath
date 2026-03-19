@@ -5,7 +5,7 @@ import { t } from '../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../content/constants';
 import { soundManager } from '../../utils/SoundManager';
 import { useOrientation } from '../../hooks/useOrientation';
-import CampModalLayout from './CampModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 
 interface ScreenArmoryProps {
     stats: PlayerStats;
@@ -75,8 +75,6 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
         }
     };
 
-    const scrapYellow = '#eab308'; // Tailwind yellow-500
-
     const scrapHeader = (
         <div className={`px-4 py-1.5 border bg-black border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] flex flex-col items-start gap-0`}>
             <span className={`text-[9px] block uppercase font-bold text-yellow-500 leading-tight opacity-70`}>{t('ui.scrap')}</span>
@@ -94,27 +92,25 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
     };
 
     return (
-        <CampModalLayout
+        <ScreenModalLayout
             title={t('stations.armory')}
-            titleColor="text-yellow-500"
+            isMobileDevice={isMobileDevice}
             onClose={onClose}
             onConfirm={handleConfirm}
             confirmLabel={t('ui.confirm_loadout')}
             closeLabel={hasChanges ? t('ui.cancel') : t('ui.close')}
             canConfirm={hasChanges}
             extraHeaderContent={scrapHeader}
-            fullHeight={true}
+            titleColorClass="text-yellow-600"
+            tabs={[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL]}
+            activeTab={activeTab}
+            onTabChange={(cat) => { setActiveTab(cat as WeaponCategory); soundManager.playUiClick(); }}
+            tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
         >
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8 pl-safe' : 'flex-col gap-4'}`}>
                 {/* Tabs bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    {!effectiveLandscape && (
-                        <>
-                            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black via-black/80 to-transparent z-10 pointer-events-none" />
-                            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black via-black/80 to-transparent z-10 pointer-events-none" />
-                        </>
-                    )}
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-10 pt-2 min-h-[50px] md:min-h-[80px] items-end scrollbar-hide'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
                         {[WeaponCategory.PRIMARY, WeaponCategory.SECONDARY, WeaponCategory.THROWABLE, WeaponCategory.SPECIAL, WeaponCategory.TOOL].map(cat => {
                             const isActive = activeTab === cat;
                             const catColor = WeaponCategoryColors[cat as keyof typeof WeaponCategoryColors] || '#ffffff';
@@ -158,18 +154,19 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                             <div
                                 key={weapon.name}
                                 onClick={() => !isEquipped && isEquippable && handleEquip(weapon.name, weapon.category)}
-                                className={`relative border-2 transition-all group overflow-hidden flex self-start ${isMobileDevice && !isLandscapeMode ? 'flex-col w-full' : (isMobileDevice ? 'flex-col' : 'flex-col min-h-[300px]')} 
+                                className={`relative border-2 transition-all group overflow-hidden flex self-start flex-col
                                     ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}
                                 `}
                                 style={{
                                     borderColor: isEquipped ? categoryColor : '#374151',
                                     backgroundColor: isEquipped ? `${categoryColor}15` : 'rgba(17, 24, 39, 0.4)',
-                                    boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none'
+                                    boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none',
+                                    minHeight: isMobileDevice ? 'auto' : '300px'
                                 }}
                             >
-                                {/* Left Side column on Mobile, Top Side on Desktop */}
+                                {/* Top Side (Image & Level) */}
                                  <div
-                                    className={`${isMobileDevice && !isLandscapeMode ? 'w-full' : (isMobileDevice ? 'w-full' : 'w-full')} flex flex-col border-b relative shrink-0 bg-black/40`}
+                                    className={`w-full flex flex-col border-b relative shrink-0 bg-black/40`}
                                     style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
                                 >
                                     <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
@@ -205,7 +202,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                     )}
                                 </div>
 
-                                {/* Right Side (Stats & Actions) on Mobile, Bottom Side on Desktop */}
+                                {/* Bottom Side (Stats) */}
                                 <div className={`flex-1 flex flex-col justify-between ${isMobileDevice ? 'p-2 min-w-0' : 'p-5 gap-4'}`}>
                                     <div className="min-w-0">
                                         <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`}
@@ -243,8 +240,6 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                             )}
                                         </div>
                                     </div>
-
-                                    {/* Desktop upgrade button removed from here, already placed under image */}
                                 </div>
                             </div>
                         );
@@ -252,7 +247,7 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                     </div>
                 </div>
             </div>
-        </CampModalLayout>
+        </ScreenModalLayout>
     );
 };
 

@@ -202,7 +202,7 @@ export const createProceduralDiffuse = () => {
         }
     });
 
-    const tacticalMap = draw(512, 512, (ctx, s) => {
+    const map = draw(512, 512, (ctx, s) => {
         const w = ctx.canvas.width; const h = ctx.canvas.height;
         ctx.fillStyle = '#dcd0b0'; ctx.fillRect(0, 0, w, h);
         ctx.strokeStyle = '#c0b090'; ctx.lineWidth = 1;
@@ -322,7 +322,7 @@ export const createProceduralDiffuse = () => {
     });
 
     // Final cache population
-    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, tacticalMap, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha };
+    cachedTextures = { gravel, stone, pineBranch, pine: pineBranch, bark, map, frostAlpha, halo, containerMetal, wood, treeRings, fenceMesh, asphalt, footprint, scorchAlpha };
 
     return cachedTextures;
 };

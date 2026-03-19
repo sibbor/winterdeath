@@ -1,23 +1,25 @@
-
 import React from 'react';
 import { t } from '../../utils/i18n';
-import CampModalLayout from './CampModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 
 interface ScreenResetConfirmProps {
     onConfirm: () => void;
     onCancel: () => void;
+    isMobileDevice?: boolean;
 }
 
-const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCancel }) => {
+const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCancel, isMobileDevice }) => {
     return (
-        <CampModalLayout
+        <ScreenModalLayout
             title={t('ui.reset_confirm_title')}
+            isMobileDevice={isMobileDevice}
             onClose={onCancel}
+            onCancel={onCancel}
+            cancelLabel={t('ui.no_cancel')}
             onConfirm={onConfirm}
             confirmLabel={t('ui.yes_delete')}
-            closeLabel={t('ui.no_cancel')}
-            showCancel={true}
             isSmall={true}
+            titleColorClass="text-red-600"
         >
             <div className="flex flex-col items-center justify-center py-4 max-w-xl mx-auto text-center space-y-8">
                 <div className="bg-red-900/40 border-2 border-red-600 p-6 shadow-[inset_0_0_20px_rgba(220,38,38,0.2)]">
@@ -26,7 +28,7 @@ const ScreenResetConfirm: React.FC<ScreenResetConfirmProps> = ({ onConfirm, onCa
                     </p>
                 </div>
             </div>
-        </CampModalLayout>
+        </ScreenModalLayout>
     );
 };
 

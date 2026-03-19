@@ -1,66 +1,7 @@
 import { WeaponType } from '../content/weapons';
+import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from './hud';
 
-// --- HUD & ZERO-GC TYPES ---
-export interface HudVector2 {
-  x: number;
-  z: number;
-}
-
-export interface HudBossInfo {
-  active: boolean;
-  name: string;
-  hp: number;
-  maxHp: number;
-}
-
-export interface HudState {
-  hp: number;
-  maxHp: number;
-  stamina: number;
-  maxStamina: number;
-  ammo: number;
-  magSize: number;
-  score: number;
-  scrap: number;
-  multiplier: number;
-  activeWeapon: WeaponType;
-  isReloading: boolean;
-  boss: HudBossInfo | null;
-  bossSpawned: boolean;
-  bossDefeated: boolean;
-  familyFound: boolean;
-  familySignal: number;
-  level: number;
-  currentXp: number;
-  nextLevelXp: number;
-  throwableAmmo: number;
-  reloadProgress: number;
-  playerPos: HudVector2;
-  familyPos: HudVector2 | null;
-  bossPos: HudVector2 | null;
-  distanceTraveled: number;
-  kills: number;
-  spEarned: number;
-  skillPoints: number;
-  isDead: boolean;
-  isDriving: boolean;
-  vehicleSpeed: number;
-  throttleState: number;
-  sectorStats?: SectorState;
-  fps: number;
-  debugInfo?: any;
-  statusEffects: any[];
-  isDisoriented: boolean;
-  activePassives: string[];
-  activeBuffs: string[];
-  activeDebuffs: string[];
-  killerName?: string;
-  killerAttackName?: string;
-  killedByEnemy?: boolean;
-  mapItems?: any[];
-  debugMode?: boolean;
-  systems?: any[];
-}
+export type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState };
 
 // --- CORE TYPES ---
 
@@ -77,106 +18,111 @@ export enum GameScreen {
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
 
-export interface VehicleDef {
-  type: 'BOAT' | 'CAR';
-  speed: number;
-  turnSpeed: number;
-  acceleration: number;
-  friction: number;
-  mass: number;
-  drag: number;
-  seats: number;
-  gearRatios?: number[];
-  forward?: { x: number; y: number; z: number };
+export interface GraphicsSettings {
+  antialias: boolean;
+  shadows: boolean;
+  bloom: boolean;
+  shadowMapType: number;
+  shadowResolution: number;
+  pixelRatio: number;
+  weatherCount: number;
+  textureQuality: number;
 }
 
 export interface PlayerStats {
   level: number;
+  xp: number;
   currentXp: number;
   nextLevelXp: number;
   maxHp: number;
   maxStamina: number;
-  speed: number;
   skillPoints: number;
-  rescuedFamilyIds: number[]; // IDs of family members currently in the party
-  kills: number; // Total kills
-  scrap: number; // Current balance
-
-  // Detailed Stats
-  sectorsCompleted: number;
-  familyFoundCount: number;
   totalSkillPointsEarned: number;
-
+  kills: number;
   killsByType: Record<string, number>;
+  deaths: number;
+  sectorsCompleted: number;
+  scrap: number;
   totalScrapCollected: number;
   totalBulletsFired: number;
   totalBulletsHit: number;
   totalThrowablesThrown: number;
   totalDamageDealt: number;
   totalDamageTaken: number;
-  totalDistanceTraveled: number; // In meters
-  cluesFound: string[]; // List of collected clue names (IDs)
-  collectiblesDiscovered: string[]; // List of collected 3D items
-  viewedCollectibles: string[]; // List of collectibles seen in Adventure Log
-  seenEnemies: string[]; // List of enemy types seen
-  seenBosses: string[]; // List of bosses seen
-  discoveredPOIs: string[]; // List of POI IDs visited
-  deaths: number;
-  mostUsedWeapon: string;
+  totalDistanceTraveled: number;
   chestsOpened: number;
   bigChestsOpened: number;
-
-  incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
-  outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
-
+  collectiblesDiscovered: string[];
+  viewedCollectibles?: string[];
+  cluesFound: string[];
+  discoveredPOIs: string[];
+  seenEnemies: string[];
+  seenBosses: string[];
   prologueSeen?: boolean;
+  // Legacy / Additional stats from constants.ts
+  speed: number;
+  rescuedFamilyIds: number[];
+  familyFoundCount: number;
+  mostUsedWeapon: string;
+  incomingDamageBreakdown?: Record<string, any>;
+  outgoingDamageBreakdown?: Record<string, any>;
 }
 
 export interface SectorStats {
+  kills: number;
+  killsByType: Record<string, number>;
+  damageDealt: number;
+  damageTaken: number;
+  timePlayed: number;
   timeElapsed: number;
+  accuracy: number;
+  itemsCollected: number;
+  scrapLooted: number;
   shotsFired: number;
   shotsHit: number;
   throwablesThrown: number;
-  killsByType: Record<string, number>;
-  totalScrapCollected?: number;
-  scrapLooted: number;
-  xpGained: number;
-  familyFound: boolean;
-  familyExtracted?: boolean;
-  damageDealt: number;
-  damageTaken: number;
-  bossDamageDealt?: number;
-  bossDamageTaken?: number;
   distanceTraveled: number;
-  cluesFound: string[];
-  collectiblesDiscovered: string[];
-  seenEnemies?: string[];
-  seenBosses?: string[];
-  discoveredPOIs?: string[];
-  isExtraction?: boolean;
   chestsOpened: number;
   bigChestsOpened: number;
+  cluesFound: string[];
+  discoveredPOIs: string[];
+  seenEnemies: string[];
+  seenBosses: string[];
+  xpGained: number;
   spEarned?: number;
+  collectiblesDiscovered?: string[];
   aborted?: boolean;
-
-  incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
-  outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
+  familyFound?: boolean;
+  familyExtracted?: boolean;
+  isExtraction?: boolean;
+  bossDamageDealt?: number;
+  bossDamageTaken?: number;
+  incomingDamageBreakdown?: Record<string, Record<string, number>>;
+  outgoingDamageBreakdown?: Record<string, number>;
+  zombieWaveActive?: boolean;
+  zombiesKilled?: number;
+  zombiesKillTarget?: number;
+  hordeTarget?: number;
 }
 
-export interface GraphicsSettings {
-  pixelRatio: number;
-  antialias: boolean;
-  shadows: boolean;
-  shadowMapType: number;
-  shadowResolution: number;
-  weatherCount: number;
-  textureQuality: number;
+export interface SectorState {
+  unlimitedThrowables?: boolean;
+  unlimitedAmmo?: boolean;
+  noReload?: boolean;
+  isInvincible?: boolean;
+  envOverride?: EnvironmentOverride;
+  ctx?: any;
+  zombieWaveActive?: boolean;
+  zombiesKilled?: number;
+  zombiesKillTarget?: number;
+  hordeTarget?: number;
+  [key: string]: any;
 }
 
 export interface GameState {
   screen: GameScreen;
-  stats: PlayerStats;
   currentSector: number;
+  stats: PlayerStats;
   loadout: {
     primary: WeaponType;
     secondary: WeaponType;
@@ -184,169 +130,105 @@ export interface GameState {
     special: WeaponType;
   };
   weaponLevels: Record<WeaponType, number>;
-  sectorBriefing: string;
-  debugMode: boolean;
-  showFps: boolean;
-  sectorStats?: SectorStats;
-  rescuedFamilyIndices: number[];
+  graphics: GraphicsSettings;
   deadBossIndices: number[];
-  graphics?: GraphicsSettings;
+  rescuedFamilyIndices: number[];
+  sectorState?: SectorState;
+  showFps?: boolean;
+  sectorBriefing?: string;
+  midRunCheckpoint: { x: number, z: number, timestamp: number } | null;
+  debugMode?: boolean;
   weather: WeatherType;
   environmentOverrides?: Record<number, EnvironmentOverride>;
 }
 
-export interface Vector2 {
-  x: number;
-  y: number;
+export interface EnvironmentOverride {
+  fogColor?: number;
+  fogDensity?: number;
+  ambientIntensity?: number;
+  directionalIntensity?: number;
+  groundColor?: number;
+  // Playground / Debug overrides
+  bgColor?: number;
+  fov?: number;
+  skyLightVisible?: boolean;
+  skyLightPosition?: { x: number; y: number; z: number };
+  skyLightColor?: number;
+  skyLightIntensity?: number;
+  weather?: WeatherType;
+  weatherDensity?: number;
+  windStrength?: number;
+  windDirection?: number;
+  windRandomized?: boolean;
 }
 
-export type TriggerType = 'COLLECTIBLE' | 'THOUGHT' | 'SPEAK' | 'POI' | 'EVENT' | 'INTERACT' | 'TERMINAL';
-
-export type TriggerActionType =
-  | 'SPAWN_ENEMY'
-  | 'PLAY_SOUND'
-  | 'UNLOCK_OBJECT'
-  | 'GIVE_REWARD'
-  | 'CAMERA_SHAKE'
-  | 'SHOW_TEXT'
-  | 'CAMERA_PAN'
-  | 'START_WAVE'
-  | 'START_CINEMATIC'
-  | 'TRIGGER_FAMILY_FOLLOW'
-  | 'OPEN_UI';
+export type TriggerType = 'COLLECTIBLE' | 'CLUE' | 'POI' | 'INTERACTION' | 'STATION' | 'SECTOR_END' | 'SPEAK' | 'THOUGHT' | 'INFO' | 'AMBUSH' | string;
 
 export interface TriggerAction {
-  type: TriggerActionType;
-  payload?: any; // Flexible payload
-  delay?: number; // Delay in ms before execution
+  type: string;
+  amount?: number;
+  id?: string;
+  payload?: any;
+  [key: string]: any;
 }
 
 export interface SectorTrigger {
   id: string;
-  position: { x: number, z: number };
+  position?: { x: number; z: number };
+  x?: number;
+  z?: number;
   radius?: number;
+  size?: { width: number; depth: number };
   type: TriggerType;
-  content: string; // Legacy: The text to display
-  description?: string; // Narrative description for clues
-  chainedContent?: string[]; // For sequential thoughts
-  triggered: boolean;
-  icon?: string; // For collectibles
-
-  // New Properties for Event System
-  actions?: TriggerAction[]; // List of actions to execute
-  repeatInterval?: number; // If > 0, trigger resets after X ms (for recurring events/spawners)
-  lastTriggerTime?: number; // Timestamp for repeat logic
-  resetOnExit?: boolean; // If true, trigger resets when player leaves the zone
-
-  // Box Shape Support
-  size?: { width: number, depth: number }; // For rectangular triggers
-  rotation?: number; // Y-rotation of the box
-
-  // Dynamic Positioning
-  familyId?: number; // Attach to a specific family member by ID
-  ownerId?: string; // Attach to any mesh with this userData.id
-}
-
-
-export interface NotificationState {
-  visible: boolean;
-  text: string;
-  icon?: string;
-  timestamp: number;
-}
-
-export interface ThoughtState {
-  visible: boolean;
-  text: string;
-  timestamp: number;
-}
-
-export type MapItemType = 'POI' | 'BUILDING' | 'ROAD' | 'OBSTACLE' | 'CHEST' | 'TRIGGER' | 'FAMILY' | 'PLAYER' | 'BOSS' | 'ENEMY' | 'OTHER';
-
-export interface MapItem {
-  id: string;
-  x: number;
-  z: number;
-  type: MapItemType;
   label?: string;
-  icon?: string; // Emoji or SVG path
+  icon?: string;
   color?: string;
-  radius?: number; // Size on map
-}
-
-export interface CinematicLine {
-  speaker: string;
-  text: string;
-  type?: string;
-  trigger?: string;
-  duration?: number;
-}
-
-export interface EnvironmentOverride {
-  bgColor?: number;
-  fogColor?: number;
-  fogDensity?: number;
-  ambientIntensity?: number;
-  groundColor?: number;
-  fov?: number;
-  skyLightVisible?: boolean;
-  skyLightColor?: number;
-  skyLightIntensity?: number;
-  skyLightPosition?: { x: number; y: number; z: number };
-  windStrength?: number;
-  windDirection?: number;
-  windRandomized?: boolean;
-  weather?: WeatherType;
-  weatherDensity?: number;
-}
-
-export interface SectorState {
-  [key: string]: any;
-  envOverride?: EnvironmentOverride;
-  isInvincible?: boolean;
-  unlimitedAmmo?: boolean;
-  unlimitedThrowables?: boolean;
-  noReload?: boolean;
-}
-
-export interface Obstacle {
-  x: number;
-  z: number;
-  radius: number;
-  type?: string;
+  content?: string;
+  triggered?: boolean;
+  actions?: TriggerAction[];
+  resetOnExit?: boolean;
+  repeatInterval?: number;
+  lastTriggerTime?: number;
+  rotation?: number;
+  familyId?: number;
+  ownerId?: string;
+  data?: any;
 }
 
 export interface GameCanvasProps {
-  onOpenMap: () => void;
   stats: PlayerStats;
-  loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType };
+  loadout: {
+    primary: WeaponType;
+    secondary: WeaponType;
+    throwable: WeaponType;
+    special: WeaponType;
+  };
   weaponLevels: Record<WeaponType, number>;
-  onDie: (stats: SectorStats, killer: string) => void;
   currentSector: number;
-  debugMode: boolean;
-  onSectorEnded: (stats: SectorStats) => void;
-  onPauseToggle: (paused: boolean) => void;
-  triggerEndSector: boolean;
+  deadBossIndices: number[];
+  rescuedFamilyIndices: number[];
+  debugMode?: boolean;
   isRunning: boolean;
   isPaused: boolean;
-  onDialogueStateChange: (active: boolean) => void;
-  onDeathStateChange?: (active: boolean) => void;
-  onBossIntroStateChange?: (active: boolean) => void;
-  onMapInit: (items: MapItem[]) => void;
+  onDie: (stats: SectorStats, killer: string) => void;
+  onSectorEnded: (stats: SectorStats) => void;
+  onPauseToggle: (val: boolean) => void;
+  onOpenMap: () => void;
+  triggerEndSector: boolean;
+  familyAlreadyRescued: boolean;
   bossPermanentlyDefeated: boolean;
-  familyAlreadyRescued?: boolean;
-  rescuedFamilyIndices: number[];
   onSectorLoaded: () => void;
+  startAtCheckpoint: boolean;
+  onCheckpointReached: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onCollectibleDiscovered: (id: string) => void;
   onClueDiscovered: (clue: SectorTrigger) => void;
   onPOIdiscovered: (poi: SectorTrigger) => void;
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
-  onFPSUpdate?: (fps: number) => void;
-  initialGraphics?: GraphicsSettings;
-  weather?: WeatherType;
-  onSpawnEnemies?: (enemies: any[]) => void;
+  onDialogueStateChange: (active: boolean) => void;
+  onDeathStateChange: (active: boolean) => void;
+  onBossIntroStateChange: (active: boolean) => void;
   onUpdateLoadout?: (loadout: any, levels: any) => void;
   onEnvironmentOverrideChange?: (overrides: EnvironmentOverride, weather: WeatherType) => void;
   environmentOverrides?: Record<number, EnvironmentOverride>;
@@ -354,6 +236,8 @@ export interface GameCanvasProps {
   isMobileDevice?: boolean;
   disableInput?: boolean;
   isWarmup?: boolean;
+  weather: WeatherType;
+  initialGraphics: GraphicsSettings;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

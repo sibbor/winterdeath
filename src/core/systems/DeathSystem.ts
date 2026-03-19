@@ -8,7 +8,7 @@ import { MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../animation/PlayerAnimator';
-import { HudStore } from './HudStore';
+import { HudStore } from '../../store/HudStore';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();

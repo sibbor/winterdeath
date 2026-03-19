@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { t } from '../../utils/i18n';
-import { HudStore } from '../../core/systems/HudStore';
+import { useHudStore } from '../../hooks/useHudStore';
 import { getSpeakerColor } from '../../utils/assets';
 
 interface CinematicBubbleProps {
@@ -9,32 +9,110 @@ interface CinematicBubbleProps {
 }
 
 export interface CinematicBubbleHandle {
-    finishTyping: () => boolean; // Returns true if it was still typing and forced finish, false if already finished
+    finishTyping: () => boolean;
 }
 
 interface TextToken {
     type: 'text' | 'action' | 'italic';
     content: string;
+    cleanContent: string;
 }
 
-const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
-    const [bubbleData, setBubbleData] = useState<{ text: string, speakerName: string, isVisible: boolean }>({ text: '', speakerName: '', isVisible: false });
-    const { text, speakerName, isVisible } = bubbleData;
+// Extract static constants to prevent inline allocations
+const CONTAINER_HIDDEN = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[-20%] opacity-0";
+const CONTAINER_VISIBLE = "fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out bottom-[calc(12%+25px)] opacity-100";
 
-    const [visibleCount, setVisibleCount] = useState(0);
-    const [opacity, setOpacity] = useState(0);
+const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(({ isMobileDevice, onComplete }, ref) => {
+    // ============================================================================
+    // ZERO-GC PRIMITIVE SELECTORS
+    // ============================================================================
+    const cinematicActive = useHudStore(s => s.cinematicActive);
+    const rawText = useHudStore(s => s.currentLine?.text || '');
+    const speakerName = useHudStore(s => s.currentLine?.speaker || '');
+
+    const isVisible = cinematicActive && !!rawText;
+
+    // Translate ONLY once when the raw string changes
+    const translatedText = useMemo(() => (rawText ? t(rawText) : ''), [rawText]);
+
+    // React state is ONLY used for start/end triggers, NOT the 30ms typing ticks
     const [isFinished, setIsFinished] = useState(false);
+
+    // Mutable refs for high-frequency animation logic
     const timerRef = useRef<number | null>(null);
+    const visibleCountRef = useRef<number>(0);
+    const textContainerRef = useRef<HTMLSpanElement>(null);
+
+    // 1. Parse text into tokens efficiently (Once per line)
+    const tokens = useMemo<TextToken[]>(() => {
+        if (!translatedText) return [];
+        const regex = /(\([^)]+\)|\/[^/]+\/)/g;
+        const parts = translatedText.split(regex);
+
+        return parts.map((part): TextToken => {
+            if (part.startsWith('(') && part.endsWith(')')) {
+                return { type: 'action', content: part, cleanContent: part.replace(/[()]/g, '') };
+            } else if (part.startsWith('/') && part.endsWith('/')) {
+                return { type: 'italic', content: part, cleanContent: part.replace(/\//g, '') };
+            } else {
+                return { type: 'text', content: part, cleanContent: part };
+            }
+        }).filter(t => t.content.length > 0);
+    }, [translatedText]);
+
+    // 2. Calculate total length
+    const fullTextLength = useMemo(() => {
+        let len = 0;
+        for (let i = 0; i < tokens.length; i++) {
+            len += tokens[i].cleanContent.length;
+        }
+        return len;
+    }, [tokens]);
+
+    // Direct DOM mutator function (Zero-GC string builder, completely bypasses React VDOM)
+    const updateDOMText = useCallback((count: number) => {
+        if (!textContainerRef.current) return;
+
+        let currentIdx = 0;
+        let html = "";
+
+        // Use standard for-loop over map for absolute zero-GC
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            const start = currentIdx;
+            const end = start + token.cleanContent.length;
+
+            if (count <= start) break;
+
+            const visibleLength = Math.min(token.cleanContent.length, count - start);
+            const displayStr = token.cleanContent.substring(0, visibleLength);
+
+            let className = "";
+            if (token.type === 'action') className = "italic opacity-80";
+            else if (token.type === 'italic') className = "italic";
+
+            if (className) {
+                html += `<span class="${className}">${displayStr}</span>`;
+            } else {
+                html += displayStr; // Raw text without spans is slightly faster
+            }
+
+            currentIdx = end;
+        }
+
+        textContainerRef.current.innerHTML = html;
+    }, [tokens]);
 
     useImperativeHandle(ref, () => ({
         finishTyping: () => {
-            if (!isFinished && isVisible && text) {
+            if (!isFinished && isVisible && translatedText) {
                 if (timerRef.current !== null) {
                     clearInterval(timerRef.current);
                     timerRef.current = null;
                 }
                 setIsFinished(true);
-                setVisibleCount(fullTextLength);
+                visibleCountRef.current = fullTextLength;
+                updateDOMText(fullTextLength);
                 if (onComplete) onComplete();
                 return true;
             }
@@ -42,73 +120,29 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
         }
     }));
 
-    // 1. Parse text into tokens (Standard, Action, Italic)
-    const tokens = useMemo<TextToken[]>(() => {
-        if (!text) return [];
-        const regex = /(\([^)]+\)|\/[^/]+\/)/g;
-        // Split and keep delimiters
-        const parts = text.split(regex);
-
-        return parts.map((part): TextToken => {
-            if (part.startsWith('(') && part.endsWith(')')) {
-                return { type: 'action', content: part };
-            } else if (part.startsWith('/') && part.endsWith('/')) {
-                return { type: 'italic', content: part };
-            } else {
-                return { type: 'text', content: part };
-            }
-        }).filter(t => t.content.length > 0);
-    }, [text]);
-
-    // 2. Calculate total length for typing effect
-    const fullTextLength = tokens.reduce((acc, token) => acc + token.content.length, 0);
-
-    // 3. HudStore Subscription
+    // 3. Typing Effect Logic (Runs entirely outside React's render phase)
     useEffect(() => {
-        const unsubscribe = HudStore.subscribe((data) => {
-            const hasLine = data.cinematicActive && data.currentLine;
-            setBubbleData(prev => {
-                const newText = hasLine ? t(data.currentLine.text) : '';
-                const newSpeaker = hasLine ? data.currentLine.speaker : '';
-
-                if (prev.text === newText && prev.isVisible === !!hasLine) return prev; // Avoid unecessary state updates
-
-                return {
-                    text: newText,
-                    speakerName: newSpeaker,
-                    isVisible: !!hasLine
-                };
-            });
-        });
-        return unsubscribe;
-    }, []);
-
-    // 4. Typing Effect Logic
-    useEffect(() => {
-        if (isVisible && text) {
-            setOpacity(1);
-            setVisibleCount(0);
+        if (isVisible && translatedText) {
+            visibleCountRef.current = 0;
             setIsFinished(false);
+            updateDOMText(0); // Clear immediately
 
             if (timerRef.current !== null) clearInterval(timerRef.current);
 
             timerRef.current = window.setInterval(() => {
-                setVisibleCount(prev => {
-                    if (prev < fullTextLength) {
-                        return prev + 1; // 1 char at a time
-                    } else {
-                        if (timerRef.current !== null) {
-                            clearInterval(timerRef.current);
-                            timerRef.current = null;
-                        }
-                        setIsFinished(true);
-                        if (onComplete) onComplete();
-                        return prev;
+                if (visibleCountRef.current < fullTextLength) {
+                    visibleCountRef.current += 1;
+                    updateDOMText(visibleCountRef.current);
+                } else {
+                    if (timerRef.current !== null) {
+                        clearInterval(timerRef.current);
+                        timerRef.current = null;
                     }
-                });
+                    setIsFinished(true); // Trigger final React render
+                    if (onComplete) onComplete();
+                }
             }, 30); // 30ms per character
         } else {
-            setOpacity(0);
             setIsFinished(false);
             if (timerRef.current !== null) {
                 clearInterval(timerRef.current);
@@ -122,81 +156,36 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
                 timerRef.current = null;
             }
         };
-    }, [text, isVisible, fullTextLength, onComplete]);
+    }, [translatedText, isVisible, fullTextLength, onComplete, updateDOMText]);
 
-    const bgColor = getSpeakerColor(speakerName);
-    const isDark = ['#111111', '#222222', '#000000'].includes(bgColor);
+    const bgColor = useMemo(() => getSpeakerColor(speakerName), [speakerName]);
 
-    // Render Logic
-    const renderContent = () => {
-        let currentIdx = 0;
+    // Extract dynamic styles to avoid inline object allocation per render
+    const lineStyle = useMemo(() => ({ backgroundColor: bgColor }), [bgColor]);
+    const textStyle = useMemo(() => ({ color: bgColor }), [bgColor]);
 
-        return tokens.map((token, i) => {
-            const start = currentIdx;
-            const end = start + token.content.length;
-
-            // If completely hidden
-            if (visibleCount <= start) {
-                currentIdx = end;
-                return null;
-            }
-
-            // Determine slice
-            const visibleLength = Math.min(token.content.length, visibleCount - start);
-            let displayStr = token.content.substring(0, visibleLength);
-
-            // Styling & Cleanup
-            let className = "";
-
-            if (token.type === 'action') {
-                className = "italic opacity-80";
-                // Strip parentheses for display
-                displayStr = displayStr.replace(/[()]/g, '');
-            } else if (token.type === 'italic') {
-                className = "italic";
-                // Strip slashes for display
-                displayStr = displayStr.replace(/\//g, '');
-            }
-
-            currentIdx = end;
-
-            return (
-                <span key={i} className={className}>
-                    {displayStr}
-                </span>
-            );
-        });
-    };
-
-    // Render Cinematic Bottom Bar
     return (
-        <div
-            className={`fixed left-0 right-0 z-[100] flex justify-center pointer-events-none transition-all duration-500 ease-out`}
-            style={{
-                bottom: isVisible ? 'calc(12% + 25px)' : '-20%',
-                opacity: opacity,
-            }}
-        >
-            <div
-                className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}
-            >
+        <div className={isVisible ? CONTAINER_VISIBLE : CONTAINER_HIDDEN}>
+            <div className={`w-[90%] md:w-[60%] max-w-4xl relative ${isMobileDevice ? 'scale-90 origin-bottom' : ''}`}>
+
                 {/* Dialogue Text Background */}
                 <div className="hud-bar-container bg-black/95 backdrop-blur-xl p-6 md:p-8 min-h-[100px] relative shadow-2xl">
+
                     {/* Speaker Accent Line */}
-                    <div
-                        className="absolute top-0 left-0 w-2 h-full opacity-60"
-                        style={{ backgroundColor: bgColor }}
-                    />
+                    <div className="absolute top-0 left-0 w-2 h-full opacity-60" style={lineStyle} />
 
                     {/* Content */}
-                    <p className="text-white/90 text-sm md:text-xl font-mono leading-relaxed ml-4" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+                    <p className="text-white/90 text-sm md:text-xl font-mono leading-relaxed ml-4 drop-shadow-md">
                         {speakerName && (
-                            <span className="font-black mr-3 uppercase tracking-widest text-xs md:text-sm block mb-1" style={{ color: bgColor }}>
+                            <span className="font-black mr-3 uppercase tracking-widest text-xs md:text-sm block mb-1" style={textStyle}>
                                 {speakerName}
                             </span>
                         )}
-                        <span className="hud-text-glow">{renderContent()}</span>
-                        {isVisible && visibleCount < fullTextLength && (
+
+                        {/* ZERO-GC DOM Container - Updated strictly via innerHTML */}
+                        <span ref={textContainerRef} className="hud-text-glow"></span>
+
+                        {isVisible && !isFinished && (
                             <span className="inline-block w-2 md:w-3 h-5 md:h-6 bg-white/50 animate-pulse ml-1 align-middle" />
                         )}
                     </p>

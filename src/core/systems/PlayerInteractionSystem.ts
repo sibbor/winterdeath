@@ -88,6 +88,8 @@ export class PlayerInteractionSystem implements System {
                 state.hasInteractionTarget = true;
             } else {
                 state.hasInteractionTarget = false;
+                state.interactionType = null;
+                state.interactionLabel = null;
             }
         }
 
@@ -286,6 +288,9 @@ export class PlayerInteractionSystem implements System {
                     // Regular Point/Radius Interaction (Chests, Collectibles, etc.)
                     const r = obj.userData.interactionRadius || 4.0;
                     if (playerPos.distanceToSquared(_v1) < r * r) {
+                        // Chest specific opened check
+                        if (obj.userData.interactionType === 'chest' && obj.userData.chestData?.opened) continue;
+
                         _detectionResult.position.copy(_v1);
                         _detectionResult.type = (obj.userData.interactionType as any) || 'sector_specific';
                         _detectionResult.id = obj.userData.interactionId;

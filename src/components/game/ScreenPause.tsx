@@ -1,7 +1,7 @@
 import React from 'react';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
-import GameModalLayout from './GameModalLayout';
+import ScreenModalLayout from '../ui/ScreenModalLayout';
 
 interface ScreenPauseProps {
     onResume: () => void;
@@ -17,7 +17,12 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
     const buttonStyle = `w-full ${isMobileDevice ? 'py-3 text-sm' : 'py-4'} font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg hover:scale-105 active:scale-95`;
 
     return (
-        <GameModalLayout title={t('ui.paused')} isMobileDevice={isMobileDevice} onClose={onResume} showCloseButton={false}>
+        <ScreenModalLayout 
+            title={t('ui.paused')} 
+            isMobileDevice={isMobileDevice} 
+            onClose={onResume}
+            showCloseButton={false}
+        >
             <div className="space-y-6">
                 <button onClick={() => { soundManager.playUiClick(); onResume(); }} className={`${buttonStyle} bg-white text-black border-white hover:bg-gray-200`}>
                     <span>{t('ui.continue')}</span>
@@ -47,7 +52,7 @@ const ScreenPause: React.FC<ScreenPauseProps> = ({ onResume, onAbort, onOpenMap,
                     <span>{t('ui.end_game')}</span>
                 </button>
             </div>
-        </GameModalLayout>
+        </ScreenModalLayout>
     );
 };
 
