@@ -2,9 +2,11 @@
 import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
+import { EnemyType } from '../../../types/enemy';
 
 export const ZombieModels = {
-    createZombie: (typeKey: string, typeData: any): THREE.Group => {
+
+    createZombie: (typeKey: EnemyType | string, typeData: any): THREE.Group => {
         const group = new THREE.Group();
 
         // Use the color from typeData (zombies.ts)

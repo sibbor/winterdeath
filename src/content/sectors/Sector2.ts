@@ -10,6 +10,7 @@ import { generateCaveSystem } from './Sector2_Cave';
 import { soundManager } from '../../utils/SoundManager';
 import { CAMERA_HEIGHT } from '../../content/constants';
 import { PlayerAnimator } from '../../core/animation/PlayerAnimator';
+import { EnemyType } from '../../types/enemy';
 
 const LOCATIONS = {
     SPAWN: {
@@ -526,10 +527,10 @@ export const Sector2: SectorDef = {
                     for (let i = 0; i < r.zombies; i++) {
                         const offX = (Math.random() - 0.5) * 20;
                         const offZ = (Math.random() - 0.5) * 20;
-                        let type = 'WALKER';
-                        if (r.id === 6 && Math.random() > 0.8) type = 'TANK';
-                        if (r.id === 5 && Math.random() > 0.7) type = 'BOMBER';
-                        else if (Math.random() > 0.7) type = 'RUNNER';
+                        let type = EnemyType.WALKER;
+                        if (r.id === 6 && Math.random() > 0.8) type = EnemyType.TANK;
+                        if (r.id === 5 && Math.random() > 0.7) type = EnemyType.BOMBER;
+                        else if (Math.random() > 0.7) type = EnemyType.RUNNER;
                         events.spawnZombie(type, new THREE.Vector3(r.x + offX, 0, r.z + offZ));
                     }
                 }

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../types/sector';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { EnemyType } from '../../types/enemy';
 
 export const Sector5: SectorDef = {
     id: 4,
@@ -114,7 +115,7 @@ export const Sector5: SectorDef = {
             const dist = 30 + Math.random() * 20;
             const px = playerPos.x + Math.cos(angle) * dist;
             const pz = playerPos.z + Math.sin(angle) * dist;
-            events.spawnZombie('TANK', new THREE.Vector3(px, 0, pz));
+            events.spawnZombie(EnemyType.TANK, new THREE.Vector3(px, 0, pz));
         }
     }
 };

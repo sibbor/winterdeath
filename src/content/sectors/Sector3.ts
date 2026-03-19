@@ -5,6 +5,7 @@ import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
+import { EnemyType } from '../../types/enemy';
 
 const LOCATIONS = {
     SPAWN: {
@@ -137,9 +138,9 @@ export const Sector3: SectorDef = {
         const farm = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
         SectorGenerator.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
 
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, 'WALKER', Math.random() * Math.PI);
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, 'RUNNER', Math.random() * Math.PI);
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, 'TANK', Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, EnemyType.RUNNER, Math.random() * Math.PI);
+        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, EnemyType.TANK, Math.random() * Math.PI);
 
         SectorGenerator.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
         SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);

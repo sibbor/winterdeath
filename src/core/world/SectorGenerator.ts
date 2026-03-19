@@ -12,6 +12,7 @@ import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
 import { WaterBodyType, WaterBody } from '../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
+import { EnemyType } from '../../types/enemy';
 
 // Shared Utilities for Sector Generation
 const _c1 = new THREE.Color();
@@ -62,7 +63,10 @@ export const SectorGenerator = {
         if (params?.radius) object.userData.interactionRadius = params.radius;
 
         // Register in the sector context list
-        if (ctx.interactables && !ctx.interactables.includes(object)) {
+        if (!ctx.interactables) {
+            ctx.interactables = [];
+        }
+        if (!ctx.interactables.includes(object)) {
             ctx.interactables.push(object);
         }
         ctx.collisionGrid.addInteractable(object);
@@ -286,23 +290,37 @@ export const SectorGenerator = {
         body.position.y = 0.5;
         body.castShadow = true;
         chest.add(body);
+
         const lid = new THREE.Mesh(GEOMETRY.chestLid, isBig ? MATERIALS.chestBig : MATERIALS.chestStandard);
         lid.position.y = 1.2;
         lid.castShadow = true;
         chest.add(lid);
 
-        // Yellow Glow for unlooted chests
-        const glow = new THREE.PointLight(0xffcc00, 4, 20);
-        glow.position.set(0, 1.5, 0);
-        glow.name = 'chestLight';
-        chest.add(glow);
+        const ringGeo = isBig ? GEOMETRY.chestGlowRingBig : GEOMETRY.chestGlowRingStandard;
+        const ringMat = isBig ? MATERIALS.chestGlowBig : MATERIALS.chestGlowStandard;
+
+        const glowRing = new THREE.Mesh(ringGeo, ringMat);
+        glowRing.rotation.x = -Math.PI / 2;
+        glowRing.position.y = 0.05;
+        glowRing.name = 'chestGlowRing';
+        chest.add(glowRing)
 
         ctx.scene.add(chest);
+
         const obs = { mesh: chest, position: chest.position, type, scrap: isBig ? 100 : 25, radius: 2, opened: false };
         ctx.chests.push(obs);
+
         SectorGenerator.addObstacle(ctx, { mesh: chest, position: chest.position, collider: { type: 'sphere', radius: 2 } });
 
-        if (ctx.dynamicLights) ctx.dynamicLights.push(glow);
+        // --- INTERAKTIONS-FIX: Säg till SpatialGrid att kistan finns! ---
+        SectorGenerator.addInteractable(ctx, chest, {
+            type: 'CHEST',
+            label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
+            radius: 3.0
+        });
+
+        // (Frivilligt) Spara datan i userData så interaktionssystemet lätt kan läsa scrap-värdet
+        chest.userData.chestData = obs;
 
         ctx.mapItems.push({
             id: `chest_${Math.random()}`,
@@ -512,7 +530,7 @@ export const SectorGenerator = {
         }
     },
 
-    spawnDeadBody: (ctx: SectorContext, x: number, z: number, type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
+    spawnDeadBody: (ctx: SectorContext, x: number, z: number, type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
         const body = ObjectGenerator.createDeadBody(type, rot, blood);
         body.position.set(x, 0, z);
         ctx.scene.add(body);
@@ -711,11 +729,7 @@ export const SectorGenerator = {
 
         ctx.scene.add(vehicleRoot);
 
-        // Interactables
-        if (!ctx.interactables) {
-            ctx.interactables = [];
-        }
-        ctx.interactables.push(vehicleRoot);
+        SectorGenerator.addInteractable(ctx, vehicleRoot);
 
         return vehicleRoot;
     },

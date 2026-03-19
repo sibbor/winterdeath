@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ZOMBIE_TYPES } from '../../content/constants';
 import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
-import { Enemy, AIState, EnemyDeathState } from '../../types/enemy';
+import { Enemy, AIState, EnemyDeathState, EnemyType } from '../../types/enemy';
 import { PerformanceMonitor } from '../systems/PerformanceMonitor';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -17,27 +17,27 @@ export const EnemySpawner = {
      * Logic to decide which type of zombie should spawn based on current game state.
      * Extracted from spawn() to allow EnemyManager to know the type BEFORE picking from pool.
      */
-    determineType: (enemyCount: number, bossSpawned: boolean): string => {
+    determineType: (enemyCount: number, bossSpawned: boolean): EnemyType => {
         // Difficulty modifier: If a boss is out, we primarily spawn Walkers to avoid chaos
-        if (bossSpawned) return 'WALKER';
+        if (bossSpawned) return EnemyType.WALKER;
 
         const roll = Math.random();
         // Probabilities: Walker 70%, Runner 15%, Tank 10%, Bomber 5%
-        if (roll > 0.95) return 'BOMBER';
-        if (roll > 0.85) return 'TANK';
-        if (roll > 0.70) return 'RUNNER';
-        return 'WALKER';
+        if (roll > 0.95) return EnemyType.BOMBER;
+        if (roll > 0.85) return EnemyType.TANK;
+        if (roll > 0.70) return EnemyType.RUNNER;
+        return EnemyType.WALKER;
     },
 
     /**
      * Applies/Overwrites an existing enemy object with stats from a specific type.
      * This is the "DNA-reset" that makes Object Pooling safe.
      */
-    applyTypeStats: (e: Enemy, typeKey: string) => {
+    applyTypeStats: (e: Enemy, typeKey: EnemyType | string) => {
         const typeData = (ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER;
 
         // Identity & Core Stats
-        e.type = typeKey;
+        e.type = typeKey as EnemyType;
         e.hp = typeData.hp;
         e.maxHp = typeData.hp;
         e.speed = typeData.speed;
@@ -53,7 +53,7 @@ export const EnemySpawner = {
         // Den aktiveras enbart inuti AIState.ATTACK_CHARGE i EnemyAI.
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
-        } else if (typeKey === 'BOMBER' && e.mesh) {
+        } else if (typeKey === EnemyType.BOMBER && e.mesh) {
             // Unikt, transparent material för varje ring för att slippa färg-krockar
             const ringMat = MATERIALS.blastRadius.clone() as THREE.MeshBasicMaterial;
             ringMat.transparent = true;
@@ -72,7 +72,7 @@ export const EnemySpawner = {
     spawn: (
         scene: THREE.Scene,
         playerPos: THREE.Vector3,
-        forcedType?: string,
+        forcedType?: EnemyType | string,
         forcedPos?: THREE.Vector3,
         bossSpawned: boolean = false,
         enemyCount: number = 0
@@ -94,7 +94,7 @@ export const EnemySpawner = {
             z = playerPos.z + Math.sin(angle) * dist;
         }
 
-        const typeKey = forcedType?.toUpperCase() || EnemySpawner.determineType(enemyCount, bossSpawned);
+        const typeKey = forcedType || EnemySpawner.determineType(enemyCount, bossSpawned);
         const typeData = (ZOMBIE_TYPES as any)[typeKey] || ZOMBIE_TYPES.WALKER;
 
         const g = ModelFactory.createZombie(typeKey, typeData);
@@ -174,7 +174,7 @@ export const EnemySpawner = {
         g.scale.set(s * w, s, s * w);
         g.userData.entity = enemy;
 
-        if (typeKey === 'BOMBER') {
+        if (typeKey === EnemyType.BOMBER) {
             // [VINTERDÖD FIX] Klona materialet så ringarna inte synkar färg/opacitet med varandra
             const ringMat = MATERIALS.blastRadius.clone() as THREE.MeshBasicMaterial;
             ringMat.transparent = true;
@@ -211,7 +211,7 @@ export const EnemySpawner = {
         const enemy: Enemy = {
             id: `boss_${bossData.id}`,
             mesh: boss,
-            type: 'Boss',
+            type: EnemyType.BOSS,
             hp: bossData.hp,
             maxHp: bossData.hp,
             speed: bossData.speed,

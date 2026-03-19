@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
-import { Enemy, EnemyDeathState } from '../../types/enemy';
+import { Enemy, EnemyDeathState, EnemyType } from '../../types/enemy';
 import { WeaponType } from '../../content/weapons';
 
 export class ZombieRenderer {
@@ -20,10 +20,10 @@ export class ZombieRenderer {
         this.maxInstances = maxInstances;
 
         // Initialize InstancedMeshes for each type
-        this.createInstances('WALKER', this.getMat(ZOMBIE_TYPES.WALKER.color));
-        this.createInstances('RUNNER', this.getMat(ZOMBIE_TYPES.RUNNER.color));
-        this.createInstances('TANK', this.getMat(ZOMBIE_TYPES.TANK.color));
-        this.createInstances('BOMBER', this.getMat(ZOMBIE_TYPES.BOMBER.color));
+        this.createInstances(EnemyType.WALKER, this.getMat(ZOMBIE_TYPES[EnemyType.WALKER].color));
+        this.createInstances(EnemyType.RUNNER, this.getMat(ZOMBIE_TYPES[EnemyType.RUNNER].color));
+        this.createInstances(EnemyType.TANK, this.getMat(ZOMBIE_TYPES[EnemyType.TANK].color));
+        this.createInstances(EnemyType.BOMBER, this.getMat(ZOMBIE_TYPES[EnemyType.BOMBER].color));
 
         this._updateMeshList();
     }

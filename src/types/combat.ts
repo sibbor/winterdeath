@@ -13,6 +13,7 @@ export enum EnemyAttackType {
 export enum StatusEffectType {
     BLEEDING = 'BLEEDING',
     SLOWED = 'SLOWED',
+    STUNNED = 'STUNNED',
     BURNING = 'BURNING',
     DISORIENTED = 'DISORIENTED',
     FREEZING = 'FREEZING',

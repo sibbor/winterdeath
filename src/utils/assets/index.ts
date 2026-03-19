@@ -6,10 +6,9 @@ export * from './ui';
 export * from './procedural';
 export * from './materials_wind';
 
-// For backward compatibility while we migrate away from monolithic assets.ts
-import { TEXTURES as NEW_TEXTURES } from './AssetLoader';
+import { TEXTURES } from './AssetLoader';
 import { createProceduralDiffuse } from './procedural';
 export const createProceduralTextures = () => ({
-    ...NEW_TEXTURES,
+    ...TEXTURES,
     ...createProceduralDiffuse()
 });

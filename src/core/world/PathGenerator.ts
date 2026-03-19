@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { SectorContext } from '../../types/sector';
-import { MATERIALS, GEOMETRY } from '../../utils/assets';
+import { MATERIALS } from '../../utils/assets';
 import { ObjectGenerator } from './ObjectGenerator';
 import { SectorGenerator } from './SectorGenerator';
+import { EnvironmentGenerator } from './EnvironmentGenerator';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -362,7 +363,7 @@ export const PathGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const steps = Math.ceil(curve.getLength() / 2.0);
         const pts = curve.getSpacedPoints(steps);
-        const proto = ObjectGenerator.createHedge(2.2, height, thickness);
+        const proto = EnvironmentGenerator.createHedge(2.2, height, thickness);
         const parts: any[] = [];
         proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
 

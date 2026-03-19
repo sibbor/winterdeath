@@ -202,7 +202,6 @@ export interface Vector2 {
 
 export type TriggerType = 'COLLECTIBLE' | 'THOUGHT' | 'SPEAK' | 'POI' | 'EVENT' | 'INTERACT' | 'TERMINAL';
 
-
 export type TriggerActionType =
   | 'SPAWN_ENEMY'
   | 'PLAY_SOUND'

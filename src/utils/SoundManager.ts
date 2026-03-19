@@ -1,6 +1,7 @@
 import { SoundCore } from './audio/SoundCore';
 import { SoundBank } from './audio/SoundBank';
 import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './audio/SoundLib';
+import { EnemyType } from '../types/enemy';
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.
@@ -126,9 +127,9 @@ export class SoundManager {
   playBomberExplode() { EnemySounds.playBomberExplode(this.core); }
   playZombieStep() { EnemySounds.playZombieStep(this.core); }
 
-  playZombieGrowl(type: string = 'WALKER') {
-    if (type === 'RUNNER') this.playRunnerScream();
-    else if (type === 'TANK') this.playTankRoar();
+  playZombieGrowl(type: EnemyType | string = EnemyType.WALKER) {
+    if (type === EnemyType.RUNNER) this.playRunnerScream();
+    else if (type === EnemyType.TANK) this.playTankRoar();
     else this.playWalkerGroan();
   }
 

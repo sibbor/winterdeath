@@ -4,6 +4,7 @@ import { createProceduralDiffuse, MATERIALS, GEOMETRY, ModelFactory, createSignM
 import { SectorContext } from '../../types/sector';
 import { SectorGenerator } from './SectorGenerator';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
+import { EnemyType } from '../../types/enemy';
 import { EffectManager } from '../systems/EffectManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -20,14 +21,7 @@ const _FIRE_FLAME_OFFSET = new THREE.Vector3(0, 0.5, 0);
 const _FIRE_SPARK_OFFSET = new THREE.Vector3(0, 1.0, 0);
 const _FIRE_SMOKE_OFFSET = new THREE.Vector3(0, 1.8, 0);
 
-// Lazy load textures
-let sharedTextures: any = null;
-const getSharedTextures = () => {
-    if (!sharedTextures) sharedTextures = createProceduralDiffuse();
-    return sharedTextures;
-};
-
-// --- [VINTERDÖD] CACHED ASSETS (ZERO-GC VRAM) ---
+// --- CACHED ASSETS (ZERO-GC VRAM) ---
 // Prevents massive GPU memory leaks and stuttering by reusing geometries
 // instead of creating 'new THREE.Geometry' inside generator functions.
 const SHARED_GEO = {
@@ -69,27 +63,6 @@ const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
 const terminalMaterialCache: Record<string, THREE.MeshBasicMaterial> = {};
 
 export const ObjectGenerator = {
-
-    createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
-        const group = new THREE.Group();
-
-        const mesh = new THREE.Mesh(SHARED_GEO.box, MATERIALS.hedge);
-        mesh.scale.set(thickness, height, length);
-        mesh.position.y = height / 2;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        group.add(mesh);
-
-        for (let i = 0; i < 5; i++) {
-            const leaf = new THREE.Mesh(SHARED_GEO.box, MATERIALS.hedge);
-            leaf.scale.set(thickness * 1.1, height * 0.2, length * 0.2);
-            leaf.position.set((Math.random() - 0.5) * 0.1, Math.random() * height, (Math.random() - 0.5) * length);
-            group.add(leaf);
-        }
-
-        group.userData.material = 'WOOD';
-        return group;
-    },
 
     createFence: (length: number = 3.0) => {
         const group = new THREE.Group();
@@ -281,24 +254,29 @@ export const ObjectGenerator = {
             let litCount = 0;
             let darkCount = 0;
 
+            // 1. Spara fönstrens konfiguration en gång för alla
+            const windowConfig = [];
+
             for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                 for (let y = 2; y < height - 1; y += 4) {
-                    if (Math.random() < lightProbability) litCount++;
+                    const isLit = Math.random() < lightProbability;
+                    windowConfig.push({ x, y, isLit });
+
+                    if (isLit) litCount++;
                     else darkCount++;
                 }
             }
 
+            // 2. Bygg instanserna
             if (litCount > 0) {
                 const litWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.litWindow, litCount);
                 let idx = 0;
-                for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
-                    for (let y = 2; y < height - 1; y += 4) {
-                        if (Math.random() < lightProbability) {
-                            _matrix.makeTranslation(x, y, depth / 2 + 0.05);
-                            _scale.set(1.2, 1.5, 1);
-                            _matrix.scale(_scale);
-                            litWindows.setMatrixAt(idx++, _matrix);
-                        }
+                for (let i = 0; i < windowConfig.length; i++) {
+                    if (windowConfig[i].isLit) {
+                        _matrix.makeTranslation(windowConfig[i].x, windowConfig[i].y, depth / 2 + 0.05);
+                        _scale.set(1.2, 1.5, 1);
+                        _matrix.scale(_scale);
+                        litWindows.setMatrixAt(idx++, _matrix);
                     }
                 }
                 litWindows.instanceMatrix.needsUpdate = true;
@@ -308,14 +286,12 @@ export const ObjectGenerator = {
             if (darkCount > 0) {
                 const darkWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.darkWindow, darkCount);
                 let idx = 0;
-                for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
-                    for (let y = 2; y < height - 1; y += 4) {
-                        if (Math.random() >= lightProbability) {
-                            _matrix.makeTranslation(x, y, depth / 2 + 0.05);
-                            _scale.set(1.2, 1.5, 1);
-                            _matrix.scale(_scale);
-                            darkWindows.setMatrixAt(idx++, _matrix);
-                        }
+                for (let i = 0; i < windowConfig.length; i++) {
+                    if (!windowConfig[i].isLit) {
+                        _matrix.makeTranslation(windowConfig[i].x, windowConfig[i].y, depth / 2 + 0.05);
+                        _scale.set(1.2, 1.5, 1);
+                        _matrix.scale(_scale);
+                        darkWindows.setMatrixAt(idx++, _matrix);
                     }
                 }
                 darkWindows.instanceMatrix.needsUpdate = true;
@@ -331,42 +307,6 @@ export const ObjectGenerator = {
         bodyGeo.dispose();
         nonIndexedBody.dispose();
 
-        return group;
-    },
-
-    createShelf: (scale: number = 1.0) => {
-        const group = new THREE.Group();
-        const mat = MATERIALS.treeTrunk;
-        const w = 2.0, h = 2.0, d = 0.5;
-
-        const leftSide = new THREE.Mesh(SHARED_GEO.box, mat);
-        leftSide.scale.set(0.1, h, d);
-        leftSide.position.set(-w / 2, h / 2, 0);
-        group.add(leftSide);
-
-        const rightSide = new THREE.Mesh(SHARED_GEO.box, mat);
-        rightSide.scale.set(0.1, h, d);
-        rightSide.position.set(w / 2, h / 2, 0);
-        group.add(rightSide);
-
-        for (let y = 0.1; y < h; y += 0.6) {
-            const shelf = new THREE.Mesh(SHARED_GEO.box, mat);
-            shelf.scale.set(w, 0.1, d);
-            shelf.position.set(0, y, 0);
-            shelf.castShadow = true;
-            group.add(shelf);
-
-            if (Math.random() > 0.3) {
-                const numProps = Math.floor(Math.random() * 4);
-                for (let i = 0; i < numProps; i++) {
-                    const prop = new THREE.Mesh(SHARED_GEO.box, MATERIALS.barrel);
-                    prop.scale.setScalar(0.2);
-                    prop.position.set((Math.random() - 0.5) * w * 0.8, y + 0.15, (Math.random() - 0.5) * d * 0.6);
-                    group.add(prop);
-                }
-            }
-        }
-        group.scale.setScalar(scale);
         return group;
     },
 
@@ -556,10 +496,11 @@ export const ObjectGenerator = {
                 log.scale.set(logRadius / 0.3, logHeight / 6, logRadius / 0.3);
                 log.position.set(startX + i * logRadius * 2, y, 0);
                 log.rotation.x = (Math.random() - 0.5) * 0.05;
-                log.castShadow = true;
                 group.add(log);
             }
         }
+        group.castShadow = true;
+        group.receiveShadow = true;
         group.scale.setScalar(scale);
         return group;
     },
@@ -581,7 +522,7 @@ export const ObjectGenerator = {
         return group;
     },
 
-    createDeadBody: (type: 'WALKER' | 'RUNNER' | 'BOMBER' | 'TANK' | 'PLAYER' | 'HUMAN', rot: number = 0, blood?: boolean) => {
+    createDeadBody: (type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood?: boolean) => {
         const group = new THREE.Group();
         group.rotation.y = rot;
 
@@ -660,9 +601,10 @@ export const ObjectGenerator = {
         cage.position.y = -0.2;
         group.add(cage);
 
-        const light = new THREE.PointLight(0xffffcc, 10, 25);
-        light.position.y = -0.2;
-        group.add(light);
+        // TODO: think about what I want to do here:
+        //const light = new THREE.PointLight(0xffffcc, 10, 25);
+        //light.position.y = -0.2;
+        //group.add(light);
 
         group.userData.material = 'METAL';
         return group;

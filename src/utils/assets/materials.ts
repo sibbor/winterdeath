@@ -183,8 +183,27 @@ export const MATERIALS = {
         roughness: 0.2
     }),
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
+
+    // Chests
     chestStandard: new THREE.MeshStandardMaterial({ color: 0x5c4033 }),
     chestBig: new THREE.MeshStandardMaterial({ color: 0xffd700 }),
+    chestGlowStandard: new THREE.MeshBasicMaterial({
+        color: 0xffcc00,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }),
+    chestGlowBig: new THREE.MeshBasicMaterial({
+        color: 0xffaa00,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }),
+
     gun: new THREE.MeshStandardMaterial({ color: 0x222222 }),
 
     aimReticle: new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),

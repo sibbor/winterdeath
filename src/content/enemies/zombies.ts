@@ -1,4 +1,4 @@
-import { ZombieTypeData } from '../../types/enemy';
+import { ZombieTypeData, EnemyType } from '../../types/enemy';
 import { EnemyAttackType, StatusEffectType } from '../../types/combat';
 
 /*
@@ -24,8 +24,8 @@ Special attacks with status effects for the player:
 - effectDamage = damage the player takes for every second the status effect is active
 */
 
-export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
-    WALKER: {
+export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
+    [EnemyType.WALKER]: {
         hp: 50,
         speed: 0.9,
         score: 20,
@@ -48,7 +48,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
             }
         ]
     },
-    RUNNER: {
+    [EnemyType.RUNNER]: {
         hp: 30,
         speed: 1.10,
         score: 10,
@@ -70,7 +70,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
             }
         ]
     },
-    TANK: {
+    [EnemyType.TANK]: {
         hp: 175,
         speed: 0.80,
         score: 50,
@@ -93,7 +93,7 @@ export const ZOMBIE_TYPES: Record<string, ZombieTypeData> = {
             }
         ]
     },
-    BOMBER: {
+    [EnemyType.BOMBER]: {
         hp: 80,
         speed: 0.70,
         score: 30,

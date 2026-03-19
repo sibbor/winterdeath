@@ -5,13 +5,13 @@ import { SectorContext } from '../../types/sector';
 import { SectorGenerator } from './SectorGenerator';
 import { TREE_TYPE } from '../../content/constants';
 
-// Pre-allocated math objects for fast matrix composition.
-// Blazing fast compared to using Object3D.updateMatrix().
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+const _matrix = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _euler = new THREE.Euler();
-const _mat = new THREE.Matrix4(); // [VINTERDÖD] Extra scratchpad to prevent matrix allocations
+const _mat = new THREE.Matrix4();
 const PI2 = Math.PI * 2;
 
 // --- TYPES ---
@@ -39,6 +39,12 @@ const _createCrossGeo = () => {
 };
 
 const SHARED_GEO = {
+    box: new THREE.BoxGeometry(1, 1, 1),
+    sphere: new THREE.SphereGeometry(1, 16, 16),
+    cone: new THREE.ConeGeometry(1, 2, 8),
+    cylinder: new THREE.CylinderGeometry(1, 1, 2, 8),
+    plane: new THREE.PlaneGeometry(1, 1),
+    dodecahedron: new THREE.DodecahedronGeometry(1, 0),
     grass: _createCrossGeo(),
     sunflowerStem: new THREE.CylinderGeometry(0.05, 0.05, 3.0, 4).translate(0, 1.5, 0),
     sunflowerHead: new THREE.SphereGeometry(0.4, 8, 8).scale(1, 1, 0.2).translate(0, 3.0, 0.05),
@@ -757,6 +763,39 @@ export const EnvironmentGenerator = {
         caveOpeningGroup.add(threshold);
 
         return caveOpeningGroup;
+    },
+
+    createHedge: (length: number = 2.0, height: number = 1.2, thickness: number = 0.8) => {
+        const geometries = [];
+
+        // Huvudkroppen
+        const mainGeo = SHARED_GEO.box.clone();
+        _matrix.makeScale(thickness, height, length);
+        _matrix.setPosition(0, height / 2, 0);
+        mainGeo.applyMatrix4(_matrix);
+        geometries.push(mainGeo);
+
+        // Bladen (Slå ihop dem istället för att skapa nya Meshes)
+        for (let i = 0; i < 5; i++) {
+            const leafGeo = SHARED_GEO.box.clone();
+            _matrix.makeScale(thickness * 1.1, height * 0.2, length * 0.2);
+            _matrix.setPosition(
+                (Math.random() - 0.5) * 0.1,
+                Math.random() * height,
+                (Math.random() - 0.5) * length
+            );
+            leafGeo.applyMatrix4(_matrix);
+            geometries.push(leafGeo);
+        }
+
+        const merged = BufferGeometryUtils.mergeGeometries(geometries);
+        const mesh = new THREE.Mesh(merged, MATERIALS.hedge);
+        mesh.castShadow = true;
+
+        // Städa upp de temporära klonerna
+        geometries.forEach(g => g.dispose());
+
+        return mesh; // Returnera en Mesh istället för en Group!
     },
 
     createRock: (width: number, height: number, sharpness: number = 0.5) => {

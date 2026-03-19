@@ -151,6 +151,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         SectorGenerator.spawnCaveLamp(ctx, pos.x, 4.5, pos.z);
     };
 
+    /*
     const decorateRoom = (room: any) => {
         const cx = room.x;
         const cy = 0;
@@ -186,6 +187,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
             });
         }
     };
+    */
 
     // --- WALL GENERATION (Optimized) ---
     const wallGeometries: THREE.BufferGeometry[] = [];

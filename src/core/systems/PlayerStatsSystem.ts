@@ -82,7 +82,6 @@ export class PlayerStatsSystem implements System {
             switch (type) {
                 case StatusEffectType.DISORIENTED:
                     state.isDisoriented = true;
-                    // Camera shake is a visual effect, but we keep the logic in systems that handle the state
                     session.engine.camera.shake(0.05);
                     break;
                 case StatusEffectType.BLEEDING:
@@ -112,16 +111,16 @@ export class PlayerStatsSystem implements System {
                 // Use intensity as damage per second
                 const dmg = effect.intensity || 0;
                 if (dmg > 0) {
-                    const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN : 
-                                  (type === StatusEffectType.BLEEDING ? DamageType.BLEED : DamageType.PHYSICAL);
+                    const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN :
+                        (type === StatusEffectType.BLEEDING ? DamageType.BLEED : DamageType.PHYSICAL);
 
                     // Track source if available
                     const attacker = effect.sourceType ? { type: effect.sourceType, isBoss: effect.sourceType === 'Boss' } : null;
-                    
+
                     // Use the effect name (e.g., 'BLEEDING') for the breakdown to match user requirements
                     // but we can prepend the source attack if we want to be super detailed.
                     // For now, let's stick to the requested format: "Bleeding", "Burning" etc.
-                    const attackName = type; 
+                    const attackName = type;
 
                     this.handlePlayerHit(session, dmg, attacker, dmgType, true, undefined, undefined, undefined, attackName);
 
@@ -192,7 +191,7 @@ export class PlayerStatsSystem implements System {
             // Set/Overwrite the duration and intensity (damage per second)
             state.statusEffects[effectType]!.duration = effectDuration;
             state.statusEffects[effectType]!.intensity = effectDamage || 0;
-            
+
             // Track source for DoT
             if (attacker) {
                 state.statusEffects[effectType]!.sourceType = attacker.isBoss ? 'Boss' : attacker.type;

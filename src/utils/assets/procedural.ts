@@ -48,9 +48,6 @@ export const createProceduralDiffuse = () => {
         // Detta är ett måste för CanvasTextures som appliceras på tusentals träd/mark-objekt.
         texture.matrixAutoUpdate = false;
 
-        // Performance optimization: Signal that this texture won't change again
-        texture.needsUpdate = false;
-
         return texture;
     };
 
@@ -71,7 +68,6 @@ export const createProceduralDiffuse = () => {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.matrixAutoUpdate = false;
-        texture.needsUpdate = false;
 
         return texture;
     };

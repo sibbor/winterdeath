@@ -9,6 +9,7 @@ import { ProjectileSystem } from '../../../core/weapons/ProjectileSystem';
 import { FXSystem } from '../../../core/systems/FXSystem';
 import { EnemyManager } from '../../../core/EnemyManager';
 import { AssetPreloader } from '../../../core/systems/AssetPreloader';
+import { AssetLoader } from '../../../utils/assets/AssetLoader';
 import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, WIND_SYSTEM, WEATHER_SYSTEM, LIGHT_SYSTEM } from '../../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../../utils/assets';
 import { soundManager } from '../../../utils/SoundManager';
@@ -571,6 +572,9 @@ export class GameSessionSetup {
         // 1. Manually tear down GPU memory to avoid the WebGL Black Hole Context leak
         const sharedGeos = Object.values(GEOMETRY);
         const sharedMats = Object.values(MATERIALS);
+
+        // Clear asset cache
+        AssetLoader.getInstance().clearCache();
 
         scene.traverse((obj: any) => {
             // [VINTERDÖD FIX] Expand protection to persistent engine systems (Weather/Water)

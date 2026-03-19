@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { AttackDefinition } from './combat';
 
-export const DEFAULT_ATTACK_RANGE = 2.5;
+export const DEFAULT_ATTACK_RANGE = 1.5;
 
 /**
  * States for the Enemy AI State Machine
@@ -41,6 +41,18 @@ export enum EnemyEffectType {
     SPARK = 'SPARK'
 }
 
+/**
+ * Standardized enemy type identifiers
+ */
+export enum EnemyType {
+    WALKER = 'WALKER',
+    RUNNER = 'RUNNER',
+    TANK = 'TANK',
+    BOMBER = 'BOMBER',
+    BOSS = 'BOSS'
+}
+
+
 
 /**
  * Static data definitions for different zombie types
@@ -69,7 +81,7 @@ export interface Enemy {
     ashPile?: THREE.Object3D;
 
     // Identity & Stats
-    type: string;
+    type: EnemyType | string;
     isBoss?: boolean;
     hp: number;
     maxHp: number;

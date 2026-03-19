@@ -5,6 +5,7 @@ import { ZOMBIE_TYPES, BOSSES, SECTOR_THEMES, RANKS } from '../../content/consta
 import { soundManager } from '../../utils/SoundManager';
 import { COLLECTIBLES } from '../../content/collectibles';
 import { useOrientation } from '../../hooks/useOrientation';
+import { EnemyType } from '../../types/enemy';
 import CampModalLayout from './CampModalLayout';
 import CollectiblePreview from '../ui/core/CollectiblePreview';
 
@@ -626,10 +627,10 @@ const getEnemyDescription = (type: string) => {
     if (loc === key) {
         // Fallback for types not strictly in the en.enemies map
         switch (type) {
-            case 'WALKER': return "Standard reanimated combatant. Low threat individually, dangerous in swarms.";
-            case 'RUNNER': return "Hyper-aggressive mutation. Closing speed is extreme.";
-            case 'TANK': return "Heavily armored juggernaut. Absorbs significant small-arms fire.";
-            case 'BOMBER': return "Unstable biological payload. Explodes on proximity.";
+            case EnemyType.WALKER: return "Standard reanimated combatant. Low threat individually, dangerous in swarms.";
+            case EnemyType.RUNNER: return "Hyper-aggressive mutation. Closing speed is extreme.";
+            case EnemyType.TANK: return "Heavily armored juggernaut. Absorbs significant small-arms fire.";
+            case EnemyType.BOMBER: return "Unstable biological payload. Explodes on proximity.";
             default: return t('enemies.unknown');
         }
     }

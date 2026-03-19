@@ -4,6 +4,7 @@ import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProce
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER } from '../../content/constants';
+import { EnemyType } from '../../types/enemy';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
@@ -273,7 +274,7 @@ export const AssetPreloader = {
                     EnvironmentGenerator.createWaterLily();
                     EnvironmentGenerator.createSeaweed();
                     EnvironmentGenerator.createRock(2, 2);
-                    ObjectGenerator.createHedge();
+                    EnvironmentGenerator.createHedge();
                     ObjectGenerator.createWheatStalk();
                     const dummyCtx = (window as any).gameEngine?.sectorContext;
                     if (dummyCtx) {
@@ -305,8 +306,13 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius), false, false);
 
+                // Chests
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard));
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestBig));
+                addToWarmup(new THREE.Mesh(GEOMETRY.chestGlowRingStandard, MATERIALS.chestGlowStandard), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.chestGlowRingBig, MATERIALS.chestGlowBig), false);
+
+                addToWarmup(new THREE.Mesh(GEOMETRY.road, MATERIALS.asphalt));
                 addToWarmup(new THREE.Mesh(GEOMETRY.rail, MATERIALS.steel));
                 addToWarmup(new THREE.Mesh(GEOMETRY.sleeper, MATERIALS.wood));
 
@@ -330,10 +336,10 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createElectricPole());
                     addToWarmup(ObjectGenerator.createHaybale());
                     addToWarmup(ObjectGenerator.createTimberPile());
-                    addToWarmup(ObjectGenerator.createDeadBody('WALKER'));
-                    addToWarmup(ObjectGenerator.createDeadBody('RUNNER'));
-                    addToWarmup(ObjectGenerator.createDeadBody('TANK'));
-                    addToWarmup(ObjectGenerator.createDeadBody('BOMBER'));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.WALKER));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.RUNNER));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.TANK));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.BOMBER));
                     addToWarmup(ObjectGenerator.createDeadBody('PLAYER'));
                     addToWarmup(ObjectGenerator.createDeadBody('HUMAN'));
                     addToWarmup(ObjectGenerator.createCaveLamp());
@@ -342,7 +348,6 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createTerminal('ENV'));
                     addToWarmup(ObjectGenerator.createRubble(0, 0, 4));
                     addToWarmup(ObjectGenerator.createRubble(0, 0, 4, MATERIALS.busBlue));
-                    addToWarmup(ObjectGenerator.createShelf());
                     addToWarmup(ObjectGenerator.createScarecrow(0, 0));
                 } catch (e) { console.warn('[AssetPreloader] Prop warmup failed', e); }
 
@@ -352,9 +357,12 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker));
                 addToWarmup(new THREE.Mesh(GEOMETRY.sphere, MATERIALS.flashWhite));
 
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
+                // Trees
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
+                addInstancedWarmup(GEOMETRY.treeFirNeedles, MATERIALS.treeFirNeedles);
+                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesOak);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
+                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.deadWood);
                 addInstancedWarmup(GEOMETRY.ashPile, MATERIALS.ash);

@@ -5,8 +5,9 @@ import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/VehicleGenerator';
-import { CAMERA_HEIGHT } from '../constants';
+import { CAMERA_HEIGHT, TREE_TYPE, LIGHT_SYSTEM } from '../constants';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { EnemyType } from '../../types/enemy';
 
 const LOCATIONS = {
     SPAWN: {
@@ -346,7 +347,6 @@ export const Sector1: SectorDef = {
 
         SectorGenerator.spawnNeonSign(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z - 6, 0, "CAFÉ", 0xffaa00);
 
-
         // Grocery store
         const grocery = SectorGenerator.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 15, 10, 30, 0, {
             lowerMat: MATERIALS.whiteBrick,
@@ -521,8 +521,14 @@ export const Sector1: SectorDef = {
 
         // Store references for the event logic
         (ctx as any).busObject = bus;
-        (ctx as any).busColMesh = colMesh; // [VINTERDÖD] Needed for proper scene.remove on explosion
+        (ctx as any).busColMesh = colMesh;
         (ctx as any).busObjectIdx = busIdx;
+
+        // [EXPLOSION LAG FIX] Pre-allocate bus rubble under the ground
+        const rubble = SectorGenerator.spawnRubble(ctx, LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.z, 20, MATERIALS.busBlue, Math.PI);
+        rubble.position.y = -1000;
+        rubble.visible = false;
+        (ctx as any).busRubble = rubble
 
         // ----------------------------
         // Train yard - Fence
@@ -755,7 +761,7 @@ export const Sector1: SectorDef = {
         ];
         SectorGenerator.createForest(ctx, forestPolygon, 8, 'spruce');
 
-        SectorGenerator.spawnDeadBody(ctx, 37, 44, 'WALKER', 0, true);
+        SectorGenerator.spawnDeadBody(ctx, 37, 44, EnemyType.WALKER, 0, true);
         SectorGenerator.spawnChest(ctx, 45, 45, 'standard');
         SectorGenerator.spawnChest(ctx, 110, 80, 'standard');
         SectorGenerator.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, 'standard');
@@ -827,7 +833,7 @@ export const Sector1: SectorDef = {
         if (!sectorState.spawns.initial && now - state.startTime > 0) {
             sectorState.spawns.initial = true;
             for (let i = 0; i < 3; i++) {
-                if (events.spawnZombie) events.spawnZombie('WALKER', new THREE.Vector3(14, 0, 1));
+                if (events.spawnZombie) events.spawnZombie(EnemyType.WALKER, new THREE.Vector3(14, 0, 1));
             }
         }
 
@@ -835,7 +841,7 @@ export const Sector1: SectorDef = {
         if (playerPos.distanceTo(forestHomeSMU) < 40 && !sectorState.spawns.forest_home_smu) {
             sectorState.spawns.forest_home_smu = true;
             for (let i = 0; i < 6; i++) {
-                const type = Math.random() > 0.7 ? 'RUNNER' : 'WALKER';
+                const type = Math.random() > 0.7 ? EnemyType.RUNNER : EnemyType.WALKER;
                 const offX = (Math.random() - 0.5) * 30;
                 const offZ = (Math.random() - 0.5) * 30;
                 if (events.spawnZombie) events.spawnZombie(type, new THREE.Vector3(forestHomeSMU.x + offX, 0, forestHomeSMU.z + offZ));
@@ -844,10 +850,10 @@ export const Sector1: SectorDef = {
 
         const buildingPOIs = [
             { name: 'church', pos: LOCATIONS.POIS.CHURCH, count: 6, type: 'MIXED' },
-            { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, type: 'WALKER' },
-            { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, type: 'RUNNER' },
+            { name: 'cafe', pos: LOCATIONS.POIS.CAFE, count: 4, type: EnemyType.WALKER },
+            { name: 'grocery', pos: LOCATIONS.POIS.GROCERY, count: 5, type: EnemyType.RUNNER },
             { name: 'gym', pos: LOCATIONS.POIS.GYM, count: 3, type: 'MIXED' },
-            { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: 'WALKER' },
+            { name: 'pizzeria', pos: LOCATIONS.POIS.PIZZERIA, count: 4, type: EnemyType.WALKER },
         ];
 
         buildingPOIs.forEach(poi => {
@@ -855,9 +861,9 @@ export const Sector1: SectorDef = {
             if (dist < 45 && !sectorState.spawns[poi.name]) {
                 sectorState.spawns[poi.name] = true;
                 for (let i = 0; i < poi.count; i++) {
-                    let type = 'WALKER';
-                    if (poi.type === 'MIXED') type = Math.random() > 0.8 ? 'RUNNER' : 'WALKER';
-                    else if (poi.type === 'RUNNER') type = Math.random() > 0.3 ? 'RUNNER' : 'WALKER';
+                    let type = EnemyType.WALKER;
+                    if (poi.type === 'MIXED') type = Math.random() > 0.8 ? EnemyType.RUNNER : EnemyType.WALKER;
+                    else if (poi.type === EnemyType.RUNNER) type = Math.random() > 0.3 ? EnemyType.RUNNER : EnemyType.WALKER;
 
                     const offX = (Math.random() - 0.5) * 20;
                     const offZ = (Math.random() - 0.5) * 20;
@@ -870,11 +876,11 @@ export const Sector1: SectorDef = {
         if (playerPos.distanceTo(townCenterWoods) < 50 && !sectorState.spawns.town_forest) {
             sectorState.spawns.town_forest = true;
             for (let i = 0; i < 8; i++) {
-                let type = 'WALKER';
+                let type = EnemyType.WALKER;
                 const roll = Math.random();
-                if (roll > 0.8) type = 'TANK';
-                else if (roll > 0.9) type = 'BOMBER';
-                else if (roll > 0.7) type = 'RUNNER';
+                if (roll > 0.8) type = EnemyType.TANK;
+                else if (roll > 0.9) type = EnemyType.BOMBER;
+                else if (roll > 0.7) type = EnemyType.RUNNER;
 
                 const offX = (Math.random() - 0.5) * 40;
                 const offZ = (Math.random() - 0.5) * 40;
@@ -992,7 +998,7 @@ export const Sector1: SectorDef = {
             for (let i = 0; i < LOCS.length; i++) {
                 for (let j = 0; j < 6; j++) {
                     _viewPos.set(LOCS[i].x, 0, LOCS[i].z);
-                    if (events.spawnZombie) events.spawnZombie(undefined, _viewPos.clone());
+                    if (events.spawnZombie) events.spawnZombie(EnemyType.WALKER, _viewPos.clone());
                     totalSpawned++;
                 }
             }
@@ -1123,30 +1129,42 @@ export const Sector1: SectorDef = {
                     events.spawnPart(_busOriginalPos.x, 3, _busOriginalPos.z, 'debris', 15);
                 }
 
-                // --- 2. CLEAR THE TUNNEL PASSAGE ---
+                // --- 2. CLEAR THE TUNNEL PASSAGE (ZERO-GC) ---
                 const _busObj = (sectorState.ctx as any).busObject as THREE.Object3D | null;
                 const _obsArray = sectorState.ctx.obstacles;
 
-                if (_busObj && events.scene) {
+                if (_busObj) {
                     SectorGenerator.extinguishFire(sectorState.ctx, _busObj);
-                    events.scene.remove(_busObj);
+
+                    // LAGG- & KROCK-FIX: Göm den visuella bussen och teleportera bort den.
+                    _busObj.visible = false;
+                    _busObj.position.set(0, -1000, 0);
+                    _busObj.updateMatrixWorld(true); // Tvinga motorn att fatta att den flyttat
                     (sectorState.ctx as any).busObject = null;
                 }
 
                 if (_obsArray && _busOriginalPos) {
                     for (let i = 0; i < _obsArray.length; i++) {
                         const obs = _obsArray[i];
-                        if (obs && obs.collider && obs.collider.type === 'box' &&
-                            obs.id === 'tunnel_bus') {
+                        if (obs && obs.collider && obs.collider.type === 'box' && obs.id === 'tunnel_bus') {
 
+                            // 1. Krymp krocklådan till absolut noll
                             obs.collider.size.set(0, 0, 0);
                             obs.radius = 0;
-                            obs.position.setY(-1000);
-                            if (obs.mesh) {
-                                obs.mesh.position.setY(-1000);
-                                if (events.scene) events.scene.remove(obs.mesh);
+
+                            // 2. Förvisa långt utanför kartan (X och Z är det som räknas i en platt värld!)
+                            if (obs.position) {
+                                obs.position.set(99999, -1000, 99999);
                             }
 
+                            // 3. Teleportera och göm själva Three.js-meshen
+                            if (obs.mesh) {
+                                obs.mesh.position.set(99999, -1000, 99999);
+                                obs.mesh.visible = false;
+                                obs.mesh.updateMatrixWorld(true);
+                            }
+
+                            // 4. Ta bort den från legacy-arrayen
                             _obsArray[i] = _obsArray[_obsArray.length - 1];
                             _obsArray.pop();
                             break;
@@ -1155,32 +1173,30 @@ export const Sector1: SectorDef = {
                 }
                 (sectorState.ctx as any).busObjectIdx = undefined;
 
-                // --- 3. SPAWN ANIMATED RUBBLE BIASED AWAY FROM TUNNEL ---
-                sectorState.busRubble = SectorGenerator.spawnRubble(
-                    sectorState.ctx,
-                    _busOriginalPos.x,
-                    _busOriginalPos.z,
-                    20,
-                    MATERIALS.busBlue,
-                    Math.PI
-                );
+                // --- 3. SPAWN PRE-ALLOCATED RUBBLE BIASED AWAY FROM TUNNEL ---
+                sectorState.busRubble = (sectorState.ctx as any).busRubble;
 
                 if (sectorState.busRubble) {
-                    sectorState.busRubble.userData.active = true;
-                    sectorState.busRubble.userData.hasLanded = new Uint8Array(sectorState.busRubble.count);
+                    const rMesh = sectorState.busRubble;
+                    rMesh.position.set(_busOriginalPos.x, _busOriginalPos.y, _busOriginalPos.z);
+                    rMesh.visible = true;
 
-                    const data = sectorState.busRubble.userData;
-                    for (let i = 0; i < sectorState.busRubble.count; i++) {
+                    rMesh.userData.active = true;
+                    rMesh.userData.hasLanded = new Uint8Array(rMesh.count);
+
+                    const data = rMesh.userData;
+                    for (let i = 0; i < rMesh.count; i++) {
                         const ix = i * 3;
 
-                        // X = Sprid i sidled
-                        const dirX = (Math.random() - 0.5) * 3.0;
+                        // [SPRIDNINGS-FIX] 
+                        // -Math.PI / 2 pekar rakt söderut (-Z, bort från tunneln). 
+                        // Vi sprider dem slumpmässigt +/- 80 grader åt väster och öster.
+                        const arcAngle = -Math.PI / 2 + (Math.random() - 0.5) * (Math.PI * 0.9);
+                        const power = 1.0 + Math.random();
 
-                        // Y = Kasta uppåt
-                        const dirY = 1.0 + Math.random();
-
-                        // Z = NEGATIV RIKTNING (bort från tunnelns Z=344 mot gatan på Z=300)
-                        const dirZ = -(0.5 + Math.random() * 1.5);
+                        const dirX = Math.cos(arcAngle) * power;
+                        const dirZ = Math.sin(arcAngle) * power;
+                        const dirY = 1.0 + Math.random() * 1.5;
 
                         const force = 15 + Math.random() * 20;
                         const vec = new THREE.Vector3(dirX, dirY, dirZ).normalize().multiplyScalar(force);
@@ -1188,6 +1204,11 @@ export const Sector1: SectorDef = {
                         data.velocities[ix] = vec.x;
                         data.velocities[ix + 1] = vec.y;
                         data.velocities[ix + 2] = vec.z;
+
+                        // Resetta positionerna relativt till _busOriginalPos
+                        data.positions[ix] = (Math.random() - 0.5) * 4;
+                        data.positions[ix + 1] = 2 + Math.random() * 2;
+                        data.positions[ix + 2] = (Math.random() - 0.5) * 4;
                     }
                 }
                 sectorState.lastMetalImpactTime = 0;

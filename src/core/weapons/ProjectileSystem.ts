@@ -464,7 +464,7 @@ export const ProjectileSystem = {
 
                     for (let _pi = 0; _pi < potential.length; _pi++) {
                         const p = potential[_pi];
-                        if (p.deathState !== 'ALIVE' || _arcCannonHitIds.has(p.id)) continue;
+                        if (p.deathState !== EnemyDeathState.ALIVE || _arcCannonHitIds.has(p.id)) continue;
                         const d = p.mesh.position.distanceToSquared(curr.mesh.position);
                         if (d < nextDist) {
                             nextDist = d;
@@ -561,10 +561,6 @@ export const ProjectileSystem = {
                 if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
                     if (ctx.onPlayerHit) {
                         ctx.onPlayerHit(0, null, DamageType.BURN);
-                        // Status effects are now handled via extended parameters if available, 
-                        // but since the base method only takes 3, we'll rely on the 'Burn' type 
-                        // in PlayerStatsSystem to trigger the burning effect if we can't change the signature everywhere.
-                        // Or better: update the signature in GameContext.
                     }
                 }
             }
@@ -667,7 +663,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
         for (let i = 0; i < nearbyEnemies.length; i++) {
             const enemy = nearbyEnemies[i];
-            if (enemy.deathState !== 'ALIVE' || projectile.hitEntities.has(enemy.id)) continue;
+            if (enemy.deathState !== EnemyDeathState.ALIVE || projectile.hitEntities.has(enemy.id)) continue;
 
             _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
             const hitRad = 1.2 * (enemy.widthScale || 1.0) * (enemy.originalScale || 1.0);

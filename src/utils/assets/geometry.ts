@@ -191,6 +191,8 @@ export const GEOMETRY = {
     fireZone: new THREE.CircleGeometry(3.5, 16),
     chestBody: new THREE.BoxGeometry(1.5, 1.0, 1.0),
     chestLid: new THREE.BoxGeometry(1.5, 0.4, 1.0),
+    chestGlowRingStandard: new THREE.RingGeometry(1.2, 1.5, 16),
+    chestGlowRingBig: new THREE.RingGeometry(1.8, 2.2, 16),
     blastRadius: new THREE.RingGeometry(0.05, 1, 32),
     decal: new THREE.CircleGeometry(1, 12),
     splatterDecal: createSplatterGeo(),
@@ -202,11 +204,11 @@ export const GEOMETRY = {
     sleeper: new THREE.BoxGeometry(3, 0.2, 0.5),
     plane: new THREE.PlaneGeometry(1, 1),
     aimRing: new THREE.RingGeometry(0.2, 0.25, 32),
-    landingMarker: new THREE.RingGeometry(0.85, 1.0, 64),
+    landingMarker: new THREE.RingGeometry(0.50, 1.0, 64),
     ashPile: new THREE.ConeGeometry(0.6, 0.4, 8),
     shard: new THREE.TetrahedronGeometry(0.1, 0),
     shockwave: new THREE.RingGeometry(0.5, 1.5, 32),
-    flame: new THREE.TetrahedronGeometry(0.5, 1), // [VINTERDÖD] Reduced poly count from Dodecahedron to fix AdditiveBlending fill rate lag
+    flame: new THREE.TetrahedronGeometry(0.5, 1),
     showInPreloader: true, // Marker for preloader
     bloodSplat: createBloodSplatGeo(),
     impactSplat: createImpactSplatGeo(),

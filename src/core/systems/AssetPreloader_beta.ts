@@ -4,16 +4,17 @@ import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProce
 import { TEXTURES } from '../../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, PLAYER_CHARACTER, WATER_SYSTEM } from '../../content/constants';
+import { EnemyType } from '../../types/enemy';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { ObjectGenerator } from '../world/ObjectGenerator';
 import { VehicleGenerator } from '../world/VehicleGenerator';
 import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { CampWorld, CAMP_SCENE, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
-import { SectorSystem } from '../systems/SectorSystem';
+import { SectorSystem } from './SectorSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
 import { SoundBank } from '../../utils/audio/SoundBank';
-import { FXSystem } from '../systems/FXSystem';
+import { FXSystem } from './FXSystem';
 import { COLLECTIBLES } from '../../content/collectibles';
 
 const warmedModules = new Set<string>();
@@ -22,7 +23,7 @@ let lastSectorIndex = -1;
 
 export const TRANSPARENT_UI_ICONS: Record<string, string> = {};
 
-export const AssetPreloader = {
+export const AssetPreloader_beta = {
 
     warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', envConfigBase: any = null, yieldToMain?: () => Promise<void>, sectorId?: number) => {
         const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
@@ -148,6 +149,8 @@ export const AssetPreloader = {
                         const mat = mesh.material as any;
                         if (forceShadow) mesh.receiveShadow = mat && !mat.isMeshBasicMaterial && !mat.isShaderMaterial;
 
+                        mesh.frustumCulled = false;
+
                         if (instancing && !(mesh as any).isInstancedMesh) {
                             const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
                             if (forceShadow) {
@@ -168,6 +171,7 @@ export const AssetPreloader = {
             const addInstancedWarmup = (geo: THREE.BufferGeometry, mat: THREE.Material, castShadow: boolean = true) => {
                 const mesh = new THREE.InstancedMesh(geo, mat, 1);
                 mesh.castShadow = castShadow;
+                mesh.frustumCulled = false;
                 mesh.receiveShadow = castShadow && mat && !(mat as any).isMeshBasicMaterial && !(mat as any).isShaderMaterial;
                 mesh.setMatrixAt(0, new THREE.Matrix4());
                 mesh.visible = false;
@@ -281,34 +285,47 @@ export const AssetPreloader = {
                 endInternal('AssetPreloader: CORE -> Generators');
                 if (yieldToMain) await yieldToMain();
 
+                // Trees
                 beginInternal('AssetPreloader: CORE -> Props & Trees');
+
+                // 1. Automatically warms up BOTH regular and instanced tree parts
                 const treeTypes: TREE_TYPE[] = [TREE_TYPE.PINE, TREE_TYPE.SPRUCE, TREE_TYPE.OAK, TREE_TYPE.DEAD, TREE_TYPE.BIRCH];
                 for (let i = 0; i < treeTypes.length; i++) {
                     addToWarmup(EnvironmentGenerator.createTree(treeTypes[i], 1.0, 0));
                 }
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeLeavesBirch);
-                addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunk);
-                addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkOak);
-                addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeTrunkBirch);
-                addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.deadWood);
 
+                // 2. Weather particles (Krävs eftersom de inte täcks av träden)
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_snow, false);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_rain, false);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ash, false);
                 addInstancedWarmup(GEOMETRY.weatherParticle, MATERIALS.particle_ember, false);
 
-                const windMats = [MATERIALS.grass, MATERIALS.flower, MATERIALS.treeTrunkBirch, MATERIALS.treeTrunk];
+                // 3. Wind materials (BARA de som faktiskt inte fanns i träden ovan!)
+                const windMats = [
+                    MATERIALS.grass,
+                    MATERIALS.flower,
+                    MATERIALS.treeSilhouette
+                ];
                 for (let i = 0; i < windMats.length; i++) {
                     const m = windMats[i];
+                    // Box works fine here since grass/flower are often just planes or simple shapes
                     const dummyWindMesh = new THREE.Mesh(GEOMETRY.box, m);
                     addToWarmup(dummyWindMesh);
                 }
 
+                endInternal('AssetPreloader: CORE -> Props & Trees');
+                if (yieldToMain) await yieldToMain();
+
+                // CORE: Models
+                beginInternal('AssetPreloader: CORE -> Models');
+
+                // Player & Family models
                 addToWarmup(ModelFactory.createPlayer());
                 for (let i = 0; i < FAMILY_MEMBERS.length; i++) {
                     addToWarmup(ModelFactory.createFamilyMember(FAMILY_MEMBERS[i]));
                 }
 
+                // Collectible models
                 try {
                     const warmedModels: string[] = [];
                     const allCollectibles = Object.values(COLLECTIBLES) as any[];
@@ -323,8 +340,7 @@ export const AssetPreloader = {
                 } catch (e) {
                     console.warn('[AssetPreloader] Collectible warmup failed', e);
                 }
-                endInternal('AssetPreloader: CORE -> Props & Trees');
-                if (yieldToMain) await yieldToMain();
+                endInternal('AssetPreloader: CORE -> Models');
 
                 beginInternal('AssetPreloader: CORE -> FX');
                 const fxTypes = [
@@ -390,8 +406,13 @@ export const AssetPreloader = {
                 addToWarmup(new THREE.Mesh(GEOMETRY.fogParticle, MATERIALS.fog), false, false);
                 addToWarmup(new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius), false, false);
 
+                // Chests
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestBody, MATERIALS.chestStandard));
                 addToWarmup(new THREE.Mesh(GEOMETRY.chestLid, MATERIALS.chestBig));
+                addToWarmup(new THREE.Mesh(GEOMETRY.chestGlowRingStandard, MATERIALS.chestGlowStandard), false, false);
+                addToWarmup(new THREE.Mesh(GEOMETRY.chestGlowRingBig, MATERIALS.chestGlowBig), false, false);
+
+                addToWarmup(new THREE.Mesh(GEOMETRY.road, MATERIALS.asphalt));
                 addToWarmup(new THREE.Mesh(GEOMETRY.rail, MATERIALS.steel));
                 addToWarmup(new THREE.Mesh(GEOMETRY.sleeper, MATERIALS.wood));
 
@@ -417,10 +438,10 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createElectricPole());
                     addToWarmup(ObjectGenerator.createHaybale());
                     addToWarmup(ObjectGenerator.createTimberPile());
-                    addToWarmup(ObjectGenerator.createDeadBody('WALKER'));
-                    addToWarmup(ObjectGenerator.createDeadBody('RUNNER'));
-                    addToWarmup(ObjectGenerator.createDeadBody('TANK'));
-                    addToWarmup(ObjectGenerator.createDeadBody('BOMBER'));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.WALKER));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.RUNNER));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.TANK));
+                    addToWarmup(ObjectGenerator.createDeadBody(EnemyType.BOMBER));
                     addToWarmup(ObjectGenerator.createDeadBody('PLAYER'));
                     addToWarmup(ObjectGenerator.createDeadBody('HUMAN'));
                     addToWarmup(ObjectGenerator.createCaveLamp());
@@ -428,8 +449,7 @@ export const AssetPreloader = {
                     addToWarmup(ObjectGenerator.createTerminal('SPAWNER'));
                     addToWarmup(ObjectGenerator.createTerminal('ENV'));
                     addToWarmup(ObjectGenerator.createRubble(0, 0, 4));
-                    addToWarmup(ObjectGenerator.createRubble(0, 0, 4, MATERIALS.busBlue));
-                    addToWarmup(ObjectGenerator.createShelf());
+                    addToWarmup(ObjectGenerator.createRubble(0, 0, 4, MATERIALS.busBlue));;
                     addToWarmup(ObjectGenerator.createScarecrow(0, 0));
                 } catch (e) {
                     console.warn('[AssetPreloader] Prop warmup failed', e);
@@ -473,7 +493,7 @@ export const AssetPreloader = {
                     console.warn('[AssetPreloader] Boss warmup failed', e);
                 }
 
-                // Water System & Vegitation
+                // Water System
                 const dummyRipples = new Array(WATER_SYSTEM.MAX_RIPPLES).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
                 const dummyObjects = new Array(WATER_SYSTEM.MAX_FLOATING_OBJECTS).fill(null).map(() => new THREE.Vector4(0, 0, -1000, 0));
                 const coreWaterMat = createWaterMaterial(10, 10, dummyRipples, dummyObjects, 'rect');
@@ -488,33 +508,30 @@ export const AssetPreloader = {
                 dummyRoot.add(nwMesh);
                 ownedObjects.push(nwMesh);
 
+                // Vegetation geometries
                 const lilyPadGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.05, 8);
                 const lilyStemGeo = new THREE.CylinderGeometry(0.03, 0.03, 1.5, 4);
                 const lilyFlowerGeo = new THREE.ConeGeometry(0.15, 0.2, 5);
                 const seaweedGeo = new THREE.PlaneGeometry(0.3, 1.5, 2, 4);
                 ownedGeometries.push(lilyPadGeo, lilyStemGeo, lilyFlowerGeo, seaweedGeo);
 
-                const waterMats = [MATERIALS.waterLily, MATERIALS.waterLilyFlower, MATERIALS.seaweed];
-                for (let i = 0; i < waterMats.length; i++) {
-                    addToWarmup(new THREE.Mesh(GEOMETRY.box, waterMats[i]));
-                }
-
-                addInstancedWarmup(lilyPadGeo, MATERIALS.waterLily);
-                addInstancedWarmup(lilyFlowerGeo, MATERIALS.waterLilyFlower);
-                addInstancedWarmup(seaweedGeo, MATERIALS.seaweed);
-                addInstancedWarmup(lilyStemGeo, MATERIALS.seaweed);
+                // Do addToWarmup directly on the correct material and shape.
+                // Parameters: (object, instancing=true, castShadow=false)
+                addToWarmup(new THREE.Mesh(lilyPadGeo, MATERIALS.waterLily), true, false);
+                addToWarmup(new THREE.Mesh(lilyStemGeo, MATERIALS.seaweed), true, false); // Fixed: Seaweed color on the stem!
+                addToWarmup(new THREE.Mesh(lilyFlowerGeo, MATERIALS.waterLilyFlower), true, false);
+                addToWarmup(new THREE.Mesh(seaweedGeo, MATERIALS.seaweed), true, false);
 
                 addInstancedWarmup(GEOMETRY.scrap, MATERIALS.scrap);
 
                 try {
                     addToWarmup(ObjectGenerator.createBuilding(10, 8, 10, 0xffffff, true, true, 0.2));
-                    addToWarmup(ObjectGenerator.createBuilding(10, 10, 10, 0x888888));
                     addToWarmup(ObjectGenerator.createStorefrontBuilding(10, 10, 10));
                     addToWarmup(ObjectGenerator.createGlassStaircase(2, 5, 2));
                     addToWarmup(ObjectGenerator.createNeonSign("WARMUP", 0x00ffff, true));
                     addToWarmup(ObjectGenerator.createNeonHeart(0xff0000));
                     addToWarmup(EnvironmentGenerator.createRock(2, 2));
-                    addToWarmup(ObjectGenerator.createHedge());
+                    addToWarmup(EnvironmentGenerator.createHedge());
                     addToWarmup(ObjectGenerator.createWheatStalk());
                 } catch (e) { console.warn('[AssetPreloader] Building warmup failed', e); }
 
@@ -613,8 +630,11 @@ export const AssetPreloader = {
                     addToWarmup(new THREE.Mesh(geo, CAMP_MAT.smoke), false);
                 }
 
+                // Tree silhouettes
                 addInstancedWarmup(GEOMETRY.treeTrunk, MATERIALS.treeSilhouette);
-                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeSilhouette);
+                addInstancedWarmup(GEOMETRY.foliageCluster, MATERIALS.treeSilhouette)
+
+                addInstancedWarmup(GEOMETRY.ashPile, MATERIALS.ash);;
 
                 if (yieldToMain) await yieldToMain();
 

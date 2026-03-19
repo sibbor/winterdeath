@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-class AssetLoader {
+export class AssetLoader {
     private static instance: AssetLoader;
     private textureLoader: THREE.TextureLoader;
     private textureCacheSource: Map<string, THREE.Texture> = new Map();
@@ -19,32 +19,47 @@ class AssetLoader {
     /**
      * Loads a texture and sets standard properties for environment maps.
      * [VINTERDÖD] Uses flat arguments instead of objects to prevent GC allocations.
+     *
+     * @param persistent if true, the texture will never be removed from VRAM.
+     *                   Perfect for global bump-maps.
      */
-    public loadTexture(path: string, repeatX: number = 1, repeatY: number = 1): THREE.Texture {
-        const cacheKey = `${path}_${repeatX}_${repeatY}`;
+    public loadTexture(path: string, repeatX: number = 1, repeatY: number = 1, isColorTexture: boolean = false, persistent: boolean = true): THREE.Texture {
+        const cacheKey = `${path}_${repeatX}_${repeatY}_${isColorTexture}`;
 
         if (this.textureCacheSource.has(cacheKey)) {
             return this.textureCacheSource.get(cacheKey)!;
         }
 
         const texture = this.textureLoader.load(path);
+        if (isColorTexture) texture.colorSpace = THREE.SRGBColorSpace;
+        else texture.colorSpace = THREE.NoColorSpace;
 
-        // Standard environment settings
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.repeat.set(repeatX, repeatY);
-
-        // Performance: Anisotropy for sharp looks at distance. 
-        // 4 is a great sweet spot for mobile/desktop performance.
         texture.anisotropy = 4;
-
-        // [VINTERDÖD CRITICAL FIX] Disable auto-update to save CPU cycles per frame.
-        // BUT we MUST call updateMatrix() once manually to apply the repeat settings!
         texture.matrixAutoUpdate = false;
         texture.updateMatrix();
 
+        // Mark texture so we know if it can be deleted or not
+        texture.userData.isPersistent = persistent;
         this.textureCacheSource.set(cacheKey, texture);
         return texture;
+    }
+
+    public clearCache() {
+        const keysToRemove: string[] = [];
+
+        this.textureCacheSource.forEach((texture, key) => {
+            if (!texture.userData.isPersistent) {
+                texture.dispose();
+                keysToRemove.push(key);
+            }
+        });
+
+        for (let i = 0; i < keysToRemove.length; i++) {
+            this.textureCacheSource.delete(keysToRemove[i]);
+        }
     }
 }
 

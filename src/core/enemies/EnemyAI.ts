@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE } from '../../types/enemy';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE, EnemyType } from '../../types/enemy';
 import { DamageType, EnemyAttackType } from '../../types/combat';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler';
 import { applyCollisionResolution } from '../world/CollisionResolution';
@@ -101,7 +101,7 @@ export const EnemyAI = {
             else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === DamageType.BURN) {
                 e.deathState = EnemyDeathState.BURNED;
             }
-            else if (dmgType === WeaponType.GRENADE || e.type === 'BOMBER' || e.isBoss) {
+            else if (dmgType === WeaponType.GRENADE || e.type === EnemyType.BOMBER || e.isBoss) {
                 e.deathState = EnemyDeathState.EXPLODED;
                 if (dmgType !== WeaponType.GRENADE) {
                     soundManager.playExplosion();
@@ -196,7 +196,7 @@ export const EnemyAI = {
                     if (callbacks.applyDamage) callbacks.applyDamage(e, fallDamage, DamageType.FALL, true);
 
                     callbacks.spawnPart?.(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
-                    if (e.hp <= 0 && e.deathState === 'ALIVE') {
+                    if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
                         logAI(`[AI] ${e.type}_${e.id} killed by: Environment (FALL)`);
                         e.deathState = EnemyDeathState.FALL;
                     }
@@ -233,7 +233,7 @@ export const EnemyAI = {
         }
 
         // --- 6. DROWNING ---
-        if (e.isDrowning && e.deathState === 'ALIVE') {
+        if (e.isDrowning && e.deathState === EnemyDeathState.ALIVE) {
             e.drownTimer += delta;
 
             if (water) {
@@ -257,7 +257,7 @@ export const EnemyAI = {
                 e.hp -= tickDmg;
                 if (callbacks.applyDamage) callbacks.applyDamage(e, tickDmg, DamageType.DROWNING);
 
-                if (e.hp <= 0 && e.deathState === 'ALIVE') {
+                if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
                     logAI(`[AI] ${e.type}_${e.id} killed by: Environment (DROWNED)`);
                     e.deathState = EnemyDeathState.DROWNED;
                     e.velocity.set(0, 0, 0);
@@ -327,7 +327,7 @@ export const EnemyAI = {
             const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, separationRadius);
             for (let i = 0; i < nearbyEnemies.length; i++) {
                 const other = nearbyEnemies[i];
-                if (other === e || other.deathState !== 'ALIVE') continue;
+                if (other === e || other.deathState !== EnemyDeathState.ALIVE) continue;
 
                 const odx = e.mesh.position.x - other.mesh.position.x;
                 const odz = e.mesh.position.z - other.mesh.position.z;
@@ -459,7 +459,7 @@ export const EnemyAI = {
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
                     moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6);
 
-                    const chaseStepInterval = e.type === 'RUNNER' ? 250 : 400;
+                    const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
                         e.lastStepTime = now;
                     }

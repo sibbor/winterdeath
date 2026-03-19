@@ -6,6 +6,7 @@ import { WinterEngine } from '../../core/engine/WinterEngine';
 import * as THREE from 'three';
 import { soundManager } from '../../utils/SoundManager';
 import { HudStore } from '../../core/systems/HudStore';
+import { EnemyType } from '../../types/enemy';
 
 interface ScreenPlaygroundEnemyStationProps {
     onClose: () => void;
@@ -13,7 +14,7 @@ interface ScreenPlaygroundEnemyStationProps {
     isMobileDevice?: boolean;
 }
 
-const ENEMY_TYPES = ['WALKER', 'RUNNER', 'TANK', 'BOMBER'];
+const ENEMY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
 const SPAWN_LOCATIONS = ['NEAR', 'FOREST', 'FARM', 'VILLAGE'];
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -23,7 +24,7 @@ const _spawnPos = new THREE.Vector3();
 const _playerPosRef = new THREE.Vector3();
 
 export const ScreenPlaygroundEnemyStation: React.FC<ScreenPlaygroundEnemyStationProps> = ({ onClose, onSpawnEnemies, isMobileDevice }) => {
-    const [selectedType, setSelectedType] = useState('WALKER');
+    const [selectedType, setSelectedType] = useState<EnemyType | string>(EnemyType.WALKER);
     const [countVal, setCountVal] = useState(1);
     const [spread, setSpread] = useState(5);
     const [biome, setBiome] = useState<'NEAR' | 'FOREST' | 'FARM' | 'VILLAGE'>('NEAR');

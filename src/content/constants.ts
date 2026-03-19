@@ -8,6 +8,7 @@ export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
 export { SECTOR_THEMES } from './sectors/sector_themes';
 
+// 20% HP
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;
 
 export const CAMERA_HEIGHT = 50;

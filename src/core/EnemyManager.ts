@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState } from '../types/enemy';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType } from '../types/enemy';
 import { DamageType, StatusEffectType } from '../types/combat';
 import { EnemySpawner } from './enemies/EnemySpawner';
 import { EnemyAI } from './enemies/EnemyAI';
@@ -386,7 +386,8 @@ export const EnemyManager = {
 
         for (let i = 0; i < enemies.length; i++) {
             const enemy = enemies[i];
-            if (enemy.deathState === 'ALIVE') {
+
+            if (enemy.deathState === EnemyDeathState.ALIVE) {
                 const distSq = enemy.mesh.position.distanceToSquared(playerGroup.position);
 
                 if (distSq < radiusSq) {
@@ -437,7 +438,7 @@ export const EnemyManager = {
     },
 
     applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
-        const canTackle = enemy.deathState === 'ALIVE' && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
+        const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
         if (!isDashing) {
@@ -591,7 +592,7 @@ export const EnemyManager = {
             const e = enemies[i];
 
             // 1. Endast AI Logic om de är ALIVE
-            if (e.deathState === 'ALIVE') {
+            if (e.deathState === EnemyDeathState.ALIVE) {
                 EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, isDead, {
                     ..._aiCallbacks,
                     onPlayerHit: _aiCallbacks.onPlayerHitExtended
@@ -599,25 +600,25 @@ export const EnemyManager = {
             }
 
             // 2. Visuella animationer 
-            if (e.deathState !== 'ALIVE' && e.deathState !== 'DEAD') {
+            if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
                 EnemyManager.processDeathAnimation(e, delta, now, _aiCallbacks);
             }
 
-            const s = e.deathState;
+            const deathState = e.deathState;
 
             // 3. Renderings-beslut
-            if (s === 'BURNED' || s === 'ELECTRIFIED' || s === 'DROWNED') {
+            if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTRIFIED || deathState === EnemyDeathState.DROWNED) {
                 e.mesh.visible = true;
                 e.mesh.matrixAutoUpdate = true; // Enable local matrix calculus when explicitly drawn
             }
-            else if (!e.isBoss && !e.mesh.userData.exploded && s !== 'DEAD') {
+            else if (!e.isBoss && !e.mesh.userData.exploded && deathState !== EnemyDeathState.DEAD) {
                 e.mesh.visible = false;
                 e.mesh.matrixAutoUpdate = false; // Freeze to save CPU when instanced
                 _syncList.push(e);
             }
 
             // 4. Hit Flashes (Flyttat från AI för renare arkitektur!)
-            if (s === 'ALIVE') {
+            if (deathState === EnemyDeathState.ALIVE) {
                 if (e.isBoss && e.mesh && e.color !== undefined) {
                     const timeSinceHit = now - e.hitTime;
                     if (timeSinceHit < 100) {
@@ -685,8 +686,8 @@ export const EnemyManager = {
                 e.mesh.userData.deathPy = e.mesh.position.y;
                 e.mesh.userData.deathPz = e.mesh.position.z;
                 if (!e.mesh.userData.exploded) {
-                    if (e.type === 'RUNNER') soundManager.playRunnerDeath();
-                    else if (e.type === 'TANK') soundManager.playTankDeath();
+                    if (e.type === EnemyType.RUNNER) soundManager.playRunnerDeath();
+                    else if (e.type === EnemyType.TANK) soundManager.playTankDeath();
                     else soundManager.playWalkerDeath();
                 }
             }

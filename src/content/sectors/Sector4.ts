@@ -5,6 +5,7 @@ import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { CAMERA_HEIGHT } from '../constants';
+import { EnemyType } from '../../types/enemy';
 
 const LOCATIONS = {
     SPAWN: {
@@ -153,7 +154,7 @@ export const Sector4: SectorDef = {
     setupZombies: async (ctx: SectorContext) => {
         // --- ZOMBIE SPAWNING ---
         for (let i = 0; i < 5; i++) {
-            ctx.spawnZombie('WALKER');
+            ctx.spawnZombie(EnemyType.WALKER);
         }
 
         spawnSectorHordes(ctx);
@@ -168,7 +169,7 @@ export const Sector4: SectorDef = {
             const pz = playerPos.z + Math.sin(angle) * dist;
 
             // Check if position is occupied by obstacles would be ideal, but simple distance logic works for now
-            events.spawnZombie('RUNNER', new THREE.Vector3(px, 0, pz));
+            events.spawnZombie(EnemyType.RUNNER, new THREE.Vector3(px, 0, pz));
         }
     }
 };

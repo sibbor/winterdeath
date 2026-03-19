@@ -3,6 +3,7 @@ import { System } from './System';
 import { GameSessionLogic } from '../GameSessionLogic';
 import { SectorDef } from '../../types/sector';
 import { EnemyManager } from '../EnemyManager';
+import { EnemyType } from '../../types/enemy';
 import { Sector1 } from '../../content/sectors/Sector1';
 import { Sector2 } from '../../content/sectors/Sector2';
 import { Sector3 } from '../../content/sectors/Sector3';
@@ -162,11 +163,11 @@ export class SectorSystem implements System {
                     // Future expansion: hook into engine.water for global level changes
                 },
                 emitNoise: (pos: THREE.Vector3, radius: number, type: string) => session.makeNoise(pos, radius, type as any),
-                spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => {
+                spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => {
                     if (this.callbacks.spawnHorde) {
                         this.callbacks.spawnHorde(count, type, pos);
                     } else {
-                        for (let i = 0; i < count; i++) this.callbacks.spawnZombie(type || 'WALKER', pos);
+                        for (let i = 0; i < count; i++) this.callbacks.spawnZombie(type || EnemyType.WALKER, pos);
                     }
                 },
                 setOverlay: this.callbacks.setOverlay

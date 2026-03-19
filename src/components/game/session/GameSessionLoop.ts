@@ -21,7 +21,7 @@ interface LoopContext {
     engine: WinterEngine;
     session: GameSessionLogic;
     state: RuntimeState;
-    refs: any; // GameSessionState refs
+    refs: any;
     propsRef: any;
     callbacks: {
         concludeSector: (val: boolean) => void;
@@ -136,8 +136,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 color = (WeaponCategoryColors as any)[weaponData.category] || '#ffffff';
             } else {
                 // FALLBACKS for non-weapon damage
-                if (type === DamageType.BURN || type === 'BURN') color = '#ffaa00';
-                else if (type === DamageType.ELECTRIC || type === 'ELECTRIC') color = '#00ffff';
+                if (type === DamageType.BURN) color = '#ffaa00';
+                else if (type === DamageType.ELECTRIC) color = '#00ffff';
                 else if (type === DamageType.FALL) color = '#ffffff';
                 else if (type === DamageType.DROWNING) color = '#3b82f6';
             }
@@ -223,17 +223,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         const now = performance.now();
-        const input = engine.input.state;
         const monitor = PerformanceMonitor.getInstance();
         frame++;
-
-        // 1. Interaction Input
-        if (input.e && !refs.prevInputRef.current) {
-            if ((state as any).currentInteraction && (state as any).currentInteraction.action) {
-                (state as any).currentInteraction.action();
-            }
-        }
-        refs.prevInputRef.current = input.e;
 
         const isCinematic = refs.cinematicRef.current.active;
         const isBossIntro = refs.bossIntroRef.current.active;
@@ -516,45 +507,55 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         lastTime = now;
 
-        // 12. Interaction Logic (Event-Driven)
+        // 12. Interaction Logic
         const currentInter = state.interactionType;
         const currentLabel = state.interactionLabel;
         const lastType = refs.interactionTypeRef.current;
 
-        if (currentInter && (state as any).currentInteraction) {
-            if ((state as any).currentInteraction.position) {
-                _vInteraction.copy((state as any).currentInteraction.position);
-                _vInteraction.y += 1.5;
-            } else {
-                _vInteraction.copy(playerGroup.position);
-                _vInteraction.y += 2.5;
-            }
+        // FIX: Lyssna på det nya PlayerInteractionSystemets output
+        if (currentInter && state.hasInteractionTarget && state.interactionTargetPos) {
+            _vInteraction.copy(state.interactionTargetPos);
+            _vInteraction.y += 1.5; // Offset so that [E] hovers a bit above the object
 
+            // Calculate screen coordinates
             const vector = _vInteraction.project(engine.camera.threeCamera);
-            const screenX = Math.round((vector.x + 1) / 2 * 100);
-            const screenY = Math.round((1 - vector.y) / 2 * 100);
 
-            const lastPos = refs.lastInteractionPosRef.current;
-            const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 3.0;
-            const typeChanged = currentInter !== lastType;
-            const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
+            // Safety check: vector.z must be less than 1, otherwise the object is behind the camera!
+            if (vector.z < 1) {
+                const screenX = Math.round((vector.x + 1) / 2 * 100); // 0-100 for CSS %
+                const screenY = Math.round((1 - vector.y) / 2 * 100);
 
-            if (posChanged || typeChanged || labelChanged) {
-                _interactionScreenPosScratch.x = screenX;
-                _interactionScreenPosScratch.y = screenY;
-                refs.lastInteractionPosRef.current = _interactionScreenPosScratch;
-                refs.interactionTypeRef.current = currentInter;
-                (state as any).lastInteractionLabel = currentLabel;
+                const lastPos = refs.lastInteractionPosRef.current;
+                const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 1.0 || Math.abs(lastPos.y - screenY) > 1.0;
+                const typeChanged = currentInter !== lastType;
+                const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
 
-                // ZERO-GC: Mutate the store data directly instead of spreading
-                const hData = HudStore.getData();
-                if (!hData.interactionPrompt) hData.interactionPrompt = {} as any;
-                hData.interactionPrompt.type = currentInter;
-                hData.interactionPrompt.label = currentLabel;
-                hData.interactionPrompt.pos = _interactionScreenPosScratch;
-                HudStore.update(hData);
+                if (posChanged || typeChanged || labelChanged) {
+                    _interactionScreenPosScratch.x = screenX;
+                    _interactionScreenPosScratch.y = screenY;
+                    refs.lastInteractionPosRef.current = _interactionScreenPosScratch;
+                    refs.interactionTypeRef.current = currentInter;
+                    (state as any).lastInteractionLabel = currentLabel;
+
+                    // ZERO-GC: Mutate the store data directly
+                    const hData = HudStore.getData();
+                    if (!hData.interactionPrompt) hData.interactionPrompt = {} as any;
+                    hData.interactionPrompt.type = currentInter;
+                    hData.interactionPrompt.label = currentLabel;
+                    hData.interactionPrompt.pos = _interactionScreenPosScratch;
+                    HudStore.update(hData);
+                }
+            } else {
+                // Object is behind camera, clear HUD
+                if (refs.interactionTypeRef.current !== null) {
+                    refs.interactionTypeRef.current = null;
+                    const hData = HudStore.getData();
+                    hData.interactionPrompt = null;
+                    HudStore.update(hData);
+                }
             }
         } else {
+            // No object in range, clear HUD
             if (refs.interactionTypeRef.current !== null) {
                 refs.interactionTypeRef.current = null;
                 refs.lastInteractionPosRef.current = null;
@@ -567,9 +568,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
 
+        // 13. Game Context (Zero-GC property updates instead of Object reassignment)
         const activeCallbacks = getActiveCallbacks() as any;
 
-        // 13. Game Context (Zero-GC property updates instead of Object reassignment)
         _gameContext.scene = engine.scene;
         _gameContext.enemies = state.enemies;
         _gameContext.obstacles = state.obstacles;

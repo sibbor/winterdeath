@@ -5,7 +5,6 @@ import { WeaponType } from '../../content/weapons';
 import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
 import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
-import { ModelFactory } from '../../utils/assets';
 import { PlayerAnimator } from '../../core/animation/PlayerAnimator';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
@@ -124,9 +123,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         while (container.firstChild) container.removeChild(container.firstChild);
 
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-
         // --- ENGINE & RENDERER ---
         engine.updateSettings(graphics);
         engine.mount(container);
@@ -134,7 +130,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         const scene = engine.scene;
         const camera = engine.camera;
-        const renderer = engine.renderer;
 
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
@@ -182,10 +177,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             }
         };
         requestAnimationFrame(checkReady);
-
-        return () => {
-            // Scene cleanup handled by engine
-        };
     }, [rescuedFamilyIndices, debugMode, textures]);
 
     // --- INTERACTIVITY EFFECT: Registers loop + events ---

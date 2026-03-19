@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SectorTrigger, MapItem, WeatherType, SectorState } from './index';
 import { SpatialGrid } from '../core/world/SpatialGrid';
+import { EnemyType } from './enemy';
 
 export interface SectorEnvironment {
     bgColor: number;
@@ -75,8 +76,8 @@ export interface SectorContext {
     rng: () => number;
     debugMode: boolean; // Controls visualization of triggers/POIs
     textures: any; // Dynamic textures passed from App/Canvas
-    spawnZombie: (type: string, pos?: THREE.Vector3) => void;
-    spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => void;
+    spawnZombie: (type: EnemyType | string, pos?: THREE.Vector3) => void;
+    spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => void;
     spawnBoss: (type: string, pos?: THREE.Vector3) => void;
     smokeEmitters: any[];
     cluesFound: string[];
@@ -141,8 +142,8 @@ export interface SectorDef {
         gameState: any,
         sectorState: SectorState,
         events: {
-            spawnZombie: (type?: string, pos?: THREE.Vector3) => void;
-            spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => void;
+            spawnZombie: (type?: EnemyType | string, pos?: THREE.Vector3) => void;
+            spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => void;
             setNotification: (n: any) => void;
             setInteraction: (interaction: { id: string, text: string, action: () => void, position?: THREE.Vector3 } | null) => void;
             playSound: (id: string) => void;
