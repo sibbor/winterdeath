@@ -25,7 +25,7 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
     );
 
     return (
-        <GameModalLayout title={titleNode} maxWidthClass="max-w-4xl" blurClass="backdrop-blur-xl" isMobileDevice={isMobileDevice}>
+        <GameModalLayout title={titleNode} blurClass="backdrop-blur-xl" isMobileDevice={isMobileDevice}>
             <div className={`bg-black/50 ${isMobileDevice ? 'p-4' : 'p-8'} border-2 border-red-900 mb-6 md:mb-10`}>
                 <div className="">
                     <p className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} leading-relaxed font-light italic mb-4 md:mb-8 text-gray-200`}>

@@ -97,7 +97,6 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
             fullHeight={true}
             canConfirm={hasChanges}
             isMobileDevice={isMobileDevice}
-            maxWidthClass="max-w-7xl"
             transparent={true}
             showCloseButton={false}
             extraHeaderContent={

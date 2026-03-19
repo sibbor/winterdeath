@@ -75,7 +75,6 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     return (
         <GameModalLayout
             title={t('ui.sector_report')}
-            maxWidthClass="max-w-7xl"
             isMobileDevice={isMobileDevice}
             onClose={showRespawn ? onReturnCamp : undefined}
             cancelLabel={showRespawn ? t('ui.return_camp') : undefined}

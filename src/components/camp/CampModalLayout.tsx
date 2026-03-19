@@ -100,62 +100,85 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
         }
     }, [canConfirm, onConfirm]);
 
+    const mobile = isMobileDevice;
+
     return (
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-[80] p-4 md:p-8 backdrop-blur-2xl pointer-events-auto cursor-default">
-            <div className={`bg-black border border-white/10 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden`}>
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" />
+        <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-[80] p-0 md:p-4 backdrop-blur-2xl pointer-events-auto cursor-default font-mono overflow-hidden">
+            <div className={`
+                bg-zinc-950 border border-zinc-800 w-full ${maxWidth} ${height} flex flex-col shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden
+                ${mobile ? 'w-[95%] h-[85%] border-zinc-700' : `transform scale-50 md:scale-100 origin-center`}
+            `}>
+                
+                {/* Hardware Details */}
+                <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-zinc-700/50 z-20 pointer-events-none" />
+                <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-zinc-700/50 z-20 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-zinc-700/50 z-20 pointer-events-none" />
+                <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-zinc-700/50 z-20 pointer-events-none" />
+
+                {/* Decorative Lines */}
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[80%] h-px bg-zinc-800/50 z-0" />
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[80%] h-px bg-zinc-800/50 z-0" />
+
+                {/* Grid Background */}
+                <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0" 
+                     style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+                
+                {/* Scanline Effect */}
+                <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
 
                 {/* Header Container */}
-                <div className={`p-4 md:p-8 flex flex-col gap-4 relative z-20 pl-safe pr-safe`}>
+                <div className={`p-8 md:p-12 pb-0 flex flex-col gap-4 relative z-20 pl-safe pr-safe shrink-0`}>
+                    <div className="mb-8 border-b-2 border-zinc-800/80 pb-6 relative flex justify-between items-center w-full">
+                        <div className="flex flex-col">
+                            <h2 className={`text-5xl md:text-7xl font-black uppercase tracking-tighter inline-block ${titleColor} italic drop-shadow-[0_0_15px_rgba(0,0,0,0.5)]`}>
+                                {title}
+                            </h2>
+                        </div>
 
-                    {/* TOP ROW: Title and Scrap */}
-                    <div className="flex justify-between items-center w-full">
-                        <h2 className={`text-2xl md:text-5xl lg:text-7xl font-light uppercase tracking-tighter ${titleColor} truncate ${isMobileDevice ? 'ml-10' : ''}`}>
-                            {title}
-                        </h2>
+                        <div className="flex items-center gap-6">
+                            {extraHeaderContent && (
+                                <div className="flex-shrink-0">
+                                    {extraHeaderContent}
+                                </div>
+                            )}
 
-                        {extraHeaderContent && (
-                            <div className="flex-shrink-0 ml-4">
-                                {extraHeaderContent}
+                            {/* Desktop Buttons */}
+                            <div className="hidden md:flex items-center gap-4">
+                                {debugAction && (
+                                    <button
+                                        onClick={handleDebugClick}
+                                        className="px-6 py-3 font-bold uppercase tracking-widest transition-all duration-200 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black hover:scale-105 active:scale-95 whitespace-nowrap text-sm"
+                                    >
+                                        {debugAction.label}
+                                    </button>
+                                )}
+                                {showCancel && (
+                                    <button
+                                        onClick={handleCloseClick}
+                                        className={`${buttonStyle} ${primaryClose ? 'border-white bg-white text-black' : 'border-zinc-700 text-zinc-400 bg-zinc-900'}`}
+                                    >
+                                        {closeLabel || t('ui.close')}
+                                    </button>
+                                )}
+                                {onConfirm && (
+                                    <button
+                                        onClick={handleConfirmClick}
+                                        disabled={!canConfirm}
+                                        className={`${buttonStyle} ${canConfirm ? 'border-white bg-white text-black' : 'border-zinc-800 text-zinc-600 bg-zinc-900 cursor-not-allowed'}`}
+                                    >
+                                        {confirmLabel || t('ui.confirm')}
+                                    </button>
+                                )}
                             </div>
-                        )}
-
-                        {/* Buttons (Desktop OR Landscape Mobile) - Sköts helt av CSS! */}
-                        <div className="hidden md:flex landscape:flex items-center gap-4 ml-8">
-                            {debugAction && (
-                                <button
-                                    onClick={handleDebugClick}
-                                    className="px-3 md:px-6 py-1.5 md:py-3 font-bold uppercase tracking-widest transition-all duration-200 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-black hover:scale-105 active:scale-95 whitespace-nowrap text-[10px] md:text-sm"
-                                >
-                                    {debugAction.label}
-                                </button>
-                            )}
-                            {showCancel && (
-                                <button
-                                    onClick={handleCloseClick}
-                                    className={`${buttonStyle} ${primaryClose ? 'border-white bg-white text-black' : 'border-gray-600 text-gray-400 bg-black'}`}
-                                >
-                                    {closeLabel || t('ui.close')}
-                                </button>
-                            )}
-                            {onConfirm && (
-                                <button
-                                    onClick={handleConfirmClick}
-                                    disabled={!canConfirm}
-                                    className={`${buttonStyle} ${canConfirm ? 'border-white bg-white text-black' : 'border-gray-800 text-gray-600 bg-black cursor-not-allowed'}`}
-                                >
-                                    {confirmLabel || t('ui.confirm')}
-                                </button>
-                            )}
                         </div>
                     </div>
 
-                    {/* BOTTOM ROW (Mobile Portrait Only): Buttons below the title */}
-                    <div className="flex md:hidden landscape:hidden gap-4 w-full pl-10">
+                    {/* Mobile Buttons (Portrait) */}
+                    <div className="flex md:hidden gap-4 w-full mb-6">
                         {showCancel && (
                             <button
                                 onClick={handleCloseClick}
-                                className={`${buttonStyle} flex-1 border-gray-600 text-gray-400 bg-black`}
+                                className={`${buttonStyle} flex-1 border-zinc-700 text-zinc-400 bg-zinc-900`}
                             >
                                 {closeLabel || t('ui.close')}
                             </button>
@@ -164,7 +187,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                             <button
                                 onClick={handleConfirmClick}
                                 disabled={!canConfirm}
-                                className={`${buttonStyle} flex-1 ${canConfirm ? 'border-white bg-white text-black' : 'border-gray-800 text-gray-600 bg-black cursor-not-allowed'}`}
+                                className={`${buttonStyle} flex-1 ${canConfirm ? 'border-white bg-white text-black' : 'border-zinc-800 text-zinc-600 bg-zinc-900 cursor-not-allowed'}`}
                             >
                                 {confirmLabel || t('ui.confirm')}
                             </button>
@@ -173,7 +196,7 @@ const CampModalLayout: React.FC<CampModalLayoutProps> = ({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-transparent touch-auto relative z-10 px-safe">
+                <div className="flex-1 overflow-y-auto px-8 md:px-16 pb-12 custom-scrollbar bg-transparent touch-auto relative z-20 px-safe">
                     {children}
                 </div>
             </div>

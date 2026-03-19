@@ -243,7 +243,6 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
             onClose={onClose}
             onConfirm={onClose}
             confirmLabel={t('ui.close')}
-            maxWidthClass="max-w-6xl"
             heightClass="h-[80vh]"
             contentClass="flex-1 flex flex-col min-h-0 overflow-hidden p-0"
             titleColorClass="text-white"

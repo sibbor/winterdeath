@@ -44,7 +44,6 @@ const ScreenPlaygroundSkillStation: React.FC<ScreenPlaygroundSkillStationProps> 
             onConfirm={handleConfirm}
             confirmLabel={t('ui.apply_calibration')}
             isMobileDevice={isMobileDevice}
-            maxWidthClass="max-w-4xl"
         >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 pb-8">
                 {/* Stats Section */}

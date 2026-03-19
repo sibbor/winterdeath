@@ -1,7 +1,6 @@
 
 import React from 'react';
 import { t } from '../../utils/i18n';
-import { soundManager } from '../../utils/SoundManager';
 import CampModalLayout from './CampModalLayout';
 
 interface ScreenResetConfirmProps {

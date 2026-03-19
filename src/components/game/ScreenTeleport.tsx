@@ -31,7 +31,6 @@ const ScreenTeleport: React.FC<ScreenTeleportProps> = ({ onJump, onCancel, initi
     return (
         <GameModalLayout
             title={t('ui.teleport_title')}
-            maxWidthClass="max-w-2xl"
             isMobileDevice={isMobileDevice}
             onClose={onCancel}
             onCancel={onCancel}
