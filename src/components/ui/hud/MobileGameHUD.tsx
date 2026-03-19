@@ -207,8 +207,13 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
             case 'nathalie': return '🛡️';
             case 'sotis':
             case 'panter': return '🐱';
-            default: return '👤';
+            default: return getStatusIcon(name);
         }
+    };
+
+    const isFamilyMember = (name: string) => {
+        const n = name.toLowerCase();
+        return ['loke', 'jordan', 'esmeralda', 'nathalie', 'sotis', 'panter'].includes(n);
     };
 
     const renderSegments = (current: number, max: number, colorClass: string = 'active') => {
@@ -256,19 +261,57 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                                 <div className="h-full bg-[#06b6d4] hud-bar-glow" style={{ width: `${xpP}%` }} />
                             </div>
                         </div>
-                        {/* Passives - Small Circles */}
+                        {/* Unified Status Row (Portrait) */}
                         {!isLandscapeMode && (
-                            <div className="flex gap-1 mt-1">
-                                {activePassives.map((name: string, i: number) => (
-                                    <div
-                                        key={i}
-                                        className="w-5 h-5 rounded-full border border-green-500 bg-black/80 flex items-center justify-center text-[8px] pointer-events-auto"
-                                        data-tooltip={t(`family.${name.toLowerCase()}`)}
-                                        onTouchStart={handleTouchTooltip}
-                                    >
-                                        {getPassiveIcon(name)}
-                                    </div>
-                                ))}
+                            <div className="flex flex-wrap gap-1.5 mt-1 pointer-events-auto">
+                                {activePassives.map((name: string, i: number) => {
+                                    const isFam = isFamilyMember(name);
+                                    return (
+                                        <div
+                                            key={`pass-${i}`}
+                                            className={`w-6 h-6 flex items-center justify-center bg-black/80 border transition-all ${isFam ? 'rounded-full border-green-500' : 'rounded-sm border-purple-500'}`}
+                                            data-tooltip={isFam ? t(`family.${name.toLowerCase()}`) : t(`attacks.${name}.title`)}
+                                            onTouchStart={handleTouchTooltip}
+                                        >
+                                            <span className="text-[10px]">{getPassiveIcon(name)}</span>
+                                        </div>
+                                    );
+                                })}
+                                {activeBuffs.map((type: string, i: number) => {
+                                    const effect = statusEffects.find((e: any) => e.type === type);
+                                    const progress = effect ? Math.min(100, (effect.duration / 5000) * 100) : 0;
+                                    return (
+                                        <div
+                                            key={`buff-${i}`}
+                                            className="w-6 h-6 flex items-center justify-center bg-black/80 border rounded-sm hud-buff-pulse relative"
+                                            style={{ borderImage: 'linear-gradient(45deg, #22c55e, #a855f7) 1' }}
+                                            data-tooltip={t(`attacks.${type}.title`)}
+                                            onTouchStart={handleTouchTooltip}
+                                        >
+                                            <span className="text-[10px]">{getStatusIcon(type)}</span>
+                                            <div className="absolute -bottom-0.5 left-0 w-full h-0.5 bg-black/40">
+                                                <div className="h-full bg-green-500" style={{ width: `${progress}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {activeDebuffs.map((type: string, i: number) => {
+                                    const effect = statusEffects.find((e: any) => e.type === type);
+                                    const progress = effect ? Math.min(100, (effect.duration / 5000) * 100) : 0;
+                                    return (
+                                        <div
+                                            key={`debuff-${i}`}
+                                            className="w-6 h-6 flex items-center justify-center bg-black/80 border border-red-500 rounded-sm animate-pulse relative"
+                                            data-tooltip={t(`attacks.${type}.title`)}
+                                            onTouchStart={handleTouchTooltip}
+                                        >
+                                            <span className="text-[10px]">{getStatusIcon(type)}</span>
+                                            <div className="absolute -bottom-0.5 left-0 w-full h-0.5 bg-black/40">
+                                                <div className="h-full bg-red-500" style={{ width: `${progress}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -293,37 +336,55 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
 
                     {/* Landscape Left Column: Passives & Buffs */}
                     {isLandscapeMode && (
-                        <div className="absolute top-24 left-0 flex flex-col gap-2 pl-safe">
-                            {activePassives.map((name: string, i: number) => (
-                                <div
-                                    key={`pass-${i}`}
-                                    className="w-10 h-10 rounded-full border-2 border-green-500/50 bg-black/80 flex items-center justify-center text-xl pointer-events-auto shadow-lg"
-                                    data-tooltip={t(`family.${name.toLowerCase()}`)}
-                                    onTouchStart={handleTouchTooltip}
-                                >
-                                    {getPassiveIcon(name)}
-                                </div>
-                            ))}
-                            {activeBuffs.map((type: string, i: number) => (
-                                <div
-                                    key={`buff-L-${i}`}
-                                    className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 border-blue-500 rounded-lg text-lg pointer-events-auto shadow-lg"
-                                    data-tooltip={t(`attacks.${type}.title`)}
-                                    onTouchStart={handleTouchTooltip}
-                                >
-                                    {getStatusIcon(type)}
-                                </div>
-                            ))}
-                            {activeDebuffs.map((type: string, i: number) => (
-                                <div
-                                    key={`debuff-L-${i}`}
-                                    className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 border-red-500 rounded-lg text-lg pointer-events-auto shadow-lg"
-                                    data-tooltip={t(`attacks.${type}.title`)}
-                                    onTouchStart={handleTouchTooltip}
-                                >
-                                    {getStatusIcon(type)}
-                                </div>
-                            ))}
+                        <div className="absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto">
+                            {activePassives.map((name: string, i: number) => {
+                                const isFam = isFamilyMember(name);
+                                return (
+                                    <div
+                                        key={`pass-L-${i}`}
+                                        className={`w-10 h-10 flex items-center justify-center bg-black/80 border-2 shadow-lg transition-all ${isFam ? 'rounded-full border-green-500' : 'rounded-sm border-purple-500'}`}
+                                        data-tooltip={isFam ? t(`family.${name.toLowerCase()}`) : t(`attacks.${name}.title`)}
+                                        onTouchStart={handleTouchTooltip}
+                                    >
+                                        <span className="text-xl">{getPassiveIcon(name)}</span>
+                                    </div>
+                                );
+                            })}
+                            {activeBuffs.map((type: string, i: number) => {
+                                const effect = statusEffects.find((e: any) => e.type === type);
+                                const progress = effect ? Math.min(100, (effect.duration / 5000) * 100) : 0;
+                                return (
+                                    <div
+                                        key={`buff-L-${i}`}
+                                        className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 rounded-lg hud-buff-pulse relative shadow-lg"
+                                        style={{ borderImage: 'linear-gradient(45deg, #22c55e, #a855f7) 1' }}
+                                        data-tooltip={t(`attacks.${type}.title`)}
+                                        onTouchStart={handleTouchTooltip}
+                                    >
+                                        <span className="text-xl">{getStatusIcon(type)}</span>
+                                        <div className="absolute -bottom-1 left-0 w-full h-1 bg-black/40">
+                                            <div className="h-full bg-green-500" style={{ width: `${progress}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {activeDebuffs.map((type: string, i: number) => {
+                                const effect = statusEffects.find((e: any) => e.type === type);
+                                const progress = effect ? Math.min(100, (effect.duration / 5000) * 100) : 0;
+                                return (
+                                    <div
+                                        key={`debuff-L-${i}`}
+                                        className="w-10 h-10 flex items-center justify-center bg-black/80 border-2 border-red-500 rounded-lg animate-pulse relative shadow-lg"
+                                        data-tooltip={t(`attacks.${type}.title`)}
+                                        onTouchStart={handleTouchTooltip}
+                                    >
+                                        <span className="text-xl">{getStatusIcon(type)}</span>
+                                        <div className="absolute -bottom-1 left-0 w-full h-1 bg-black/40">
+                                            <div className="h-full bg-red-500" style={{ width: `${progress}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -408,33 +469,6 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                     </div>
                 </div>
 
-                {/* Status Effects (Bottom Left - Portrait only) */}
-                {!isLandscapeMode && (
-                    <div className="absolute bottom-4 left-4 flex flex-col gap-2">
-                        <div className="flex gap-1 pointer-events-auto">
-                            {activeBuffs.map((type: string, i: number) => (
-                                <div
-                                    key={`buff-${i}`}
-                                    className="w-6 h-6 flex items-center justify-center bg-black/80 border border-green-500 rounded-sm"
-                                    data-tooltip={t(`attacks.${type}.title`)}
-                                    onTouchStart={handleTouchTooltip}
-                                >
-                                    <span className="text-[10px]">{getStatusIcon(type)}</span>
-                                </div>
-                            ))}
-                            {activeDebuffs.map((type: string, i: number) => (
-                                <div
-                                    key={`debuff-${i}`}
-                                    className="w-6 h-6 flex items-center justify-center bg-black/80 border border-red-500 rounded-sm"
-                                    data-tooltip={t(`attacks.${type}.title`)}
-                                    onTouchStart={handleTouchTooltip}
-                                >
-                                    <span className="text-[10px]">{getStatusIcon(type)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
 
                 {/* Tooltip Popup */}
                 {tooltipContent && (
@@ -444,6 +478,16 @@ const MobileGameHUD: React.FC<MobileGameHUDProps> = React.memo(({
                         </span>
                     </div>
                 )}
+                <style>{`
+                @keyframes buffPulse {
+                    0% { box-shadow: 0 0 5px rgba(34,197,94,0.4); border-color: #22c55e; }
+                    50% { box-shadow: 0 0 15px rgba(168,85,247,0.6); border-color: #a855f7; }
+                    100% { box-shadow: 0 0 5px rgba(34,197,94,0.4); border-color: #22c55e; }
+                }
+                .hud-buff-pulse {
+                    animation: buffPulse 2s infinite ease-in-out;
+                }
+            `}</style>
             </div>
         </>
     );

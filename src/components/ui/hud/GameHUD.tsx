@@ -204,8 +204,13 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             case 'nathalie': return '🛡️';
             case 'sotis':
             case 'panter': return '🐱';
-            default: return '👤';
+            default: return getStatusIcon(name);
         }
+    };
+
+    const isFamilyMember = (name: string) => {
+        const n = name.toLowerCase();
+        return ['loke', 'jordan', 'esmeralda', 'nathalie', 'sotis', 'panter'].includes(n);
     };
 
     return (
@@ -251,19 +256,66 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                             </div>
                         </div>
 
-                        {/* Passives (Family Boosts) */}
-                        <div className="flex gap-1.5 mt-1 ml-1">
-                            {activePassives.map((name: string, i: number) => (
-                                <div
-                                    key={i}
-                                    className="w-6 h-6 rounded-full border-2 border-green-500 bg-black/80 flex items-center justify-center text-[10px] shadow-[0_0_5px_rgba(34,197,94,0.3)] pointer-events-auto cursor-help"
-                                    data-tooltip={t(`family.${name.toLowerCase()}`)}
-                                    onMouseEnter={handleMouseEnter}
-                                    onMouseLeave={handleMouseLeave}
-                                >
-                                    {getPassiveIcon(name)}
-                                </div>
-                            ))}
+                        {/* Unified Status Row: Passives -> Buffs -> Debuffs */}
+                        <div className="flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto">
+                            {/* 1. Passives (Family = Circles, Others = Squares) */}
+                            {activePassives.map((name: string, i: number) => {
+                                const isFam = isFamilyMember(name);
+                                return (
+                                    <div
+                                        key={`passive-${i}`}
+                                        className={`w-7 h-7 flex items-center justify-center bg-black/80 border-2 transition-all cursor-help ${isFam ? 'rounded-full border-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'rounded-sm border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]'}`}
+                                        data-tooltip={isFam ? t(`family.${name.toLowerCase()}`) : t(`attacks.${name}.title`)}
+                                        onMouseEnter={handleMouseEnter}
+                                        onMouseLeave={handleMouseLeave}
+                                    >
+                                        <span className="text-[11px]">{getPassiveIcon(name)}</span>
+                                    </div>
+                                );
+                            })}
+
+                            {/* 2. Buffs (Pulsing Green-Purple Squares with Timers) */}
+                            {activeBuffs.map((type: string, i: number) => {
+                                const effect = statusEffects.find((e: any) => e.type === type);
+                                const progress = effect ? Math.min(100, (effect.duration / 5000) * 100) : 0;
+                                return (
+                                    <div
+                                        key={`buff-${i}`}
+                                        className="w-7 h-7 flex items-center justify-center bg-black/80 border-2 rounded-sm hud-buff-pulse relative cursor-help"
+                                        style={{ borderImage: 'linear-gradient(45deg, #22c55e, #a855f7) 1' }}
+                                        data-tooltip={t(`attacks.${type}.title`)}
+                                        onMouseEnter={handleMouseEnter}
+                                        onMouseLeave={handleMouseLeave}
+                                    >
+                                        <span className="text-[11px]">{getStatusIcon(type)}</span>
+                                        {/* Timer Overlay */}
+                                        <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-black/40">
+                                            <div className="h-full bg-green-500 transition-all duration-100" style={{ width: `${progress}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {/* 3. Debuffs (Pulsing Red Squares with Timers) */}
+                            {activeDebuffs.map((type: string, i: number) => {
+                                const effect = statusEffects.find((e: any) => e.type === type);
+                                const progress = effect ? Math.min(100, (effect.duration / 5000) * 100) : 0;
+                                return (
+                                    <div
+                                        key={`debuff-${i}`}
+                                        className="w-7 h-7 flex items-center justify-center bg-black/80 border-2 border-red-500 rounded-sm animate-pulse relative cursor-help"
+                                        data-tooltip={t(`attacks.${type}.title`)}
+                                        onMouseEnter={handleMouseEnter}
+                                        onMouseLeave={handleMouseLeave}
+                                    >
+                                        <span className="text-[11px]">{getStatusIcon(type)}</span>
+                                        {/* Timer Overlay */}
+                                        <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-black/40">
+                                            <div className="h-full bg-red-500 transition-all duration-100" style={{ width: `${progress}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -415,65 +467,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     )}
                 </div>
 
-                {/* Status Effects (Bottom Left) — Passives → Buffs → Debuffs, always left-anchored */}
-                <div className="absolute bottom-8 left-8 flex flex-col gap-3">
-                    <div className="flex gap-2 mb-1">
-                        {/* Passives (purple, no pulse — permanent) */}
-                        {activePassives.map((type: string, i: number) => (
-                            <div
-                                key={`passive-${i}`}
-                                className="w-8 h-8 flex items-center justify-center bg-black/80 border-2 border-purple-500 rounded-sm shadow-[0_0_8px_rgba(168,85,247,0.4)] pointer-events-auto cursor-help"
-                                data-tooltip={t(`attacks.${type}.title`)}
-                                onMouseEnter={handleMouseEnter}
-                                onMouseLeave={handleMouseLeave}
-                            >
-                                <span className="text-sm">{getStatusIcon(type)}</span>
-                            </div>
-                        ))}
-                        {/* Buffs (green) */}
-                        {activeBuffs.map((type: string, i: number) => (
-                            <div
-                                key={`buff-${i}`}
-                                className="w-8 h-8 flex items-center justify-center bg-black/80 border-2 border-green-500 rounded-sm shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse pointer-events-auto cursor-help"
-                                data-tooltip={t(`attacks.${type}.title`)}
-                                onMouseEnter={handleMouseEnter}
-                                onMouseLeave={handleMouseLeave}
-                            >
-                                <span className="text-sm">{getStatusIcon(type)}</span>
-                            </div>
-                        ))}
-                        {/* Debuffs (red) */}
-                        {activeDebuffs.map((type: string, i: number) => (
-                            <div
-                                key={`debuff-${i}`}
-                                className="w-8 h-8 flex items-center justify-center bg-black/80 border-2 border-red-500 rounded-sm shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse pointer-events-auto cursor-help"
-                                data-tooltip={t(`attacks.${type}.title`)}
-                                onMouseEnter={handleMouseEnter}
-                                onMouseLeave={handleMouseLeave}
-                            >
-                                <span className="text-sm">{getStatusIcon(type)}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Detailed timers for active Debuffs */}
-                    {statusEffects.map((eff: any, i: number) => (
-                        <div
-                            key={`timer-${i}`}
-                            className="px-3 py-1 bg-black/60 border-l-2 border-red-500/50 flex items-center gap-2 animate-fadeIn max-w-[120px] pointer-events-auto cursor-help"
-                            data-tooltip={t(`attacks.${eff.type}.title`)}
-                            onMouseEnter={handleMouseEnter}
-                            onMouseLeave={handleMouseLeave}
-                        >
-                            <span className="text-[9px] font-black text-red-500 uppercase tracking-tighter">
-                                {eff.type.substring(0, 4)}
-                            </span>
-                            <div className="h-1 flex-1 bg-red-900/30 relative">
-                                <div className="h-full bg-red-500" style={{ width: `${Math.min(100, (eff.duration / 5000) * 100)}%` }} />
-                            </div>
-                        </div>
-                    ))}
-                </div>
 
 
                 {/* Tooltip Popup */}
@@ -489,6 +482,14 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(10px); }
                     to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes buffPulse {
+                    0% { box-shadow: 0 0 5px rgba(34,197,94,0.4); border-color: #22c55e; }
+                    50% { box-shadow: 0 0 15px rgba(168,85,247,0.6); border-color: #a855f7; }
+                    100% { box-shadow: 0 0 5px rgba(34,197,94,0.4); border-color: #22c55e; }
+                }
+                .hud-buff-pulse {
+                    animation: buffPulse 2s infinite ease-in-out;
                 }
             `}</style>
             </div>
