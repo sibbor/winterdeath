@@ -34,7 +34,7 @@ export interface GameContext {
 
     now: number;
     playerPos: THREE.Vector3;
-    onPlayerHit: (damage: number, attacker: any, type: string | DamageType) => void;
+    onPlayerHit: (damage: number, attacker: any, type: string | DamageType, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
     noiseEvents?: { pos: THREE.Vector3, radius: number, time: number, active: boolean }[];
 }
 
@@ -84,24 +84,45 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (pos: THREE.Vector3, radiu
             if (!hitWater) {
                 _v2.set(0, 0, 0);
 
-                const effectScale = radius * 0.4;
+                const effectScale = radius * 0.25;
 
-                ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2, undefined, effectScale, 15.0);
-                ctx.spawnPart(pos.x, pos.y + 0.2, pos.z, 'shockwave', 1, undefined, _v2, undefined, effectScale * 0.8, 20.0);
+                // 1. FLASH: Much shorter lifespan (from 15 to 5) and smaller scale.
+                // It should only be there for a fraction of a second to simulate the light flash.
+                ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2, undefined, effectScale, 5.0);
 
+                // 2. SHOCKWAVE: Ground marker for to "anchor" the explosion in the ground
+                ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 1, undefined, _v2, undefined, radius * 0.5, 5.0);
+
+                // 3. BLAST RADIUS: A red/orange ring on the ground showing exactly where the damage occurred
+                ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 30.0);
+
+                // 4. FIRE: Fewer "large_fire" (they are the ones that blind the most).
+                for (let i = 0; i < 8; i++) {
+                    _v2.set(Math.random() - 0.5, Math.random() * 0.5 + 0.2, Math.random() - 0.5)
+                        .normalize()
+                        .multiplyScalar(radius * 0.5);
+
+                    // Use 'fire' instead of 'large_fire' for most
+                    const type = i < 3 ? 'large_fire' : 'fire';
+                    ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, type, 1, undefined, _v2, undefined, effectScale * 0.6 + Math.random() * 0.5, 15 + Math.random() * 10);
+                }
+
+                // 5. SMOKE: More smoke than fire for a grenade. It gives a "dirtier" feeling.
                 for (let i = 0; i < 15; i++) {
-                    _v2.set(Math.random() - 0.5, Math.random() * 0.5 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * (0.8 + Math.random()));
-                    ctx.spawnPart(pos.x, pos.y + 1.0, pos.z, 'large_fire', 1, undefined, _v2, undefined, effectScale * 0.4 + Math.random(), 25 + Math.random() * 15);
+                    _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.4, Math.random() - 0.5)
+                        .normalize()
+                        .multiplyScalar(radius * 0.4 * (1.0 + Math.random()));
+
+                    ctx.spawnPart(pos.x, pos.y + 0.8, pos.z, 'large_smoke', 1, undefined, _v2, undefined, effectScale * 0.8 + Math.random(), 60 + Math.random() * 40);
                 }
 
-                for (let i = 0; i < 20; i++) {
-                    _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.4, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.6 * (1.0 + Math.random()));
-                    ctx.spawnPart(pos.x, pos.y + 1.0, pos.z, 'large_smoke', 1, undefined, _v2, undefined, effectScale * 0.5 + Math.random(), 40 + Math.random() * 30);
-                }
+                // 6. DEBRIS: Gravel and shrapnel flying far
+                for (let i = 0; i < 15; i++) {
+                    _v2.set(Math.random() - 0.5, Math.random() * 1.2 + 0.5, Math.random() - 0.5)
+                        .normalize()
+                        .multiplyScalar(radius * 2.0); // Shrapnel flies outside the smoke puff
 
-                for (let i = 0; i < 20; i++) {
-                    _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * 1.5 * (0.5 + Math.random()));
-                    ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'debris', 1, undefined, _v2, undefined, 1.0 + Math.random(), 100 + Math.random() * 50);
+                    ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'debris', 1, undefined, _v2, undefined, 0.4 + Math.random() * 0.4, 80 + Math.random() * 40);
                 }
             }
 
@@ -557,10 +578,10 @@ export const ProjectileSystem = {
                     }
                 }
 
-                // [VINTERDÖD] Player Burn Interaction
+                // Player Burn Interaction
                 if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
                     if (ctx.onPlayerHit) {
-                        ctx.onPlayerHit(0, null, DamageType.BURN);
+                        ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, 'Fire');
                     }
                 }
             }

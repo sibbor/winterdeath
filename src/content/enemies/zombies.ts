@@ -64,7 +64,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 type: EnemyAttackType.JUMP,
                 damage: 5,
                 range: 5,
-                cooldown: 20000,
+                cooldown: 5000,
                 effect: StatusEffectType.SLOWED,
                 effectDuration: 2000,
             }

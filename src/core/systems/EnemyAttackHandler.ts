@@ -35,8 +35,13 @@ export const EnemyAttackHandler = {
     handleBasicHit: (e: Enemy, att: AttackDefinition, distSq: number, callbacks: any) => {
         const range = att.range || DEFAULT_ATTACK_RANGE;
         const rangeSq = range * range;
+        const inRange = distSq < rangeSq;
 
-        if (distSq < rangeSq) {
+        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+            console.log(`[EnemyAttackHandler] BASIC HIT | IN RANGE: ${inRange} | ${e.type}_${e.id} attacking with ${att.type} (${att.damage} dmg)`);
+        }
+
+        if (inRange) {
             callbacks.onPlayerHit(att.damage, e, DamageType.PHYSICAL, false, att.effect, att.effectDuration, att.effectDamage, att.type);
             callbacks.playSound(att.type);
         }
@@ -51,6 +56,10 @@ export const EnemyAttackHandler = {
         // Use defined radius (AoE), then range, then default fallback.
         const effectiveRange = att.radius || att.range || DEFAULT_ATTACK_RANGE;
         const inRange = distSq < (effectiveRange * effectiveRange);
+
+        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+            console.log(`[EnemyAttackHandler] SPECIAL ATTACK | IN RANGE: ${inRange} | ${e.type}_${e.id} attacking with ${att.type} (${att.damage} dmg)`);
+        }
 
         switch (att.type) {
             case EnemyAttackType.BITE:

@@ -260,6 +260,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             // Append data directly to avoid Object Spread allocation
             (hudData as any).debugMode = propsRef.current.debugMode;
             (hudData as any).systems = session.getSystems();
+            (hudData as any).interactionPrompt = HudStore.getData().interactionPrompt;
 
             HudStore.update(hudData);
         }

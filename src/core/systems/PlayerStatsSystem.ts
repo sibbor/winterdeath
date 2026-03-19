@@ -157,9 +157,9 @@ export class PlayerStatsSystem implements System {
         // Apply Damage Resistance Multiplier (Nathalie)
         let actualDmg = damage * state.multipliers.damageResist;
 
-        if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
-            console.log(`[PLAYER] HP: ${state.hp.toFixed(0)} | -${actualDmg.toFixed(1)} (${type}) from ${attacker?.type || 'Other'}${isDoT ? ' [DoT]' : ''}`);
-        }
+        //if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
+        console.log(`[PLAYER] HIT | HP: ${state.hp.toFixed(0)} | -${actualDmg.toFixed(1)} (${type}) from ${attacker?.type || 'Other'}${isDoT ? ' [DoT]' : ''} | Effect: ${effectType || 'None'} (${effectDuration || 0}ms)`);
+        //}
 
 
         const isBite = type === DamageType.BITE;
@@ -283,9 +283,9 @@ export class PlayerStatsSystem implements System {
         state.isDead = true;
         state.deathStartTime = now;
 
-        if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
-            console.log(`[PLAYER] DIED from ${type} | Attacker: ${attacker?.type || 'Other'}`);
-        }
+        //if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
+        console.log(`[PLAYER] DIED from ${type} | Attacker: ${attacker?.type || 'Other'}`);
+        //}
 
         // Setup killer name for UI
         state.killerType = type as string;

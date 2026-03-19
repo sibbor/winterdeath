@@ -442,7 +442,7 @@ export class GameSessionSetup {
                     soundManager.stopMusic();
                     if (currentSector.environment.ambientLoop) soundManager.playMusic(currentSector.environment.ambientLoop);
                 },
-                onPlayerHit: (damage, attacker, type) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type)
+                onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName)
             }));
 
             session.addSystem(new SectorSystem(playerGroup, props.currentSector, {

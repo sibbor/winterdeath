@@ -73,8 +73,8 @@ const _aiCallbacks: any = {
     spawnBubble: null as any,
     applyDamage: null as any,
     onEffectTick: null as any,
-    onPlayerHitExtended: (damage: number, attacker: any, type: string, effect?: any, dur?: number, intense?: number) => {
-        if (_aiCallbacks.onPlayerHit) _aiCallbacks.onPlayerHit(damage, attacker, type, effect, dur, intense);
+    onPlayerHitExtended: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+        if (_aiCallbacks.onPlayerHit) _aiCallbacks.onPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
     },
     playSound: (id: string) => soundManager.playEffect(id)
 };
