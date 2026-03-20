@@ -87,7 +87,6 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
     contentClass = "",
     showCloseButton = true,
     showCancel = true,
-    primaryClose = false,
     extraHeaderContent,
     footer,
     debugAction,

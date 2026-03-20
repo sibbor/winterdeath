@@ -171,11 +171,12 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                 >
                                     <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
                                         {weapon.iconIsPng ? (
-                                            <img src={weapon.icon} alt="" className="w-full h-full object-contain p-4" />
+                                            <img src={weapon.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" />
                                         ) : (
                                             <div className="w-16 h-16 md:w-24 md:h-24" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
                                         )}
                                     </div>
+
 
                                     {/* Upgrade Button UNDER image */}
                                     {isUpgradeable && (

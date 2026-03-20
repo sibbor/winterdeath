@@ -20,9 +20,12 @@ export class CameraSystem {
     private _shakeIntensity = 0; // Persistent environmental shake
     private _hurtIntensity = 0;  // Rapidly decaying damage shake
 
+    // Instant React (not using lerp)
+    private instantReact = true;
+
     // Smoothing settings
-    private _moveSpeed = 15.0;
-    private _lookSpeed = 10.0;
+    private _moveSpeed = 35.0;
+    private _lookSpeed = 25.0;
 
     // Mode
     private _isCinematic = false;
@@ -165,11 +168,19 @@ export class CameraSystem {
             const targetY = this._baseHeight + this._followHeightMod;
             const targetZ = this._followTarget.z + offsetZRotated;
 
-            // FPS-Independent Lerp position
-            const lerpFactor = 1.0 - Math.exp(-this._moveSpeed * dt);
-            this._idealPos.x += (targetX - this._idealPos.x) * lerpFactor;
-            this._idealPos.y += (targetY - this._idealPos.y) * lerpFactor;
-            this._idealPos.z += (targetZ - this._idealPos.z) * lerpFactor;
+            // 1. Follow Logic
+            if (this.instantReact) {
+                // Instant snap: Zero math, zero lag
+                this._idealPos.x = targetX;
+                this._idealPos.y = targetY;
+                this._idealPos.z = targetZ;
+            } else {
+                // FPS-Independent Smooth Lerp: Heavy math, cinematic feel
+                const lerpFactor = 1.0 - Math.exp(-this._moveSpeed * dt);
+                this._idealPos.x += (targetX - this._idealPos.x) * lerpFactor;
+                this._idealPos.y += (targetY - this._idealPos.y) * lerpFactor;
+                this._idealPos.z += (targetZ - this._idealPos.z) * lerpFactor;
+            }
 
             // Direct assignment is faster than calling .copy() every frame (Zero-GC)
             this._idealLookAt.x = this._followTarget.x;
@@ -177,9 +188,13 @@ export class CameraSystem {
             this._idealLookAt.z = this._followTarget.z;
         }
 
-        // 2. Smooth LookAt
-        const lookLerpFactor = 1.0 - Math.exp(-this._lookSpeed * dt);
-        this._currentLookAt.lerp(this._idealLookAt, lookLerpFactor);
+        // 2. LookAt Logic
+        if (this.instantReact) {
+            this._currentLookAt.copy(this._idealLookAt);
+        } else {
+            const lookLerpFactor = 1.0 - Math.exp(-this._lookSpeed * dt);
+            this._currentLookAt.lerp(this._idealLookAt, lookLerpFactor);
+        }
 
         // 3. Shake Calculation
         // Calculate shake separately to easily add it to the final position without allocating new vectors

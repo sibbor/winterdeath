@@ -176,7 +176,7 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                             >
                                 <div className={`w-full flex flex-col border-b relative shrink-0 bg-black/40`} style={{ borderColor: isEquipped ? categoryColor : '#374151' }}>
                                     <div className={`${isMobileDevice ? 'h-32' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
-                                        <img src={weapon.icon} alt="" className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} object-contain`} />
+                                        <img src={weapon.icon} alt="" className={`${isMobileDevice ? 'w-20 h-20' : 'w-24 h-24'} object-contain filter brightness-0 invert`} />
                                     </div>
                                     {isEquippable && (
                                         <button

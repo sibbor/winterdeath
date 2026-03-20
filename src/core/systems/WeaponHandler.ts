@@ -15,6 +15,9 @@ const _v5 = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
 const _slotArray: WeaponType[] = [];
 
+// For Billboard Math
+const _cameraWorldPos = new THREE.Vector3();
+
 const _continuousNumberCache: Record<number, string> = {};
 function getContinuousNumberString(num: number): string {
     const rounded = Math.round(num);
@@ -147,33 +150,6 @@ export const WeaponHandler = {
         return Math.floor(baseDamage * (1 + level * 0.1));
     },
 
-    // Updates the reload progress bar above the player
-    updateReloadBar: (reloadBar: { bg: THREE.Mesh, fg: THREE.Mesh } | null, state: any, playerPos: THREE.Vector3, cameraQuaternion: THREE.Quaternion, now: number) => {
-        if (!reloadBar) return;
-
-        if (state.isReloading) {
-            const wep = WEAPONS[state.activeWeapon];
-            const baseReload = wep.reloadTime * (state.multipliers.reloadTime || 1.0);
-            const progress = Math.min(1, Math.max(0, 1 - ((state.reloadEndTime - now) / (baseReload || 1))));
-
-            _v1.copy(playerPos);
-            _v1.y += 2.5;
-
-            reloadBar.bg.visible = reloadBar.fg.visible = true;
-            reloadBar.bg.position.copy(_v1);
-            reloadBar.fg.position.copy(_v1);
-            reloadBar.bg.quaternion.copy(cameraQuaternion);
-            reloadBar.fg.quaternion.copy(cameraQuaternion);
-
-            reloadBar.fg.scale.set(progress, 1, 1);
-            const offset = -0.75 + (progress * 0.75);
-            _v2.set(offset, 0, 0.01).applyQuaternion(cameraQuaternion);
-            reloadBar.fg.position.add(_v2);
-        } else {
-            reloadBar.bg.visible = reloadBar.fg.visible = false;
-        }
-    },
-
     // --- CORE FIRING LOGIC ---
     handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false, cameraAngle: number = 0, camera: THREE.Camera | null = null) => {
         if (state.activeVehicle) {
@@ -184,11 +160,6 @@ export const WeaponHandler = {
 
         let wep = WEAPONS[state.activeWeapon];
         if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
-
-        //const laser = playerGroup.getObjectByName('laserSight');
-        //if (laser) {
-        //    laser.visible = state.activeWeapon !== WeaponType.ARC_CANNON && state.activeWeapon !== WeaponType.FLAMETHROWER;
-        //}
 
         if (state.activeWeapon === WeaponType.RADIO) {
             state.throwChargeStart = 0;
@@ -314,9 +285,6 @@ export const WeaponHandler = {
 
         // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
         if (wep.behavior === WeaponBehavior.THROWABLE) {
-
-            // Helper function to force the throw and avoid code duplication.
-            // Restored the exact _v3 target calculation logic from the original code!
             const executeThrow = (ratio: number) => {
                 const isUnlimited = !!state.sectorState?.unlimitedThrowables;
                 if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
@@ -327,14 +295,12 @@ export const WeaponHandler = {
                 const maxDist = ((wep as any).maxThrowDistance || 25.0) * (state.multipliers.range || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
-                // Origin and exact Target calculation restored
                 _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
                 _v3.copy(playerGroup.position).addScaledVector(_v1, dist); // Target
                 _v3.y = 0.1;
 
                 const tMax = 1.0 + (dist / maxDist) * 0.5;
 
-                // Provide exact target (_v3) and physics metrics (tMax) to the system
                 ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v3, state.activeWeapon, tMax);
 
                 if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {
@@ -342,14 +308,12 @@ export const WeaponHandler = {
                 }
 
                 state.throwChargeStart = 0;
-                state.lastShotTime = now; // Add a small cooldown before the next throw can be charged
+                state.lastShotTime = now;
 
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             };
 
-            // We can only start charging if we have ammo, OR debugMode is on, 
-            // AND we haven't thrown a grenade within the last 500ms.
             const canCharge = (state.weaponAmmo[state.activeWeapon] > 0 || debugMode) && now > (state.lastShotTime || 0) + 500;
 
             if (input.fire && canCharge) {
@@ -357,8 +321,6 @@ export const WeaponHandler = {
 
                 const chargeTime = 1250;
                 const elapsed = now - state.throwChargeStart;
-
-                // Cap the ratio at 1.0 (max distance) instead of continuous modulo loop
                 const ratio = Math.min(1, elapsed / chargeTime);
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
@@ -366,7 +328,6 @@ export const WeaponHandler = {
                 const maxDist = ((wep as any).maxThrowDistance || 25.0) * (state.multipliers.range || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
-                // Origin and exact Target calculation for rendering
                 _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));
                 _v3.copy(playerGroup.position).addScaledVector(_v1, dist);
                 _v3.y = 0.1;
@@ -379,7 +340,6 @@ export const WeaponHandler = {
                     aimCrossMesh.position.copy(_v3);
                     aimCrossMesh.position.y = 0.2;
 
-                    // Visual feedback pulse when fully charged
                     if (ratio >= 1.0) {
                         aimCrossMesh.scale.setScalar(1.5 + Math.sin(now * 0.01) * 0.1);
                     } else {
@@ -387,7 +347,6 @@ export const WeaponHandler = {
                     }
                 }
 
-                // Advanced Trajectory rendering restored with water buoyancy support
                 if (trajectoryLineMesh) {
                     trajectoryLineMesh.visible = true;
 
@@ -420,7 +379,6 @@ export const WeaponHandler = {
                         _v4.set(tx, Math.max(groundY, ty), tz);
                         _v5.set(vx, instVy, vz).normalize();
 
-                        // Uses _v1 as scratch to avoid overwriting _v3
                         _v1.crossVectors(_v5, _UP).normalize().multiplyScalar(width);
 
                         posAttr.setXYZ(2 * i, _v4.x - _v1.x, _v4.y, _v4.z - _v1.z);
@@ -431,17 +389,14 @@ export const WeaponHandler = {
                     (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
                 }
 
-                // Auto-throw logic: Force the throw if the button is held for 3.25 seconds
                 if (elapsed >= chargeTime + 2000) {
                     executeThrow(1.0);
                 }
 
             } else if (state.throwChargeStart > 0) {
-                // The player released the mouse button before auto-throw was triggered
                 const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
                 executeThrow(ratio);
             } else {
-                // Do nothing, ensure UI is hidden
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             }

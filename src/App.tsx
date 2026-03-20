@@ -29,7 +29,7 @@ import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/SoundManager';
-import { getCollectibleById, getCollectiblesBySector } from './content/collectibles';
+import { getCollectiblesBySector } from './content/collectibles';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './core/systems/AssetPreloader';
 import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';

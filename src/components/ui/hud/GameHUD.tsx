@@ -5,6 +5,7 @@ import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
+import { StatusEffectType } from '../../../types/combat';
 import DamageVignette from './DamageVignette';
 
 interface GameHUDProps {
@@ -19,10 +20,22 @@ interface GameHUDProps {
     onRotateCamera?: (dir: number) => void;
 }
 
+// --- ENUMS FOR TYPE SAFETY ---
+export enum FamilyMember {
+    LOKE = 'LOKE',
+    JORDAN = 'JORDAN',
+    ESMERALDA = 'ESMERALDA',
+    NATHALIE = 'NATHALIE',
+    SOTIS = 'SOTIS',
+    PANTER = 'PANTER'
+}
+
 // --- PERFORMANCE: Static CSS and Zero-GC helpers ---
 const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duration-500 ease-in";
 const BAR_WRAPPER = "hud-bar-container relative overflow-hidden";
-const SLOT_BASE = "hud-slot flex items-center justify-center relative border transition-all overflow-hidden pointer-events-auto shadow-lg";
+
+// --- WINTER DEATH THEME: Add 'hud-gritty-base' and 'hud-gritty-texture' for grunge look ---
+const SLOT_BASE = "hud-slot flex items-center justify-center relative transition-transform duration-200 overflow-hidden pointer-events-auto hud-gritty-base hud-gritty-texture";
 
 const _arrayCache: Record<number, number[]> = {};
 const getCachedArray = (length: number): number[] => {
@@ -33,32 +46,34 @@ const getCachedArray = (length: number): number[] => {
     return _arrayCache[length];
 };
 
-const getStatusIcon = (type: string) => {
+const getStatusIcon = (type: StatusEffectType | string) => {
     switch (type) {
-        case 'FREEZING': return '❄️';
-        case 'BURNING': return '🔥';
-        case 'BLEEDING': return '🩸';
-        case 'ELECTRIFIED': return '⚡';
-        case 'SLOWED': return '🐌';
-        case 'DISORIENTED': return '😵';
+        case StatusEffectType.FREEZING: return '❄️';
+        case StatusEffectType.BURNING: return '🔥';
+        case StatusEffectType.BLEEDING: return '🩸';
+        case StatusEffectType.ELECTRIFIED: return '⚡';
+        case StatusEffectType.SLOWED: return '🐌';
+        case StatusEffectType.DISORIENTED: return '😵';
         default: return '❓';
     }
 };
 
 const getPassiveIcon = (name: string) => {
-    const n = name.toLowerCase();
-    if (['loke', 'jordan', 'esmeralda', 'nathalie'].includes(n)) {
-        if (n === 'loke') return '⚡';
-        if (n === 'jordan') return '🎯';
-        if (n === 'esmeralda') return '🔫';
-        if (n === 'nathalie') return '🛡️';
+    const n = name.toUpperCase();
+    switch (n) {
+        case FamilyMember.LOKE: return '⚡';
+        case FamilyMember.JORDAN: return '🎯';
+        case FamilyMember.ESMERALDA: return '🔫';
+        case FamilyMember.NATHALIE: return '🛡️';
+        case FamilyMember.SOTIS:
+        case FamilyMember.PANTER: return '🐱';
+        default: return getStatusIcon(name as StatusEffectType);
     }
-    if (n === 'sotis' || n === 'panter') return '🐱';
-    return getStatusIcon(name);
 };
 
-const isFamilyMember = (name: string) =>
-    ['loke', 'jordan', 'esmeralda', 'nathalie', 'sotis', 'panter'].includes(name.toLowerCase());
+const isFamilyMember = (name: string) => {
+    return Object.values(FamilyMember).includes(name.toUpperCase() as FamilyMember);
+};
 
 // ============================================================================
 // HIGH-FREQUENCY DOM MUTATORS (Bypassing React Render Cycle)
@@ -78,7 +93,6 @@ const BuffIcon = React.memo(({ type, isMobileDevice, isLandscapeMode, handleActi
                     break;
                 }
             }
-            // Zero-GC: Only mutate DOM and allocate string if value changed
             if (progress !== lastProgress) {
                 barRef.current.style.transform = `scaleX(${progress})`;
                 lastProgress = progress;
@@ -99,7 +113,11 @@ const BuffIcon = React.memo(({ type, isMobileDevice, isLandscapeMode, handleActi
     );
 });
 
-const ReloadStripes = React.memo(({ isActive, catColor }: { isActive: boolean, catColor: string }) => {
+// ============================================================================
+// RELOAD GRITTY FILL
+// Blends weapon color with grunge texture, filling from bottom up.
+// ============================================================================
+const ReloadGrittyFill = React.memo(({ isActive, catColor }: { isActive: boolean, catColor: string }) => {
     const barRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -118,8 +136,61 @@ const ReloadStripes = React.memo(({ isActive, catColor }: { isActive: boolean, c
 
     return (
         <div ref={barRef}
-            className="absolute bottom-0 left-0 w-full opacity-40 origin-bottom hud-reloading-stripes"
-            style={{ backgroundColor: catColor, transform: 'scaleY(0)', willChange: 'transform' }} />
+            className="absolute inset-0 w-full h-full origin-bottom hud-gritty-blended-fill z-0 will-change-transform"
+            style={{ backgroundColor: catColor, transform: 'scaleY(0)' }} />
+    );
+});
+
+// ============================================================================
+// FLOATING RELOAD BAR (GPU Accelerated CSS - Fixed Center - Gritty)
+// ============================================================================
+const FloatingReloadBar = React.memo(({ activeWeapon }: { activeWeapon: WeaponType }) => {
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const fillRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        let lastProgress = -1;
+        let lastVisible = false;
+
+        const unsubscribe = HudStore.subscribe((state) => {
+            if (!wrapperRef.current || !fillRef.current) return;
+
+            // 1. Handle Visibility
+            const isVisible = state.isReloading;
+            if (isVisible !== lastVisible) {
+                wrapperRef.current.style.opacity = isVisible ? '1' : '0';
+                lastVisible = isVisible;
+            }
+
+            // 2. Handle Progress Fill
+            if (isVisible && state.reloadProgress !== lastProgress) {
+                fillRef.current.style.transform = `scaleX(${state.reloadProgress})`;
+                lastProgress = state.reloadProgress;
+            }
+        });
+
+        return unsubscribe;
+    }, []);
+
+    const wep = WEAPONS[activeWeapon];
+    const catColor = wep ? (WeaponCategoryColors as any)[wep.category] || 'white' : 'white';
+
+    return (
+        <div className="fixed inset-0 pointer-events-none z-[100]">
+            <div
+                ref={wrapperRef}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-10 w-16 h-2 overflow-hidden rounded-sm transition-opacity duration-100 hud-gritty-bar-container"
+                style={{ opacity: 0, willChange: 'opacity' }}
+            >
+                <div
+                    ref={fillRef}
+                    className="w-full h-full origin-left will-change-transform hud-gritty-blended-fill relative"
+                    style={{ backgroundColor: catColor, transform: 'scaleX(0)' }}
+                >
+                    <div className="absolute inset-0 hud-noise-overlay opacity-20" />
+                </div>
+            </div>
+        </div>
     );
 });
 
@@ -134,7 +205,6 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro }: { isMobileDevic
     const xpBarRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Delta caches to prevent string allocations every frame
         let lastHpScale = -1;
         let lastHpValue = -1;
         let lastMaxHpValue = -1;
@@ -327,7 +397,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
 
             {isDriving ? (
                 <div className={`flex flex-col items-center ${isMobileDevice ? 'pt-2' : 'pt-8'}`}>
-                    <div className={`${BAR_WRAPPER} ${isMobileDevice ? 'px-8 py-2' : 'px-12 py-4'} shadow-2xl bg-zinc-950/80 border border-white/20`}>
+                    <div className={`${BAR_WRAPPER} hud-gritty-base hud-gritty-texture ${isMobileDevice ? 'px-8 py-2' : 'px-12 py-4'} shadow-2xl`}>
                         <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white tracking-tighter block hud-text-glow text-center`}>
                             {speedKmH}
                         </span>
@@ -358,14 +428,23 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                             <button key={slot} data-slot={slot}
                                 onClick={!isMobileDevice ? handleSelectWeaponInternal : undefined}
                                 onTouchStart={isMobileDevice ? handleSelectWeaponInternal : undefined}
-                                className={`${SLOT_BASE} ${size} ${isActive ? 'scale-105 z-10 bg-zinc-950/80 border-2' : 'opacity-40 bg-black/40 border'} 
+                                // Use transform: scale() so it enlarges visibly without shifting flex items
+                                className={`${SLOT_BASE} ${size} ${isActive ? 'scale-[1.15] z-20 border-[3px]' : 'opacity-80 border border-white/20 hover:opacity-80'} 
                                                ${(isRadio && familyFound) || (isThrowable && throwableAmmo <= 0) ? 'grayscale' : ''}`}
-                                style={{ borderColor: isActive ? catColor : 'rgba(255,255,255,0.1)' }}>
+                                style={{
+                                    borderColor: isActive ? catColor : undefined,
+                                    // Combine color accent glow with the dark inner-shadow
+                                    boxShadow: isActive ? `0 0 20px -5px ${catColor}, inset 0 0 15px rgba(0,0,0,0.9)` : undefined
+                                }}>
 
-                                <ReloadStripes isActive={isActive && isReloading} catColor={catColor} />
+                                {/* Gritty fill behind the weapon icon */}
+                                <ReloadGrittyFill isActive={isActive && isReloading} catColor={catColor} />
+
+                                {/* Static noise overlay to sit behind the weapon icon but inside the slot */}
+                                <div className="absolute inset-0 hud-noise-overlay opacity-20 mix-blend-overlay z-0" />
 
                                 <div className={`${isMobileDevice ? 'w-8 h-8' : 'w-10 h-10'} flex items-center justify-center mb-1 relative z-10`}
-                                    style={{ filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,0.8))' : 'opacity(0.5)' }}>
+                                    style={{ filter: isActive ? 'drop-shadow(0_0_2px_rgba(255,255,255,1.0))' : 'opacity(0.8)' }}>
                                     {wData.iconIsPng ? <img src={wData.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" /> : <div className="w-full h-full text-white" dangerouslySetInnerHTML={{ __html: wData.icon }} />}
                                 </div>
 
@@ -380,7 +459,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                                     </div>
                                 )}
 
-                                {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 drop-shadow-md">{t('ui.located')}</span>}
+                                {isRadio && familyFound && <span className="absolute bottom-1 w-full text-center text-[9px] font-black uppercase text-blue-300 drop-shadow-md z-10">{t('ui.located')}</span>}
                             </button>
                         );
                     })}
@@ -389,7 +468,6 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
         </div>
     );
 });
-
 
 // ============================================================================
 // MAIN HUD LAYOUT
@@ -404,6 +482,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const maxHp = useHudStore(s => s.maxHp);
     const isDead = useHudStore(s => s.isDead);
     const isDisoriented = useHudStore(s => s.isDisoriented);
+    const activeWeapon = useHudStore(s => s.activeWeapon);
     const { isLandscapeMode } = useOrientation();
 
     const [tooltipContent, setTooltipContent] = useState<string | null>(null);
@@ -468,6 +547,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     <BossWavePanel isMobileDevice={isMobileDevice} />
                 </div>
 
+                {/* UI RELOAD BAR OVER PLAYER HEAD */}
+                <FloatingReloadBar activeWeapon={activeWeapon} />
+
                 <BottomActionPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} weaponSlots={weaponSlots} handleSelectWeaponInternal={handleSelectWeaponInternal} />
 
                 {tooltipContent && (
@@ -478,18 +560,57 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     </div>
                 )}
 
+                {/* --- WINTER DEATH GRITTY CSS --- */}
                 <style>{`
                     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
                     @keyframes buffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(168,85,247,0.4); border-color: rgba(168,85,247,0.8); } 50% { box-shadow: 0 0 15px rgba(168,85,247,0.8); border-color: #a855f7; } }
                     @keyframes debuffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(239,68,68,0.4); border-color: rgba(239,68,68,0.8); } 50% { box-shadow: 0 0 15px rgba(239,68,68,0.8); border-color: #ef4444; } }
-                    @keyframes reloadStripes { from { background-position: 0 0; } to { background-position: 40px 0; } }
+                    
                     .hud-buff-pulse { animation: buffPulse 2s infinite ease-in-out; }
                     .hud-debuff-pulse { animation: debuffPulse 2s infinite ease-in-out; }
-                    .hud-reloading-stripes { 
-                        background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
-                        background-size: 20px 20px;
-                        animation: reloadStripes 0.5s linear infinite;
+                    
+                    /* --- Winter Death noise texture base64 --- */
+                    .hud-noise-overlay {
+                        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+                        background-repeat: repeat;
+                        background-size: 100px 100px;
+                        pointer-events: none;
                     }
+
+                    /* General grungy base for panels */
+                    .hud-gritty-base {
+                        background-color: rgba(15, 15, 15, 0.9);
+                        box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.9);
+                        border: 1px solid rgba(255, 255, 255, 0.08);
+                    }
+
+                    /* Add the texture layer as an ::after element so it sits above backgrounds but below content */
+                    .hud-gritty-texture { position: relative; }
+                    .hud-gritty-texture::after {
+                        content: '';
+                        position: absolute;
+                        inset: 0;
+                        opacity: 0.1; /* Subtle grime */
+                        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+                        background-repeat: repeat;
+                        background-size: 100px 100px;
+                        pointer-events: none;
+                        z-index: 1; /* Sit above the solid fill z-0 */
+                    }
+
+                    /* Styling for the floating reload bar container */
+                    .hud-gritty-bar-container {
+                        background-color: rgba(10, 10, 10, 0.95);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        box-shadow: 0 0 15px rgba(0,0,0,0.8), inset 0 0 5px rgba(0,0,0,0.9);
+                    }
+
+                    /* Special blending for reloading fills (darker, grungier) */
+.hud-gritty-blended-fill {
+    filter: brightness(1.2) saturate(1.2);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.6); 
+}
+
                     .hud-text-glow { text-shadow: 0 0 15px rgba(255,255,255,0.3); }
                     .hud-bar-glow { box-shadow: 0 0 10px rgba(255,255,255,0.2); }
                 `}</style>

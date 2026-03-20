@@ -7,16 +7,12 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 export class PlayerCombatSystem implements System {
     id = 'player_combat';
 
-    private reloadBar: { bg: THREE.Mesh; fg: THREE.Mesh } | null = null;
-
-    // Flat primitives instead of Record<string, boolean>. Faster memory access.
     private _p1: boolean = false;
     private _p2: boolean = false;
     private _p3: boolean = false;
     private _p4: boolean = false;
     private _p5: boolean = false;
 
-    // State-diffing for death, prevents per-frame GPU updates
     private _wasDead: boolean = false;
 
     private aimCross: THREE.Group | null = null;
@@ -32,23 +28,7 @@ export class PlayerCombatSystem implements System {
 
         const scene = session.engine.scene;
 
-        // --- Create Reload Bar (Standard UI Geometry) ---
-        const barGeo = new THREE.PlaneGeometry(1.5, 0.2);
-        const bgMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, depthTest: false });
-        const fgMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, depthTest: false });
-
-        const reloadBg = new THREE.Mesh(barGeo, bgMat);
-        const reloadFg = new THREE.Mesh(barGeo, fgMat);
-
-        reloadBg.visible = reloadFg.visible = false;
-        reloadBg.renderOrder = 999;
-        reloadFg.renderOrder = 1000;
-
-        scene.add(reloadBg);
-        scene.add(reloadFg);
-        this.reloadBar = { bg: reloadBg, fg: reloadFg };
-
-        // --- Create Aim Crosshair (Reticle) ---
+        // --- Create Aim Crosshair ---
         const crossGroup = new THREE.Group();
         const aimRing = new THREE.Mesh(GEOMETRY.aimRing, MATERIALS.aimReticle);
         aimRing.rotation.x = -Math.PI / 2;
@@ -58,14 +38,13 @@ export class PlayerCombatSystem implements System {
         scene.add(crossGroup);
         this.aimCross = crossGroup;
 
-        // --- Create Trajectory Line (Pre-allocated buffer for WeaponHandler) ---
+        // --- Create Trajectory Line ---
         const vertexCount = 42;
         const positions = new Float32Array(vertexCount * 3);
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-        // Direct allocation of typed array instead of dynamic push() 
-        const indicesCount = 20 * 6; // 20 quads * 6 indices
+        const indicesCount = 20 * 6;
         const indices = new Uint16Array(indicesCount);
         let idx = 0;
         for (let i = 0; i < 20; i++) {
@@ -95,7 +74,7 @@ export class PlayerCombatSystem implements System {
         this.trajectoryLine.renderOrder = 999;
         scene.add(this.trajectoryLine);
 
-        // --- Cache Laser Sight Reference ---
+        // --- Cache Laser Sight ---
         this.laserSight = this.playerGroup.children.find(c => c.userData.isLaserSight) as THREE.Mesh || null;
     }
 
@@ -105,24 +84,18 @@ export class PlayerCombatSystem implements System {
         const disableInput = session.inputDisabled;
 
         if (state.isDead) {
-            // Only hide UI once when the player dies.
             if (!this._wasDead) {
                 if (this.laserSight) this.laserSight.visible = false;
                 if (this.aimCross) this.aimCross.visible = false;
                 if (this.trajectoryLine) this.trajectoryLine.visible = false;
-                if (this.reloadBar) {
-                    this.reloadBar.bg.visible = false;
-                    this.reloadBar.fg.visible = false;
-                }
                 this._wasDead = true;
             }
             return;
         }
         this._wasDead = false;
 
-        // --- Weapon Slot Switching (Edge Triggered) ---
+        // --- Weapon Slot Switching ---
         if (!disableInput) {
-            // Flat evaluations
             if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
             if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
             if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
@@ -130,7 +103,6 @@ export class PlayerCombatSystem implements System {
             if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
         }
 
-        // Update input cache with strict boolean conversion
         this._p1 = !!input['1'];
         this._p2 = !!input['2'];
         this._p3 = !!input['3'];
@@ -139,18 +111,6 @@ export class PlayerCombatSystem implements System {
 
         if (!disableInput) {
             WeaponHandler.handleInput(input, state, state.loadout, now, disableInput);
-        }
-
-        // [VINTERDÖD] Movement/Combat UI updates should happen even if input is disabled 
-        // to prevent "stuck" visuals during cinematics or state transitions.
-        if (this.reloadBar) {
-            WeaponHandler.updateReloadBar(
-                this.reloadBar,
-                state,
-                this.playerGroup.position,
-                session.engine.camera.threeCamera.quaternion,
-                now
-            );
         }
 
         if (!disableInput) {
@@ -167,7 +127,6 @@ export class PlayerCombatSystem implements System {
             );
         }
 
-        // Sync Laser Sight visibility with state
         if (this.laserSight) {
             this.laserSight.visible = !state.activeVehicle;
         }
@@ -176,17 +135,6 @@ export class PlayerCombatSystem implements System {
     cleanup(session: GameSessionLogic) {
         const scene = session.engine.scene;
 
-        // Dispose Reload Bar
-        if (this.reloadBar) {
-            scene.remove(this.reloadBar.bg);
-            scene.remove(this.reloadBar.fg);
-            this.reloadBar.bg.geometry.dispose();
-            (this.reloadBar.bg.material as THREE.Material).dispose();
-            this.reloadBar.fg.geometry.dispose();
-            (this.reloadBar.fg.material as THREE.Material).dispose();
-        }
-
-        // Dispose Reticle - Removed closure in traverse.
         if (this.aimCross) {
             scene.remove(this.aimCross);
             const children = this.aimCross.children;
@@ -201,7 +149,6 @@ export class PlayerCombatSystem implements System {
             }
         }
 
-        // Dispose Trajectory Line
         if (this.trajectoryLine) {
             scene.remove(this.trajectoryLine);
             if (this.trajectoryLine.geometry) this.trajectoryLine.geometry.dispose();

@@ -12,9 +12,12 @@ import { EnvironmentGenerator } from '../world/EnvironmentGenerator';
 import { CampWorld, CAMP_SCENE, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../../components/camp/CampWorld';
 import { SectorSystem } from '../systems/SectorSystem';
 import { registerSoundGenerators } from '../../utils/audio/SoundLib';
+import { soundManager } from '../../utils/SoundManager';
 import { SoundBank } from '../../utils/audio/SoundBank';
 import { FXSystem } from '../systems/FXSystem';
 import { COLLECTIBLES } from '../../content/collectibles';
+import { WEAPONS } from '../../content/weapons';
+
 
 const warmedModules = new Set<string>();
 const activePromises = new Map<string, Promise<void>>();
@@ -97,33 +100,30 @@ export const AssetPreloader = {
             endInternal('lighting');
             console.log(`[AssetPreloader]   lighting+fog: ${(warmupTimings['lighting'] ?? 0).toFixed(1)}ms (${engineMaxVisible} lights, ${engineMaxShadows} shadow casters)`);
 
-            // --- 3. CORE ASSETS (Full 40+ Sound Bank) ---
+            // --- 3. CORE ASSETS ---
             if (isCore) {
-                beginInternal('core_assets');
-                registerSoundGenerators();
-                const soundEngine = (window as any).gameEngine?.sound;
-                if (soundEngine) {
-                    const essential = [
-                        'ui_hover', 'ui_click', 'ui_confirm', 'ui_chime', 'shot_pistol', 'shot_smg', 'shot_rifle',
-                        'shot_shotgun', 'shot_revolver', 'shot_minigun', 'shot_arc_cannon', 'shot_flamethrower',
-                        'pin_pull', 'ignite', 'explosion', 'walker_groan', 'walker_attack', 'walker_death',
-                        'runner_scream', 'runner_attack', 'runner_death', 'tank_roar', 'tank_smash', 'tank_death',
-                        'bomber_beep', 'step_zombie', 'impact_flesh', 'impact_metal', 'impact_concrete', 'impact_stone',
-                        'impact_wood', 'blood_splat', 'door_metal_shut', 'door_metal_open', 'heartbeat', 'ui_level_up',
-                        'loot_scrap', 'chest_open', 'vehicle_skid', 'vehicle_engine_car', 'vehicle_engine_boat',
-                        'step', 'step_snow', 'step_metal', 'step_wood', 'step_water', 'swimming', 'dash', 'BITE',
-                        'jump_impact', 'heavy_smash', 'owl_hoot', 'bird_ambience', 'ambient_rustle', 'ambient_metal'
-                    ];
-                    for (let i = 0; i < essential.length; i++) SoundBank.get(soundEngine, essential[i]);
+                // Sounds
+                beginInternal('asset_warmup_sounds');
 
-                    try {
-                        const { createMusicBuffer } = await import('../../utils/audio/SoundLib');
-                        const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
-                        for (let k = 0; k < music.length; k++) {
-                            createMusicBuffer(soundEngine.ctx, music[k]);
-                        }
-                    } catch (e) { }
+                registerSoundGenerators();
+
+                if (soundManager) {
+                    // Optimized Generic Sound Warmup: Preloads all registered generators
+                    await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || (async () => { }));
+
+                    const { createMusicBuffer } = await import('../../utils/audio/SoundLib');
+                    const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
+
+                    // Await all music buffer creations in parallel (assuming they return promises)
+                    await Promise.all(music.map(m => createMusicBuffer(soundManager.core.ctx, m)));
                 }
+
+                endInternal('asset_warmup_sounds');
+                if (yieldToMain) await yieldToMain();
+
+                // Textures
+                beginInternal('asset_warmup_textures');
+
                 const procedural = createProceduralDiffuse();
                 Object.values(procedural).forEach(t => engine.renderer.initTexture(t));
 
@@ -134,9 +134,35 @@ export const AssetPreloader = {
                     if (tex) engine.renderer.initTexture(tex);
                 }
 
-                endInternal('core_assets');
+                endInternal('asset_warmup_textures');
+                if (yieldToMain) await yieldToMain();
+
+                beginInternal('asset_warmup_ui_images');
+                const uiAssetsSet = new Set<string>([
+                    '/assets/ui/icon_dash.png',
+                    '/assets/ui/icon_reload.png',
+                    '/assets/ui/icon_flashlight.png',
+                ]);
+
+                // Collect icons from main registries that use PNGs (Generic)
+                Object.values(WEAPONS).forEach(w => {
+                    if (w.icon && w.iconIsPng) uiAssetsSet.add(w.icon);
+                });
+
+                const allUiAssets = Array.from(uiAssetsSet);
+
+                await Promise.all(allUiAssets.map(url => {
+                    const img = new Image();
+                    img.src = url;
+                    return img.decode().catch(() => {
+                        console.warn(`[AssetPreloader] Failed to pre-decode UI image: ${url}`);
+                    });
+                }));
+
+                endInternal('asset_warmup_ui_images');
                 if (yieldToMain) await yieldToMain();
             }
+
 
             // --- 4. SHARED POOL INITIALIZATION (Union of All Systems) ---
             if (!sharedPoolInitialized) {
@@ -220,6 +246,18 @@ export const AssetPreloader = {
                 Object.keys(VEHICLES).forEach(v => add(v === 'boat' ? VehicleGenerator.createBoat() : VehicleGenerator.createVehicle(v as VehicleType), true, true));
                 add(ModelFactory.createPlayer(), true, true);
                 FAMILY_MEMBERS.forEach(fm => add(ModelFactory.createFamilyMember(fm), true, true));
+
+                // G2. Collectibles (Shader Warmup)
+                const warmedModels: string[] = [];
+                const collectibles = Object.values(COLLECTIBLES);
+                for (let i = 0; i < collectibles.length; i++) {
+                    const mType = (collectibles[i] as any).modelType;
+                    if (mType && !warmedModels.includes(mType)) {
+                        warmedModels.push(mType);
+                        add(ModelFactory.createCollectible(mType), true, true);
+                    }
+                }
+
 
                 // Trees (ALL variants)
                 await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
