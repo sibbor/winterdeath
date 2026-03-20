@@ -17,19 +17,20 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
 
     return (
         <ScreenModalLayout
-            title={t(def.nameKey)}
+            title={t('ui.collectible_discovered')}
             isMobileDevice={isMobileDevice}
-            onClose={onClose}
             onConfirm={onClose}
             confirmLabel={t('ui.continue')}
             isSmall={true}
             titleColorClass="text-yellow-500"
         >
             <div className="flex flex-col items-center text-center">
-                <div className="mb-4">
-                    <span className="text-[10px] font-black uppercase tracking-[0.5em] text-yellow-500/60 mb-2 block animate-pulse">
-                        {t('ui.collectible_discovered')}
+                <div className="mb-4 flex items-center justify-center gap-3">
+                    <div className="h-[1px] w-8 bg-yellow-500/30"></div>
+                    <span className="text-xl font-black uppercase tracking-[0.5em] text-yellow-500/60 mb-2 block animate-pulse">
+                        {t(def.nameKey)}
                     </span>
+                    <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                 </div>
 
                 {/* Collector Icon/Preview */}
@@ -44,13 +45,6 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                     <p className="text-zinc-400 text-sm sm:text-base leading-relaxed font-medium italic">
                         "{t(def.descriptionKey)}"
                     </p>
-                    <div className="mt-6 flex items-center justify-center gap-3">
-                        <div className="h-[1px] w-8 bg-yellow-500/30"></div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-yellow-500/60">
-                            {t(`ui.type_${def.modelType.toLowerCase()}`)}
-                        </span>
-                        <div className="h-[1px] w-8 bg-yellow-500/30"></div>
-                    </div>
                 </div>
             </div>
         </ScreenModalLayout>
