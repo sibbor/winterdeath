@@ -428,14 +428,9 @@ export class GameSessionSetup {
             }
 
             session.addSystem(new DamageTrackerSystem());
-            
-            const noiseSystem = new NoiseSystem();
-            session.noiseSystem = noiseSystem;
-            session.addSystem(noiseSystem);
-
+            session.addSystem(new NoiseSystem());
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new VehicleMovementSystem(playerGroup));
-
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new PlayerInteractionSystem(
                 playerGroup,

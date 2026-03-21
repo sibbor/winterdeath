@@ -34,21 +34,35 @@ export interface NoiseEvent {
     active: boolean;
 }
 
+const MAX_NOISE_EVENTS = 64;
+const NOISE_LIFETIME_MS = 500;
+const NOISE_MERGE_TIME_MS = 100;
+const NOISE_MERGE_DIST_SQ = 4.0; // 2 meters squared
+
 /**
  * NoiseSystem handles the lifecycle, pooling, and merging of audio distractors (noises) 
- * in the game world. It is strictly Zero-GC during runtime.
+ * in the game world. Strict Zero-GC utilizing a circular ring buffer.
  */
 export class NoiseSystem implements System {
-    id = 'noise';
-    enabled = true;
+    public id = 'noise';
+    public enabled = true;
 
-    // Zero-GC: Single pool of events. 
-    // We reuse objects by toggling their 'active' flag.
+    // Zero-GC: Fixed size pool of events configured as a ring buffer
     public events: NoiseEvent[] = [];
+    private head: number = 0;
+    private currentTime: number = 0;
+
+    init(session: GameSessionLogic): void {
+        // Register itself as the primary noise system for the session
+        session.noiseSystem = this;
+
+        // Initialize time to prevent Frame 0 desync if makeNoise is called before the first update
+        this.currentTime = performance.now();
+    }
 
     constructor() {
         // Pre-allocate Noise Pool (Zero-GC from frame 1)
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < MAX_NOISE_EVENTS; i++) {
             this.events.push({
                 pos: new THREE.Vector3(),
                 radius: 0,
@@ -59,21 +73,18 @@ export class NoiseSystem implements System {
         }
     }
 
-    init(session: GameSessionLogic): void {
-        // Shorthand for easier access from other systems/logic
-        (session as any).noiseSystem = this;
-    }
-
     /**
      * Managed maintenance of noise lifecycles.
      * Events are automatically deactivated after their duration expires.
      */
     update(session: GameSessionLogic, delta: number, now: number): void {
+        this.currentTime = now;
         const events = this.events;
-        for (let i = 0; i < events.length; i++) {
+        const length = events.length;
+
+        for (let i = 0; i < length; i++) {
             const evt = events[i];
-            // Hard-coded 500ms life for all noises. AI reacts instantly then searches.
-            if (evt.active && now - evt.time > 500) {
+            if (evt.active && (now - evt.time > NOISE_LIFETIME_MS)) {
                 evt.active = false;
             }
         }
@@ -81,57 +92,48 @@ export class NoiseSystem implements System {
 
     /**
      * Registers a sound event in the world for AI to react to.
-     * ZERO-GC THROTTLING: Merges nearby recent noises of the same type 
-     * to prevent pool flooding and excessive distance calculations in AI loops.
+     * ZERO-GC: Uses a circular buffer to overwrite oldest events and throttles
+     * duplicate events within proximity.
      */
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number): void {
-        const now = performance.now();
         const finalRadius = radius !== undefined ? radius : (NOISE_RADIUS[type] || 30);
-
-        // 1. Throttling/Merging
         const events = this.events;
-        for (let i = 0; i < events.length; i++) {
+        const length = events.length;
+
+        // 1. Throttling/Merging: Prevent pool flooding
+        for (let i = 0; i < length; i++) {
             const n = events[i];
             if (n.active && n.type === type) {
-                // If same type noise exists within 2m and was created < 100ms ago, merge it.
-                if (n.pos.distanceToSquared(pos) < 4.0 && now - n.time < 100) {
-                    n.time = now;
-                    if (finalRadius > n.radius) n.radius = finalRadius;
-                    return;
+                // If same type noise exists nearby and was created recently, merge it.
+                if (this.currentTime - n.time < NOISE_MERGE_TIME_MS && n.pos.distanceToSquared(pos) < NOISE_MERGE_DIST_SQ) {
+                    n.time = this.currentTime;
+                    if (finalRadius > n.radius) {
+                        n.radius = finalRadius;
+                    }
+                    return; // Successfully merged, exit early
                 }
             }
         }
 
-        // 2. Find reusable object
-        let event = null;
-        for (let i = 0; i < events.length; i++) {
-            if (!events[i].active) {
-                event = events[i];
-                break;
-            }
-        }
+        // 2. O(1) Allocation via Ring Buffer
+        const event = events[this.head];
 
-        // 3. Emergency Allocation (Settles into stable size)
-        if (!event) {
-            event = {
-                pos: new THREE.Vector3(),
-                radius: 0,
-                type: NoiseType.OTHER,
-                time: 0,
-                active: false
-            };
-            events.push(event);
-        }
-
-        // 4. Populate
         event.pos.copy(pos);
         event.radius = finalRadius;
         event.type = type;
-        event.time = now;
+        event.time = this.currentTime;
         event.active = true;
+
+        // Advance head, loop back to 0 if at max
+        this.head = (this.head + 1) % MAX_NOISE_EVENTS;
     }
 
     cleanup(): void {
-        this.events.length = 0;
+        const events = this.events;
+        const length = events.length;
+        for (let i = 0; i < length; i++) {
+            events[i].active = false;
+        }
+        this.head = 0;
     }
 }
