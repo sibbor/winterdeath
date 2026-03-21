@@ -31,7 +31,12 @@ let sharedPoolCompiled = false;  // Tracks if WebGL shaders are built
 // Static arrays to prevent GC allocations
 const BUMP_MAPS = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'concrete_bump', 'brick_bump', 'bark_rough_bump'];
 const FX_SOLID = ['debris', 'scrap', 'glass', 'gore'];
-const FX_GAS = ['fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'flash', 'splash', 'impact', 'blood', 'gore_splat'];
+const FX_GAS = [
+    'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'flash', 'splash', 'impact', 'blood', 'gore_splat',
+    'shockwave', 'frost_nova', 'screech_wave', 'electric_beam', 'magnetic_sparks', 'ground_impact', 'impact_splat', 
+    'blood_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire', 
+    'enemy_effect_stun', 'electric_flash', 'enemy_effect_flame', 'enemy_effect_spark'
+];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK];
 const TREE_TYPES = [TREE_TYPE.PINE, TREE_TYPE.SPRUCE, TREE_TYPE.OAK, TREE_TYPE.BIRCH, TREE_TYPE.DEAD];

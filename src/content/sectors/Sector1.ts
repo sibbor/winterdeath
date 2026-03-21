@@ -58,6 +58,8 @@ const LOCATIONS = {
     ]
 } as const;
 
+const _v1 = new THREE.Vector3();
+
 // Zero-GC Pre-allocated Vectors for the Update Loop
 const _busPos = new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z);
 const _trainYardPos = new THREE.Vector3(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
@@ -528,7 +530,8 @@ export const Sector1: SectorDef = {
         const rubble = SectorGenerator.spawnRubble(ctx, LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.z, 20, MATERIALS.busBlue, Math.PI);
         rubble.position.y = -1000;
         rubble.visible = false;
-        (ctx as any).busRubble = rubble
+        rubble.userData.hasLanded = new Uint8Array(rubble.count);
+        (ctx as any).busRubble = rubble;
 
         // ----------------------------
         // Train yard - Fence
@@ -1165,7 +1168,7 @@ export const Sector1: SectorDef = {
                     rMesh.visible = true;
 
                     rMesh.userData.active = true;
-                    rMesh.userData.hasLanded = new Uint8Array(rMesh.count);
+                    if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
 
                     const data = rMesh.userData;
                     for (let i = 0; i < rMesh.count; i++) {
@@ -1180,13 +1183,12 @@ export const Sector1: SectorDef = {
                         const dirX = Math.cos(arcAngle) * power;
                         const dirZ = Math.sin(arcAngle) * power;
                         const dirY = 1.0 + Math.random() * 1.5;
+                        const speed = 15 + Math.random() * 20;
+                        _v1.set(dirX, dirY, dirZ).normalize().multiplyScalar(speed);
 
-                        const force = 15 + Math.random() * 20;
-                        const vec = new THREE.Vector3(dirX, dirY, dirZ).normalize().multiplyScalar(force);
-
-                        data.velocities[ix] = vec.x;
-                        data.velocities[ix + 1] = vec.y;
-                        data.velocities[ix + 2] = vec.z;
+                        data.velocities[ix] = _v1.x;
+                        data.velocities[ix + 1] = _v1.y;
+                        data.velocities[ix + 2] = _v1.z;
 
                         // Resetta positionerna relativt till _busOriginalPos
                         data.positions[ix] = (Math.random() - 0.5) * 4;
