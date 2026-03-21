@@ -110,6 +110,12 @@ export class PlayerInteractionSystem implements System {
                             state,
                             session
                         );
+
+                        // Immediately hide the interaction prompt. Without this, the prompt stays
+                        // visible for up to 100ms until the next throttled detection cycle clears it.
+                        state.hasInteractionTarget = false;
+                        state.interactionType = null;
+                        state.interactionLabel = null;
                     }
                 }
             }

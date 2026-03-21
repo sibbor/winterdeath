@@ -23,16 +23,19 @@ export function useHudStore<T>(selector: (state: HudState) => T): T {
         selectorRef.current = selector;
     });
 
-    // 3. Stable snapshot getter with ZERO dependencies
+    // 3. Stable snapshot getter with ZERO dependencies.
+    // NOTE: We intentionally do NOT cache on state reference equality.
+    // The direct interaction-clear paths in GameSessionLoop mutate the HudStore
+    // state object in-place before calling HudStore.update(), so the reference
+    // never changes. Skipping the re-computation would permanently return the
+    // stale type ('chest', 'collectible', etc.) and the prompt would never hide.
+    // React's useSyncExternalStore handles duplicate-value suppression itself via
+    // Object.is(), so re-renders are only triggered when the selector's returned
+    // primitive value actually changes.
     const getSnapshot = useCallback(() => {
         const state = HudStore.getState();
-
-        // Ensure we have a result even on the first call (initialization)
-        if (state !== lastStateRef.current || currentResultRef.current === null) {
-            currentResultRef.current = selectorRef.current(state);
-            lastStateRef.current = state;
-        }
-
+        currentResultRef.current = selectorRef.current(state);
+        lastStateRef.current = state;
         return currentResultRef.current as T;
     }, []);
 

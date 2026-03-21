@@ -290,10 +290,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             (hudData as any).debugMode = propsRef.current.debugMode;
             (hudData as any).systems = session.getSystems();
 
-            // Ensure interaction prompt exists in the payload buffer to prevent allocation later
-            if (!(hudData as any).interactionPrompt) {
-                (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
-            }
+            // Always copy interactionPrompt from the store into the freshly swapped buffer.
+            // HudSystem alternates _bufferA/_bufferB: the "other" buffer still holds a stale
+            // non-null prompt from two ticks ago. A conditional guard would skip the copy and
+            // resurrect a ghost prompt every other 15fps tick after the player has left.
+            // Step 12 (later this same frame) is the sole authority: it writes null when the
+            // player leaves / interacts, or the live prompt when in range.
+            (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
 
             HudStore.update(hudData);
         }
@@ -545,8 +548,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const vector = _vInteraction.project(engine.camera.threeCamera);
 
             if (vector.z >= -1.0 && vector.z <= 1.05) {
-                const screenX = Math.round((vector.x + 1) / 2 * 100);
-                const screenY = Math.round((1 - vector.y) / 2 * 100);
+                const screenX = Math.round((vector.x + 1) / 2 * window.innerWidth);
+                const screenY = Math.round((1 - vector.y) / 2 * window.innerHeight);
 
                 const lastPos = refs.lastInteractionPosRef.current;
                 const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 1.0 || Math.abs(lastPos.y - screenY) > 1.0;
