@@ -47,7 +47,7 @@ interface ScreenModalLayoutProps {
 // Defined strictly outside the component to prevent GC allocation on render
 // ============================================================================
 const OVERLAY_BASE = "absolute inset-0 z-[100] flex items-center justify-center p-0 md:p-4 overflow-hidden font-mono pointer-events-auto touch-auto transition-opacity duration-300";
-const MODAL_BOX_BASE = "bg-zinc-950 border shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col transition-all duration-300 origin-center";
+const MODAL_BOX_BASE = "bg-zinc-950 border shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col transition-all duration-300 origin-center";
 const HEADER_CONTAINER = "p-6 md:p-12 pb-0 relative z-20 shrink-0 pl-safe pr-safe";
 const HEADER_INNER = "mb-4 md:mb-8 border-b-2 border-zinc-800/80 pb-4 md:pb-6 relative flex justify-between items-center w-full";
 const CONTENT_AREA = "flex-1 overflow-y-auto custom-scrollbar bg-transparent touch-auto relative z-20 px-safe px-8 md:px-16 pb-12";
@@ -81,7 +81,7 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
     isSmallScreen = false,
     fullHeight = false,
     transparent = false,
-    blurClass = "backdrop-blur-md",
+    blurClass = "backdrop-blur-sm",
     titleColorClass = "text-white",
     borderColorClass = "border-zinc-800",
     contentClass = "",

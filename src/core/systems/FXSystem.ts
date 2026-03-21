@@ -192,6 +192,7 @@ export const FXSystem = {
         const clone = baseMat.clone();
         clone.transparent = true;
         (clone as any)._baseType = poolKey;
+        clone.userData = { isSharedAsset: true };
         return clone;
     },
 
@@ -457,6 +458,7 @@ export const FXSystem = {
             const ctx = canvas.getContext('2d')!;
             const texture = new THREE.CanvasTexture(canvas);
             const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: true });
+            mat.userData = { isSharedAsset: true };
             const mesh = new THREE.Sprite(mat);
 
             mesh.scale.set(3.0, 0.75, 2.0);
@@ -756,6 +758,7 @@ export const FXSystem = {
                 if (!_whiteGoreMaterial) {
                     _whiteGoreMaterial = MATERIALS.gore.clone();
                     (_whiteGoreMaterial as any).color.setHex(0xffffff);
+                    _whiteGoreMaterial.userData = { isSharedAsset: true };
                 }
                 mat = _whiteGoreMaterial;
             }

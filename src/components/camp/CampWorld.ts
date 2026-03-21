@@ -466,7 +466,7 @@ export const CampWorld = {
 
     setupSky,
 
-    setupCampScene: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
+    build: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
 
         if (!isWarmup) {
             scene.clear();

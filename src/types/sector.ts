@@ -89,6 +89,7 @@ export interface SectorContext {
     state: any; // RuntimeState (for systems like waterSystem, windSystem)
     uniqueMeshes?: any[]; // For instanced meshes or unique geometry
     yield: () => Promise<void>;
+    isWarmup?: boolean; // When true: skip triggers, enemies, and story logic (preloader ghost-render mode)
 
     // --- NEW CAMERA CALLBACKS ---
     setCameraAngle?: (angle: number) => void;

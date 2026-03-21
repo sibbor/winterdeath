@@ -767,7 +767,8 @@ export const Sector1: SectorDef = {
         SectorGenerator.spawnChest(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z + 5, 'standard');
     },
 
-    setupContent: (ctx: SectorContext) => {
+    setupContent: async (ctx: SectorContext) => {
+        if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         SectorGenerator.addTriggers(ctx, [
             { id: 's1_start_tracks', position: LOCATIONS.TRIGGERS.START_TRACKS, radius: 10, type: 'THOUGHT', content: "clues.s1_start_tracks", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's1_blood_stains', position: LOCATIONS.TRIGGERS.BLOOD_STAINS, radius: 10, type: 'THOUGHT', content: "clues.s1_blood_stains", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -797,24 +798,6 @@ export const Sector1: SectorDef = {
                 actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
             }
         ]);
-
-        /* TODO: FIX THIS  DO NOT REMOVE
-        const homeFlowers = [
-            new THREE.Vector3(8, 0, -8),
-            new THREE.Vector3(12, 0, -8),
-            new THREE.Vector3(12, 0, -2),
-            new THREE.Vector3(8, 0, -2)
-        ];
-        EnvironmentGenerator.fillAreaWithFlowers(ctx, homeFlowers, 1.0);
-
-        const churchFlowers = [
-            new THREE.Vector3(160, 0, 235),
-            new THREE.Vector3(170, 0, 235),
-            new THREE.Vector3(170, 0, 245),
-            new THREE.Vector3(160, 0, 245)
-        ];
-        EnvironmentGenerator.fillAreaWithFlowers(ctx, churchFlowers, 0.7);
-        */
     },
 
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {

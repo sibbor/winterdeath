@@ -142,6 +142,7 @@ export const Sector4: SectorDef = {
     },
 
     setupContent: async (ctx: SectorContext) => {
+        if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers
         SectorGenerator.addTriggers(ctx, [
             { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHT', content: "clues.s4_noise", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -152,6 +153,7 @@ export const Sector4: SectorDef = {
     },
 
     setupZombies: async (ctx: SectorContext) => {
+        if (ctx.isWarmup) return; // No enemy spawning during preloader ghost-render
         // --- ZOMBIE SPAWNING ---
         for (let i = 0; i < 5; i++) {
             ctx.spawnZombie(EnemyType.WALKER);

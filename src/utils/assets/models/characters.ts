@@ -40,6 +40,8 @@ const getLaserAssets = () => {
         depthWrite: false,
         side: THREE.DoubleSide
     });
+    // Protect this singleton from being purged on respawn
+    material.userData = { isSharedAsset: true };
 
     cachedLaserAssets = { geometry, material };
     return cachedLaserAssets;

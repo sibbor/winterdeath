@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { MapItem, MapItemType } from '../../types';
 import { t } from '../../utils/i18n';
 import { soundManager } from '../../utils/SoundManager';
@@ -43,16 +43,18 @@ const TooltipOverlay: React.FC<{ data: { rect: DOMRect, items: MapItem[] } | nul
     );
 };
 
-const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouseMove, onInteractionStart, onInteractionEnd, onClickImmediate, isMobileDevice }: any) => {
-    const toMapPercent = useCallback((x: number, z: number) => {
-        const width = bounds.maxX - bounds.minX;
-        const height = bounds.maxZ - bounds.minZ;
-        if (width === 0 || height === 0) return { x: 50, y: 50 };
-        return {
-            x: ((x - bounds.minX) / width) * 100,
-            y: ((z - bounds.minZ) / height) * 100
-        };
-    }, [bounds]);
+// Extracted utility
+const getMapPercent = (x: number, z: number, bounds: any) => {
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxZ - bounds.minZ;
+    if (width === 0 || height === 0) return { x: 50, y: 50 };
+    return {
+        x: ((x - bounds.minX) / width) * 100,
+        y: ((z - bounds.minZ) / height) * 100
+    };
+};
+
+const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipData, onMouseMove, onInteractionStart, onInteractionEnd, onClickImmediate, isMobileDevice }: any) => {
 
     // Zero-GC Input Handlers
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -84,7 +86,6 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
         onInteractionStart(x, z);
     }, [bounds, onInteractionStart]);
 
-
     // Render Grid Lines
     const gridLines = useMemo(() => {
         const lines = [];
@@ -111,11 +112,9 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
         return lines;
     }, [bounds]);
 
-    const mapItems = useHudStore(s => s.mapItems);
-
     return (
         <div
-            className="relative bg-slate-900 border-2 border-blue-900/50 cursor-crosshair w-full h-full overflow-hidden"
+            className="absolute inset-0 bg-slate-900 border-2 border-blue-900/50 cursor-crosshair overflow-hidden"
             onMouseMove={handleMouseMove}
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}
@@ -125,11 +124,11 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
 
             {/* Polygon Layer (Terrain/Buildings) */}
             <svg className="absolute inset-0 pointer-events-none w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {mapItems.filter(item => item.points && item.points.length > 0).map(poly => (
+                {mapItems.filter((item: MapItem) => item.points && item.points.length > 0).map((poly: MapItem) => (
                     <polygon
                         key={poly.id}
                         points={poly.points!.map(p => {
-                            const pos = toMapPercent(p.x, p.z);
+                            const pos = getMapPercent(p.x, p.z, bounds);
                             return `${pos.x},${pos.y}`;
                         }).join(' ')}
                         fill={poly.color || 'gray'}
@@ -140,8 +139,8 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
                     />
                 ))}
                 {/* Circular Lakes (Fallback for radius without points) */}
-                {mapItems.filter(item => item.type === 'LAKE' && !item.points).map(lake => {
-                    const pos = toMapPercent(lake.x, lake.z);
+                {mapItems.filter((item: MapItem) => item.type === 'LAKE' && !item.points).map((lake: MapItem) => {
+                    const pos = getMapPercent(lake.x, lake.z, bounds);
                     const rx = (lake.radius! / (bounds.maxX - bounds.minX)) * 100;
                     const ry = (lake.radius! / (bounds.maxZ - bounds.minZ)) * 100;
                     return (
@@ -165,12 +164,9 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
             <div className="absolute top-1/2 left-0 right-0 border-t border-blue-500/10 pointer-events-none"></div>
             {groupedEntities.map((group: any, i: number) => {
                 const topItem = group[0];
-                const pos = toMapPercent(topItem.x, topItem.z);
+                const pos = getMapPercent(topItem.x, topItem.z, bounds);
                 let content = <div className="w-2 h-2 rounded-full" style={{ backgroundColor: topItem.color || 'white' }} />;
 
-                if (topItem.type === 'PLAYER') content = <div className="w-3 h-3 bg-blue-500 rotate-45 border border-white shadow-[0_0_10px_white] scale-125" />;
-                if (topItem.type === 'BOSS') content = <span className="text-2xl">💀</span>;
-                if (topItem.type === 'FAMILY') content = <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />;
                 if (topItem.type === 'POI') content = <span className="text-lg">📍</span>;
                 if (topItem.type === 'CHEST') content = <span className="text-lg">📦</span>;
                 if (topItem.type === 'TRIGGER' || topItem.label?.includes('clue')) content = <span className="text-lg">🔍</span>;
@@ -195,17 +191,68 @@ const MapCanvas = React.memo(({ bounds, groupedEntities, setTooltipData, onMouse
     );
 });
 
+// ZERO-GC: Live Map Entities perfectly decoupled from the heavy SVG re-renders
+const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
+    const px = useHudStore(s => s.playerPos.x);
+    const pz = useHudStore(s => s.playerPos.z);
+    const fx = useHudStore(s => s.familyPos?.x);
+    const fz = useHudStore(s => s.familyPos?.z);
+    const bx = useHudStore(s => s.bossPos?.x);
+    const bz = useHudStore(s => s.bossPos?.z);
+    const hasFamily = useHudStore(s => !!s.familyPos);
+    const hasBoss = useHudStore(s => !!s.bossPos);
+
+    const posP = getMapPercent(px, pz, bounds);
+    
+    return (
+        <>
+            <div
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none"
+                style={{ left: `${posP.x}%`, top: `${posP.y}%` }}
+            >
+                <div className="w-3 h-3 bg-blue-500 rotate-45 border border-white shadow-[0_0_10px_white] scale-125" />
+            </div>
+
+            {hasBoss && bx !== undefined && bz !== undefined && (() => {
+                const posB = getMapPercent(bx, bz, bounds);
+                return (
+                    <div
+                        className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
+                        style={{ left: `${posB.x}%`, top: `${posB.y}%` }}
+                    >
+                        <span className="text-2xl">💀</span>
+                    </div>
+                );
+            })()}
+
+            {hasFamily && fx !== undefined && fz !== undefined && (() => {
+                const posF = getMapPercent(fx, fz, bounds);
+                return (
+                    <div
+                        className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
+                        style={{ left: `${posF.x}%`, top: `${posF.y}%` }}
+                    >
+                        <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                    </div>
+                );
+            })()}
+        </>
+    );
+});
+
+const LivePlayerCoordinates = React.memo(() => {
+    const px = useHudStore(s => s.playerPos.x);
+    const pz = useHudStore(s => s.playerPos.z);
+    return (
+        <span className="text-sm font-mono text-white font-bold">
+            {`${Math.round(px)}, ${Math.round(pz)}`}
+        </span>
+    );
+});
+
 const LONG_PRESS_DURATION = 600;
 
 export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, isMobileDevice }) => {
-    const px = useHudStore(s => s.playerPos.x);
-    const pz = useHudStore(s => s.playerPos.z);
-    const fx = useHudStore(s => s.familyPos?.x || 0);
-    const fz = useHudStore(s => s.familyPos?.z || 0);
-    const bx = useHudStore(s => s.bossPos?.x || 0);
-    const bz = useHudStore(s => s.bossPos?.z || 0);
-    const hasFamily = useHudStore(s => !!s.familyPos);
-    const hasBoss = useHudStore(s => !!s.bossPos);
     const mapItems = useHudStore(s => s.mapItems);
 
     const [mouseCoords, setMouseCoords] = useState<{ x: number, z: number } | null>(null);
@@ -213,18 +260,26 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
     const longPressTimer = useRef<any>(null);
     const pressCoords = useRef<{ x: number, z: number } | null>(null);
 
-    const allEntities = useMemo(() => {
-        const ent = [...mapItems];
-        ent.push({ id: 'player', x: px, z: pz, type: 'PLAYER', label: 'ui.player', color: '#3b82f6', icon: null, radius: null });
-        if (hasFamily) ent.push({ id: 'family', x: fx, z: fz, type: 'FAMILY', label: 'ui.family_member', color: '#22c55e', icon: null, radius: null });
-        if (hasBoss) ent.push({ id: 'boss', x: bx, z: bz, type: 'BOSS', label: 'ui.boss', color: '#ef4444', icon: null, radius: null });
-        return ent;
-    }, [mapItems, px, pz, fx, fz, bx, bz, hasFamily, hasBoss]);
+    const bounds = useMemo(() => {
+        if (mapItems.length === 0) return { minX: -200, maxX: 200, minZ: -200, maxZ: 200 };
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (let i = 0; i < mapItems.length; i++) {
+            const e = mapItems[i];
+            minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x);
+            minZ = Math.min(minZ, e.z); maxZ = Math.max(maxZ, e.z);
+        }
+        // If max == min, add buffer to prevent div/0
+        if (maxX <= minX) { maxX += 100; minX -= 100; }
+        if (maxZ <= minZ) { maxZ += 100; minZ -= 100; }
+        
+        const pad = 100;
+        return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
+    }, [mapItems]);
 
-    const groupedEntities = useMemo(() => {
+    const staticGroupedEntities = useMemo(() => {
         const groups: Record<string, MapItem[]> = {};
-        for (let i = 0; i < allEntities.length; i++) {
-            const item = allEntities[i];
+        for (let i = 0; i < mapItems.length; i++) {
+            const item = mapItems[i];
             const key = `${Math.round(item.x / 10)}_${Math.round(item.z / 10)}`;
             if (!groups[key]) groups[key] = [];
             groups[key].push(item);
@@ -236,21 +291,10 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
             result.push(sorted);
         }
         return result;
-    }, [allEntities]);
-
-    const bounds = useMemo(() => {
-        if (allEntities.length === 0) return { minX: -450, maxX: 450, minZ: -450, maxZ: 450 };
-        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        for (let i = 0; i < allEntities.length; i++) {
-            const e = allEntities[i];
-            minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x);
-            minZ = Math.min(minZ, e.z); maxZ = Math.max(maxZ, e.z);
-        }
-        const pad = 100;
-        return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
-    }, [allEntities]);
+    }, [mapItems]);
 
     const handleSetMouseCoords = useCallback((x: number, z: number) => {
+        // Debounce or reduce resolution if needed, but standard mouse move is fine for occasional overlay
         setMouseCoords({ x, z });
     }, []);
 
@@ -278,6 +322,33 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
         onSelectCoords(x, z);
     }, [onSelectCoords]);
 
+    const footerNode = useMemo(() => (
+        <div className="flex flex-col gap-4 w-full">
+            <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
+                <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500"></span> {t('ui.player')}</div>
+                <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full"></span> {t('ui.family_member')}</div>
+                <div className="flex items-center gap-2">💀 {t('ui.boss')}</div>
+                <div className="flex items-center gap-2">📦 {t('ui.chest')}</div>
+                <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
+                <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
+            </div>
+            <div className="flex gap-4 justify-center">
+                <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30">
+                    <span className="text-[10px] text-blue-400 font-bold uppercase mr-2">{t('ui.player')}</span>
+                    <LivePlayerCoordinates />
+                </div>
+                {!isMobileDevice && mouseCoords && (
+                    <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase mr-2">{t('ui.coordinates')}</span>
+                        <span className="text-sm font-mono text-white font-bold">
+                            {`${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}`}
+                        </span>
+                    </div>
+                )}
+            </div>
+        </div>
+    ), [isMobileDevice, mouseCoords]);
+
     return (
         <ScreenModalLayout
             title={t('ui.map')}
@@ -287,34 +358,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
             cancelLabel={t('ui.close')}
             fullHeight={true}
             contentClass="flex flex-col p-0 !px-0 !pb-0 overflow-hidden"
-            footer={
-                <div className="flex flex-col gap-4 w-full">
-                    <div className="w-full flex flex-wrap justify-center gap-4 text-[10px] uppercase font-bold text-gray-400">
-                        <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-500"></span> {t('ui.player')}</div>
-                        <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-500 rounded-full"></span> {t('ui.family_member')}</div>
-                        <div className="flex items-center gap-2">💀 {t('ui.boss')}</div>
-                        <div className="flex items-center gap-2">📦 {t('ui.chest')}</div>
-                        <div className="flex items-center gap-2">📍 {t('ui.poi')}</div>
-                        <div className="flex items-center gap-2">🔍 {t('ui.clue')}</div>
-                    </div>
-                    <div className="flex gap-4 justify-center">
-                        <div className="bg-blue-900/20 px-3 py-1 border border-blue-500/30">
-                            <span className="text-[10px] text-blue-400 font-bold uppercase mr-2">{t('ui.player')}</span>
-                            <span className="text-sm font-mono text-white font-bold">
-                                {`${Math.round(px)}, ${Math.round(pz)}`}
-                            </span>
-                        </div>
-                        {!isMobileDevice && (
-                            <div className="bg-gray-900/40 px-3 py-1 border border-gray-700/50">
-                                <span className="text-[10px] text-gray-400 font-bold uppercase mr-2">{t('ui.coordinates')}</span>
-                                <span className="text-sm font-mono text-white font-bold">
-                                    {mouseCoords ? `${Math.round(mouseCoords.x)}, ${Math.round(mouseCoords.z)}` : '--, --'}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            }
+            footer={footerNode}
         >
             <div className="relative flex-1 w-full bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
                 <div 
@@ -325,12 +369,13 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                         height: 'auto',
                         maxWidth: '100%',
                         maxHeight: '100%',
-                        display: 'flex'
+                        display: 'flex' // crucial to keep relative child sizing sane
                     }}
                 >
                     <MapCanvas
+                        mapItems={mapItems}
                         bounds={bounds}
-                        groupedEntities={groupedEntities}
+                        groupedEntities={staticGroupedEntities}
                         setTooltipData={setTooltipData}
                         onMouseMove={handleSetMouseCoords}
                         onInteractionStart={handleInteractionStart}
@@ -338,6 +383,10 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
                         onClickImmediate={handleClickImmediate}
                         isMobileDevice={isMobileDevice}
                     />
+                    {/* Absolutely positioned live entities mapped over the canvas */}
+                    <div className="absolute inset-0 pointer-events-none z-20">
+                        <LiveMapEntities bounds={bounds} />
+                    </div>
                 </div>
             </div>
             <TooltipOverlay data={tooltipData} />

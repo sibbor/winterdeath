@@ -133,7 +133,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
-            const { interactables, outlines, envState } = await CampWorld.setupCampScene(scene, textures, weather);
+            const { interactables, outlines, envState } = await CampWorld.build(scene, textures, weather);
 
             // Race condition check: If another setup started, abort this one
             if (setupCounterRef.current !== currentSetupId || !container.parentElement) return;

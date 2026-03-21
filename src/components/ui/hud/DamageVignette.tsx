@@ -1,36 +1,47 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
+import { HudStore } from '../../../store/HudStore';
 
-interface DamageVignetteProps {
-    hp: number;
-    maxHp: number;
-    threshold: number;
-    isDead?: boolean;
-}
+const DamageVignette: React.FC = () => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const gradientRef = useRef<HTMLDivElement>(null);
 
-const DamageVignette: React.FC<DamageVignetteProps> = ({ hp, maxHp, threshold, isDead }) => {
-    const isCritical = hp > 0 && hp <= maxHp * threshold && !isDead;
+    useEffect(() => {
+        return HudStore.subscribe(() => {
+            const state = HudStore.getState();
+            if (!containerRef.current || !gradientRef.current) return;
 
-    if (!isCritical) return null;
+            // Threshold is currently hardcoded to 0.3 globally for vignette
+            const isCritical = state.hp > 0 && state.hp <= state.maxHp * 0.3 && !state.isDead;
+            
+            if (!isCritical) {
+                containerRef.current.style.opacity = '0';
+                return;
+            }
 
-    // Räkna ut hur djupt in i "kritiska zonen" vi är (0.0 till 1.0)
-    const criticalHpTarget = maxHp * threshold;
-    const criticalSeverity = 1 - (hp / criticalHpTarget);
+            containerRef.current.style.opacity = '1';
 
-    // Bas-opacitet + extra opacitet ju närmare 0 HP vi kommer
-    const baseOpacity = 0.4;
-    const dynamicOpacity = baseOpacity + (criticalSeverity * 0.4);
+            const criticalHpTarget = state.maxHp * 0.3;
+            const criticalSeverity = 1 - (state.hp / criticalHpTarget);
+            const dynamicOpacity = 0.4 + (criticalSeverity * 0.4);
 
+            gradientRef.current.style.background = `radial-gradient(circle, transparent 40%, rgba(220,38,38,${dynamicOpacity}) 100%)`;
+        });
+    }, []);
+
+    // Component mounts invisibly, entirely controlled by Zero-GC observer
     return (
-        <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+        <div 
+            ref={containerRef} 
+            className="absolute inset-0 pointer-events-none z-50 overflow-hidden" 
+            style={{ opacity: 0, transition: 'opacity 0.3s ease-in-out' }}
+        >
             <div
+                ref={gradientRef}
                 className="absolute inset-0 animate-pulse-fast pointer-events-none"
-                style={{
-                    background: `radial-gradient(circle, transparent 40%, rgba(220,38,38,${dynamicOpacity}) 100%)`
-                }}
             />
             <div className="absolute inset-0 border-[20px] border-red-600/20 blur-2xl animate-pulse-slow pointer-events-none" />
         </div>
     );
 };
 
-export default DamageVignette;
+export default React.memo(DamageVignette);

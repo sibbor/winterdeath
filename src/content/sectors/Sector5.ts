@@ -83,6 +83,7 @@ export const Sector5: SectorDef = {
     },
 
     setupContent: async (ctx: SectorContext) => {
+        if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         const { triggers } = ctx;
 
         // --- FIND PETS EVENT ---

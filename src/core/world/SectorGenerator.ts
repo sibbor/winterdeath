@@ -119,6 +119,48 @@ export const SectorGenerator = {
     },
 
     /*
+     * Creates a fully isolated, throwaway SectorContext for use during the AssetPreloader ghost-render.
+     * All gameplay callbacks (spawnZombie, spawnHorde, spawnBoss) are no-ops.
+     * The stub collision grid satisfies SpatialGrid's interface without allocating real spatial data.
+     * Set isWarmup: true so sector files can skip trigger/enemy registration via early-exit guards.
+     */
+    createWarmupContext: (scene: THREE.Scene, sectorId: number, yieldFn?: () => Promise<void>): SectorContext => {
+        const NOOP = () => {};
+        const NOOP_ARRAY = () => [] as any[];
+        const STUB_GRID: any = {
+            addObstacle: NOOP, removeObstacle: NOOP,
+            addInteractable: NOOP, removeInteractable: NOOP,
+            addTrigger: NOOP, removeTrigger: NOOP,
+            updateObstacle: NOOP, clear: NOOP, update: NOOP,
+            getNearbyEnemies: NOOP_ARRAY, getNearbyObstacles: NOOP_ARRAY,
+            getNearbyInteractables: NOOP_ARRAY, getNearbyTriggers: NOOP_ARRAY,
+        };
+        return {
+            scene,
+            engine: null as any,
+            sectorId,
+            isWarmup: true,
+            collisionGrid: STUB_GRID,
+            obstacles: [], chests: [], triggers: [], mapItems: [],
+            interactables: [], collectibles: [], dynamicLights: [],
+            flickeringLights: [], burningObjects: [], smokeEmitters: [],
+            cluesFound: [], collectiblesDiscovered: [],
+            rng: Math.random,
+            debugMode: false,
+            textures: {} as any,
+            sectorState: {} as any,
+            state: {} as any,
+            // Use the caller's yield function to actually release the main thread between heavy operations.
+            // Falling back to setTimeout(0) if none provided — never use Promise.resolve() here,
+            // as microtasks don't yield to the browser's rendering pipeline.
+            yield: yieldFn ?? (() => new Promise<void>(resolve => setTimeout(resolve, 0))),
+            spawnZombie: NOOP as any,
+            spawnHorde: NOOP as any,
+            spawnBoss: NOOP as any,
+        };
+    },
+
+    /*
     * Main Orchestrator for building a sector.
     * Uses the new structured lifecycle to standardize generation.
     */
@@ -156,34 +198,23 @@ export const SectorGenerator = {
 
         // Sync water lighting with sector moon/sun
         const skyLight = def.environment?.skyLight;
-        if (skyLight) skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
         if (skyLight?.visible && skyLight.position && engine?.water) {
+            skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
             _v1_sg.set(skyLight.position.x, skyLight.position.y || 100, skyLight.position.z);
             engine.water.setLightPosition(_v1_sg);
         }
 
         // 4. Setup Props (Static Objects)
-        if (def.setupProps) {
-            await def.setupProps(ctx);
-            if (ctx.yield) await ctx.yield();
-        }
+        if (def.setupProps) await def.setupProps(ctx);
 
         // 5. Setup Custom Content (POIs, Cinematics, Special Logic)
-        if (def.setupContent) {
-            await def.setupContent(ctx);
-            if (ctx.yield) await ctx.yield();
-        }
+        if (def.setupContent) await def.setupContent(ctx);
 
         // 6. Setup Zombies (Hordes, Spawning)
-        if (def.setupZombies) {
-            await def.setupZombies(ctx);
-            if (ctx.yield) await ctx.yield();
-        }
+        if (def.setupZombies) await def.setupZombies(ctx);
 
         // 7. Legacy Support (Escape Hatch)
-        if (def.generate) {
-            await def.generate(ctx);
-        }
+        if (def.generate) await def.generate(ctx);
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
@@ -1474,7 +1505,7 @@ export const SectorGenerator = {
                     type: 'FAMILY',
                     label: 'ui.family_hint',
                     icon: '❤️',
-                    color: '#ef4444', 
+                    color: '#ef4444',
                     radius: 12
                 });
             }

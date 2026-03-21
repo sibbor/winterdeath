@@ -365,6 +365,7 @@ export const Sector3: SectorDef = {
     },
 
     setupContent: async (ctx: SectorContext) => {
+        if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers:
         SectorGenerator.addTriggers(ctx, [{ id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, familyId: 2, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
         { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'SPEAK', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -377,7 +378,7 @@ export const Sector3: SectorDef = {
     },
 
     setupZombies: async (ctx: SectorContext) => {
-        if (!ctx.spawnHorde) return;
+        if (ctx.isWarmup || !ctx.spawnHorde) return; // No enemy spawning during preloader ghost-render
 
         const hordeSpots = [
             new THREE.Vector3(40, 0, -30),

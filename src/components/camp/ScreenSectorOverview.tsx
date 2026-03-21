@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../utils/i18n';
 import { SECTOR_THEMES, BOSSES, FAMILY_MEMBERS } from '../../content/constants';
 import { getCollectiblesBySector } from '../../content/collectibles';
@@ -24,7 +24,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [selectedSectorIndex, setSelectedSectorIndex] = useState(currentSector);
-    const [briefingText, setBriefingText] = useState("");
+    const textRef = useRef<HTMLSpanElement>(null);
 
     const sectorTheme = SECTOR_THEMES[selectedSectorIndex];
     const boss = BOSSES[selectedSectorIndex] || BOSSES[0];
@@ -41,15 +41,18 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     }, [selectedSectorIndex, sectorTheme, boss]);
 
     useEffect(() => {
-        // Reset and type-write text when selection changes
-        setBriefingText("");
+        // Reset and type-write text directly to the DOM for Zero-GC
+        if (textRef.current) textRef.current.innerText = "";
         let i = 0;
         const speed = 5; // Faster typing
-        const briefingText = briefingData.briefing;
+        const briefingTextStr = briefingData.briefing;
+        
         const interval = setInterval(() => {
-            setBriefingText(briefingText.slice(0, i));
+            if (textRef.current) {
+                textRef.current.innerText = briefingTextStr.slice(0, i);
+            }
             i++;
-            if (i > briefingText.length) clearInterval(interval);
+            if (i > briefingTextStr.length) clearInterval(interval);
         }, speed);
         return () => clearInterval(interval);
     }, [briefingData]);
@@ -199,7 +202,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
                     {/* Briefing Text */}
                     <div className={`flex-1 bg-black p-4 mb-4 md:mb-6 shadow-inner font-mono text-sm md:text-xl leading-relaxed text-gray-300 whitespace-pre-wrap ${!effectiveLandscape ? 'min-h-[150px]' : 'overflow-y-auto'}`}>
-                        {briefingText}
+                        <span ref={textRef}></span>
                         <span className="animate-pulse inline-block w-2 h-4 bg-red-500 ml-1 align-middle"></span>
                     </div>
                 </div>

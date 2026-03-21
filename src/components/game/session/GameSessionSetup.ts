@@ -600,8 +600,8 @@ export class GameSessionSetup {
                 const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
                 for (let i = 0; i < mats.length; i++) {
                     const m = mats[i];
-                    // DO NOT dispose shared library materials
-                    if (!sharedMats.includes(m)) {
+                    // DO NOT dispose shared library materials or those strictly tagged as shared
+                    if (!sharedMats.includes(m) && !m.userData?.isSharedAsset) {
                         this.disposeMaterial(m);
                     }
                 }

@@ -478,8 +478,6 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     onTogglePause, onToggleMap, onSelectWeapon, onRotateCamera
 }) => {
     // Only fetch layout-breaking states at the top level
-    const hp = useHudStore(s => s.hp);
-    const maxHp = useHudStore(s => s.maxHp);
     const isDead = useHudStore(s => s.isDead);
     const isDisoriented = useHudStore(s => s.isDisoriented);
     const activeWeapon = useHudStore(s => s.activeWeapon);
@@ -523,7 +521,7 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
     return (
         <>
-            <DamageVignette hp={hp} maxHp={maxHp} threshold={HEALTH_CRITICAL_THRESHOLD} isDead={isDead} />
+            <DamageVignette />
 
             <div className={`${HUD_WRAPPER} ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
 
