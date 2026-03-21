@@ -1,5 +1,5 @@
-import { EnemyDeathState } from '../types/enemy';
-import { StatusEffectType } from '../types/combat';
+import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
+import { StatusEffectType } from '../entities/player/CombatTypes';
 
 // --- ENUMS ---
 

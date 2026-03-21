@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createProceduralDiffuse, MATERIALS, GEOMETRY, ModelFactory, createSignMesh, createTextSprite } from '../../utils/assets';
-import { SectorContext } from '../../types/sector';
+import { SectorContext } from '../../game/session/SectorTypes';
 import { SectorGenerator } from './SectorGenerator';
 import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
-import { EnemyType } from '../../types/enemy';
-import { EffectManager } from '../systems/EffectManager';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { EffectManager } from '../../systems/EffectManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();

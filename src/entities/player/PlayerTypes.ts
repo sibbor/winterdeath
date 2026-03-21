@@ -1,0 +1,37 @@
+export interface PlayerStats {
+  level: number;
+  xp: number;
+  currentXp: number;
+  nextLevelXp: number;
+  maxHp: number;
+  maxStamina: number;
+  skillPoints: number;
+  totalSkillPointsEarned: number;
+  kills: number;
+  killsByType: Record<string, number>;
+  deaths: number;
+  sectorsCompleted: number;
+  scrap: number;
+  totalScrapCollected: number;
+  totalBulletsFired: number;
+  totalBulletsHit: number;
+  totalThrowablesThrown: number;
+  totalDamageDealt: number;
+  totalDamageTaken: number;
+  totalDistanceTraveled: number;
+  chestsOpened: number;
+  bigChestsOpened: number;
+  collectiblesDiscovered: string[];
+  viewedCollectibles?: string[];
+  cluesFound: string[];
+  discoveredPOIs: string[];
+  seenEnemies: string[];
+  seenBosses: string[];
+  prologueSeen?: boolean;
+  speed: number;
+  rescuedFamilyIds: number[];
+  familyFoundCount: number;
+  mostUsedWeapon: string;
+  incomingDamageBreakdown?: Record<string, any>;
+  outgoingDamageBreakdown?: Record<string, any>;
+}

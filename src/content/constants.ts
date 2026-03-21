@@ -1,6 +1,7 @@
 
 import * as THREE from 'three';
-import { PlayerStats, GraphicsSettings } from '../types';
+import { PlayerStats } from '../entities/player/PlayerTypes';
+import { GraphicsSettings } from '../core/engine/EngineTypes';
 
 // Re-export Data
 export { ZOMBIE_TYPES } from './enemies/zombies';

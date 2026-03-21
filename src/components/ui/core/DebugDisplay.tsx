@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PerformanceMonitor } from '../../../core/systems/PerformanceMonitor';
+import { PerformanceMonitor } from '../../../systems/PerformanceMonitor';
 
 interface DebugDisplayProps {
     debugMode: boolean;

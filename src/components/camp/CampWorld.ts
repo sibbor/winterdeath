@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
-import { WeatherType } from '../../types';
+import { WeatherType } from '../../core/engine/EngineTypes';;
 
 // ============================================================================
 // CONFIGURATION CONSTANTS (Source of truth for Camp & AssetPreloader)

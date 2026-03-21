@@ -1,4 +1,4 @@
-import { HudState } from '../types/hud';
+import { HudState } from '../components/ui/hud/HudTypes';
 import { WeaponType } from '../content/weapons';
 
 // ============================================================================

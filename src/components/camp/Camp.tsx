@@ -1,23 +1,23 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
-import { PlayerStats } from '../../types';
+import { PlayerStats } from '../../entities/player/PlayerTypes';;
 import { WeaponType } from '../../content/weapons';
 import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
 import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
-import { PlayerAnimator } from '../../core/animation/PlayerAnimator';
+import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
 import { CampEffectsState, CAMP_SCENE } from './CampWorld';
-import { WeatherType } from '../../types';
-import { PerformanceMonitor } from '../../core/systems/PerformanceMonitor';
+import { WeatherType } from '../../core/engine/EngineTypes';;
+import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 
 // Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
 
 // Import UI Components
-import CampHUD from './CampHUD';
+import CampHUD from '../ui/hud/CampHUD';
 
 interface CampProps {
     stats: PlayerStats;

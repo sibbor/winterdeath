@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { ZOMBIE_TYPES } from '../../content/constants';
-import { Enemy, EnemyDeathState, EnemyType } from '../../types/enemy';
+import { Enemy, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { WeaponType } from '../../content/weapons';
 
 export class ZombieRenderer {

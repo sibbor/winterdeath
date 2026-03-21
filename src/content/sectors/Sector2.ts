@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sector';
+import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
@@ -9,8 +9,8 @@ import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
 import { soundManager } from '../../utils/SoundManager';
 import { CAMERA_HEIGHT } from '../../content/constants';
-import { PlayerAnimator } from '../../core/animation/PlayerAnimator';
-import { EnemyType } from '../../types/enemy';
+import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 const LOCATIONS = {
     SPAWN: {

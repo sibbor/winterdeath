@@ -5,7 +5,7 @@ import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
-import { StatusEffectType } from '../../../types/combat';
+import { StatusEffectType } from '../../../entities/player/CombatTypes';
 import DamageVignette from './DamageVignette';
 
 interface GameHUDProps {

@@ -1,5 +1,5 @@
-import { ZombieTypeData, EnemyType } from '../../types/enemy';
-import { EnemyAttackType, StatusEffectType } from '../../types/combat';
+import { ZombieTypeData, EnemyType } from '../../entities/enemies/EnemyTypes';
+import { EnemyAttackType, StatusEffectType } from '../../entities/player/CombatTypes';
 
 /*
 Zombie data:

@@ -1,10 +1,9 @@
 
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SectorContext } from '../../types/sector';
+import { SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 
 export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Group) => {
     const { scene, obstacles, flickeringLights, triggers } = ctx;

@@ -1,6 +1,6 @@
 import { useSyncExternalStore, useRef, useCallback, useEffect } from 'react';
 import { HudStore } from '../store/HudStore';
-import { HudState } from '../types/hud';
+import { HudState } from '../components/ui/hud/HudTypes';
 
 /**
  * Optimized hook for accessing HudStore state with selector support.

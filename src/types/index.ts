@@ -1,5 +1,5 @@
 import { WeaponType } from '../content/weapons';
-import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from './hud';
+import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '../components/ui/hud/HudTypes';
 
 export type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState };
 

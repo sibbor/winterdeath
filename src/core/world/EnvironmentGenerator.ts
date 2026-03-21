@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS } from '../../utils/assets/materials';
-import { SectorContext } from '../../types/sector';
+import { SectorContext } from '../../game/session/SectorTypes';
 import { SectorGenerator } from './SectorGenerator';
 import { TREE_TYPE } from '../../content/constants';
 

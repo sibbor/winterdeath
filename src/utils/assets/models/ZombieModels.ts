@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GEOMETRY } from '../geometry';
 import { MATERIALS } from '../materials';
-import { EnemyType } from '../../../types/enemy';
+import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 
 export const ZombieModels = {
 

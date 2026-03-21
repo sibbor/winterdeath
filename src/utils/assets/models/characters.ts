@@ -9,26 +9,26 @@ let cachedLaserAssets: { geometry: THREE.BufferGeometry, material: THREE.Materia
 const getLaserAssets = () => {
     if (cachedLaserAssets) return cachedLaserAssets;
 
-    // Skapa Texture (Canvas)
+    // Create Texture (Canvas)
     const canvas = document.createElement('canvas');
-    canvas.width = 2; // Räcker med 2px bredd för en vertikal gradient
+    canvas.width = 2; // Sufficient with 2px width for a vertical gradient
     canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
     const grad = ctx.createLinearGradient(0, 0, 0, 256);
 
-    // Vi ritar gradienten så att 0 är basen och 256 är spetsen
-    grad.addColorStop(0, 'rgba(0, 170, 255, 1)');   // Bas (vid vapnet)
-    grad.addColorStop(0.5, 'rgba(0, 170, 255, 1)'); // Håll full styrka till hälften
-    grad.addColorStop(0.8, 'rgba(0, 170, 255, 0.3)'); // Börja tona ut
-    grad.addColorStop(1, 'rgba(0, 170, 255, 0)');   // Helt genomskinlig spets
+    // We draw the gradient so that 0 is the base and 256 is the tip
+    grad.addColorStop(0, 'rgba(0, 170, 255, 1)');   // Base (at the weapon)
+    grad.addColorStop(0.5, 'rgba(0, 170, 255, 1)'); // Keep full strength to halfway
+    grad.addColorStop(0.8, 'rgba(0, 170, 255, 0.3)'); // Start to fade out
+    grad.addColorStop(1, 'rgba(0, 170, 255, 0)');   // Completely transparent tip
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 2, 256);
     const texture = new THREE.CanvasTexture(canvas);
 
-    // Skapa Geometry med ändrad pivot-punkt
-    // Vi translaterar geometrin 15 enheter framåt så att Mesh-origin (0,0,0) 
-    // hamnar i början av lasern istället för i mitten.
+    // Create geometry with changed pivot point
+    // Translate the geometry 15 units forward so that the Mesh-origin (0,0,0) 
+    // ends up at the beginning of the laser instead of in the middle.
     const geometry = new THREE.PlaneGeometry(0.15, 20);
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(0, 0, 10);
@@ -94,14 +94,14 @@ export const CharacterModels = {
         body.userData = { isBody: true, isPlayer: true, baseY: 1.0, baseScale: 1.0 };
         group.add(body);
 
-        // Gun (Placerad lite till höger för att matcha hand)
+        // Gun (placed a bit to the right to match the hand)
         const gun = new THREE.Mesh(GEOMETRY.box, MATERIALS.gun);
         gun.name = 'gun';
         gun.position.set(0.3, 0.4, 0.5); // Adjust Y relative to body origin (0 is center of 2.0h capsule)
         gun.scale.set(0.1, 0.4, 1);
         body.add(gun);
 
-        // Laser sight (Hämtar delade resurser)
+        // Laser sight (gets shared resources)
         const assets = getLaserAssets();
         const laserSight = new THREE.Mesh(assets.geometry, assets.material);
         laserSight.position.set(0.3, 0.4, 0.5);
@@ -131,7 +131,7 @@ export const CharacterModels = {
 
         body.position.y = baseY;
         body.castShadow = true;
-        // [VINTERDÖD MOD] Added metadata so PlayerAnimator.update can properly offset and pulse the body
+        // Added metadata so PlayerAnimator.update can properly offset and pulse the body
         body.userData = {
             isBody: true,
             geometryHeight,

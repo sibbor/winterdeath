@@ -1,9 +1,9 @@
 
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sector';
+import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
-import { EnemyType } from '../../types/enemy';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 export const Sector5: SectorDef = {
     id: 4,

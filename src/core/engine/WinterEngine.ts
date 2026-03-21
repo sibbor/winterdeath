@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { DEFAULT_GRAPHICS, LIGHT_SYSTEM } from '../../content/constants';
-import { GraphicsSettings } from '../../types';
+import { GraphicsSettings } from '../../core/engine/EngineTypes';
 import { InputManager } from './InputManager';
-import { CameraSystem } from '../systems/CameraSystem';
-import { WindSystem } from '../systems/WindSystem';
-import { WeatherSystem } from '../systems/WeatherSystem';
-import { WaterSystem } from '../systems/WaterSystem';
-import { PerformanceMonitor } from '../systems/PerformanceMonitor';
+import { CameraSystem } from '../../systems/CameraSystem';
+import { WindSystem } from '../../systems/WindSystem';
+import { WeatherSystem } from '../../systems/WeatherSystem';
+import { WaterSystem } from '../../systems/WaterSystem';
+import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 export type { GraphicsSettings };

@@ -3,8 +3,8 @@ import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _tempColor = new THREE.Color();
-const _tempQuat = new THREE.Quaternion(); // [VINTERDÖD] Repellerar GC vid Euler-omvandlingar
-const _defaultDeadColor = new THREE.Color(0x808080); // [VINTERDÖD] 0xffffff * 0.5 (Standardfärgen för kalla lik)
+const _tempQuat = new THREE.Quaternion();
+const _defaultDeadColor = new THREE.Color(0x808080); // 0xffffff * 0.5 (default color for cold corpses)
 
 /**
  * CorpseRenderer manages dead enemy visuals using Hardware Instancing.

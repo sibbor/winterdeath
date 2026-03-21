@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sector';
-import { MATERIALS, GEOMETRY, createTextSprite, ModelFactory } from '../../utils/assets';
+import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
+import { MATERIALS } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
-import { BOSSES, FAMILY_MEMBERS, CAMERA_HEIGHT } from '../../content/constants';
-import { EnemyType } from '../../types/enemy';
+import { CAMERA_HEIGHT } from '../../content/constants';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 const LOCATIONS = {
     SPAWN: {

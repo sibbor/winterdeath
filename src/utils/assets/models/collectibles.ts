@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS } from '../../assets';
 
 // --- PERFORMANCE CACHE (Zero-GC) ---
 const cache: Record<string, any> = {};
@@ -16,7 +15,7 @@ const getMat = (key: string, create: () => THREE.Material) => {
     return cache[key];
 };
 
-// Generera en glöd-textur med kod (så vi slipper ladda in en bildfil)
+// Generate a glow texture with code (so we don't have to load an image file)
 const getGlowTexture = () => {
     if (!cache['glow_texture']) {
         const canvas = document.createElement('canvas');
@@ -24,7 +23,7 @@ const getGlowTexture = () => {
         canvas.height = 64;
         const ctx = canvas.getContext('2d')!;
 
-        // Rita en radiell övergång (Skarpt i mitten, transparent i kanten)
+        // Draw a radial transition (Sharp in the middle, transparent at the edge)
         const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
         gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
         gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.4)');
@@ -40,10 +39,10 @@ const getGlowTexture = () => {
 
 export const CollectibleModels = {
     createCollectible: (type: string): THREE.Group => {
-        // OPTIMERING: Om vi redan byggt denna typ av modell en gång, returnera en klon!
+        // If we've already built this type of model once, return a clone!
         if (prefabCache[type]) {
             const clone = prefabCache[type].clone();
-            clone.userData = { type }; // Sätt userData på klonen
+            clone.userData = { type }; // Set userData on the clone
             return clone;
         }
 
@@ -213,14 +212,14 @@ export const CollectibleModels = {
                 const phoneGroup = new THREE.Group();
                 const phoneW = 0.22; const phoneH = 0.50; const phoneD = 0.03;
 
-                // 1. Själva telefonen
+                // 1. Phone
                 const body = new THREE.Mesh(
                     getGeo('phone_body_port', () => new THREE.BoxGeometry(phoneW, phoneH, phoneD)),
                     getMat('phone_mat_dark', () => new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.2, metalness: 0.6 }))
                 );
                 phoneGroup.add(body);
 
-                // 2. Displayen (Vit bakgrund)
+                // 2. Display (White background)
                 const screen = new THREE.Mesh(
                     getGeo('phone_screen_port', () => new THREE.PlaneGeometry(phoneW - 0.02, phoneH - 0.02)),
                     getMat('phone_ui_bg', () => new THREE.MeshBasicMaterial({ color: 0xffffff }))
@@ -228,7 +227,7 @@ export const CollectibleModels = {
                 screen.position.z = phoneD / 2 + 0.001;
                 phoneGroup.add(screen);
 
-                // 3. iMessage-konversationen
+                // 3. iMessage-conversation
                 const uiGroup = new THREE.Group();
                 uiGroup.position.z = phoneD / 2 + 0.002;
 
@@ -265,7 +264,7 @@ export const CollectibleModels = {
 
                 phoneGroup.add(uiGroup);
 
-                // 4. Sprickorna (Ytterst)
+                // 4. Cracks (Outermost)
                 const crackGroup = new THREE.Group();
                 crackGroup.position.z = phoneD / 2 + 0.004;
 
@@ -287,8 +286,8 @@ export const CollectibleModels = {
 
                 phoneGroup.add(crackGroup);
 
-                // 5. Skärm-ljus / Fake Glow (Ersätter PointLight)
-                // AdditiveBlending tillsammans med det utsträckta vita planet skapar skenet.
+                // 5. Screen light / Fake Glow (Replaces PointLight)
+                // AdditiveBlending together with the extended white plane creates the glow.
                 const screenGlowMat = getMat('phone_screen_glow', () => new THREE.MeshBasicMaterial({
                     map: getGlowTexture(),
                     color: 0xffffff,
@@ -439,7 +438,7 @@ export const CollectibleModels = {
                 mainStone.position.set(0, 0.13, 0);
                 ringGroup.add(mainStone);
 
-                // Ljus från diamanten med Fake Glow (optimerad prestanda)
+                // Light from the diamond with Fake Glow
                 const diamondGlowMat = getMat('ring_diamond_glow', () => new THREE.SpriteMaterial({
                     map: getGlowTexture(),
                     color: 0xffffff,
@@ -530,26 +529,26 @@ export const CollectibleModels = {
             }
         }
 
-        // --- FAKE GLOW (Optimerad belysning som omsluter alla objekt) ---
+        // --- FAKE GLOW (Optimized lighting that surrounds all objects) ---
         const glowMat = getMat('collectible_glow_mat', () => new THREE.SpriteMaterial({
             map: getGlowTexture(),
-            color: 0xffcc00, // Guldgul färg för items
+            color: 0xffcc00, // Gold yellow color for items
             transparent: true,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
-            opacity: 0.6 // Justera hur starkt det ska "lysa" i omgivningen
+            opacity: 0.6 // Adjust how strongly it should "shine" in the surroundings
         }));
 
         const fakeGlow = new THREE.Sprite(glowMat);
-        fakeGlow.scale.set(1.5, 1.5, 1.5); // Gör skenet stort nog att omsluta objektet
+        fakeGlow.scale.set(1.5, 1.5, 1.5); // Make the glow large enough to surround the object
         fakeGlow.position.set(0, 0.2, 0);
         fakeGlow.name = 'collectibleGlow';
         group.add(fakeGlow);
 
-        // OPTIMERING: Spara den färdiga hierarkin i vår prefab-cache
+        // Save the finished hierarchy in our prefab cache
         prefabCache[type] = group;
 
-        // Returnera en klon även första gången så vi skyddar vår master-prefab
+        // Return a clone even the first time so we protect our master prefab
         const initialClone = group.clone();
         initialClone.userData = { type };
         return initialClone;

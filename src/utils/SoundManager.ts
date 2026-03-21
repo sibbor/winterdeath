@@ -1,7 +1,7 @@
 import { SoundCore } from './audio/SoundCore';
 import { SoundBank } from './audio/SoundBank';
 import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './audio/SoundLib';
-import { EnemyType } from '../types/enemy';
+import { EnemyType } from '../entities/enemies/EnemyTypes';
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.

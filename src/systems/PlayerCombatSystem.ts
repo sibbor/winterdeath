@@ -1,0 +1,160 @@
+import * as THREE from 'three';
+import { System } from './System';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { WeaponHandler } from './WeaponHandler';
+import { GEOMETRY, MATERIALS } from '../utils/assets';
+
+export class PlayerCombatSystem implements System {
+    id = 'player_combat';
+
+    private _p1: boolean = false;
+    private _p2: boolean = false;
+    private _p3: boolean = false;
+    private _p4: boolean = false;
+    private _p5: boolean = false;
+
+    private _wasDead: boolean = false;
+
+    private aimCross: THREE.Group | null = null;
+    private trajectoryLine: THREE.Mesh | null = null;
+    private laserSight: THREE.Mesh | null = null;
+    private initialized = false;
+
+    constructor(private playerGroup: THREE.Group) { }
+
+    init(session: GameSessionLogic) {
+        if (this.initialized) return;
+        this.initialized = true;
+
+        const scene = session.engine.scene;
+
+        // --- Create Aim Crosshair ---
+        const crossGroup = new THREE.Group();
+        const aimRing = new THREE.Mesh(GEOMETRY.aimRing, MATERIALS.aimReticle);
+        aimRing.rotation.x = -Math.PI / 2;
+        crossGroup.add(aimRing);
+        crossGroup.position.y = 0.5;
+        crossGroup.visible = false;
+        scene.add(crossGroup);
+        this.aimCross = crossGroup;
+
+        // --- Create Trajectory Line ---
+        const vertexCount = 42;
+        const positions = new Float32Array(vertexCount * 3);
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const indicesCount = 20 * 6;
+        const indices = new Uint16Array(indicesCount);
+        let idx = 0;
+        for (let i = 0; i < 20; i++) {
+            const base = i * 2;
+            indices[idx++] = base;
+            indices[idx++] = base + 1;
+            indices[idx++] = base + 2;
+
+            indices[idx++] = base + 1;
+            indices[idx++] = base + 3;
+            indices[idx++] = base + 2;
+        }
+        lineGeo.setIndex(new THREE.BufferAttribute(indices, 1));
+
+        const lineMat = new THREE.MeshBasicMaterial({
+            color: 0x10b981,
+            transparent: true,
+            opacity: 0.8,
+            depthWrite: false,
+            depthTest: false,
+            side: THREE.DoubleSide
+        });
+
+        this.trajectoryLine = new THREE.Mesh(lineGeo, lineMat);
+        this.trajectoryLine.visible = false;
+        this.trajectoryLine.frustumCulled = false;
+        this.trajectoryLine.renderOrder = 999;
+        scene.add(this.trajectoryLine);
+
+        // --- Cache Laser Sight ---
+        this.laserSight = this.playerGroup.children.find(c => c.userData.isLaserSight) as THREE.Mesh || null;
+    }
+
+    update(session: GameSessionLogic, dt: number, now: number) {
+        const state = session.state;
+        const input = session.engine.input.state;
+        const disableInput = session.inputDisabled;
+
+        if (state.isDead) {
+            if (!this._wasDead) {
+                if (this.laserSight) this.laserSight.visible = false;
+                if (this.aimCross) this.aimCross.visible = false;
+                if (this.trajectoryLine) this.trajectoryLine.visible = false;
+                this._wasDead = true;
+            }
+            return;
+        }
+        this._wasDead = false;
+
+        // --- Weapon Slot Switching ---
+        if (!disableInput) {
+            if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
+            if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
+            if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
+            if (input['4'] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
+            if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
+        }
+
+        this._p1 = !!input['1'];
+        this._p2 = !!input['2'];
+        this._p3 = !!input['3'];
+        this._p4 = !!input['4'];
+        this._p5 = !!input['5'];
+
+        if (!disableInput) {
+            WeaponHandler.handleInput(input, state, state.loadout, now, disableInput);
+        }
+
+        if (!disableInput) {
+            WeaponHandler.handleFiring(
+                session.engine.scene,
+                this.playerGroup,
+                input,
+                state,
+                dt,
+                now,
+                state.loadout,
+                this.aimCross,
+                this.trajectoryLine,
+            );
+        }
+
+        if (this.laserSight) {
+            this.laserSight.visible = !state.activeVehicle;
+        }
+    }
+
+    cleanup(session: GameSessionLogic) {
+        const scene = session.engine.scene;
+
+        if (this.aimCross) {
+            scene.remove(this.aimCross);
+            const children = this.aimCross.children;
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i] as THREE.Mesh;
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material && (child.material as THREE.Material).dispose) {
+                        (child.material as THREE.Material).dispose();
+                    }
+                }
+            }
+        }
+
+        if (this.trajectoryLine) {
+            scene.remove(this.trajectoryLine);
+            if (this.trajectoryLine.geometry) this.trajectoryLine.geometry.dispose();
+            if (this.trajectoryLine.material) (this.trajectoryLine.material as THREE.Material).dispose();
+        }
+
+        this.initialized = false;
+    }
+}

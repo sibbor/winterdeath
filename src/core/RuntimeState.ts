@@ -1,11 +1,13 @@
 import * as THREE from 'three';
-import { SectorTrigger, SectorState, PlayerStats } from '../types';
-import { StatusEffectType, PlayerDeathState, ActiveStatusEffect } from '../types/combat';
+import { SectorTrigger } from '../systems/TriggerTypes';
+import { SectorState } from '../game/session/SessionTypes';
+import { PlayerStats } from '../entities/player/PlayerTypes';;
+import { StatusEffectType, PlayerDeathState, ActiveStatusEffect } from '../entities/player/CombatTypes';
 import { WeaponType } from '../content/weapons';
 import { VehicleType } from '../content/vehicles';
 import { Obstacle } from './world/CollisionResolution';
-import { Enemy } from './EnemyManager';
-import { ScrapItem } from './systems/WorldLootSystem';
+import { Enemy } from '../entities/enemies/EnemyManager';
+import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 
 export interface RuntimeState {

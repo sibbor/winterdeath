@@ -1,13 +1,14 @@
 import * as THREE from 'three';
-import { SectorDef, SectorContext } from '../../types/sector';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS, createTextSprite } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ObjectGenerator } from '../../core/world/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/VehicleGenerator';
-import { CAMERA_HEIGHT, TREE_TYPE, LIGHT_SYSTEM } from '../constants';
+import { CAMERA_HEIGHT } from '../constants';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { EnemyType } from '../../types/enemy';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 const LOCATIONS = {
     SPAWN: {
@@ -950,7 +951,7 @@ export const Sector1: SectorDef = {
             if (events.cameraShake) events.cameraShake(5.0);
 
             if (events.emitNoise) {
-                events.emitNoise(_trainYardPos.clone(), 200, 'loud_explosion');
+                events.emitNoise(_trainYardPos.clone(), NoiseType.OTHER, 100);
             }
         }
 

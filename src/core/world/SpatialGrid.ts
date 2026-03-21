@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Obstacle } from './CollisionResolution';
-import { Enemy, EnemyDeathState } from '../../types/enemy';
+import { Enemy, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 
 // Prime number for optimal spatial hash distribution without collisions
 const HASH_SIZE = 4093;

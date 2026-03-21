@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { GameState, GameScreen } from '../types';
+import { GameState, GameScreen } from '../game/session/SessionTypes';;
 import { WeaponType } from '../content/weapons';
 import { INITIAL_STATS, DEFAULT_GRAPHICS } from '../content/constants';
 

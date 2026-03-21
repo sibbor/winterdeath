@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
-import { SectorContext } from '../../types/sector';
+import { SectorContext } from '../../game/session/SectorTypes';
 import { ObjectGenerator } from './ObjectGenerator';
 import { VehicleGenerator } from './VehicleGenerator';
 import { EnvironmentGenerator } from './EnvironmentGenerator';
 import { PathGenerator } from './PathGenerator';
-import { EffectManager } from '../systems/EffectManager';
+import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
-import { SectorTrigger, TriggerType, TriggerAction } from '../../types';
-import { WaterBodyType, WaterBody } from '../systems/WaterSystem';
+import { SectorTrigger, TriggerType, TriggerAction } from '../../systems/TriggerTypes';;
+import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
-import { EnemyType } from '../../types/enemy';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 // Shared Utilities for Zero-GC Operations
 const _c1 = new THREE.Color();
