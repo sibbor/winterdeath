@@ -125,7 +125,12 @@ export const TriggerHandler = {
                     if (trig.actions && trig.actions.length > 0) {
                         const aLen = trig.actions.length;
                         for (let j = 0; j < aLen; j++) {
-                            callbacks.onAction(trig.actions[j]);
+                            const action = trig.actions[j];
+                            if (action.type === 'START_CINEMATIC' && trig.familyId !== undefined) {
+                                if (!action.payload) action.payload = {};
+                                if (action.payload.familyId === undefined) action.payload.familyId = trig.familyId;
+                            }
+                            callbacks.onAction(action);
                         }
                     }
 

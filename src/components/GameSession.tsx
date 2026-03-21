@@ -181,9 +181,21 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
         if (type === 'START_CINEMATIC') {
             const engine = refs.engineRef.current;
-            const target = engine?.scene.getObjectByName(payload?.targetName || payload?.id);
+            let target: THREE.Object3D | null | undefined = null;
+
+            if (payload?.familyId !== undefined && refs.activeFamilyMembers.current) {
+                target = refs.activeFamilyMembers.current.find((m: any) => m.id === payload.familyId)?.mesh;
+            }
+
+            if (!target && (payload?.targetName || payload?.id)) {
+                target = engine?.scene.getObjectByName(payload?.targetName || payload?.id);
+                if (!target && payload?.id) {
+                    target = engine?.scene.children.find((c: any) => c.userData?.id === payload.id);
+                }
+            }
+
             if (target) {
-                refs.gameSessionRef.current?.getSystem('cinematic')?.startCinematic(target, payload?.scriptId || 0);
+                refs.gameSessionRef.current?.getSystem('cinematic')?.startCinematic(target, payload?.scriptId || 0, payload);
             }
         }
         if (type === 'TRIGGER_FAMILY_FOLLOW') {
