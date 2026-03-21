@@ -10,9 +10,11 @@ export class PerformanceMonitor {
         return this.instance;
     }
 
-    // Flat timing structure avoids nested object allocation per frame
-    private timings: Record<string, number> = {};
-    private startTimes: Record<string, number> = {};
+    // Zero-GC: Fast array tracking instead of slow Dictionary/Object keys
+    private _keys: string[] = ['logic', 'wind', 'weather', 'water', 'camera', 'render', 'render_setup', 'render_draw', 'cleanup'];
+    private timings: Float32Array;
+    private startTimes: Float32Array;
+
     private _lastFrameTotal: number = 0;
     private _consoleLoggingEnabled: boolean = true;
     private _aiLoggingEnabled: boolean = true;
@@ -27,6 +29,10 @@ export class PerformanceMonitor {
     };
 
     constructor() {
+        // Pre-allocate typed arrays for blazingly fast iteration without garbage
+        this.timings = new Float32Array(this._keys.length);
+        this.startTimes = new Float32Array(this._keys.length);
+
         // Load initial state from localStorage
         const savedEng = localStorage.getItem('vinterdod_debug_console_logging');
         if (savedEng !== null) this._consoleLoggingEnabled = savedEng === 'true';
@@ -51,25 +57,27 @@ export class PerformanceMonitor {
     private heapLimitMB: number = 0;
     private _lastGcTime: number = 0;
 
-    // Renderer Stat Tracking (set externally from WinterEngine after each render)
+    // Renderer Stat Tracking
     private _drawCalls: number = 0;
     private _triangles: number = 0;
     private _textures: number = 0;
     private _geometries: number = 0;
     private _shaderPrograms: number = 0;
     private _lastShaderPrograms: number = 0;
-    private _shaderRecompileCount: number = 0; // Cumulative new programs this session
-    private _knownPrograms = new Set<string>(); // Tracks unique shader permutations
+    private _shaderRecompileCount: number = 0;
+    private _knownPrograms = new Set<string>();
 
     /**
-     * Clears tracking data for a new frame.
+     * Clears tracking data for a new frame. 
+     * Uses flat typed array iteration for 0 memory allocation.
      */
     public startFrame() {
         this._lastFrameTotal = 0;
-        // Optimization: Rather than object allocation, simply clear properties
-        for (const key in this.timings) {
-            this.timings[key] = 0;
-            this.startTimes[key] = 0;
+
+        // Zero-GC loop over pre-allocated typed arrays
+        for (let i = 0; i < this._keys.length; i++) {
+            this.timings[i] = 0;
+            this.startTimes[i] = 0;
         }
 
         const now = performance.now();
@@ -81,8 +89,6 @@ export class PerformanceMonitor {
         }
 
         // --- EXPERIMENTAL GC TRACKING ---
-
-        // (performance.memory is a Chrome/Edge non-standard API)
         const mem = (performance as any).memory;
         if (mem) {
             const currentHeap = mem.usedJSHeapSize;
@@ -96,14 +102,12 @@ export class PerformanceMonitor {
                     this._lastGcTime = now;
                 } else {
                     this.gcDetected = false;
-                    // We don't reset droppedMB so the UI can linger on the value
                 }
             }
             this.lastHeapSize = currentHeap;
         }
     }
 
-    // --- GAME STATE UPDATERS ---
     public updateGameState(playerX: number, playerZ: number, camX: number, camY: number, camZ: number, enemies: number, objects: number) {
         this.gameState.playerCoords.x = playerX;
         this.gameState.playerCoords.z = playerZ;
@@ -116,8 +120,7 @@ export class PerformanceMonitor {
 
     /**
      * Called from WinterEngine immediately after renderer.render().
-     * Reads renderer.info — Zero-GC, just primitive copies.
-     * Also tracks and logs exactly WHICH shaders were compiled if a spike happens.
+     * Heavily optimized to avoid Scene traversals and array allocations.
      */
     public setRendererStats(rendererInfo: { render: { calls: number; triangles: number }; memory: { textures: number; geometries: number }; programs: any[] | null | undefined }): void {
         this._drawCalls = rendererInfo.render.calls;
@@ -135,33 +138,34 @@ export class PerformanceMonitor {
             if (this._shaderLoggingEnabled) {
                 console.warn(`[SHADER] New program compiled — total: ${programCount} (+${diff})`);
 
-                // Identify exactly what caused the recompile by checking against our known set
-                const newPrograms = currentPrograms.filter(p => !this._knownPrograms.has(p.cacheKey || p.id));
-                newPrograms.forEach(p => {
-                    const matType = p.name || 'UnknownMaterial';
-                    // cacheKey contains all the WebGL #defines (lights, fog, instancing, etc)
-                    const keyString = String(p.cacheKey);
-                    // Slice to 120 chars to avoid flooding the console, but keep enough to spot differences
-                    const permPreview = keyString.length > 120 ? keyString.substring(0, 120) + '...' : keyString;
+                // [VINTERDÖD] Optimized logger: No .filter, no .forEach, NO SCENE TRAVERSALS.
+                for (let i = 0; i < currentPrograms.length; i++) {
+                    const p = currentPrograms[i];
+                    const key = p.cacheKey || p.id;
 
-                    // Leta i hela scenen efter materialet som just skapades!
-                    let foundObjectName = "Unknown (probably a sprite/particle)";
-                    if ((window as any).gameEngine && (window as any).gameEngine.scene) {
-                        (window as any).gameEngine.scene.traverse((obj: any) => {
-                            if (obj.material && (obj.material.id === p.id || String(p.cacheKey) === obj.material.customProgramCacheKey?.())) {
-                                foundObjectName = obj.name || obj.type || "Nameless object";
-                            }
-                        });
+                    if (!this._knownPrograms.has(key)) {
+                        const keyString = String(key);
+                        // Shorten string drastically to prevent string-heap bloat
+                        const permPreview = keyString.length > 60 ? keyString.substring(0, 60) + '...' : keyString;
+                        console.log(`   -> Type: ${p.name || 'UnknownMaterial'} | Signature: ${permPreview}`);
+                        this._knownPrograms.add(key);
                     }
-                    console.log(`   -> Type: ${matType} | Key: ${permPreview} | Belongs to: ${foundObjectName}`);
-                });
+                }
+            } else {
+                // If logging is disabled, still add to known set silently
+                for (let i = 0; i < currentPrograms.length; i++) {
+                    const p = currentPrograms[i];
+                    const key = p.cacheKey || p.id;
+                    if (key) this._knownPrograms.add(key);
+                }
             }
-        }
-
-        // Add all current programs to known set so we don't log them again
-        for (let i = 0; i < currentPrograms.length; i++) {
-            const key = currentPrograms[i].cacheKey || currentPrograms[i].id;
-            if (key) this._knownPrograms.add(key);
+        } else if (programCount > 0 && this._lastShaderPrograms === 0) {
+            // Initial population
+            for (let i = 0; i < currentPrograms.length; i++) {
+                const p = currentPrograms[i];
+                const key = p.cacheKey || p.id;
+                if (key) this._knownPrograms.add(key);
+            }
         }
 
         this._lastShaderPrograms = programCount;
@@ -189,7 +193,7 @@ export class PerformanceMonitor {
             drawCalls: this._drawCalls.toString(),
             triangles: (this._triangles / 1000).toFixed(1) + 'k',
             shaderPrograms: this._shaderPrograms.toString(),
-            shaderRecompiles: this._shaderRecompileCount, // Int (used for coloring)
+            shaderRecompiles: this._shaderRecompileCount,
             textures: this._textures.toString(),
             geometries: this._geometries.toString()
         };
@@ -207,9 +211,10 @@ export class PerformanceMonitor {
     public getFormattedTimings() {
         const formatted: Record<string, string> = {};
         let total = 0;
-        for (const key in this.timings) {
-            formatted[key] = this.timings[key].toFixed(2);
-            total += this.timings[key];
+        for (let i = 0; i < this._keys.length; i++) {
+            const time = this.timings[i];
+            formatted[this._keys[i]] = time.toFixed(2);
+            total += time;
         }
         return {
             breakdown: formatted,
@@ -218,110 +223,102 @@ export class PerformanceMonitor {
     }
 
     // ============================================================================
+    // TIMING HELPERS
+    // ============================================================================
 
-    /**
-     * Mark the start of a block to track.
-     */
+    private _getIndex(id: string): number {
+        const idx = this._keys.indexOf(id);
+        if (idx === -1) {
+            this._keys.push(id);
+            // Re-allocate buffers if an unknown system is added dynamically
+            const newTimings = new Float32Array(this._keys.length);
+            newTimings.set(this.timings);
+            this.timings = newTimings;
+
+            const newStarts = new Float32Array(this._keys.length);
+            newStarts.set(this.startTimes);
+            this.startTimes = newStarts;
+
+            return this._keys.length - 1;
+        }
+        return idx;
+    }
+
     public begin(id: string) {
-        this.startTimes[id] = performance.now();
+        this.startTimes[this._getIndex(id)] = performance.now();
     }
 
-    /**
-     * Mark the end of a block and accumulate the time passed.
-     */
     public end(id: string) {
-        const start = this.startTimes[id];
-        if (start === undefined || start === 0) return;
-        const passed = performance.now() - start;
-        this.timings[id] = (this.timings[id] || 0) + passed;
+        const idx = this._getIndex(id);
+        const start = this.startTimes[idx];
+        if (start === 0) return;
+        this.timings[idx] += performance.now() - start;
     }
 
-    /**
-     * Run a synchronous function and track its duration under the provided ID.
-     */
     public track(id: string, fn: () => void) {
         this.begin(id);
         fn();
         this.end(id);
     }
 
-    /**
-     * Add time directly (useful if passing metrics up from sub-systems that pre-tracked them).
-     */
     public addTime(id: string, ms: number) {
-        this.timings[id] = (this.timings[id] || 0) + ms;
+        this.timings[this._getIndex(id)] += ms;
     }
 
-    public getFps(): number {
-        return this._fps;
-    }
+    // ============================================================================
+    // SETTERS & GETTERS
+    // ============================================================================
 
-    public get consoleLoggingEnabled(): boolean {
-        return this._consoleLoggingEnabled;
-    }
+    public getFps(): number { return this._fps; }
 
+    public get consoleLoggingEnabled(): boolean { return this._consoleLoggingEnabled; }
     public set consoleLoggingEnabled(value: boolean) {
         this._consoleLoggingEnabled = value;
         localStorage.setItem('vinterdod_debug_console_logging', String(value));
     }
 
-    public get aiLoggingEnabled(): boolean {
-        return this._aiLoggingEnabled;
-    }
-
+    public get aiLoggingEnabled(): boolean { return this._aiLoggingEnabled; }
     public set aiLoggingEnabled(value: boolean) {
         this._aiLoggingEnabled = value;
         localStorage.setItem('vinterdod_debug_ai_logging', String(value));
     }
 
-    public get shaderLoggingEnabled(): boolean {
-        return this._shaderLoggingEnabled;
-    }
-
+    public get shaderLoggingEnabled(): boolean { return this._shaderLoggingEnabled; }
     public set shaderLoggingEnabled(value: boolean) {
         this._shaderLoggingEnabled = value;
         localStorage.setItem('vinterdod_debug_shader_logging', String(value));
     }
 
+    // Return mapped object ONLY if UI explicitly requests it
     public getTimings(): Record<string, number> {
-        return this.timings;
+        const obj: Record<string, number> = {};
+        for (let i = 0; i < this._keys.length; i++) obj[this._keys[i]] = this.timings[i];
+        return obj;
     }
 
-    /**
-     * Prints a standardized Heavy Frame output to the console if total time exceeds threshold.
-     * Automatically includes renderer stats and GC info collected this frame.
-     */
     public printIfHeavy(context: 'Game Engine Performance' | 'Camp Performance', totalTime: number, threshold: number = 50, extraStats?: Record<string, any>) {
         this._lastFrameTotal = totalTime;
         if (totalTime > threshold) {
             const formatted: Record<string, string> = {};
 
-            // CPU timing breakdown
-            for (const key in this.timings) {
-                if (this.timings[key] > 0) {
-                    formatted[key] = this.timings[key].toFixed(2) + 'ms';
-                }
+            for (let i = 0; i < this._keys.length; i++) {
+                const time = this.timings[i];
+                if (time > 0) formatted[this._keys[i]] = time.toFixed(2) + 'ms';
             }
             formatted.total = totalTime.toFixed(2) + 'ms';
 
-            // Auto-include renderer stats (set by setRendererStats each frame)
             formatted['drawCalls'] = String(this._drawCalls);
             formatted['triangles'] = (this._triangles / 1000).toFixed(1) + 'k';
             formatted['shaderPrograms'] = String(this._shaderPrograms);
+
             if (this._shaderRecompileCount > 0) {
                 formatted['⚠️ Shader Recompiles'] = String(this._shaderRecompileCount) + ' total this session';
             }
-
-            // GC event flag
             if (this.gcDetected) {
                 formatted['⚠️ GC Event Possible'] = `Heap dropped by ${this.gcDroppedMB.toFixed(2)} MB between frames`;
             }
-
-            // Any caller-provided extra stats
             if (extraStats) {
-                for (const key in extraStats) {
-                    formatted[key] = extraStats[key];
-                }
+                for (const key in extraStats) formatted[key] = extraStats[key];
             }
 
             if (this._consoleLoggingEnabled) {

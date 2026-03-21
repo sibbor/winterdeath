@@ -190,6 +190,8 @@ const CAMP_ENV_CACHE = {
     fire: null as any
 };
 
+let cachedTerrainMat: THREE.MeshStandardMaterial | null = null;
+
 // ============================================================================
 // INTERNAL HELPERS
 // ============================================================================
@@ -364,25 +366,22 @@ const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) =
     starSystem.rotation.z = 0.1;
     scene.add(starSystem);
 
-    let skyLight: THREE.DirectionalLight | null = null;
-
-    // 3. ONLY add lights if we are NOT warming up!
-    if (!isWarmup) {
-        skyLight = new THREE.DirectionalLight(CAMP_SCENE.skyLight.color, CAMP_SCENE.skyLight.intensity);
-        skyLight.name = 'SKY_LIGHT';
-        skyLight.position.set(-80, 150, -100);
-        skyLight.castShadow = true;
-        skyLight.shadow.mapSize.width = 1024;
-        skyLight.shadow.mapSize.height = 1024;
-        skyLight.shadow.camera.near = 0.5;
-        skyLight.shadow.camera.far = 1000;
-        skyLight.shadow.camera.left = -100;
-        skyLight.shadow.camera.right = 100;
-        skyLight.shadow.camera.top = 100;
-        skyLight.shadow.camera.bottom = -100;
-        skyLight.shadow.bias = CAMP_SCENE.dirLight.bias;
-        scene.add(skyLight);
-    }
+    // [VINTERDÖD] Ljusen läggs ALLTID till, även under warmup, för att 
+    // garantera att WebGL bygger shaders med rätt antal ljuskällor (Directional + Point).
+    const skyLight = new THREE.DirectionalLight(CAMP_SCENE.skyLight.color, CAMP_SCENE.skyLight.intensity);
+    skyLight.name = 'SKY_LIGHT';
+    skyLight.position.set(-80, 150, -100);
+    skyLight.castShadow = true;
+    skyLight.shadow.mapSize.width = 1024;
+    skyLight.shadow.mapSize.height = 1024;
+    skyLight.shadow.camera.near = 0.5;
+    skyLight.shadow.camera.far = 1000;
+    skyLight.shadow.camera.left = -100;
+    skyLight.shadow.camera.right = 100;
+    skyLight.shadow.camera.top = 100;
+    skyLight.shadow.camera.bottom = -100;
+    skyLight.shadow.bias = CAMP_SCENE.dirLight.bias;
+    scene.add(skyLight);
 
     return {
         objects: { moon: skyBody, halo: moonHaloSprite, stars: starSystem, light: skyLight },
@@ -443,22 +442,19 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
 
     scene.add(fireGroup);
 
-    // 3. ONLY add PointLight if NOT warming up
-    let fireLight: THREE.PointLight | null = null;
-    if (!isWarmup) {
-        fireLight = new THREE.PointLight(
-            CAMP_SCENE.campfireLight.color,
-            CAMP_SCENE.campfireLight.intensity,
-            CAMP_SCENE.campfireLight.distance
-        );
-        fireLight.position.set(0, 3, 0);
-        fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
-        fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
-        fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
-        fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
-        fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
-        scene.add(fireLight);
-    }
+    // [VINTERDÖD] Ljuset läggs ALLTID till, även under warmup.
+    const fireLight = new THREE.PointLight(
+        CAMP_SCENE.campfireLight.color,
+        CAMP_SCENE.campfireLight.intensity,
+        CAMP_SCENE.campfireLight.distance
+    );
+    fireLight.position.set(0, 3, 0);
+    fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
+    fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
+    fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
+    fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
+    fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
+    scene.add(fireLight);
 
     return fireLight;
 };
@@ -471,14 +467,9 @@ export const CampWorld = {
     setupSky,
 
     setupCampScene: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
-        let interactables: any[] = [];
-        let outlines: Record<string, THREE.LineSegments> = {};
 
-        // 1. Only construct the structural scene if this is NOT a warmup
         if (!isWarmup) {
             scene.clear();
-
-            // Always use CameraSystem directly from the Engine Singleton.
             const engine = WinterEngine.getInstance();
             const camera = engine.camera;
 
@@ -487,45 +478,42 @@ export const CampWorld = {
             camera.set('fov', 50);
             camera.set('far', 2500);
             camera.lookAt(CAMP_SCENE.cameraBaseLookAt.x, CAMP_SCENE.cameraBaseLookAt.y, CAMP_SCENE.cameraBaseLookAt.z, true);
-
-            scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
-            scene.background = new THREE.Color(CAMP_SCENE.bgColor);
-
-            // 2. Base Lighting
-            const hemiLight = new THREE.HemisphereLight(
-                CAMP_SCENE.hemiLight.sky,
-                CAMP_SCENE.hemiLight.ground,
-                CAMP_SCENE.hemiLight.intensity
-            );
-            scene.add(hemiLight);
-
-            // 3. Terrain & Trees
-            CampWorld.setupTerrain(scene, textures);
-
-            // 4. Stations
-            const stationsData = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
-            interactables = stationsData.interactables;
-            outlines = stationsData.outlines;
         }
 
-        // 5. Effects (Sky, Campfire, Weather)
-        // We ALWAYS run this, even on warmup, because AssetPreloader needs 
-        // to harvest envState (starSystem, particles) to explicitly compile them.
+        scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
+        scene.background = new THREE.Color(CAMP_SCENE.bgColor);
+
+        const hemiLight = new THREE.HemisphereLight(
+            CAMP_SCENE.hemiLight.sky,
+            CAMP_SCENE.hemiLight.ground,
+            CAMP_SCENE.hemiLight.intensity
+        );
+        scene.add(hemiLight);
+
+        CampWorld.setupTerrain(scene, textures);
+
+        const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
+
         const envState = CampWorld.initEffects(scene, textures, weather, isWarmup);
 
         return { interactables, outlines, envState };
     },
 
     setupTerrain: (scene: THREE.Scene, textures: Textures) => {
-        // Optimization: Use .copy() instead of .clone() to avoid deep clone overhead
-        // creating a new material instance safely for the terrain repetition.
-        const groundMat = new THREE.MeshStandardMaterial().copy(MATERIALS.dirt as THREE.MeshStandardMaterial);
+        if (!cachedTerrainMat) {
+            cachedTerrainMat = new THREE.MeshStandardMaterial().copy(MATERIALS.dirt as THREE.MeshStandardMaterial);
+            cachedTerrainMat.userData = { isSharedAsset: true };
+        }
 
-        if (groundMat.map) groundMat.map.repeat.set(60, 60);
-        if (groundMat.bumpMap) groundMat.bumpMap.repeat.set(60, 60);
+        if (cachedTerrainMat.map && cachedTerrainMat.map.repeat.x !== 60) {
+            cachedTerrainMat.map.repeat.set(60, 60);
+        }
+        if (cachedTerrainMat.bumpMap && cachedTerrainMat.bumpMap.repeat.x !== 60) {
+            cachedTerrainMat.bumpMap.repeat.set(60, 60);
+        }
 
         const groundGeo = new THREE.PlaneGeometry(120, 120);
-        const ground = new THREE.Mesh(groundGeo, groundMat);
+        const ground = new THREE.Mesh(groundGeo, cachedTerrainMat);
 
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;

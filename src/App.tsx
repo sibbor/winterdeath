@@ -51,6 +51,7 @@ const EMPTY_OVERRIDES = {};
 
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
+    useRef(WinterEngine.getInstance(gameState.graphics));
     const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
@@ -442,21 +443,28 @@ const App: React.FC = () => {
             WinterEngine.getInstance().updateSettings(newG);
 
             if (needsReWarm) {
-                AssetPreloader.reset();
+                // IMPORTANT: Don't run reset()! It deletes all sounds and JS data.
+                AssetPreloader.resetCompilationOnly();
+
                 const engine = WinterEngine.getInstance();
                 const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
                 const isCamp = prev.screen === GameScreen.CAMP;
                 const sectorIndex = prev.currentSector !== undefined ? prev.currentSector : 0;
                 const envConfig = isCamp ? CAMP_SCENE : SECTOR_THEMES[sectorIndex];
 
-                AssetPreloader.warmupAsync('CORE', envConfig, yieldToMain).then(() => {
-                    if (isCamp) AssetPreloader.warmupAsync('CAMP', envConfig, yieldToMain);
-                    else AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
+                // We never has to warm up CORE again, because the data is already in sharedPool.
+                // We just send the scene compilation directly!
+                triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
+                    if (isCamp) {
+                        await AssetPreloader.warmupAsync('CAMP', envConfig, yieldToMain);
+                    } else {
+                        await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
+                    }
                 });
             }
             return { ...prev, graphics: newG };
         });
-    }, []);
+    }, [triggerLoadingTransition]);
 
     const handleSaveLoadout = useCallback((loadout: any, levels: any) => {
         setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));
@@ -525,20 +533,17 @@ const App: React.FC = () => {
         });
     }, [triggerLoadingTransition]);
 
-    const handleRetrySector = useCallback(() => {
+    const handleRespawnSector = useCallback(() => {
         soundManager.playUiConfirm();
-        triggerLoadingTransition('SECTOR', async () => {
-            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-            setSectorStats(null);
-            setDeathDetails(null);
-            setActiveCollectible(null);
-            setActiveOverlay(null);
-            const { gameState: currentGameState } = latestStateRef.current;
-            const sectorIndex = currentGameState.currentSector;
-            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-            await AssetPreloader.warmupAsync('SECTOR', SECTOR_THEMES[sectorIndex], yieldToMain, sectorIndex);
-        });
-    }, [triggerLoadingTransition]);
+
+        // Respawn is instant. Since the sector has already been played, all 
+        // shaders and models are already in memory. No AssetPreloader or loading screen is needed.
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        setSectorStats(null);
+        setDeathDetails(null);
+        setActiveCollectible(null);
+        setActiveOverlay(null);
+    }, []);
 
     const globalInputActions = React.useMemo(() => ({
         setActiveOverlay,
@@ -787,7 +792,7 @@ const App: React.FC = () => {
                     deathDetails={deathDetails}
                     currentSector={gameState.currentSector}
                     onReturnCamp={handleReturnToCamp}
-                    onRetry={handleRetrySector}
+                    onRetry={handleRespawnSector}
                     isMobileDevice={isMobileDevice}
                 />
             )}

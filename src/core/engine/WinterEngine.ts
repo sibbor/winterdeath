@@ -18,8 +18,9 @@ export type { GraphicsSettings };
 export class WinterEngine {
     private static instance: WinterEngine | null = null;
 
-    public static getInstance(): WinterEngine {
-        if (!this.instance) this.instance = new WinterEngine();
+    // Accepts initial settings to prevent double WebGL context creation on boot
+    public static getInstance(initialSettings?: Partial<GraphicsSettings>): WinterEngine {
+        if (!this.instance) this.instance = new WinterEngine(initialSettings);
         return this.instance;
     }
 
@@ -39,7 +40,7 @@ export class WinterEngine {
     public water: WaterSystem;
 
     private sceneStack: THREE.Scene[] = [];
-    private settings: GraphicsSettings = { ...DEFAULT_GRAPHICS };
+    private settings: GraphicsSettings;
 
     // Lifecycle & Timing
     private clock: THREE.Clock;
@@ -53,7 +54,12 @@ export class WinterEngine {
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
 
-    constructor() {
+    // Cached Sets for O(1) Zero-GC lookups during cleanup
+    private sharedGeoSet: Set<any> | null = null;
+    private sharedMatSet: Set<any> | null = null;
+
+    constructor(initialSettings?: Partial<GraphicsSettings>) {
+        this.settings = { ...DEFAULT_GRAPHICS, ...initialSettings };
         this.scene = new THREE.Scene();
         this.clock = new THREE.Clock();
 
@@ -74,7 +80,7 @@ export class WinterEngine {
     private _calculateHardwareLimits() {
         const maxTextures = this.renderer.capabilities.maxTextures;
 
-        // [VINTERDÖD] SUPER-SAFE BUDGET:
+        // SUPER-SAFE BUDGET:
         // We reserve 12 textures for extremely heavy materials (water, PBR, envMaps etc).
         // This leaves (maxTextures - 12) textures for PointLight shadows.
         // On a graphics card with 16 textures, this results in a maximum of 4 PointLight shadows.
@@ -180,7 +186,7 @@ export class WinterEngine {
         container.appendChild(this.renderer.domElement);
         this.handleResize();
 
-        // [VINTERDÖD] Reset pause states on mount to ensure fresh state
+        // Reset pause states on mount to ensure fresh state
         this.isRenderingPaused = false;
         this.isSimulationPaused = false;
 
@@ -223,11 +229,15 @@ export class WinterEngine {
         this.onUpdate = null;
         this.onRender = null;
 
+        this.sharedGeoSet = null;
+        this.sharedMatSet = null;
+
         WinterEngine.instance = null;
     }
 
     /**
      * Aggressively disposes of all objects in the current scene.
+     * Uses O(1) Set lookups and flat loops to guarantee Zero-GC drops.
      * @param includingPersistent If true, even systemic meshes (weather/water) are disposed.
      */
     public clearActiveScene(includingPersistent: boolean = false) {
@@ -235,24 +245,23 @@ export class WinterEngine {
         monitor.begin('cleanup');
 
         const disposableObjects: THREE.Object3D[] = [];
+        const children = this.scene.children;
 
-        // 1. Collect all children
-        this.scene.children.forEach(child => {
-            // Skip persistent systems unless explicitly requested
+        // 1. Collect all children (Zero-GC Loop)
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
             const isPersistent = child.userData.isPersistent ||
-                child.name.includes('Weather') ||
-                child.name.includes('Water');
+                child.name.indexOf('Weather') !== -1 ||
+                child.name.indexOf('Water') !== -1;
 
             if (!isPersistent || includingPersistent) {
                 disposableObjects.push(child);
             }
-        });
+        }
 
-        // Pre-allocate disposal function to ensure Zero-GC loops during cleanup traversal
-        const checkMaterial = (m: any) => {
-            const isSharedMat = Object.values(MATERIALS).includes(m) || m.userData?.isSharedAsset;
-            if (!isSharedMat && m.dispose) m.dispose();
-        };
+        // Initialize Sets lazily to avoid heavy computations at engine boot
+        if (!this.sharedGeoSet) this.sharedGeoSet = new Set(Object.values(GEOMETRY));
+        if (!this.sharedMatSet) this.sharedMatSet = new Set(Object.values(MATERIALS));
 
         // 2. Dispose of Geometries and Materials
         for (let i = 0; i < disposableObjects.length; i++) {
@@ -264,20 +273,25 @@ export class WinterEngine {
                 if (isProtected) return;
 
                 if (child.isMesh || child.isLine || child.isPoints || child.isSprite) {
+
                     if (child.geometry) {
-                        // Safeguard: Do not dispose if it's a shared geometry
-                        const isSharedGeo = Object.values(GEOMETRY).includes(child.geometry) || child.geometry.userData?.isSharedAsset;
-                        if (!isSharedGeo && child.geometry.dispose) child.geometry.dispose();
+                        const isSharedGeo = this.sharedGeoSet!.has(child.geometry) || child.geometry.userData?.isSharedAsset;
+                        if (!isSharedGeo && child.geometry.dispose) {
+                            child.geometry.dispose();
+                        }
                     }
 
                     if (child.material) {
                         if (Array.isArray(child.material)) {
                             const len = child.material.length;
                             for (let m = 0; m < len; m++) {
-                                checkMaterial(child.material[m]);
+                                const mat = child.material[m];
+                                const isSharedMat = this.sharedMatSet!.has(mat) || mat.userData?.isSharedAsset;
+                                if (!isSharedMat && mat.dispose) mat.dispose();
                             }
                         } else {
-                            checkMaterial(child.material);
+                            const isSharedMat = this.sharedMatSet!.has(child.material) || child.material.userData?.isSharedAsset;
+                            if (!isSharedMat && child.material.dispose) child.material.dispose();
                         }
                     }
                 }
@@ -377,10 +391,6 @@ export class WinterEngine {
                 monitor.begin('render_setup');
                 this.scene.updateMatrixWorld();
                 this.camera.threeCamera.updateMatrixWorld();
-
-                // Note: Removed the forced this.renderer.shadowMap.needsUpdate here.
-                // Three.js handles shadow map autoUpdate organically. Forcing it creates major GPU bottleneck overhead.
-
                 monitor.end('render_setup');
 
                 monitor.begin('render_draw');
