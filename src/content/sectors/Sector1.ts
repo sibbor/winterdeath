@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { NoiseType } from '../../systems/NoiseSystem';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS, createTextSprite } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
@@ -62,7 +62,6 @@ const LOCATIONS = {
 const _v1 = new THREE.Vector3();
 
 // Zero-GC Pre-allocated Vectors for the Update Loop
-const _busPos = new THREE.Vector3(LOCATIONS.TRIGGERS.BUS.x, 0, LOCATIONS.TRIGGERS.BUS.z);
 const _trainYardPos = new THREE.Vector3(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
 const _viewPos = new THREE.Vector3();
 const _camOverrideTarget = new THREE.Vector3();
