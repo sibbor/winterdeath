@@ -166,7 +166,7 @@ export class OcclusionSystem implements System {
         }
     }
 
-    cleanup(_session: GameSessionLogic): void {
+    clear(): void {
         const playerGroup = this.playerGroup.current;
         if (playerGroup) removeGhost(playerGroup);
 

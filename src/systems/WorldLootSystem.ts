@@ -227,7 +227,7 @@ export class WorldLootSystem implements System {
         this.instancedMesh.instanceMatrix.needsUpdate = true;
     }
 
-    public cleanup() {
+    public clear() {
         this.pool = [];
         this.spawnQueue = [];
         this.freeIndices = [];

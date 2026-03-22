@@ -100,6 +100,8 @@ export interface SectorContext {
     setCameraHeight?: (heightMod: number) => void;
     setCameraOverride?: (active: boolean, targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3, durationMs?: number) => void;
     shakeCamera?: (amount: number, type?: 'general' | 'hurt') => void;
+    makeNoise?: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+    weaponHandler?: any;
 }
 
 export interface SectorDef {

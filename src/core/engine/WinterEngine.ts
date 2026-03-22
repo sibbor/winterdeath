@@ -9,6 +9,7 @@ import { FogSystem } from '../../systems/FogSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
+import { System } from '../../systems/System';
 
 export type { GraphicsSettings };
 
@@ -55,10 +56,15 @@ export class WinterEngine {
     public onRender: (() => void) | null = null;
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
+    public onUpdateContext: any = null;
 
     // Cached Sets for O(1) Zero-GC lookups during cleanup
     private sharedGeoSet: Set<any> | null = null;
     private sharedMatSet: Set<any> | null = null;
+
+    // --- HYBRID SYSTEM REGISTRY (Zero-GC) ---
+    private _systemsMap: Map<string, System> = new Map();
+    private _systemArray: System[] = [];
 
     constructor(initialSettings?: Partial<GraphicsSettings>) {
         this.settings = { ...DEFAULT_GRAPHICS, ...initialSettings };
@@ -76,6 +82,15 @@ export class WinterEngine {
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
+
+        // Export for standalone systems (Zero-GC singleton access)
+        (window as any).WinterEngineInstance = this;
+
+        // Register persistent environmental systems to the centralized registry
+        this.registerSystem(this.wind);
+        this.registerSystem(this.weather);
+        this.registerSystem(this.fog);
+        this.registerSystem(this.water);
 
         window.addEventListener('resize', this.handleResize);
     }
@@ -224,11 +239,6 @@ export class WinterEngine {
         // Aggressive Cleanup before renderer disposal
         this.clearActiveScene(true);
 
-        // Also explicitly clear the environmental systems to free materials/buffers
-        if (this.weather) this.weather.clear();
-        if (this.fog) this.fog.clear();
-        if (this.water) this.water.clear();
-
         this.renderer.dispose();
 
         // Aggressive Garbage Collection flagging
@@ -239,6 +249,8 @@ export class WinterEngine {
 
         this.sharedGeoSet = null;
         this.sharedMatSet = null;
+
+        this.clearSystems();
 
         WinterEngine.instance = null;
     }
@@ -263,7 +275,8 @@ export class WinterEngine {
             const isPersistent = child.userData.isPersistent ||
                 child.name.indexOf('Weather') !== -1 ||
                 child.name.indexOf('Fog') !== -1 ||
-                child.name.indexOf('Water') !== -1;
+                child.name.indexOf('Water') !== -1 ||
+                child.name.indexOf('Wind') !== -1;
 
             if (!isPersistent || includingPersistent) {
                 disposableObjects.push(child);
@@ -336,10 +349,13 @@ export class WinterEngine {
     }
 
     private syncSystemsToScene() {
-        // Move environmental meshes to the new active scene
-        if (this.weather && (this.weather as any).reAttach) (this.weather as any).reAttach(this.scene);
-        if (this.fog && (this.fog as any).reAttach) (this.fog as any).reAttach(this.scene);
-        if (this.water && (this.water as any).reAttach) (this.water as any).reAttach(this.scene);
+        const systems = this._systemArray;
+        const len = systems.length;
+
+        for (let i = 0; i < len; i++) {
+            const sys = systems[i];
+            if (sys.reAttach) sys.reAttach(this.scene);
+        }
     }
 
     private handleResize = () => {
@@ -371,28 +387,9 @@ export class WinterEngine {
         if (this.onUpdate) this.onUpdate(dt);
         monitor.end('logic');
 
-        // 2. Environmental Systems Update
+        // 2. High-Performance System Logic (Unified Registry)
         if (!this.isSimulationPaused) {
-            monitor.begin('wind');
-            this.wind.update(now, dt);
-            monitor.end('wind');
-
-            monitor.begin('weather');
-            this.weather.update(dt, now);
-            monitor.end('weather');
-
-            monitor.begin('fog');
-            if (this.settings.volumetricFog) {
-                this.fog.update(dt, now);
-            } else {
-                this.fog.clear();
-            }
-            monitor.end('fog');
-
-            monitor.begin('water');
-            this.water.setWaterDynamics(this.wind.strength, this.wind.current);
-            this.water.update(dt, now);
-            monitor.end('water');
+            this.updateSystems(this.onUpdateContext, dt, now);
         }
 
         // 3. Camera Update — runs after all environment systems so thunder/weather
@@ -432,5 +429,95 @@ export class WinterEngine {
      */
     public getSettings(): GraphicsSettings {
         return { ...this.settings };
+    }
+
+    /**
+     * Registers a new system. Adds to Map for O(1) lookup and flat Array for Zero-GC iteration.
+     */
+    public registerSystem(system: System) {
+        if (!this._systemsMap.has(system.id)) {
+            this._systemsMap.set(system.id, system);
+            this._systemArray.push(system);
+        }
+    }
+
+    /**
+     * Unregisters a system using Swap-and-Pop for O(1) array removal (Zero-GC).
+     */
+    public unregisterSystem(id: string) {
+        const sys = this._systemsMap.get(id);
+        if (sys) {
+            this._systemsMap.delete(id);
+            const idx = this._systemArray.indexOf(sys);
+            if (idx !== -1) {
+                // Swap-and-Pop: Efficient removal without shifting (Zero-GC)
+                this._systemArray[idx] = this._systemArray[this._systemArray.length - 1];
+                this._systemArray.pop();
+            }
+            if (sys.clear) sys.clear();
+        }
+    }
+
+    /**
+     * Type-safe system retrieval from the Map.
+     */
+    public getSystem<T extends System>(id: string): T | null {
+        return (this._systemsMap.get(id) as T) || null;
+    }
+
+    /**
+     * Returns the flat system array for the main update loop (Zero-GC).
+     */
+    public getSystems(): System[] {
+        return this._systemArray;
+    }
+
+    /**
+     * Centralized high-performance system update loop.
+     * Skips disabled systems and handles performance monitoring automatically.
+     * @param context Usually GameSessionLogic or null (for Camp)
+     * @param dt Delta time in seconds
+     * @param now performance.now() timestamp
+     */
+    public updateSystems(context: any, dt: number, now: number): void {
+        const monitor = PerformanceMonitor.getInstance();
+        const systems = this._systemArray;
+        const len = systems.length;
+
+        for (let i = 0; i < len; i++) {
+            const sys = systems[i];
+
+            // Fast skip for disabled systems
+            if (sys.enabled === false) continue;
+
+            const id = sys.id;
+            monitor.begin(id);
+            sys.update(context, dt, now);
+            monitor.end(id);
+        }
+    }
+
+    /**
+     * Synchronizes the enabled state of a system.
+     */
+    public setSystemEnabled(id: string, enabled: boolean) {
+        const sys = this._systemsMap.get(id);
+        if (sys) {
+            sys.enabled = enabled;
+        }
+    }
+
+    /**
+     * Clears all registered systems and calls their cleanup functions.
+     */
+    public clearSystems() {
+        // Zero-GC loop
+        const len = this._systemArray.length;
+        for (let i = 0; i < len; i++) {
+            const sys = this._systemArray[i];
+            if (sys.clear) sys.clear();
+        }
+        this._systemArray.length = 0;
+        this._systemsMap.clear();
     }
 }

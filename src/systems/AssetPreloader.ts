@@ -81,7 +81,11 @@ export const AssetPreloader = {
                 registerSoundGenerators();
 
                 if (soundManager) {
-                    await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || (async () => { }));
+                    try {
+                        await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || (async () => { }));
+                    } catch (e) {
+                        console.error("[AssetPreloader] SoundBank preloading failed, continuing anyway:", e);
+                    }
                     const { createMusicBuffer } = await import('../utils/audio/SoundLib');
                     const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
 

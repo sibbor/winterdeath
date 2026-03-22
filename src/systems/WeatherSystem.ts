@@ -4,11 +4,16 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { WeatherType } from '../core/engine/EngineTypes';;
 import { WEATHER_SYSTEM } from '../content/constants';
 
+import { System } from './System';
+
 /**
  * WeatherSystem
  * Handles millions of particles with zero GC and high-performance buffer manipulation.
  */
-export class WeatherSystem {
+export class WeatherSystem implements System {
+    public id = 'weather';
+    public enabled = true;
+
     private instancedMesh: THREE.InstancedMesh | null = null;
 
     // Buffers for raw physics data
@@ -195,7 +200,7 @@ export class WeatherSystem {
     /**
      * Updates particles based on wind and velocity.
      */
-    public update(dt: number, time: number) {
+    public update(ctx: any, dt: number, now: number) {
         if (!this.instancedMesh || !this.instancedMesh.visible || this.count === 0) return;
 
         // Using cached sway multiplier and direct wind access

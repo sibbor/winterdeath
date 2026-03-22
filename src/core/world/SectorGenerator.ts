@@ -278,7 +278,7 @@ export const SectorGenerator = {
         const uvAttr = geo.attributes.uv;
         for (let i = 0; i < uvAttr.count; i++) {
             uvAttr.setXY(i, uvAttr.getX(i) * repeatX, uvAttr.getY(i) * repeatY);
-            if (ctx.yield && i % 1000 === 0) await ctx.yield(); // Yield for large geometry updates
+            if (ctx.yield && i % 500 === 0) await ctx.yield(); // Yield for large geometry updates
         }
 
         const mesh = new THREE.Mesh(geo, mat);

@@ -128,7 +128,7 @@ export class NoiseSystem implements System {
         this.head = (this.head + 1) % MAX_NOISE_EVENTS;
     }
 
-    cleanup(): void {
+    clear(): void {
         const events = this.events;
         const length = events.length;
         for (let i = 0; i < length; i++) {

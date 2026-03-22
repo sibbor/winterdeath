@@ -6,12 +6,12 @@ const FOG_AREA_SIZE = 120.0;
 const FOG_SCALE = 45.0; // Larger planes to compensate for fewer instances
 const DEFAULT_FOG_HEIGHT = 15.0;
 
-/**
- * FogSystem
- * Handles localized, drifting volumetric fog planes.
- * Matches WeatherSystem's standalone architecture with zero GC and high-performance buffer manipulation.
- */
-export class FogSystem {
+import { System } from './System';
+
+export class FogSystem implements System {
+    public id = 'fog';
+    public enabled = true;
+
     private scene: THREE.Scene;
     private wind: WindSystem;
     private camera: THREE.Camera;
@@ -26,6 +26,8 @@ export class FogSystem {
     private fogCount: number = 0;
     private targetColor: THREE.Color = new THREE.Color(0.7, 0.75, 0.8);
     private targetHeight: number = DEFAULT_FOG_HEIGHT; // Default height ceiling
+
+    private globalTime: number = 0; // Added for update signature standardization
 
     constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera) {
         this.scene = scene;
@@ -136,7 +138,25 @@ export class FogSystem {
     /**
      * Updates fog planes based on wind and handles zero-math billboarding.
      */
-    public update(dt: number, time: number) {
+    public update(ctx: any, dt: number, now: number): void {
+        this.globalTime += dt;
+
+        // Auto-handle volumetric fog setting
+        const engine = (window as any).WinterEngineInstance; // Safe singleton access
+        if (!engine?.settings?.volumetricFog) {
+            if (this.fogMesh && this.fogMesh.visible) {
+                this.fogMesh.visible = false;
+            }
+            return;
+        }
+
+        if (!this.fogMesh || this.fogCount === 0) return;
+
+        // If the setting was just turned on again, make it visible
+        if (!this.fogMesh.visible) {
+            this.fogMesh.visible = true;
+        }
+
         if (!this.fogMesh || !this.fogMesh.visible || this.fogCount === 0) return;
 
         // Direct wind access for zero-overhead integration

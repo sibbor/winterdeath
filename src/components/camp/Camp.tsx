@@ -10,8 +10,9 @@ import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
 import { CampEffectsState, CAMP_SCENE } from './CampWorld';
-import { WeatherType } from '../../core/engine/EngineTypes';;
+import { WeatherType } from '../../core/engine/EngineTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
+import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './CampSystems';
 
 // Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
@@ -163,6 +164,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             sceneOutlineKeysRef.current = Object.keys(outlines);
             sceneFamilyMembersRef.current = familyMembers;
             sceneActiveMembersRef.current = activeMembers;
+
+            // Register Camp Systems to the Engine
+            engine.registerSystem(new CampEffectsSystem());
+            engine.registerSystem(new FamilyAnimationSystem());
+            engine.registerSystem(new CampChatterSystem());
         };
 
         setup();
@@ -274,103 +280,40 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 nextWildlifeTime.current = now + 5000 + Math.random() * 10000;
             }
             const monitor = PerformanceMonitor.getInstance();
+            const familyMembers = sceneFamilyMembersRef.current;
+            const interactables = sceneInteractablesRef.current;
+            const outlines = sceneOutlinesRef.current;
+            const outlineKeys = sceneOutlineKeysRef.current;
 
-            monitor.begin('env_camera');
-            if (envStateRef.current) {
-                CampWorld.updateEffects(scene, envStateRef.current, dt, now, frameCount);
-            }
+            // Run centralized Camp Systems
+            const ctx = {
+                scene,
+                camera: camera.threeCamera,
+                container,
+                envState: envStateRef.current,
+                familyMembers,
+                activeMembers: sceneActiveMembersRef.current,
+                activeChats: activeChats.current,
+                chatOverlay: chatOverlayRef.current,
+                frameCount,
+                isRunning,
+                nextChatterTime: { val: nextChatterTime.current, set: (v: number) => nextChatterTime.current = v },
+                nextWildlifeTime: { val: nextWildlifeTime.current, set: (v: number) => nextWildlifeTime.current = v },
+                hoveredId: hoveredRef.current
+            };
 
+            engine.onUpdateContext = ctx;
+            
+            frameCount++;
+            frameRef.current = frameCount;
+
+            // Camera logic (still manual for now due to complex state)
             const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
             const BASE_LOOK_AT = sceneBaseLookAtRef.current;
             const targetLookAt = isIdleRef.current ? CINEMATIC_LOOK_AT : BASE_LOOK_AT;
             camera.set('lookSpeed', isIdleRef.current ? 0.2 : 3.0);
             camera.lookAt(targetLookAt.x, targetLookAt.y, targetLookAt.z);
             camera.update(dt, now);
-            monitor.end('env_camera');
-
-            frameCount++;
-
-            const familyMembers = sceneFamilyMembersRef.current;
-            const interactables = sceneInteractablesRef.current;
-            const outlines = sceneOutlinesRef.current;
-            const outlineKeys = sceneOutlineKeysRef.current;
-
-            monitor.begin('family_anim');
-            const chats = activeChats.current;
-            for (let i = 0; i < familyMembers.length; i++) {
-                const fm = familyMembers[i];
-                let isSpeaking = fm.bounce > 0;
-
-                if (!isSpeaking) {
-                    for (let j = 0; j < chats.length; j++) {
-                        const c = chats[j];
-                        if (c.mesh.uuid === fm.mesh.uuid && now >= c.startTime && now <= c.startTime + c.duration) {
-                            isSpeaking = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (fm.bounce > 0) { fm.bounce -= 0.02 * (dt / 0.016); if (fm.bounce < 0) fm.bounce = 0; }
-
-                PlayerAnimator.update(fm.mesh as any, {
-                    isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
-                    isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
-                }, now, dt);
-
-                const isHov = hoveredRef.current === (fm.mesh.userData.id);
-                const emissiveIntensity = isHov ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
-
-                for (let j = 0; j < fm.emissiveMaterials.length; j++) {
-                    const mat = fm.emissiveMaterials[j];
-                    mat.emissive.setHex(0xaaaaaa);
-                    mat.emissiveIntensity = emissiveIntensity;
-                }
-            }
-            monitor.end('family_anim');
-
-            monitor.begin('chatter');
-            if (isRunning && now > nextChatterTime.current && sceneActiveMembersRef.current.length > 1) {
-                const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
-                let delayOffset = 0;
-                for (let i = 0; i < numSpeakers; i++) {
-                    const speaker = familyMembers[Math.floor(Math.random() * familyMembers.length)];
-                    const linesKey = (speaker.name || '').toLowerCase();
-                    let lines = t(`chatter.${linesKey}`) as unknown as string[];
-                    if (!Array.isArray(lines)) lines = CHATTER_LINES[speaker.name] || ["..."];
-                    const text = lines[Math.floor(Math.random() * lines.length)];
-                    const duration = 2000 + text.length * 60;
-                    const el = document.createElement('div');
-                    el.className = 'absolute bg-black/80 border-2 border-black text-white px-4 py-2 text-sm font-bold rounded-lg pointer-events-none opacity-0 transition-opacity duration-500 whitespace-normal z-40 w-max max-w-[280px] text-center shadow-lg';
-                    el.innerText = text;
-                    if (chatOverlayRef.current) chatOverlayRef.current.appendChild(el);
-                    activeChats.current.push({ id: `chat_${now}_${i}`, mesh: speaker.mesh, text, startTime: now + delayOffset, duration, element: el, playedSound: false });
-                    delayOffset += duration + 500;
-                }
-                nextChatterTime.current = now + delayOffset + 10000 + Math.random() * 20000;
-            }
-
-            if (now > nextWildlifeTime.current) {
-                if (Math.random() > 0.5) soundManager.playOwlHoot();
-                nextWildlifeTime.current = now + 30000 + Math.random() * 60000;
-            }
-
-            for (let i = activeChats.current.length - 1; i >= 0; i--) {
-                const c = activeChats.current[i];
-                if (now > c.startTime + c.duration) {
-                    if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
-                    activeChats.current.splice(i, 1);
-                } else if (now >= c.startTime) {
-                    if (!c.playedSound) { c.playedSound = true; if (isRunning) soundManager.playUiConfirm(); }
-                    c.element.style.opacity = now < c.startTime + 500 ? String((now - c.startTime) / 500) : (now > c.startTime + c.duration - 500 ? String((c.startTime + c.duration - now) / 500) : '1');
-                    const vec = _v1; c.mesh.getWorldPosition(vec); vec.y += 2.2; vec.project(camera.threeCamera);
-                    const width = container.clientWidth, height = container.clientHeight;
-                    c.element.style.left = `${(vec.x * 0.5 + 0.5) * width}px`;
-                    c.element.style.top = `${(-(vec.y * 0.5) + 0.5) * height}px`;
-                    c.element.style.transform = 'translate(-50%, -100%)';
-                }
-            }
-            monitor.end('chatter');
 
             monitor.begin('raycasting');
             const isMobileLabels = isMobileDevice && !isIdleRef.current;

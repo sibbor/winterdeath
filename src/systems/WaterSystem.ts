@@ -3,6 +3,7 @@ import { createWaterMaterial } from '../utils/assets/materials_water';
 import { WATER_SYSTEM } from '../content/constants';
 import { MATERIALS } from '../utils/assets/materials';
 import { NoiseType } from './NoiseSystem';
+import { System } from './System';
 
 interface WaterBind {
     uTime: { value: number };
@@ -113,7 +114,11 @@ export class WaterBody {
     }
 }
 
-export class WaterSystem {
+
+export class WaterSystem implements System {
+    public id = 'water';
+    public enabled = true;
+
     surfaces: WaterSurface[] = [];
     waterBodies: WaterBody[] = [];
     private rippleData: THREE.Vector4[] = [];
@@ -387,8 +392,14 @@ export class WaterSystem {
         this.playerWasInWater = false;
     }
 
-    public update(dt: number, now: number): void {
+    public update(ctx: any, dt: number, now: number): void {
         this.globalTime += dt;
+
+        // Auto-sync with Engine Wind
+        const engine = (window as any).WinterEngineInstance;
+        if (engine && engine.wind) {
+            this.setWaterDynamics(engine.wind.strength, engine.wind.current);
+        }
 
         // Bind strictly aquatic vegetation shaders
         if (this.boundUniforms.length === 0) {

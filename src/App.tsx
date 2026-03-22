@@ -65,10 +65,10 @@ const App: React.FC = () => {
     const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
 
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
-    const [debugSystems, setDebugSystems] = useState<{ id: string; enabled: boolean }[]>([]);
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
     const [isPointerLocked, setIsPointerLocked] = useState(false);
+    const showFPS = !!gameState.showFps;
 
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
     const transitionTaskRef = useRef(false);
@@ -384,13 +384,6 @@ const App: React.FC = () => {
 
     const handleCancelReset = useCallback(() => setActiveOverlay('SETTINGS'), []);
 
-    const handleToggleSystemAction = useCallback((id: string, enabled: boolean) => {
-        const success = gameCanvasRef.current?.setSystemEnabled(id, enabled);
-        if (success !== false) {
-            const systems = gameCanvasRef.current?.getSystems();
-            if (systems) setDebugSystems(systems);
-        }
-    }, []);
 
     const handleSectorEnded = useCallback((stats: SectorStats) => {
         setDeathDetails(null);
@@ -454,7 +447,7 @@ const App: React.FC = () => {
                 const sectorIndex = prev.currentSector !== undefined ? prev.currentSector : 0;
                 const envConfig = isCamp ? CAMP_SCENE : SECTOR_THEMES[sectorIndex];
 
-                // We never has to warm up CORE again, because the data is already in sharedPool.
+                // We never have to warm up CORE again, because the data is already in sharedPool.
                 // We just send the scene compilation directly!
                 triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
                     if (isCamp) {
@@ -517,8 +510,14 @@ const App: React.FC = () => {
     }, [tryDismissLoading]);
 
     const onStationInteraction = useCallback((type: OverlayType | null) => setActiveOverlay(type), []);
-    const handleToggleDebug = useCallback((val: boolean) => setGameState(prev => ({ ...prev, debugMode: val })), []);
+    const handleToggleDebug = useCallback((val: boolean) => {
+        setGameState(prev => ({ ...prev, debugMode: val }));
+    }, []);
     const handlePauseToggle = useCallback((val: boolean) => setActiveOverlay(val ? 'PAUSE' : null), []);
+    const handleToggleShowFps = useCallback(() => {
+        setGameState(prev => ({ ...prev, showFps: !prev.showFps }));
+        soundManager.playUiClick();
+    }, []);
     const handleOverlayClose = useCallback(() => setActiveOverlay(null), []);
 
     // Memoized Actions for Report Screen
@@ -664,6 +663,8 @@ const App: React.FC = () => {
                     onClose={handleCloseAction}
                     graphics={gameState.graphics}
                     onUpdateGraphics={handleSaveGraphics}
+                    showFps={showFPS}
+                    onToggleShowFps={handleToggleShowFps}
                     isMobileDevice={isMobileDevice}
                 />
             )}
@@ -826,11 +827,9 @@ const App: React.FC = () => {
                 />
             )}
 
-            {gameState.debugMode && (
+            {(showFPS || gameState.debugMode) && (
                 <DebugDisplay
                     debugMode={gameState.debugMode}
-                    systems={debugSystems}
-                    onToggleSystem={handleToggleSystemAction}
                 />
             )}
 

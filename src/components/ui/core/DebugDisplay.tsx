@@ -1,39 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { PerformanceMonitor } from '../../../systems/PerformanceMonitor';
+import { WinterEngine } from '../../../core/engine/WinterEngine';
 
 interface DebugDisplayProps {
     debugMode: boolean;
-    systems?: { id: string; enabled: boolean }[];
-    onToggleSystem?: (id: string, enabled: boolean) => void;
 }
 
-const DebugDisplay: React.FC<DebugDisplayProps> = ({ debugMode, systems, onToggleSystem }) => {
+const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => {
     const [isMinimized, setIsMinimized] = useState(() => localStorage.getItem('vinterdod_debug_minimized') === 'true');
     const [systemsExpanded, setSystemsExpanded] = useState(true);
 
-    // En enda state-box för all formaterad data (uppdateras 15 ggr/sek)
     const [stats, setStats] = useState<any>(null);
+    const [systems, setSystems] = useState<any[]>([]);
 
     useEffect(() => {
-        if (!debugMode) return;
-
         const monitor = PerformanceMonitor.getInstance();
 
-        // 66ms = ~15 uppdateringar per sekund. "Realtid" för ögat, men skonsamt för React.
         const interval = setInterval(() => {
-            setStats({
-                fps: Math.round(monitor.getFps()),
-                gameState: monitor.getFormattedGameState(),
-                renderer: monitor.getFormattedRendererStats(),
-                gc: monitor.getFormattedGcInfo(),
-                timings: monitor.getFormattedTimings(),
-                logging: {
-                    engine: monitor.consoleLoggingEnabled,
-                    ai: monitor.aiLoggingEnabled,
-                    shader: monitor.shaderLoggingEnabled
-                }
-            });
-        }, 66);
+            const engine = WinterEngine.getInstance();
+            if (debugMode) {
+                setStats({
+                    fps: Math.round(monitor.getFps()),
+                    gameState: monitor.getFormattedGameState(),
+                    renderer: monitor.getFormattedRendererStats(),
+                    gc: monitor.getFormattedGcInfo(),
+                    timings: monitor.getFormattedTimings(),
+                    logging: {
+                        engine: monitor.consoleLoggingEnabled,
+                        ai: monitor.aiLoggingEnabled,
+                        shader: monitor.shaderLoggingEnabled
+                    }
+                });
+                setSystems(engine.getSystems());
+            } else {
+                setStats({
+                    fps: Math.round(monitor.getFps())
+                });
+            }
+        }, 100);
 
         return () => clearInterval(interval);
     }, [debugMode]);
@@ -45,25 +49,20 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ debugMode, systems, onToggl
         localStorage.setItem('vinterdod_debug_minimized', String(next));
     };
 
-    // Mode: OFF
-    if (!debugMode) {
+    // Show FPS meter in the top-right
+    if (!debugMode || (debugMode && isMinimized)) {
         return (
-            <div className="fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] pointer-events-none select-none backdrop-blur-[2px] border border-white/5 rounded-sm">
-                {stats?.fps ?? 0} FPS
+            <div
+                onClick={debugMode ? toggleMinimized : undefined}
+                className={`fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] select-none backdrop-blur-[2px] border border-white/5 rounded-sm ${debugMode ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none'}`}>
+                <div className="font-mono font-bold text-white text-[12px]">
+                    {stats?.fps ?? 0} FPS
+                </div>
             </div>
         );
     }
 
-    // Minimized State
-    if (isMinimized) {
-        return (
-            <div onClick={toggleMinimized} className="fixed top-0 right-0 z-[9998] bg-black/40 px-2 py-0.5 cursor-pointer shadow-xl pointer-events-auto border border-green-400/30 hover:bg-green-600 backdrop-blur-md">
-                <div className="font-mono font-bold text-white text-[12px]">{stats?.fps ?? 0} FPS</div>
-            </div>
-        );
-    }
-
-    if (!stats) return null; // Väntar på första ticken
+    if (!stats || !debugMode) return null;
 
     // Expanded State
     return (
@@ -129,7 +128,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ debugMode, systems, onToggl
                                 {systems.map(sys => {
                                     const timing = stats.timings.breakdown[sys.id];
                                     return (
-                                        <div key={sys.id} onClick={(e) => { e.stopPropagation(); onToggleSystem?.(sys.id, !sys.enabled); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
+                                        <div key={sys.id} onClick={(e) => { e.stopPropagation(); WinterEngine.getInstance().setSystemEnabled(sys.id, !sys.enabled); }} className={`flex justify-between border-b border-white/5 py-0.5 cursor-pointer hover:bg-white/5 px-1 rounded ${sys.enabled ? 'text-green-400' : 'text-red-400/60'}`}>
                                             <span className="truncate mr-2">{sys.id}</span>
                                             <span className="text-white/40">{timing !== undefined ? `${timing}ms` : '–'}</span>
                                         </div>
@@ -175,6 +174,6 @@ const DebugDisplay: React.FC<DebugDisplayProps> = ({ debugMode, systems, onToggl
             </div>
         </div>
     );
-};
+});
 
 export default DebugDisplay;

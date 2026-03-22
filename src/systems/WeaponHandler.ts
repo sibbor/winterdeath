@@ -207,6 +207,7 @@ export const WeaponHandler = {
                     _continuousCtx.addFireZone = cb.addFireZone;
                     _continuousCtx.now = now;
                     _continuousCtx.noiseEvents = state.noiseEvents;
+                    _continuousCtx.makeNoise = cb.makeNoise;
 
                     _continuousCtx.applyDamage = (state as any).applyDamage;
 

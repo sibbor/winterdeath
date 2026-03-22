@@ -12,6 +12,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetPreloader } from '../../systems/AssetPreloader';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
+import { WeaponHandler } from '../../systems/WeaponHandler';
 import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, WIND_SYSTEM, WEATHER_SYSTEM, LIGHT_SYSTEM } from '../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
@@ -241,7 +242,9 @@ export class GameSessionSetup {
                 textures: textures, spawnZombie: callbacks.spawnZombie, spawnHorde, spawnBoss,
                 cluesFound: props.stats.cluesFound || [], collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
                 collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
-                sectorState: state.sectorState, state: state, yield: yielder
+                sectorState: state.sectorState, state: state, yield: yielder,
+                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
+                weaponHandler: WeaponHandler
             };
             refs.sectorContextRef.current = sectorCtx;
             state.sectorState.ctx = sectorCtx;
@@ -283,6 +286,7 @@ export class GameSessionSetup {
                     state.bossDefeatedTime = performance.now();
                     callbacks.onBossKilled(id);
                 },
+                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
                 collectedCluesRef: refs.collectedCluesRef
             };
 

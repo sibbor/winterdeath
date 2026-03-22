@@ -23,14 +23,14 @@ export class DamageTrackerSystem implements System {
         isBoss: boolean = false
     ) {
         const state = session.state;
-        
+
         // Update Session State
         state.damageTaken += amount;
         if (isBoss) state.bossDamageTaken += amount;
 
         if (!state.incomingDamageBreakdown) state.incomingDamageBreakdown = {};
         if (!state.incomingDamageBreakdown[sourceName]) state.incomingDamageBreakdown[sourceName] = {};
-        
+
         state.incomingDamageBreakdown[sourceName][attackName] = (state.incomingDamageBreakdown[sourceName][attackName] || 0) + amount;
 
         // Update Persistence Stats
@@ -38,7 +38,7 @@ export class DamageTrackerSystem implements System {
             const pStats = state.stats as any;
             if (!pStats.incomingDamageBreakdown) pStats.incomingDamageBreakdown = {};
             if (!pStats.incomingDamageBreakdown[sourceName]) pStats.incomingDamageBreakdown[sourceName] = {};
-            
+
             pStats.incomingDamageBreakdown[sourceName][attackName] = (pStats.incomingDamageBreakdown[sourceName][attackName] || 0) + amount;
             pStats.totalDamageTaken += amount;
         }
@@ -76,6 +76,6 @@ export class DamageTrackerSystem implements System {
         }
     }
 
-    cleanup(session: GameSessionLogic) {
+    clear() {
     }
 }

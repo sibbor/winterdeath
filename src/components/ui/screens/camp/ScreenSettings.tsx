@@ -10,10 +10,12 @@ interface ScreenSettingsProps {
     onClose: () => void;
     graphics: GraphicsSettings;
     onUpdateGraphics: (settings: GraphicsSettings) => void;
+    showFps?: boolean;
+    onToggleShowFps?: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics, isMobileDevice }) => {
+const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics, showFps, onToggleShowFps, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<'graphics' | 'general'>('graphics');
@@ -182,6 +184,18 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 <div className="flex gap-2">
                     <button onClick={(e) => { e.stopPropagation(); setLocale('en'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'en' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>EN</button>
                     <button onClick={(e) => { e.stopPropagation(); setLocale('sv'); setTick(t => t + 1); soundManager.playUiClick(); }} className={`px-4 py-1 font-bold uppercase border-2 transition-all ${getLocale() === 'sv' ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>SV</button>
+                </div>
+            </div>
+
+            {/* Show FPS Toggle */}
+            <div onClick={onToggleShowFps} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
+                <div>
+                    <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">Show FPS</h3>
+                    <p className="text-gray-400 text-xs font-mono">Display current frames per second in the top-right corner.</p>
+                </div>
+                <div className="flex gap-2">
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${showFps ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!showFps ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
                 </div>
             </div>
         </div>

@@ -119,7 +119,7 @@ export class EnemySystem implements System {
         FXSystem.spawnDecal(session.engine.scene, session.state.bloodDecals, x, z, scale, mat, type);
     }
 
-    cleanup(session: GameSessionLogic) {
+    clear() {
         this.updateCallbacks = null;
         this.cleanupCallbacks = null;
     }

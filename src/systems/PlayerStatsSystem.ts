@@ -342,6 +342,7 @@ export class PlayerStatsSystem implements System {
         state.deathVel.y = 4;
     }
 
-    cleanup(session: GameSessionLogic) {
+    clear() {
     }
+
 }

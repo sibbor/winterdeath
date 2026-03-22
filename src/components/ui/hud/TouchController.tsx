@@ -1,6 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { InputState } from '../../../core/engine/InputManager';
-import { t } from '../../../utils/i18n';
 import { useOrientation } from '../../../hooks/useOrientation';
 
 interface TouchControllerProps {

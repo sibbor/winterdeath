@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
+import { System } from './System';
 
 interface WindBind {
   uTime: { value: number };
   uWind: { value: THREE.Vector2 };
 }
 
-export class WindSystem {
+export class WindSystem implements System {
+  public id = 'wind';
+  public enabled = true;
+
   public current = new THREE.Vector2(0, 0);
   public direction = new THREE.Vector3(0, 0, 0);
   public strength: number = 0;
@@ -69,7 +73,7 @@ export class WindSystem {
     }
   }
 
-  update(now: number, deltaTime: number = 0.016): THREE.Vector2 {
+  update(ctx: any, deltaTime: number = 0.016, now: number = performance.now()): THREE.Vector2 {
     if (this.boundUniforms.length === 0) {
       this.bindMaterial(MATERIALS.hedge);
       this.bindMaterial(MATERIALS.grass);
@@ -97,8 +101,8 @@ export class WindSystem {
       this.nextChange = now + 3000 + Math.random() * 5000;
     }
 
-    this.current.lerp(this.target, 0.01);
-    this.direction.set(this.current.x, 0, this.current.y);
+    const lerpFactor = 1.0 - Math.exp(-0.6 * deltaTime);
+    this.current.lerp(this.target, lerpFactor); this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 
     // Brutal iterations-loop för just DETTA WindSystem
@@ -122,4 +126,5 @@ export class WindSystem {
     this.boundUniforms.length = 0;
     this.overrideActive = false;
   }
+
 }

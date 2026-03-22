@@ -450,5 +450,5 @@ export class VehicleMovementSystem implements System {
         }
     }
 
-    cleanup() { }
+    clear() { }
 }

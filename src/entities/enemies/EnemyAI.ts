@@ -28,6 +28,10 @@ const SEARCH_TIMERS: Record<string, number> = {
 const _waterCheckResult = { flatDepth: 0 };
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
+const VISUAL_RANGE_SQ = 625; // 25 meters
+const STEALTH_RANGE_SQ = 49;  // 7 meters (360 vision)
+const FOV_DOT = 0.4;         // Wide cone (approx 65 degrees)
+
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -332,7 +336,17 @@ export const EnemyAI = {
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
         // --- 8. SENSORS & SEPARATION ---
-        const canSeePlayer = distSq < 900;
+        let canSeePlayer = false;
+        if (distSq < STEALTH_RANGE_SQ) {
+            canSeePlayer = true;
+        } else if (distSq < VISUAL_RANGE_SQ) {
+            _v4.set(0, 0, 1).applyQuaternion(e.mesh.quaternion);
+            _v5.subVectors(playerPos, e.mesh.position).normalize();
+            if (_v4.dot(_v5) > FOV_DOT) {
+                canSeePlayer = true;
+            }
+        }
+
         _v6.set(0, 0, 0);
 
         const separationRadius = 1.5;
@@ -386,11 +400,11 @@ export const EnemyAI = {
             case AIState.IDLE:
                 e.idleTimer -= delta;
                 if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE);
+                    logStateChange(e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE);
+                    logStateChange(e, AIState.CHASE, `HEARD ${e.lastHeardNoiseType}`);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.idleTimer <= 0) {
@@ -409,11 +423,11 @@ export const EnemyAI = {
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
                 if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE);
+                    logStateChange(e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE);
+                    logStateChange(e, AIState.CHASE, `HEARD ${e.lastHeardNoiseType}`);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
@@ -436,11 +450,11 @@ export const EnemyAI = {
                 }
 
                 if (canSeePlayer) {
-                    logStateChange(e, AIState.CHASE);
+                    logStateChange(e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE);
+                    logStateChange(e, AIState.CHASE, `HEARD ${e.lastHeardNoiseType}`);
                     e.state = AIState.CHASE;
                     updateLastSeen(e, noisePos, now);
                 } else if (e.searchTimer <= 0) {
@@ -564,7 +578,7 @@ export const EnemyAI = {
                     EnemyAnimator.updateAttackAnim(e, now, delta);
 
                     if (e.attackTimer <= 0) {
-                        logStateChange(e, AIState.CHASE);
+                        logStateChange(e, AIState.CHASE, 'VISUAL');
                         e.state = AIState.CHASE;
                     }
                 }

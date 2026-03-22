@@ -132,8 +132,10 @@ export class PlayerCombatSystem implements System {
         }
     }
 
-    cleanup(session: GameSessionLogic) {
-        const scene = session.engine.scene;
+    clear() {
+        const engine = (window as any).WinterEngineInstance;
+        const scene = engine?.scene;
+        if (!scene) return;
 
         if (this.aimCross) {
             scene.remove(this.aimCross);

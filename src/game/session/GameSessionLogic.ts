@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps } from '../../game/session/SessionTypes';
-import { NoiseType, NOISE_RADIUS } from '../../systems/NoiseSystem';
+import { NoiseType, NoiseSystem } from '../../systems/NoiseSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';;
 import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
@@ -13,9 +13,6 @@ import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
 import { soundManager } from '../../utils/SoundManager';
-import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
-
-import { NoiseSystem } from '../../systems/NoiseSystem';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -26,12 +23,12 @@ export class GameSessionLogic {
 
     public engine: WinterEngine;
     public state!: RuntimeState;
-    private systems: System[] = [];
 
     public noiseSystem!: NoiseSystem;
 
     constructor(engine: WinterEngine) {
         this.engine = engine;
+        this.engine.onUpdateContext = this;
     }
 
     static createInitialState(props: GameCanvasProps): RuntimeState {
@@ -184,26 +181,9 @@ export class GameSessionLogic {
     }
 
     update(dt: number, mapId: number = 0) {
-        const now = performance.now();
-
-
-
         this.mapId = mapId;
         if (!this.state) return;
-
-        const systems = this.systems;
-        const len = systems.length;
-        const monitor = PerformanceMonitor.getInstance();
-
-        // High-performance system iteration — skip disabled systems
-        for (let i = 0; i < len; i++) {
-            const sys = systems[i];
-            if (sys.enabled === false) continue;
-            const id = sys.id || `sys_${i}`;
-            monitor.begin(id);
-            sys.update(this, dt, now);
-            monitor.end(id);
-        }
+        // Systems are now updated via WinterEngine.animate() loop
     }
 
     /**
@@ -218,59 +198,33 @@ export class GameSessionLogic {
 
     addSystem(system: System) {
         if (system.enabled === undefined) system.enabled = true;
-        this.systems.push(system);
+        this.engine.registerSystem(system);
         if (system.init) system.init(this);
     }
 
     /** Toggle a system on/off by id. Use in debug panel or console. */
     setSystemEnabled(id: string, enabled: boolean) {
-        for (let i = 0; i < this.systems.length; i++) {
-            if (this.systems[i].id === id) {
-                this.systems[i].enabled = enabled;
-                return;
-            }
-        }
+        this.engine.setSystemEnabled(id, enabled);
     }
 
     /** Returns a snapshot of all registered systems for the debug panel. */
-    getSystems(): { id: string; enabled: boolean }[] {
-        const out: { id: string; enabled: boolean }[] = [];
-        for (let i = 0; i < this.systems.length; i++) {
-            const s = this.systems[i];
-            out.push({ id: s.id, enabled: s.enabled !== false });
-        }
-        return out;
+    getSystems(): System[] {
+        return this.engine.getSystems();
     }
 
     /** Find a system by its ID. */
     getSystem(id: string): System | undefined {
-        for (let i = 0; i < this.systems.length; i++) {
-            if (this.systems[i].id === id) return this.systems[i];
-        }
-        return undefined;
+        return this.engine.getSystem(id) || undefined;
     }
 
     removeSystem(id: string) {
-        for (let i = 0; i < this.systems.length; i++) {
-            if (this.systems[i].id === id) {
-                const sys = this.systems[i];
-                if (sys.cleanup) sys.cleanup(this);
-                this.systems.splice(i, 1);
-                break;
-            }
-        }
+        this.engine.unregisterSystem(id);
     }
 
     dispose() {
-        const systems = this.systems;
-        for (let i = 0; i < systems.length; i++) {
-            if (systems[i].cleanup) systems[i].cleanup(this);
-        }
-        this.systems = [];
-
+        this.engine.onUpdateContext = null;
+        this.engine.clearSystems();
         soundManager.stopAll();
-
-
 
         if (this.state) {
             for (const key in this.state) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps } from '../../game/session/SessionTypes';;
+import { GameCanvasProps } from '../../game/session/SessionTypes';
 import { soundManager } from '../../utils/SoundManager';
 import { FLASHLIGHT } from '../../content/constants';
 
@@ -144,20 +144,21 @@ export const useGameInput = (
     useEffect(() => {
         const handleLockChange = () => {
             if (!document.pointerLockElement && props.isRunning && !props.isPaused) {
+
                 // Ignore if we JUST unpaused (lock takes a frame or two to acquire)
                 if (performance.now() - unpauseTimeRef.current < 500) {
                     return;
                 }
 
-                // If the pointer is lost while running and NOT explicitly paused by an overlay
                 const isExpected = refs.cinematicRef.current.active || refs.bossIntroTimerRef.current || refs.stateRef.current?.isDead;
                 if (!isExpected) {
                     props.onPauseToggle(true);
                 }
             }
         };
+
         document.addEventListener('pointerlockchange', handleLockChange);
         return () => document.removeEventListener('pointerlockchange', handleLockChange);
-    }, [props.isRunning, props.isPaused, refs]);
+    }, [props.isRunning, props.isPaused, props.onPauseToggle, refs]);
 
 };
