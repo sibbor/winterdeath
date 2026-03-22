@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { NoiseType } from '../../systems/NoiseSystem';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS, createTextSprite } from '../../utils/assets';
 import { SectorGenerator } from '../../core/world/SectorGenerator';

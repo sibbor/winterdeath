@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE, EnemyType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE, EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
 import { DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { EnemyAttackHandler } from './EnemyAttackHandler';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
@@ -10,7 +10,6 @@ import { soundManager } from '../../utils/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
-import { NoiseType } from '../../systems/NoiseSystem';
 
 // Search timers (seconds) for different noise types
 const SEARCH_TIMERS: Record<string, number> = {
@@ -28,10 +27,6 @@ const SEARCH_TIMERS: Record<string, number> = {
 const _waterCheckResult = { flatDepth: 0 };
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const VISUAL_RANGE_SQ = 625; // 25 meters
-const STEALTH_RANGE_SQ = 49;  // 7 meters (360 vision)
-const FOV_DOT = 0.4;         // Wide cone (approx 65 degrees)
-
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -59,7 +54,6 @@ export const EnemyAI = {
         delta: number,
         playerPos: THREE.Vector3,
         collisionGrid: SpatialGrid,
-        noiseEvents: any[],
         isDead: boolean,
         callbacks: {
             onPlayerHit: (damage: number, attacker: any, type: string, effect?: any, effectDuration?: number, effectIntensity?: number) => void;
@@ -97,7 +91,6 @@ export const EnemyAI = {
             const dmgType = e.lastDamageType || '';
             const weapon = WEAPONS[dmgType as WeaponType];
 
-            // O(1) Dictionary lookup instead of Object.values().includes()
             const isWeapon = !!weapon;
             const cause = isWeapon ? `Weapon (${e.lastDamageType})` : `Effect (${e.lastDamageType})`;
             logAI(`[AI] ${e.type}_${e.id} killed by: ${cause}`);
@@ -133,10 +126,8 @@ export const EnemyAI = {
             }
             else if (weapon) {
                 e.deathState = EnemyDeathState.SHOT;
-
                 if (e.deathVel) {
                     _v1.subVectors(e.mesh.position, playerPos).normalize();
-                    // Eliminated .clone() hidden in dot product
                     _v2.copy(_v1).negate();
                     const forwardMomentum = e.velocity.dot(_v2);
                     e.fallForward = forwardMomentum > 1.5;
@@ -145,7 +136,6 @@ export const EnemyAI = {
                     const impactForce = weapon.damage * 0.15;
                     e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
                 }
-
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 5.0;
             }
             else {
@@ -159,11 +149,9 @@ export const EnemyAI = {
                 }
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
             }
-
-            return; // Hand over control to EnemyManager
+            return;
         }
 
-        // AI only processes ALIVE enemies from here on
         if (e.deathState !== EnemyDeathState.ALIVE) return;
 
         // --- 2. POOLING SCALE RECOVERY ---
@@ -336,19 +324,10 @@ export const EnemyAI = {
         if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
         // --- 8. SENSORS & SEPARATION ---
-        let canSeePlayer = false;
-        if (distSq < STEALTH_RANGE_SQ) {
-            canSeePlayer = true;
-        } else if (distSq < VISUAL_RANGE_SQ) {
-            _v4.set(0, 0, 1).applyQuaternion(e.mesh.quaternion);
-            _v5.subVectors(playerPos, e.mesh.position).normalize();
-            if (_v4.dot(_v5) > FOV_DOT) {
-                canSeePlayer = true;
-            }
-        }
+        const isFullyAware = e.awareness >= 0.9;
+        const seesPlayer = isFullyAware && e.lastKnownPosition && e.lastKnownPosition.distanceToSquared(playerPos) < 2.0;
 
         _v6.set(0, 0, 0);
-
         const separationRadius = 1.5;
         const separationRadiusSq = separationRadius * separationRadius;
 
@@ -364,7 +343,7 @@ export const EnemyAI = {
 
                 if (odSq < separationRadiusSq && odSq > 0.001) {
                     const od = Math.sqrt(odSq);
-                    const invOd = 1.0 / od; // Inlined division optimization
+                    const invOd = 1.0 / od;
                     const pushStrength = (separationRadius - od) / separationRadius;
                     _v6.x += (odx * invOd) * pushStrength * 1.5;
                     _v6.z += (odz * invOd) * pushStrength * 1.5;
@@ -373,40 +352,18 @@ export const EnemyAI = {
             if (_v6.lengthSq() > 9.0) _v6.normalize().multiplyScalar(3.0);
         }
 
-        let heardNoise = false;
-        let noisePos: THREE.Vector3 | null = null;
-
-        if (!canSeePlayer && noiseEvents.length > 0) {
-            for (let i = 0; i < noiseEvents.length; i++) {
-                const n = noiseEvents[i];
-                if (!n.active) continue;
-
-                // Inlined distanceToSquared
-                const ndx = e.mesh.position.x - n.pos.x;
-                const ndz = e.mesh.position.z - n.pos.z;
-                const nDistSq = ndx * ndx + ndz * ndz;
-
-                if (nDistSq < (n.radius * n.radius)) {
-                    heardNoise = true;
-                    noisePos = n.pos;
-                    e.lastHeardNoiseType = n.type;
-                    break;
-                }
-            }
-        }
-
         // --- 9. STATE MACHINE ---
         switch (e.state) {
             case AIState.IDLE:
                 e.idleTimer -= delta;
-                if (canSeePlayer) {
+                if (seesPlayer) {
                     logStateChange(e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
-                } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE, `HEARD ${e.lastHeardNoiseType}`);
-                    e.state = AIState.CHASE;
-                    updateLastSeen(e, noisePos, now);
+                } else if (e.awareness > 0 && e.lastKnownPosition) {
+                    logStateChange(e, AIState.SEARCH, 'AWARE');
+                    e.state = AIState.SEARCH;
+                    e.searchTimer = 5.0;
                 } else if (e.idleTimer <= 0) {
                     logStateChange(e, AIState.WANDER);
                     e.state = AIState.WANDER;
@@ -422,64 +379,56 @@ export const EnemyAI = {
                 _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
-                if (canSeePlayer) {
+                if (seesPlayer) {
                     logStateChange(e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
-                } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE, `HEARD ${e.lastHeardNoiseType}`);
-                    e.state = AIState.CHASE;
-                    updateLastSeen(e, noisePos, now);
+                } else if (e.awareness > 0 && e.lastKnownPosition) {
+                    logStateChange(e, AIState.SEARCH, 'AWARE');
+                    e.state = AIState.SEARCH;
+                    e.searchTimer = 5.0;
                 } else if (e.searchTimer <= 0) {
                     logStateChange(e, AIState.IDLE);
-                    e.state = AIState.IDLE; e.idleTimer = 1.0 + Math.random() * 2.0;
-                }
-
-                const wanderStepInterval = 1200;
-                if (now > (e.lastStepTime || 0) + wanderStepInterval) {
-                    e.lastStepTime = now;
+                    e.state = AIState.IDLE;
+                    e.idleTimer = 1.0 + Math.random() * 2.0;
                 }
                 break;
 
             case AIState.SEARCH:
                 e.searchTimer -= delta;
-                if (e.lastSeenPos && e.mesh.position.distanceToSquared(e.lastSeenPos) > 1.5) {
-                    moveEntity(e, e.lastSeenPos, delta, e.speed * 0.8, collisionGrid, _v6);
-                } else {
-                    e.mesh.rotation.y += delta * 2.5;
-                }
 
-                if (canSeePlayer) {
+                if (seesPlayer) {
                     logStateChange(e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
-                } else if (heardNoise && noisePos) {
-                    logStateChange(e, AIState.CHASE, `HEARD ${e.lastHeardNoiseType}`);
-                    e.state = AIState.CHASE;
-                    updateLastSeen(e, noisePos, now);
+                } else if (e.awareness === 1.0 && e.lastKnownPosition) {
+                    updateLastSeen(e, e.lastKnownPosition, now);
+                    e.searchTimer = e.lastHeardNoiseType ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
                 } else if (e.searchTimer <= 0) {
                     logStateChange(e, AIState.IDLE);
                     e.state = AIState.IDLE;
+                    e.idleTimer = 1.0 + Math.random() * 2.0;
+                } else if (e.lastKnownPosition && e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
+                    moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6);
+                } else {
+                    e.mesh.rotation.y += delta * 2.5; // Spin around looking
                 }
                 break;
 
             case AIState.CHASE:
-                if (canSeePlayer) {
+                if (seesPlayer) {
                     updateLastSeen(e, playerPos, now);
-                } else if (heardNoise && noisePos) {
-                    updateLastSeen(e, noisePos, now);
+                } else if (e.awareness === 1.0 && e.lastKnownPosition) {
+                    updateLastSeen(e, e.lastKnownPosition, now);
                 }
 
-                if ((!canSeePlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
+                if ((!seesPlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
                     logStateChange(e, AIState.SEARCH);
                     e.state = AIState.SEARCH;
-
-                    // Pick the search duration based on what was heard (or default to 5s if strictly visual)
                     const baseTime = e.lastHeardNoiseType ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
                     e.searchTimer = baseTime;
                 }
                 else {
-                    // If player is dead, stop chasing
                     if (isDead) {
                         logStateChange(e, AIState.SEARCH);
                         e.state = AIState.SEARCH;
@@ -487,7 +436,7 @@ export const EnemyAI = {
                         return;
                     }
 
-                    const target = canSeePlayer ? playerPos : e.lastSeenPos!;
+                    const target = (seesPlayer) ? playerPos : e.lastKnownPosition!;
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
                     moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6);
 
@@ -504,12 +453,10 @@ export const EnemyAI = {
                             const cooldown = e.attackCooldowns[att.type] || 0;
                             if (cooldown > 0) continue;
 
-                            // Fallback range for HIT (combat.ts: DEFAULT_ATTACK_RANGE)
                             const range = (att.type === EnemyAttackType.HIT && !att.range) ? DEFAULT_ATTACK_RANGE : (att.range || DEFAULT_ATTACK_RANGE);
                             const rangeSq = range * range;
 
                             if (distSq < rangeSq) {
-                                // If we found a special attack, take it. Otherwise keep looking.
                                 if (att.type !== EnemyAttackType.HIT) {
                                     bestAttackIndex = i;
                                     break;
@@ -538,17 +485,14 @@ export const EnemyAI = {
                 }
                 break;
 
-
             case AIState.ATTACK_CHARGE:
                 if (e.attackTimer !== undefined) {
                     e.attackTimer -= delta;
                     const att = e.attacks![e.currentAttackIndex!];
 
-                    // Orient towards player logically
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
 
-                    // ALL VISUAL DEFORMATION AND TELEGRAPHING HAPPENS HERE
                     EnemyAnimator.updateAttackAnim(e, now, delta);
 
                     if (e.attackTimer <= 0) {
@@ -565,16 +509,13 @@ export const EnemyAI = {
                     e.attackTimer -= delta;
                     const att = e.attacks?.[e.currentAttackIndex!];
 
-                    // Orient towards player logically
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
 
-                    // Continuous logic for boss attacks (Beam, Chain)
                     if (att && att.activeTime) {
                         EnemyAttackHandler.updateContinuousAttack(e, att, delta, playerPos, callbacks);
                     }
 
-                    // ALL VISUAL DEFORMATION HAPPENS HERE
                     EnemyAnimator.updateAttackAnim(e, now, delta);
 
                     if (e.attackTimer <= 0) {
@@ -586,8 +527,6 @@ export const EnemyAI = {
         }
 
         // --- 10. COOLDOWNS & BOUNCE ANIMATION ---
-
-        // Zero-GC: Using array iteration instead of slow for...in
         if (e.attacks) {
             for (let i = 0; i < e.attacks.length; i++) {
                 const atkType = e.attacks[i].type;
@@ -614,7 +553,6 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     const dist = _v2.length();
     if (dist < 0.01) return;
 
-    // Inlined division
     const invDist = 1.0 / dist;
     _v2.x *= invDist;
     _v2.y *= invDist;
@@ -631,7 +569,6 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 
     e.velocity.copy(_v2).multiplyScalar(curSpeed);
 
-    // Inlined vector addition
     _v4.set(
         e.mesh.position.x + _v3.x,
         e.mesh.position.y + _v3.y,
@@ -656,10 +593,9 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
-    if (e.lastSeenPos) {
-        e.lastSeenPos.copy(pos);
-        e.lastSeenTime = now;
-    }
+    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
+    e.lastKnownPosition.copy(pos);
+    e.lastSeenTime = now;
 }
 
 function handleStatusEffects(e: Enemy, delta: number, now: number, callbacks: any) {

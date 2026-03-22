@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps } from '../../game/session/SessionTypes';
-import { NoiseType, NoiseSystem } from '../../systems/NoiseSystem';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';;
 import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
@@ -24,7 +25,7 @@ export class GameSessionLogic {
     public engine: WinterEngine;
     public state!: RuntimeState;
 
-    public noiseSystem!: NoiseSystem;
+    public detectionSystem!: EnemyDetectionSystem;
 
     constructor(engine: WinterEngine) {
         this.engine = engine;
@@ -183,16 +184,15 @@ export class GameSessionLogic {
     update(dt: number, mapId: number = 0) {
         this.mapId = mapId;
         if (!this.state) return;
-        // Systems are now updated via WinterEngine.animate() loop
     }
 
     /**
      * Registers a sound event in the world for AI to react to.
-     * Delegates to the centralized NoiseSystem.
+     * Delegates to the centralized EnemyDetectionSystem.
      */
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {
-        if (this.noiseSystem) {
-            this.noiseSystem.makeNoise(pos, type, radius);
+        if (this.detectionSystem) {
+            this.detectionSystem.makeNoise(pos, type, radius);
         }
     }
 

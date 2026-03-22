@@ -4,7 +4,7 @@ import { MapItem } from '../../components/ui/hud/HudTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { NoiseType } from '../../systems/NoiseSystem';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
@@ -32,7 +32,7 @@ import { LightSystem } from '../../systems/LightSystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
 import { DeathSystem } from '../../systems/DeathSystem';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
-import { NoiseSystem } from '../../systems/NoiseSystem';
+import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { RuntimeState } from '../../core/RuntimeState';
 
 const seededRandom = (seed: number) => {
@@ -432,7 +432,11 @@ export class GameSessionSetup {
             }
 
             session.addSystem(new DamageTrackerSystem());
-            session.addSystem(new NoiseSystem());
+            
+            const detectionSys = new EnemyDetectionSystem();
+            session.addSystem(detectionSys);
+            session.detectionSystem = detectionSys;
+            
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new VehicleMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));

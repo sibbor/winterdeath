@@ -9,7 +9,7 @@ import { StatusEffectType, DamageType } from '../entities/player/CombatTypes';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
-import { NoiseType } from './NoiseSystem';
+import { NoiseType } from '../entities/enemies/EnemyTypes';
 import { WeaponFX } from './WeaponFX';
 
 // --- INTERFACES ---

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SectorTrigger, MapItem, WeatherType, SectorState } from '../../types';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { NoiseType } from '../../systems/NoiseSystem';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
 
 export interface SectorEnvironment {
     bgColor: number;

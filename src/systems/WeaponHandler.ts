@@ -4,7 +4,7 @@ import { ProjectileSystem } from './ProjectileSystem';
 import { soundManager } from '../utils/SoundManager';
 import { haptic } from '../utils/HapticManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
-import { NoiseType, NOISE_RADIUS } from './NoiseSystem';
+import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { _buoyancyResult } from './WaterSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---

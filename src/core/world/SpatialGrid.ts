@@ -134,6 +134,38 @@ export class SpatialGrid {
         return this.obstacleQueryResults;
     }
 
+    getObstaclesInPath(start: THREE.Vector3, end: THREE.Vector3): Obstacle[] {
+        this.obstacleQueryResults.length = 0;
+        this._queryFrame++;
+
+        const minX = Math.min(start.x, end.x);
+        const maxX = Math.max(start.x, end.x);
+        const minZ = Math.min(start.z, end.z);
+        const maxZ = Math.max(start.z, end.z);
+
+        const sX = Math.floor(minX / this.cellSize);
+        const eX = Math.floor(maxX / this.cellSize);
+        const sZ = Math.floor(minZ / this.cellSize);
+        const eZ = Math.floor(maxZ / this.cellSize);
+
+        for (let ix = sX; ix <= eX; ix++) {
+            for (let iz = sZ; iz <= eZ; iz++) {
+                const hash = Math.abs((ix * 73856093) ^ (iz * 19349663)) % HASH_SIZE;
+                const cell = this.obstacleCells[hash];
+                if (cell) {
+                    for (let i = 0; i < cell.length; i++) {
+                        const obs = cell[i];
+                        if ((obs as any)._sqf !== this._queryFrame) {
+                            (obs as any)._sqf = this._queryFrame;
+                            this.obstacleQueryResults.push(obs);
+                        }
+                    }
+                }
+            }
+        }
+        return this.obstacleQueryResults;
+    }
+
     // --- ENEMY MANAGEMENT ---
 
     updateEnemyGrid(enemies: Enemy[]) {

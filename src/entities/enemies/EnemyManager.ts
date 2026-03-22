@@ -577,7 +577,7 @@ export const EnemyManager = {
         }
     },
 
-    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, noiseEvents: any[], isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, applyDamage?: any, water?: WaterSystem) => {
+    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, applyDamage?: any, water?: WaterSystem) => {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
@@ -593,7 +593,7 @@ export const EnemyManager = {
 
             // 1. Endast AI Logic om de är ALIVE
             if (e.deathState === EnemyDeathState.ALIVE) {
-                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, noiseEvents, isDead, {
+                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, isDead, {
                     ..._aiCallbacks,
                     onPlayerHit: _aiCallbacks.onPlayerHitExtended
                 }, water);

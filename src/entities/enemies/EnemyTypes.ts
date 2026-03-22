@@ -1,7 +1,37 @@
 import * as THREE from 'three';
 import { AttackDefinition } from '../../entities/player/CombatTypes';
 
-import { NoiseType, NOISE_RADIUS } from '../../systems/NoiseSystem';
+// Enemy Detection & AI Perception
+export const ENEMY_DETECTION = {
+    STEALTH_ZONE_RADIUS_SQ: 49, // 7m radius (360 vision)
+    VISUAL_RANGE_SQ: 625,       // 25m radius (FOV vision)
+    FOV_COS: Math.cos(65 * 0.5 * (Math.PI / 180)),
+    SEARCH_DURATION: 5.0
+};
+
+export enum NoiseType {
+    PLAYER_WALK = 'PLAYER_WALK',
+    PLAYER_RUSH = 'PLAYER_RUSH',
+    PLAYER_ROLLING = 'PLAYER_DODGE',
+    PLAYER_SWIM = 'PLAYER_SWIM',
+    GUNSHOT = 'GUNSHOT',
+    GRENADE = 'GRENADE',
+    MOLOTOV = 'MOLOTOV',
+    FLASHBANG = 'FLASHBANG',
+    OTHER = 'OTHER'
+}
+
+export const NOISE_RADIUS: Record<string, number> = {
+    [NoiseType.PLAYER_WALK]: 10,
+    [NoiseType.PLAYER_RUSH]: 20,
+    [NoiseType.PLAYER_ROLLING]: 15,
+    [NoiseType.PLAYER_SWIM]: 15,
+    [NoiseType.GUNSHOT]: 60,
+    [NoiseType.MOLOTOV]: 50,
+    [NoiseType.FLASHBANG]: 60,
+    [NoiseType.GRENADE]: 80,
+    [NoiseType.OTHER]: 30,
+};
 
 export const DEFAULT_ATTACK_RANGE = 1.5;
 
@@ -106,7 +136,9 @@ export interface Enemy {
     spawnPos: THREE.Vector3;           // Anchor point for WANDER behavior
     lastSeenPos: THREE.Vector3 | null; // Coordinates of the last player sighting
     lastSeenTime: number;              // Timestamp of the last sighting
+    lastKnownPosition: THREE.Vector3;  // Memory of where the player was last detected via sound/sight
     hearingThreshold: number;          // Range multiplier for sound detection (0.0 to 1.0+)
+    awareness: number;                 // 0.0 to 1.0 representation of alertness
     lastHeardNoiseType?: NoiseType;    // Type of the most recent noise sensed
 
     // Interaction & Boss States

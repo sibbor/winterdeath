@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createWaterMaterial } from '../utils/assets/materials_water';
 import { WATER_SYSTEM } from '../content/constants';
 import { MATERIALS } from '../utils/assets/materials';
-import { NoiseType } from './NoiseSystem';
+import { NoiseType } from '../entities/enemies/EnemyTypes';
 import { System } from './System';
 
 interface WaterBind {

@@ -4,7 +4,7 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
-import { NoiseType } from './NoiseSystem';
+import { NoiseType } from '../entities/enemies/EnemyTypes';
 import { SectorGenerator } from '../core/world/SectorGenerator';
 import { LIGHT_SYSTEM } from '../content/constants';
 import { Sector1 } from '../content/sectors/Sector1';

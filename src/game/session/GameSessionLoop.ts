@@ -16,7 +16,7 @@ import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../content/weapons
 import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { DamageType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
-import { NoiseType, NOISE_RADIUS } from '../../systems/NoiseSystem';
+import { NoiseType, NOISE_RADIUS } from '../../entities/enemies/EnemyTypes';
 import { WeaponHandler } from '../../systems/WeaponHandler';
 
 interface LoopContext {

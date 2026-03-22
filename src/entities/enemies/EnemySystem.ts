@@ -88,7 +88,6 @@ export class EnemySystem implements System {
                 this.playerGroup.position,
                 state.enemies,
                 state.collisionGrid,
-                session.noiseSystem.events,
                 state.isDead,
                 this.callbacks.onPlayerHit,
                 this.updateCallbacks.spawnPart,
