@@ -412,9 +412,36 @@ export const FXSystem = {
         }
     },
 
-    spawnDecal: (scene: THREE.Scene, decalList: any[], x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
+    spawnDecal: (scene: THREE.Scene, decalList: THREE.Mesh[], x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
+        // --- SPATIAL MERGING FOR DECALS ---
+        // If a decal of the same material already exists very close, just grow it!
+        // This prevents Z-fighting and saves rendering overhead.
+        const mergeRadiusSq = (scale * 0.4) * (scale * 0.4); // Adaptive merge distance based on scale
+
+        for (let i = 0; i < decalList.length; i++) {
+            const existingDecal = decalList[i];
+
+            // Check if it's the same material (e.g., blood vs scorch mark)
+            if (existingDecal.material === material || (!material && existingDecal.material === MATERIALS.bloodDecal)) {
+                const dx = existingDecal.position.x - x;
+                const dz = existingDecal.position.z - z;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < mergeRadiusSq) {
+                    // It's close! Don't spawn a new one, just increase the target scale of the existing one.
+                    // Cap the maximum growth to prevent a single bullet hole covering the map
+                    const maxScale = scale * 2.5;
+                    if (existingDecal.userData.targetScale < maxScale) {
+                        existingDecal.userData.targetScale = Math.min(maxScale, existingDecal.userData.targetScale + (scale * 0.3));
+                    }
+                    return; // EARLY OUT! ZERO-GC.
+                }
+            }
+        }
+
+        // --- NORMAL SPAWN (If no merge occurred) ---
         let req = DECAL_REQUEST_POOL.pop();
-        if (!req) req = { scene, particlesList: decalList, x, y: 0, z, type, customVel: new THREE.Vector3(), hasCustomVel: false };
+        if (!req) req = { scene, particlesList: decalList as any, x, y: 0, z, type, customVel: new THREE.Vector3(), hasCustomVel: false };
         else { req.scene = scene; req.particlesList = decalList as any; req.x = x; req.z = z; req.type = type; }
 
         req.scale = scale;
@@ -450,8 +477,59 @@ export const FXSystem = {
     },
 
     // --- ZERO-GC TEXT POOL ---
-    _textPool: [] as { mesh: THREE.Sprite, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, texture: THREE.CanvasTexture, active: boolean, life: number }[],
+    _textPool: [] as {
+        mesh: THREE.Sprite,
+        canvas: HTMLCanvasElement,
+        ctx: CanvasRenderingContext2D,
+        texture: THREE.CanvasTexture,
+        active: boolean,
+        life: number,
+        isNumeric: boolean,
+        numericValue: number
+    }[],
+
     spawnFloatingText: (scene: THREE.Scene, x: number, y: number, z: number, text: string, color: string = '#ffffff') => {
+        const parsedValue = parseFloat(text);
+        const isNumeric = !isNaN(parsedValue);
+
+        // --- 1. SPATIAL MERGING (Damage Accumulation) ---
+        // Sökradie på ca 1.5 meter (ignorerar Y-axeln så siffran kan flyta uppåt)
+        const MERGE_DIST_SQ = 2.25;
+
+        for (let i = 0; i < FXSystem._textPool.length; i++) {
+            const t = FXSystem._textPool[i];
+            if (!t.active) continue;
+
+            const dx = t.mesh.position.x - x;
+            const dz = t.mesh.position.z - z;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq < MERGE_DIST_SQ) {
+                // We found an active number in the same place! Time to merge.
+                let newText = text;
+
+                // If both old and new text are numbers, add them! (e.g. 12 + 4 = 16)
+                if (isNumeric && t.isNumeric) {
+                    t.numericValue += parsedValue;
+                    newText = Math.round(t.numericValue).toString();
+                }
+
+                // Update Canvas (extremely fast in V8)
+                t.ctx.clearRect(0, 0, 256, 64);
+                t.ctx.strokeText(newText, 128, 32);
+                t.ctx.fillText(newText, 128, 32);
+                t.texture.needsUpdate = true;
+
+                // Reset the lifetime and give it a "Visual POP" by scaling it up temporarily
+                t.life = 1.5;
+                t.mesh.scale.set(4.0, 1.0, 2.0);
+                t.mesh.material.color.set(color);
+
+                return; // ZERO-GC EXIT! No new objects are created.
+            }
+        }
+
+        // --- 2. NORMAL SPAWN (if no merge occurred) ---
         let pooled = FXSystem._textPool.find(t => !t.active);
 
         if (!pooled) {
@@ -466,9 +544,13 @@ export const FXSystem = {
             mesh.scale.set(3.0, 0.75, 2.0);
             scene.add(mesh);
 
-            pooled = { mesh, canvas, ctx, texture, active: true, life: 0 };
+            pooled = { mesh, canvas, ctx, texture, active: true, life: 0, isNumeric: false, numericValue: 0 };
             FXSystem._textPool.push(pooled);
         }
+
+        // Set mathematical properties
+        pooled.isNumeric = isNumeric;
+        pooled.numericValue = isNumeric ? parsedValue : 0;
 
         pooled.ctx.clearRect(0, 0, 256, 64);
         pooled.ctx.font = 'bold 64px Arial';
@@ -483,6 +565,7 @@ export const FXSystem = {
 
         pooled.texture.needsUpdate = true;
 
+        pooled.mesh.scale.set(3.0, 0.75, 2.0);
         pooled.mesh.position.set(x, y + 1.5, z);
         pooled.mesh.material.color.set(color);
         pooled.mesh.material.opacity = 1.0;
@@ -492,60 +575,13 @@ export const FXSystem = {
     },
 
     // --- MAIN UPDATE LOOP ---
-
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
 
-        // 1. Process Queues (Budgeted)
-        for (let i = FXSystem._essentialQueueHead; i < FXSystem.essentialQueue.length; i++) {
-            const req = FXSystem.essentialQueue[i];
-            if (!req.scene) req.scene = scene;
-            if (!req.particlesList) req.particlesList = particlesList;
-            FXSystem._spawnPartImmediate(req);
-            REQUEST_POOL.push(req);
-        }
-        FXSystem.essentialQueue.length = 0;
-        FXSystem._essentialQueueHead = 0;
-
-        const pEnd = Math.min(FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME, FXSystem.ambientQueue.length);
-        for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
-            const req = FXSystem.ambientQueue[i];
-            if (!req.scene) req.scene = scene;
-            if (!req.particlesList) req.particlesList = particlesList;
-            FXSystem._spawnPartImmediate(req);
-            REQUEST_POOL.push(req);
-        }
-        FXSystem._ambientQueueHead = pEnd;
-        if (FXSystem._ambientQueueHead >= FXSystem.ambientQueue.length) {
-            FXSystem.ambientQueue.length = 0;
-            FXSystem._ambientQueueHead = 0;
-        }
-
-        const dEnd = Math.min(FXSystem._decalQueueHead + 10, FXSystem.decalQueue.length);
-        for (let i = FXSystem._decalQueueHead; i < dEnd; i++) {
-            const req = FXSystem.decalQueue[i];
-            FXSystem._spawnDecalImmediate(req);
-            DECAL_REQUEST_POOL.push(req);
-        }
-        FXSystem._decalQueueHead = dEnd;
-        if (FXSystem._decalQueueHead >= FXSystem.decalQueue.length) {
-            FXSystem.decalQueue.length = 0;
-            FXSystem._decalQueueHead = 0;
-        }
-
-        for (let i = 0; i < decalList.length; i++) {
-            const m = decalList[i];
-            if (m.userData.targetScale && m.scale.x < m.userData.targetScale) {
-                const growthStep = m.userData.targetScale * 3.0 * safeDelta;
-                const newScale = Math.min(m.userData.targetScale, m.scale.x + growthStep);
-                // Inlined scale update
-                m.scale.x = newScale;
-                m.scale.y = newScale;
-                m.scale.z = newScale;
-            }
-        }
-
-        // 2. Update Particles (Math fully inlined for V8 optimization)
+        // ==========================================
+        // 1. UPDATE EXISTING PARTICLES (Physics & Death)
+        // Frees up pool indices BEFORE we try to spawn new ones!
+        // ==========================================
         const decay = safeDelta * 44;
         const airFriction = Math.max(0.0, 1.0 - (5.0 * safeDelta));
         const shrinkRate = Math.max(0.0, 1.0 - (10.0 * safeDelta));
@@ -648,7 +684,61 @@ export const FXSystem = {
             }
         }
 
-        // 3. Update Text Floaters
+        // ==========================================
+        // 2. PROCESS QUEUES (Spawn new particles)
+        // Now has maximum pool slots available
+        // ==========================================
+        for (let i = FXSystem._essentialQueueHead; i < FXSystem.essentialQueue.length; i++) {
+            const req = FXSystem.essentialQueue[i];
+            if (!req.scene) req.scene = scene;
+            if (!req.particlesList) req.particlesList = particlesList;
+            FXSystem._spawnPartImmediate(req);
+            REQUEST_POOL.push(req);
+        }
+        FXSystem.essentialQueue.length = 0;
+        FXSystem._essentialQueueHead = 0;
+
+        const pEnd = Math.min(FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME, FXSystem.ambientQueue.length);
+        for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
+            const req = FXSystem.ambientQueue[i];
+            if (!req.scene) req.scene = scene;
+            if (!req.particlesList) req.particlesList = particlesList;
+            FXSystem._spawnPartImmediate(req);
+            REQUEST_POOL.push(req);
+        }
+        FXSystem._ambientQueueHead = pEnd;
+        if (FXSystem._ambientQueueHead >= FXSystem.ambientQueue.length) {
+            FXSystem.ambientQueue.length = 0;
+            FXSystem._ambientQueueHead = 0;
+        }
+
+        const dEnd = Math.min(FXSystem._decalQueueHead + 10, FXSystem.decalQueue.length);
+        for (let i = FXSystem._decalQueueHead; i < dEnd; i++) {
+            const req = FXSystem.decalQueue[i];
+            FXSystem._spawnDecalImmediate(req);
+            DECAL_REQUEST_POOL.push(req);
+        }
+        FXSystem._decalQueueHead = dEnd;
+        if (FXSystem._decalQueueHead >= FXSystem.decalQueue.length) {
+            FXSystem.decalQueue.length = 0;
+            FXSystem._decalQueueHead = 0;
+        }
+
+        for (let i = 0; i < decalList.length; i++) {
+            const m = decalList[i];
+            if (m.userData.targetScale && m.scale.x < m.userData.targetScale) {
+                const growthStep = m.userData.targetScale * 3.0 * safeDelta;
+                const newScale = Math.min(m.userData.targetScale, m.scale.x + growthStep);
+                // Inlined scale update
+                m.scale.x = newScale;
+                m.scale.y = newScale;
+                m.scale.z = newScale;
+            }
+        }
+
+        // ==========================================
+        // 3. UPDATE TEXT FLOATERS
+        // ==========================================
         for (let i = 0; i < FXSystem._textPool.length; i++) {
             const t = FXSystem._textPool[i];
             if (!t.active) continue;
@@ -660,11 +750,22 @@ export const FXSystem = {
                 continue;
             }
 
+            // Float upwards
             t.mesh.position.y += 1.2 * safeDelta;
             t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
+
+            // --- VISUAL POP DECAY ---
+            // If the text was merged and scaled up, shrink it softly back to original size
+            if (t.mesh.scale.x > 3.0) {
+                t.mesh.scale.x = Math.max(3.0, t.mesh.scale.x - 4.0 * safeDelta);
+                t.mesh.scale.y = Math.max(0.75, t.mesh.scale.y - 1.0 * safeDelta);
+            }
         }
 
-        // 4. Finalize Instanced Batches
+        // ==========================================
+        // 4. FINALIZE INSTANCED BATCHES (Write to GPU)
+        // Combines both old updated AND newly spawned particles
+        // ==========================================
         for (let k = 0; k < FXSystem._instancedMeshKeys.length; k++) {
             const type = FXSystem._instancedMeshKeys[k];
             const imesh = FXSystem._instancedMeshes[type];
