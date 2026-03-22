@@ -8,7 +8,7 @@ import { PathGenerator } from './PathGenerator';
 import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
-import { SectorTrigger, TriggerType, TriggerAction } from '../../systems/TriggerTypes';;
+import { SectorTrigger, TriggerType, TriggerAction } from '../../systems/TriggerTypes';
 import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
@@ -125,7 +125,7 @@ export const SectorGenerator = {
      * Set isWarmup: true so sector files can skip trigger/enemy registration via early-exit guards.
      */
     createWarmupContext: (scene: THREE.Scene, sectorId: number, yieldFn?: () => Promise<void>): SectorContext => {
-        const NOOP = () => {};
+        const NOOP = () => { };
         const NOOP_ARRAY = () => [] as any[];
         const STUB_GRID: any = {
             addObstacle: NOOP, removeObstacle: NOOP,
@@ -161,9 +161,9 @@ export const SectorGenerator = {
     },
 
     /*
-    * Main Orchestrator for building a sector.
-    * Uses the new structured lifecycle to standardize generation.
-    */
+     * Main Orchestrator for building a sector.
+     * Uses the new structured lifecycle to standardize generation.
+     */
     build: async (ctx: SectorContext, def: any) => {
         const engine = WinterEngine.getInstance();
 
@@ -173,8 +173,10 @@ export const SectorGenerator = {
         // 1. Automatic Content (Ground, Bounds, Collectibles)
         await SectorGenerator.generateAutomaticContent(ctx, def);
 
+        const env = def.environment;
+
         // 2. Wind Configuration 
-        const w = def.environment?.wind;
+        const w = env?.wind;
         if (engine?.wind) {
             const minStrength = w?.strengthMin ?? 0.02;
             const maxStrength = w?.strengthMax ?? 0.05;
@@ -190,7 +192,47 @@ export const SectorGenerator = {
             engine.wind.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
         }
 
-        // 3. Setup Environment (Lights, Fog, etc.)
+        // 3. Fog & Environment Configuration
+        let fogColorHex = env.bgColor;
+        let volDensity = 0;
+        let fogHeight: number | undefined = undefined;
+
+        // Bena ut parametrar från gamla eller nya strukturen
+        if (env?.fog) {
+            fogColorHex = env.fog.color !== undefined ? env.fog.color : env.bgColor;
+            volDensity = env.fog.density;
+            fogHeight = env.fog.height;
+        } else if (env?.fogDensity !== undefined) {
+            fogColorHex = env.fogColor !== undefined ? env.fogColor : env.bgColor;
+            volDensity = env.fogDensity;
+        }
+
+        _c1.setHex(fogColorHex);
+
+        if (engine.settings.volumetricFog) {
+            // Aktivera snygga dim-plan och en väldigt svag bakgrundsdimma
+            if (engine?.fog) engine.fog.sync(volDensity, fogHeight, _c1);
+
+            if (volDensity > 0) {
+                const distFog = volDensity * 0.0001; // 40 plan -> 0.004
+                ctx.scene.fog = new THREE.FogExp2(fogColorHex, distFog);
+            } else {
+                ctx.scene.fog = null;
+            }
+        } else {
+            // Fallback: Stäng av dim-planen, och gör bakgrundsdimman mycket tjockare
+            if (engine?.fog) engine.fog.sync(0, undefined, _c1);
+
+            if (volDensity > 0) {
+                // Skala upp densiteten rejält för att kompensera (40 plan -> 0.02 tjocklek)
+                const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
+                ctx.scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
+            } else {
+                ctx.scene.fog = null;
+            }
+        }
+
+        // 4. Setup Environment (Lights, Fog, etc.)
         if (def.setupEnvironment) {
             await def.setupEnvironment(ctx);
             if (ctx.yield) await ctx.yield();
@@ -204,16 +246,16 @@ export const SectorGenerator = {
             engine.water.setLightPosition(_v1_sg);
         }
 
-        // 4. Setup Props (Static Objects)
+        // 5. Setup Props (Static Objects)
         if (def.setupProps) await def.setupProps(ctx);
 
-        // 5. Setup Custom Content (POIs, Cinematics, Special Logic)
+        // 6. Setup Custom Content (POIs, Cinematics, Special Logic)
         if (def.setupContent) await def.setupContent(ctx);
 
-        // 6. Setup Zombies (Hordes, Spawning)
+        // 7. Setup Zombies (Hordes, Spawning)
         if (def.setupZombies) await def.setupZombies(ctx);
 
-        // 7. Legacy Support (Escape Hatch)
+        // 8. Legacy Support (Escape Hatch)
         if (def.generate) await def.generate(ctx);
     },
 
@@ -1213,12 +1255,12 @@ export const SectorGenerator = {
         // 1. Determine Default Target Values
         const defEnv = sectorDef.environment;
         const targetFogColor = _c1.setHex(defEnv.bgColor);
-        if (defEnv.fogColor !== undefined) targetFogColor.setHex(defEnv.fogColor);
+        if (defEnv.fog?.color !== undefined) targetFogColor.setHex(defEnv.fog.color);
 
-        let targetFogDensity = defEnv.fogDensity;
+        let targetFogDensity = defEnv.fog?.density ?? 0;
         let targetAmbient = defEnv.ambientIntensity;
         let targetGroundColor = defEnv.groundColor ?? 0xffffff;
-        let activeWeather: any = 'none';
+        let activeWeather: any = defEnv.weather?.type || 'none';
         let maxWeight = 0;
 
         // 2. Apply Zone Blending (if not overridden)
@@ -1254,7 +1296,9 @@ export const SectorGenerator = {
                     blendedG += _c2.g * weight;
                     blendedB += _c2.b * weight;
 
-                    blendedDensity += z.fogDensity * weight;
+                    // Support both old z.fogDensity and new z.fog.density
+                    const zFogDensity = z.fog?.density ?? z.fogDensity ?? 0;
+                    blendedDensity += zFogDensity * weight;
                     blendedAmbient += z.ambient * weight;
                     totalWeight += weight;
 
@@ -1279,8 +1323,12 @@ export const SectorGenerator = {
         // 3. Apply Manual Overrides (Terminal Station)
         if (override) {
             if (override.bgColor !== undefined) targetFogColor.setHex(override.bgColor);
-            if (override.fogColor !== undefined) targetFogColor.setHex(override.fogColor);
-            if (override.fogDensity !== undefined) targetFogDensity = override.fogDensity;
+            if (override.fog?.color !== undefined) targetFogColor.setHex(override.fog.color);
+            else if (override.fogColor !== undefined) targetFogColor.setHex(override.fogColor);
+
+            if (override.fog?.density !== undefined) targetFogDensity = override.fog.density;
+            else if (override.fogDensity !== undefined) targetFogDensity = override.fogDensity;
+
             if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
             if (override.groundColor !== undefined) targetGroundColor = override.groundColor;
 
@@ -1316,7 +1364,6 @@ export const SectorGenerator = {
         }
 
         // 4. Apply Atmosphere to Scene (Lerped for smoothness)
-        // Optimization: Use Three.js internal prototype flag instead of 'instanceof'
         if (scene.fog && (scene.fog as any).isFogExp2) {
             (scene.fog as THREE.FogExp2).color.lerp(targetFogColor, 0.05);
 
@@ -1327,9 +1374,17 @@ export const SectorGenerator = {
             const FOG_HEIGHT_MIN = 25; // below this, fog is at full density
             const FOG_HEIGHT_MAX = 90; // above this, fog is effectively 0
             const heightFactor = 1.0 - Math.max(0, Math.min(1, (camY - FOG_HEIGHT_MIN) / (FOG_HEIGHT_MAX - FOG_HEIGHT_MIN)));
-            const effectiveDensity = targetFogDensity * heightFactor;
+
+            // Map the 0-40 volumetric count back to a distance density (e.g. 40 -> 0.004)
+            const baseDistanceDensity = targetFogDensity * 0.0001;
+            const effectiveDensity = baseDistanceDensity * heightFactor;
 
             (scene.fog as THREE.FogExp2).density = THREE.MathUtils.lerp((scene.fog as THREE.FogExp2).density, effectiveDensity, 0.05);
+        }
+
+        // Smoothly lerp the Volumetric FogSystem color
+        if (engine?.fog && (engine.fog as any).fogMaterial) {
+            (engine.fog as any).fogMaterial.uniforms.uColor.value.lerp(targetFogColor, 0.05);
         }
 
         if (_cachedAmbientLight) {

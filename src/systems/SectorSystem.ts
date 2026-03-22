@@ -154,10 +154,23 @@ export class SectorSystem implements System {
                 setFOV: (fov: number) => {
                     session.engine.camera.set('fov', fov);
                 },
-                setFog: (color: THREE.Color, density: number) => {
-                    if (scene.fog) {
-                        (scene.fog as THREE.FogExp2).color.copy(color);
-                        (scene.fog as THREE.FogExp2).density = density;
+                setFog: (density: number, height?: number, color?: THREE.Color) => {
+                    // 1. Uppdatera det volymetriska systemet (FogSystem.ts)
+                    session.engine.fog.sync(density, height, color);
+
+                    // 2. Uppdatera horisont-dimman (THREE.FogExp2)
+                    if (density > 0) {
+                        if (!scene.fog) {
+                            // Skapa ny om den saknas, använd ett statiskt djupt värde
+                            scene.fog = new THREE.FogExp2(color.getHex(), 0.002);
+                        } else {
+                            (scene.fog as THREE.FogExp2).color.copy(color);
+                            // Notera: Vi rör inte .density på FogExp2, den förblir på 0.002
+                            // density-värdet från SectorDef används nu till FogSystem:s instans-antal.
+                        }
+                    } else {
+                        // Stäng av horisont-dimma om densiteten är 0
+                        scene.fog = null;
                     }
                 },
                 setWater: (level?: number, waveHeight?: number) => {

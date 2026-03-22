@@ -7,6 +7,7 @@ export interface GraphicsSettings {
   pixelRatio: number;
   weatherCount: number;
   textureQuality: number;
+  volumetricFog: boolean;
 }
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';

@@ -85,7 +85,6 @@ export const Sector1: SectorDef = {
     name: "sectors.sector_1_name",
     environment: {
         bgColor: 0x020208,
-        fogDensity: 0.02,
         ambientIntensity: 0.4,
         ambientColor: 0x404050,
         groundColor: 0xddddff,
@@ -93,16 +92,21 @@ export const Sector1: SectorDef = {
         skyLight: { visible: true, color: 0x6688ff, intensity: 10.0, position: { x: 50, y: 35, z: 50 } },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
-        weather: {
-            type: 'snow',
-            particles: 2000
-        },
         wind: {
             strengthMin: 0.5,
             strengthMax: 1.0,
             direction: { x: 1, z: 1 },
             angleVariance: Math.PI / 4
-        }
+        },
+        fog: {
+            density: 0.02,
+            color: 0x020208,
+            height: 10
+        },
+        weather: {
+            type: 'snow',
+            particles: 2000
+        },
     },
     groundType: 'SNOW',
     ambientLoop: 'ambient_wind_loop',

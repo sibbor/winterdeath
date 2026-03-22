@@ -13,8 +13,11 @@ export const CAMP_SCENE = {
 
     // Fog & Background
     bgColor: 0x161629,
-    fogColor: 0x161629,
-    fogDensity: 0.01,
+    fog: {
+        color: 0x999999, //161629,
+        density: 100,
+        height: 2
+    },
     ambientIntensity: 0.4,
     skyLight: {
         visible: true,
@@ -469,8 +472,11 @@ export const CampWorld = {
     build: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
 
         if (!isWarmup) {
-            scene.clear();
             const engine = WinterEngine.getInstance();
+
+            // Clear SAFE! Keep FogSystem, WeatherSystem and WaterSystem intact
+            engine.clearActiveScene(false);
+
             const camera = engine.camera;
 
             camera.reset();
@@ -478,9 +484,44 @@ export const CampWorld = {
             camera.set('fov', 50);
             camera.set('far', 2500);
             camera.lookAt(CAMP_SCENE.cameraBaseLookAt.x, CAMP_SCENE.cameraBaseLookAt.y, CAMP_SCENE.cameraBaseLookAt.z, true);
+
+            // --- FOG SYSTEM INTEGRATION ---
+            const fogConfig = CAMP_SCENE.fog || { color: CAMP_SCENE.bgColor, density: 25, height: 22.0 };
+            const fogColorHex = fogConfig.color !== undefined ? fogConfig.color : CAMP_SCENE.bgColor;
+            const fogColor = new THREE.Color(fogColorHex);
+
+            const volDensity = fogConfig.density;
+            const fogHeight = fogConfig.height !== undefined ? fogConfig.height : 22.0;
+
+            if (engine.settings.volumetricFog) {
+                // Modern fog
+                if (engine.fog) engine.fog.sync(volDensity, fogHeight, fogColor);
+
+                if (volDensity > 0) {
+                    scene.fog = new THREE.FogExp2(fogColorHex, volDensity * 0.0001);
+                } else {
+                    scene.fog = null;
+                }
+            } else {
+                // Fallback dimma
+                if (engine.fog) engine.fog.sync(0, undefined, fogColor);
+
+                if (volDensity > 0) {
+                    const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
+                    scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
+                } else {
+                    scene.fog = null;
+                }
+            }
+        } else {
+            // Safe fallback for warmup phase (AssetPreloader)
+            const fogConfig = CAMP_SCENE.fog || { color: CAMP_SCENE.bgColor, density: 25 };
+            const fogColorHex = fogConfig.color !== undefined ? fogConfig.color : CAMP_SCENE.bgColor;
+            const volDensity = fogConfig.density;
+            const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
+            scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
         }
 
-        scene.fog = new THREE.FogExp2(CAMP_SCENE.fogColor, CAMP_SCENE.fogDensity);
         scene.background = new THREE.Color(CAMP_SCENE.bgColor);
 
         const hemiLight = new THREE.HemisphereLight(

@@ -5,6 +5,7 @@ import { InputManager } from './InputManager';
 import { CameraSystem } from '../../systems/CameraSystem';
 import { WindSystem } from '../../systems/WindSystem';
 import { WeatherSystem } from '../../systems/WeatherSystem';
+import { FogSystem } from '../../systems/FogSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
@@ -37,10 +38,11 @@ export class WinterEngine {
     // Environmental Systems (Persistent across scenes)
     public wind: WindSystem;
     public weather: WeatherSystem;
+    public fog: FogSystem;
     public water: WaterSystem;
 
     private sceneStack: THREE.Scene[] = [];
-    private settings: GraphicsSettings;
+    public settings: GraphicsSettings;
 
     // Lifecycle & Timing
     private clock: THREE.Clock;
@@ -72,6 +74,7 @@ export class WinterEngine {
         this.camera = new CameraSystem();
         this.wind = new WindSystem();
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
+        this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
 
         window.addEventListener('resize', this.handleResize);
@@ -221,6 +224,11 @@ export class WinterEngine {
         // Aggressive Cleanup before renderer disposal
         this.clearActiveScene(true);
 
+        // Also explicitly clear the environmental systems to free materials/buffers
+        if (this.weather) this.weather.clear();
+        if (this.fog) this.fog.clear();
+        if (this.water) this.water.clear();
+
         this.renderer.dispose();
 
         // Aggressive Garbage Collection flagging
@@ -238,7 +246,7 @@ export class WinterEngine {
     /**
      * Aggressively disposes of all objects in the current scene.
      * Uses O(1) Set lookups and flat loops to guarantee Zero-GC drops.
-     * @param includingPersistent If true, even systemic meshes (weather/water) are disposed.
+     * @param includingPersistent If true, even systemic meshes (weather/water/fog) are disposed.
      */
     public clearActiveScene(includingPersistent: boolean = false) {
         const monitor = PerformanceMonitor.getInstance();
@@ -250,8 +258,11 @@ export class WinterEngine {
         // 1. Collect all children (Zero-GC Loop)
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
+
+            // Added Fog to the persistent protection list
             const isPersistent = child.userData.isPersistent ||
                 child.name.indexOf('Weather') !== -1 ||
+                child.name.indexOf('Fog') !== -1 ||
                 child.name.indexOf('Water') !== -1;
 
             if (!isPersistent || includingPersistent) {
@@ -327,6 +338,7 @@ export class WinterEngine {
     private syncSystemsToScene() {
         // Move environmental meshes to the new active scene
         if (this.weather && (this.weather as any).reAttach) (this.weather as any).reAttach(this.scene);
+        if (this.fog && (this.fog as any).reAttach) (this.fog as any).reAttach(this.scene);
         if (this.water && (this.water as any).reAttach) (this.water as any).reAttach(this.scene);
     }
 
@@ -368,6 +380,14 @@ export class WinterEngine {
             monitor.begin('weather');
             this.weather.update(dt, now);
             monitor.end('weather');
+
+            monitor.begin('fog');
+            if (this.settings.volumetricFog) {
+                this.fog.update(dt, now);
+            } else {
+                this.fog.clear();
+            }
+            monitor.end('fog');
 
             monitor.begin('water');
             this.water.setWaterDynamics(this.wind.strength, this.wind.current);

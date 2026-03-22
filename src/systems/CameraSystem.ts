@@ -20,8 +20,8 @@ export class CameraSystem {
     private _shakeIntensity = 0; // Persistent environmental shake
     private _hurtIntensity = 0;  // Rapidly decaying damage shake
 
-    // Instant React (not using lerp)
-    private instantReact = true;
+    // Instant reaction, not using lerp
+    private instantReact = { follow: true, lookAt: false };
 
     // Smoothing settings
     private _moveSpeed = 35.0;
@@ -154,7 +154,7 @@ export class CameraSystem {
             this._initialized = true;
         }
 
-        // 1. Follow Logic
+        // 1. Follow Target Position Logic
         if (!this._isCinematic && this._followTarget) {
             // Smooth interpolation of rotation/pitch
             const angleLerp = 1.0 - Math.exp(-8.0 * dt);
@@ -168,8 +168,7 @@ export class CameraSystem {
             const targetY = this._baseHeight + this._followHeightMod;
             const targetZ = this._followTarget.z + offsetZRotated;
 
-            // 1. Follow Logic
-            if (this.instantReact) {
+            if (this.instantReact.follow) {
                 // Instant snap: Zero math, zero lag
                 this._idealPos.x = targetX;
                 this._idealPos.y = targetY;
@@ -188,10 +187,11 @@ export class CameraSystem {
             this._idealLookAt.z = this._followTarget.z;
         }
 
-        // 2. LookAt Logic
-        if (this.instantReact) {
+        // 2. LookAt Logic (Independent of FollowTarget)
+        if (this.instantReact.lookAt) {
             this._currentLookAt.copy(this._idealLookAt);
         } else {
+            // FPS-Independent Smooth Lerp for panning
             const lookLerpFactor = 1.0 - Math.exp(-this._lookSpeed * dt);
             this._currentLookAt.lerp(this._idealLookAt, lookLerpFactor);
         }

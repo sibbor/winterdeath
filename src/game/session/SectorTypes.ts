@@ -6,8 +6,11 @@ import { NoiseType } from '../../systems/NoiseSystem';
 
 export interface SectorEnvironment {
     bgColor: number;
-    fogDensity: number;
-    fogColor?: number;
+    fog?: {
+        density: number; // 0-40 (Antal plan för FogSystem)
+        color?: number;  // Om satt, override:ar bgColor
+        height?: number; //  fogHeight om du vill styra yTop parametern i framtiden
+    };
     ambientIntensity: number;
     ambientColor?: number;
     groundColor: number;
@@ -164,7 +167,7 @@ export interface SectorDef {
             setBackgroundColor: (color: number) => void;
             setGroundColor: (color: number) => void;
             setFOV: (fov: number) => void;
-            setFog: (color: THREE.Color, density: number) => void;
+            setFog: (density: number, height?: number, color?: THREE.Color) => void;
             setWater: (level?: number, waveHeight?: number) => void;
             setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
             emitNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;

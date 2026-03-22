@@ -33,8 +33,8 @@ const BUMP_MAPS = ['snow_bump', 'asphalt_bump', 'stone_bump', 'dirt_bump', 'conc
 const FX_SOLID = ['debris', 'scrap', 'glass', 'gore'];
 const FX_GAS = [
     'fire', 'large_fire', 'flame', 'spark', 'smoke', 'large_smoke', 'flash', 'splash', 'impact', 'blood', 'gore_splat',
-    'shockwave', 'frost_nova', 'screech_wave', 'electric_beam', 'magnetic_sparks', 'ground_impact', 'impact_splat', 
-    'blood_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire', 
+    'shockwave', 'frost_nova', 'screech_wave', 'electric_beam', 'magnetic_sparks', 'ground_impact', 'impact_splat',
+    'blood_splat', 'campfire_flame', 'campfire_spark', 'campfire_smoke', 'flamethrower_fire',
     'enemy_effect_stun', 'electric_flash', 'enemy_effect_flame', 'enemy_effect_spark', 'blastRadius'
 ];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
@@ -149,8 +149,28 @@ export const AssetPreloader = {
             // 1. BASE ENVIRONMENT
             beginInternal('lighting');
             if (envConfig) {
-                const fogCol = new THREE.Color(envConfig.fogColor || envConfig.bgColor);
-                scene.fog = new THREE.FogExp2(fogCol, envConfig.fogDensity || 0.01);
+                let fogColorHex = envConfig.bgColor;
+                let fogExpDensity = 0.01;
+
+                // Hantera det nya fog-objektet
+                if (envConfig.fog) {
+                    fogColorHex = envConfig.fog.color !== undefined ? envConfig.fog.color : envConfig.bgColor;
+                    fogExpDensity = envConfig.fog.density * 0.0001;
+                }
+                // Fallback för äldre sektorer
+                else if (envConfig.fogDensity !== undefined) {
+                    fogColorHex = envConfig.fogColor !== undefined ? envConfig.fogColor : envConfig.bgColor;
+                    const isVolumetric = envConfig.fogDensity >= 1.0;
+                    fogExpDensity = isVolumetric ? envConfig.fogDensity * 0.0001 : envConfig.fogDensity;
+                }
+
+                const fogCol = new THREE.Color(fogColorHex);
+
+                if (fogExpDensity > 0) {
+                    scene.fog = new THREE.FogExp2(fogCol, fogExpDensity);
+                } else {
+                    scene.fog = null;
+                }
                 scene.background = fogCol;
 
                 if (envConfig.hemiLight) {
@@ -193,7 +213,7 @@ export const AssetPreloader = {
                 // to force compilation of all PointLight and MeshDistanceMaterial variants.
                 const maxVisibleLights = (engine as any).maxVisibleLights || LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS || 6;
                 const maxShadows = (engine as any).maxSafeShadows ?? LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS ?? 2;
-                
+
                 for (let i = 0; i < maxVisibleLights; i++) {
                     const pl = new THREE.PointLight(0xffaaaa, 1, 50);
                     pl.position.set(i * 10, 10, i * 10); // Spread them out

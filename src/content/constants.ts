@@ -77,7 +77,8 @@ export const DEFAULT_GRAPHICS: GraphicsSettings = {
     shadowMapType: 1,
     shadowResolution: 256,
     weatherCount: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES,
-    textureQuality: 1.0
+    textureQuality: 1.0,
+    volumetricFog: true
 };
 
 export const SCRAP_COST_BASE = 50;
