@@ -104,7 +104,12 @@ export class SoundManager {
   // --- WEAPON DELEGATES ---
   playShot(weaponId: string) { WeaponSounds.playShot(this.core, weaponId); }
   playThrowable(weaponId: string) { WeaponSounds.playThrowable(this.core, weaponId); }
+  playGrenadeImpact() { WeaponSounds.playGrenadeImpact(this.core); }
+  playMolotovImpact() { WeaponSounds.playMolotovImpact(this.core); }
+  playFlashbangImpact() { WeaponSounds.playFlashbangImpact(this.core); }
   playExplosion() { WeaponSounds.playExplosion(this.core); }
+  playWaterExplosion() { WeaponSounds.playWaterExplosion(this.core); }
+  playWaterSplash() { WeaponSounds.playWaterSplash(this.core); }
   playMagOut() { WeaponSounds.playMagOut(this.core); }
   playMagIn() { WeaponSounds.playMagIn(this.core); }
   playEmptyClick() { WeaponSounds.playEmptyClick(this.core); }

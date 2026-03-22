@@ -36,4 +36,9 @@ export const haptic = {
     explosion(): void {
         doVibrate([80, 40, 120]);
     },
+
+    /** Heavy rumble — grenade, boss, misc explosion. */
+    explosionWater(): void {
+        doVibrate([20, 45, 30]);
+    },
 };

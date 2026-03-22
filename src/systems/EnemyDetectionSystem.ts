@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Enemy, ENEMY_DETECTION, NoiseType, NOISE_RADIUS, AIState, EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { System } from './System';
+import { PerformanceMonitor } from './PerformanceMonitor';
 
 export interface NoiseEvent {
     pos: THREE.Vector3;
@@ -27,20 +28,43 @@ export class EnemyDetectionSystem implements System {
     public attach() { }
     public detach() { }
 
+
     /**
-     * Broadcasts a noise event for enemies to hear.
-     */
+         * Broadcasts a noise event for enemies to hear. 
+         * Uses Spatial Merging to automatically throttle high-frequency events (like automatic gunfire or vehicles) without allocating new memory.
+         */
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, customRadius?: number) {
         let radius = customRadius;
         if (radius === undefined) {
             radius = NOISE_RADIUS[type] || 30;
         }
 
+        const now = performance.now();
+
+        // --- CENTRALIZED THROTTLING (SPATIAL MERGING) ---
+        // Iterate active noises to see if we can merge this new noise with an existing one.
+        for (let i = 0; i < this.noiseEvents.length; i++) {
+            const evt = this.noiseEvents[i];
+
+            if (evt.type === type) {
+                // Check squared distance to avoid Math.sqrt. (25.0 = 5 meters squared)
+                const distSq = evt.pos.distanceToSquared(pos);
+
+                if (distSq < 25.0) {
+                    // Update the existing noise instead of creating a new one
+                    evt.pos.copy(pos);
+                    evt.timestamp = now;
+                    // We return early. ZERO garbage collection, ZERO array growth!
+                    return;
+                }
+            }
+        }
+
         this.noiseEvents.push({
-            pos: pos.clone(), // Allowed here as it's an event trigger, not every frame
+            pos: pos.clone(),
             type,
             radius,
-            timestamp: performance.now()
+            timestamp: now
         });
     }
 
@@ -102,7 +126,8 @@ export class EnemyDetectionSystem implements System {
         return true;
     }
 
-    update(delta: number, now: number, state: any) {
+    update(context: any, delta: number, now: number) {
+        const state = context.state;
         const enemies: Enemy[] = state.enemies || [];
         const playerPos: THREE.Vector3 = state.playerPos;
         const collisionGrid: SpatialGrid = state.collisionGrid;
@@ -158,6 +183,11 @@ export class EnemyDetectionSystem implements System {
                     e.lastKnownPosition.copy(evt.pos);
                     e.lastHeardNoiseType = evt.type;
 
+                    if (PerformanceMonitor.getInstance().aiLoggingEnabled
+                        && (evt.type === NoiseType.GRENADE || evt.type === NoiseType.GUNSHOT)) {
+                        console.log(`[EnemyDetection] Enemy ${e.id} HEARD ${evt.type} at dist ${Math.sqrt(distSq).toFixed(1)} (Radius: ${effectiveRadius})`);
+                    }
+
                     e.awareness = 1.0;
 
                     if (e.state === AIState.IDLE || e.state === AIState.WANDER) {
@@ -167,6 +197,10 @@ export class EnemyDetectionSystem implements System {
                         const angle = Math.atan2(dx, dz);
                         e.mesh.rotation.y = angle;
                         e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+
+                        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                            console.log(`[EnemyDetection] Enemy ${e.id} investigated noise at ${evt.pos.x.toFixed(1)}, ${evt.pos.z.toFixed(1)}`);
+                        }
                     }
                 }
             }

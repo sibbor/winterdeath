@@ -10,6 +10,7 @@ import { WaterSystem } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System } from '../../systems/System';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
 
 export type { GraphicsSettings };
 
@@ -504,6 +505,17 @@ export class WinterEngine {
         const sys = this._systemsMap.get(id);
         if (sys) {
             sys.enabled = enabled;
+        }
+    }
+
+    /**
+     * Broadcasts a world noise event to the EnemyDetectionSystem.
+     * Centralized entry point for Combat, Projectiles, and Player movement.
+     */
+    public makeNoise(pos: THREE.Vector3, type: NoiseType, radius?: number) {
+        const sys = this.getSystem<any>('EnemyDetectionSystem');
+        if (sys && sys.makeNoise) {
+            sys.makeNoise(pos, type, radius);
         }
     }
 

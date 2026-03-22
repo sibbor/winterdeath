@@ -118,7 +118,6 @@ export class GameSessionLogic {
             playerBloodSpawned: false,
             playerAshSpawned: false,
             lastDrownTick: 0,
-
             deathVel: new THREE.Vector3(),
 
             // Zero-GC: Pre-allocated vectors with boolean flags instead of null
@@ -191,9 +190,7 @@ export class GameSessionLogic {
      * Delegates to the centralized EnemyDetectionSystem.
      */
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {
-        if (this.detectionSystem) {
-            this.detectionSystem.makeNoise(pos, type, radius);
-        }
+        this.engine.makeNoise(pos, type, radius);
     }
 
     addSystem(system: System) {

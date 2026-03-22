@@ -17,7 +17,6 @@ import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { DamageType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { NoiseType, NOISE_RADIUS } from '../../entities/enemies/EnemyTypes';
-import { WeaponHandler } from '../../systems/WeaponHandler';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -145,7 +144,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         onPlayerHit: (dmg: number, attacker: any, type: DamageType, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
-        weaponHandler: WeaponHandler,
         applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType | string, isHighImpact: boolean = false) => {
             if (enemy.deathState !== EnemyDeathState.ALIVE) return false;
 
@@ -582,10 +580,20 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         hData.interactionPrompt.pos.y = screenY;
                     }
 
-                    // Because our React UI uses primitive selectors for the interaction prompt, 
-                    // this update is completely invisible to React and will only trigger the 
-                    // GPU-transform mutator we set up in GameUI.
-                    HudStore.update(hData);
+                    // Optimization: Only update the store if the prompt position or data changed significantly
+                    const lastPos = refs.lastInteractionPosRef.current;
+                    const moved = !lastPos || Math.abs(lastPos.x - screenX) > 1 || Math.abs(lastPos.y - screenY) > 1;
+                    const stateChanged = refs.interactionTypeRef.current !== currentInter || (state as any).lastInteractionLabel !== currentLabel;
+
+                    if (moved || stateChanged) {
+                        if (!refs.lastInteractionPosRef.current) refs.lastInteractionPosRef.current = { x: 0, y: 0 };
+                        refs.lastInteractionPosRef.current.x = screenX;
+                        refs.lastInteractionPosRef.current.y = screenY;
+                        refs.interactionTypeRef.current = currentInter;
+                        (state as any).lastInteractionLabel = currentLabel;
+
+                        HudStore.update(hData);
+                    }
                 }
             } else {
                 if (refs.interactionTypeRef.current !== null) {

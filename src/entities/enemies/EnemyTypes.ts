@@ -14,10 +14,13 @@ export enum NoiseType {
     PLAYER_RUSH = 'PLAYER_RUSH',
     PLAYER_ROLLING = 'PLAYER_DODGE',
     PLAYER_SWIM = 'PLAYER_SWIM',
+    BULLET_HIT = 'BULLET_HIT',
     GUNSHOT = 'GUNSHOT',
     GRENADE = 'GRENADE',
     MOLOTOV = 'MOLOTOV',
     FLASHBANG = 'FLASHBANG',
+    VEHICLE_IDLE = 'VEHICLE_IDLE',
+    VEHICLE_DRIVE = 'VEHICLE_DRIVE',
     OTHER = 'OTHER'
 }
 
@@ -26,10 +29,13 @@ export const NOISE_RADIUS: Record<string, number> = {
     [NoiseType.PLAYER_RUSH]: 20,
     [NoiseType.PLAYER_ROLLING]: 15,
     [NoiseType.PLAYER_SWIM]: 15,
+    [NoiseType.BULLET_HIT]: 5,
     [NoiseType.GUNSHOT]: 60,
     [NoiseType.MOLOTOV]: 50,
     [NoiseType.FLASHBANG]: 60,
     [NoiseType.GRENADE]: 80,
+    [NoiseType.VEHICLE_IDLE]: 25,
+    [NoiseType.VEHICLE_DRIVE]: 60,
     [NoiseType.OTHER]: 30,
 };
 

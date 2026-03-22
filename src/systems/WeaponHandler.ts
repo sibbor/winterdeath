@@ -250,7 +250,7 @@ export const WeaponHandler = {
                     haptic.gunshot();
 
                     if (state.callbacks && state.callbacks.makeNoise) {
-                        state.callbacks.makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS.GUNSHOT);
+                        WinterEngine.getInstance().makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS.GUNSHOT);
                     }
 
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
@@ -405,33 +405,4 @@ export const WeaponHandler = {
         }
     },
 
-    /**
-     * Centralized handling for weapon impact noise.
-     * Called by ProjectileSystem when a projectile hits or explodes.
-     */
-    emitImpactNoise: (pos: THREE.Vector3, weaponType: WeaponType, ctx: any) => {
-        let noiseType = NoiseType.OTHER;
-        let noiseRadius = NOISE_RADIUS.OTHER;
-
-        switch (weaponType) {
-            case WeaponType.GRENADE:
-                noiseType = NoiseType.GRENADE;
-                noiseRadius = NOISE_RADIUS.GRENADE;
-                break;
-            case WeaponType.MOLOTOV:
-                noiseType = NoiseType.MOLOTOV;
-                noiseRadius = NOISE_RADIUS.MOLOTOV;
-                break;
-            case WeaponType.FLASHBANG:
-                noiseType = NoiseType.FLASHBANG;
-                noiseRadius = NOISE_RADIUS.FLASHBANG;
-                break;
-            default:
-                return;
-        }
-
-        if (ctx.makeNoise) {
-            ctx.makeNoise(pos, noiseType, noiseRadius);
-        }
-    }
 };

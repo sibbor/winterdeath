@@ -244,7 +244,6 @@ export class GameSessionSetup {
                 collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
                 sectorState: state.sectorState, state: state, yield: yielder,
                 makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-                weaponHandler: WeaponHandler
             };
             refs.sectorContextRef.current = sectorCtx;
             state.sectorState.ctx = sectorCtx;
@@ -432,11 +431,11 @@ export class GameSessionSetup {
             }
 
             session.addSystem(new DamageTrackerSystem());
-            
+
             const detectionSys = new EnemyDetectionSystem();
             session.addSystem(detectionSys);
             session.detectionSystem = detectionSys;
-            
+
             session.addSystem(new PlayerMovementSystem(playerGroup));
             session.addSystem(new VehicleMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));

@@ -17,6 +17,8 @@ export class SpatialGrid {
     private triggerQueryResults: any[] = [];
     private interactableQueryResults: THREE.Object3D[] = [];
     private _vWorld = new THREE.Vector3();
+    private _vLineAB = new THREE.Vector3();
+    private _vLineAP = new THREE.Vector3();
 
     // Scratchpad to completely avoid function allocations in loops
     private _hashScratchpad = new Int32Array(1024);
@@ -148,16 +150,61 @@ export class SpatialGrid {
         const sZ = Math.floor(minZ / this.cellSize);
         const eZ = Math.floor(maxZ / this.cellSize);
 
+        // 1. Förberäknar siktlinjens vektor (A -> B) på XZ-planet
+        this._vLineAB.set(end.x - start.x, 0, end.z - start.z);
+        const abLenSq = this._vLineAB.lengthSq();
+
         for (let ix = sX; ix <= eX; ix++) {
             for (let iz = sZ; iz <= eZ; iz++) {
                 const hash = Math.abs((ix * 73856093) ^ (iz * 19349663)) % HASH_SIZE;
                 const cell = this.obstacleCells[hash];
-                if (cell) {
+
+                if (cell && cell.length > 0) {
                     for (let i = 0; i < cell.length; i++) {
                         const obs = cell[i];
                         if ((obs as any)._sqf !== this._queryFrame) {
                             (obs as any)._sqf = this._queryFrame;
-                            this.obstacleQueryResults.push(obs);
+
+                            // --- 2. ZERO-GC LINE-SEGMENT CULLING ---
+                            // Räkna ut kortaste avståndet från hindret till siktlinjen
+                            const px = obs.position.x;
+                            const pz = obs.position.z;
+
+                            this._vLineAP.set(px - start.x, 0, pz - start.z);
+
+                            // Projicera P på AB, clamp mellan 0 (start) och 1 (end)
+                            let t = 0;
+                            if (abLenSq > 0.0001) {
+                                t = this._vLineAP.dot(this._vLineAB) / abLenSq;
+                                t = Math.max(0, Math.min(1, t));
+                            }
+
+                            // Punkten på linjen närmast hindret
+                            const closestX = start.x + this._vLineAB.x * t;
+                            const closestZ = start.z + this._vLineAB.z * t;
+
+                            // Avstånd i kvadrat
+                            const dx = px - closestX;
+                            const dz = pz - closestZ;
+                            const distSq = dx * dx + dz * dz;
+
+                            // Vad är hindrets maxradie? (Box eller sfär)
+                            let cullRadius = obs.radius || 2.0;
+
+                            // Typsäkert och snabbt: kolla om collider och size finns
+                            if (obs.collider && obs.collider.size) {
+                                const halfX = obs.collider.size.x * 0.5;
+                                const halfZ = obs.collider.size.z * 0.5;
+                                cullRadius = Math.max(cullRadius, Math.sqrt(halfX * halfX + halfZ * halfZ));
+                            }
+
+                            // Lägg till ~1 meter marginal för geometrins variationer
+                            cullRadius += 1.0;
+
+                            // 3. Om hindret är tillräckligt nära siktlinjen -> lägg till för Raycast!
+                            if (distSq <= cullRadius * cullRadius) {
+                                this.obstacleQueryResults.push(obs);
+                            }
                         }
                     }
                 }
