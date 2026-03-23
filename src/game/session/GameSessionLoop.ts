@@ -563,8 +563,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const vector = _vInteraction.project(engine.camera.threeCamera);
 
             if (vector.z >= -1.0 && vector.z <= 1.05) {
-                const screenX = Math.round((vector.x + 1) / 2 * window.innerWidth);
-                const screenY = Math.round((1 - vector.y) / 2 * window.innerHeight);
+                const screenX = Math.round((vector.x + 1) / 2 * engine.screenWidth);
+                const screenY = Math.round((1 - vector.y) / 2 * engine.screenHeight);
 
                 const lastPos = refs.lastInteractionPosRef.current;
                 const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 1.0 || Math.abs(lastPos.y - screenY) > 1.0;

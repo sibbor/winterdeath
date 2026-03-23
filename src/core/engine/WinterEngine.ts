@@ -64,6 +64,8 @@ export class WinterEngine {
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
     public onUpdateContext: any = null;
+    public screenWidth: number = window.innerWidth;
+    public screenHeight: number = window.innerHeight;
 
     // Cached Sets for O(1) Zero-GC lookups during cleanup
     private sharedGeoSet: Set<any> | null = null;
@@ -370,6 +372,9 @@ export class WinterEngine {
         if (!this.container) return;
         const width = this.container.clientWidth || window.innerWidth;
         const height = this.container.clientHeight || window.innerHeight;
+
+        this.screenWidth = width;
+        this.screenHeight = height;
 
         this.camera.set('aspect', width / height);
         this.renderer.setSize(width, height);
