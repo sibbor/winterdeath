@@ -155,6 +155,11 @@ export const EnemyManager = {
         e._accumulatedDamage = 0;
         e._lastDamageTextTime = 0;
 
+        // Reset AI Knowledge
+        e.lastSeenTime = 0;
+        e.awareness = 0;
+        if (e.lastKnownPosition) e.lastKnownPosition.copy(e.mesh.position);
+
         const s = e.originalScale || 1.0;
         const w = e.widthScale || 1.0;
         e.mesh.scale.set(s * w, s, s * w);
@@ -196,8 +201,21 @@ export const EnemyManager = {
 
     spawnHorde: (scene: THREE.Scene, startPos: THREE.Vector3, count: number, bossSpawned: boolean, currentCount: number) => {
         const horde: Enemy[] = [];
+        const goldenAngle = 137.5 * (Math.PI / 180);
+        const spacing = 1.5;
+
         for (let i = 0; i < count; i++) {
-            const enemy = EnemyManager.spawn(scene, startPos, undefined, startPos, bossSpawned, currentCount + i);
+            const radius = Math.sqrt(i) * spacing;
+            const theta = i * goldenAngle;
+
+            _v1.set(
+                startPos.x + Math.cos(theta) * radius,
+                0,
+                startPos.z + Math.sin(theta) * radius
+            );
+
+            // Anropar sin egen manager-funktion (vilket använder minnespoolen!)
+            const enemy = EnemyManager.spawn(scene, startPos, undefined, _v1, bossSpawned, currentCount + i);
             if (enemy) horde.push(enemy);
         }
         return horde;

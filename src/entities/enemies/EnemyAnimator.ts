@@ -40,33 +40,42 @@ export const EnemyAnimator = {
 
             switch (att.type) {
                 case EnemyAttackType.HIT:
-                case EnemyAttackType.BITE:
-                    // Wind up: lean back and compress slightly
-                    targetRotX = -0.4 * progress;
+                    // Wind up: lean back, turn shoulders slightly (RotZ)
+                    targetRotX = -0.3 * progress;
+                    targetRotZ = 0.3 * Math.sin(progress * Math.PI * 0.5); // Twist shoulder back
                     targetScaleY = baseScale * (1.0 - 0.1 * progress);
+                    break;
+
+                case EnemyAttackType.BITE:
+                    // Wind up for a lunge: pull head back, open arms
+                    targetRotX = -0.4 * progress;
+                    targetScaleX = baseScale * widthScale * (1.0 + 0.15 * progress); // Expand chest
                     break;
 
                 case EnemyAttackType.SMASH:
                 case EnemyAttackType.FREEZE_JUMP:
-                    // Heavy wind up: rear up, stretch high
+                    // Heavy wind up: rear up, stretch high, breathe in deeply
                     targetRotX = -0.6 * progress;
                     targetScaleY = baseScale * (1.0 + 0.3 * progress);
+                    targetScaleX = baseScale * widthScale * (1.0 + 0.2 * progress); // Puff out chest
                     targetPosY = baseY + 0.5 * progress;
                     break;
 
                 case EnemyAttackType.JUMP:
-                    // Squat down before leaping
-                    targetScaleY = baseScale * (1.0 - 0.4 * progress);
-                    targetScaleX = baseScale * widthScale * (1.0 + 0.3 * progress);
-                    targetScaleZ = baseScale * widthScale * (1.0 + 0.3 * progress);
-                    targetPosY = baseY - 0.2 * progress;
+                    // Squat down super low like a frog before leaping
+                    targetScaleY = baseScale * (1.0 - 0.6 * progress); // Deep squat
+                    targetScaleX = baseScale * widthScale * (1.0 + 0.4 * progress); // Bulge outwards
+                    targetScaleZ = baseScale * widthScale * (1.0 + 0.4 * progress);
+                    targetRotX = 0.2 * progress; // Lean head forward
+                    targetPosY = baseY - 0.3 * progress;
                     break;
 
                 case EnemyAttackType.SCREECH:
-                    // Inhale: puff up chest, lean back
-                    targetRotX = -0.3 * progress;
-                    targetScaleX = baseScale * widthScale * (1.0 + 0.2 * progress);
-                    targetScaleZ = baseScale * widthScale * (1.0 + 0.2 * progress);
+                    // Inhale: puff up chest, lean back, tremble
+                    targetRotX = -0.4 * progress;
+                    targetScaleX = baseScale * widthScale * (1.0 + 0.25 * progress);
+                    targetScaleZ = baseScale * widthScale * (1.0 + 0.25 * progress);
+                    mesh.position.x += (Math.random() - 0.5) * 0.05 * progress; // Minor tremble
                     break;
 
                 case EnemyAttackType.EXPLODE:
@@ -84,11 +93,9 @@ export const EnemyAnimator = {
                     if (e.indicatorRing) {
                         e.indicatorRing.visible = true;
                         e.indicatorRing.matrixAutoUpdate = true;
-                        // Keep ring on the ground
                         e.indicatorRing.position.set(0, -targetPosY + 0.05, 0);
 
                         const targetRadius = (att.radius || 10.0);
-                        // Counter-act the parent mesh scale to ensure the ring matches exact world radius
                         e.indicatorRing.scale.setScalar(targetRadius / targetScaleX);
 
                         const flashSpeed = progress * 30;
@@ -103,9 +110,10 @@ export const EnemyAnimator = {
 
                 case EnemyAttackType.ELECTRIC_BEAM:
                 case EnemyAttackType.MAGNETIC_CHAIN:
-                    // Boss logic: Float up and gather energy
+                    // Boss logic: Float up and gather energy, limbs dangling
                     targetPosY = baseY + 1.0 * progress;
-                    targetPosY += Math.sin(now * 0.01) * 0.2 * progress; // Add subtle bobbing
+                    targetPosY += Math.sin(now * 0.01) * 0.2 * progress;
+                    targetScaleY = baseScale * (1.0 + 0.2 * progress); // Elongate to look alien/creepy
                     break;
             }
         }
@@ -117,11 +125,18 @@ export const EnemyAnimator = {
 
             switch (att.type) {
                 case EnemyAttackType.HIT:
+                    // A quick haymaker swing (RotZ + RotX combined)
+                    const swing = Math.sin(progress * Math.PI); // 0 -> 1 -> 0
+                    targetRotX = 0.4 * swing;
+                    targetRotZ = -0.5 * swing; // Slash downward to the side
+                    break;
+
                 case EnemyAttackType.BITE:
-                    // Snap forward and recover (Sin wave from 0 -> 1 -> 0)
-                    const strike = Math.sin(progress * Math.PI);
-                    targetRotX = 0.6 * strike; // Lean heavily forward
-                    targetPosY = baseY + 0.2 * strike; // Slight forward hop
+                    // A violent thrust of the head forward
+                    const bite = Math.sin(progress * Math.PI);
+                    targetRotX = 0.7 * bite; // Lean heavily forward
+                    targetPosY = baseY + 0.2 * bite; // Hop forward
+                    targetScaleY = baseScale * (1.0 + 0.2 * bite); // Stretch neck
                     break;
 
                 case EnemyAttackType.SMASH:
@@ -131,6 +146,7 @@ export const EnemyAnimator = {
                         const slam = progress / 0.2;
                         targetRotX = -0.6 + (1.4 * slam); // Rapidly go from -0.6 to +0.8
                         targetPosY = baseY + 0.5 * (1.0 - slam);
+                        targetScaleY = baseScale * (1.0 - 0.2 * slam); // Compress on impact
                     } else {
                         // Slow recovery (20% to 100%)
                         const recover = (progress - 0.2) / 0.8;
@@ -139,17 +155,19 @@ export const EnemyAnimator = {
                     break;
 
                 case EnemyAttackType.JUMP:
-                    // Parabolic leap through the air
+                    // Animalistic Pounce! Lean forward, fly through air, stretch body
                     const leapArc = Math.sin(progress * Math.PI);
-                    targetPosY = baseY + leapArc * 3.0; // Max jump height
-                    targetRotX = progress * Math.PI * 2; // Full front flip
+                    targetPosY = baseY + leapArc * 2.5; // Max jump height
+                    targetRotX = 0.6; // Keep leaning forward like a diving predator
+                    targetScaleY = baseScale * (1.0 + leapArc * 0.4); // Stretch body while in air
                     break;
 
                 case EnemyAttackType.SCREECH:
-                    // Vibrate violently while screeching
-                    targetRotX = -0.3; // Hold the lean back
-                    mesh.position.x += (Math.random() - 0.5) * 0.15;
-                    mesh.position.z += (Math.random() - 0.5) * 0.15;
+                    // Vibrate violently while screeching, head thrown back
+                    targetRotX = -0.3;
+                    mesh.position.x += (Math.random() - 0.5) * 0.2;
+                    mesh.position.z += (Math.random() - 0.5) * 0.2;
+                    targetScaleX = baseScale * widthScale * (1.0 + 0.1 * Math.sin(now * 0.05)); // Pulsing chest
                     break;
 
                 case EnemyAttackType.EXPLODE:
@@ -161,9 +179,9 @@ export const EnemyAnimator = {
 
                 case EnemyAttackType.ELECTRIC_BEAM:
                 case EnemyAttackType.MAGNETIC_CHAIN:
-                    // Hover in the air and pulse with energy
-                    targetPosY = baseY + 1.0 + Math.sin(now * 0.015) * 0.3;
-                    const pulse = 1.0 + Math.sin(now * 0.05) * 0.05;
+                    // Hover in the air and pulse with violent energy
+                    targetPosY = baseY + 1.0 + Math.sin(now * 0.03) * 0.3; // Faster bobbing
+                    const pulse = 1.0 + Math.sin(now * 0.08) * 0.1; // Aggressive pulsing
                     targetScaleX = baseScale * widthScale * pulse;
                     targetScaleY = baseScale * pulse;
                     targetScaleZ = baseScale * widthScale * pulse;
@@ -172,9 +190,18 @@ export const EnemyAnimator = {
         }
 
         // --- APPLY TRANSFORMS ---
-        mesh.rotation.x = targetRotX;
-        mesh.rotation.z = targetRotZ;
-        mesh.scale.set(targetScaleX, targetScaleY, targetScaleZ);
-        mesh.position.y = targetPosY;
+        // We use an aggressive lerp to smooth out state transitions (e.g. from IDLE to CHARGE)
+        mesh.rotation.x += (targetRotX - mesh.rotation.x) * 15 * delta;
+        mesh.rotation.z += (targetRotZ - mesh.rotation.z) * 15 * delta;
+        mesh.scale.x += (targetScaleX - mesh.scale.x) * 15 * delta;
+        mesh.scale.y += (targetScaleY - mesh.scale.y) * 15 * delta;
+        mesh.scale.z += (targetScaleZ - mesh.scale.z) * 15 * delta;
+
+        // Don't lerp Y if attacking heavily or leaping (we want the snappy math)
+        if (e.state === AIState.ATTACK_CHARGE || (att && (att.type === EnemyAttackType.JUMP || att.type === EnemyAttackType.SMASH))) {
+            mesh.position.y = targetPosY;
+        } else {
+            mesh.position.y += (targetPosY - mesh.position.y) * 10 * delta;
+        }
     }
 };

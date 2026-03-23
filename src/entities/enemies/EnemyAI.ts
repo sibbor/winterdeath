@@ -60,6 +60,7 @@ export const EnemyAI = {
         const dz = playerPos.z - e.mesh.position.z;
         const distSq = dx * dx + dz * dz;
 
+        // 10000 = 100 units distance
         if (distSq > 10000 &&
             e.deathState === EnemyDeathState.ALIVE &&
             !e.isBurning &&
@@ -286,7 +287,6 @@ export const EnemyAI = {
                     e.mesh.quaternion.setFromEuler(e.mesh.rotation);
                 }
             } else {
-                if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
                 const jitterScale = delta * 60;
                 e.mesh.position.x += (Math.random() - 0.5) * 0.2 * jitterScale;
                 e.mesh.position.z += (Math.random() - 0.5) * 0.2 * jitterScale;
@@ -340,6 +340,8 @@ export const EnemyAI = {
         }
 
         // --- 9. STATE MACHINE ---
+        let doMovementBounce = false;
+
         switch (e.state) {
             case AIState.IDLE:
                 e.idleTimer -= delta;
@@ -362,9 +364,10 @@ export const EnemyAI = {
                 break;
 
             case AIState.WANDER:
+                doMovementBounce = true;
                 e.searchTimer -= delta;
                 _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
-                moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
+                moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6, now, false);
 
                 if (seesPlayer) {
                     logStateChange(now, e, AIState.CHASE, 'VISUAL');
@@ -396,7 +399,8 @@ export const EnemyAI = {
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 } else if (e.lastKnownPosition && e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
-                    moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6);
+                    doMovementBounce = true;
+                    moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, now, false);
                 } else {
                     e.mesh.rotation.y += delta * 2.5; // Spin around looking
                 }
@@ -425,7 +429,8 @@ export const EnemyAI = {
 
                     const target = (seesPlayer) ? playerPos : e.lastKnownPosition!;
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
-                    moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6);
+                    doMovementBounce = true;
+                    moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6, now, true);
 
                     const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
@@ -513,7 +518,7 @@ export const EnemyAI = {
                 break;
         }
 
-        // --- 10. COOLDOWNS & BOUNCE ANIMATION ---
+        // --- 10. COOLDOWNS ---
         if (e.attacks) {
             for (let i = 0; i < e.attacks.length; i++) {
                 const atkType = e.attacks[i].type;
@@ -525,16 +530,11 @@ export const EnemyAI = {
         }
 
         if (e.slowTimer > 0) e.slowTimer -= delta;
-
-        if (!isPhysicallyAirborne && e.state !== AIState.ATTACK_CHARGE) {
-            if (e.mesh.userData.baseY === undefined) e.mesh.userData.baseY = e.mesh.position.y;
-            e.mesh.position.y = e.mesh.userData.baseY + Math.abs(Math.sin(now * (e.state === AIState.CHASE ? 0.018 : 0.009))) * 0.12;
-        }
     }
 };
 
 // --- HELPERS ---
-function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, now: number, isChasing: boolean) {
     _v1.set(target.x, e.mesh.position.y, target.z);
     _v2.subVectors(_v1, e.mesh.position);
     const dist = _v2.length();
@@ -565,13 +565,16 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     const baseScale = e.originalScale || 1.0;
     const hitRadius = 0.5 * baseScale * (e.widthScale || 1.0);
 
-    const nearby = collisionGrid.getNearbyObstacles(_v4, hitRadius + 1.5);
+    // ZERO-GC: Obstacles usually don't move. We pass a tighter radius
+    const nearby = collisionGrid.getNearbyObstacles(_v4, hitRadius + 1.0);
     for (let i = 0; i < nearby.length; i++) {
         applyCollisionResolution(_v4, hitRadius, nearby[i]);
     }
 
-    const groundY = 1.0 * (e.originalScale || 1.0);
-    _v4.y = groundY;
+    // Ground bounce applied directly here
+    const groundY = 1.0 * baseScale;
+    const bounceOffset = Math.abs(Math.sin(now * (isChasing ? 0.018 : 0.009))) * 0.12;
+    _v4.y = groundY + bounceOffset;
 
     e.mesh.position.copy(_v4);
 
@@ -580,7 +583,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
-    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
+    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3(); // Note: Will be pre-allocated in EnemyManager moving forward
     e.lastKnownPosition.copy(pos);
     e.lastSeenTime = now;
 }

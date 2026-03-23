@@ -43,7 +43,9 @@ export const EnemySpawner = {
         e.speed = typeData.speed;
         e.color = typeData.color;
         e.attacks = typeData.attacks || [];
-        e.attackCooldowns = {};
+        for (const key in e.attackCooldowns) {
+            e.attackCooldowns[key] = 0;
+        }
 
         // Visual Transformation Data
         e.originalScale = typeData.scale || 1.0;
@@ -126,9 +128,10 @@ export const EnemySpawner = {
             searchTimer: 0,
 
             spawnPos: new THREE.Vector3(x, 0, z),
-            lastSeenPos: new THREE.Vector3(),
             lastSeenTime: 0,
+            lastKnownPosition: new THREE.Vector3(x, 0, z),
             hearingThreshold: 1.0,
+            awareness: 0,
 
             isBoss: false,
             dead: false,
@@ -225,9 +228,10 @@ export const EnemySpawner = {
             idleTimer: 2.0,
             searchTimer: 0,
             spawnPos: new THREE.Vector3(pos.x, 0, pos.z),
-            lastSeenPos: new THREE.Vector3(),
             lastSeenTime: 0,
+            lastKnownPosition: new THREE.Vector3(pos.x, 0, pos.z),
             hearingThreshold: 1.5,
+            awareness: 0.2,
             isBoss: true,
             bossId: bossData.id,
             dead: false,
@@ -268,33 +272,4 @@ export const EnemySpawner = {
         return enemy;
     },
 
-    /**
-     * Spawns a cluster of enemies.
-     */
-    spawnHorde: (
-        scene: THREE.Scene,
-        startPos: THREE.Vector3,
-        count: number,
-        bossSpawned: boolean,
-        currentCount: number
-    ): Enemy[] => {
-        console.log(`[Spawner] Initierar spawnHorde med ${count} fiender!`);
-        const horde: Enemy[] = [];
-        const goldenAngle = 137.5 * (Math.PI / 180); // 2.3999 radianer
-        const spacing = 1.5; // Varje zombie får 1.5 meters radie
-
-        for (let i = 0; i < count; i++) {
-            const radius = Math.sqrt(i) * spacing; // Roten ur ger en jämn densitet!
-            const theta = i * goldenAngle;
-
-            _v1.set(
-                startPos.x + Math.cos(theta) * radius,
-                0,
-                startPos.z + Math.sin(theta) * radius
-            );
-            const enemy = EnemySpawner.spawn(scene, startPos, undefined, _v1, bossSpawned, currentCount + i);
-            if (enemy) horde.push(enemy);
-        }
-        return horde;
-    }
 };

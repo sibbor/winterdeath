@@ -56,26 +56,6 @@ export class EnemySystem implements System {
             t: this.callbacks.t,
             gainXp: this.callbacks.gainXp,
             onBossKilled: this.callbacks.onBossKilled,
-            // Register drowned enemy body as a floating prop in the nearest water body
-            registerFloatingCorpse: (mesh: THREE.Object3D, pos: THREE.Vector3) => {
-                const water = session.engine.water;
-                if (!water || water.waterBodies.length === 0) {
-                    scene.add(mesh);
-                    return;
-                }
-                // Find nearest water body
-                let nearest = water.waterBodies[0];
-                let bestDistSq = Infinity;
-                for (let i = 0; i < water.waterBodies.length; i++) {
-                    const b = water.waterBodies[i];
-                    const dx = pos.x - b.surface.bounds.x;
-                    const dz = pos.z - b.surface.bounds.z;
-                    const dSq = dx * dx + dz * dz;
-                    if (dSq < bestDistSq) { bestDistSq = dSq; nearest = b; }
-                }
-                scene.add(mesh);
-                nearest.registerFloatingProp(mesh);
-            }
         };
     }
 

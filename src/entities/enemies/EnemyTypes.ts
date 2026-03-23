@@ -153,7 +153,6 @@ export interface Enemy {
 
     // AI Knowledge & Sensors
     spawnPos: THREE.Vector3;           // Anchor point for WANDER behavior
-    lastSeenPos: THREE.Vector3 | null; // Coordinates of the last player sighting
     lastSeenTime: number;              // Timestamp of the last sighting
     lastKnownPosition: THREE.Vector3;  // Memory of where the player was last detected via sound/sight
     hearingThreshold: number;          // Range multiplier for sound detection (0.0 to 1.0+)
