@@ -27,7 +27,6 @@ export interface GameContext {
     enemies: Enemy[];
     collisionGrid: SpatialGrid;
     spawnPart: (x: number, y: number, z: number, type: string, count: number, mesh?: any, vel?: any, color?: number, scale?: number, life?: number) => void;
-    spawnDecal: (x: number, z: number, scale: number, mat?: any) => void;
     explodeEnemy: (e: Enemy, force: THREE.Vector3) => void;
     addScore: (amt: number) => void;
     addFireZone: (z: FireZone) => void;
@@ -83,8 +82,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
     [WeaponType.GRENADE]: {
         onImpact: (ctx, pos, radius, damage, hitWater) => {
-            const engine = WinterEngine.getInstance();
-
             // --- 1. DYNAMIC NOISE & AUDIO ---
             if (hitWater) {
                 soundManager.playWaterExplosion();
@@ -97,39 +94,8 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
             const effectiveNoiseRadius = hitWater ? (NOISE_RADIUS.GRENADE * 0.5) : NOISE_RADIUS.GRENADE;
             ctx.makeNoise(pos, NoiseType.GRENADE, effectiveNoiseRadius);
 
-            _v2.set(0, 0, 0);
-
-            // --- 2. VISUALS ---
-            if (!hitWater) {
-                ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2, undefined, 1.5, 1.0);
-                ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 1, undefined, _v2, undefined, radius * 0.2, 2.0);
-                ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 25.0);
-
-                const fireScale = radius * 0.15;
-                for (let i = 0; i < 8; i++) {
-                    _v2.set(Math.random() - 0.5, Math.random() * 0.5 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.25);
-                    const type = i < 3 ? 'large_fire' : 'fire';
-                    ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, type, 1, undefined, _v2, undefined, fireScale + Math.random() * 0.5, 8 + Math.random() * 5);
-                }
-
-                const smokeScale = radius * 0.2;
-                for (let i = 0; i < 15; i++) {
-                    _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.4, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.5 * Math.random());
-                    ctx.spawnPart(pos.x, pos.y + 0.8, pos.z, 'large_smoke', 1, undefined, _v2, undefined, smokeScale + Math.random(), 30 + Math.random() * 20);
-                }
-
-                for (let i = 0; i < 15; i++) {
-                    _v2.set(Math.random() - 0.5, Math.random() * 1.2 + 0.5, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.8);
-                    ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'debris', 1, undefined, _v2, undefined, 0.3 + Math.random() * 0.3, 40 + Math.random() * 20);
-                }
-
-                ctx.spawnDecal(pos.x, pos.z, 4.0, MATERIALS.scorchDecal);
-            } else {
-                ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 85);
-                if (engine && engine.water) {
-                    engine.water.spawnExplosionRipple(pos.x, pos.z, 200.0);
-                }
-            }
+            // --- 2. VISUALS (Helt inkapslat!) ---
+            WeaponFX.createGrenadeImpact(pos, radius, hitWater, ctx);
 
             // --- 3. HIT DETECTION ---
             const effectiveRadius = hitWater ? radius * 0.5 : radius;
@@ -164,20 +130,24 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
     [WeaponType.MOLOTOV]: {
         onImpact: (ctx, pos, radius, damage, hitWater) => {
-            const engine = WinterEngine.getInstance();
-
-            // Noise, sound, haptic
+            // --- 1. DYNAMIC NOISE & AUDIO ---
             if (hitWater) {
                 ctx.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.BULLET_HIT);
                 soundManager.playWaterSplash();
                 haptic.explosionWater();
-                return;
+            } else {
+                ctx.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.MOLOTOV);
+                soundManager.playMolotovImpact();
+                haptic.explosion();
             }
 
-            ctx.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.MOLOTOV);
-            soundManager.playMolotovImpact();
-            haptic.explosion();
+            // --- 2. VISUALS (Delegated to WeaponFX) ---
+            WeaponFX.createMolotovImpact(pos, radius, hitWater, ctx);
 
+            // Om den träffar vatten skapar vi ingen FireZone
+            if (hitWater) return;
+
+            // --- 3. FIREZONE LOGIC (Physics/State) ---
             let fz: FireZone | null = null;
             for (let i = 0; i < FIREZONE_POOL.length; i++) {
                 if (FIREZONE_POOL[i].life <= 0) {
@@ -201,12 +171,16 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
             if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
             ctx.addFireZone(fz);
-            ctx.spawnDecal(pos.x, pos.z, fz.radius * 2.0, MATERIALS.scorchDecal);
 
+            // --- 4. HIT DETECTION (Initial burn) ---
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = fz.radiusSq;
             for (let i = 0; i < direct.length; i++) {
                 const e = direct[i];
+
+                // Säkerhetskoll (precis som vi gjorde för granaten)
+                if (e.deathState !== EnemyDeathState.ALIVE) continue;
+
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
                     ctx.applyDamage(e, 0, WeaponType.MOLOTOV);
                     e.isBurning = true;
@@ -219,25 +193,24 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
     [WeaponType.FLASHBANG]: {
         onImpact: (ctx, pos, radius, damage, hitWater) => {
-            const engine = WinterEngine.getInstance();
-
+            // --- 1. DYNAMIC NOISE & AUDIO ---
             if (hitWater) {
                 ctx.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.BULLET_HIT);
                 soundManager.playWaterSplash();
                 haptic.explosionWater();
-                return;
+            } else {
+                ctx.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.FLASHBANG);
+                soundManager.playFlashbangImpact();
+                haptic.explosion();
             }
 
-            ctx.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.FLASHBANG);
-            soundManager.playFlashbangImpact();
-            haptic.explosion();
+            // --- 2. VISUALS (Delegated to WeaponFX) ---
+            WeaponFX.createFlashbangImpact(pos, hitWater, ctx);
 
-            // Relative Y-coordinate (pos.y + 2) instead of fixed value
-            ctx.spawnPart(pos.x, pos.y + 2, pos.z, 'flash', 1, undefined, undefined, undefined, 8.0);
-            ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal);
-
+            // --- 3. HIT DETECTION (Blind & Stun) ---
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = radius * radius;
+
             for (let i = 0; i < nearby.length; i++) {
                 const e = nearby[i];
 
@@ -249,8 +222,8 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
                     e.blindTimer = 4.0;
                     e.stunTimer = 1.5;
 
-                    // Relative Y-coordinate for stun effect above enemy head
-                    ctx.spawnPart(e.mesh.position.x, e.mesh.position.y + 1.8, e.mesh.position.z, 'enemy_effect_stun', 3, undefined, undefined, undefined, 0.8);
+                    // Stun sparks delegated to WeaponFX
+                    WeaponFX.createStunSparks(e.mesh.position);
                 }
             }
         }
@@ -285,7 +258,7 @@ export const ProjectileSystem = {
         return p;
     },
 
-    spawnBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, damage?: number) => {
+    launchBullet: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, dir: THREE.Vector3, weapon: string, damage?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
@@ -319,7 +292,7 @@ export const ProjectileSystem = {
         projectiles.push(p);
     },
 
-    spawnThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, target: THREE.Vector3, weapon: string, time: number) => {
+    launchThrowable: (scene: THREE.Scene, projectiles: Projectile[], origin: THREE.Vector3, target: THREE.Vector3, weapon: string, time: number, damage: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
@@ -351,7 +324,7 @@ export const ProjectileSystem = {
 
         p.speed = p.vel.length();
         p.origin.copy(origin);
-        p.damage = data.damage;
+        p.damage = damage !== undefined ? damage : data.damage;
         p.life = time + 0.5;
         p.maxRadius = data.range;
 
@@ -369,7 +342,6 @@ export const ProjectileSystem = {
     },
 
     // --- CONTINUOUS WEAPON HANDLING ---
-
     handleContinuousFire: (weapon: WeaponType, origin: THREE.Vector3, direction: THREE.Vector3, delta: number, ctx: GameContext, damageOverride?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
@@ -378,7 +350,7 @@ export const ProjectileSystem = {
 
         if (weapon === WeaponType.FLAMETHROWER) {
             if (Math.random() < 0.3) {
-                WeaponFX.spawnMuzzleFlash(origin, direction, false);
+                WeaponFX.createMuzzleFlash(origin, direction, false);
             }
 
             // Skapa elden (vi ökar till 4 partiklar per tick för att molnet ska bli riktigt tätt)
@@ -386,7 +358,7 @@ export const ProjectileSystem = {
             for (let i = 0; i < count; i++) {
                 // Sprid ut startpunkten marginellt för att elden ska se oregelbunden ut direkt från mynningen
                 _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.8);
-                WeaponFX.spawnFlame(_v1, direction);
+                WeaponFX.createFlame(_v1, direction);
             }
 
             const range = data.range;
@@ -493,7 +465,7 @@ export const ProjectileSystem = {
                 const primaryTarget = _arcCannonHitList[0];
                 _v1.copy(primaryTarget.mesh.position).y += 1.0;
 
-                WeaponFX.spawnLightning(_v3, _v1, true);
+                WeaponFX.createLightning(_v3, _v1, true);
                 ctx.applyDamage(primaryTarget, finalDamage, WeaponType.ARC_CANNON);
                 primaryTarget.stunTimer = stunDur;
 
@@ -505,7 +477,7 @@ export const ProjectileSystem = {
                     const e = _arcCannonHitList[i];
                     _v1.copy(e.mesh.position).y += 1.0;
 
-                    WeaponFX.spawnLightning(_v3, _v1, false);
+                    WeaponFX.createLightning(_v3, _v1, false);
                     ctx.applyDamage(e, finalDamage, WeaponType.ARC_CANNON);
                     e.stunTimer = stunDur;
 
@@ -521,7 +493,7 @@ export const ProjectileSystem = {
             } else {
                 // Shoot empty bolt into the void
                 _v1.copy(origin).addScaledVector(direction, range);
-                WeaponFX.spawnLightning(origin, _v1, true);
+                WeaponFX.createLightning(origin, _v1, true);
 
                 if (ctx.now - _lastArcSoundTime > 150) {
                     soundManager.playArcCannonZap();
@@ -548,57 +520,44 @@ export const ProjectileSystem = {
             }
         }
 
-        for (let i = fireZones.length - 1; i >= 0; i--) {
-            const fz = fireZones[i];
-            fz.life -= delta;
+        // Update FireZones only if there are any:
+        if (fireZones.length > 0) {
+            for (let i = fireZones.length - 1; i >= 0; i--) {
+                const fz = fireZones[i];
+                fz.life -= delta;
 
-            if (!fz._lastDamageTime || now - fz._lastDamageTime > 500) {
-                fz._lastDamageTime = now;
-                const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
-                const rSq = fz.radiusSq;
-                for (let _ni = 0; _ni < nearby.length; _ni++) {
-                    const e = nearby[_ni];
-                    if (e.deathState !== EnemyDeathState.ALIVE) {
-                        continue;
+                if (!fz._lastDamageTime || now - fz._lastDamageTime > 500) {
+                    fz._lastDamageTime = now;
+                    const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
+                    const rSq = fz.radiusSq;
+                    for (let _ni = 0; _ni < nearby.length; _ni++) {
+                        const e = nearby[_ni];
+                        if (e.deathState !== EnemyDeathState.ALIVE) {
+                            continue;
+                        }
+                        if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
+                            e.isBurning = true;
+                            e.afterburnTimer = 5.0;
+                            e.burnTimer = 0.5;
+                        }
                     }
-                    if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
-                        e.isBurning = true;
-                        e.afterburnTimer = 5.0;
-                        e.burnTimer = 0.5;
+
+                    // Player Burn Interaction
+                    if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
+                        if (ctx.onPlayerHit) {
+                            ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, 'Fire');
+                        }
                     }
                 }
 
-                // TODO: Does this work?
-                // Player Burn Interaction
-                if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
-                    if (ctx.onPlayerHit) {
-                        ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, 'Fire');
-                    }
+                // Firezone visuals
+                WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta, ctx);
+
+                if (fz.life <= 0) {
+                    ctx.scene.remove(fz.mesh);
+                    fireZones[i] = fireZones[fireZones.length - 1];
+                    fireZones.pop();
                 }
-            }
-
-            const targetFlameCount = 360 * delta;
-            let flameCount = Math.floor(targetFlameCount);
-            if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
-
-            for (let j = 0; j < flameCount; j++) {
-                const r = Math.sqrt(Math.random()) * fz.radius;
-                const theta = Math.random() * Math.PI * 2;
-                const fx = fz.mesh.position.x + r * Math.cos(theta);
-                const fzZ = fz.mesh.position.z + r * Math.sin(theta);
-
-                const normalizedDist = r / fz.radius;
-                const flameScale = 2.5 - normalizedDist * 1.8;
-                const flameY = 0.3 + (1.0 - normalizedDist) * 1.2;
-                const colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
-
-                ctx.spawnPart(fx, flameY, fzZ, 'fire', 1, undefined, undefined, colorHex, flameScale);
-            }
-
-            if (fz.life <= 0) {
-                ctx.scene.remove(fz.mesh);
-                fireZones[i] = fireZones[fireZones.length - 1];
-                fireZones.pop();
             }
         }
     },
@@ -660,7 +619,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
         if (_v6.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
-            ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'smoke', 3);
+            //ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'smoke', 3);
             soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
             ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS.BULLET_HIT);
             break;
@@ -749,15 +708,12 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     let hitY = 0;
 
     const engine = WinterEngine.getInstance();
-
     if (engine && engine.water) {
         engine.water.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
         if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {
             destroyed = true;
             hitWater = true;
             hitY = _buoyancyResult.waterLevel;
-            ctx.spawnPart(p.mesh.position.x, hitY, p.mesh.position.z, 'splash', 15);
-            engine.water.spawnRipple(p.mesh.position.x, p.mesh.position.z, 5.0);
         }
     }
 
@@ -786,4 +742,5 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     } else {
         p.life -= delta;
     }
+
 }

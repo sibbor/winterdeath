@@ -310,8 +310,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const introTime = now - refs.bossIntroRef.current.startTime;
 
             _vCamera.set(bossPos.x, 12, bossPos.z + 20);
-            engine.camera.setPosition(_vCamera.x, _vCamera.y, _vCamera.z);
-            engine.camera.lookAt(bossPos.x, bossPos.y + 3, bossPos.z);
+            engine.camera.setPosition(_vCamera);
+            _vInteraction.set(bossPos.x, bossPos.y + 3, bossPos.z);
+            engine.camera.lookAt(_vInteraction);
 
             if (frame % 5 === 0 && introTime < 3000) {
                 bossMesh.rotation.y += (Math.random() - 0.5) * 0.2;
@@ -340,7 +341,14 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const burningObjects = refs.sectorContextRef.current?.burningObjects || EMPTY_ARRAY;
             for (let i = 0; i < burningObjects.length; i++) {
                 const mesh = burningObjects[i];
-                if (!mesh.userData.effects) continue;
+                if (!mesh.visible || !mesh.userData.effects) continue;
+
+                // --- DISTANCE CULLING ---
+                const distSq = mesh.position.distanceToSquared(playerGroup.position);
+                if (distSq > 3600) { // 60 units radius
+                    continue;
+                }
+
                 const effs = mesh.userData.effects;
                 const cos = Math.cos(mesh.rotation.y);
                 const sin = Math.sin(mesh.rotation.y);
@@ -505,8 +513,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     engine.camera.setCinematic(false);
                 } else {
                     _vCamera.copy(engine.camera.position).lerp(override.targetPos, 1.0 - Math.exp(-10.0 * delta));
-                    engine.camera.setPosition(_vCamera.x, _vCamera.y, _vCamera.z, true);
-                    engine.camera.lookAt(override.lookAtPos, true);
+                    engine.camera.setPosition(_vCamera, true);
+                    engine.camera.lookAt(override.lookAtPos, true); // (Denna hade du redan fixat, snyggt!)
                 }
             } else {
                 if (state.hurtShake > 0) {
@@ -662,13 +670,26 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 16. Emitters Update
         monitor.begin('active_effects');
         if (state.activeEffects) {
+            // --- BACKLOG AWARENESS ---
+            const isBacklogged = (FXSystem as any).ambientQueue.length > 1000;
+
             for (let i = 0; i < state.activeEffects.length; i++) {
                 const obj = state.activeEffects[i];
                 if (!obj.visible || !obj.userData.effects) continue;
+
+                // --- DISTANCE CULLING ---
+                const distSq = obj.position.distanceToSquared(playerGroup.position);
+                if (distSq > 3600) { // 60 units radius
+                    continue;
+                }
+
                 const effects = obj.userData.effects;
                 for (let j = 0; j < effects.length; j++) {
                     const eff = effects[j];
                     if (eff.type === 'emitter') {
+                        // Skip non-essential ambient effects if backlogged
+                        if (isBacklogged && !eff.essential) continue;
+
                         if (!eff.lastEmit) eff.lastEmit = 0;
                         if (now - eff.lastEmit > eff.interval) {
                             eff.lastEmit = now;

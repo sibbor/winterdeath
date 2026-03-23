@@ -450,6 +450,12 @@ export class SoundManager {
       SoundBank.play(this.core, 'door_metal_open', 0.3);
     }
   }
+  
+  playVehicleImpact(type: 'light' | 'heavy') {
+    const vol = type === 'heavy' ? 0.6 : 0.3;
+    const pitch = type === 'heavy' ? 0.8 : 1.2;
+    SoundBank.play(this.core, 'vehicle_impact', vol, pitch + Math.random() * 0.2);
+  }
 
   playVehicleHorn() {
     SoundBank.play(this.core, 'vehicle_horn', 0.5);

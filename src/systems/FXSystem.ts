@@ -43,15 +43,18 @@ interface SpawnRequest {
 // --- PERFORMANCE SCRATCHPADS & CONSTANTS ---
 const _tempColor = new THREE.Color();
 const _v1 = new THREE.Vector3();
+const _lastSpawnX: Record<string, number> = {};
+const _lastSpawnZ: Record<string, number> = {};
 const REQUEST_POOL: SpawnRequest[] = [];
 const DECAL_REQUEST_POOL: SpawnRequest[] = [];
 
 // Limits
 const MAX_INSTANCES_PER_MESH = 5000;
-const MAX_AMBIENT_SPAWNS_PER_FRAME = 250;
-const AMBIENT_QUEUE_WARNING_LIMIT = 1000;
+const MAX_AMBIENT_SPAWNS_PER_FRAME = 500;
+const AMBIENT_QUEUE_WARNING_LIMIT = 1500;
+const AMBIENT_QUEUE_HARD_CAP = 2000;
 const MAX_DECALS = 150;
-const MAX_PARTICLE_REQUESTS = 500;
+const MAX_PARTICLE_REQUESTS = 2200; // Buffer for essential + ambient
 
 // Pre-allocate pools to prevent mid-combat GC spikes
 for (let i = 0; i < MAX_PARTICLE_REQUESTS; i++) {
@@ -452,6 +455,28 @@ export const FXSystem = {
     spawnPart: (scene: THREE.Scene, particlesList: ParticleState[], x: number, y: number, z: number, type: string, count: number, customMesh?: any, customVel?: THREE.Vector3, color?: number, scale?: number, life?: number) => {
         const isEssential = !!ESSENTIAL_TYPES[type];
 
+        // --- SPATIAL THROTTLING (ZERO-GC) ---
+        if (!isEssential) {
+            if (_lastSpawnX[type] === undefined) {
+                _lastSpawnX[type] = -999;
+                _lastSpawnZ[type] = -999;
+            }
+
+            const lastX = _lastSpawnX[type];
+            const lastZ = _lastSpawnZ[type];
+            const distSq = (x - lastX) * (x - lastX) + (z - lastZ) * (z - lastZ);
+
+            // If spawning at basically the same spot in the same frame burst, 
+            // reduce count or skip to save performance during high-intensity moments.
+            if (distSq < 0.04) { // 0.2 units distance
+                if (count > 2) count = Math.ceil(count * 0.5);
+                else if (Math.random() < 0.7) return;
+            }
+
+            _lastSpawnX[type] = x;
+            _lastSpawnZ[type] = z;
+        }
+
         for (let i = 0; i < count; i++) {
             let req = FXSystem._getSpawnRequest();
             req.scene = scene; req.particlesList = particlesList; req.x = x; req.y = y; req.z = z;
@@ -468,8 +493,13 @@ export const FXSystem = {
             if (isEssential) {
                 FXSystem.essentialQueue.push(req);
             } else {
+                if (FXSystem.ambientQueue.length >= AMBIENT_QUEUE_HARD_CAP) {
+                    // Recycle request immediately if we can't queue it (Zero-GC save!)
+                    REQUEST_POOL.push(req);
+                    continue;
+                }
                 if (FXSystem.ambientQueue.length === AMBIENT_QUEUE_WARNING_LIMIT) {
-                    console.warn(`[FXSystem] Ambient queue is heavily backlogged. Performance may degrade.`);
+                    console.warn(`[FXSystem] Ambient queue is heavily backlogged (${FXSystem.ambientQueue.length}). Performance may degrade.`);
                 }
                 FXSystem.ambientQueue.push(req);
             }

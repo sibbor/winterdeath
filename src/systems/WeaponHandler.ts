@@ -152,7 +152,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null, debugMode: boolean = false, cameraAngle: number = 0, camera: THREE.Camera | null = null) => {
+    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
         if (state.activeVehicle) {
             return;
         }
@@ -236,11 +236,11 @@ export const WeaponHandler = {
 
             if (input.fire) {
                 const isUnlimited = !!state.sectorState?.unlimitedAmmo;
-                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || debugMode || isUnlimited;
+                const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                 const actualFireRate = wep.fireRate / (state.multipliers.fireRate || 1.0);
                 if (now > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = now;
-                    if (!debugMode && !isUnlimited) state.weaponAmmo[state.activeWeapon]--;
+                    if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
                     state.shotsFired++;
 
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
@@ -256,6 +256,10 @@ export const WeaponHandler = {
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;
                     const spread = wep.name === WeaponType.SHOTGUN ? 0.15 : 0;
 
+                    // Calculate total damage once (Zero-GC and faster)
+                    const totalDamage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
+                    const damagePerPellet = totalDamage / pellets;
+
                     for (let i = 0; i < pellets; i++) {
                         _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion);
 
@@ -268,7 +272,7 @@ export const WeaponHandler = {
                             _v3.normalize();
                         }
 
-                        ProjectileSystem.spawnBullet(scene, state.projectiles, _v2, _v3, wep.name, WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]));
+                        ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name, damagePerPellet);
                     }
                 } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + wep.fireRate) {
                     state.lastShotTime = now;
@@ -303,9 +307,11 @@ export const WeaponHandler = {
 
                 const tMax = 1.0 + (dist / maxDist) * 0.5;
 
-                ProjectileSystem.spawnThrowable(scene, state.projectiles, _v2, _v3, state.activeWeapon, tMax);
+                const damage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
+                ProjectileSystem.launchThrowable(scene, state.projectiles, _v2, _v3,
+                    state.activeWeapon, tMax, damage);
 
-                if (state.weaponAmmo[state.activeWeapon] <= 0 && !debugMode) {
+                if (state.weaponAmmo[state.activeWeapon] <= 0) {
                     state.activeWeapon = loadout.primary;
                 }
 
@@ -316,7 +322,7 @@ export const WeaponHandler = {
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             };
 
-            const canCharge = (state.weaponAmmo[state.activeWeapon] > 0 || debugMode) && now > (state.lastShotTime || 0) + 500;
+            const canCharge = (state.weaponAmmo[state.activeWeapon] > 0) && now > (state.lastShotTime || 0) + 500;
 
             if (input.fire && canCharge) {
                 if (state.throwChargeStart === 0) state.throwChargeStart = now;

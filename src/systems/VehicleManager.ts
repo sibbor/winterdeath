@@ -5,6 +5,7 @@ import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { VehicleDef } from '../content/vehicles';
 import { FLASHLIGHT } from '../content/constants';
+import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 
 const HIT_COOLDOWN_MS = 350;
 const SPEED_SQ_PUSH = 1.0;
@@ -46,6 +47,16 @@ export const VehicleManager = {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
                 VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, now);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
+                
+                // --- ENGINE & MOVEMENT NOISE ---
+                const speedSq = vel.lengthSq();
+                const noiseType = speedSq > 5 ? NoiseType.VEHICLE_DRIVE : NoiseType.VEHICLE_IDLE;
+                const noiseRadius = NOISE_RADIUS[noiseType];
+
+                if (!vehicle.userData._lastNoiseTime || now - vehicle.userData._lastNoiseTime > 500) {
+                    session.makeNoise(vehicle.position, noiseType, noiseRadius);
+                    vehicle.userData._lastNoiseTime = now;
+                }
             }
         }
     },
@@ -242,6 +253,7 @@ export const VehicleManager = {
                 const isHeavyHit = (EnemyManager as any).applyVehicleHit(e, _knockDir, speedMS, def, state, session, now);
                 if (isHeavyHit) {
                     vehicle.userData.suspVelY += 2.0;
+                    soundManager.playVehicleImpact(speedMS > 15 ? 'heavy' : 'light');
                 }
             }
         }
@@ -284,6 +296,11 @@ export const VehicleManager = {
 
                 vehicle.userData.suspVelY += impactDot < 0 ? -impactDot * 0.5 : impactDot * 0.5;
                 vel.multiplyScalar(0.85);
+
+                const impactSpeed = Math.abs(impactDot);
+                if (impactSpeed > 2.0) {
+                    soundManager.playVehicleImpact(impactSpeed > 10.0 ? 'heavy' : 'light');
+                }
             }
         }
     }

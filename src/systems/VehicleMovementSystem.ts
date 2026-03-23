@@ -12,9 +12,6 @@ const _v1 = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 
-import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
-import { WinterEngine } from '../core/engine/WinterEngine';
-
 // --- FAKE BRAKE GLOW (Zero-GC / Procedural Texture) ---
 // Generates a soft, glowing gradient texture dynamically on load
 function createBrakeGlowTexture() {
@@ -125,8 +122,6 @@ export class VehicleMovementSystem implements System {
 
         const vel = ud.velocity as THREE.Vector3;
         const angVel = ud.angularVelocity as THREE.Vector3;
-
-        // (Engine startup is now handled by VehicleManager)
 
         // --- COMPUTE FORWARD & RIGHT VECTORS ---
         // Extracted directly from the world matrix (Zero-GC)
@@ -427,21 +422,7 @@ export class VehicleMovementSystem implements System {
                     }
                 }
             }
-
-            // --- VEHICLE WORLD NOISE ---
-            if (state.vehicleEngineState !== 'OFF') {
-                const noiseType = speedSq > 25 ? NoiseType.VEHICLE_DRIVE : NoiseType.VEHICLE_IDLE;
-                const noiseRadius = NOISE_RADIUS[noiseType];
-
-                if (!ud._lastNoiseTime || now - ud._lastNoiseTime > 500) {
-                    WinterEngine.getInstance().makeNoise(vehicle.position, noiseType, noiseRadius);
-                    ud._lastNoiseTime = now;
-                }
-            }
         }
-
-        // --- COLLISION ---
-        // (Collisions are now handled by VehicleManager)
 
         // --- SYNC PLAYER TO VEHICLE & DISMOUNT LOGIC ---
         if (input) {

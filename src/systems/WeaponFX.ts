@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { FXSystem } from './FXSystem';
+import { WinterEngine } from '../core/engine/WinterEngine';
+import { MATERIALS } from '../utils/assets';
 
 // --- ZERO-GC SCRATCHPADS ---
 // Dedicated memory spaces solely for weapon calculations
@@ -11,7 +13,103 @@ const _v8 = new THREE.Vector3();
 
 export const WeaponFX = {
 
-    spawnFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
+    createGrenadeImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
+        if (hitWater) {
+            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 85);
+            const engine = WinterEngine.getInstance();
+            if (engine && engine.water) {
+                engine.water.spawnRipple(pos.x, pos.z, 200.0);
+            }
+            return;
+        }
+
+        // Flash, shockwave, blast radius
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 1.5, 1.0);
+        ctx.spawnPart(pos.x, pos.y + 0.1, pos.z, 'shockwave', 1, undefined, _v2, undefined, radius * 0.2, 2.0);
+        ctx.spawnPart(pos.x, pos.y + 0.05, pos.z, 'blastRadius', 1, undefined, _v2, undefined, radius, 25.0);
+
+        // Fire
+        const fireScale = radius * 0.15;
+        for (let i = 0; i < 8; i++) {
+            _v2.set(Math.random() - 0.5, Math.random() * 0.5 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.25);
+            const type = i < 3 ? 'large_fire' : 'fire';
+            ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, type, 1, undefined, _v2, undefined, fireScale + Math.random() * 0.5, 8 + Math.random() * 5);
+        }
+
+        // Smoke
+        const smokeScale = radius * 0.2;
+        for (let i = 0; i < 15; i++) {
+            _v2.set(Math.random() - 0.5, Math.random() * 0.8 + 0.4, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.5 * Math.random());
+            ctx.spawnPart(pos.x, pos.y + 0.8, pos.z, 'large_smoke', 1, undefined, _v2, undefined, smokeScale + Math.random(), 30 + Math.random() * 20);
+        }
+
+        // Debris
+        for (let i = 0; i < 15; i++) {
+            _v2.set(Math.random() - 0.5, Math.random() * 1.2 + 0.5, Math.random() - 0.5).normalize().multiplyScalar(radius * 0.8);
+            ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'debris', 1, undefined, _v2, undefined, 0.3 + Math.random() * 0.3, 40 + Math.random() * 20);
+        }
+
+        // Scorch mark
+        ctx.spawnDecal(pos.x, pos.z, 4.0, MATERIALS.scorchDecal);
+    },
+
+    createMolotovImpact: (pos: THREE.Vector3, radius: number, hitWater: boolean, ctx: any) => {
+        if (hitWater) {
+            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 30);
+            const engine = WinterEngine.getInstance();
+            if (engine && engine.water) {
+                engine.water.spawnRipple(pos.x, pos.z, 50.0);
+            }
+            return;
+        }
+
+        // Initial burst (Glas som krossas + en snabb puff av eld)
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'glass', 15);
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), 0xff8800, 1.0, 1.0);
+        ctx.spawnPart(pos.x, pos.y + 0.5, pos.z, 'large_fire', 5, undefined, undefined, undefined, 1.5);
+
+        // Brännmärket på marken
+        ctx.spawnDecal(pos.x, pos.z, radius * 2.0, MATERIALS.scorchDecal);
+    },
+
+    updateFireZoneVisuals: (pos: THREE.Vector3, radius: number, delta: number, ctx: any) => {
+        const targetFlameCount = 360 * delta;
+        let flameCount = Math.floor(targetFlameCount);
+        if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
+
+        for (let j = 0; j < flameCount; j++) {
+            const r = Math.sqrt(Math.random()) * radius;
+            const theta = Math.random() * Math.PI * 2;
+            const fx = pos.x + r * Math.cos(theta);
+            const fzZ = pos.z + r * Math.sin(theta);
+
+            const normalizedDist = r / radius;
+            const flameScale = 2.5 - normalizedDist * 1.8;
+            const flameY = 0.3 + (1.0 - normalizedDist) * 1.2;
+            const colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
+
+            ctx.spawnPart(fx, flameY, fzZ, 'fire', 1, undefined, undefined, colorHex, flameScale);
+        }
+    },
+
+    createFlashbangImpact: (pos: THREE.Vector3, hitWater: boolean, ctx: any) => {
+        if (hitWater) {
+            ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 30);
+            const engine = WinterEngine.getInstance();
+            if (engine && engine.water) {
+                engine.water.spawnRipple(pos.x, pos.z, 50.0);
+            }
+            return;
+        }
+
+        // The blinding flash
+        ctx.spawnPart(pos.x, pos.y + 2, pos.z, 'flash', 1, undefined, _v2.set(0, 0, 0), undefined, 8.0);
+
+        // Minor scorch mark from the casing popping
+        ctx.spawnDecal(pos.x, pos.z, 2.0, MATERIALS.scorchDecal);
+    },
+
+    createFlame: (start: THREE.Vector3, direction: THREE.Vector3) => {
         // Tajtare spridning så att trycket riktas mer framåt
         const spread = 0.30;
         _v1.copy(direction).add(_v2.set(
@@ -42,7 +140,7 @@ export const WeaponFX = {
         FXSystem.essentialQueue.push(req);
     },
 
-    spawnMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
+    createMuzzleFlash: (start: THREE.Vector3, direction: THREE.Vector3, isCyan: boolean = false) => {
         const spread = 0.2;
         _v1.copy(direction).add(_v2.set(
             (Math.random() - 0.5) * spread,
@@ -67,7 +165,7 @@ export const WeaponFX = {
         FXSystem.essentialQueue.push(req);
     },
 
-    spawnLightning: (start: THREE.Vector3, end: THREE.Vector3, isMain: boolean = true) => {
+    createLightning: (start: THREE.Vector3, end: THREE.Vector3, isMain: boolean = true) => {
         const dist = start.distanceTo(end);
         const segments = Math.max(3, Math.floor(dist * 1.5));
         const jitterScale = isMain ? 1.5 : 0.8;
@@ -130,7 +228,7 @@ export const WeaponFX = {
         }
     },
 
-    spawnStunSparks: (pos: THREE.Vector3) => {
+    createStunSparks: (pos: THREE.Vector3) => {
         for (let i = 0; i < 3; i++) {
             const req = FXSystem._getSpawnRequest();
             req.scene = null as any;

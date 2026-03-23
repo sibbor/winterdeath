@@ -426,6 +426,20 @@ const Generators = {
         }
         return buffer;
     },
+    vehicle_impact: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.6;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Heavy crunch (noise + pulse)
+            const crunch = (Math.random() * 2 - 1) * 0.4 * Math.exp(-8 * t);
+            const thud = Math.sin(2 * Math.PI * 60 * t) * 0.5 * Math.exp(-12 * t);
+            const metal = Math.sin(2 * Math.PI * 400 * t) * 0.1 * Math.exp(-5 * t);
+            data[i] = crunch + thud + metal;
+        }
+        return buffer;
+    },
 
     // WILDLIFE
     owl_hoot: (ctx: AudioContext) => {
@@ -761,6 +775,7 @@ export function registerSoundGenerators() {
     SoundBank.register('vehicle_engine_boat', Generators.vehicle_engine_boat);
     SoundBank.register('vehicle_engine_car', Generators.vehicle_engine_car);
     SoundBank.register('vehicle_skid', Generators.vehicle_skid);
+    SoundBank.register('vehicle_impact', Generators.vehicle_impact);
 
     // Wildlife
     SoundBank.register('owl_hoot', Generators.owl_hoot);
