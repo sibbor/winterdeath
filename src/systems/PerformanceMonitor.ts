@@ -10,8 +10,13 @@ export class PerformanceMonitor {
         return this.instance;
     }
 
-    // Zero-GC: Fast array tracking instead of slow Dictionary/Object keys
-    private _keys: string[] = ['logic', 'wind', 'weather', 'water', 'camera', 'render', 'render_setup', 'render_draw', 'cleanup'];
+    // --- ZERO-GC DYNAMIC SYSTEM TRACKING ---
+    // Pre-allocate space for up to 64 systems to prevent Float32Array reallocation during gameplay
+    private readonly MAX_SYSTEMS = 64;
+    private _keyMap: Record<string, number> = {}; // O(1) Fast dictionary lookup
+    private _keys: string[] = []; // Only used for UI labels
+    private _systemCount: number = 0;
+
     private timings: Float32Array;
     private startTimes: Float32Array;
 
@@ -20,29 +25,13 @@ export class PerformanceMonitor {
     private _aiLoggingEnabled: boolean = true;
     private _shaderLoggingEnabled: boolean = true;
 
-    // --- GAME STATE CACHE (Raw data, updated 60fps, Zero-GC) ---
+    // --- GAME STATE CACHE (Raw numbers only, 0 allocations) ---
     public gameState = {
         playerCoords: { x: 0, z: 0 },
         cameraPos: { x: 0, y: 0, z: 0 },
         enemyCount: 0,
         objectCount: 0
     };
-
-    constructor() {
-        // Pre-allocate typed arrays for blazingly fast iteration without garbage
-        this.timings = new Float32Array(this._keys.length);
-        this.startTimes = new Float32Array(this._keys.length);
-
-        // Load initial state from localStorage
-        const savedEng = localStorage.getItem('vinterdod_debug_console_logging');
-        if (savedEng !== null) this._consoleLoggingEnabled = savedEng === 'true';
-
-        const savedAI = localStorage.getItem('vinterdod_debug_ai_logging');
-        if (savedAI !== null) this._aiLoggingEnabled = savedAI === 'true';
-
-        const savedShaders = localStorage.getItem('vinterdod_debug_shader_logging');
-        if (savedShaders !== null) this._shaderLoggingEnabled = savedShaders === 'true';
-    }
 
     // FPS Tracking
     private _fps: number = 0;
@@ -67,15 +56,31 @@ export class PerformanceMonitor {
     private _shaderRecompileCount: number = 0;
     private _knownPrograms = new Set<string>();
 
+    constructor() {
+        // Pre-allocate typed arrays for blazingly fast iteration without garbage
+        this.timings = new Float32Array(this.MAX_SYSTEMS);
+        this.startTimes = new Float32Array(this.MAX_SYSTEMS);
+
+        // Load initial state from localStorage
+        const savedEng = localStorage.getItem('vinterdod_debug_console_logging');
+        if (savedEng !== null) this._consoleLoggingEnabled = savedEng === 'true';
+
+        const savedAI = localStorage.getItem('vinterdod_debug_ai_logging');
+        if (savedAI !== null) this._aiLoggingEnabled = savedAI === 'true';
+
+        const savedShaders = localStorage.getItem('vinterdod_debug_shader_logging');
+        if (savedShaders !== null) this._shaderLoggingEnabled = savedShaders === 'true';
+    }
+
     /**
      * Clears tracking data for a new frame. 
-     * Uses flat typed array iteration for 0 memory allocation.
+     * Uses flat typed array iteration matching only active systems.
      */
     public startFrame() {
         this._lastFrameTotal = 0;
 
-        // Zero-GC loop over pre-allocated typed arrays
-        for (let i = 0; i < this._keys.length; i++) {
+        // Zero-GC loop: Only iterate over actually registered systems
+        for (let i = 0; i < this._systemCount; i++) {
             this.timings[i] = 0;
             this.startTimes[i] = 0;
         }
@@ -173,7 +178,50 @@ export class PerformanceMonitor {
     }
 
     // ============================================================================
+    // TIMING HELPERS (HOT PATH - 100% ZERO GC)
+    // ============================================================================
+
+    private _getIndex(id: string): number {
+        let idx = this._keyMap[id];
+
+        // Dynamic registration: If unknown system, assign next available slot
+        if (idx === undefined) {
+            if (this._systemCount >= this.MAX_SYSTEMS) {
+                console.warn(`[PerformanceMonitor] Over ${this.MAX_SYSTEMS} systems tracked! Ignoring '${id}'.`);
+                return 0; // Safe fallback to prevent crash/out-of-bounds
+            }
+            idx = this._systemCount;
+            this._keyMap[id] = idx;
+            this._keys.push(id);
+            this._systemCount++;
+        }
+        return idx;
+    }
+
+    public begin(id: string) {
+        this.startTimes[this._getIndex(id)] = performance.now();
+    }
+
+    public end(id: string) {
+        const idx = this._getIndex(id);
+        const start = this.startTimes[idx];
+        if (start === 0) return;
+        this.timings[idx] += performance.now() - start;
+    }
+
+    public track(id: string, fn: () => void) {
+        this.begin(id);
+        fn();
+        this.end(id);
+    }
+
+    public addTime(id: string, ms: number) {
+        this.timings[this._getIndex(id)] += ms;
+    }
+
+    // ============================================================================
     // UI GETTERS (FORMATS ON DEMAND TO PREVENT CONSTANT GC SPIKES)
+    // Called ONLY by React UI via throttled setInterval
     // ============================================================================
 
     public getFormattedGameState() {
@@ -201,7 +249,7 @@ export class PerformanceMonitor {
 
     public getFormattedGcInfo() {
         return {
-            timeSinceDetection: performance.now() - this._lastGcTime,
+            timeSinceDetection: Math.round(performance.now() - this._lastGcTime),
             droppedMB: this.gcDroppedMB.toFixed(1),
             heapUsedMB: this.heapUsedMB.toFixed(1),
             heapLimitMB: this.heapLimitMB.toFixed(0),
@@ -211,7 +259,8 @@ export class PerformanceMonitor {
     public getFormattedTimings() {
         const formatted: Record<string, string> = {};
         let total = 0;
-        for (let i = 0; i < this._keys.length; i++) {
+        // Loop ONLY up to _systemCount
+        for (let i = 0; i < this._systemCount; i++) {
             const time = this.timings[i];
             formatted[this._keys[i]] = time.toFixed(2);
             total += time;
@@ -220,49 +269,6 @@ export class PerformanceMonitor {
             breakdown: formatted,
             total: total.toFixed(2)
         };
-    }
-
-    // ============================================================================
-    // TIMING HELPERS
-    // ============================================================================
-
-    private _getIndex(id: string): number {
-        const idx = this._keys.indexOf(id);
-        if (idx === -1) {
-            this._keys.push(id);
-            // Re-allocate buffers if an unknown system is added dynamically
-            const newTimings = new Float32Array(this._keys.length);
-            newTimings.set(this.timings);
-            this.timings = newTimings;
-
-            const newStarts = new Float32Array(this._keys.length);
-            newStarts.set(this.startTimes);
-            this.startTimes = newStarts;
-
-            return this._keys.length - 1;
-        }
-        return idx;
-    }
-
-    public begin(id: string) {
-        this.startTimes[this._getIndex(id)] = performance.now();
-    }
-
-    public end(id: string) {
-        const idx = this._getIndex(id);
-        const start = this.startTimes[idx];
-        if (start === 0) return;
-        this.timings[idx] += performance.now() - start;
-    }
-
-    public track(id: string, fn: () => void) {
-        this.begin(id);
-        fn();
-        this.end(id);
-    }
-
-    public addTime(id: string, ms: number) {
-        this.timings[this._getIndex(id)] += ms;
     }
 
     // ============================================================================
@@ -292,7 +298,7 @@ export class PerformanceMonitor {
     // Return mapped object ONLY if UI explicitly requests it
     public getTimings(): Record<string, number> {
         const obj: Record<string, number> = {};
-        for (let i = 0; i < this._keys.length; i++) obj[this._keys[i]] = this.timings[i];
+        for (let i = 0; i < this._systemCount; i++) obj[this._keys[i]] = this.timings[i];
         return obj;
     }
 
@@ -301,7 +307,7 @@ export class PerformanceMonitor {
         if (totalTime > threshold) {
             const formatted: Record<string, string> = {};
 
-            for (let i = 0; i < this._keys.length; i++) {
+            for (let i = 0; i < this._systemCount; i++) {
                 const time = this.timings[i];
                 if (time > 0) formatted[this._keys[i]] = time.toFixed(2) + 'ms';
             }

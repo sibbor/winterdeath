@@ -16,9 +16,20 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     useEffect(() => {
         const monitor = PerformanceMonitor.getInstance();
 
+        // 250ms är tillräckligt snabbt för att kännas live, 
+        // men sparar massivt med GC-arbete jämfört med 100ms.
         const interval = setInterval(() => {
             const engine = WinterEngine.getInstance();
-            if (debugMode) {
+
+            if (!debugMode) return; // Gör inget om debug är helt av
+
+            if (isMinimized) {
+                // LIGHTWEIGHT MODE: Endast FPS (nästan ingen GC)
+                setStats({
+                    fps: Math.round(monitor.getFps())
+                });
+            } else {
+                // FULL MODE: Hämta all formaterad data
                 setStats({
                     fps: Math.round(monitor.getFps()),
                     gameState: monitor.getFormattedGameState(),
@@ -32,15 +43,11 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                     }
                 });
                 setSystems(engine.getSystems());
-            } else {
-                setStats({
-                    fps: Math.round(monitor.getFps())
-                });
             }
-        }, 100);
+        }, 250);
 
         return () => clearInterval(interval);
-    }, [debugMode]);
+    }, [debugMode, isMinimized]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
         e.stopPropagation();
