@@ -953,8 +953,8 @@ export const Sector1: SectorDef = {
             if (events.playSound) events.playSound('explosion');
             if (events.cameraShake) events.cameraShake(5.0);
 
-            if (events.emitNoise) {
-                events.emitNoise(_trainYardPos.clone(), NoiseType.OTHER, 100);
+            if (events.makeNoise) {
+                events.makeNoise(_trainYardPos.clone(), NoiseType.OTHER, 100);
             }
         }
 

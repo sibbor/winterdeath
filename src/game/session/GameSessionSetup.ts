@@ -9,11 +9,11 @@ import { SectorGenerator } from '../../core/world/SectorGenerator';
 import { PathGenerator } from '../../core/world/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { FXSystem } from '../../systems/FXSystem';
+import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetPreloader } from '../../systems/AssetPreloader';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { WeaponHandler } from '../../systems/WeaponHandler';
-import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, WIND_SYSTEM, WEATHER_SYSTEM, LIGHT_SYSTEM } from '../../content/constants';
+import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM } from '../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
@@ -66,7 +66,7 @@ export interface SetupContext {
         playCinematicLine: (index: number) => void;
         spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
-        spawnFloatingText: (x: number, y: number, z: number, text: string, color?: string) => void;
+        showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => void;
         concludeSector: (isExtraction: boolean) => void;
         handleTriggerAction: (action: any, scene: THREE.Scene) => void;
@@ -125,7 +125,7 @@ export class GameSessionSetup {
             // --- ENVIRONMENT SYNC (Centralized) ---
             if (!props.isWarmup) {
                 engine.syncEnvironment(env);
-                
+
                 // Track skyLight for the game loop and shadow following
                 const skyLight = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
                 if (skyLight) {
@@ -180,7 +180,7 @@ export class GameSessionSetup {
             state.callbacks = {
                 spawnPart: callbacks.spawnPart,
                 spawnDecal: callbacks.spawnDecal,
-                spawnFloatingText: callbacks.spawnFloatingText,
+                showDamageText: callbacks.showDamageText,
                 spawnBubble: callbacks.spawnBubble,
                 onClueDiscovered: callbacks.onClueDiscovered,
                 onPOIdiscovered: callbacks.onPOIdiscovered,
@@ -354,9 +354,12 @@ export class GameSessionSetup {
                 engine.water.setPlayerRef(playerGroup);
                 engine.water.setCallbacks({
                     spawnPart: (x, y, z, type, count) => callbacks.spawnPart(x, y, z, type, count),
-                    emitNoise: (pos, type, rad) => session.makeNoise(pos, type as NoiseType, rad)
+                    makeNoise: (pos, type, rad) => session.makeNoise(pos, type as NoiseType, rad)
                 });
             }
+
+            const damageSystem = new DamageNumberSystem(scene);
+            session.addSystem(damageSystem);
 
             session.addSystem(new DamageTrackerSystem());
 
@@ -408,7 +411,7 @@ export class GameSessionSetup {
                     refs.cameraOverrideRef.current = params;
                     engine.camera.setCinematic(!!params);
                 },
-                emitNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => session.makeNoise(pos, type, radius),
+                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
                 spawnZombie: callbacks.spawnZombie,
                 spawnHorde: spawnHorde,
                 setOverlay: ui.setOverlay

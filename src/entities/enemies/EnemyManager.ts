@@ -403,8 +403,8 @@ export const EnemyManager = {
                     if (state.callbacks?.trackStats) {
                         state.callbacks.trackStats('damage', damage, !!enemy.isBoss);
                     }
-                    if (state.callbacks?.spawnFloatingText) {
-                        state.callbacks.spawnFloatingText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, damage.toString(), "#ffffff");
+                    if (state.callbacks?.showDamageText) {
+                        state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, damage.toString(), "#ffffff");
                     }
 
                     _v1.subVectors(enemy.mesh.position, playerGroup.position);

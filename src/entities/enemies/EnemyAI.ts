@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE, EnemyType, NoiseType } from '../../entities/enemies/EnemyTypes';
+import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE, EnemyType, SEARCH_TIMERS } from '../../entities/enemies/EnemyTypes';
 import { DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { EnemyAttackHandler } from './EnemyAttackHandler';
 import { applyCollisionResolution } from '../../core/world/CollisionResolution';
@@ -10,19 +10,6 @@ import { soundManager } from '../../utils/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
-
-// Search timers (seconds) for different noise types
-const SEARCH_TIMERS: Record<string, number> = {
-    [NoiseType.PLAYER_WALK]: 2.0,
-    [NoiseType.PLAYER_RUSH]: 2.0,
-    [NoiseType.PLAYER_ROLLING]: 2.0,
-    [NoiseType.PLAYER_SWIM]: 2.0,
-    [NoiseType.GUNSHOT]: 5.0,
-    [NoiseType.GRENADE]: 8.0,
-    [NoiseType.MOLOTOV]: 8.0,
-    [NoiseType.FLASHBANG]: 8.0,
-    [NoiseType.OTHER]: 3.0
-};
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -63,7 +50,6 @@ export const EnemyAI = {
             playSound: (id: string) => void;
             spawnBubble: (text: string, duration: number) => void;
             spawnPart?: (x: number, y: number, z: number, type: string, count: number) => void;
-            makeNoise?: (pos: THREE.Vector3, radius: number, type: NoiseType) => void;
         },
         water?: WaterSystem
     ) => {

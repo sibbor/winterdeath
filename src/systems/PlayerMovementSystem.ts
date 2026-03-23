@@ -7,7 +7,7 @@ import { applyCollisionResolution } from '../core/world/CollisionResolution';
 import { soundManager } from '../utils/SoundManager';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
-import { NoiseType } from '../entities/enemies/EnemyTypes';
+import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -82,11 +82,12 @@ export class PlayerMovementSystem implements System {
                 this._shieldMesh.position.y = 1.0;
                 this.playerGroup.add(this._shieldMesh);
             }
+
             // Pulse effect
-            const pulse = 0.15 + Math.sin(now * 0.005) * 0.05;
-            (this._shieldMesh.material as THREE.MeshBasicMaterial).opacity = pulse;
-            const s = 1.0 + Math.sin(now * 0.005) * 0.05;
-            this._shieldMesh.scale.setScalar(s);
+            const sineWave = Math.sin(now * 0.005) * 0.05;
+
+            (this._shieldMesh.material as THREE.MeshBasicMaterial).opacity = 0.15 + sineWave;
+            this._shieldMesh.scale.setScalar(1.0 + sineWave);
             this._shieldMesh.visible = true;
         } else if (this._shieldMesh) {
             this._shieldMesh.visible = false;
@@ -127,7 +128,6 @@ export class PlayerMovementSystem implements System {
             }
         }
 
-        const isRushing = state.isRushing;
         let speed = currentSpeed;
 
         // --- 2. WATER PHYSICS & DRAG ---
@@ -184,10 +184,8 @@ export class PlayerMovementSystem implements System {
                 // Drowning Damage
                 if (now - (state.lastDrownTick || 0) > 1000) {
                     state.lastDrownTick = now;
-                    // Trigger drowning hit
-                    const statsSys = session.getSystem('player_stats_system') as any;
-                    if (statsSys) {
-                        statsSys.handlePlayerHit(session, 15, null, DamageType.DROWNING, true);
+                    if (state.callbacks && state.callbacks.onPlayerHit) {
+                        state.callbacks.onPlayerHit(15, null, DamageType.DROWNING, true);
                     }
                 }
             }
@@ -222,7 +220,7 @@ export class PlayerMovementSystem implements System {
             if (!state.rollSmokeSpawned && !inWater) {
                 state.rollSmokeSpawned = true;
                 soundManager.playFootstep('step');
-                session.makeNoise(playerGroup.position, NoiseType.PLAYER_ROLLING); // Added rolling noise
+                session.makeNoise(playerGroup.position, NoiseType.PLAYER_ROLLING, NOISE_RADIUS.PLAYER_ROLLING);
                 FXSystem.spawnPart(
                     session.engine.scene, state.particles,
                     playerGroup.position.x, 0.5, playerGroup.position.z,
@@ -271,34 +269,39 @@ export class PlayerMovementSystem implements System {
 
                 const stepInterval = state.isSwimming ? 350 : (state.isRushing ? 250 : 400);
                 if (now > (state.lastStepTime || 0) + stepInterval) {
+                    state.lastStepTime = now;
+
+                    let noiseType = NoiseType.PLAYER_WALK;
+                    let noiseRadius = NOISE_RADIUS.PLAYER_WALK;
+
                     if (inWater) {
                         if (isSwimming) {
+                            noiseType = NoiseType.PLAYER_SWIM;
+                            noiseRadius = NOISE_RADIUS.PLAYER_SWIM;
                             soundManager.playSwimming();
                             FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, playerGroup.position.y + 1.0, playerGroup.position.z, 'splash', 3);
-                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_SWIM);
+                            session.engine.water?.spawnRipple(playerGroup.position.x, playerGroup.position.z, 4.0);
                         } else {
+                            // Wading in water
                             soundManager.playFootstep('water');
-                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_WALK);
-                        }
-
-                        if (session.engine.water) {
-                            const ripplePower = isSwimming ? 4.0 : 1.5;
-                            session.engine.water.spawnRipple(playerGroup.position.x, playerGroup.position.z, ripplePower);
+                            session.engine.water?.spawnRipple(playerGroup.position.x, playerGroup.position.z, 1.5);
                         }
                     } else {
+                        // On Land
                         soundManager.playFootstep('step');
                         if (state.isRushing) {
+                            noiseType = NoiseType.PLAYER_RUSH;
+                            noiseRadius = NOISE_RADIUS.PLAYER_RUSH;
                             FXSystem.spawnPart(
                                 session.engine.scene, state.particles,
                                 playerGroup.position.x, 0.2, playerGroup.position.z,
                                 'large_smoke', 1, undefined, undefined, 0xcccccc, 0.8
                             );
-                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_RUSH);
-                        } else {
-                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_WALK);
                         }
                     }
-                    state.lastStepTime = now;
+
+                    // Skicka ljudet till AI:n (gemensamt anrop för alla tillstånd!)
+                    session.makeNoise(playerGroup.position, noiseType, noiseRadius);
                 }
             }
         }
@@ -316,31 +319,32 @@ export class PlayerMovementSystem implements System {
         _v2.copy(baseMoveVec).divideScalar(steps);
 
         const isDashing = state.isRushing || state.isRolling;
+        const searchRadius = isDashing ? 2.5 : 1.0;
 
         for (let s = 0; s < steps; s++) {
             _v3.copy(playerGroup.position).add(_v2);
 
+            // --- OPTIMERING: Hämta hinder EN GÅNG per fysiskt steg! ---
+            // Vi behöver inte söka i gridden 4 gånger för mikro-justeringarna.
+            const nearbyEnemies = state.collisionGrid.getNearbyEnemies(_v3, searchRadius);
+            const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
+
+            const eLen = nearbyEnemies.length;
+            const nLen = nearbyObs.length;
+
+            // Solver-loop för att knuffa ut spelaren ur överlappningar
             for (let i = 0; i < 4; i++) {
                 let adjusted = false;
 
                 // --- 1. FIENDE-KOLLISION (PLOGEN) ---
-                // FIX: Vi måste specifikt be griden om att ge oss FIENDER!
-                const searchRadius = isDashing ? 2.5 : 1.0;
-                const nearbyEnemies = state.collisionGrid.getNearbyEnemies(_v3, searchRadius);
-                const eLen = nearbyEnemies.length;
-
                 for (let j = 0; j < eLen; j++) {
                     const enemy = nearbyEnemies[j];
                     const distSq = _v3.distanceToSquared(enemy.mesh.position);
-
-                    // PLOG-RADIE: Större än deras attackradie så vi träffar dem FÖRST!
                     const hitRadiusSq = isDashing ? 4.5 : 0.8;
 
                     if (distSq < hitRadiusSq) {
-                        // EnemyManager handles the knockback
                         EnemyManager.applyKnockback(enemy, _v3, baseMoveVec, isDashing, state, session.engine.scene, now);
 
-                        // Om vi INTE dashar, hantera mjuk kollision så vi inte går igenom dem
                         if (!isDashing) {
                             const overlap = Math.sqrt(hitRadiusSq) - Math.sqrt(distSq);
                             if (overlap > 0 && distSq > 0.001) {
@@ -353,10 +357,6 @@ export class PlayerMovementSystem implements System {
                 }
 
                 // --- 2. STANDARD WALL/OBJECT COLLISION ---
-                // Griden hämtar nu bara stenar, fordon och träd här
-                const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
-                const nLen = nearbyObs.length;
-
                 for (let j = 0; j < nLen; j++) {
                     const obs = nearbyObs[j];
 
@@ -369,7 +369,6 @@ export class PlayerMovementSystem implements System {
                             let pushForce = (isDashing ? 6.0 : 1.5) * massInverse;
 
                             _v1.copy(_v3).sub(playerGroup.position).normalize().multiplyScalar(pushForce);
-
                             if (obs.mesh.userData.isBall) _v1.multiplyScalar(2.0);
 
                             (obs.mesh.userData.velocity as THREE.Vector3).add(_v1);
@@ -377,12 +376,13 @@ export class PlayerMovementSystem implements System {
                     }
                 }
 
+                // Om ingen kollision inträffade under denna iteration behöver vi inte iterera igen!
                 if (!adjusted) break;
             }
+
             playerGroup.position.copy(_v3);
         }
     }
-
 
     private handleRotation(playerGroup: THREE.Group, input: any, state: any, isMobileDevice: boolean, disableInput: boolean, isMoving: boolean, session: GameSessionLogic) {
         if (disableInput) return;
@@ -390,6 +390,7 @@ export class PlayerMovementSystem implements System {
 
         if (isMobileDevice) {
             const stick = (input.joystickAim?.lengthSq() > 0.25) ? input.joystickAim : (input.joystickMove?.lengthSq() > 0.1 ? input.joystickMove : null);
+
             if (stick) {
                 _v1.set(stick.x, 0, stick.y);
                 if (angle !== 0) _v1.applyAxisAngle(_UP, angle);
@@ -399,7 +400,7 @@ export class PlayerMovementSystem implements System {
                     playerGroup.position.y,
                     playerGroup.position.z + _v1.z * 10
                 );
-                playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
+                playerGroup.lookAt(_v5);
             }
         } else {
             if (input.aimVector && input.aimVector.lengthSq() > 1) {
@@ -411,7 +412,7 @@ export class PlayerMovementSystem implements System {
                     playerGroup.position.y,
                     playerGroup.position.z + _v1.z
                 );
-                playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
+                playerGroup.lookAt(_v5);
 
             } else if (isMoving) {
                 if (_v6.lengthSq() > 0) {
@@ -423,7 +424,7 @@ export class PlayerMovementSystem implements System {
                         playerGroup.position.y,
                         playerGroup.position.z + _v1.z * 10
                     );
-                    playerGroup.lookAt(_v5.x, playerGroup.position.y, _v5.z);
+                    playerGroup.lookAt(_v5);
                 }
             }
         }

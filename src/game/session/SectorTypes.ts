@@ -127,7 +127,7 @@ export interface SectorDef {
             setFog: (density: number, height?: number, color?: THREE.Color) => void;
             setWater: (level?: number, waveHeight?: number) => void;
             setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
-            emitNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+            makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
         }
     ) => void;
     onInteract?: (id: string, object: THREE.Object3D, state: any, events: any) => void;

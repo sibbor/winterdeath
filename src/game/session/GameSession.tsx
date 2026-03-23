@@ -65,10 +65,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
     }, [refs]);
 
-    const spawnFloatingText = useCallback((x: number, y: number, z: number, text: string, color?: string) => {
-        const engine = refs.engineRef.current;
-        if (engine) {
-            FXSystem.spawnFloatingText(engine.scene, x, y, z, text, color);
+    const showDamageText = useCallback((x: number, y: number, z: number, text: string, color?: string) => {
+        const session = refs.gameSessionRef.current;
+
+        if (session) {
+            const damageSystem = session.getSystem('damage_number_system') as any;
+            if (damageSystem) {
+                damageSystem.spawn(x, y, z, text, color);
+            }
         }
     }, [refs]);
 
@@ -490,7 +494,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = new GameSessionLogic(engine);
         if (refs.stateRef.current) session.init(refs.stateRef.current);
         refs.gameSessionRef.current = session;
-        
+
         // [VINTERDÖD FIX] Attach the player reference for systems (EnemyDetection, etc)
         if (refs.playerGroupRef.current) {
             session.playerPos = refs.playerGroupRef.current.position;
@@ -548,6 +552,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             },
             callbacks: {
                 t,
+                showDamageText,
                 onCollectibleDiscovered: (collectibleId: string) => {
                     if (!refs.stateRef.current.sessionCollectiblesDiscovered.includes(collectibleId)) {
                         refs.stateRef.current.sessionCollectiblesDiscovered.push(collectibleId);
@@ -566,10 +571,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 },
                 spawnDecal: (x, z, scale, material, type = 'decal') => {
                     FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
-
-                },
-                spawnFloatingText: (x, y, z, text, color) => {
-                    FXSystem.spawnFloatingText(engine.scene, x, y, z, text, color);
 
                 },
                 onClueDiscovered: (clue: any) => {
@@ -688,7 +689,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 gainXp,
                 spawnPart,
                 spawnDecal,
-                spawnFloatingText,
+                showDamageText,
                 t,
                 spawnBubble: (text: string, duration?: number) => {
                     window.dispatchEvent(new CustomEvent('spawn-bubble', {

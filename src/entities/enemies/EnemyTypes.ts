@@ -39,6 +39,19 @@ export const NOISE_RADIUS: Record<string, number> = {
     [NoiseType.OTHER]: 30,
 };
 
+// Search timers (seconds) for different noise types
+export const SEARCH_TIMERS: Record<string, number> = {
+    [NoiseType.PLAYER_WALK]: 2.0,
+    [NoiseType.PLAYER_RUSH]: 2.0,
+    [NoiseType.PLAYER_ROLLING]: 2.0,
+    [NoiseType.PLAYER_SWIM]: 2.0,
+    [NoiseType.GUNSHOT]: 5.0,
+    [NoiseType.GRENADE]: 8.0,
+    [NoiseType.MOLOTOV]: 8.0,
+    [NoiseType.FLASHBANG]: 8.0,
+    [NoiseType.OTHER]: 3.0
+};
+
 export const DEFAULT_ATTACK_RANGE = 1.5;
 
 /**

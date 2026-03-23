@@ -476,104 +476,6 @@ export const FXSystem = {
         }
     },
 
-    // --- ZERO-GC TEXT POOL ---
-    _textPool: [] as {
-        mesh: THREE.Sprite,
-        canvas: HTMLCanvasElement,
-        ctx: CanvasRenderingContext2D,
-        texture: THREE.CanvasTexture,
-        active: boolean,
-        life: number,
-        isNumeric: boolean,
-        numericValue: number
-    }[],
-
-    spawnFloatingText: (scene: THREE.Scene, x: number, y: number, z: number, text: string, color: string = '#ffffff') => {
-        const parsedValue = parseFloat(text);
-        const isNumeric = !isNaN(parsedValue);
-
-        // --- 1. SPATIAL MERGING (Damage Accumulation) ---
-        // Sökradie på ca 1.5 meter (ignorerar Y-axeln så siffran kan flyta uppåt)
-        const MERGE_DIST_SQ = 2.25;
-
-        for (let i = 0; i < FXSystem._textPool.length; i++) {
-            const t = FXSystem._textPool[i];
-            if (!t.active) continue;
-
-            const dx = t.mesh.position.x - x;
-            const dz = t.mesh.position.z - z;
-            const distSq = dx * dx + dz * dz;
-
-            if (distSq < MERGE_DIST_SQ) {
-                // We found an active number in the same place! Time to merge.
-                let newText = text;
-
-                // If both old and new text are numbers, add them! (e.g. 12 + 4 = 16)
-                if (isNumeric && t.isNumeric) {
-                    t.numericValue += parsedValue;
-                    newText = Math.round(t.numericValue).toString();
-                }
-
-                // Update Canvas (extremely fast in V8)
-                t.ctx.clearRect(0, 0, 256, 64);
-                t.ctx.strokeText(newText, 128, 32);
-                t.ctx.fillText(newText, 128, 32);
-                t.texture.needsUpdate = true;
-
-                // Reset the lifetime and give it a "Visual POP" by scaling it up temporarily
-                t.life = 1.5;
-                t.mesh.scale.set(4.0, 1.0, 2.0);
-                t.mesh.material.color.set(color);
-
-                return; // ZERO-GC EXIT! No new objects are created.
-            }
-        }
-
-        // --- 2. NORMAL SPAWN (if no merge occurred) ---
-        let pooled = FXSystem._textPool.find(t => !t.active);
-
-        if (!pooled) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 256; canvas.height = 64;
-            const ctx = canvas.getContext('2d')!;
-            const texture = new THREE.CanvasTexture(canvas);
-            const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: true });
-            mat.userData = { isSharedAsset: true };
-            const mesh = new THREE.Sprite(mat);
-
-            mesh.scale.set(3.0, 0.75, 2.0);
-            scene.add(mesh);
-
-            pooled = { mesh, canvas, ctx, texture, active: true, life: 0, isNumeric: false, numericValue: 0 };
-            FXSystem._textPool.push(pooled);
-        }
-
-        // Set mathematical properties
-        pooled.isNumeric = isNumeric;
-        pooled.numericValue = isNumeric ? parsedValue : 0;
-
-        pooled.ctx.clearRect(0, 0, 256, 64);
-        pooled.ctx.font = 'bold 64px Arial';
-        pooled.ctx.fillStyle = 'white';
-        pooled.ctx.textAlign = 'center';
-        pooled.ctx.textBaseline = 'middle';
-
-        pooled.ctx.strokeStyle = 'black';
-        pooled.ctx.lineWidth = 5;
-        pooled.ctx.strokeText(text, 128, 32);
-        pooled.ctx.fillText(text, 128, 32);
-
-        pooled.texture.needsUpdate = true;
-
-        pooled.mesh.scale.set(3.0, 0.75, 2.0);
-        pooled.mesh.position.set(x, y + 1.5, z);
-        pooled.mesh.material.color.set(color);
-        pooled.mesh.material.opacity = 1.0;
-        pooled.mesh.visible = true;
-        pooled.life = 1.5;
-        pooled.active = true;
-    },
-
     // --- MAIN UPDATE LOOP ---
     update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
@@ -737,33 +639,7 @@ export const FXSystem = {
         }
 
         // ==========================================
-        // 3. UPDATE TEXT FLOATERS
-        // ==========================================
-        for (let i = 0; i < FXSystem._textPool.length; i++) {
-            const t = FXSystem._textPool[i];
-            if (!t.active) continue;
-
-            t.life -= safeDelta;
-            if (t.life <= 0) {
-                t.active = false;
-                t.mesh.visible = false;
-                continue;
-            }
-
-            // Float upwards
-            t.mesh.position.y += 1.2 * safeDelta;
-            t.mesh.material.opacity = Math.min(1.0, t.life * 2.0);
-
-            // --- VISUAL POP DECAY ---
-            // If the text was merged and scaled up, shrink it softly back to original size
-            if (t.mesh.scale.x > 3.0) {
-                t.mesh.scale.x = Math.max(3.0, t.mesh.scale.x - 4.0 * safeDelta);
-                t.mesh.scale.y = Math.max(0.75, t.mesh.scale.y - 1.0 * safeDelta);
-            }
-        }
-
-        // ==========================================
-        // 4. FINALIZE INSTANCED BATCHES (Write to GPU)
+        // 3. FINALIZE INSTANCED BATCHES (Write to GPU)
         // Combines both old updated AND newly spawned particles
         // ==========================================
         for (let k = 0; k < FXSystem._instancedMeshKeys.length; k++) {

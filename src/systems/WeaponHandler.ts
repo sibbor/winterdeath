@@ -32,7 +32,7 @@ const _continuousCtx: any = {
     enemies: null,
     collisionGrid: null,
     spawnPart: null,
-    spawnFloatingText: null,
+    showDamageText: null,
     spawnDecal: null,
     explodeEnemy: null,
     trackStats: null,
@@ -199,7 +199,7 @@ export const WeaponHandler = {
                     _continuousCtx.enemies = state.enemies || [];
                     _continuousCtx.collisionGrid = state.collisionGrid;
                     _continuousCtx.spawnPart = cb.spawnPart;
-                    _continuousCtx.spawnFloatingText = cb.spawnFloatingText || ((x: number, y: number, z: number, t: string, c?: string) => { });
+                    _continuousCtx.showDamageText = cb.showDamageText || ((x: number, y: number, z: number, t: string, c?: string) => { });
                     _continuousCtx.spawnDecal = cb.spawnDecal;
                     _continuousCtx.explodeEnemy = cb.explodeEnemy;
                     _continuousCtx.trackStats = cb.trackStats;

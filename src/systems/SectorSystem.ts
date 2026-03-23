@@ -3,9 +3,7 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
-import { EnemyType } from '../entities/enemies/EnemyTypes';
-import { NoiseType } from '../entities/enemies/EnemyTypes';
-import { SectorGenerator } from '../core/world/SectorGenerator';
+import { EnemyType, NoiseType } from '../entities/enemies/EnemyTypes';
 import { LIGHT_SYSTEM } from '../content/constants';
 import { Sector1 } from '../content/sectors/Sector1';
 import { Sector2 } from '../content/sectors/Sector2';
@@ -46,7 +44,7 @@ export class SectorSystem implements System {
             cameraShake: (amount: number) => void;
             scene: THREE.Scene;
             setCameraOverride: (params: any | null) => void;
-            emitNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+            makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
             spawnZombie: (type: string, pos?: THREE.Vector3) => void;
             spawnHorde: (count: number, type?: string, pos?: THREE.Vector3) => void;
             setOverlay: (type: string | null) => void;
@@ -68,7 +66,7 @@ export class SectorSystem implements System {
             session.engine.water.setPlayerRef(this.playerGroup);
             session.engine.water.setCallbacks({
                 spawnPart: this.callbacks.spawnPart,
-                emitNoise: this.callbacks.emitNoise
+                makeNoise: this.callbacks.makeNoise
             });
             this.waterInitialized = true;
         }
@@ -176,7 +174,7 @@ export class SectorSystem implements System {
                 setWater: (level?: number, waveHeight?: number) => {
                     // Future expansion: hook into engine.water for global level changes
                 },
-                emitNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => session.makeNoise(pos, type, radius),
+                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
                 spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => {
                     if (this.callbacks.spawnHorde) {
                         this.callbacks.spawnHorde(count, type, pos);

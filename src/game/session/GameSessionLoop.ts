@@ -29,7 +29,7 @@ interface LoopContext {
         gainXp: (val: number) => void;
         spawnPart: (x: number, y: number, z: number, type: string, count: number, customMesh?: THREE.Mesh, customVel?: THREE.Vector3, color?: number, scale?: number) => void;
         spawnDecal: (x: number, z: number, scale: number, material?: THREE.Material, type?: string) => void;
-        spawnFloatingText: (x: number, y: number, z: number, text: string, color?: string) => void;
+        showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
     };
@@ -127,7 +127,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         collisionGrid: null,
         spawnPart: null,
         spawnDecal: null,
-        spawnFloatingText: null,
+        showDamageText: null,
         now: 0,
         playerPos: null,
         makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
@@ -187,12 +187,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             enemy._accumulatedDamage = (enemy._accumulatedDamage || 0) + amount;
 
             if (_gameContext.now - (enemy._lastDamageTextTime || 0) > textThrottle) {
-                if (_gameContext.spawnFloatingText && enemy._accumulatedDamage >= 1) {
+                if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
                     const textX = enemy.mesh.position.x;
                     const textY = enemy.isBoss ? 4.0 : 2.5;
                     const textZ = enemy.mesh.position.z;
 
-                    _gameContext.spawnFloatingText(
+                    _gameContext.showDamageText(
                         textX, textY, textZ,
                         getCachedNumberString(enemy._accumulatedDamage),
                         color
@@ -630,7 +630,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _gameContext.collisionGrid = state.collisionGrid;
         _gameContext.spawnPart = activeCallbacks.spawnPart || callbacks.spawnPart;
         _gameContext.spawnDecal = activeCallbacks.spawnDecal || callbacks.spawnDecal;
-        _gameContext.spawnFloatingText = activeCallbacks.spawnFloatingText || callbacks.spawnFloatingText;
+        _gameContext.showDamageText = activeCallbacks.showDamageText || callbacks.showDamageText;
 
         if (activeCallbacks.explodeEnemy) _gameContext.explodeEnemy = activeCallbacks.explodeEnemy;
         if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
@@ -640,25 +640,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _gameContext.playerPos = playerGroup.position;
 
         refs.gameContextRef.current = _gameContext;
-
-        // Make sounds for player movement, to attract enemies
-        if (state.isMoving && playerGroup) {
-            let noiseType = NoiseType.PLAYER_WALK;
-            let noiseRadius = NOISE_RADIUS.PLAYER_WALK;
-
-            if (state.isWading || state.isSwimming) {
-                noiseType = NoiseType.PLAYER_SWIM;
-                noiseRadius = NOISE_RADIUS.PLAYER_SWIM;
-            } else if (state.isRushing) {
-                noiseType = NoiseType.PLAYER_RUSH;
-                noiseRadius = NOISE_RADIUS.PLAYER_RUSH;
-            } else if (state.isRolling) {
-                noiseType = NoiseType.PLAYER_ROLLING;
-                noiseRadius = NOISE_RADIUS.PLAYER_ROLLING;
-            }
-
-            session.makeNoise(playerGroup.position, noiseType, noiseRadius);
-        }
 
         // 14. ProjectileSystem
         monitor.begin('projectiles');

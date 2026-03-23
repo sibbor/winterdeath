@@ -767,8 +767,8 @@ export class WaterSystem implements System {
 
     public setPlayerRef(g: THREE.Group) { this.playerGroup = g; }
 
-    public setCallbacks(c: { emitNoise?: any, spawnPart?: any }) {
-        if (c.emitNoise) this.emitNoiseCb = c.emitNoise;
+    public setCallbacks(c: { makeNoise?: any, spawnPart?: any }) {
+        if (c.makeNoise) this.emitNoiseCb = c.makeNoise;
         if (c.spawnPart) this.spawnPartCb = c.spawnPart;
     }
 }

@@ -198,6 +198,8 @@ export class EnemyDetectionSystem implements System {
                         const angle = Math.atan2(dx, dz);
                         e.mesh.rotation.y = angle;
                         e.mesh.quaternion.setFromEuler(e.mesh.rotation);
+
+                        break;
                     }
                 }
             }
