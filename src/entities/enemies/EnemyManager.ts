@@ -15,7 +15,7 @@ import { WeaponType } from '../../content/weapons';
 
 export type { Enemy };
 
-// --- INTERNAL POOLING & SCRATCHPADS ---
+// --- INTERNAL POOLING & SCRATCHPADS (ZERO-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 5, 0);
@@ -65,18 +65,23 @@ function setBaseColor(obj: any, colorObj: THREE.Color) {
     }
 }
 
-// --- REUSABLE UPDATE CALLBACKS --- 
-const _aiCallbacks: any = {
-    onPlayerHit: null as any,
-    spawnPart: null as any,
-    spawnDecal: null as any,
-    spawnBubble: null as any,
-    applyDamage: null as any,
-    onEffectTick: null as any,
-    onPlayerHitExtended: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
-        if (_aiCallbacks.onPlayerHit) _aiCallbacks.onPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
+// --- REUSABLE UPDATE CALLBACKS (100% Zero-GC) --- 
+// Pre-allocated object to prevent massive GC spikes during the update loop
+const _aiContext: any = {
+    spawnPart: null,
+    spawnDecal: null,
+    spawnBubble: null,
+    applyDamage: null,
+    onEffectTick: null,
+    playSound: (id: string) => soundManager.playEffect(id),
+
+    // Called from within EnemyAI, routes to the actual game session callback
+    onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+        if (_aiContext._realOnPlayerHit) {
+            _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
+        }
     },
-    playSound: (id: string) => soundManager.playEffect(id)
+    _realOnPlayerHit: null
 };
 
 export const EnemyManager = {
@@ -108,10 +113,12 @@ export const EnemyManager = {
         const typeToSpawn = forcedType || EnemySpawner.determineType(enemyCount, bossSpawned);
 
         if (enemyPool.length > 0) {
+            // Recycle from memory pool
             enemy = enemyPool.pop()!;
             EnemyManager.resetEnemy(enemy, typeToSpawn, playerPos, forcedPos);
             if (!enemy.mesh.parent) scene.add(enemy.mesh);
         } else {
+            // Create new instance if pool is empty
             enemy = EnemySpawner.spawn(scene, playerPos, typeToSpawn, forcedPos, bossSpawned, enemyCount);
         }
 
@@ -135,6 +142,7 @@ export const EnemyManager = {
             e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
         }
 
+        // Reset runtime state
         e.dead = false;
         e.hp = e.maxHp;
         e.deathState = EnemyDeathState.ALIVE;
@@ -163,7 +171,6 @@ export const EnemyManager = {
         e.isInWater = false; e.isWading = false; e.isDrowning = false;
         e.drownTimer = 0; e.drownDmgTimer = 0;
         e.isAirborne = false; e.fallStartY = 0;
-        e._accumulatedDamage = 0; e._lastDamageTextTime = 0;
 
         e.mesh.userData.exploded = false;
         e.mesh.userData.gibbed = false;
@@ -173,6 +180,10 @@ export const EnemyManager = {
         e.mesh.userData.baseY = undefined;
         e.mesh.userData.isFlashing = false;
         e.ashPile = undefined;
+
+        // ZERO-GC: Pre-allocate physics vector so we don't allocate during combat
+        if (!e.mesh.userData.spinVel) e.mesh.userData.spinVel = new THREE.Vector3();
+        e.mesh.userData.spinVel.set(0, 0, 0);
 
         if (e.indicatorRing) e.indicatorRing.visible = false;
     },
@@ -486,7 +497,6 @@ export const EnemyManager = {
         soundManager.playImpact('flesh');
     },
 
-    // --- NY FORDONS-KOLLISION ---
     applyVehicleHit: (
         e: Enemy,
         knockDir: THREE.Vector3,
@@ -500,7 +510,7 @@ export const EnemyManager = {
         const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
         const massRatio = (vehicleDef.mass * 0.001) / (mass || 1.0);
 
-        // Momentum-baserad skada
+        // Momentum-based damage
         const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;
 
         e.hp -= baseDamage;
@@ -517,22 +527,22 @@ export const EnemyManager = {
                 e.deathState = EnemyDeathState.GIBBED;
                 e.lastDamageType = DamageType.VEHICLE_SPLATTER;
 
-                // Tvingar fram lite uppåt-kraft och mycket framåt-kraft för gibbningen
+                // Force upward and forward momentum for gibbing
                 const forceDir = _v1.copy(knockDir).multiplyScalar(speedMS * 1.5).setY(3.0);
 
-                EnemyManager.explodeEnemy(e, _aiCallbacks, forceDir, true);
+                EnemyManager.explodeEnemy(e, _aiContext, forceDir, true);
 
                 session.engine.camera.shake(0.4);
                 soundManager.playImpact('flesh');
 
-                return true; // Tung träff
+                return true; // Heavy hit
 
                 // 2. FALL (20 - 79 km/h) - Airborne ragdoll effect
             } else if (speedKmh >= 20) {
                 e.deathState = EnemyDeathState.FALL;
                 e.lastDamageType = DamageType.VEHICLE_RAM;
 
-                // Båge genom luften
+                // Arc through the air
                 const pushForce = speedMS * 0.8 * massRatio;
                 const upForce = speedMS * 0.6 * massRatio;
 
@@ -546,7 +556,7 @@ export const EnemyManager = {
                 session.engine.camera.shake(0.2);
                 soundManager.playImpact('flesh');
 
-                return true; // Tung träff
+                return true; // Heavy hit
 
                 // 3. GENERIC (< 20 km/h) - Low speed death, falls over
             } else {
@@ -556,18 +566,17 @@ export const EnemyManager = {
                 e.deathVel.copy(knockDir).multiplyScalar(speedMS * massRatio * 0.2);
                 e.deathVel.y = 2.0;
 
-                return false; // Lätt träff
+                return false; // Light hit
             }
 
             // --- SURVIVED HIT (Knockback) ---
         } else {
             e.lastDamageType = DamageType.VEHICLE_PUSH;
 
-            // Skapa en velocity-vektor som representerar bilens smäll för att skicka till knockback-systemet
+            // Create a velocity vector representing the car's impact to send to the knockback system
             _v1.copy(knockDir).multiplyScalar(speedMS);
 
-            // _v2 används normalt för impactPos i applyKnockback, vi lånar bilens position (som _knockDir pekar från)
-            // men vi räknar baklänges från zombien för att få en exakt point-of-impact.
+            // Calculate precise point of impact backwards from the zombie
             _v2.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
 
             EnemyManager.applyKnockback(e, _v2, _v1, true, state, scene, now);
@@ -581,32 +590,31 @@ export const EnemyManager = {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
-        _aiCallbacks.onPlayerHit = onPlayerHit;
-        _aiCallbacks.spawnPart = spawnPart;
-        _aiCallbacks.spawnDecal = spawnDecal;
-        _aiCallbacks.spawnBubble = spawnBubble;
-        _aiCallbacks.applyDamage = applyDamage;
+        // Route external callbacks to our static context object
+        _aiContext._realOnPlayerHit = onPlayerHit;
+        _aiContext.spawnPart = spawnPart;
+        _aiContext.spawnDecal = spawnDecal;
+        _aiContext.spawnBubble = spawnBubble;
+        _aiContext.applyDamage = applyDamage;
 
         const len = enemies.length;
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
-            // 1. Endast AI Logic om de är ALIVE
+            // 1. Only process AI Logic if ALIVE
             if (e.deathState === EnemyDeathState.ALIVE) {
-                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, isDead, {
-                    ..._aiCallbacks,
-                    onPlayerHit: _aiCallbacks.onPlayerHitExtended
-                }, water);
+                // ZERO-GC: Pass the pre-allocated static object instead of creating a new spread object
+                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, isDead, _aiContext, water);
             }
 
-            // 2. Visuella animationer 
+            // 2. Visual animations (Death states)
             if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
-                EnemyManager.processDeathAnimation(e, delta, now, _aiCallbacks);
+                EnemyManager.processDeathAnimation(e, delta, now, _aiContext);
             }
 
             const deathState = e.deathState;
 
-            // 3. Renderings-beslut
+            // 3. Rendering visibility decisions
             if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTRIFIED || deathState === EnemyDeathState.DROWNED) {
                 e.mesh.visible = true;
                 e.mesh.matrixAutoUpdate = true; // Enable local matrix calculus when explicitly drawn
@@ -617,7 +625,7 @@ export const EnemyManager = {
                 _syncList.push(e);
             }
 
-            // 4. Hit Flashes (Flyttat från AI för renare arkitektur!)
+            // 4. Hit Flashes (Moved from AI for cleaner architecture)
             if (deathState === EnemyDeathState.ALIVE) {
                 if (e.isBoss && e.mesh && e.color !== undefined) {
                     const timeSinceHit = now - e.hitTime;
@@ -745,12 +753,15 @@ export const EnemyManager = {
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
+                // ZERO-GC: Array removal via swapping the last element
                 const recycled = enemies[i];
                 enemies[i] = enemies[enemies.length - 1];
                 enemies.pop();
 
                 recycled.dead = true;
                 recycled.deathState = EnemyDeathState.DEAD;
+
+                // Push non-boss enemies back into the pool for immediate reuse later
                 if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }
@@ -758,20 +769,20 @@ export const EnemyManager = {
 };
 
 // --- INITIALIZE AI CALLBACKS ---
-_aiCallbacks.onEffectTick = (enemy: Enemy, type: EnemyEffectType) => {
+_aiContext.onEffectTick = (enemy: Enemy, type: EnemyEffectType) => {
     const pos = enemy.mesh.position;
 
     switch (type) {
         case 'STUN':
-            _aiCallbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'enemy_effect_stun', 1, undefined, undefined, 0xffff00, 0.3);
+            _aiContext.spawnPart(pos.x, pos.y + 1.8, pos.z, 'enemy_effect_stun', 1, undefined, undefined, 0xffff00, 0.3);
             break;
         case 'FLAME':
             _v1.set(pos.x + (Math.random() - 0.5) * 0.5, pos.y + 1.0, pos.z + (Math.random() - 0.5) * 0.5);
-            _aiCallbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'enemy_effect_flame', 1);
+            _aiContext.spawnPart(_v1.x, _v1.y, _v1.z, 'enemy_effect_flame', 1);
             break;
         case 'SPARK':
             _v1.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.8 + Math.random() * 0.4, pos.z + (Math.random() - 0.5) * 0.4);
-            _aiCallbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'enemy_effect_spark', 1);
+            _aiContext.spawnPart(_v1.x, _v1.y, _v1.z, 'enemy_effect_spark', 1);
             break;
     }
 };
