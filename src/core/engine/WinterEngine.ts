@@ -604,7 +604,11 @@ export class WinterEngine {
         }
 
         // Apply background to target scene
-        scene.background = _c1.clone();
+        if (scene.background && (scene.background as THREE.Color).isColor) {
+            (scene.background as THREE.Color).copy(_c1);
+        } else {
+            scene.background = _c1.clone(); 
+        }
 
         // 4. Weather Sync
         if (env.weather && this.weather) {
