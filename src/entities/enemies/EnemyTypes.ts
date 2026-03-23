@@ -125,6 +125,7 @@ export interface ZombieTypeData {
 export interface Enemy {
     // Unique identifier for tracking and debugging
     id: string;
+    poolId: number; // For amortized AI queries
 
     // Component References
     mesh: THREE.Group;

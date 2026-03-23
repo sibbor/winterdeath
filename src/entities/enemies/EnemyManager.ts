@@ -614,6 +614,14 @@ export const EnemyManager = {
         _aiContext.spawnDecal = spawnDecal;
         _aiContext.spawnBubble = spawnBubble;
         _aiContext.applyDamage = applyDamage;
+        
+        // --- 1. PRE-CALCULATE CAMERA CULLING DATA ---
+        const cam = (playerPos as any)._engine?.camera?.threeCamera; // Fallback if engine not in context
+        // If we have engine access via context or singleton
+        const engine = (window as any).WinterEngineInstance;
+        const camera = engine?.camera;
+        const cameraPos = camera?.threeCamera?.position;
+        const cameraDir = _v1.set(0, 0, -1).applyQuaternion(camera?.threeCamera?.quaternion || _up.set(0,0,0));
 
         const len = enemies.length;
         for (let i = 0; i < len; i++) {
@@ -632,15 +640,33 @@ export const EnemyManager = {
 
             const deathState = e.deathState;
 
-            // 3. Rendering visibility decisions
+            // 3. Rendering visibility decisions (Frustum Culling)
             if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTRIFIED || deathState === EnemyDeathState.DROWNED) {
                 e.mesh.visible = true;
-                e.mesh.matrixAutoUpdate = true; // Enable local matrix calculus when explicitly drawn
+                e.mesh.matrixAutoUpdate = true;
             }
             else if (!e.isBoss && !e.mesh.userData.exploded && deathState !== EnemyDeathState.DEAD) {
-                e.mesh.visible = false;
-                e.mesh.matrixAutoUpdate = false; // Freeze to save CPU when instanced
-                _syncList.push(e);
+                // LoD RENDERING: Skip if behind camera and far away
+                let isVisible = true;
+                if (cameraPos && cameraDir) {
+                    _v2.subVectors(e.mesh.position, cameraPos);
+                    const dot = cameraDir.dot(_v2);
+                    const distSq = _v2.lengthSq();
+                    
+                    // Behind camera (dot < -2) and outside a safety radius (25 units)
+                    if (dot < -2.0 && distSq > 625) {
+                        isVisible = false;
+                    }
+                }
+
+                if (isVisible) {
+                    e.mesh.visible = false;
+                    e.mesh.matrixAutoUpdate = false;
+                    _syncList.push(e);
+                } else {
+                    e.mesh.visible = false;
+                    e.mesh.matrixAutoUpdate = false;
+                }
             }
 
             // 4. Hit Flashes (Moved from AI for cleaner architecture)

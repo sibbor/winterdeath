@@ -30,6 +30,7 @@ export class AshRenderer {
     private maxInstances: number;
     private insertIndex: number = 0;
     private dummy = new THREE.Object3D();
+    private _sharedBoundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2000);
 
     // Animation pooling
     private animatingList: AnimatingAsh[] = [];
@@ -43,7 +44,7 @@ export class AshRenderer {
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
         this.mesh.count = 0;
-        this.mesh.frustumCulled = false;
+        this.mesh.boundingSphere = this._sharedBoundingSphere;
 
         // Ensure instance matrices and colors are initialized properly to avoid WebGL stutter
         if (!this.mesh.instanceColor) {
@@ -111,10 +112,12 @@ export class AshRenderer {
             anim.pos.copy(position);
             anim.pos.y = 0.2;
             anim.rot.copy(rotation);
-            // Ash pile target dimensions
-            anim.targetScaleX = parseFloat((1.2 * scale * widthScale).toFixed(3));
-            anim.targetScaleY = parseFloat((1.0 * scale).toFixed(3));
-            anim.targetScaleZ = parseFloat((1.2 * scale * widthScale).toFixed(3));
+
+            // Ash pile target dimensions (ZERO-GC, no strings attached!)
+            anim.targetScaleX = 1.2 * scale * widthScale;
+            anim.targetScaleY = 1.0 * scale;
+            anim.targetScaleZ = 1.2 * scale * widthScale;
+
             anim.colorHex = colorHex;
             this.animatingList.push(anim);
         } else {

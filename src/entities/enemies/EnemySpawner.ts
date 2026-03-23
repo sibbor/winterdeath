@@ -5,8 +5,7 @@ import { soundManager } from '../../utils/SoundManager';
 import { Enemy, AIState, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 
-// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
-const _v1 = new THREE.Vector3();
+let _nextPoolId = 0;
 
 /**
  * EnemySpawner System
@@ -108,6 +107,7 @@ export const EnemySpawner = {
 
         const enemy: Enemy = {
             id: `z_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            poolId: _nextPoolId++,
             mesh: g,
             type: typeKey,
             hp: typeData.hp,
@@ -213,6 +213,7 @@ export const EnemySpawner = {
 
         const enemy: Enemy = {
             id: `boss_${bossData.id}`,
+            poolId: _nextPoolId++,
             mesh: boss,
             type: EnemyType.BOSS,
             hp: bossData.hp,

@@ -11,9 +11,12 @@ export class ZombieRenderer {
     private maxInstances: number;
 
     // --- PERFORMANCE SCRATCHPADS ---
-    private _dummy = new THREE.Object3D();
     private _tempColor = new THREE.Color();
     private _white = new THREE.Color(0xffffff);
+
+    // En enorm bounding sphere som säkerställer att horden inte pop:ar, 
+    // men tillåter THREE att ignorera hela gruppen om du tittar bort.
+    private _sharedBoundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2000);
 
     constructor(scene: THREE.Scene, maxInstances: number = 500) {
         this.scene = scene;
@@ -40,10 +43,6 @@ export class ZombieRenderer {
         this.scene = scene;
         for (let i = 0; i < this._meshList.length; i++) {
             const m = this._meshList[i];
-            // The provided snippet `if (zombieRenderer) zombieRenderer.sync(_syncList, now);`
-            // contains undefined variables (`zombieRenderer`, `_syncList`, `now`) in this context.
-            // To maintain syntactical correctness as per instructions, the original line is kept.
-            // If this change was intended for a different file or context, please clarify.
             if (m.parent !== scene) scene.add(m);
         }
     }
@@ -54,9 +53,14 @@ export class ZombieRenderer {
         mesh.receiveShadow = true;
         mesh.count = 0;
 
-        // Optimization: Setting frustumCulled to false is heavy on GPU but prevents popping.
-        // If performance drops, consider true + computeBoundingSphere() in sync.
-        mesh.frustumCulled = false;
+        // PRE-ALLOCATE COLOR BUFFER
+        // Detta är extremt viktigt för setColorAt ska funka utan att krascha/lura GC
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.maxInstances * 3), 3);
+
+        // OPTIMERING: Istället för frustumCulled = false (som ritar objekten även om du tittar bort),
+        // ger vi dem en gigantisk sfär. Då ritas horden så fort ETT hörn av mappen är i bild, 
+        // men klipps bort om du tittar rakt upp i himlen.
+        mesh.boundingSphere = this._sharedBoundingSphere;
 
         this.meshes[type] = mesh;
         this.scene.add(mesh);
@@ -94,17 +98,12 @@ export class ZombieRenderer {
 
             const idx = instMesh.count;
 
-            // Sync transform using reusable dummy object (Zero-GC)
-            const scale = e.originalScale || 1.0;
-            const wScale = (e.widthScale || 1.0) * scale;
-
-            this._dummy.position.copy(e.mesh.position);
-            this._dummy.quaternion.copy(e.mesh.quaternion);
-            this._dummy.scale.set(wScale, scale, wScale);
-
-            // [VINTERDÖD] Direkt matriskomposition minskar overhead radikalt.
-            this._dummy.matrix.compose(this._dummy.position, this._dummy.quaternion, this._dummy.scale);
-            instMesh.setMatrixAt(idx, this._dummy.matrix);
+            // --- MATRIX SYNC ---
+            // Eftersom EnemyAnimator redan snurrar, poserar och skalar e.mesh,
+            // uppdaterar vi dess world matrix och lånar den direkt till instansen!
+            // Det sparar CPU eftersom vi slipper räkna matrisen två gånger.
+            e.mesh.updateMatrixWorld(true);
+            instMesh.setMatrixAt(idx, e.mesh.matrixWorld);
 
             // --- HIT FLASH LOGIC ---
             // Calculate color based on hit feedback. Arc-Cannon has a unique cyan-white flash.
@@ -116,10 +115,12 @@ export class ZombieRenderer {
                 } else {
                     this._tempColor.set(0xffffff); // Standard white flash
                 }
+                instMesh.setColorAt(idx, this._tempColor);
             } else {
-                this._tempColor.setHex(e.isBoss || e.color !== undefined ? (e.color || 0xffffff) : 0xffffff);
+                // If not flashing, reset to white (which allows the material base color to show)
+                this._tempColor.setHex(0xffffff);
+                instMesh.setColorAt(idx, this._tempColor);
             }
-            instMesh.setColorAt(idx, this._tempColor);
 
             instMesh.count++;
         }
@@ -134,8 +135,10 @@ export class ZombieRenderer {
         for (let i = 0; i < this._meshList.length; i++) {
             const m = this._meshList[i];
             // Only update GPU buffers if there are instances or if it was recently cleared
-            m.instanceMatrix.needsUpdate = true;
-            if (m.instanceColor) m.instanceColor.needsUpdate = true;
+            if (m.count > 0 || m.instanceMatrix.needsUpdate) {
+                m.instanceMatrix.needsUpdate = true;
+                if (m.instanceColor) m.instanceColor.needsUpdate = true;
+            }
         }
     }
 

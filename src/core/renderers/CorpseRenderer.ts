@@ -14,8 +14,9 @@ export class CorpseRenderer {
     private mesh: THREE.InstancedMesh;
     private scene: THREE.Scene;
     private maxInstances: number;
-    private insertIndex: number = 0; // [VINTERDÖD] Egen pekare för ren O(1) cirkulär loop
+    private insertIndex: number = 0;
     private dummy = new THREE.Object3D();
+    private _sharedBoundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2000);
 
     constructor(scene: THREE.Scene, maxInstances: number = 2000) {
         this.scene = scene;
@@ -31,10 +32,7 @@ export class CorpseRenderer {
         this.mesh.castShadow = true;
         this.mesh.receiveShadow = true;
         this.mesh.count = 0;
-
-        // Disable frustum culling to prevent corpses from popping in/out 
-        // when the camera is close to the ground.
-        this.mesh.frustumCulled = false;
+        this.mesh.boundingSphere = this._sharedBoundingSphere;
 
         this.scene.add(this.mesh);
     }

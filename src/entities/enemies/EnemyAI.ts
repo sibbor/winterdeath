@@ -60,6 +60,17 @@ export const EnemyAI = {
         const dz = playerPos.z - e.mesh.position.z;
         const distSq = dx * dx + dz * dz;
 
+        // --- AI LoD (Level of Detail) TIERS ---
+        // 625 = 25u, 2500 = 50u, 6400 = 80u, 10000 = 100u
+        const isTier1 = distSq < 625;
+        const isTier2 = !isTier1 && distSq < 2500;
+        const isTier3 = !isTier1 && !isTier2 && distSq < 6400;
+        const isTier4 = !isTier1 && !isTier2 && !isTier3 && distSq <= 10000;
+
+        // Amortization (Spread load across frames)
+        const frameTick = Math.floor(now / 16.6); // Approximate frame counter
+        const frameOffset = (frameTick + (e.poolId % 60));
+
         // 10000 = 100 units distance
         if (distSq > 10000 &&
             e.deathState === EnemyDeathState.ALIVE &&
@@ -318,7 +329,12 @@ export const EnemyAI = {
         const separationRadius = 1.5;
         const separationRadiusSq = separationRadius * separationRadius;
 
-        if (e.state !== AIState.ATTACK_CHARGE && e.state !== AIState.ATTACKING) {
+        // LoD: Throttled separation queries
+        let shouldCheckSeparation = isTier1;
+        if (isTier2) shouldCheckSeparation = (frameOffset % 5 === 0);
+        if (isTier3) shouldCheckSeparation = false; // Skip entirely at Tier 3+
+
+        if (shouldCheckSeparation && e.state !== AIState.ATTACK_CHARGE && e.state !== AIState.ATTACKING) {
             const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, separationRadius);
             for (let i = 0; i < nearbyEnemies.length; i++) {
                 const other = nearbyEnemies[i];
@@ -367,7 +383,11 @@ export const EnemyAI = {
                 doMovementBounce = true;
                 e.searchTimer -= delta;
                 _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
-                moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6, now, false);
+                
+                // Tier 4: Minimal updates, skip movement physics
+                if (!isTier4) {
+                    moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6, now, false, isTier1, isTier2, frameOffset);
+                }
 
                 if (seesPlayer) {
                     logStateChange(now, e, AIState.CHASE, 'VISUAL');
@@ -400,7 +420,9 @@ export const EnemyAI = {
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 } else if (e.lastKnownPosition && e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
                     doMovementBounce = true;
-                    moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, now, false);
+                    if (!isTier4) {
+                        moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, now, false, isTier1, isTier2, frameOffset);
+                    }
                 } else {
                     e.mesh.rotation.y += delta * 2.5; // Spin around looking
                 }
@@ -430,7 +452,10 @@ export const EnemyAI = {
                     const target = (seesPlayer) ? playerPos : e.lastKnownPosition!;
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
                     doMovementBounce = true;
-                    moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6, now, true);
+                    
+                    if (!isTier4) {
+                        moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6, now, true, isTier1, isTier2, frameOffset);
+                    }
 
                     const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
                     if (now > (e.lastStepTime || 0) + chaseStepInterval) {
@@ -534,7 +559,7 @@ export const EnemyAI = {
 };
 
 // --- HELPERS ---
-function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, now: number, isChasing: boolean) {
+function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: number, collisionGrid: SpatialGrid, sepForce: THREE.Vector3, now: number, isChasing: boolean, isTier1: boolean, isTier2: boolean, frameOffset: number) {
     _v1.set(target.x, e.mesh.position.y, target.z);
     _v2.subVectors(_v1, e.mesh.position);
     const dist = _v2.length();
@@ -565,10 +590,17 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     const baseScale = e.originalScale || 1.0;
     const hitRadius = 0.5 * baseScale * (e.widthScale || 1.0);
 
-    // ZERO-GC: Obstacles usually don't move. We pass a tighter radius
-    const nearby = collisionGrid.getNearbyObstacles(_v4, hitRadius + 1.0);
-    for (let i = 0; i < nearby.length; i++) {
-        applyCollisionResolution(_v4, hitRadius, nearby[i]);
+    // LoD: Throttled obstacle collision checks
+    let shouldCheckObstacles = isTier1;
+    if (isTier2) shouldCheckObstacles = (frameOffset % 3 === 0);
+    // Tier 3+ skips obstacle resolution to save significant CPU (they are far away)
+
+    if (shouldCheckObstacles) {
+        // ZERO-GC: Obstacles usually don't move. We pass a tighter radius
+        const nearby = collisionGrid.getNearbyObstacles(_v4, hitRadius + 1.0);
+        for (let i = 0; i < nearby.length; i++) {
+            applyCollisionResolution(_v4, hitRadius, nearby[i]);
+        }
     }
 
     // Ground bounce applied directly here
