@@ -30,7 +30,11 @@ export const Sector6: SectorDef = {
     name: "sectors.sector_6_name",
     environment: {
         bgColor: 0x020208,
-        fogDensity: 0.02,
+        fog: {
+            density: 200,
+            color: 0x020208,
+            height: 10
+        },
         ambientIntensity: 0.4,
         ambientColor: 0x404050,
         groundColor: 0x111111,

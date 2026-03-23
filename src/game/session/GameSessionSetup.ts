@@ -122,91 +122,19 @@ export class GameSessionSetup {
             camera.set('fov', env.fov);
             camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
 
-            // --- ENVIRONMENT SYNC (Zero-GC) ---
+            // --- ENVIRONMENT SYNC (Centralized) ---
             if (!props.isWarmup) {
-                // WndSystem
-                if (env.wind) {
-                    const dir = env.wind?.direction || { x: 0, z: 1 };
-                    const windAngle = Math.atan2(dir.z, dir.x);
-                    engine.wind.setRandomWind(
-                        env.wind?.strengthMin ?? WIND_SYSTEM.MIN_STRENGTH,
-                        env.wind?.strengthMax ?? WIND_SYSTEM.MAX_STRENGTH,
-                        windAngle,
-                        env.wind?.angleVariance || WIND_SYSTEM.ANGLE_VARIANCE
-                    );
-                } else {
-                    engine.wind.setRandomWind(WIND_SYSTEM.MIN_STRENGTH, WIND_SYSTEM.MAX_STRENGTH);
+                engine.syncEnvironment(env);
+                
+                // Track skyLight for the game loop and shadow following
+                const skyLight = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+                if (skyLight) {
+                    refs.skyLightRef.current = skyLight;
+                    if (!refs.skyLightOffsetRef.current) {
+                        refs.skyLightOffsetRef.current = new THREE.Vector3();
+                    }
+                    refs.skyLightOffsetRef.current.copy(skyLight.position);
                 }
-
-                // WeatherSystem
-                if (engine.weather) {
-                    const activeWeather = env.weather?.type || 'none';
-                    const weatherDensity = env.weatherDensity ?? 1.0;
-                    const baseWeatherCount = WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES;
-                    const finalCount = Math.min(Math.floor(baseWeatherCount * weatherDensity),
-                        WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES);
-
-                    engine.weather.reAttach(scene);
-                    engine.weather.sync(activeWeather, finalCount, 120);
-                }
-
-                // WaterSystem
-                if (engine.water) engine.water.reAttach(scene);
-            }
-
-            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
-
-            scene.background = new THREE.Color(env.bgColor);
-            scene.fog = new THREE.FogExp2(env.fogColor || env.bgColor, env.fogDensity);
-            camera.lookAt(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z, true);
-
-            ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
-            EnemyManager.init(scene);
-
-            // --- AMBIENT LIGHT SETUP ---
-            const ambientLight = new THREE.AmbientLight((env as any).ambientColor || 0x404050, env.ambientIntensity);
-            ambientLight.name = LIGHT_SYSTEM.AMBIENT_LIGHT;
-            scene.add(ambientLight);
-
-            // --- SKY LIGHT SETUP - WITH TRACKING SHADOW CAMERA ---
-            if (env.skyLight) {
-                const lightPos = env.skyLight.position || { x: 80, y: 50, z: 50 };
-                // Zero-GC Swap: Always DirectionalLight, but intensity=0 if !visible
-                const intensity = env.skyLight.visible ? env.skyLight.intensity : 0;
-
-                const skyLight = new THREE.DirectionalLight(env.skyLight.color, intensity);
-                skyLight.name = LIGHT_SYSTEM.SKY_LIGHT;
-                skyLight.position.set(lightPos.x, lightPos.y, lightPos.z);
-
-                // Shadows:
-                const shadowRes = engine.getSettings().shadowResolution;
-
-                skyLight.castShadow = true; // castShadow to reserve the uniform slot in the GPU program
-                skyLight.shadow.camera.left = -100;
-                skyLight.shadow.camera.right = 100;
-                skyLight.shadow.camera.top = 100;
-                skyLight.shadow.camera.bottom = -100;
-                skyLight.shadow.camera.far = 300;
-                skyLight.shadow.bias = -0.0005;
-                skyLight.shadow.mapSize.width = shadowRes * 2;
-                skyLight.shadow.mapSize.height = shadowRes * 2;
-
-                // FIX FOR iOS/IPHONE: Force the projection matrix to update 
-                // BEFORE the first render so the shadow map bounds are correctly calculated.
-                skyLight.shadow.camera.updateProjectionMatrix();
-
-                scene.add(skyLight);
-                scene.add(skyLight.target); // MUST be added to scene for tracking to work
-
-                // Save references for the game loop
-                refs.skyLightRef.current = skyLight;
-
-                // Check if .current is null, not the ref object itself
-                if (!refs.skyLightOffsetRef.current) {
-                    refs.skyLightOffsetRef.current = new THREE.Vector3();
-                }
-
-                refs.skyLightOffsetRef.current.copy(skyLight.position);
             }
 
             const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {

@@ -153,43 +153,7 @@ export const AssetPreloader = {
             // 1. BASE ENVIRONMENT
             beginInternal('lighting');
             if (envConfig) {
-                let fogColorHex = envConfig.bgColor;
-                let fogExpDensity = 0.01;
-
-                // Hantera det nya fog-objektet
-                if (envConfig.fog) {
-                    fogColorHex = envConfig.fog.color !== undefined ? envConfig.fog.color : envConfig.bgColor;
-                    fogExpDensity = envConfig.fog.density * 0.0001;
-                }
-                // Fallback för äldre sektorer
-                else if (envConfig.fogDensity !== undefined) {
-                    fogColorHex = envConfig.fogColor !== undefined ? envConfig.fogColor : envConfig.bgColor;
-                    const isVolumetric = envConfig.fogDensity >= 1.0;
-                    fogExpDensity = isVolumetric ? envConfig.fogDensity * 0.0001 : envConfig.fogDensity;
-                }
-
-                const fogCol = new THREE.Color(fogColorHex);
-
-                if (fogExpDensity > 0) {
-                    scene.fog = new THREE.FogExp2(fogCol, fogExpDensity);
-                } else {
-                    scene.fog = null;
-                }
-                scene.background = fogCol;
-
-                if (envConfig.hemiLight) {
-                    scene.add(new THREE.HemisphereLight(envConfig.hemiLight.sky, envConfig.hemiLight.ground, envConfig.hemiLight.intensity));
-                } else {
-                    scene.add(new THREE.AmbientLight(envConfig.ambientColor || 0x404050, envConfig.ambientIntensity || 0.4));
-                }
-
-                if (envConfig.skyLight?.visible) {
-                    const sky = new THREE.DirectionalLight(envConfig.skyLight.color, envConfig.skyLight.intensity);
-                    sky.position.set(50, 50, 50);
-                    sky.castShadow = true;
-                    scene.add(sky);
-                }
-
+                engine.syncEnvironment(envConfig, scene);
             }
             endInternal('lighting');
 

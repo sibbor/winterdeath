@@ -73,6 +73,10 @@ export class WindSystem implements System {
     }
   }
 
+  public sync(minStrength: number, maxStrength: number, baseAngle: number = 0.0, angleVariance: number = Math.PI) {
+    this.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
+  }
+
   update(ctx: any, deltaTime: number = 0.016, now: number = performance.now()): THREE.Vector2 {
     if (this.boundUniforms.length === 0) {
       this.bindMaterial(MATERIALS.hedge);

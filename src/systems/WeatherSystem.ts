@@ -21,7 +21,7 @@ export class WeatherSystem implements System {
     private velocities: Float32Array;
 
     private scene: THREE.Scene;
-    private type: WeatherType = 'none';
+    public type: WeatherType = 'none';
     private count: number = 0;
     private areaSize: number = 100;
     private wind: WindSystem;
@@ -244,15 +244,11 @@ export class WeatherSystem implements System {
                 z = centerZ + (r1 * areaSize - areaHalf);
             }
 
-            // X/Z Axis Wrapping relative to camera
-            const dx = x - centerX;
-            const dz = z - centerZ;
-
-            if (dx < -areaHalf) x += areaSize;
-            else if (dx > areaHalf) x -= areaSize;
-
-            if (dz < -areaHalf) z += areaSize;
-            else if (dz > areaHalf) z -= areaSize;
+            // X/Z Axis Wrapping relative to camera (Robust against teleports)
+            while (x < centerX - areaHalf) x += areaSize;
+            while (x > centerX + areaHalf) x -= areaSize;
+            while (z < centerZ - areaHalf) z += areaSize;
+            while (z > centerZ + areaHalf) z -= areaSize;
 
             pos[i3 + 0] = x;
             pos[i3 + 1] = y;

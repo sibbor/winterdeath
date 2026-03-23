@@ -3,55 +3,11 @@ import { SectorTrigger, MapItem, WeatherType, SectorState } from '../../types';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
 
-export interface SectorEnvironment {
-    bgColor: number;
-    fog?: {
-        density: number; // 0-40 (Antal plan för FogSystem)
-        color?: number;  // Om satt, override:ar bgColor
-        height?: number; //  fogHeight om du vill styra yTop parametern i framtiden
-    };
-    ambientIntensity: number;
-    ambientColor?: number;
-    groundColor: number;
-    fov: number;
-    skyLight: {
-        visible: boolean;
-        color: number;
-        intensity: number;
-        position?: { x: number; y: number; z: number };
-    };
-    hemiLight?: {
-        sky: number;
-        ground: number;
-        intensity: number;
-    };
-    cameraOffsetZ: number;
-    cameraHeight?: number;
-    weather: {
-        type: WeatherType,
-        particles: number
-    };
-    wind?: {
-        strengthMin?: number;
-        strengthMax?: number;
-        direction?: { x: number, z: number };
-        angleVariance?: number;
-    };
-}
 
-export interface AtmosphereZone {
-    label: string;
-    x: number;
-    z: number;
-    weather: WeatherType;
-    bgColor: number;
-    fogDensity: number;
-    ambient: number;
-    weatherDensity?: number;
-    innerRadius?: number;
-    outerRadius?: number;
-}
+
+
 
 export interface SpawnPoint {
     x: number;

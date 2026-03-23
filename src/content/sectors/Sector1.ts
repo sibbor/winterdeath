@@ -99,7 +99,7 @@ export const Sector1: SectorDef = {
             angleVariance: Math.PI / 4
         },
         fog: {
-            density: 0.02,
+            density: 200,
             color: 0x020208,
             height: 10
         },

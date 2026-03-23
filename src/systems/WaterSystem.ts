@@ -325,6 +325,10 @@ export class WaterSystem implements System {
         }
     }
 
+    public sync(params: { clarity?: number, waterLevel?: number }) {
+        if (params.clarity !== undefined) this.setClarity(params.clarity);
+    }
+
     public registerGround(mesh: THREE.Mesh): void {
         if (this.grounds.includes(mesh)) return;
         this.grounds.push(mesh);

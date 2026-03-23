@@ -199,7 +199,7 @@ export class SectorSystem implements System {
         }
 
         // 4. Centralized Atmosphere Update
-        SectorGenerator.updateAtmosphere(dt, now, pPos, state, state.sectorState, events, this.currentSector, this.currentSector.atmosphereZones);
+        session.engine.updateAtmosphere(pPos, this.currentSector.environment, this.currentSector.atmosphereZones, state, dt);
         this.currentSector.onUpdate(dt, now, pPos, state, state.sectorState, events);
     }
 }

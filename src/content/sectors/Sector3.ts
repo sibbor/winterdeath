@@ -22,7 +22,7 @@ const LOCATIONS = {
         C2: { x: 215, z: -25 }
     },
     TRIGGERS: {
-        FOREST_NOISE: { x: 20, z: -18 },
+        FOREST_AMBIENT: { x: 20, z: -18 },
         POI_MAST: { x: 215, z: -25 },
         FOUND_ESMERALDA: { x: 215, z: -25 }
     },
@@ -68,7 +68,11 @@ export const Sector3: SectorDef = {
     name: "sectors.sector_3_name",
     environment: {
         bgColor: 0x051015,
-        fogDensity: 0.02,
+        fog: {
+            density: 200,
+            color: 0x020208,
+            height: 10
+        },
         ambientIntensity: 0.3,
         ambientColor: 0x404050,
         groundColor: 0x112211,
@@ -368,7 +372,7 @@ export const Sector3: SectorDef = {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers:
         SectorGenerator.addTriggers(ctx, [{ id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, familyId: 2, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
-        { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_NOISE, radius: 8, type: 'SPEAK', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+        { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: 'SPEAK', content: "clues.s3_forest_noise", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
         { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'POI', content: "clues.s3_poi_the_mast", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
         { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: 'POI', content: "clues.s3_dead_bodies", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
         { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: 'SPEAK', content: "clues.s3_tractor", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },

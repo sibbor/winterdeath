@@ -1,3 +1,4 @@
+import { EnvironmentOverride } from '../core/engine/EngineTypes';
 import { WeaponType } from '../content/weapons';
 import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '../components/ui/hud/HudTypes';
 
@@ -140,26 +141,6 @@ export interface GameState {
   debugMode?: boolean;
   weather: WeatherType;
   environmentOverrides?: Record<number, EnvironmentOverride>;
-}
-
-export interface EnvironmentOverride {
-  fogColor?: number;
-  fogDensity?: number;
-  ambientIntensity?: number;
-  directionalIntensity?: number;
-  groundColor?: number;
-  // Playground / Debug overrides
-  bgColor?: number;
-  fov?: number;
-  skyLightVisible?: boolean;
-  skyLightPosition?: { x: number; y: number; z: number };
-  skyLightColor?: number;
-  skyLightIntensity?: number;
-  weather?: WeatherType;
-  weatherDensity?: number;
-  windStrength?: number;
-  windDirection?: number;
-  windRandomized?: boolean;
 }
 
 export type TriggerType = 'COLLECTIBLE' | 'CLUE' | 'POI' | 'INTERACTION' | 'STATION' | 'SECTOR_END' | 'SPEAK' | 'THOUGHT' | 'INFO' | 'AMBUSH' | string;

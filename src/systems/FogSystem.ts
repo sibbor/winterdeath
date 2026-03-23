@@ -43,10 +43,19 @@ export class FogSystem implements System {
      * Synchronizes fog state. Initializes the mesh lazily and updates density/color/height.
      */
     public sync(density: number, height?: number, color?: THREE.Color) {
-        this.fogCount = Math.min(density, MAX_FOG_PLANES);
+        this.fogCount = Math.floor(Math.min(density, MAX_FOG_PLANES));
 
         if (height !== undefined) {
+            const oldHeight = this.targetHeight;
             this.targetHeight = height;
+
+            // If height changed significantly and we have a mesh, re-distribute vertically immediately
+            if (this.fogMesh && Math.abs(oldHeight - height) > 0.1) {
+                const pos = this.positions;
+                for (let i = 0; i < MAX_FOG_PLANES; i++) {
+                    pos[i * 3 + 1] = -2.0 + Math.random() * (this.targetHeight + 2.0);
+                }
+            }
         }
 
         if (color) {
@@ -200,11 +209,11 @@ export class FogSystem implements System {
             const dx = x - centerX;
             const dz = z - centerZ;
 
-            if (dx < -areaHalf) x += areaSize;
-            else if (dx > areaHalf) x -= areaSize;
-
-            if (dz < -areaHalf) z += areaSize;
-            else if (dz > areaHalf) z -= areaSize;
+            // Wrapping check (Robust against large teleports)
+            while (x < centerX - areaHalf) x += areaSize;
+            while (x > centerX + areaHalf) x -= areaSize;
+            while (z < centerZ - areaHalf) z += areaSize;
+            while (z > centerZ + areaHalf) z -= areaSize;
 
             pos[i3 + 0] = x;
             pos[i3 + 1] = y;

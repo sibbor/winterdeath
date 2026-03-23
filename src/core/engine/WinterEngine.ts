@@ -10,7 +10,13 @@ import { WaterSystem } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System } from '../../systems/System';
+import { SectorEnvironment, EnvironmentOverride, EnvironmentalZone, EnvironmentalWeather, WeatherType } from '../../core/engine/EngineTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
+
+// Module-level scratchpads for Zero-GC operations
+const _c1 = new THREE.Color();
+const _c2 = new THREE.Color();
+const _v1 = new THREE.Vector3();
 
 export type { GraphicsSettings };
 
@@ -349,13 +355,14 @@ export class WinterEngine {
         }
     }
 
-    private syncSystemsToScene() {
+    public syncSystemsToScene(targetScene?: THREE.Scene) {
         const systems = this._systemArray;
         const len = systems.length;
+        const scene = targetScene || this.scene;
 
         for (let i = 0; i < len; i++) {
             const sys = systems[i];
-            if (sys.reAttach) sys.reAttach(this.scene);
+            if (sys.reAttach) sys.reAttach(scene);
         }
     }
 
@@ -509,13 +516,284 @@ export class WinterEngine {
     }
 
     /**
-     * Broadcasts a world noise event to the EnemyDetectionSystem.
-     * Centralized entry point for Combat, Projectiles, and Player movement.
+     * Synchronizes all environmental systems to a new state.
+     * Used for initial sector setup and major transitions.
+     * @param env The target environment or override.
      */
-    public makeNoise(pos: THREE.Vector3, type: NoiseType, radius?: number) {
-        const sys = this.getSystem<any>('EnemyDetectionSystem');
-        if (sys && sys.makeNoise) {
-            sys.makeNoise(pos, type, radius);
+    public syncEnvironment(env: SectorEnvironment | EnvironmentOverride, targetScene?: THREE.Scene) {
+        const scene = targetScene || this.scene;
+        
+        // 1. Light Setup (Ambient)
+        if (env.ambientIntensity !== undefined) {
+            const ambient = scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+            if (ambient) {
+                ambient.intensity = env.ambientIntensity;
+                if (env.ambientColor !== undefined) ambient.color.setHex(env.ambientColor);
+            } else {
+                // If it doesn't exist (e.g. in AssetPreloader's ghost scene), create it
+                const amb = new THREE.AmbientLight(env.ambientColor || 0x404050, env.ambientIntensity);
+                amb.name = LIGHT_SYSTEM.AMBIENT_LIGHT;
+                scene.add(amb);
+            }
+        }
+
+        // 2. Wind Configuration
+        if (env.wind && this.wind) {
+            const w = env.wind;
+            const minStrength = w.strengthMin ?? 0.02;
+            const maxStrength = w.strengthMax ?? 0.05;
+            let baseAngle = 0;
+            let angleVariance = w.angleVariance ?? Math.PI;
+
+            if (w.direction && (w.direction.x !== 0 || w.direction.z !== 0)) {
+                baseAngle = Math.atan2(w.direction.z, w.direction.x);
+                angleVariance = w.angleVariance ?? (Math.PI / 4);
+            }
+            this.wind.sync(minStrength, maxStrength, baseAngle, angleVariance);
+        }
+
+        // 3. Fog & Background Color
+        if (env.bgColor !== undefined) {
+            if (!targetScene) this.renderer.setClearColor(env.bgColor);
+            _c1.setHex(env.bgColor);
+        }
+
+        let volDensity = 0;
+        let fogHeight: number | undefined = undefined;
+        let fogColorHex = env.bgColor || 0x000000;
+
+        if (env.fog) {
+            fogColorHex = env.fog.color !== undefined ? env.fog.color : (env.bgColor || 0x000000);
+            volDensity = env.fog.density;
+            fogHeight = env.fog.height;
+        } else if ((env as any).fogDensity !== undefined) {
+            // Legacy support
+            fogColorHex = (env as any).fogColor !== undefined ? (env as any).fogColor : (env.bgColor || 0x000000);
+            volDensity = (env as any).fogDensity;
+        }
+
+        _c1.setHex(fogColorHex);
+
+        if (this.fog) {
+            if (this.settings.volumetricFog) {
+                // Re-attach fog to target scene if provided
+                if (targetScene) this.fog.reAttach(targetScene);
+                this.fog.sync(volDensity, fogHeight, _c1);
+                
+                if (volDensity > 0) {
+                    const distFog = volDensity * 0.0001; 
+                    scene.fog = new THREE.FogExp2(fogColorHex, distFog);
+                } else {
+                    scene.fog = null;
+                }
+            } else {
+                if (targetScene) this.fog.reAttach(targetScene);
+                this.fog.sync(0, undefined, _c1);
+                if (volDensity > 0) {
+                    const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
+                    scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
+                } else {
+                    scene.fog = null;
+                }
+            }
+        }
+
+        // Apply background to target scene
+        scene.background = _c1.clone();
+
+        // 4. Weather Sync
+        if (env.weather && this.weather) {
+            if (targetScene) this.weather.reAttach(targetScene);
+            const w = env.weather as EnvironmentalWeather;
+            const type = typeof w === 'string' ? w : w.type;
+            const count = typeof w === 'string' ? 2000 : w.particles;
+            this.weather.sync(type as WeatherType, count);
+        }
+
+        // 5. Water Sync
+        if (this.water) {
+            if (targetScene) this.water.reAttach(targetScene);
+            // Sync skyLight position if available
+            if (env.skyLight?.visible && env.skyLight.position) {
+                _v1.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
+                this.water.setLightPosition(_v1);
+            }
+        }
+
+        // 6. Camera Settings
+        if (env.fov !== undefined) {
+            this.camera.set('fov', env.fov);
+        }
+
+        // 7. SkyLight Setup (Discrete)
+        if (env.skyLight) {
+            let sky = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+            if (!sky) {
+                sky = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
+                sky.name = LIGHT_SYSTEM.SKY_LIGHT;
+                scene.add(sky);
+                scene.add(sky.target); // MUST be added to scene
+            }
+            
+            sky.color.setHex(env.skyLight.color);
+            sky.intensity = env.skyLight.visible ? env.skyLight.intensity : 0;
+            
+            if (env.skyLight.position) {
+                sky.position.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
+            }
+
+            // Shadow Configuration
+            if (this.settings.shadows) {
+                sky.castShadow = true;
+                const shadowRes = this.settings.shadowResolution;
+                sky.shadow.camera.left = -100;
+                sky.shadow.camera.right = 100;
+                sky.shadow.camera.top = 100;
+                sky.shadow.camera.bottom = -100;
+                sky.shadow.camera.far = 300;
+                sky.shadow.bias = -0.0005;
+                sky.shadow.mapSize.width = shadowRes * 2;
+                sky.shadow.mapSize.height = shadowRes * 2;
+                sky.shadow.camera.updateProjectionMatrix();
+            } else {
+                sky.castShadow = false;
+            }
+        }
+    }
+
+    /**
+     * Updates the atmosphere blending based on player position and zones.
+     * High-performance, Zero-GC loop executed every frame.
+     */
+    public updateAtmosphere(playerPos: THREE.Vector3, defaultEnv: SectorEnvironment, zones: EnvironmentalZone[] | undefined, sectorState: any, dt: number) {
+        if (!playerPos) return;
+
+        // 1. Determine Default Target Values
+        const targetFogColor = _c1.setHex(defaultEnv.bgColor);
+        if (defaultEnv.fog?.color !== undefined) targetFogColor.setHex(defaultEnv.fog.color);
+
+        let targetFogDensity = defaultEnv.fog?.density ?? 0;
+        let targetAmbient = defaultEnv.ambientIntensity;
+        let targetGroundColor = defaultEnv.groundColor ?? 0xffffff;
+        let activeWeather: any = defaultEnv.weather?.type || 'none';
+        let maxWeight = 0;
+
+        const px = playerPos.x;
+        const pz = playerPos.z;
+
+        // 2. Zone Blending
+        const override = sectorState.envOverride;
+        if (!override && zones && zones.length > 0) {
+            let totalWeight = 0;
+            let blendedR = 0, blendedG = 0, blendedB = 0;
+            let blendedDensity = 0;
+            let blendedAmbient = 0;
+
+            for (let i = 0; i < zones.length; i++) {
+                const z = zones[i];
+                const dx = px - z.x;
+                const dz = pz - z.z;
+                const distSq = dx * dx + dz * dz;
+
+                const inner = z.innerRadius || 250;
+                const outer = z.outerRadius || 450;
+                const outerSq = outer * outer;
+
+                if (distSq < outerSq) {
+                    const dist = Math.sqrt(distSq);
+                    let weight = 1.0;
+                    if (dist > inner) {
+                        weight = 1.0 - ((dist - inner) / (outer - inner));
+                    }
+                    weight = weight * weight; 
+
+                    _c2.setHex(z.bgColor);
+                    blendedR += _c2.r * weight;
+                    blendedG += _c2.g * weight;
+                    blendedB += _c2.b * weight;
+
+                    // Support both old z.fogDensity and new z.fog.density
+                    const zFogDensity = z.fogDensity ?? 0;
+                    blendedDensity += zFogDensity * weight;
+                    blendedAmbient += z.ambient * weight;
+                    totalWeight += weight;
+
+                    if (weight > maxWeight) {
+                        maxWeight = weight;
+                        activeWeather = z.weather;
+                    }
+                }
+            }
+
+            if (totalWeight > 0) {
+                const lerpFactor = Math.min(1.0, totalWeight);
+                const invWeight = 1 / totalWeight;
+                _c2.setRGB(blendedR * invWeight, blendedG * invWeight, blendedB * invWeight);
+
+                targetFogColor.lerp(_c2, lerpFactor);
+                targetFogDensity = THREE.MathUtils.lerp(targetFogDensity, blendedDensity * invWeight, lerpFactor);
+                targetAmbient = THREE.MathUtils.lerp(targetAmbient, blendedAmbient * invWeight, lerpFactor);
+            }
+        }
+
+        // 3. Apply Overrides
+        if (override) {
+            if (override.bgColor !== undefined) targetFogColor.setHex(override.bgColor);
+            if (override.fog?.color !== undefined) targetFogColor.setHex(override.fog.color);
+            if (override.fog?.density !== undefined) targetFogDensity = override.fog.density;
+            if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
+            if (override.groundColor !== undefined) targetGroundColor = override.groundColor;
+            
+            // Apply discrete overrides immediately
+            if (override.fov !== undefined) this.camera.set('fov', override.fov);
+            if (override.weather !== undefined) {
+                const type = typeof override.weather === 'string' ? override.weather : override.weather.type;
+                const count = typeof override.weather === 'string' ? (override.weatherDensity ?? 1.0) * 2000 : override.weather.particles;
+                this.weather.sync(type as WeatherType, count);
+            }
+
+            // SkyLight Override
+            const skyLight = this.scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+            if (skyLight) {
+                if (override.skyLightColor !== undefined) skyLight.color.setHex(override.skyLightColor);
+                if (override.skyLightIntensity !== undefined) skyLight.intensity = override.skyLightIntensity;
+                if (override.skyLightVisible !== undefined) skyLight.visible = override.skyLightVisible;
+                if (override.skyLightPosition) skyLight.position.set(override.skyLightPosition.x, override.skyLightPosition.y, override.skyLightPosition.z);
+            }
+        }
+
+        // 4. Apply Blended Values to systems (Lerped for smoothness)
+        const sceneFog = this.scene.fog as THREE.FogExp2;
+        if (sceneFog && sceneFog.isFogExp2) {
+            sceneFog.color.lerp(targetFogColor, 0.05);
+
+            const camY = this.camera.position.y;
+            const FOG_HEIGHT_MIN = 25;
+            const FOG_HEIGHT_MAX = 90;
+            const heightFactor = 1.0 - Math.max(0, Math.min(1, (camY - FOG_HEIGHT_MIN) / (FOG_HEIGHT_MAX - FOG_HEIGHT_MIN)));
+            const baseDistanceDensity = targetFogDensity * 0.0001;
+            sceneFog.density = THREE.MathUtils.lerp(sceneFog.density, baseDistanceDensity * heightFactor, 0.05);
+        }
+
+        if (this.fog && (this.fog as any).fogMaterial) {
+            (this.fog as any).fogMaterial.uniforms.uColor.value.lerp(targetFogColor, 0.05);
+        }
+
+        const ambient = this.scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+        if (ambient) {
+            ambient.intensity = THREE.MathUtils.lerp(ambient.intensity, targetAmbient, 0.05);
+        }
+
+        const ground = this.scene.getObjectByName('GROUND') as THREE.Mesh;
+        if (ground && ground.material) {
+            (ground.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);
+        }
+
+        // 5. Auto-Weather Sync
+        if (!override && zones && zones.length > 0) {
+            if (maxWeight > 0.5 && this.weather.type !== activeWeather) {
+                this.weather.sync(activeWeather as WeatherType, 2000);
+            }
         }
     }
 
