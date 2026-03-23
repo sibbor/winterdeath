@@ -161,8 +161,8 @@ export class CinematicSystem implements System {
             _v1.copy(cinematic.midPoint).addScaledVector(_v2, zoomFactor);
         }
 
-        camera.setPosition(_v1.x, _v1.y, _v1.z);
-        camera.lookAt(cinematic.cameraLookAt.x, cinematic.cameraLookAt.y, cinematic.cameraLookAt.z);
+        camera.setPosition(_v1);
+        camera.lookAt(cinematic.cameraLookAt);
 
         // 2. Speaker Identification
         const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';

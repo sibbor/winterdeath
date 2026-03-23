@@ -69,19 +69,39 @@ export class CameraSystem {
         }
     }
 
-    public setPosition(x: number, y: number, z: number, immediate: boolean = false) {
-        this._idealPos.set(x, y, z);
-        if (immediate) {
-            this.threeCamera.position.copy(this._idealPos);
-            this._initialized = true;
+    public setPosition(pos: THREE.Vector3, immediate?: boolean): void;
+    public setPosition(x: number, y: number, z: number, immediate?: boolean): void;
+    public setPosition(arg1: number | THREE.Vector3, arg2?: number | boolean, arg3?: number, arg4?: boolean) {
+        if (arg1 instanceof THREE.Vector3) {
+            this._idealPos.copy(arg1);
+            if (arg2 === true) {
+                this.threeCamera.position.copy(this._idealPos);
+                this._initialized = true;
+            }
+        } else {
+            this._idealPos.set(arg1, arg2 as number, arg3 as number);
+            if (arg4 === true) {
+                this.threeCamera.position.copy(this._idealPos);
+                this._initialized = true;
+            }
         }
     }
 
-    public lookAt(x: number, y: number, z: number, immediate: boolean = false) {
-        this._idealLookAt.set(x, y, z);
-        if (immediate) {
-            this._currentLookAt.copy(this._idealLookAt);
-            this.threeCamera.lookAt(this._currentLookAt);
+    public lookAt(vector: THREE.Vector3, immediate?: boolean): void;
+    public lookAt(x: number, y: number, z: number, immediate?: boolean): void;
+    public lookAt(arg1: number | THREE.Vector3, arg2?: number | boolean, arg3?: number, arg4?: boolean) {
+        if (arg1 instanceof THREE.Vector3) {
+            this._idealLookAt.copy(arg1);
+            if (arg2 === true) {
+                this._currentLookAt.copy(this._idealLookAt);
+                this.threeCamera.lookAt(this._currentLookAt);
+            }
+        } else {
+            this._idealLookAt.set(arg1, arg2 as number, arg3 as number);
+            if (arg4 === true) {
+                this._currentLookAt.copy(this._idealLookAt);
+                this.threeCamera.lookAt(this._currentLookAt);
+            }
         }
     }
 

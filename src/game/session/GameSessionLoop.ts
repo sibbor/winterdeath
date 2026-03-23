@@ -425,7 +425,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
                 refs.lastTeleportRef.current = tgt.timestamp;
                 engine.camera.setPosition(tgt.x, 50, tgt.z + (propsRef.current.currentSectorData?.environment.cameraOffsetZ || 0), true);
-                engine.camera.lookAt(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, true);
+                engine.camera.lookAt(playerGroup.position, true);
                 refs.prevPosRef.current.copy(playerGroup.position);
             }
         }
@@ -506,7 +506,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 } else {
                     _vCamera.copy(engine.camera.position).lerp(override.targetPos, 1.0 - Math.exp(-10.0 * delta));
                     engine.camera.setPosition(_vCamera.x, _vCamera.y, _vCamera.z, true);
-                    engine.camera.lookAt(override.lookAtPos.x, override.lookAtPos.y, override.lookAtPos.z, true);
+                    engine.camera.lookAt(override.lookAtPos, true);
                 }
             } else {
                 if (state.hurtShake > 0) {
