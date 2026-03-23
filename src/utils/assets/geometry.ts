@@ -196,6 +196,7 @@ export const GEOMETRY = {
     blastRadius: new THREE.RingGeometry(0.05, 1, 32),
     decal: new THREE.CircleGeometry(1, 12),
     splatterDecal: createSplatterGeo(),
+    scorchDecal: new THREE.CircleGeometry(1, 12),
     fogParticle: new THREE.PlaneGeometry(20, 20),
     weatherParticle: new THREE.PlaneGeometry(0.1, 0.1),
     barrel: new THREE.CylinderGeometry(0.8, 0.8, 2.5, 10),

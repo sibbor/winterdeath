@@ -30,6 +30,7 @@ export class FamilyAnimationSystem implements System {
 
     update(ctx: any, dt: number, now: number): void {
         const { familyMembers, activeChats, frameCount, hoveredId } = ctx;
+        if (!familyMembers) return;
 
         for (let i = 0; i < familyMembers.length; i++) {
             const fm = familyMembers[i];
@@ -85,7 +86,7 @@ export class CampChatterSystem implements System {
         }
 
         // 2. Chatter Generation
-        if (now > nextChatterTime.val && activeMembers.length > 1) {
+        if (now > nextChatterTime.val && activeMembers.length > 1 && familyMembers && familyMembers.length > 0) {
             const numSpeakers = 1 + Math.floor(Math.random() * 2.5);
             let delayOffset = 0;
             for (let i = 0; i < numSpeakers; i++) {

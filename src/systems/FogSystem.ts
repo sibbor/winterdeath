@@ -11,6 +11,7 @@ import { System } from './System';
 export class FogSystem implements System {
     public id = 'fog';
     public enabled = true;
+    public persistent = true;
 
     private scene: THREE.Scene;
     private wind: WindSystem;

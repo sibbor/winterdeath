@@ -250,7 +250,7 @@ export const WeaponHandler = {
                     haptic.gunshot();
 
                     if (state.callbacks && state.callbacks.makeNoise) {
-                        WinterEngine.getInstance().makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS.GUNSHOT);
+                        state.callbacks.makeNoise(_v2, NoiseType.GUNSHOT, NOISE_RADIUS.GUNSHOT);
                     }
 
                     const pellets = wep.name === WeaponType.SHOTGUN ? 8 : 1;

@@ -490,6 +490,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const session = new GameSessionLogic(engine);
         if (refs.stateRef.current) session.init(refs.stateRef.current);
         refs.gameSessionRef.current = session;
+        
+        // [VINTERDÖD FIX] Attach the player reference for systems (EnemyDetection, etc)
+        if (refs.playerGroupRef.current) {
+            session.playerPos = refs.playerGroupRef.current.position;
+        }
+
+        // [VINTERDÖD FIX] Bind the session as the logic context for all engine systems
+        engine.onUpdateContext = session;
 
         if (props.debugMode) {
             (window as any).gameSession = session;

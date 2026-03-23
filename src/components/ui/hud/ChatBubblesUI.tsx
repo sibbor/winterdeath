@@ -1,63 +1,71 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-interface Bubble {
-    id: string;
-    text: string;
-    duration: number;
-}
+const MAX_BUBBLES = 5; // Vi behöver sällan se fler än 5 samtidigt
 
 const ChatBubblesUI: React.FC = () => {
-    const [bubbles, setBubbles] = useState<Bubble[]>([]);
+    // Vi skapar en pool av referenser till våra div-element
+    const bubbleRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const nextIdx = useRef(0);
+    const lastMessageRef = useRef<string | null>(null);
 
     useEffect(() => {
         const handleSpawn = (e: Event) => {
-            const customEvent = e as CustomEvent;
-            const { text, duration } = customEvent.detail;
+            const { text, duration = 3000 } = (e as CustomEvent).detail;
 
-            const id = Math.random().toString(36).substring(2, 9);
-            const newBubble = { id, text, duration };
+            // Deduplication (Precis som din originalkod)
+            if (lastMessageRef.current === text) return;
+            lastMessageRef.current = text;
+            setTimeout(() => { lastMessageRef.current = null; }, 100);
 
-            setBubbles(prev => [...prev, newBubble]);
+            // Hämta nästa div från poolen (Circular buffer)
+            const idx = nextIdx.current;
+            const el = bubbleRefs.current[idx];
 
-            // React tar automatiskt bort bubblan när duration har passerat
-            setTimeout(() => {
-                setBubbles(prev => prev.filter(b => b.id !== id));
-            }, duration);
+            if (el) {
+                // 1. Sätt texten direkt i DOM
+                el.innerText = text;
+
+                // 2. Starta om CSS-animationen genom att "resetta" den
+                el.style.animation = 'none';
+                // Triggar en reflow för att webbläsaren ska fatta att animationen är borta
+                void el.offsetWidth;
+
+                // 3. Applicera animationen igen
+                el.style.display = 'block';
+                el.style.animation = `chat-bubble-anim ${duration}ms cubic-bezier(0.25, 1, 0.5, 1) forwards`;
+
+                // 4. Göm den när den är klar för att frigöra plats visuellt
+                setTimeout(() => {
+                    if (el) el.style.display = 'none';
+                }, duration);
+            }
+
+            nextIdx.current = (nextIdx.current + 1) % MAX_BUBBLES;
         };
 
         window.addEventListener('spawn-bubble', handleSpawn);
         return () => window.removeEventListener('spawn-bubble', handleSpawn);
     }, []);
 
-    if (bubbles.length === 0) return null;
-
     return (
-        <div className="absolute inset-0 pointer-events-none z-50 flex flex-col items-center justify-center pb-[10%]">
-            {bubbles.map((b) => (
+        <div className="absolute inset-0 pointer-events-none z-[60] flex flex-col items-center justify-center pb-[15%]">
+            {/* Vi renderar alla divar direkt, men gömmer dem med display: none */}
+            {Array.from({ length: MAX_BUBBLES }).map((_, i) => (
                 <div
-                    key={b.id}
-                    className="chat-bubble-anim mt-2 px-4 py-2 rounded bg-black/80 border border-teal-500 text-teal-300 font-bold shadow-[0_0_15px_rgba(20,184,166,0.5)] text-center min-w-[200px]"
-                    style={{
-                        // CSS-animation reads the time and does the whole process
-                        animationDuration: `${b.duration}ms`
-                    }}
-                >
-                    {b.text}
-                </div>
+                    key={i}
+                    ref={(el) => (bubbleRefs.current[i] = el)}
+                    className="mt-2 px-6 py-3 rounded-sm bg-black/90 border-l-4 border-teal-500 text-teal-400 font-black shadow-2xl text-center min-w-[250px] uppercase tracking-tighter"
+                    style={{ display: 'none', willChange: 'transform, opacity' }}
+                />
             ))}
 
-            {/* Add the GPU animation here or in your global CSS file */}
             <style>{`
                 @keyframes chat-bubble-anim {
-                    0% { opacity: 0; transform: translateY(20px) scale(0.9); }
-                    10% { opacity: 1; transform: translateY(0) scale(1); }
+                    0% { opacity: 0; transform: translateY(30px) scale(0.8); filter: blur(10px); }
+                    10% { opacity: 1; transform: translateY(0) scale(1.1); filter: blur(0px); }
+                    15% { transform: scale(1); }
                     85% { opacity: 1; transform: translateY(-10px) scale(1); }
-                    100% { opacity: 0; transform: translateY(-20px) scale(0.9); }
-                }
-                .chat-bubble-anim {
-                    animation-name: chat-bubble-anim;
-                    animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
-                    animation-fill-mode: forwards;
+                    100% { opacity: 0; transform: translateY(-30px) scale(0.9); }
                 }
             `}</style>
         </div>

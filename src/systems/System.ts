@@ -11,6 +11,11 @@ export interface System {
     enabled?: boolean;
 
     /**
+     * If true, the system survives engine.clearSystems() calls (e.g. Environmental systems).
+     */
+    persistent?: boolean;
+
+    /**
      * Called once when the system is registered.
      */
     init?(context: any): void;

@@ -130,6 +130,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         spawnFloatingText: null,
         now: 0,
         playerPos: null,
+        makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
         explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
         trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
             if (type === 'damage') {
@@ -441,6 +442,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         session.cameraAngle = engine.camera.angle;
 
         monitor.begin('session_update');
+        // [VINTERDÖD FIX] Keep the session.playerPos synchronized with the playerGroup reference
+        // This is critical for EnemyDetectionSystem and EnemySystem to work correctly.
+        if (playerGroup) {
+            session.playerPos = playerGroup.position;
+        }
         session.update(delta, propsRef.current.mapId || 0);
         monitor.end('session_update');
 
@@ -716,5 +722,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             state.obstacles ? state.obstacles.length : 0
         );
 
+        // 18. High-frequency HUD update (Zero-GC, bypasses React)
+        HudSystem.emitFastUpdate(state, engine.input.state, now);
     };
 }

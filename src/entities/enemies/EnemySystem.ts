@@ -29,6 +29,10 @@ export class EnemySystem implements System {
         const state = session.state;
         const scene = session.engine.scene;
 
+        // [VINTERDÖD FIX] Initialize the EnemyManager to setup ZombieRenderer for instanced drawing.
+        // This is mandatory for enemies to be visible.
+        EnemyManager.init(scene);
+
         this.updateCallbacks = {
             spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
             spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
@@ -85,7 +89,7 @@ export class EnemySystem implements System {
             EnemyManager.update(
                 dt,
                 now,
-                this.playerGroup.position,
+                session.playerPos || this.playerGroup.position,
                 state.enemies,
                 state.collisionGrid,
                 state.isDead,

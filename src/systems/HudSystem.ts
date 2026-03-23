@@ -106,7 +106,62 @@ let _useBufferA = true;
 const truncate1 = (val: number) => Math.round(val * 10) / 10;
 const truncate2 = (val: number) => Math.round(val * 100) / 100;
 
+const _fastUpdateDetail = {
+    hp: 0,
+    maxHp: 0,
+    stamina: 0,
+    maxStamina: 0,
+    ammo: 0,
+    currentXp: 0,
+    nextLevelXp: 0,
+    reloadProgress: 0,
+    bossHpP: -1 // -1 means no boss/wave active
+};
+
 export const HudSystem = {
+    emitFastUpdate: (state: any, input: any, now: number) => {
+        const wep = WEAPONS[state.activeWeapon];
+
+        // Clamp reloadProgress mellan 0 och 1 för stabil CSS-rendering
+        const reloadDuration = (wep?.reloadTime || 1000) + (input.fire ? 1000 : 0);
+        const reloadRemaining = state.reloadEndTime - now;
+        const reloadProgress = state.isReloading
+            ? Math.max(0, Math.min(1, 1 - (reloadRemaining / reloadDuration)))
+            : 0;
+
+        // Fast-path for boss/wave detection
+        let bossHpP = -1;
+        const enemies = state.enemies;
+        let activeBossObj = null;
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].isBoss) {
+                activeBossObj = enemies[i];
+                break;
+            }
+        }
+
+        if (activeBossObj) {
+            bossHpP = activeBossObj.hp / activeBossObj.maxHp;
+        } else if (state.sectorState && state.sectorState.hordeTarget > 0) {
+            // Wave progress
+            const kills = state.sectorState.zombiesKilled || 0;
+            const target = state.sectorState.zombiesKillTarget || state.sectorState.hordeTarget;
+            bossHpP = kills / target;
+        }
+
+        _fastUpdateDetail.hp = state.hp;
+        _fastUpdateDetail.maxHp = state.maxHp;
+        _fastUpdateDetail.stamina = state.stamina;
+        _fastUpdateDetail.maxStamina = state.maxStamina;
+        _fastUpdateDetail.ammo = state.weaponAmmo[state.activeWeapon] || 0;
+        _fastUpdateDetail.currentXp = state.currentXp;
+        _fastUpdateDetail.nextLevelXp = state.nextLevelXp;
+        _fastUpdateDetail.reloadProgress = reloadProgress;
+        _fastUpdateDetail.bossHpP = bossHpP;
+
+        window.dispatchEvent(new CustomEvent('hud-fast-update', { detail: _fastUpdateDetail }));
+    },
+
     getHudData: (
         state: any,
         playerPos: THREE.Vector3,

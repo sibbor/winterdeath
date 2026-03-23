@@ -2,7 +2,7 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
 
 export class DamageTrackerSystem implements System {
-    id = 'damage_tracker_system';
+    id = 'DamageTrackerSystem';
 
     init(session: GameSessionLogic) {
         // Initialization if needed

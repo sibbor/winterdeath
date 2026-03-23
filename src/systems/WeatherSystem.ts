@@ -13,6 +13,7 @@ import { System } from './System';
 export class WeatherSystem implements System {
     public id = 'weather';
     public enabled = true;
+    public persistent = true;
 
     private instancedMesh: THREE.InstancedMesh | null = null;
 

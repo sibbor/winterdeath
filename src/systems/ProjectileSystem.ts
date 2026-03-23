@@ -36,6 +36,7 @@ export interface GameContext {
     now: number;
     playerPos: THREE.Vector3;
     onPlayerHit: (damage: number, attacker: any, type: string | DamageType, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
+    makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
     weaponHandler?: any;
 }
 
@@ -94,7 +95,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
             }
 
             const effectiveNoiseRadius = hitWater ? (NOISE_RADIUS.GRENADE * 0.5) : NOISE_RADIUS.GRENADE;
-            engine.makeNoise(pos, NoiseType.GRENADE, effectiveNoiseRadius);
+            ctx.makeNoise(pos, NoiseType.GRENADE, effectiveNoiseRadius);
 
             _v2.set(0, 0, 0);
 
@@ -167,13 +168,13 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
             // Noise, sound, haptic
             if (hitWater) {
-                engine.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.BULLET_HIT);
+                ctx.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.BULLET_HIT);
                 soundManager.playWaterSplash();
                 haptic.explosionWater();
                 return;
             }
 
-            engine.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.MOLOTOV);
+            ctx.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.MOLOTOV);
             soundManager.playMolotovImpact();
             haptic.explosion();
 
@@ -221,13 +222,13 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
             const engine = WinterEngine.getInstance();
 
             if (hitWater) {
-                engine.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.BULLET_HIT);
+                ctx.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.BULLET_HIT);
                 soundManager.playWaterSplash();
                 haptic.explosionWater();
                 return;
             }
 
-            engine.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.FLASHBANG);
+            ctx.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.FLASHBANG);
             soundManager.playFlashbangImpact();
             haptic.explosion();
 
@@ -661,7 +662,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             destroyBullet = true;
             ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'smoke', 3);
             soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
-            engine.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS.BULLET_HIT);
+            ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS.BULLET_HIT);
             break;
         }
     }

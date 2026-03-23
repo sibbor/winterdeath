@@ -7,6 +7,7 @@ import { applyCollisionResolution } from '../core/world/CollisionResolution';
 import { soundManager } from '../utils/SoundManager';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
+import { NoiseType } from '../entities/enemies/EnemyTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -221,6 +222,7 @@ export class PlayerMovementSystem implements System {
             if (!state.rollSmokeSpawned && !inWater) {
                 state.rollSmokeSpawned = true;
                 soundManager.playFootstep('step');
+                session.makeNoise(playerGroup.position, NoiseType.PLAYER_ROLLING); // Added rolling noise
                 FXSystem.spawnPart(
                     session.engine.scene, state.particles,
                     playerGroup.position.x, 0.5, playerGroup.position.z,
@@ -273,8 +275,10 @@ export class PlayerMovementSystem implements System {
                         if (isSwimming) {
                             soundManager.playSwimming();
                             FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, playerGroup.position.y + 1.0, playerGroup.position.z, 'splash', 3);
+                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_SWIM);
                         } else {
                             soundManager.playFootstep('water');
+                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_WALK);
                         }
 
                         if (session.engine.water) {
@@ -289,6 +293,9 @@ export class PlayerMovementSystem implements System {
                                 playerGroup.position.x, 0.2, playerGroup.position.z,
                                 'large_smoke', 1, undefined, undefined, 0xcccccc, 0.8
                             );
+                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_RUSH);
+                        } else {
+                            session.makeNoise(playerGroup.position, NoiseType.PLAYER_WALK);
                         }
                     }
                     state.lastStepTime = now;

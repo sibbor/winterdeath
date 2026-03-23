@@ -40,10 +40,11 @@ function logAI(msg: string) {
     }
 }
 
-function logStateChange(e: Enemy, newState: AIState, reason?: string) {
+function logStateChange(now: number, e: Enemy, newState: AIState, reason?: string) {
     if (e.state !== newState) {
+        const oldState = e.state;
         const reasonStr = reason ? ` (${reason})` : '';
-        logAI(`[EnemyAI] ${e.type}_${e.id} changed state: ${AIState[e.state]} -> ${AIState[newState]}${reasonStr}`);
+        logAI(`[EnemyAI] ${e.type}_${e.id} changed state: ${AIState[oldState]} -> ${AIState[newState]}${reasonStr}`);
     }
 }
 
@@ -309,7 +310,7 @@ export const EnemyAI = {
             if (Math.random() < 0.1) callbacks.onEffectTick(e, EnemyEffectType.STUN);
 
             if (e.stunTimer <= 0) {
-                logStateChange(e, AIState.CHASE);
+                logStateChange(now, e, AIState.CHASE);
                 e.state = AIState.CHASE;
                 e.mesh.userData.isRagdolling = false;
                 e.mesh.rotation.x = 0;
@@ -357,15 +358,15 @@ export const EnemyAI = {
             case AIState.IDLE:
                 e.idleTimer -= delta;
                 if (seesPlayer) {
-                    logStateChange(e, AIState.CHASE, 'VISUAL');
+                    logStateChange(now, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (e.awareness > 0 && e.lastKnownPosition) {
-                    logStateChange(e, AIState.SEARCH, 'AWARE');
+                    logStateChange(now, e, AIState.SEARCH, 'AWARE');
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
                 } else if (e.idleTimer <= 0) {
-                    logStateChange(e, AIState.WANDER);
+                    logStateChange(now, e, AIState.WANDER);
                     e.state = AIState.WANDER;
                     const angle = Math.random() * Math.PI * 2;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
@@ -380,15 +381,15 @@ export const EnemyAI = {
                 moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6);
 
                 if (seesPlayer) {
-                    logStateChange(e, AIState.CHASE, 'VISUAL');
+                    logStateChange(now, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (e.awareness > 0 && e.lastKnownPosition) {
-                    logStateChange(e, AIState.SEARCH, 'AWARE');
+                    logStateChange(now, e, AIState.SEARCH, 'AWARE');
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
                 } else if (e.searchTimer <= 0) {
-                    logStateChange(e, AIState.IDLE);
+                    logStateChange(now, e, AIState.IDLE);
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 }
@@ -398,14 +399,14 @@ export const EnemyAI = {
                 e.searchTimer -= delta;
 
                 if (seesPlayer) {
-                    logStateChange(e, AIState.CHASE, 'VISUAL');
+                    logStateChange(now, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
                 } else if (e.awareness === 1.0 && e.lastKnownPosition) {
                     updateLastSeen(e, e.lastKnownPosition, now);
                     e.searchTimer = e.lastHeardNoiseType ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
                 } else if (e.searchTimer <= 0) {
-                    logStateChange(e, AIState.IDLE);
+                    logStateChange(now, e, AIState.IDLE);
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 } else if (e.lastKnownPosition && e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
@@ -423,14 +424,14 @@ export const EnemyAI = {
                 }
 
                 if ((!seesPlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
-                    logStateChange(e, AIState.SEARCH);
+                    logStateChange(now, e, AIState.SEARCH);
                     e.state = AIState.SEARCH;
                     const baseTime = e.lastHeardNoiseType ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
                     e.searchTimer = baseTime;
                 }
                 else {
                     if (isDead) {
-                        logStateChange(e, AIState.SEARCH);
+                        logStateChange(now, e, AIState.SEARCH);
                         e.state = AIState.SEARCH;
                         e.searchTimer = 3.0;
                         return;
@@ -471,12 +472,12 @@ export const EnemyAI = {
                             e.currentAttackIndex = bestAttackIndex;
 
                             if (att.chargeTime && att.chargeTime > 0) {
-                                logStateChange(e, AIState.ATTACK_CHARGE);
+                                logStateChange(now, e, AIState.ATTACK_CHARGE);
                                 e.state = AIState.ATTACK_CHARGE;
                                 e.attackTimer = att.chargeTime / 1000;
                             } else {
                                 EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks);
-                                logStateChange(e, AIState.ATTACKING);
+                                logStateChange(now, e, AIState.ATTACKING);
                                 e.state = AIState.ATTACKING;
                                 e.attackTimer = (att.activeTime || 500) / 1000;
                             }
@@ -496,7 +497,7 @@ export const EnemyAI = {
                     EnemyAnimator.updateAttackAnim(e, now, delta);
 
                     if (e.attackTimer <= 0) {
-                        logStateChange(e, AIState.ATTACKING);
+                        logStateChange(now, e, AIState.ATTACKING);
                         e.state = AIState.ATTACKING;
                         e.attackTimer = (att.activeTime || 100) / 1000;
                         EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks);
@@ -519,7 +520,7 @@ export const EnemyAI = {
                     EnemyAnimator.updateAttackAnim(e, now, delta);
 
                     if (e.attackTimer <= 0) {
-                        logStateChange(e, AIState.CHASE, 'VISUAL');
+                        logStateChange(now, e, AIState.CHASE, 'VISUAL');
                         e.state = AIState.CHASE;
                     }
                 }

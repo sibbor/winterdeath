@@ -24,7 +24,7 @@ export class GameSessionLogic {
 
     public engine: WinterEngine;
     public state!: RuntimeState;
-
+    public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
 
     constructor(engine: WinterEngine) {
@@ -190,7 +190,9 @@ export class GameSessionLogic {
      * Delegates to the centralized EnemyDetectionSystem.
      */
     makeNoise(pos: THREE.Vector3, type: NoiseType = NoiseType.OTHER, radius?: number) {
-        this.engine.makeNoise(pos, type, radius);
+        if (this.detectionSystem) {
+            this.detectionSystem.makeNoise(pos, type, radius);
+        }
     }
 
     addSystem(system: System) {

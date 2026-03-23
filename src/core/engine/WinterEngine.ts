@@ -576,8 +576,8 @@ export class WinterEngine {
 
         if (this.fog) {
             if (this.settings.volumetricFog) {
-                // Re-attach fog to target scene if provided
-                if (targetScene) this.fog.reAttach(targetScene);
+                // [VINTERDÖD FIX] Always re-attach to the current scene (ensures persistence across sector loads)
+                this.fog.reAttach(scene);
                 this.fog.sync(volDensity, fogHeight, _c1);
                 
                 if (volDensity > 0) {
@@ -587,7 +587,7 @@ export class WinterEngine {
                     scene.fog = null;
                 }
             } else {
-                if (targetScene) this.fog.reAttach(targetScene);
+                this.fog.reAttach(scene);
                 this.fog.sync(0, undefined, _c1);
                 if (volDensity > 0) {
                     const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
@@ -603,7 +603,7 @@ export class WinterEngine {
 
         // 4. Weather Sync
         if (env.weather && this.weather) {
-            if (targetScene) this.weather.reAttach(targetScene);
+            this.weather.reAttach(scene);
             const w = env.weather as EnvironmentalWeather;
             const type = typeof w === 'string' ? w : w.type;
             const count = typeof w === 'string' ? 2000 : w.particles;
@@ -612,7 +612,7 @@ export class WinterEngine {
 
         // 5. Water Sync
         if (this.water) {
-            if (targetScene) this.water.reAttach(targetScene);
+            this.water.reAttach(scene);
             // Sync skyLight position if available
             if (env.skyLight?.visible && env.skyLight.position) {
                 _v1.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
@@ -798,16 +798,22 @@ export class WinterEngine {
     }
 
     /**
-     * Clears all registered systems and calls their cleanup functions.
+     * Clears all non-persistent systems and calls their cleanup functions.
      */
     public clearSystems() {
-        // Zero-GC loop
-        const len = this._systemArray.length;
-        for (let i = 0; i < len; i++) {
+        // Zero-GC loop (backward for safe removal)
+        for (let i = this._systemArray.length - 1; i >= 0; i--) {
             const sys = this._systemArray[i];
+            if (sys.persistent) {
+                // Keep persistent systems (Environmental)
+                continue;
+            }
+
             if (sys.clear) sys.clear();
+
+            // Remove from array and map
+            this._systemArray.splice(i, 1);
+            this._systemsMap.delete(sys.id);
         }
-        this._systemArray.length = 0;
-        this._systemsMap.clear();
     }
 }

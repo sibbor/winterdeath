@@ -28,6 +28,10 @@ export class EnemyDetectionSystem implements System {
     public attach() { }
     public detach() { }
 
+    public init(context: any) {
+        context.detectionSystem = this;
+    }
+
 
     /**
          * Broadcasts a noise event for enemies to hear. 
@@ -127,9 +131,11 @@ export class EnemyDetectionSystem implements System {
     }
 
     update(context: any, delta: number, now: number) {
-        const state = context.state;
+        const state = context?.state;
+        if (!state || !context.playerPos) return;
+
         const enemies: Enemy[] = state.enemies || [];
-        const playerPos: THREE.Vector3 = state.playerPos;
+        const playerPos: THREE.Vector3 = context.playerPos;
         const collisionGrid: SpatialGrid = state.collisionGrid;
 
         if (!playerPos || !collisionGrid) return;
@@ -137,7 +143,7 @@ export class EnemyDetectionSystem implements System {
         // 1. Cleanup stale noise events FIRST using Swap-and-Go to save inner loop cycles
         for (let i = this.noiseEvents.length - 1; i >= 0; i--) {
             const evt = this.noiseEvents[i];
-            if (now - evt.timestamp > 100) {
+            if (now - evt.timestamp > 200) { // Increased to 200ms for stability
                 this.noiseEvents[i] = this.noiseEvents[this.noiseEvents.length - 1];
                 this.noiseEvents.pop();
             }
@@ -183,11 +189,6 @@ export class EnemyDetectionSystem implements System {
                     e.lastKnownPosition.copy(evt.pos);
                     e.lastHeardNoiseType = evt.type;
 
-                    if (PerformanceMonitor.getInstance().aiLoggingEnabled
-                        && (evt.type === NoiseType.GRENADE || evt.type === NoiseType.GUNSHOT)) {
-                        console.log(`[EnemyDetection] Enemy ${e.id} HEARD ${evt.type} at dist ${Math.sqrt(distSq).toFixed(1)} (Radius: ${effectiveRadius})`);
-                    }
-
                     e.awareness = 1.0;
 
                     if (e.state === AIState.IDLE || e.state === AIState.WANDER) {
@@ -197,10 +198,6 @@ export class EnemyDetectionSystem implements System {
                         const angle = Math.atan2(dx, dz);
                         e.mesh.rotation.y = angle;
                         e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-
-                        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-                            console.log(`[EnemyDetection] Enemy ${e.id} investigated noise at ${evt.pos.x.toFixed(1)}, ${evt.pos.z.toFixed(1)}`);
-                        }
                     }
                 }
             }

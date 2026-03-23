@@ -10,6 +10,8 @@ interface WindBind {
 export class WindSystem implements System {
   public id = 'wind';
   public enabled = true;
+  public persistent = true;
+  
 
   public current = new THREE.Vector2(0, 0);
   public direction = new THREE.Vector3(0, 0, 0);

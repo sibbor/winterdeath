@@ -118,6 +118,7 @@ export class WaterBody {
 export class WaterSystem implements System {
     public id = 'water';
     public enabled = true;
+    public persistent = true;
 
     surfaces: WaterSurface[] = [];
     waterBodies: WaterBody[] = [];
