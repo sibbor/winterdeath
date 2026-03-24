@@ -126,7 +126,12 @@ const sanitizeStats = (stats: any) => {
     if (isNaN(maxSt) || maxSt < 100) stats.maxStamina = 100;
     if (isNaN(st) || st < 0 || st > stats.maxStamina) stats.stamina = stats.maxStamina;
 
-    // Ensure numeric types for other critical stats
+    // --- SPEED MIGRATION (v1.0 scalar -> 25.0 kph) ---
+    // If speed is in the old system, convert to new 25.0 kph-based system.
+    if (isNaN(stats.speed)) {
+        stats.speed = 25.0;
+    }
+
     if (isNaN(stats.skillPoints)) stats.skillPoints = 0;
     if (isNaN(stats.level)) stats.level = 1;
 };

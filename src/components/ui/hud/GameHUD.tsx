@@ -259,7 +259,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
     const familyFound = useHudStore(s => s.familyFound);
     const unlimitedAmmo = useHudStore(s => s.sectorStats?.unlimitedAmmo || false);
 
-    const speedKmH = Math.round(vehicleSpeed * 3.6);
+    const speedKmH = Math.round(vehicleSpeed);
     const wep = WEAPONS[activeWeapon];
 
     return (
@@ -279,7 +279,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
                         <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white tracking-tighter block hud-text-glow text-center`}>
                             {speedKmH}
                         </span>
-                        <span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] block text-center mt-1">KM/H</span>
+                        <span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] block text-center mt-1">{t('ui.speed_unit')}</span>
                     </div>
                     <div className="flex gap-4 mt-4">
                         <div className={`px-6 py-2 border transition-all ${throttleState > 0 ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-cyan-200' : 'bg-black/80 border-white/10 text-white/20'}`}>

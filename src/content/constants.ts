@@ -91,7 +91,7 @@ export const INITIAL_STATS: PlayerStats = {
     nextLevelXp: 1500,
     maxHp: 100,
     maxStamina: 100,
-    speed: 1.0,
+    speed: 25.0, // kph
     skillPoints: 0,
     rescuedFamilyIds: [],
     kills: 0,

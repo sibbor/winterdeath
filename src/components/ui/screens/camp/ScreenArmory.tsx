@@ -216,10 +216,10 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                                 <span className="opacity-60">{t('ui.damage')}</span>
                                                 <div className="flex items-baseline gap-1.5">
                                                     <span className="text-yellow-500 font-bold text-lg leading-none">
-                                                        {Math.floor(weapon.baseDamage + (weapon.baseDamage * (level - 1) * 0.1))}
+                                                        {Math.floor(weapon.damage + (weapon.damage * (level - 1) * 0.1))}
                                                     </span>
                                                     <span className="text-white text-[10px] font-bold opacity-80 whitespace-nowrap">
-                                                        ({Math.floor(weapon.baseDamage)} + <span className="text-yellow-500">{Math.floor(weapon.baseDamage * (level - 1) * 0.1)}</span>)
+                                                        ({Math.floor(weapon.damage)} + <span className="text-yellow-500">{Math.floor(weapon.damage * (level - 1) * 0.1)}</span>)
                                                     </span>
                                                 </div>
                                             </div>
@@ -227,17 +227,23 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                                 <span className="opacity-60">{t('ui.range')}</span>
                                                 <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                                             </div>
-                                            {(isMobileDevice || weapon.category !== WeaponCategory.THROWABLE) && (
-                                                <>
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                        <span className="opacity-60">{t('ui.magazine')}</span>
-                                                        <span className="text-white font-bold">{weapon.magSize > 0 ? weapon.magSize : '-'}</span>
-                                                    </div>
-                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                        <span className="opacity-60">{t('ui.reload')}</span>
-                                                        <span className="text-white font-bold">{weapon.reloadTime > 0 ? `${(weapon.reloadTime / 1000).toFixed(1)}s` : '-'}</span>
-                                                    </div>
-                                                </>
+                                            {weapon.radius && weapon.radius > 0 && (
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                    <span className="opacity-60">{t('ui.radius')}</span>
+                                                    <span className="text-white font-bold">{weapon.radius}m</span>
+                                                </div>
+                                            )}
+                                            {weapon.magSize && weapon.magSize > 0 && (
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                    <span className="opacity-60">{t('ui.magazine')}</span>
+                                                    <span className="text-white font-bold">{weapon.magSize}</span>
+                                                </div>
+                                            )}
+                                            {weapon.reloadTime && weapon.reloadTime > 0 && (
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                    <span className="opacity-60">{t('ui.reload')}</span>
+                                                    <span className="text-white font-bold">{(weapon.reloadTime / 1000).toFixed(1)}s</span>
+                                                </div>
                                             )}
                                         </div>
                                     </div>

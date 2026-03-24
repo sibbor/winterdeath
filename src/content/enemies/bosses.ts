@@ -27,7 +27,7 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     0: {
         id: 0,
         name: 'bosses.0.name',
-        hp: 500, maxHp: 500, speed: 0.8, color: 0x4a0404, scale: 3.0, widthScale: 3.5,
+        hp: 500, maxHp: 500, speed: 20.0, color: 0x4a0404, scale: 3.0, widthScale: 3.5,
         deathStory: "bosses.0.death",
         attacks: [
             {
@@ -52,7 +52,7 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     1: {
         id: 1,
         name: 'bosses.1.name',
-        hp: 800, maxHp: 800, speed: 1.2, color: 0x2c3e50, scale: 3.0, widthScale: 1.5,
+        hp: 800, maxHp: 800, speed: 30.0, color: 0x2c3e50, scale: 3.0, widthScale: 1.5,
         deathStory: "bosses.1.death",
         attacks: [
             {
@@ -75,7 +75,7 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     2: {
         id: 2,
         name: 'bosses.2.name',
-        hp: 600, maxHp: 600, speed: 1.0, color: 0x8e44ad, scale: 3.0, widthScale: 1.0,
+        hp: 600, maxHp: 600, speed: 25.0, color: 0x8e44ad, scale: 3.0, widthScale: 1.0,
         deathStory: "bosses.2.death",
         attacks: [
             {
@@ -99,7 +99,7 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
     3: {
         id: 3,
         name: 'bosses.3.name',
-        hp: 1200, maxHp: 1200, speed: 0.70, color: 0xc0392b, scale: 3.5, widthScale: 1.8,
+        hp: 1200, maxHp: 1200, speed: 17.5, color: 0xc0392b, scale: 3.5, widthScale: 1.8,
         deathStory: "bosses.3.death",
         attacks: [
             {

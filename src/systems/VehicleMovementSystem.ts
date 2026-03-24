@@ -393,7 +393,7 @@ export class VehicleMovementSystem implements System {
             const speedRatio = speed / (maxSpeedMS > 1.0 ? maxSpeedMS : 1.0);
             const normSpeed = speedRatio < 1.0 ? speedRatio : 1.0;
 
-            state.vehicleSpeed = speed;
+            state.vehicleSpeed = speed * 3.6;
             state.vehicleThrottle = throttle;
 
             if (Number.isFinite(normSpeed)) {

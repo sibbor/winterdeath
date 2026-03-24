@@ -89,7 +89,7 @@ export const WeaponHandler = {
             // Manual checks avoid array allocation
             const checkSlot = (wepType: WeaponType | null | undefined) => {
                 if (!wepType) return;
-                if (WEAPONS[wepType] && WEAPONS[wepType].category === WeaponCategory.THROWABLE && state.weaponAmmo[wepType] <= 0) return;
+                if (WEAPONS[wepType] && WEAPONS[wepType].category === WeaponCategory.THROWABLE && (state.weaponAmmo[wepType] || 0) <= 0) return;
                 if (wepType === WeaponType.RADIO && state.familyFound) return;
 
                 if (wepType === state.activeWeapon) {
@@ -129,9 +129,9 @@ export const WeaponHandler = {
         const isThrowable = wep.category === WeaponCategory.THROWABLE;
         const isRadio = state.activeWeapon === WeaponType.RADIO;
 
-        if (input.r && !state.isReloading && !isThrowable && !isRadio && state.weaponAmmo[state.activeWeapon] < wep.magSize) {
+        if (input.r && !state.isReloading && !isThrowable && !isRadio && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.isReloading = true;
-            const actualReloadTime = wep.reloadTime * (state.multipliers.reloadTime || 1.0);
+            const actualReloadTime = (wep.reloadTime || 0) * (state.multipliers.reloadTime || 1.0);
             state.reloadEndTime = now + actualReloadTime;
             soundManager.playMagOut();
             haptic.reload();
@@ -139,16 +139,16 @@ export const WeaponHandler = {
 
         if (state.isReloading && now > state.reloadEndTime) {
             state.isReloading = false;
-            state.weaponAmmo[state.activeWeapon] = wep.magSize;
+            state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
             soundManager.playMagIn();
         }
     },
 
     // --- DAMAGE SCALING ---
     getScaledDamage: (weaponType: WeaponType, level: number = 0) => {
-        const baseDamage = WEAPONS[weaponType]?.damage || 0;
-        // 10% increase per level: Damage * (1 + level * 0.1)
-        return Math.floor(baseDamage * (1 + level * 0.1));
+        const damage = WEAPONS[weaponType]?.damage || 0;
+        // 10% increase per level above 1: Damage * (1 + (level - 1) * 0.1)
+        return Math.floor(damage * (1 + (level - 1) * 0.1));
     },
 
     // --- CORE FIRING LOGIC ---
@@ -179,7 +179,7 @@ export const WeaponHandler = {
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                 if (hasAmmo) {
                     if (!isUnlimited) {
-                        const actualFireRate = wep.fireRate / (state.multipliers.fireRate || 1.0);
+                        const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
                         if (now > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = now;
@@ -237,7 +237,7 @@ export const WeaponHandler = {
             if (input.fire) {
                 const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
-                const actualFireRate = wep.fireRate / (state.multipliers.fireRate || 1.0);
+                const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
                 if (now > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = now;
                     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
@@ -274,14 +274,14 @@ export const WeaponHandler = {
 
                         ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name, damagePerPellet);
                     }
-                } else if (input.fire && state.weaponAmmo[state.activeWeapon] <= 0 && now > state.lastShotTime + wep.fireRate) {
+                } else if (input.fire && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && now > state.lastShotTime + (wep.fireRate || 0)) {
                     state.lastShotTime = now;
                     if (state.sectorState?.noReload) {
                         state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
                     } else {
                         soundManager.playEmptyClick();
                         state.isReloading = true;
-                        state.reloadEndTime = now + wep.reloadTime;
+                        state.reloadEndTime = now + (wep.reloadTime || 0);
                         soundManager.playMagOut();
                     }
                 }
@@ -298,7 +298,7 @@ export const WeaponHandler = {
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                const maxDist = ((wep as any).maxThrowDistance || 25.0) * (state.multipliers.range || 1.0);
+                const maxDist = (wep.range || 25.0) * (state.multipliers.range || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
                 _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
@@ -310,6 +310,12 @@ export const WeaponHandler = {
                 const damage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
                 ProjectileSystem.launchThrowable(scene, state.projectiles, _v2, _v3,
                     state.activeWeapon, tMax, damage);
+
+                if (wep.reloadTime && wep.reloadTime > 0) {
+                    state.isReloading = true;
+                    state.reloadEndTime = now + (wep.reloadTime * (state.multipliers.reloadTime || 1.0));
+                    soundManager.playMagOut();
+                }
 
                 if (state.weaponAmmo[state.activeWeapon] <= 0) {
                     state.activeWeapon = loadout.primary;
@@ -333,7 +339,7 @@ export const WeaponHandler = {
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                const maxDist = ((wep as any).maxThrowDistance || 25.0) * (state.multipliers.range || 1.0);
+                const maxDist = (wep.range || 25.0) * (state.multipliers.range || 1.0);
                 const dist = Math.max(2.0, ratio * maxDist);
 
                 _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0));

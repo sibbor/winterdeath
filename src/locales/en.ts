@@ -204,6 +204,7 @@ export const en = {
         unknown_sector: "Unknown Sector",
         health: "Health",
         speed: "Speed",
+        speed_unit: "km/h",
         end_game: "ABORT SECTOR",
         delete_save_data: "DELETE SAVE DATA",
         end_conversation: "END CONVERSATION",

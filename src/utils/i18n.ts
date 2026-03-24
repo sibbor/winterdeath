@@ -24,7 +24,8 @@ export const setLocale = (locale: Locale) => {
 
 export const getLocale = () => currentLocale;
 
-export const t = (key: string, params?: Record<string, string | number>): any => {
+export const t = (key: string | undefined | null, params?: Record<string, string | number>): any => {
+    if (!key) return '';
     const keys = key.split('.');
     let value: any = LOCALES[currentLocale];
 

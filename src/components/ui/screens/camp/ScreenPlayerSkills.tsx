@@ -9,7 +9,7 @@ import { useOrientation } from '../../../../hooks/useOrientation';
 const SKILLS_CONFIG = [
     { id: 'maxHp', labelKey: 'skills.vitality', descKey: 'skills.vitality_desc', cost: 1, value: 20, base: 100 },
     { id: 'maxStamina', labelKey: 'skills.adrenaline', descKey: 'skills.adrenaline_desc', cost: 1, value: 20, base: 100 },
-    { id: 'speed', labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.05, base: 1.0 }
+    { id: 'speed', labelKey: 'skills.reflex', descKey: 'skills.reflex_desc', cost: 2, value: 0.2, base: 25.0 }
 ];
 
 interface ScreenPlayerSkillsProps {
@@ -86,9 +86,14 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                             <p className={`${isMobileDevice ? 'text-xs h-10 mb-2 leading-tight' : 'text-lg h-16 mb-2'} text-gray-400 leading-snug`}>{t(skill.descKey)}</p>
 
                             <div className={`flex flex-col items-center justify-center gap-0 mt-0 mb-4`}>
-                                <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-purple-500 font-bold leading-none`}>
-                                    {skill.id === 'speed' ? currentVal.toFixed(2) : currentVal}
-                                </span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className={`${isMobileDevice ? 'text-2xl' : 'text-5xl'} font-mono text-purple-500 font-bold leading-none`}>
+                                        {skill.id === 'speed' ? currentVal.toFixed(2) : currentVal}
+                                    </span>
+                                    {skill.id === 'speed' && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>{t('ui.speed_unit')}</span>}
+                                    {skill.id === 'maxHp' && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>HP</span>}
+                                    {skill.id === 'maxStamina' && <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-purple-400 opacity-60 uppercase tracking-widest`}>STM</span>}
+                                </div>
                                 <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-mono text-white font-bold opacity-80`}>
                                     ({displayBase} + <span className="text-purple-400">{displayUpgrade}</span>)
                                 </span>

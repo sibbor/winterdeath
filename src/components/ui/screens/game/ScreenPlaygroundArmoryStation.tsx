@@ -209,12 +209,18 @@ const ScreenPlaygroundArmoryStation: React.FC<ScreenPlaygroundArmoryStationProps
                                         <div className={`flex flex-col gap-y-1 ${isMobileDevice ? 'text-[9px]' : 'text-xs'} font-mono text-gray-400`}>
                                             <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
                                                 <span className="opacity-60">{t('ui.damage')}</span>
-                                                <span className="text-white font-bold">{Math.floor(weapon.baseDamage * (1 + (level - 1) * 0.1))}</span>
+                                                <span className="text-white font-bold">{Math.floor(weapon.damage * (1 + (level - 1) * 0.1))}</span>
                                             </div>
                                             <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
                                                 <span className="opacity-60">{t('ui.range')}</span>
                                                 <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
                                             </div>
+                                            {weapon.radius && weapon.radius > 0 && (
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-0.5">
+                                                    <span className="opacity-60">{t('ui.radius')}</span>
+                                                    <span className="text-white font-bold">{weapon.radius}m</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

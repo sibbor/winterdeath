@@ -196,6 +196,7 @@ export const sv = {
         unknown_sector: "Okänd sektor",
         health: "Hälsa",
         speed: "Hastighet",
+        speed_unit: "km/t",
         end_game: "AVBRYT SEKTOR",
         delete_save_data: "RADERA SPARDATA",
         end_conversation: "AVSLUTA SAMTAL",

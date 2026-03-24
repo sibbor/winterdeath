@@ -33,7 +33,7 @@ export class PlayerMovementSystem implements System {
         // --- APPLY DYNAMIC MULTIPLIERS ---
         const speedMult = state.multipliers.speed;
         const baseSpeed = state.stats.speed;
-        const currentSpeed = baseSpeed * speedMult * 10;
+        const currentSpeed = (baseSpeed * speedMult) / 3.6;
 
         if (state.activeVehicle) {
             state.isMoving = false;

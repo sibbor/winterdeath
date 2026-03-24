@@ -290,7 +290,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                 </div>
                                 <div className="text-center border-l border-gray-800">
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
-                                    <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)}</div>
+                                    <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)} <span className="text-sm">{t('ui.speed_unit')}</span></div>
                                 </div>
                                 <div></div>
                             </div>

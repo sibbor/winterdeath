@@ -570,7 +570,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     _v2.y *= invDist;
     _v2.z *= invDist;
 
-    let curSpeed = speed * 10;
+    let curSpeed = (speed / 3.6);
     if (e.slowTimer > 0) curSpeed *= 0.55;
 
     _v3.copy(_v2).multiplyScalar(curSpeed * delta);

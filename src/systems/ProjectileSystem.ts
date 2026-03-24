@@ -326,7 +326,7 @@ export const ProjectileSystem = {
         p.origin.copy(origin);
         p.damage = damage !== undefined ? damage : data.damage;
         p.life = time + 0.5;
-        p.maxRadius = data.range;
+        p.maxRadius = data.radius || 10;
 
         if (!p.marker) {
             p.marker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
@@ -334,7 +334,7 @@ export const ProjectileSystem = {
         }
 
         p.marker.position.copy(target);
-        p.marker.scale.setScalar(data.range);
+        p.marker.scale.setScalar(data.radius || 10);
 
         if (p.marker.parent !== scene) scene.add(p.marker);
 
@@ -385,7 +385,7 @@ export const ProjectileSystem = {
                     e.burnTimer = 0.5;
                     e.afterburnTimer = 5.0;
 
-                    const chance = (delta * 1000) / data.fireRate;
+                    const chance = (delta * 1000) / (data.fireRate || 35);
                     if (Math.random() < chance) {
                         const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
                         ctx.applyDamage(e, finalDmg, WeaponType.FLAMETHROWER);
@@ -652,7 +652,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                     const distFromOriginSq = Math.pow(_v6.x - projectile.origin.x, 2) + Math.pow(_v6.z - projectile.origin.z, 2);
                     if (distFromOriginSq < 144.0) isHighImpact = true;
                 } else if (projectile.weapon === WeaponType.REVOLVER) {
-                    if (projectile.damage >= data.baseDamage * 0.5) isHighImpact = true;
+                    if (projectile.damage >= data.damage * 0.5) isHighImpact = true;
                 }
 
                 projectile.hitEntities.add(enemy.id);

@@ -28,7 +28,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 <div className="mb-4 flex items-center justify-center gap-3">
                     <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                     <span className="text-xl font-black uppercase tracking-[0.5em] text-yellow-500/60 mb-2 block animate-pulse">
-                        {t(def.nameKey)}
+                        {t(`collectibles.${def.sector - 1}.${def.index}.title`)}
                     </span>
                     <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                 </div>
@@ -43,7 +43,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
 
                 <div className="max-w-md px-4 mt-4">
                     <p className="text-zinc-400 text-sm sm:text-base leading-relaxed font-medium italic">
-                        "{t(def.descriptionKey)}"
+                        "{t(`collectibles.${def.sector - 1}.${def.index}.description`)}"
                     </p>
                 </div>
             </div>

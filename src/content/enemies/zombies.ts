@@ -27,7 +27,7 @@ Special attacks with status effects for the player:
 export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     [EnemyType.WALKER]: {
         hp: 50,
-        speed: 0.9,
+        speed: 22.5,
         score: 20,
         color: 0xc27ba0, // Pinkish
         scale: 1.0,
@@ -50,7 +50,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     },
     [EnemyType.RUNNER]: {
         hp: 30,
-        speed: 1.10,
+        speed: 27.0,
         score: 10,
         color: 0x33a366, // Green
         scale: 0.8,
@@ -72,7 +72,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     },
     [EnemyType.TANK]: {
         hp: 175,
-        speed: 0.80,
+        speed: 20.0,
         score: 50,
         color: 0x2b6599, // Blue
         scale: 1.5,
@@ -95,7 +95,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
     },
     [EnemyType.BOMBER]: {
         hp: 80,
-        speed: 0.70,
+        speed: 17.5,
         score: 30,
         color: 0xcf6e36,
         scale: 1.25,
