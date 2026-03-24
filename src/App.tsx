@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, GameScreen, SectorStats } from './game/session/SessionTypes';
 import { PlayerStats } from './entities/player/PlayerTypes';
-import { SectorTrigger } from './systems/TriggerTypes';;
+import { SectorTrigger } from './systems/TriggerTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './game/progression/ProgressionManager';
 import GameSession, { GameSessionHandle } from './game/session/GameSession';
@@ -53,7 +53,13 @@ const EMPTY_OVERRIDES = {};
 
 const App: React.FC = () => {
     const [gameState, setGameState] = useState<GameState>(loadGameState());
-    useRef(WinterEngine.getInstance(gameState.graphics));
+
+    // Efficient Engine Reference: Prevent instantiation evaluation on every render frame
+    const engineRef = useRef<WinterEngine | null>(null);
+    if (!engineRef.current) {
+        engineRef.current = WinterEngine.getInstance(gameState.graphics);
+    }
+
     const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
     const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
@@ -80,7 +86,6 @@ const App: React.FC = () => {
         latestStateRef.current = { gameState, isMobileDevice, activeOverlay };
     });
 
-    // --- PERSISTENCE & GLOBAL HOOKS ---
     useEffect(() => {
         saveGameState(gameState);
     }, [gameState]);
@@ -138,6 +143,12 @@ const App: React.FC = () => {
         setLoadingTargetIsCamp(type === 'CAMP');
         setShowLoadingOverlay(true);
 
+        // Suspend the engine while loading. This prevents the requestAnimationFrame loop 
+        // from fighting the synchronous Shader Compilation block, ensuring a smooth loading screen.
+        const engine = WinterEngine.getInstance();
+        engine.isRenderingPaused = true;
+        engine.isSimulationPaused = true;
+
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
         try {
@@ -146,9 +157,11 @@ const App: React.FC = () => {
             console.error("[App] triggerLoadingTransition task failed:", e);
         } finally {
             transitionTaskRef.current = false;
-            const engine = WinterEngine.getInstance();
+
+            // Resume engine operations post-compilation
             engine.isRenderingPaused = false;
             engine.isSimulationPaused = false;
+
             tryDismissLoading();
         }
     }, [tryDismissLoading]);
@@ -429,39 +442,9 @@ const App: React.FC = () => {
     }, []);
 
     const handleSaveGraphics = useCallback((newG: GraphicsSettings) => {
-        setGameState(prev => {
-            const oldG = prev.graphics;
-            const needsReWarm = newG.antialias !== oldG.antialias ||
-                newG.shadows !== oldG.shadows ||
-                newG.shadowMapType !== oldG.shadowMapType ||
-                newG.textureQuality !== oldG.textureQuality ||
-                newG.volumetricFog !== oldG.volumetricFog;
-
-            WinterEngine.getInstance().updateSettings(newG);
-
-            if (needsReWarm) {
-                // IMPORTANT: Don't run reset()! It deletes all sounds and JS data.
-                AssetPreloader.resetCompilationOnly();
-
-                const engine = WinterEngine.getInstance();
-                const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-                const isCamp = prev.screen === GameScreen.CAMP;
-                const sectorIndex = prev.currentSector !== undefined ? prev.currentSector : 0;
-                const envConfig = isCamp ? CAMP_SCENE : SECTOR_THEMES[sectorIndex];
-
-                // We never have to warm up CORE again, because the data is already in sharedPool.
-                // We just send the scene compilation directly!
-                triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
-                    if (isCamp) {
-                        await AssetPreloader.warmupAsync('CAMP', envConfig, yieldToMain);
-                    } else {
-                        await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
-                    }
-                });
-            }
-            return { ...prev, graphics: newG };
-        });
-    }, [triggerLoadingTransition]);
+        setGameState(prev => ({ ...prev, graphics: newG }));
+        WinterEngine.getInstance().updateSettings(newG);
+    }, []);
 
     const handleSaveLoadout = useCallback((loadout: any, levels: any) => {
         setGameState(prev => ({ ...prev, loadout, weaponLevels: levels }));

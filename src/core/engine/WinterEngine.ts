@@ -33,7 +33,7 @@ export class WinterEngine {
         return this.instance;
     }
 
-    // Max safe shadows & visible lights
+    // Max safe shadows & visible lights determined by hardware capabilities
     public maxSafeShadows: number = 0;
     public maxVisibleLights: number = 0;
 
@@ -57,6 +57,7 @@ export class WinterEngine {
     private requestID: number | null = null;
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
+    private contextLost: boolean = false;
 
     // Callbacks
     public onUpdate: ((dt: number) => void) | null = null;
@@ -90,17 +91,14 @@ export class WinterEngine {
         this.input = new InputManager();
         this.input.enable();
 
-        // Initialize persistent environmental systems
         this.camera = new CameraSystem();
         this.wind = new WindSystem();
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
         this.water = new WaterSystem(this.scene);
 
-        // Export for standalone systems (Zero-GC singleton access)
         (window as any).WinterEngineInstance = this;
 
-        // Register persistent environmental systems to the centralized registry
         this.registerSystem(this.wind);
         this.registerSystem(this.weather);
         this.registerSystem(this.fog);
@@ -112,24 +110,18 @@ export class WinterEngine {
     private _calculateHardwareLimits() {
         const maxTextures = this.renderer.capabilities.maxTextures;
 
-        // Shadows
+        // Reserve slots for PBR, Water, EnvMaps, etc.
         const safeShadowLimit = Math.max(0, maxTextures - 12);
         this.maxSafeShadows = Math.min(LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, safeShadowLimit);
 
-        // Integrated graphics (Intel/Surface) usually have 16 maxTextures.
-        // 16 PointLights kills an integrated GPU. We throttle to 4 lights on weak machines!
-        if (maxTextures <= 16) {
-            this.maxVisibleLights = Math.min(4, LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS);
-        } else {
-            this.maxVisibleLights = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS; // 8-16 on gaming computers
-        }
+        // We trust the user's UI settings for performance scaling, but we establish the absolute engine bounds here.
+        this.maxVisibleLights = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
 
-        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Shadows: ${this.maxSafeShadows}. Lights: ${this.maxVisibleLights}`);
+        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Max Allowed Shadows: ${this.maxSafeShadows}`);
     }
 
     /**
      * Initializes the WebGLRenderer with high-performance parameters.
-     * Hard-caps pixel ratio to prevent GPU burnout on Retina/4K mobile screens.
      */
     private initRenderer() {
         const params: THREE.WebGLRendererParameters = {
@@ -145,18 +137,34 @@ export class WinterEngine {
         this.renderer = new THREE.WebGLRenderer(params);
         this._calculateHardwareLimits();
 
-        // --- RESOLUTION MULTIPLIER LOGIC ---
-        const maxRatio = Math.min(window.devicePixelRatio, 1.5);
-        this.renderer.setPixelRatio(Math.min(maxRatio, this.settings.pixelRatio || 1));
+        // Strictly respect the user's graphical settings from the UI
+        this.renderer.setPixelRatio(this.settings.pixelRatio || 1);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // Shadow mapping setup
         this.renderer.shadowMap.enabled = this.settings.shadows;
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
-
-        // Color space management
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        // Bind Context Loss listeners to protect the render state
+        this.renderer.domElement.addEventListener('webglcontextlost', this.handleContextLost, false);
+        this.renderer.domElement.addEventListener('webglcontextrestored', this.handleContextRestored, false);
     }
+
+    private handleContextLost = (event: Event) => {
+        event.preventDefault(); // Prevents default browser behavior of permanently discarding the context
+        console.warn('🚨 [WinterEngine] WebGL Context Lost! Suspending render loop.');
+        this.contextLost = true;
+        this.stop();
+    };
+
+    private handleContextRestored = () => {
+        console.log('✅ [WinterEngine] WebGL Context Restored! Re-initializing textures and shaders.');
+        this.contextLost = false;
+
+        // Force a re-compile of active materials
+        this.renderer.compile(this.scene, this.camera.threeCamera);
+        this.start();
+    };
 
     public updateSettings(newSettings: Partial<GraphicsSettings>) {
         const needsRecreation = newSettings.antialias !== undefined && newSettings.antialias !== this.settings.antialias;
@@ -173,7 +181,10 @@ export class WinterEngine {
         const oldDom = this.renderer.domElement;
         const parent = oldDom.parentNode;
 
-        // Aggressive cleanup before disposal to prevent deallocateRenderTarget errors
+        // Clean up event listeners on the old canvas to prevent ghost firing
+        oldDom.removeEventListener('webglcontextlost', this.handleContextLost);
+        oldDom.removeEventListener('webglcontextrestored', this.handleContextRestored);
+
         this.clearActiveScene(true);
         this.renderer.dispose();
         if (parent) parent.removeChild(oldDom);
@@ -185,8 +196,7 @@ export class WinterEngine {
     }
 
     private applySettings() {
-        const maxRatio = Math.min(window.devicePixelRatio, 1.5);
-        this.renderer.setPixelRatio(Math.min(maxRatio, this.settings.pixelRatio || 1));
+        this.renderer.setPixelRatio(this.settings.pixelRatio || 1);
 
         const shadowsEnabled = this.settings.shadows;
         const shadowType = this.settings.shadowMapType as THREE.ShadowMapType;
@@ -204,8 +214,7 @@ export class WinterEngine {
 
                 if (obj.isMesh && obj.material) {
                     if (Array.isArray(obj.material)) {
-                        const len = obj.material.length;
-                        for (let i = 0; i < len; i++) {
+                        for (let i = 0; i < obj.material.length; i++) {
                             obj.material[i].needsUpdate = true;
                         }
                     } else {
@@ -235,7 +244,7 @@ export class WinterEngine {
     }
 
     public start() {
-        if (!this.isRunning) {
+        if (!this.isRunning && !this.contextLost) {
             this.isRunning = true;
             this.clock.start();
             this.animate();
@@ -255,25 +264,24 @@ export class WinterEngine {
         window.removeEventListener('resize', this.handleResize);
         this.input.dispose();
 
-        if (this.container && this.renderer.domElement.parentNode === this.container) {
-            this.container.removeChild(this.renderer.domElement);
+        const dom = this.renderer.domElement;
+        dom.removeEventListener('webglcontextlost', this.handleContextLost);
+        dom.removeEventListener('webglcontextrestored', this.handleContextRestored);
+
+        if (this.container && dom.parentNode === this.container) {
+            this.container.removeChild(dom);
         }
 
-        // Aggressive Cleanup before renderer disposal
         this.clearActiveScene(true);
-
         this.renderer.dispose();
 
-        // Aggressive Garbage Collection flagging
         this.sceneStack.length = 0;
         this.onUpdate = null;
         this.onRender = null;
-
         this.sharedGeoSet = null;
         this.sharedMatSet = null;
 
         this.clearSystems();
-
         WinterEngine.instance = null;
     }
 

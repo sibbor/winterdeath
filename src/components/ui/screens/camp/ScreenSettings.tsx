@@ -70,8 +70,15 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
     const confirmReload = useCallback(() => {
         soundManager.playUiConfirm();
         onUpdateGraphics(tempGraphics);
-        onClose();
-    }, [tempGraphics, onUpdateGraphics, onClose]);
+
+        // We force a hard reload to kill all old WebGL contexts.
+        // Since onUpdateGraphics just triggered a saveGameState(), the game will
+        // boot up with the new settings lightning fast when the page reloads.
+        setTimeout(() => {
+            window.location.reload();
+        }, 100);
+
+    }, [tempGraphics, onUpdateGraphics]);
 
     useEffect(() => {
         if (!showReloadConfirm) return;
@@ -309,17 +316,17 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                             RELOAD REQUIRED
                         </h2>
                         <p className="text-gray-300 text-sm md:text-lg font-bold uppercase tracking-widest border-l-4 border-orange-500 pl-4 py-2">
-                           Some settings require a game reload to take effect. Reload now?
+                            Some settings require a game reload to take effect. Reload now?
                         </p>
 
                         <div className="flex gap-4 mt-4">
-                            <button 
+                            <button
                                 onClick={() => { soundManager.playUiClick(); setShowReloadConfirm(false); }}
                                 className="px-8 py-3 bg-zinc-800 border-2 border-zinc-700 text-zinc-400 font-black uppercase tracking-widest hover:bg-zinc-700 transition-all"
                             >
                                 No
                             </button>
-                            <button 
+                            <button
                                 onClick={() => { confirmReload(); }}
                                 className="px-8 py-3 bg-zinc-100 border-2 border-zinc-100 text-black font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
                             >
