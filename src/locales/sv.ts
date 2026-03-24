@@ -89,6 +89,7 @@ export const sv = {
         off: "AV",
         debug_mode: "DEBUG-LÄGE",
         show_fps: "VISA FPS",
+        save_settings: "SPARA INSTÄLLNINGAR",
         cancel: "AVBRYT",
         skip: "HOPPA ÖVER",
         paused: "PAUSAD",

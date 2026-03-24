@@ -433,7 +433,9 @@ const App: React.FC = () => {
             const oldG = prev.graphics;
             const needsReWarm = newG.antialias !== oldG.antialias ||
                 newG.shadows !== oldG.shadows ||
-                newG.shadowMapType !== oldG.shadowMapType;
+                newG.shadowMapType !== oldG.shadowMapType ||
+                newG.textureQuality !== oldG.textureQuality ||
+                newG.volumetricFog !== oldG.volumetricFog;
 
             WinterEngine.getInstance().updateSettings(newG);
 

@@ -112,16 +112,19 @@ export class WinterEngine {
     private _calculateHardwareLimits() {
         const maxTextures = this.renderer.capabilities.maxTextures;
 
-        // SUPER-SAFE BUDGET:
-        // We reserve 12 textures for extremely heavy materials (water, PBR, envMaps etc).
-        // This leaves (maxTextures - 12) textures for PointLight shadows.
-        // On a graphics card with 16 textures, this results in a maximum of 4 PointLight shadows.
+        // Shadows
         const safeShadowLimit = Math.max(0, maxTextures - 12);
-
         this.maxSafeShadows = Math.min(LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, safeShadowLimit);
-        this.maxVisibleLights = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
 
-        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Safe Shadows capped at: ${this.maxSafeShadows}`);
+        // Integrated graphics (Intel/Surface) usually have 16 maxTextures.
+        // 16 PointLights kills an integrated GPU. We throttle to 4 lights on weak machines!
+        if (maxTextures <= 16) {
+            this.maxVisibleLights = Math.min(4, LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS);
+        } else {
+            this.maxVisibleLights = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS; // 8-16 on gaming computers
+        }
+
+        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Shadows: ${this.maxSafeShadows}. Lights: ${this.maxVisibleLights}`);
     }
 
     /**
@@ -170,6 +173,8 @@ export class WinterEngine {
         const oldDom = this.renderer.domElement;
         const parent = oldDom.parentNode;
 
+        // Aggressive cleanup before disposal to prevent deallocateRenderTarget errors
+        this.clearActiveScene(true);
         this.renderer.dispose();
         if (parent) parent.removeChild(oldDom);
 

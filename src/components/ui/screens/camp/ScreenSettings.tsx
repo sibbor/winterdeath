@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { t, setLocale, getLocale } from '../../../../utils/i18n';
 import { soundManager } from '../../../../utils/SoundManager';
-import { GraphicsSettings } from '../../../../core/engine/EngineTypes';;
+import { GraphicsSettings } from '../../../../core/engine/EngineTypes';
 import { SHADOW_PRESETS } from '../../../../content/constants';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { useOrientation } from '../../../../hooks/useOrientation';
@@ -20,6 +20,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<'graphics' | 'general'>('graphics');
 
+    // --- BUFFERED STATE ---
+    const [tempGraphics, setTempGraphics] = useState<GraphicsSettings>({ ...graphics });
+    const [showReloadConfirm, setShowReloadConfirm] = useState(false);
+    const prevTempGraphics = useRef<GraphicsSettings>(tempGraphics);
+
     // Force update to re-render when language changes
     const [, setTick] = useState(0);
 
@@ -32,19 +37,59 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
     };
 
     const setPixelRatio = (ratio: number) => {
-        onUpdateGraphics({ ...graphics, pixelRatio: ratio });
+        setTempGraphics({ ...tempGraphics, pixelRatio: ratio });
         soundManager.playUiClick();
     };
 
     const toggleAntialias = () => {
-        onUpdateGraphics({ ...graphics, antialias: !graphics.antialias });
+        setTempGraphics({ ...tempGraphics, antialias: !tempGraphics.antialias });
         soundManager.playUiClick();
     };
 
     const toggleVolumetricFog = () => {
-        onUpdateGraphics({ ...graphics, volumetricFog: !graphics.volumetricFog });
+        setTempGraphics({ ...tempGraphics, volumetricFog: !tempGraphics.volumetricFog });
         soundManager.playUiClick();
     };
+
+    const handleSave = () => {
+        const needsReload =
+            tempGraphics.antialias !== graphics.antialias ||
+            tempGraphics.shadows !== graphics.shadows ||
+            tempGraphics.shadowMapType !== graphics.shadowMapType ||
+            tempGraphics.textureQuality !== graphics.textureQuality ||
+            tempGraphics.volumetricFog !== graphics.volumetricFog;
+
+        if (needsReload) {
+            setShowReloadConfirm(true);
+        } else {
+            onUpdateGraphics(tempGraphics);
+            onClose();
+        }
+    };
+
+    const confirmReload = useCallback(() => {
+        soundManager.playUiConfirm();
+        onUpdateGraphics(tempGraphics);
+        onClose();
+    }, [tempGraphics, onUpdateGraphics, onClose]);
+
+    useEffect(() => {
+        if (!showReloadConfirm) return;
+
+        const handleKeys = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                setShowReloadConfirm(false);
+                soundManager.playUiClick();
+            } else if (e.key === 'Enter') {
+                e.stopPropagation();
+                confirmReload();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeys, { capture: true });
+        return () => window.removeEventListener('keydown', handleKeys, { capture: true });
+    }, [showReloadConfirm, confirmReload]);
 
     const darkenColor = (hex: string, percent: number) => {
         const num = parseInt(hex.replace('#', ''), 16);
@@ -71,9 +116,9 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                         max="3"
                         step="1"
                         value={
-                            graphics.pixelRatio <= 0.5 ? 0 :
-                                graphics.pixelRatio <= 0.75 ? 1 :
-                                    graphics.pixelRatio <= 0.85 ? 2 : 3
+                            tempGraphics.pixelRatio <= 0.5 ? 0 :
+                                tempGraphics.pixelRatio <= 0.75 ? 1 :
+                                    tempGraphics.pixelRatio <= 0.85 ? 2 : 3
                         }
                         onChange={(e) => {
                             const val = parseInt(e.target.value);
@@ -83,16 +128,16 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                         className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-white"
                     />
                     <div className="flex justify-between w-full text-[10px] font-mono text-gray-500 mt-1 uppercase">
-                        <span className={graphics.pixelRatio <= 0.5 ? 'text-white font-bold' : ''}>{t('ui.res_performance').substring(0, 4)}</span>
-                        <span className={graphics.pixelRatio > 0.5 && graphics.pixelRatio <= 0.75 ? 'text-white font-bold' : ''}>{t('ui.res_standard').substring(0, 3)}</span>
-                        <span className={graphics.pixelRatio > 0.75 && graphics.pixelRatio <= 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_optimized').substring(0, 3)}</span>
-                        <span className={graphics.pixelRatio > 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_native').substring(0, 6)}</span>
+                        <span className={tempGraphics.pixelRatio <= 0.5 ? 'text-white font-bold' : ''}>{t('ui.res_performance').substring(0, 4)}</span>
+                        <span className={tempGraphics.pixelRatio > 0.5 && tempGraphics.pixelRatio <= 0.75 ? 'text-white font-bold' : ''}>{t('ui.res_standard').substring(0, 3)}</span>
+                        <span className={tempGraphics.pixelRatio > 0.75 && tempGraphics.pixelRatio <= 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_optimized').substring(0, 3)}</span>
+                        <span className={tempGraphics.pixelRatio > 0.85 ? 'text-white font-bold' : ''}>{t('ui.res_native').substring(0, 6)}</span>
                     </div>
                     <div className="text-xs font-bold text-blue-400 uppercase tracking-widest bg-blue-900/20 px-2 py-0.5 rounded border border-blue-500/30">
                         {
-                            graphics.pixelRatio <= 0.5 ? `${t('ui.res_performance')} (0.5x)` :
-                                graphics.pixelRatio <= 0.75 ? `${t('ui.res_standard')} (0.75x)` :
-                                    graphics.pixelRatio <= 0.85 ? `${t('ui.res_optimized')} (0.85x)` : `${t('ui.res_native')} (1.0x)`
+                            tempGraphics.pixelRatio <= 0.5 ? `${t('ui.res_performance')} (0.5x)` :
+                                tempGraphics.pixelRatio <= 0.75 ? `${t('ui.res_standard')} (0.75x)` :
+                                    tempGraphics.pixelRatio <= 0.85 ? `${t('ui.res_optimized')} (0.85x)` : `${t('ui.res_native')} (1.0x)`
                         }
                     </div>
                 </div>
@@ -102,12 +147,13 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.shadow_quality')}</h3>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.shadow_sub')}</p>
                 </div>
                 <div className="flex gap-1 md:gap-2 flex-wrap">
                     <button
-                        onClick={() => { onUpdateGraphics({ ...graphics, ...SHADOW_PRESETS.OFF }); soundManager.playUiClick(); }}
-                        className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!graphics.shadows ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
+                        onClick={() => { setTempGraphics({ ...tempGraphics, ...SHADOW_PRESETS.OFF }); soundManager.playUiClick(); }}
+                        className={`px-3 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${!tempGraphics.shadows ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
                     >
                         {t('ui.off')}
                     </button>
@@ -119,8 +165,8 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                     ].map(q => (
                         <button
                             key={q.label}
-                            onClick={() => { onUpdateGraphics({ ...graphics, ...q.preset }); soundManager.playUiClick(); }}
-                            className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${graphics.shadows && graphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
+                            onClick={() => { setTempGraphics({ ...tempGraphics, ...q.preset }); soundManager.playUiClick(); }}
+                            className={`px-2 py-1 text-xs md:text-base font-bold uppercase border-2 transition-all ${tempGraphics.shadows && tempGraphics.shadowMapType === q.preset.shadowMapType ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}
                         >
                             {q.label}
                         </button>
@@ -132,6 +178,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             <div className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white rounded-lg group gap-4">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.texture_quality')}</h3>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.texture_sub')}</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
@@ -140,7 +187,7 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                         { val: 0.75, label: t('ui.quality_med') },
                         { val: 1.0, label: t('ui.quality_high') }
                     ].map(q => (
-                        <button key={q.val} onClick={() => { onUpdateGraphics({ ...graphics, textureQuality: q.val }); soundManager.playUiClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${graphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>
+                        <button key={q.val} onClick={() => { setTempGraphics({ ...tempGraphics, textureQuality: q.val }); soundManager.playUiClick(); }} className={`px-3 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.textureQuality === q.val ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>
                             {q.label}
                         </button>
                     ))}
@@ -151,11 +198,12 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             <div onClick={toggleVolumetricFog} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg gap-4">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.volumetric_fog')}</h3>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.volumetric_fog_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${graphics.volumetricFog ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!graphics.volumetricFog ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.volumetricFog ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!tempGraphics.volumetricFog ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
                 </div>
             </div>
 
@@ -163,11 +211,12 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             <div onClick={toggleAntialias} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-blue-400 cursor-pointer group rounded-lg gap-4">
                 <div>
                     <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.antialias')}</h3>
+                    <p className="text-orange-400 text-xs font-mono uppercase font-bold mb-1">(Needs reload)</p>
                     <p className="text-gray-400 text-xs font-mono">{t('ui.antialias_sub')}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${graphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
-                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!graphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!tempGraphics.antialias ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
                 </div>
             </div>
         </div>
@@ -206,8 +255,9 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
             title={t('ui.settings')}
             isMobileDevice={isMobileDevice}
             onClose={onClose}
-            onConfirm={onClose}
-            confirmLabel={t('ui.close')}
+            onConfirm={handleSave}
+            confirmLabel={t('ui.save_settings') || 'Save settings'}
+            cancelLabel={t('ui.cancel') || 'Cancel'}
             isSmall={true}
             titleColorClass="text-blue-600"
             tabs={['graphics', 'general']}
@@ -250,6 +300,35 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                     {activeTab === 'graphics' ? renderGraphicsTab() : renderGeneralTab()}
                 </div>
             </div>
+
+            {/* RELOAD CONFIRMATION MODAL */}
+            {showReloadConfirm && (
+                <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md font-mono">
+                    <div className="bg-zinc-950 border-2 border-orange-500 p-8 md:p-12 max-w-xl w-full mx-4 shadow-[0_0_50px_rgba(249,115,22,0.3)] flex flex-col gap-6 scale-animation origin-center">
+                        <h2 className="text-3xl md:text-5xl font-black uppercase text-orange-500 tracking-tighter leading-none italic">
+                            RELOAD REQUIRED
+                        </h2>
+                        <p className="text-gray-300 text-sm md:text-lg font-bold uppercase tracking-widest border-l-4 border-orange-500 pl-4 py-2">
+                           Some settings require a game reload to take effect. Reload now?
+                        </p>
+
+                        <div className="flex gap-4 mt-4">
+                            <button 
+                                onClick={() => { soundManager.playUiClick(); setShowReloadConfirm(false); }}
+                                className="px-8 py-3 bg-zinc-800 border-2 border-zinc-700 text-zinc-400 font-black uppercase tracking-widest hover:bg-zinc-700 transition-all"
+                            >
+                                No
+                            </button>
+                            <button 
+                                onClick={() => { confirmReload(); }}
+                                className="px-8 py-3 bg-zinc-100 border-2 border-zinc-100 text-black font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+                            >
+                                Yes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </ScreenModalLayout>
     );
 };

@@ -94,7 +94,7 @@ export const en = {
         on: "ON",
         off: "OFF",
         debug_mode: "DEBUG MODE",
-        show_fps: "SHOW FPS",
+        save_settings: "SAVE SETTINGS",
         cancel: "CANCEL",
         skip: "SKIP",
         paused: "PAUSED",
