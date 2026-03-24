@@ -124,19 +124,19 @@ export const WEAPONS: Record<string, WeaponStats> = {
   // --- THROWABLE ---
   [WeaponType.GRENADE]: {
     name: WeaponType.GRENADE, displayName: 'weapons.grenade', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
-    damage: 180, range: 20, radius: 8, reloadTime: 1500,
+    damage: 180, range: 20, radius: 8, reloadTime: 1500, magSize: 5,
     icon: PNG_PATH + 'grenade.png', iconIsPng: true,
     impactType: EnemyDeathState.EXPLODED, statusEffect: null
   },
   [WeaponType.MOLOTOV]: {
     name: WeaponType.MOLOTOV, displayName: 'weapons.molotov', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
-    damage: 15, range: 20, radius: 5, reloadTime: 1500,
+    damage: 15, range: 20, radius: 5, reloadTime: 1500, magSize: 5,
     icon: PNG_PATH + 'molotov.png', iconIsPng: true,
     impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectType.BURNING, duration: 5.0, damagePerTick: 5 }
   },
   [WeaponType.FLASHBANG]: {
     name: WeaponType.FLASHBANG, displayName: 'weapons.flashbang', category: WeaponCategory.THROWABLE, behavior: WeaponBehavior.THROWABLE,
-    damage: 0, range: 20, radius: 10, reloadTime: 1500,
+    damage: 0, range: 20, radius: 10, reloadTime: 1500, magSize: 5,
     icon: PNG_PATH + 'flashbang.png', iconIsPng: true,
     impactType: EnemyDeathState.SHOT, statusEffect: { type: StatusEffectType.STUNNED, duration: 3.5 }
   },
@@ -150,13 +150,13 @@ export const WEAPONS: Record<string, WeaponStats> = {
   },
   [WeaponType.FLAMETHROWER]: {
     name: WeaponType.FLAMETHROWER, displayName: 'weapons.flamethrower', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
-    damage: 6, fireRate: 35, range: 10, spread: 0.25,
+    damage: 6, fireRate: 35, range: 10, spread: 0.25, magSize: 500,
     icon: PNG_PATH + 'flamethrower.png', iconIsPng: true,
     impactType: EnemyDeathState.BURNED, statusEffect: { type: StatusEffectType.BURNING, duration: 4.5, damagePerTick: 10 }
   },
   [WeaponType.ARC_CANNON]: {
     name: WeaponType.ARC_CANNON, displayName: 'weapons.arc_cannon', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
-    damage: 14, fireRate: 90, range: 15, spread: 0.05,
+    damage: 14, fireRate: 90, range: 15, spread: 0.05, magSize: 500,
     icon: PNG_PATH + 'arc_cannon.png', iconIsPng: true,
     piercing: true, pierceDecay: 0.5, impactType: EnemyDeathState.ELECTRIFIED, statusEffect: { type: StatusEffectType.ELECTRIFIED, duration: 2.5 }
   },

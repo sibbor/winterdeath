@@ -73,7 +73,9 @@ export const WeaponFX = {
     },
 
     updateFireZoneVisuals: (pos: THREE.Vector3, radius: number, delta: number, ctx: any) => {
-        const targetFlameCount = 360 * delta;
+        const fireDensity = 10;
+        const targetFlameCount = (radius * radius * fireDensity) * delta;
+
         let flameCount = Math.floor(targetFlameCount);
         if (Math.random() < (targetFlameCount - flameCount)) flameCount++;
 
@@ -83,9 +85,22 @@ export const WeaponFX = {
             const fx = pos.x + r * Math.cos(theta);
             const fzZ = pos.z + r * Math.sin(theta);
 
+            // normalizedDist är 0 exakt i mitten, 1 exakt på kanten.
             const normalizedDist = r / radius;
-            const flameScale = 2.5 - normalizedDist * 1.8;
-            const flameY = 0.3 + (1.0 - normalizedDist) * 1.2;
+
+            // centerFocus är tvärtom: 1 i mitten, 0 på kanten.
+            const centerFocus = 1.0 - normalizedDist;
+
+            // Genom att multiplicera centerFocus med sig själv får vi en brant kurva.
+            // I mitten (1 * 1) = 1. Halvvägs ut (0.5 * 0.5) = 0.25.
+            const coreIntensity = centerFocus * centerFocus;
+
+            // Skala: 0.8 på kanten, upp till 4.5 i exakta mitten (0.8 + 3.7).
+            const flameScale = 0.8 + (coreIntensity * 3.7);
+
+            // Höjd (Y): 0.3 på kanten, skjuter upp till 2.5 i mitten.
+            const flameY = 0.3 + (coreIntensity * 2.2);
+
             const colorHex = Math.random() > 0.6 ? 0xffcc00 : (Math.random() > 0.3 ? 0xff8800 : 0xff4400);
 
             ctx.spawnPart(fx, flameY, fzZ, 'fire', 1, undefined, undefined, colorHex, flameScale);

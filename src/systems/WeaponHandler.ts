@@ -16,6 +16,9 @@ const _v5 = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
 const _slotArray: WeaponType[] = [];
 
+// Avoid creating empty objects and functions in loops
+const _NOOP_DAMAGE_TEXT = (x: number, y: number, z: number, t: string, c?: string) => { };
+
 // For Billboard Math
 const _cameraWorldPos = new THREE.Vector3();
 
@@ -42,7 +45,69 @@ const _continuousCtx: any = {
     noiseEvents: null
 };
 
+// Shared state for the checkSlot algorithm to avoid closure allocation
+let _currentSlotIdx = -1;
+function _checkSlot(wepType: WeaponType | null | undefined, state: any) {
+    if (!wepType) return;
+    if (WEAPONS[wepType] && WEAPONS[wepType].category === WeaponCategory.THROWABLE && (state.weaponAmmo[wepType] || 0) <= 0) return;
+    if (wepType === WeaponType.RADIO && state.familyFound) return;
+
+    if (wepType === state.activeWeapon) {
+        _currentSlotIdx = _slotArray.length;
+    }
+    _slotArray.push(wepType);
+}
+
+// Extracted to prevent closure allocations per frame during throwing charge
+function _executeThrow(
+    scene: THREE.Scene,
+    playerGroup: THREE.Group,
+    state: any,
+    loadout: any,
+    now: number,
+    wep: any,
+    ratio: number,
+    aimCrossMesh?: THREE.Group | null,
+    trajectoryLineMesh?: THREE.Mesh | null
+) {
+    const isUnlimited = !!state.sectorState?.unlimitedThrowables;
+    if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
+    state.throwablesThrown = (state.throwablesThrown || 0) + 1;
+
+    _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+
+    const maxDist = (wep.range || 25.0) * (state.multipliers.range || 1.0);
+    const dist = Math.max(2.0, ratio * maxDist);
+
+    _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
+    _v3.copy(playerGroup.position).addScaledVector(_v1, dist); // Target
+    _v3.y = 0.1;
+
+    const tMax = 1.0 + (dist / maxDist) * 0.5;
+
+    const damage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
+    ProjectileSystem.launchThrowable(scene, state.projectiles, _v2, _v3,
+        state.activeWeapon, tMax, damage);
+
+    if (wep.reloadTime && wep.reloadTime > 0) {
+        state.isReloading = true;
+        state.reloadEndTime = now + (wep.reloadTime * (state.multipliers.reloadTime || 1.0));
+        soundManager.playMagOut();
+    }
+
+    if (state.weaponAmmo[state.activeWeapon] <= 0) {
+        state.activeWeapon = loadout.primary;
+    }
+
+    state.throwChargeStart = 0;
+    state.lastShotTime = now;
+
+    if (aimCrossMesh) aimCrossMesh.visible = false;
+    if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
+}
+
 export const WeaponHandler = {
+
     // Handle switching weapons via 1-4 keys
     handleSlotSwitch: (state: any, loadout: any, key: string) => {
         if (state.activeVehicle) return;
@@ -84,29 +149,17 @@ export const WeaponHandler = {
         // 1. Optimized Scroll Switching (Zero-GC)
         if (input.scrollDown || input.scrollUp) {
             _slotArray.length = 0;
-            let currentIdx = -1;
+            _currentSlotIdx = -1;
 
-            // Manual checks avoid array allocation
-            const checkSlot = (wepType: WeaponType | null | undefined) => {
-                if (!wepType) return;
-                if (WEAPONS[wepType] && WEAPONS[wepType].category === WeaponCategory.THROWABLE && (state.weaponAmmo[wepType] || 0) <= 0) return;
-                if (wepType === WeaponType.RADIO && state.familyFound) return;
+            _checkSlot(loadout.primary, state);
+            _checkSlot(loadout.secondary, state);
+            _checkSlot(loadout.throwable, state);
+            _checkSlot(loadout.special, state);
+            _checkSlot(WeaponType.RADIO, state);
 
-                if (wepType === state.activeWeapon) {
-                    currentIdx = _slotArray.length;
-                }
-                _slotArray.push(wepType);
-            };
-
-            checkSlot(loadout.primary);
-            checkSlot(loadout.secondary);
-            checkSlot(loadout.throwable);
-            checkSlot(loadout.special);
-            checkSlot(WeaponType.RADIO);
-
-            if (currentIdx !== -1 && _slotArray.length > 1) {
+            if (_currentSlotIdx !== -1 && _slotArray.length > 1) {
                 const step = input.scrollDown ? 1 : -1;
-                const nextIdx = (currentIdx + step + _slotArray.length) % _slotArray.length;
+                const nextIdx = (_currentSlotIdx + step + _slotArray.length) % _slotArray.length;
                 const nextWep = _slotArray[nextIdx];
 
                 if (nextWep !== state.activeWeapon) {
@@ -123,7 +176,10 @@ export const WeaponHandler = {
 
         // 2. Weapon Validation
         let wep = WEAPONS[state.activeWeapon];
-        if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
+        if (!wep) {
+            state.activeWeapon = loadout.primary;
+            wep = WEAPONS[state.activeWeapon];
+        }
 
         // 3. Reload Logic
         const isThrowable = wep.category === WeaponCategory.THROWABLE;
@@ -153,14 +209,14 @@ export const WeaponHandler = {
 
     // --- CORE FIRING LOGIC ---
     handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
-        if (state.activeVehicle) {
-            return;
-        }
-
+        if (state.activeVehicle) return;
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];
-        if (!wep) { state.activeWeapon = loadout.primary; wep = WEAPONS[state.activeWeapon]; }
+        if (!wep) {
+            state.activeWeapon = loadout.primary;
+            wep = WEAPONS[state.activeWeapon];
+        }
 
         if (state.activeWeapon === WeaponType.RADIO) {
             state.throwChargeStart = 0;
@@ -194,20 +250,20 @@ export const WeaponHandler = {
                         soundManager.playFlamethrowerStart();
                     }
 
-                    const cb = state.callbacks || {};
+                    const cb = state.callbacks;
                     _continuousCtx.scene = scene;
                     _continuousCtx.enemies = state.enemies || [];
                     _continuousCtx.collisionGrid = state.collisionGrid;
-                    _continuousCtx.spawnPart = cb.spawnPart;
-                    _continuousCtx.showDamageText = cb.showDamageText || ((x: number, y: number, z: number, t: string, c?: string) => { });
-                    _continuousCtx.spawnDecal = cb.spawnDecal;
-                    _continuousCtx.explodeEnemy = cb.explodeEnemy;
-                    _continuousCtx.trackStats = cb.trackStats;
-                    _continuousCtx.addScore = cb.gainXp;
-                    _continuousCtx.addFireZone = cb.addFireZone;
+                    _continuousCtx.spawnPart = cb?.spawnPart;
+                    _continuousCtx.showDamageText = cb?.showDamageText || _NOOP_DAMAGE_TEXT;
+                    _continuousCtx.spawnDecal = cb?.spawnDecal;
+                    _continuousCtx.explodeEnemy = cb?.explodeEnemy;
+                    _continuousCtx.trackStats = cb?.trackStats;
+                    _continuousCtx.addScore = cb?.gainXp;
+                    _continuousCtx.addFireZone = cb?.addFireZone;
                     _continuousCtx.now = now;
                     _continuousCtx.noiseEvents = state.noiseEvents;
-                    _continuousCtx.makeNoise = cb.makeNoise;
+                    _continuousCtx.makeNoise = cb?.makeNoise;
 
                     _continuousCtx.applyDamage = (state as any).applyDamage;
 
@@ -238,6 +294,7 @@ export const WeaponHandler = {
                 const isUnlimited = !!state.sectorState?.unlimitedAmmo;
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                 const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
+
                 if (now > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = now;
                     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
@@ -267,10 +324,8 @@ export const WeaponHandler = {
                             _v3.x += (Math.random() - 0.5) * spread;
                             _v3.y += (Math.random() - 0.5) * spread;
                             _v3.z += (Math.random() - 0.5) * spread;
-                            _v3.normalize();
-                        } else {
-                            _v3.normalize();
                         }
+                        _v3.normalize();
 
                         ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name, damagePerPellet);
                     }
@@ -291,43 +346,6 @@ export const WeaponHandler = {
 
         // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
         if (wep.behavior === WeaponBehavior.THROWABLE) {
-            const executeThrow = (ratio: number) => {
-                const isUnlimited = !!state.sectorState?.unlimitedThrowables;
-                if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
-                state.throwablesThrown = (state.throwablesThrown || 0) + 1;
-
-                _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
-
-                const maxDist = (wep.range || 25.0) * (state.multipliers.range || 1.0);
-                const dist = Math.max(2.0, ratio * maxDist);
-
-                _v2.copy(playerGroup.position).add(_v4.set(0, 1.5, 0)); // Origin
-                _v3.copy(playerGroup.position).addScaledVector(_v1, dist); // Target
-                _v3.y = 0.1;
-
-                const tMax = 1.0 + (dist / maxDist) * 0.5;
-
-                const damage = WeaponHandler.getScaledDamage(state.activeWeapon, state.weaponLevels[state.activeWeapon]);
-                ProjectileSystem.launchThrowable(scene, state.projectiles, _v2, _v3,
-                    state.activeWeapon, tMax, damage);
-
-                if (wep.reloadTime && wep.reloadTime > 0) {
-                    state.isReloading = true;
-                    state.reloadEndTime = now + (wep.reloadTime * (state.multipliers.reloadTime || 1.0));
-                    soundManager.playMagOut();
-                }
-
-                if (state.weaponAmmo[state.activeWeapon] <= 0) {
-                    state.activeWeapon = loadout.primary;
-                }
-
-                state.throwChargeStart = 0;
-                state.lastShotTime = now;
-
-                if (aimCrossMesh) aimCrossMesh.visible = false;
-                if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
-            };
-
             const canCharge = (state.weaponAmmo[state.activeWeapon] > 0) && now > (state.lastShotTime || 0) + 500;
 
             if (input.fire && canCharge) {
@@ -404,17 +422,16 @@ export const WeaponHandler = {
                 }
 
                 if (elapsed >= chargeTime + 2000) {
-                    executeThrow(1.0);
+                    _executeThrow(scene, playerGroup, state, loadout, now, wep, 1.0, aimCrossMesh, trajectoryLineMesh);
                 }
 
             } else if (state.throwChargeStart > 0) {
                 const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
-                executeThrow(ratio);
+                _executeThrow(scene, playerGroup, state, loadout, now, wep, ratio, aimCrossMesh, trajectoryLineMesh);
             } else {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;
             }
         }
     },
-
 };
