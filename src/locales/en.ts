@@ -94,6 +94,7 @@ export const en = {
         on: "ON",
         off: "OFF",
         debug_mode: "DEBUG MODE",
+        begin: "BEGIN",
         save_settings: "SAVE SETTINGS",
         cancel: "CANCEL",
         skip: "SKIP",

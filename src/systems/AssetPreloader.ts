@@ -25,8 +25,10 @@ let lastSectorIndex = -1;
 
 // --- PERSISTENT SHARED MODEL POOL ---
 const sharedPool: THREE.Object3D[] = [];
-let sharedPoolPopulated = false; // Tracks if JS memory is built
-let sharedPoolCompiled = false;  // Tracks if WebGL shaders are built
+let sharedPoolPopulated = false;
+
+// Preloadern keeps track of what lighting the pool is baked for.
+let sharedPoolCompiledTarget: 'CAMP' | 'SECTOR' | null = null;
 
 // --- PERFORMANCE SCRATCHPADS & DUMMIES (Zero-GC) ---
 const _dummyMatrix = new THREE.Matrix4();
@@ -49,15 +51,17 @@ const WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIAL
 
 export const AssetPreloader = {
 
+    isWarmedUp: (module: string = 'CORE') => warmedModules.has(module),
+
     warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', envConfigBase: any = null, yieldToMain?: () => Promise<void>, sectorId?: number) => {
         const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
 
         if (warmedModules.has(moduleKey)) {
-            return; // Already compiled — multiple callers are expected and fine
+            return; // Already compiled
         }
 
         if (activePromises.has(moduleKey)) {
-            return activePromises.get(moduleKey); // Warmup in progress, attach to existing promise
+            return activePromises.get(moduleKey);
         }
 
         const warmupLogic = async () => {
@@ -79,7 +83,7 @@ export const AssetPreloader = {
             console.log(`[AssetPreloader] ▶ START warming [${moduleKey}]`);
 
             // =========================================================
-            // PHASE 1: CORE DATA FETCHING (No WebGL Compilation)
+            // PHASE 1: CORE DATA FETCHING
             // =========================================================
             if (isCore) {
                 beginInternal('core_assets');
@@ -89,7 +93,7 @@ export const AssetPreloader = {
                     try {
                         await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || _NOOP_ASYNC);
                     } catch (e) {
-                        console.error("[AssetPreloader] SoundBank preloading failed, continuing anyway:", e);
+                        console.error("[AssetPreloader] SoundBank preloading failed:", e);
                     }
                     const { createMusicBuffer } = await import('../utils/audio/SoundLib');
                     const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
@@ -136,38 +140,31 @@ export const AssetPreloader = {
 
                 warmedModules.add(moduleKey);
                 endInternal('asset_warmup_total');
-                console.log(`[AssetPreloader] ✅ DONE [CORE] Data fetched in ${(warmupTimings['asset_warmup_total'] ?? 0).toFixed(0)}ms. WebGL compilation deferred to first scene load.`);
+                console.log(`[AssetPreloader] ✅ DONE [CORE]`);
                 return;
             }
 
             // =========================================================
-            // PHASE 2: SCENE COMPILATION (CAMP or SECTOR)
+            // PHASE 2: SCENE COMPILATION
             // =========================================================
             const scene = new THREE.Scene();
 
             let envConfig = envConfigBase;
-            if (isCamp && !envConfig) {
-                envConfig = CAMP_SCENE;
-            } else if (isSector && !envConfig) {
-                const sectorIndex = sectorId ?? 0;
-                const sector = SectorSystem.getSector(sectorIndex);
-                if (sector) envConfig = sector.environment;
+            if (isCamp && !envConfig) envConfig = CAMP_SCENE;
+            else if (isSector && !envConfig) {
+                const sectorDef = SectorSystem.getSector(sectorId ?? 0);
+                if (sectorDef) envConfig = sectorDef.environment;
             }
 
-            // 1. BASE ENVIRONMENT
             beginInternal('lighting');
-            if (envConfig) {
-                engine.syncEnvironment(envConfig, scene);
-            }
+            if (envConfig) engine.syncEnvironment(envConfig, scene);
             endInternal('lighting');
 
-            // 2. INJECT TARGET SCENE
             beginInternal('scene_inject');
             const sceneRoot = new THREE.Group();
             scene.add(sceneRoot);
 
             if (isCamp) {
-                // --- CAMP LOGIC (Native lighting, no proxies) ---
                 const textures = createProceduralTextures();
                 await CampWorld.build(scene, textures as any, 'snow', true);
 
@@ -176,7 +173,6 @@ export const AssetPreloader = {
                 console.log(`[AssetPreloader] CAMP: Compiling native shader for ${lampsInScene} natural light(s).`);
 
             } else if (isSector) {
-                // --- SECTOR LOGIC (Strict LightSystem Proxy matching) ---
                 const ENGINE_MAX_VISIBLE = engine.maxVisibleLights;
                 const SHADOW_BUDGET = engine.maxSafeShadows;
 
@@ -194,11 +190,9 @@ export const AssetPreloader = {
                     sceneRoot.add(proxy);
                 }
 
-                const sectorIndex = sectorId ?? 0;
-                const sectorDef = SectorSystem.getSector(sectorIndex);
-
+                const sectorDef = SectorSystem.getSector(sectorId ?? 0);
                 if (sectorDef) {
-                    const warmupCtx = SectorGenerator.createWarmupContext(scene, sectorIndex, yieldToMain);
+                    const warmupCtx = SectorGenerator.createWarmupContext(scene, sectorId ?? 0, yieldToMain);
                     await SectorGenerator.build(warmupCtx, sectorDef);
                 }
 
@@ -207,10 +201,9 @@ export const AssetPreloader = {
                 sceneRoot.add(dummyFlashlight);
                 sceneRoot.add(dummyFlashlight.target);
 
-                const bossData = BOSSES[sectorIndex];
+                const bossData = BOSSES[sectorId ?? 0];
                 if (bossData) sceneRoot.add(ModelFactory.createBoss('Boss', bossData));
 
-                // Hide logical lights to ensure shader compiles only against proxies and the flashlight
                 let lampsInScene = 0;
                 scene.traverse((obj) => {
                     if (obj instanceof THREE.PointLight) {
@@ -222,12 +215,20 @@ export const AssetPreloader = {
                 });
                 console.log(`[AssetPreloader] SECTOR: Compiling strict shader for ${lampsInScene} proxied light(s).`);
             }
-
             endInternal('scene_inject');
 
-            // 3. SMART COMPILE SHARED POOL
+            // =========================================================
+            // PHASE 3: SMART COMPILE SHARED POOL
+            // =========================================================
             beginInternal('compilation');
-            if (!sharedPoolCompiled && sharedPoolPopulated) {
+
+            // Check what type of environment we are requesting warming for
+            const currentTargetType = isCamp ? 'CAMP' : 'SECTOR';
+
+            // If we switch from Camp to Sector (or vice versa), we MUST recompile the entire pool!
+            if (sharedPoolCompiledTarget !== currentTargetType && sharedPoolPopulated) {
+                console.log(`[AssetPreloader] Context shift detected (${sharedPoolCompiledTarget} -> ${currentTargetType}). Recompiling Shared Pool...`);
+
                 const dummyRoot = new THREE.Group();
                 scene.add(dummyRoot);
 
@@ -282,7 +283,9 @@ export const AssetPreloader = {
                     dummyRoot.children[i].visible = false;
                 }
                 scene.remove(dummyRoot);
-                sharedPoolCompiled = true;
+
+                // Save the pool of what's it's configured for
+                sharedPoolCompiledTarget = currentTargetType;
             }
 
             // 4. COMPILE SCENE SPECIFICS & WARMUP FRAME
@@ -319,8 +322,6 @@ export const AssetPreloader = {
 
         const add = (obj: THREE.Object3D, createInstanced: boolean = true, forceShadow: boolean = false) => {
             obj.visible = false;
-
-            // Force disable matrix updates for the root object to save CPU
             obj.matrixAutoUpdate = false;
             obj.updateMatrix();
 
@@ -330,7 +331,6 @@ export const AssetPreloader = {
             while (_traverseStack.length > 0) {
                 const current = _traverseStack.pop() as any;
 
-                // Disable auto update for all children traversing the tree
                 current.matrixAutoUpdate = false;
                 current.updateMatrix();
 
@@ -350,11 +350,8 @@ export const AssetPreloader = {
                     if (createInstanced && !current.isInstancedMesh) {
                         const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
                         iMesh.visible = false;
-
-                        // Enforce static matrix on InstancedMesh wrappers
                         iMesh.matrixAutoUpdate = false;
                         iMesh.updateMatrix();
-
                         iMesh.setMatrixAt(0, _dummyMatrix);
                         iMesh.castShadow = mesh.castShadow;
                         iMesh.receiveShadow = mesh.receiveShadow;
@@ -453,28 +450,13 @@ export const AssetPreloader = {
         add(new THREE.LineSegments(outlineGeo, outlineMat), false);
     },
 
-    isWarmedUp: (module: string = 'CORE') => warmedModules.has(module),
-
-    reset: () => {
-        warmedModules.clear();
-        activePromises.clear();
-        lastSectorIndex = -1;
-        sharedPoolPopulated = false;
-        sharedPoolCompiled = false;
-        sharedPool.length = 0;
-    },
-
-    resetCompilationOnly: () => {
-        warmedModules.clear();
-        activePromises.clear();
-        sharedPoolCompiled = false;
-    },
-
     getLastSectorIndex: () => lastSectorIndex,
+
     setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; },
 
     releaseSectorAssets: (index: number) => {
         const moduleKey = `SECTOR_${index}`;
         if (warmedModules.has(moduleKey)) warmedModules.delete(moduleKey);
     }
+
 };

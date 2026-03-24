@@ -12,6 +12,7 @@ export const sv = {
         game_title_2: "DÖD",
         sp: "FP",
         kills: "DÖDADE",
+        begin: "BÖRJA",
         level: "NIVÅ",
         level_up: "NIVÅ UPP!",
         xp: "EP",

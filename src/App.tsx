@@ -454,6 +454,23 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, currentSector: sectorIndex }));
     }, []);
 
+    const handleReturnToCamp = useCallback(() => {
+        soundManager.playUiConfirm();
+
+        triggerLoadingTransition('CAMP', async () => {
+            setGameState(prev => {
+                AssetPreloader.releaseSectorAssets(prev.currentSector);
+
+                const isCleared = prev.deadBossIndices.includes(prev.currentSector);
+                const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
+
+                return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
+            });
+            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+            await AssetPreloader.warmupAsync('CAMP', CAMP_SCENE, yieldToMain);
+        });
+    }, [triggerLoadingTransition]);
+
     const handleStartSector = useCallback(async () => {
         const { gameState: currentGameState } = latestStateRef.current;
         const sectorIndex = currentGameState.currentSector;
@@ -468,6 +485,18 @@ const App: React.FC = () => {
             await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
         });
     }, [triggerLoadingTransition]);
+
+    const handleRespawnSector = useCallback(() => {
+        soundManager.playUiConfirm();
+
+        // Respawn is instant. Since the sector has already been played, all 
+        // shaders and models are already in memory. No AssetPreloader or loading screen is needed.
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        setSectorStats(null);
+        setDeathDetails(null);
+        setActiveCollectible(null);
+        setActiveOverlay(null);
+    }, []);
 
     const handleAbortSector = useCallback(() => {
         if (!gameCanvasRef.current) return;
@@ -504,32 +533,6 @@ const App: React.FC = () => {
         soundManager.playUiClick();
     }, []);
     const handleOverlayClose = useCallback(() => setActiveOverlay(null), []);
-
-    // Memoized Actions for Report Screen
-    const handleReturnToCamp = useCallback(() => {
-        soundManager.playUiConfirm();
-        triggerLoadingTransition('CAMP', async () => {
-            setGameState(prev => {
-                const isCleared = prev.deadBossIndices.includes(prev.currentSector);
-                const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
-                return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
-            });
-            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-            await AssetPreloader.warmupAsync('CAMP', CAMP_SCENE, yieldToMain);
-        });
-    }, [triggerLoadingTransition]);
-
-    const handleRespawnSector = useCallback(() => {
-        soundManager.playUiConfirm();
-
-        // Respawn is instant. Since the sector has already been played, all 
-        // shaders and models are already in memory. No AssetPreloader or loading screen is needed.
-        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
-        setSectorStats(null);
-        setDeathDetails(null);
-        setActiveCollectible(null);
-        setActiveOverlay(null);
-    }, []);
 
     const globalInputActions = React.useMemo(() => ({
         setActiveOverlay,
@@ -822,7 +825,8 @@ const App: React.FC = () => {
 
             <ScreenLoading
                 isDone={!showLoadingOverlay}
-                sectorIndex={gameState.currentSector}
+                sectorIndex={gameState.screen === GameScreen.PROLOGUE ? 0 : (gameState.currentSector || 0)}
+                isPrologue={gameState.screen === GameScreen.PROLOGUE}
                 isCamp={loadingTargetIsCamp}
                 isInitialBoot={isInitialBoot}
                 isMobileDevice={isMobileDevice}
