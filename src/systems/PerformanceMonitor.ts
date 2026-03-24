@@ -19,7 +19,9 @@ export class PerformanceMonitor {
     private timings: Float32Array;
     private startTimes: Float32Array;
 
+    // --- HÄR ÄR DEN SAKNADE VARIABELN ---
     private _lastFrameTotal: number = 0;
+
     private _consoleLoggingEnabled: boolean = true;
     private _aiLoggingEnabled: boolean = true;
     private _shaderLoggingEnabled: boolean = true;
@@ -65,6 +67,8 @@ export class PerformanceMonitor {
     // --- RECORDING STATE ---
     private _reports: Record<string, number[]> = {};
     private _isRecording = false;
+    private _recordingPending = false;
+    private _recordingFramesLeft = 0;
 
     constructor() {
         this.timings = new Float32Array(this.MAX_SYSTEMS);
@@ -86,6 +90,15 @@ export class PerformanceMonitor {
         for (let i = 0; i < this._systemCount; i++) {
             this.timings[i] = 0;
             this.startTimes[i] = 0;
+        }
+
+        // --- INSPELNINGSLOGIK (Frame Count) ---
+        if (this._isRecording) {
+            this._recordingFramesLeft--;
+            if (this._recordingFramesLeft <= 0) {
+                this._isRecording = false;
+                this.dumpReport();
+            }
         }
 
         const now = performance.now();
@@ -198,7 +211,7 @@ export class PerformanceMonitor {
         const time = performance.now() - start;
         this.timings[idx] += time;
 
-        // Only allocates arrays during the specific 5-second debug window
+        // Spara enbart data till arrayer när vi befinner oss i aktiv inspelning
         if (this._isRecording) {
             if (!this._reports[id]) this._reports[id] = [];
             this._reports[id].push(time);
@@ -220,19 +233,56 @@ export class PerformanceMonitor {
     // ============================================================================
 
     public startRecording() {
-        if (this._isRecording) return;
-        this._isRecording = true;
-        this._reports = {};
-        console.log("🔴 [WinterEngine] Recording performance data for 5 seconds...");
+        if (this._isRecording || this._recordingPending) return;
+        this._recordingPending = true;
+
+        console.log("⏳ [WinterEngine] Recording starting in 2 seconds. Close the menu!");
 
         setTimeout(() => {
-            this._isRecording = false;
-            this.dumpReport();
-        }, 5000);
+            this._recordingPending = false;
+            this._isRecording = true;
+            this._recordingFramesLeft = 300; // 5 sekunder i 60 FPS
+            this._reports = {};
+            console.log("🔴 [WinterEngine] Recording active gameplay for 300 frames...");
+        }, 2000);
+    }
+
+    // Returnerar true om vi antingen väntar (delay) eller faktiskt spelar in
+    public get isRecordingActive(): boolean {
+        return this._isRecording || this._recordingPending;
     }
 
     private dumpReport() {
-        console.log("📊 --- WINTER ENGINE PERFORMANCE REPORT ---");
+        console.log("📊 ========================================================");
+        console.log("📊 --- WINTER ENGINE 300-FRAME PERFORMANCE REPORT ---");
+        console.log("📊 ========================================================");
+
+        // Refresh caches before dumping
+        const world = this.getFormattedGameState();
+        const render = this.getFormattedRendererStats();
+        const gc = this.getFormattedGcInfo();
+
+        // 1. WORLD & MEMORY
+        console.log("🌍 [WORLD & MEMORY]");
+        console.log(`   Player: X:${world.playerX}, Z:${world.playerZ} | Cam: ${world.camX}, ${world.camY}, ${world.camZ}`);
+        console.log(`   Entities: ${world.enemies} Enemies | ${world.objects} Objects`);
+        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB (Dropped: ${gc.droppedMB} MB)`);
+
+        // 2. RENDERER
+        console.log("🎨 [RENDERER]");
+        console.log(`   Draw Calls: ${render.drawCalls}`);
+        console.log(`   Triangles:  ${render.triangles}k`);
+        console.log(`   Geometries: ${render.geometries} | Textures: ${render.textures}`);
+        console.log(`   Shaders:    ${render.shaderPrograms} (Recompiles during 300 frames: ${render.shaderRecompiles})`);
+
+        // 3. SYSTEMS
+        console.log("⚙️  [SYSTEMS]");
+        // Get all systems that registered a time > 0 during the recording
+        const activeSystems = Object.keys(this._reports).filter(k => this._reports[k].length > 0);
+        console.log(`   Active tracked systems: ${activeSystems.join(', ')}`);
+
+        // 4. TIMINGS
+        console.log("⏱️  [CPU TIMINGS (Avg over 300 frames)]");
         const report: any = {};
         let totalFrameTime = 0;
 
@@ -241,7 +291,7 @@ export class PerformanceMonitor {
             let sum = 0;
             for (let i = 0; i < times.length; i++) sum += times[i];
             const avg = sum / times.length;
-            report[id] = `${avg.toFixed(2)} ms (avg over ${times.length} samples)`;
+            report[id] = `${avg.toFixed(2)} ms`;
 
             // Only sum top-level domains to prevent counting sub-systems twice
             if (id === 'logic' || id === 'camera' || id === 'render') {
@@ -249,8 +299,8 @@ export class PerformanceMonitor {
             }
         }
         console.table(report);
-        console.log(`⏱️ Average Total Frame Time: ${totalFrameTime.toFixed(2)} ms (Target for 60fps is 16.6ms)`);
-        console.log("------------------------------------------");
+        console.log(`🔥 Avg Total Frame Time: ${totalFrameTime.toFixed(2)} ms (Target for 60FPS: 16.6ms)`);
+        console.log("==========================================================");
     }
 
     // ============================================================================
@@ -270,7 +320,6 @@ export class PerformanceMonitor {
 
     public getFormattedRendererStats() {
         this._rendererStatsCache.drawCalls = this._drawCalls;
-        // Divide by 1000 and round to 1 decimal (e.g., 12543 -> 12.5)
         this._rendererStatsCache.triangles = Math.round((this._triangles / 1000) * 10) / 10;
         this._rendererStatsCache.shaderPrograms = this._shaderPrograms;
         this._rendererStatsCache.shaderRecompiles = this._shaderRecompileCount;
@@ -291,7 +340,6 @@ export class PerformanceMonitor {
         let total = 0;
         for (let i = 0; i < this._systemCount; i++) {
             const time = this.timings[i];
-            // Math.round(val * 100) / 100 keeps max 2 decimals without string casting
             this._formattedTimingsCache.breakdown[this._keys[i]] = Math.round(time * 100) / 100;
             total += time;
         }
@@ -330,10 +378,6 @@ export class PerformanceMonitor {
         return this._timingsObject;
     }
 
-    /**
-     * Detection for heavy frames. 
-     * Zero-GC logic wrapper: No string concatenation until absolutely necessary.
-     */
     public printIfHeavy(context: string, totalTime: number, threshold: number = 50) {
         this._lastFrameTotal = totalTime;
 

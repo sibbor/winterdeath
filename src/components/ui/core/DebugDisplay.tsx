@@ -36,6 +36,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                     renderer: monitor.getFormattedRendererStats(),
                     gc: monitor.getFormattedGcInfo(),
                     timings: monitor.getFormattedTimings(),
+                    recordingState: monitor.isRecordingActive,
                     logging: {
                         engine: monitor.consoleLoggingEnabled,
                         ai: monitor.aiLoggingEnabled,
@@ -160,13 +161,17 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                         <div className="flex justify-between items-center mb-1">
                             <div className="text-white/40 uppercase text-[10px]">Logging</div>
                             <button
+                                disabled={stats.recordingState}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     PerformanceMonitor.getInstance().startRecording();
                                 }}
-                                className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 px-1.5 py-0.5 rounded cursor-pointer transition-colors font-bold tracking-wider"
+                                className={`px-2 py-0.5 rounded transition-colors font-bold tracking-wider ${stats.recordingState
+                                    ? 'bg-gray-500/20 text-gray-400 cursor-not-allowed animate-pulse'
+                                    : 'bg-red-500/20 text-red-300 hover:bg-red-500/40 cursor-pointer'
+                                    }`}
                             >
-                                DUMP 5S
+                                {stats.recordingState ? 'RECORDING...' : 'RECORD'}
                             </button>
                         </div>
                         <div onClick={(e) => { e.stopPropagation(); PerformanceMonitor.getInstance().consoleLoggingEnabled = !stats.logging.engine; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
