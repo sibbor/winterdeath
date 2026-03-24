@@ -261,6 +261,11 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
 
                     {/* Mobile/Portrait Bottom Buttons */}
                     <div className={`flex md:hidden gap-4 w-full mb-6 ${isLandscapeMode ? 'hidden' : ''}`}>
+                        {debugAction && (
+                            <button onClick={handleDebugInternal} className={`${BUTTON_STYLE} ${BTN_DEBUG}`}>
+                                {debugAction.label}
+                            </button>
+                        )}
                         {(onCancel || (onClose && showCloseButton)) && showCancel && (
                             <button onClick={handleCancelInternal} className={`${BUTTON_STYLE} ${BTN_CANCEL}`}>
                                 {cancelLabel || t('ui.close')}

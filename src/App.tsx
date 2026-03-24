@@ -675,6 +675,7 @@ const App: React.FC = () => {
                     onClose={handleCloseAction}
                     onMarkCollectiblesViewed={handleMarkCollectiblesViewedAction}
                     isMobileDevice={isMobileDevice}
+                    debugMode={gameState.debugMode}
                 />
             )}
 
@@ -691,6 +692,7 @@ const App: React.FC = () => {
                     stats={gameState.stats}
                     onClose={handleOverlayClose}
                     isMobileDevice={isMobileDevice}
+                    debugMode={gameState.debugMode}
                 />
             )}
 

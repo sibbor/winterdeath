@@ -1,9 +1,8 @@
 
 export interface CollectibleDefinition {
     id: string;
-    nameKey: string;
-    descriptionKey: string;
     sector: number;
+    index: number;
     modelType: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy';
     reward: {
         sp: number;
@@ -14,17 +13,15 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
     // Sector 1
     's1_collectible_1': {
         id: 's1_collectible_1',
-        nameKey: 'clues.s1_collectible_1_title',
-        descriptionKey: 'clues.s1_collectible_1_description',
         sector: 1,
+        index: 0,
         modelType: 'phone',
         reward: { sp: 1 }
     },
     's1_collectible_2': {
         id: 's1_collectible_2',
-        nameKey: 'clues.s1_collectible_2_title',
-        descriptionKey: 'clues.s1_collectible_2_description',
         sector: 1,
+        index: 1,
         modelType: 'axe',
         reward: { sp: 1 }
     },
@@ -32,17 +29,15 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
     // Sector 2
     's2_collectible_1': {
         id: 's2_collectible_1',
-        nameKey: 'clues.s2_collectible_1_title',
-        descriptionKey: 'clues.s2_collectible_1_description',
         sector: 2,
+        index: 0,
         modelType: 'pacifier',
         reward: { sp: 1 }
     },
     's2_collectible_2': {
         id: 's2_collectible_2',
-        nameKey: 'clues.s2_collectible_2_title',
-        descriptionKey: 'clues.s2_collectible_2_description',
         sector: 2,
+        index: 1,
         modelType: 'teddy',
         reward: { sp: 1 }
     },
@@ -50,17 +45,15 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
     // Sector 3
     's3_collectible_1': {
         id: 's3_collectible_1',
-        nameKey: 'clues.s3_collectible_1_title',
-        descriptionKey: 'clues.s3_collectible_1_description',
         sector: 3,
+        index: 0,
         modelType: 'diary',
         reward: { sp: 1 }
     },
     's3_collectible_2': {
         id: 's3_collectible_2',
-        nameKey: 'clues.s3_collectible_2_title',
-        descriptionKey: 'clues.s3_collectible_2_description',
         sector: 3,
+        index: 1,
         modelType: 'jacket',
         reward: { sp: 1 }
     },
@@ -68,17 +61,15 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
     // Sector 4
     's4_collectible_1': {
         id: 's4_collectible_1',
-        nameKey: 'clues.s4_collectible_1_title',
-        descriptionKey: 'clues.s4_collectible_1_description',
         sector: 4,
+        index: 0,
         modelType: 'ring',
         reward: { sp: 1 }
     },
     's4_collectible_2': {
         id: 's4_collectible_2',
-        nameKey: 'clues.s4_collectible_2_title',
-        descriptionKey: 'clues.s4_collectible_2_description',
         sector: 4,
+        index: 1,
         modelType: 'badge',
         reward: { sp: 1 }
     },
@@ -86,9 +77,8 @@ export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
     // Sector 6 (Playground Test)
     'dummy_badge_test': {
         id: 'dummy_badge_test',
-        nameKey: 'clues.s4_collectible_2_title',
-        descriptionKey: 'clues.s4_collectible_2_description',
         sector: 6,
+        index: 0,
         modelType: 'badge',
         reward: { sp: 0 }
     }

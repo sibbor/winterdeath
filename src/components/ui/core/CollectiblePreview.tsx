@@ -51,6 +51,14 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
     const [isVisible, setIsVisible] = useState(false);
     const [isReady, setIsReady] = useState(false);
 
+    // [VINTERDÖD] Optimization: Use refs for THREE objects to ensure they are 
+    // preserved during visibility changes but disposed of correctly on unmount.
+    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const meshRef = useRef<THREE.Object3D | null>(null);
+    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const groupRef = useRef<THREE.Group | null>(null);
+
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(
@@ -63,11 +71,12 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
 
     useEffect(() => {
         if (isVisible && !isLocked) {
-            const timer = setTimeout(() => setIsReady(true), 250);
+            const timer = setTimeout(() => setIsReady(true), 150);
             return () => clearTimeout(timer);
         }
     }, [isVisible, isLocked]);
 
+    // --- THREE.js INITIALIZATION ---
     useEffect(() => {
         if (!isReady || isLocked || !containerRef.current) return;
 
@@ -101,7 +110,6 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         const originalMesh = ModelFactory.createCollectible(type);
         const mesh = originalMesh.clone();
 
-        // Optimized cloning: Avoid .map() to keep memory flat
         mesh.traverse((child: any) => {
             if (child.isMesh && child.material) {
                 if (Array.isArray(child.material)) {
@@ -123,33 +131,50 @@ const CollectiblePreview: React.FC<CollectiblePreviewProps> = ({ type, isLocked 
         group.add(mesh);
         scene.add(group);
 
-        let animeId: number;
-        let isRunning = true;
+        // Store refs for animation loop and explicit cleanup
+        rendererRef.current = renderer;
+        sceneRef.current = scene;
+        meshRef.current = mesh;
+        cameraRef.current = camera;
+        groupRef.current = group;
 
+        return () => {
+            // Explicit disposal only on unmount or key data change (type)
+            mesh.traverse(disposeNode);
+            scene.clear();
+            renderer.dispose();
+            renderer.forceContextLoss();
+            if (container.contains(renderer.domElement)) {
+                container.removeChild(renderer.domElement);
+            }
+            rendererRef.current = null;
+            sceneRef.current = null;
+            meshRef.current = null;
+            cameraRef.current = null;
+            groupRef.current = null;
+        };
+    }, [type, isLocked, isReady]);
+
+    // --- ANIMATION LOOP ---
+    // Controlled independently by isVisible to allow pausing without re-allocating
+    useEffect(() => {
+        const renderer = rendererRef.current;
+        const scene = sceneRef.current;
+        const group = groupRef.current;
+        const camera = cameraRef.current;
+
+        if (!renderer || !scene || !group || !camera || !isVisible) return;
+
+        let animeId: number;
         const animate = () => {
-            if (!isRunning) return;
             animeId = requestAnimationFrame(animate);
             group.rotation.y += 0.03;
             renderer.render(scene, camera);
         };
+        
         animate();
-
-        return () => {
-            isRunning = false;
-            cancelAnimationFrame(animeId);
-
-            // Using our static, non-allocating cleanup logic
-            mesh.traverse(disposeNode);
-
-            scene.clear();
-            renderer.dispose();
-            renderer.forceContextLoss();
-
-            if (container.contains(renderer.domElement)) {
-                container.removeChild(renderer.domElement);
-            }
-        };
-    }, [type, isLocked, isReady]);
+        return () => cancelAnimationFrame(animeId);
+    }, [isVisible, isReady]);
 
     return (
         <div ref={containerRef} className="w-full h-full relative bg-black/20 flex items-center justify-center overflow-hidden">

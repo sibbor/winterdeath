@@ -156,7 +156,7 @@ export class PlayerStatsSystem implements System {
         let actualDmg = damage * state.multipliers.damageResist;
 
         //if (PerformanceMonitor.getInstance().consoleLoggingEnabled) {
-        console.log(`[PLAYER] HIT | HP: ${state.hp.toFixed(0)} | -${actualDmg.toFixed(1)} (${type}) from ${attacker?.type || 'Other'}${isDoT ? ' [DoT]' : ''} | Effect: ${effectType || 'None'} (${effectDuration || 0}ms)`);
+        //console.log(`[PLAYER] HIT | HP: ${state.hp.toFixed(0)} | -${actualDmg.toFixed(1)} (${type}) from ${attacker?.type || 'Other'}${isDoT ? ' [DoT]' : ''} | Effect: ${effectType || 'None'} (${effectDuration || 0}ms)`);
         //}
 
 

@@ -290,15 +290,15 @@ export const Sector2: SectorDef = {
         if (!ctx.isWarmup) {
             // Triggers produce no GPU state — skip during preloader ghost-render
             SectorGenerator.addTriggers(ctx, [
-                { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHT', content: "clues.s2_start", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEAK', content: "clues.s2_combat", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEAK', content: "clues.s2_cave_lights", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEAK', content: "clues.s2_cave_loot", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEAK', content: "clues.s2_cave_loot_more", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-                { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'POI', content: "clues.s2_campfire", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-                { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'POI', content: "clues.s2_train_tunnel", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-                { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: 'POI', content: "clues.s2_cave_watch_out", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-                { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'POI', content: "clues.s2_cave_shelter_port_room", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
+                { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHT', content: "clues.1.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+                { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEAK', content: "clues.1.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+                { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEAK', content: "clues.1.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+                { id: 's2_cave_loot', position: LOCATIONS.TRIGGERS.CAVE_LOOT_1, radius: 15, type: 'SPEAK', content: "clues.1.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+                { id: 's2_cave_loot_more', position: LOCATIONS.TRIGGERS.CAVE_LOOT_2, radius: 15, type: 'SPEAK', content: "clues.1.4.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+                { id: 's2_poi_campfire', position: LOCATIONS.POIS.CAMPFIRE, radius: 10, type: 'POI', content: "pois.1.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+                { id: 's2_poi_train_tunnel', position: LOCATIONS.POIS.TRAIN_TUNNEL, radius: 15, type: 'POI', content: "pois.1.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+                { id: 's2_poi_cave_entrance', position: LOCATIONS.POIS.CAVE_ENTRANCE, radius: 15, type: 'POI', content: "pois.1.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+                { id: 's2_poi_mountain_vault', position: LOCATIONS.POIS.BOSS_ROOM, radius: 30, type: 'POI', content: "pois.1.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
             ]);
         }
 

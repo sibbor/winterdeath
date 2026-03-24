@@ -102,7 +102,6 @@ const _bufferA = createHudBuffer();
 const _bufferB = createHudBuffer();
 let _useBufferA = true;
 
-// Math helper for quick decimal truncation (much faster than .toFixed())
 const truncate1 = (val: number) => Math.round(val * 10) / 10;
 const truncate2 = (val: number) => Math.round(val * 100) / 100;
 

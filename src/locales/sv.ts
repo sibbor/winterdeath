@@ -468,87 +468,104 @@ export const sv = {
         sotis: ["Mjau."],
         panter: ["Mjau?"]
     },
-    // DON'T AUTO-TRANSLATE EXISTING ENTIRES IN 'clues', BUT CREATE NON-EXISTING ONES
     clues: {
-        // Sector 1 Triggers
-        s1_collectible_1_title: "Lokes telefon",
-        s1_collectible_1_description: "Skärmen är sprucken och flimrar, men vissa detaljer syns. Lokes sista försök var ett meddelande till mig:\n'Pappa!! Kan inte ringa dig! Hjälp oss! Någon satte eld på vår bil och försöker bryta sig in. RING NU!! Vi springer mot D[...]'\n'Meddelandet kunde inte skickas. Försök igen?' är skrivet i rött nertill...",
-        s1_collectible_2_title: "Lokes handyxa",
-        s1_collectible_2_description: "Handyxan som jag har gett till Loke. Den han alltid använder när han hjälper mig med veden eller hugga ned träd hemma. Han måste ha tagit med sig den för att försvara sig.",
-
-        s1_start_tracks: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?",
-        s1_blood_stains: "Blodfläckar! Är de skadade?!",
-        s1_they_must_be_scared: "Det är kaos! De måste vara livrädda.",
-        s1_still_tracking: "Spåren fortsätter i den här riktningen.",
-        s1_town_center: "Spåren försvinner... de måste vara här någonstans.",
-
-        s1_event_tunnel_blocked: "Hmm... Tunneln till tågstationen blockeras av en krocked buss.",
-        s1_event_tunnel_whats_happening: "Vilken explosion! Vad i HELVETE var det?! Det kom från tågvagnshallen!",
-        s1_event_tunnel_plant_explosives: "Låt oss rensa tunneln genom att spränga den där jävla bussen!",
-        s1_event_tunnel_cleared: "Tunneln rensad. Smidigt!",
-        s1_event_tunnel_explosion_attracted_zombies: "Helvete! Explosionen lockade till sig zombies!",
-
-        s1_poi_building_on_fire: "Helvete! SMU-gården brinner!",
-        s1_poi_church: "Kyrkan brinner... Satans verk?",
-        s1_poi_cafe: "Åh, jag saknar att sitta på caféet med min familj.",
-        s1_poi_pizzeria: "Uppskattar alltid att köra 'PIZZA TIME!' med min familjen här.",
-        s1_poi_gym: "Brukade lyfta skrot här. Riktigt jävla tungt skrot.",
-        s1_poi_grocery: "Mataffären verkar plundrad...",
-        s1_poi_train_yard: "Hmm... röken kommer från tåget.",
-
-        // Sector 2 Triggers
-        s2_collectible_1_title: "Jordans favoritnapp",
-        s2_collectible_1_description: "Den är liten, blå och täckt av frost. Jordan går aldrig någonstans utan den. Han måste ha tappat den när de sprang in i grottorna.",
-        s2_collectible_2_title: "Jordans nallebjörn",
-        s2_collectible_2_description: "Jordans favoritnalle. Den saknar ett öga och luktar av grottans fukt. Han måste ha tappat den när de sprang in i mörkret.",
-
-        s2_start: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss...",
-        s2_combat: "FAN! Zombier överallt. Fortsätt kämpa, Loke! Vi fixar det här.",
-        s2_mountain: "Åh, grottingången. Låt oss se om de gömmer sig där inne!",
-        s2_campfire: "En lägereld. Någon måste ha varit här nyligen. Tror du att det är dem?",
-        s2_cave_lights: "Elektriskt ljus. Generatorn körs...",
-        s2_cave_watch_out: "Loke, håll dig nära. Jag hör något.",
-        s2_cave_loot: "Gamla militärförråd. Låt oss se vad vi kan hitta.",
-        s2_cave_loot_more: "Mer förnödenheter. Det mesta är redan plundrat. Av vem?! Nathalie? Esmeralda? Jordan?",
-        s2_cave_shelter_port_room: "Dessa enorma dörrar måste leda till skyddsrummet. Låt oss hoppas att de är inuti!",
-        s2_train_tunnel: "Tunneln är blockerad. Låt oss gå åt ett annat håll.",
-        s2_tunnel: "Den här tunneln ser ut att ha lett ut till andra sidan berget.",
-
-        // Sector 3 Triggers
-        s3_collectible_1_title: "Esmeraldas dagbok",
-        s3_collectible_1_description: "En liten anteckningsbok med blommor på omslaget. Sista sidan handlar om hur mycket hon saknar sina vänner... och hur rädd hon är för mörkret i skogen.",
-        s3_collectible_2_title: "Esmeraldas jacka",
-        s3_collectible_2_description: "Esmeraldas favoritjacka. Den är sönderriven och har blodfläckar på ärmen. Det knyter sig i magen... jag hoppas det inte är hennes blod.",
-
-        s3_forest_noise: "Skogen är för högljudd. Varje kvist som bryts låter som en löpare...",
-        s3_mast_sight: "Där är den. Häglaredsmasten. Om Esmeralda är någonstans, så är hon där.",
-
-        // Sector 4 Triggers
-        s4_collectible_1_title: "Nathalies förlovningsring",
-        s4_collectible_1_description: "En guldring med en stor vit diamant; på insidan en inskription: 'För alltid vi'. Den är kall, men minnena den bär på bränner i handen.",
-        s4_collectible_2_title: "Nathalies polisbricka",
-        s4_collectible_2_description: "Nathalies kriminalinspektörsbricka. Den är repad och lite svedd i kanten. Hon måste ha tappat den under striden på skroten. Hon ger aldrig upp sitt märke frivilligt.",
-
-        s4_noise: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?",
-        s4_shed: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne."
+        "0": {
+            "0": { reaction: "Skoavtryck! De gick åt det här hållet... vad menade Loke med 'D'?" },
+            "1": { reaction: "Blodfläckar! Är de skadade?!" },
+            "2": { reaction: "Det är kaos! De måste vara livrädda." },
+            "3": { reaction: "Spåren fortsätter i den här riktningen." },
+            "4": { reaction: "Spåren försvinner... de måste vara här någonstans." },
+            "5": { reaction: "Hmm... Tunneln till tågstationen blockeras av en krocked buss." },
+            "6": { reaction: "Vilken explosion! Vad i HELVETE var det?! Det kom från tågvagnshallen!" },
+            "7": { reaction: "Låt oss rensa tunneln genom att spränga den där jävla bussen!" },
+            "8": { reaction: "Tunneln rensad. Smidigt!" },
+            "9": { reaction: "Helvete! Explosionen lockade till sig zombies!" }
+        },
+        "1": {
+            "0": { reaction: "Loke sa att de andra följde dessa skenor. Låt oss se vart det leder oss..." },
+            "1": { reaction: "FAN! Zombier överallt. Fortsätt kämpa, Loke! Vi fixar det här." },
+            "2": { reaction: "Elektriskt ljus. Generatorn körs..." },
+            "3": { reaction: "Gamla militärförråd. Låt oss se vad vi kan hitta." },
+            "4": { reaction: "Mer förnödenheter. Det mesta är redan plundrat. Av vem?! Nathalie? Esmeralda? Jordan?" }
+        },
+        "2": {
+            "0": { reaction: "Skogen är för högljudd. Varje kvist som bryts låter som en löpare..." },
+            "1": { reaction: "Stackars jävlar... Barn, titta bort!" },
+            "2": { reaction: "Nice traktor. Undrar om den fungerar?" }
+        },
+        "3": {
+            "0": { reaction: "Metallen gnisslar i vinden. Eller är det 'Titanen' som Nathalie nämnde?" }
+        }
     },
-    poi: {
-        s1_poi_building_on_fire_title: "Brinnande Byggnad",
-        s1_poi_building_on_fire_story: "Den gamla SMU-gården står i lågor. Oklart om det var zombier eller överlevande som startade elden, men det är en dyster fyr i natten.",
-        s1_poi_church_title: "Byns Kyrka",
-        s1_poi_church_story: "Inte ens Guds hus kunde skydda dem. Dörrarna är uppbrutna och kyrkbänkarna är fläckade av blod.",
-        s1_poi_cafe_title: "Lokala Kaféet",
-        s1_poi_cafe_story: "Vi brukade komma hit på söndagar. Nu är fönstren krossade och doften av kaffe har ersatts av ruttet kött.",
-        s1_poi_pizzeria_title: "Pizzerian",
-        s1_poi_pizzeria_story: "Den lokala pizzerian. Ugnarna är kalla, men något annat kanske tillagas i mörkret.",
-        s1_poi_grocery_title: "Mataffären",
-        s1_poi_grocery_story: "Helt plundrad. Hyllorna gapar tomma, men någon kan ha lämnat skrot eller ammunition bakom sig i paniken.",
-        s1_poi_gym_title: "Gymmet",
-        s1_poi_gym_story: "En plats för att bygga styrka. Ironiskt nog är de starkaste här nu de döda.",
-        s1_poi_train_yard_title: "Gånghester Station",
-        s1_poi_train_yard_story: "Den gamla järnvägsstationen. Det skedde en massiv explosion här, vilket blockerar tunneln ut ur staden."
+    pois: {
+        "0": {
+            "0": { title: "SMU-gården", description: "Den gamla SMU-gården står i lågor. Oklart om det var zombier eller överlevande som startade elden, men det är en dyster fyr i natten.", reaction: "Helvete! SMU-gården brinner!" },
+            "1": { title: "Kyrkan", description: "Inte ens Guds hus kunde skydda dem. Dörrarna är uppbrutna och kyrkbänkarna är fläckade av blod.", reaction: "Kyrkan brinner... Satans verk?" },
+            "2": { title: "Café 9:an", description: "Vi brukade komma hit på söndagar. Nu är fönstren krossade och doften av kaffe har ersatts av ruttet kött.", reaction: "Åh, jag saknar att sitta på caféet med min familj." },
+            "3": { title: "Gånghester Pizzeria", description: "Den lokala pizzerian. Ugnarna är kalla, men något annat kanske tillagas i mörkret.", reaction: "Uppskattar alltid att köra 'PIZZA TIME!' med min familjen här." },
+            "4": { title: "Ica Hjärtat", description: "Helt plundrad. Hyllorna gapar tomma, men någon kan ha lämnat skrot eller ammunition bakom sig i paniken.", reaction: "Mataffären verkar plundrad..." },
+            "5": { title: "Gym Gånghester", description: "En plats för att bygga styrka. Ironiskt nog är de starkaste här nu de döda.", reaction: "Brukade lyfta skrot här. Riktigt jävla tungt skrot." },
+            "6": { title: "Gånghester tågstation", description: "Den gamla järnvägsstationen. Det skedde en massiv explosion här, vilket blockerar tunneln ut ur staden.", reaction: "Hmm... röken kommer från tåget." }
+        },
+        "1": {
+            "0": { title: "Övergiven lägereld", description: "Någon har varit här nyligen. Glöden är fortfarande varm. De måste ha gett sig av i all hast.", reaction: "En lägereld. Någon måste ha varit här nyligen. Tror du att det är dem?" },
+            "1": { title: "Blockerad tunnel", description: "Tunneln som förbinder berget. Den är helt förseglad med rasmassor och bråte.", reaction: "Tunneln är blockerad. Låt oss gå åt ett annat håll." },
+            "2": { title: "Grottingång", description: "Ett mörkt gap som leder in i jorden. Det luktar fuktig sten och unken luft.", reaction: "Åh, grottingången. Låt oss se om de gömmer sig där inne!" },
+            "3": { title: "Bergrummet", description: "Ett gammalt skyddsrum från kalla kriget. De massiva ståldörrarna är tätt stängda. Min yngsta son är där inne.", reaction: "Dessa enorma dörrar måste leda till skyddsrummet. Låt oss hoppas att de är inuti!" }
+        },
+        "2": {
+            "0": { title: "Häglaredsmasten", description: "Det stora kommunikationstornet. Esmeralda gick upp dit för att laga signalen.", reaction: "Där är den. Häglaredsmasten. Om Esmeralda är någonstans, så är hon där." },
+            "1": { title: "Äggfarmen", description: "Vi brukade köpa våra ägg här. Nu kryllar gården av odöda.", reaction: "Där är farmen. Vi brukade köpa våra ägg här." },
+            "2": { title: "Brinnande bondgård", description: "Huvudbyggnaden är helt övertänd. En dyster fyr i den kalla vinternatten.", reaction: "Huset brinner... snälla Nathalie, säg att du inte är där inne." },
+            "3": { title: "Den gamla ladan", description: "Ladan brinner. De djur som fanns där inne är sedan länge borta.", reaction: "Ladan står också i ljusan låga." }
+        },
+        "3": {
+            "0": { title: "Förstärkt Skjul", description: "En liten kontorsbyggnad med en förstärkt dörr. Nathalie är instängd där inne, omgiven av mörker.", reaction: "Kontorsbyggnaden. Det är det enda stället med en förstärkt dörr. Hon måste vara där inne." },
+            "1": { title: "Skroten", description: "En labyrint av rostande metall och staplade bilar. En dödsfälla fylld av lurande fasor.", reaction: "Den gamla skroten... en perfekt plats att gömma sig. Eller dö." }
+        }
     },
-    // DON'T AUTO-TRANSLATE EXISTING ENTIRES IN 'dialogue', BUT CREATE NON-EXISTING ONES
+    collectibles: {
+        "0": {
+            "0": {
+                title: "Lokes telefon",
+                description: "Skärmen är sprucken och flimrar, men vissa detaljer syns. Lokes sista försök var ett meddelande till mig:\n'Pappa!! Kan inte ringa dig! Hjälp oss! Någon satte eld på vår bil och försöker bryta sig in. RING NU!! Vi springer mot D[...]'\n'Meddelandet kunde inte skickas. Försök igen?' är skrivet i rött nertill..."
+            },
+            "1": {
+                title: "Lokes handyxa",
+                description: "Handyxan som jag har gett till Loke. Den han alltid använder när han hjälper mig med veden eller hugga ned träd hemma. Han måste ha tagit med sig den för att försvara sig."
+            }
+        },
+        "1": {
+            "0": {
+                title: "Jordans favoritnapp",
+                description: "Den är liten, blå och täckt av frost. Jordan går aldrig någonstans utan den. Han måste ha tappat den när de sprang in i grottorna."
+            },
+            "1": {
+                title: "Jordans nallebjörn",
+                description: "Jordans favoritnalle. Den saknar ett öga och luktar av grottans fukt. Han måste ha tappat den när de sprang in i mörkret."
+            }
+        },
+        "2": {
+            "0": {
+                title: "Esmeraldas dagbok",
+                description: "En liten anteckningsbok med blommor på omslaget. Sista sidan handlar om hur mycket hon saknar sina vänner... och hur rädd hon är för mörkret i skogen."
+            },
+            "1": {
+                title: "Esmeraldas jacka",
+                description: "Esmeraldas favoritjacka. Den är sönderriven och har blodfläckar på ärmen. Det knyter sig i magen... jag hoppas det inte är hennes blod."
+            }
+        },
+        "3": {
+            "0": {
+                title: "Nathalies förlovningsring",
+                description: "En guldring med en stor vit diamant; på insidan en inskription: 'För alltid vi'. Den är kall, men minnena den bär på bränner i handen."
+            },
+            "1": {
+                title: "Nathalies polisbricka",
+                description: "Nathalies kriminalinspektörsbricka. Den är repad och lite svedd i kanten. Hon måste ha tappat den under striden på skroten. Hon ger aldrig upp sitt märke frivilligt."
+            }
+        }
+    },
     dialogue: {
         // Dialogue: Sector 1
         "0_0": "LOKE!!",
@@ -636,6 +653,6 @@ export const sv = {
         "3_23": "(Viskar i radio) /Jag distraherar monstret. Redo? KOM IN./",
         "3_24": "(Viskar i radio) /Redo. KOM IN./",
         "3_25": "(Viskar) /1... 2... 3, spring!/",
-        "3_26": "KOM OCH TA MIG DÅ, DIN JÄVEL!"
+        "3_26": "KOM OCH TA ME DIG DÅ, DIN JÄVEL!"
     }
 };

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';;
+import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
-import { ZOMBIE_TYPES, BOSSES, SECTOR_THEMES, RANKS } from '../../../../content/constants';
-import { soundManager } from '../../../../utils/SoundManager';
 import { COLLECTIBLES } from '../../../../content/collectibles';
+import { CLUES } from '../../../../content/clues';
+import { POIS } from '../../../../content/pois';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
+import { SECTOR_THEMES, ZOMBIE_TYPES, BOSSES, RANKS } from '../../../../content/constants';
+import { soundManager } from '../../../../utils/SoundManager';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -16,7 +18,6 @@ interface ScreenAdventureLogProps {
     isMobileDevice?: boolean;
     debugMode?: boolean;
 }
-
 
 type Tab = 'stats' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
@@ -69,22 +70,19 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             case 'enemy': {
                 stats.seenEnemies = Object.keys(ZOMBIE_TYPES);
                 if (!stats.killsByType) stats.killsByType = {};
-                Object.keys(ZOMBIE_TYPES).forEach(k => stats.killsByType![k] = 99);
+                Object.keys(ZOMBIE_TYPES).forEach(k => {
+                    if (stats.killsByType![k] === undefined) stats.killsByType![k] = 0;
+                });
                 break;
             }
             case 'clues': {
-                stats.cluesFound = [
-                    's1_start_tracks', 's1_blood_stains', 's1_they_must_be_scared', 's1_still_tracking', 's1_town_center',
-                    's2_start', 's2_campfire', 's2_combat', 's3_forest_noise', 's4_noise'
-                ];
+                const allClueIds = Object.keys(CLUES);
+                stats.cluesFound = [...new Set([...(stats.cluesFound || []), ...allClueIds])];
                 break;
             }
             case 'poi': {
-                stats.discoveredPOIs = [
-                    's1_poi_building_on_fire', 's1_poi_church', 's1_poi_cafe', 's1_poi_pizzeria', 's1_poi_grocery', 's1_poi_gym', 's1_poi_train_yard',
-                    's2_poi_campfire', 's2_poi_train_tunnel', 's2_poi_cave_entrance', 's2_poi_mountain_vault',
-                    's3_poi_farm', 's3_poi_farmhouse', 's3_poi_barn', 's3_poi_mast', 's4_poi_shed', 's4_poi_scrapyard'
-                ];
+                const allPoiIds = Object.keys(POIS);
+                stats.discoveredPOIs = [...new Set([...(stats.discoveredPOIs || []), ...allPoiIds])];
                 break;
             }
         }
@@ -122,7 +120,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             <div className={`flex h-full ${effectiveLandscape ? 'flex-row gap-8' : 'flex-col gap-4'}`}>
                 {/* Tabs Bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
-                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-gray-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
+                    <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
                         {tabs.map(tab => {
                             const isActive = activeTab === tab.id;
                             const pulseColor = themeColor;
@@ -149,13 +147,25 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                    {activeTab === 'stats' && <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />}
-                    {activeTab === 'enemy' && <EnemyTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />}
-                    {activeTab === 'boss' && <BossTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
-                    {activeTab === 'collectibles' && <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
-                    {activeTab === 'clues' && <CluesTab stats={stats} color={'#eab308'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
-                    {activeTab === 'poi' && <PoiTab stats={stats} color={'#3b82f6'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />}
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
+                    <div className={activeTab === 'stats' ? 'block h-full' : 'hidden'}>
+                        <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />
+                    </div>
+                    <div className={activeTab === 'enemy' ? 'block' : 'hidden'}>
+                        <EnemyTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />
+                    </div>
+                    <div className={activeTab === 'boss' ? 'block' : 'hidden'}>
+                        <BossTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                    </div>
+                    <div className={activeTab === 'collectibles' ? 'block' : 'hidden'}>
+                        <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                    </div>
+                    <div className={activeTab === 'clues' ? 'block' : 'hidden'}>
+                        <CluesTab stats={stats} color={'#eab308'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                    </div>
+                    <div className={activeTab === 'poi' ? 'block' : 'hidden'}>
+                        <PoiTab stats={stats} color={'#3b82f6'} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                    </div>
                 </div>
             </div>
         </ScreenModalLayout>
@@ -262,7 +272,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                 return (
                     <Card key={key} isLocked={!isSeen} color={itemColor}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
-                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? 'white' : '#4b5563' }}>
+                            <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
                                 {isSeen ? key : '???'}
                             </h3>
                             {isSeen && (
@@ -364,10 +374,9 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                     <div className="flex flex-col h-full">
                                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                                             <div className="flex flex-col">
-                                                <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
+                                                <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: boss ? `#${boss.color.toString(16).padStart(6, '0')}` : 'white' }}>
                                                     {t(boss.name)}
                                                 </h3>
-                                                {isDefeated && <span className="text-[10px] text-green-500 font-black uppercase tracking-widest mt-1">{t('ui.defeated')}</span>}
                                             </div>
                                         </div>
 
@@ -446,7 +455,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = stats.collectiblesDiscovered || [];
-    const sectors = [1, 2, 3, 4, 5, 6];
+    const sectors = [1, 2, 3, 4];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
@@ -487,24 +496,16 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 
 const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const cluesFound = stats.cluesFound || [];
-    const sectors = [1, 2, 3, 4, 5, 6];
+    const sectors = [1, 2, 3, 4];
 
     return (
         <div className="space-y-16 pb-12">
             {sectors.map(sectorId => {
                 const theme = SECTOR_THEMES[sectorId - 1];
+                const sectorClues = Object.values(CLUES).filter(clue => clue.sector === sectorId);
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
-
-                const sectorClues = cluesFound.filter(id =>
-                    id.startsWith(`s${sectorId}_`) &&
-                    !id.includes('_collectible_') &&
-                    !id.includes('_poi_') &&
-                    !id.includes('_event_') &&
-                    !id.endsWith('_title') &&
-                    !id.endsWith('_description') &&
-                    !id.endsWith('_story')
-                );
+                const foundInSector = sectorClues.filter(c => cluesFound.includes(c.id)).length;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -512,33 +513,36 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                             <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
                                 {sectorName}
                             </h3>
+                            {isSectorUnlocked && sectorClues.length > 0 && (
+                                <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
+                                    {foundInSector} / {sectorClues.length} {t('ui.discovered')}
+                                </span>
+                            )}
                         </div>
 
                         <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {sectorClues.length > 0 ? sectorClues.map((clueId) => {
-                                const isThought = clueId.includes('thought');
-                                const type = isThought ? 'THOUGHT' : 'SPEAK';
+                            {sectorClues.map((clue) => {
+                                const clueId = clue.id;
+                                const isFound = cluesFound.includes(clueId);
+                                const isThought = clue.type === 'THOUGHT';
+                                const type = clue.type;
                                 const typeColor = isThought ? '#3b82f6' : '#eab308';
 
                                 return (
-                                    <Card key={clueId} isLocked={false} color={typeColor}>
+                                    <div key={clueId} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
                                         <div className="flex flex-col gap-4">
-                                            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: typeColor }}>
-                                                    {type}
+                                            <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor : '#333' }}>
+                                                    {isFound ? type : '???'}
                                                 </span>
                                             </div>
-                                            <p className="text-lg text-gray-200 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: typeColor }}>
-                                                "{t(`clues.${clueId}`)}"
+                                            <p className={`text-lg italic leading-relaxed border-l-4 pl-4 py-1 ${isFound ? 'text-gray-200' : 'text-zinc-800'}`} style={{ borderColor: isFound ? typeColor : '#333' }}>
+                                                {isFound ? `"${t(`clues.${clue.sector - 1}.${clue.index}.reaction`)}"` : '???'}
                                             </p>
                                         </div>
-                                    </Card>
+                                    </div>
                                 );
-                            }) : (
-                                <div className="col-span-full h-24 flex items-center justify-center border-2 border-dashed border-gray-800 rounded">
-                                    <span className="text-gray-700 font-mono tracking-widest uppercase">???</span>
-                                </div>
-                            )}
+                            })}
                         </div>
                     </div>
                 );
@@ -549,16 +553,16 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 
 const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = stats.discoveredPOIs || [];
-    const sectors = [1, 2, 3, 4, 5, 6];
+    const sectors = [1, 2, 3, 4];
 
     return (
         <div className="space-y-16 pb-12">
             {sectors.map(sectorId => {
                 const theme = SECTOR_THEMES[sectorId - 1];
+                const sectorPOIs = Object.values(POIS).filter(poi => poi.sector === sectorId);
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
-
-                const sectorPOIs = visitedList.filter(id => id.startsWith(`s${sectorId}_poi_`));
+                const foundInSector = sectorPOIs.filter(p => visitedList.includes(p.id)).length;
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -566,30 +570,39 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
                             <h3 className="text-3xl font-light uppercase tracking-tighter text-white">
                                 {sectorName}
                             </h3>
+                            {isSectorUnlocked && sectorPOIs.length > 0 && (
+                                <span className="text-sm font-mono text-zinc-600 font-light uppercase mt-1">
+                                    {foundInSector} / {sectorPOIs.length} {t('ui.discovered')}
+                                </span>
+                            )}
                         </div>
 
                         <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                            {sectorPOIs.length > 0 ? sectorPOIs.map((poiId) => {
+                            {sectorPOIs.map((poi) => {
+                                const poiId = poi.id;
+                                const isFound = visitedList.includes(poiId);
                                 return (
-                                    <Card key={poiId} isLocked={false} color={color}>
+                                    <div key={poiId} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
                                         <div className="flex flex-col gap-4">
-                                            <div className="flex justify-between items-start border-b border-gray-800 pb-3">
-                                                <h3 className="text-2xl font-semibold uppercase tracking-tighter text-white">
-                                                    {t(`poi.${poiId}_title`)}
+                                            <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
+                                                <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
+                                                    {isFound ? t(`pois.${poi.sector - 1}.${poi.index}.title`) : '???'}
                                                 </h3>
-                                                <span className="text-[10px] bg-blue-900/40 text-blue-400 px-3 py-1 rounded border border-blue-900 font-black tracking-widest">POI</span>
                                             </div>
-                                            <p className="text-lg text-gray-200 italic leading-relaxed border-l-4 pl-4 py-1" style={{ borderColor: color }}>
-                                                {t(`poi.${poiId}_story`)}
-                                            </p>
+                                            <div className="space-y-3">
+                                                <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
+                                                    {isFound ? t(`pois.${poi.sector - 1}.${poi.index}.description`) : '???'}
+                                                </p>
+                                                {isFound && t(`pois.${poi.sector - 1}.${poi.index}.reaction`) && (
+                                                    <p className="text-lg italic leading-relaxed border-l-4 pl-4 py-1 text-gray-200" style={{ borderColor: color }}>
+                                                        "{t(`pois.${poi.sector - 1}.${poi.index}.reaction`)}"
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
-                                    </Card>
+                                    </div>
                                 );
-                            }) : (
-                                <div className="col-span-full h-24 flex items-center justify-center border-2 border-dashed border-gray-800 rounded">
-                                    <span className="text-gray-700 font-mono tracking-widest uppercase">???</span>
-                                </div>
-                            )}
+                            })}
                         </div>
                     </div>
                 );
@@ -599,8 +612,8 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
 };
 
 const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string }> = ({ children, isLocked, color = '#6b7280' }) => (
-    <div className={`p-6 border-l-8 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-gray-800' : ''}`}
-        style={{ borderColor: isLocked ? '#1f2937' : color, boxShadow: isLocked ? 'none' : `inset 0 0 20px ${color}11` }}
+    <div className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''}`}
+        style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
         <div className="">
             {children}
@@ -639,10 +652,10 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
 
             <div className={`${isMobileDevice ? 'p-2' : 'p-4'} flex-1 flex flex-col`}>
                 <h4 className={`${isMobileDevice ? 'text-xs' : 'text-lg'} font-semibold uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
-                    {isFound ? t(item.nameKey) : '???'}
+                    {isFound ? t(`collectibles.${item.sector - 1}.${item.index}.title`) : '???'}
                 </h4>
                 <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                    {isFound ? t(item.descriptionKey) : ''}
+                    {isFound ? t(`collectibles.${item.sector - 1}.${item.index}.description`) : ''}
                 </p>
                 {isFound && !isExpanded && !isMobileDevice && (
                     <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>

@@ -98,6 +98,8 @@ export const en = {
         cancel: "CANCEL",
         skip: "SKIP",
         paused: "PAUSED",
+        discovered: "DISCOVERED",
+        collected: "COLLECTED",
         continue: "CONTINUE",
         end_sector: "ABORT SECTOR",
         sector_aborted: "SECTOR ABORTED",
@@ -211,7 +213,6 @@ export const en = {
         protect_family: "PROTECT FAMILY",
         scanning: "SCANNING...",
         zombie_wave: "Zombie Wave",
-        collected: "COLLECTED",
         new: "NEW",
         survivor_tip: "Survivor Tip",
         environment_control: "ENVIRONMENT CONTROL",
@@ -475,114 +476,145 @@ export const en = {
         panter: ["Mrow?"]
     },
     clues: {
-        // Sector 1
-        s1_collectible_1_title: "Loke's phone",
-        s1_collectible_1_description: "The screen is cracked and flickering, but some details are visible. Loke's last attempt was a message to me:\n'Dad!! We can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to D[...]'\n'Message not sent. Retry?' is written in red at the bottom...",
-        s1_collectible_2_title: "Loke's Hand Axe",
-        s1_collectible_2_description: "Loke's small hand axe. He always wants to help me chop wood at the summer cottage. He must have grabbed it in a hurry to defend himself.",
-
-        s1_start_tracks: "Footprints! They went this way... what did Loke mean by 'D'?",
-        s1_blood_stains: "Blood stains! Are they hurt?!",
-        s1_they_must_be_scared: "It's chaos! They must be terrified.",
-        s1_still_tracking: "The tracks continues in this direction.",
-        s1_town_center: "The tracks disappear... they must be here somewhere.",
-
-        s1_poi_building_on_fire: "Shit! SMU campus is on a fire!",
-        s1_poi_church: "The church is burning... The work of Satan?",
-        s1_poi_cafe: "Oh, I miss sitting at the café with my family.",
-        s1_poi_pizzeria: "Always enjoying doing 'PIZZA TIME!' with my family here.",
-        s1_poi_gym: "Used to lift weights here. Some heavy fucking weights.",
-        s1_poi_grocery: "The grocery store seems looted...",
-        s1_poi_train_yard: "Hmm... the smoke comes from the train.",
-
-        s1_event_tunnel_blocked: "Hmm... The tunnel leading to the train station is blocked by a crashed bus.",
-        s1_event_tunnel_whats_happening: "What an explosion! What the HELL was that?! It came from the trainyard!",
-        s1_event_tunnel_plant_explosives: "Let's clear the tunnel by blowing up that fucking bus up!?",
-        s1_event_tunnel_cleared: "There we go - the tunnel has been cleared!",
-        s1_event_tunnel_explosion_attracted_zombies: "Fuck! The explosion attracted zombies!",
-
-        // Sector 2
-        s2_collectible_1_title: "Jordan's favorite pacifier",
-        s2_collectible_1_description: "It's small, blue and covered in frost. Jordan never goes anywhere without it. He must have dropped it when they ran into the caves.",
-        s2_collectible_2_title: "Jordan's Teddy Bear",
-        s2_collectible_2_description: "Jordan's favorite teddy bear. It's missing an eye and smells of the damp caves. He must have dropped it when they ran into the darkness.",
-
-        s2_start: "Loke said the others followed these rails. Let's see where it leads us...",
-        s2_campfire: "A campfire. Someone must have been here recently. Do you think it's them?",
-        s2_combat: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this.",
-        s2_train_tunnel: "The tunnel is blocked. Let's head another direction.",
-        s2_mountain: "Oh, the cave entrance. Let's see if they're hinding inside!",
-        s2_cave_lights: "Electric lights. The power generator is running...",
-        s2_cave_watch_out: "Loke, stay close. I hear something.",
-        s2_cave_loot: "Old military supplies. Let's see what we can find.",
-        s2_cave_loot_more: "More supplies. Most of it looted already. By who?! Natahlie? Esmeralda? Jordan?",
-        s2_cave_shelter_port_room: "These huge doors must lead to the shelter. Let's hope they're inside!",
-
-        // Sector 3:
-        s3_collectible_1_title: "Esmeralda's Diary",
-        s3_collectible_1_description: "A small notebook with flowers on the cover. The last page is about how much she misses her friends... and how scared she is of the darkness in the forest.",
-        s3_collectible_2_title: "Esmeralda's Jacket",
-        s3_collectible_2_description: "Esmeralda's favorite jacket. It's torn and has bloodstains on the sleeve. My stomach knots... I hope it's not her blood.",
-
-        s3_forest_noise: "Every snap of a twig sounds like a runner...",
-        s3_dead_bodies: "Poor bastards... Children, look away!",
-        s3_tractor: "Nice tractor. Wonder if it's working?",
-
-        s3_poi_burning_farm: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night.",
-        s3_poi_the_farm: "The egg farm. This is the place where we used to get our eggs from.",
-        s3_poi_the_mast: "The mast is huge! Hard to imagine it was even higher before it was sabotaged in 2016.",
-
-
-        // Sector 4
-        s4_collectible_1_title: "Nathalie's Wedding Ring",
-        s4_collectible_1_description: "A simple gold ring with an inscription inside: 'Forever us'. It's cold, but the memories it carries burn in my hand.",
-        s4_collectible_2_title: "Nathalie's Police Badge",
-        s4_collectible_2_description: "Nathalie's Detective Inspector badge. It's scratched and slightly scorched at the edges. She must have lost it during the fight at the scrap yard. She never gives up her shield willingly.",
-
-        s4_noise: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?",
-        s4_shed: "The office building. It's the only place with a reinforced door. She has to be in there."
+        "0": {
+            "0": { reaction: "Footprints! They went this way... what did Loke mean by 'D'?" },
+            "1": { reaction: "Blood stains! Are they hurt?!" },
+            "2": { reaction: "It's chaos! They must be terrified." },
+            "3": { reaction: "The tracks continues in this direction." },
+            "4": { reaction: "The tracks disappear... they must be here somewhere." },
+            "5": { reaction: "Hmm... The tunnel leading to the train station is blocked by a crashed bus." },
+            "6": { reaction: "What an explosion! What the HELL was that?! It came from the trainyard!" },
+            "7": { reaction: "Let's clear the tunnel by blowing up that fucking bus up!?" },
+            "8": { reaction: "There we go - the tunnel has been cleared!" },
+            "9": { reaction: "Fuck! The explosion attracted zombies!" }
+        },
+        "1": {
+            "0": { reaction: "Loke said the others followed these rails. Let's see where it leads us..." },
+            "1": { reaction: "FUCK! Zombies everywhere. Keep on fighting, Loke! We've got this." },
+            "2": { reaction: "Electric lights. The power generator is running..." },
+            "3": { reaction: "Old military supplies. Let's see what we can find." },
+            "4": { reaction: "More supplies. Most of it looted already. By who?! Natahlie? Esmeralda? Jordan?" }
+        },
+        "2": {
+            "0": { reaction: "Every snap of a twig sounds like a runner..." },
+            "1": { reaction: "Nice tractor. Wonder if it's working?" }
+        },
+        "3": {
+            "0": { reaction: "The metal is groaning in the wind. Or is that the 'Titan' Nathalie mentioned?" }
+        }
     },
-    poi: {
-        s1_poi_building_on_fire_title: "Burning Building",
-        s1_poi_building_on_fire_story: "The old campus building is engulfed in flames. Not sure if it was zombies or survivors that started it, but it's a grim beacon in the night.",
-        s1_poi_church_title: "Village Church",
-        s1_poi_church_story: "Even the house of God couldn't protect them. The doors are smashed open and the pews are stained with blood.",
-        s1_poi_cafe_title: "Local Café",
-        s1_poi_cafe_story: "We used to come here on Sundays. Now the windows are shattered and the smell of coffee has been replaced by rot.",
-        s1_poi_pizzeria_title: "Pizzeria",
-        s1_poi_pizzeria_story: "The local pizza place. The ovens are cold, but something else might be cooking in the dark.",
-        s1_poi_grocery_title: "Grocery Store",
-        s1_poi_grocery_story: "Completely looted. The shelves are bare, but someone might have left scrap or ammo behind in the panic.",
-        s1_poi_gym_title: "Fitness Center",
-        s1_poi_gym_story: "A place for building strength. Ironically, the strongest ones here now are the dead.",
-        s1_poi_train_yard_title: "Gånghester Station",
-        s1_poi_train_yard_story: "The old railway station. There was a massive explosion here, blocking the tunnel out of town.",
-
-        // Sector 2
-        s2_poi_campfire_title: "Abandoned Campfire",
-        s2_poi_campfire_story: "Someone was here recently. The embers are still warm. They must have left in a hurry.",
-        s2_poi_train_tunnel_title: "Blocked Tunnel",
-        s2_poi_train_tunnel_story: "The tunnel that connects the mountain. It's completely sealed with rubble and debris.",
-        s2_poi_cave_entrance_title: "Mountain Cave Entrance",
-        s2_poi_cave_entrance_story: "A dark maw leading into the earth. It smells of damp stone and stale air.",
-        s2_poi_mountain_vault_title: "The Mountain Vault",
-        s2_poi_mountain_vault_story: "An old Cold War shelter. The massive steel doors are closed tight. My youngest son is in there.",
-
-        // Sector 3
-        s3_poi_farm_title: "Egg Farm",
-        s3_poi_farm_story: "We used to buy our eggs here. Now the yard is crawling with the undead.",
-        s3_poi_farmhouse_title: "Burning Farmhouse",
-        s3_poi_farmhouse_story: "The main farmhouse is completely engulfed in flames. A grim beacon in the cold winter night.",
-        s3_poi_barn_title: "The Old Barn",
-        s3_poi_barn_story: "The barn is on fire. Any animals that were inside are long gone.",
-        s3_poi_mast_title: "Häglareds Mast",
-        s3_poi_mast_story: "The large communication tower. Esmeralda went up there to fix the signal.",
-
-        // Sector 4
-        s4_poi_shed_title: "Reinforced Shed",
-        s4_poi_shed_story: "A small office building with a reinforced door. Nathalie is trapped inside, surrounded by darkness.",
-        s4_poi_scrapyard_title: "The Scrapyard",
-        s4_poi_scrapyard_story: "A labyrinth of rusted metal and stacked cars. A death trap filled with lurking horrors.",
+    pois: {
+        "0": {
+            "0": {
+                title: "SMU campus",
+                description: "The old campus building is engulfed in flames. Not sure if it was zombies or survivors that started it, but it's a grim beacon in the night.",
+                reaction: "Shit! SMU campus is on a fire!"
+            },
+            "1": {
+                title: "Village Church",
+                description: "Even the house of God couldn't protect them. The doors are smashed open and the pews are stained with blood.",
+                reaction: "The church is burning... The work of Satan?"
+            },
+            "2": {
+                title: "Café 9:an",
+                description: "We used to come here on Sundays. Now the windows are shattered and the smell of coffee has been replaced by rot.",
+                reaction: "Oh, I miss sitting at the café with my family."
+            },
+            "3": {
+                title: "Gånghester Pizzeria",
+                description: "The local pizza place. The ovens are cold, but something else might be cooking in the dark.",
+                reaction: "Always enjoying doing 'PIZZA TIME!' with my family here."
+            },
+            "4": {
+                title: "Ica Hjärtat",
+                description: "Completely looted. The shelves are bare, but someone might have left scrap or ammo behind in the panic.",
+                reaction: "The grocery store seems looted..."
+            },
+            "5": {
+                title: "Gym Gånghester",
+                description: "A place for building strength. Ironically, the strongest ones here now are the dead.",
+                reaction: "Used to lift weights here. Some heavy fucking weights."
+            },
+            "6": {
+                title: "Gånghester Train Station",
+                description: "The old railway station. There was a massive explosion here, blocking the tunnel out of town.",
+                reaction: "Hmm... the smoke comes from the train."
+            }
+        },
+        "1": {
+            "0": {
+                title: "Abandoned Campfire",
+                description: "Someone was here recently. The embers are still warm. They must have left in a hurry.",
+                reaction: "A campfire. Someone must have been here recently. Do you think it's them?"
+            },
+            "1": {
+                title: "Blocked Tunnel",
+                description: "The tunnel that connects the mountain. It's completely sealed with rubble and debris.",
+                reaction: "The tunnel is blocked. Let's head another direction."
+            },
+            "2": {
+                title: "Mountain Cave Entrance",
+                description: "A dark maw leading into the earth. It smells of damp stone and stale air.",
+                reaction: "Oh, the cave entrance. Let's see if they're hinding inside!"
+            },
+            "3": {
+                title: "The Mountain Vault",
+                description: "An old Cold War shelter. The massive steel doors are closed tight. My youngest son is in there.",
+                reaction: "These huge doors must lead to the shelter. Let's hope they're inside!"
+            }
+        },
+        "2": {
+            "0": {
+                title: "Häglared Mast",
+                description: "The large communication tower. Esmeralda went up there to fix the signal.",
+                reaction: "The mast is huge! Hard to imagine it was even higher before it was sabotaged in 2016."
+            },
+            "1": {
+                title: "Egg Farm",
+                description: "We used to buy our eggs here. Now the yard is crawling with the undead.",
+                reaction: "Poor bastards... Children, look away!"
+            },
+            "2": {
+                title: "Burning Farmhouse",
+                description: "The main farmhouse is completely engulfed in flames. A grim beacon in the cold winter night.",
+                reaction: "The farm is in flames. At least it's giving us some warmth in this ice-colde bister winter night."
+            },
+            "3": {
+                title: "The Old Barn",
+                description: "The barn is on fire. Any animals that were inside are long gone.",
+                reaction: "The egg farm. This is the place where we used to get our eggs from."
+            }
+        },
+        "3": {
+            "0": {
+                title: "Reinforced Shed",
+                description: "A small office building with a reinforced door. Nathalie is trapped inside, surrounded by darkness.",
+                reaction: "The office building. It's the only place with a reinforced door. She has to be in there."
+            },
+            "1": {
+                title: "The Scrapyard",
+                description: "A labyrinth of rusted metal and stacked cars. A death trap filled with lurking horrors.",
+                reaction: ""
+            }
+        }
+    },
+    collectibles: {
+        "0": {
+            "0": { title: "Loke's phone", description: "The screen is cracked and flickering, but some details are visible. Loke's last attempt was a message to me:\n'Dad!! We can't call you! Help us! Someone lit our car on fire and are trying to break in. CALL NOW!! We are running to D[...]'\n'Message not sent. Retry?' is written in red at the bottom..." },
+            "1": { title: "Loke's Hand Axe", description: "Loke's small hand axe. He always wants to help me chop wood at the summer cottage. He must have grabbed it in a hurry to defend himself." }
+        },
+        "1": {
+            "0": { title: "Jordan's favorite pacifier", description: "It's small, blue and covered in frost. Jordan never goes anywhere without it. He must have dropped it when they ran into the caves." },
+            "1": { title: "Jordan's Teddy Bear", description: "Jordan's favorite teddy bear. It's missing an eye and smells of the damp caves. He must have dropped it when they ran into the darkness." }
+        },
+        "2": {
+            "0": { title: "Esmeralda's Diary", description: "A small notebook with flowers on the cover. The last page is about how much she misses her friends... and how scared she is of the darkness in the forest." },
+            "1": { title: "Esmeralda's Jacket", description: "Esmeralda's favorite jacket. It's torn and has bloodstains on the sleeve. My stomach knots... I hope it's not her blood." }
+        },
+        "3": {
+            "0": { title: "Nathalie's Wedding Ring", description: "A simple gold ring with an inscription inside: 'Forever us'. It's cold, but the memories it carries burn in my hand." },
+            "1": { title: "Nathalie's Police Badge", description: "Nathalie's Detective Inspector badge. It's scratched and slightly scorched at the edges. She must have lost it during the fight at the scrap yard. She never gives up her shield willingly." }
+        }
     },
     dialogue: {
         // Dialogue: Sector 1
