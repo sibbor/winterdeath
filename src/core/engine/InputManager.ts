@@ -45,6 +45,19 @@ const KEY_MAP: Record<string, keyof InputState> = {
     '1': '1', '2': '2', '3': '3', '4': '4'
 };
 
+// Static array avoids runtime allocation during resets
+const _RESET_KEYS: (keyof InputState)[] = [
+    'w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', 'f', 'm',
+    'enter', 'escape', 'shift', '1', '2', '3', '4'
+];
+
+// Pre-calculated math constants
+const MAX_AIM_RADIUS = 300;
+const MAX_AIM_RADIUS_SQ = MAX_AIM_RADIUS * MAX_AIM_RADIUS;
+const MIN_AIM_RADIUS = 50;
+const MIN_AIM_RADIUS_SQ = MIN_AIM_RADIUS * MIN_AIM_RADIUS;
+const INV_MAX_AIM_RADIUS = 1.0 / MAX_AIM_RADIUS;
+
 export class InputManager {
     public state: InputState;
     private isEnabled: boolean = false;
@@ -53,6 +66,12 @@ export class InputManager {
     // Cached window dimensions to prevent layout thrashing on mousemove
     private screenWidth: number = window.innerWidth;
     private screenHeight: number = window.innerHeight;
+
+    // Pre-calculated inverses to transform slow division into fast multiplication
+    private invScreenWidth: number = 1.0 / this.screenWidth;
+    private invScreenHeight: number = 1.0 / this.screenHeight;
+    private screenHalfWidth: number = this.screenWidth * 0.5;
+    private screenHalfHeight: number = this.screenHeight * 0.5;
 
     public onKeyDown?: (key: string) => void;
     public onKeyUp?: (key: string) => void;
@@ -66,7 +85,7 @@ export class InputManager {
             scrollUp: false, scrollDown: false,
             mouse: new THREE.Vector2(),
             aimVector: new THREE.Vector2(1, 0),
-            cursorPos: { x: this.screenWidth / 2, y: this.screenHeight / 2 },
+            cursorPos: { x: this.screenHalfWidth, y: this.screenHalfHeight },
             joystickMove: new THREE.Vector2(0, 0),
             joystickAim: new THREE.Vector2(0, 0),
             locked: false
@@ -85,15 +104,9 @@ export class InputManager {
     }
 
     private resetState() {
-        // Pre-defined array avoids runtime allocation
-        const keys: (keyof InputState)[] = [
-            'w', 'a', 's', 'd', 'space', 'fire', 'r', 'e', 'f', 'm',
-            'enter', 'escape', 'shift', '1', '2', '3', '4'
-        ];
-
-        // Classic for-loop preferred for performance
-        for (let i = 0; i < keys.length; i++) {
-            (this.state[keys[i]] as boolean) = false;
+        // Classic for-loop over static array for Zero-GC
+        for (let i = 0; i < _RESET_KEYS.length; i++) {
+            (this.state[_RESET_KEYS[i]] as boolean) = false;
         }
 
         this.state.joystickMove.set(0, 0);
@@ -127,6 +140,12 @@ export class InputManager {
     private handleResize = () => {
         this.screenWidth = window.innerWidth;
         this.screenHeight = window.innerHeight;
+
+        // Cache multiplication-friendly values
+        this.invScreenWidth = 1.0 / this.screenWidth;
+        this.invScreenHeight = 1.0 / this.screenHeight;
+        this.screenHalfWidth = this.screenWidth * 0.5;
+        this.screenHalfHeight = this.screenHeight * 0.5;
     };
 
     private handleKeyDown = (e: KeyboardEvent) => {
@@ -166,30 +185,31 @@ export class InputManager {
             this.virtualAimPos.x += e.movementX;
             this.virtualAimPos.y += e.movementY;
 
-            const maxRadius = 300;
-            const minRadius = 50;
             const distSq = this.virtualAimPos.lengthSq();
 
-            if (distSq > maxRadius * maxRadius) {
-                this.virtualAimPos.setLength(maxRadius);
-            } else if (distSq < minRadius * minRadius && distSq > 0) {
-                this.virtualAimPos.setLength(minRadius);
+            // Zero-GC manual length clamping to avoid redundant Math.sqrt
+            if (distSq > MAX_AIM_RADIUS_SQ) {
+                const invDist = MAX_AIM_RADIUS / Math.sqrt(distSq);
+                this.virtualAimPos.x *= invDist;
+                this.virtualAimPos.y *= invDist;
+            } else if (distSq < MIN_AIM_RADIUS_SQ && distSq > 0) {
+                const invDist = MIN_AIM_RADIUS / Math.sqrt(distSq);
+                this.virtualAimPos.x *= invDist;
+                this.virtualAimPos.y *= invDist;
             }
 
             this.state.aimVector.copy(this.virtualAimPos);
-            this.state.mouse.x = this.virtualAimPos.x / maxRadius;
-            this.state.mouse.y = this.virtualAimPos.y / maxRadius;
+            this.state.mouse.x = this.virtualAimPos.x * INV_MAX_AIM_RADIUS;
+            this.state.mouse.y = this.virtualAimPos.y * INV_MAX_AIM_RADIUS;
         } else {
             this.state.cursorPos.x = e.clientX;
             this.state.cursorPos.y = e.clientY;
 
-            const centerX = this.screenWidth / 2;
-            const centerY = this.screenHeight / 2;
+            // Use pre-calculated inverse for fast multiplication instead of division
+            this.state.mouse.x = (e.clientX * this.invScreenWidth) * 2.0 - 1.0;
+            this.state.mouse.y = -(e.clientY * this.invScreenHeight) * 2.0 + 1.0;
 
-            this.state.mouse.x = (e.clientX / this.screenWidth) * 2 - 1;
-            this.state.mouse.y = -(e.clientY / this.screenHeight) * 2 + 1;
-
-            this.state.aimVector.set(e.clientX - centerX, e.clientY - centerY);
+            this.state.aimVector.set(e.clientX - this.screenHalfWidth, e.clientY - this.screenHalfHeight);
         }
     };
 

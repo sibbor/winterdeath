@@ -45,6 +45,7 @@ const _vCamera = new THREE.Vector3();
 const _vInteraction = new THREE.Vector3();
 const _interactionScreenPosScratch = { x: 0, y: 0 };
 const _animStateScratch: any = {};
+const _traverseStack: THREE.Object3D[] = []; // Used for Zero-GC scene traversal
 
 // Pre-define ALL properties to lock V8 Hidden Classes (Shapes)
 const _fxCallbacks: any = {
@@ -93,29 +94,49 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
     };
 
+    // [VINTERDÖD FIX] Zero-GC Traversal avoiding Three.js .traverse() closures
     _triggerOptionsScratch.removeVisual = (id: string) => {
         const scene = engine.scene;
-        let visual = scene.getObjectByName(`clue_visual_${id}`);
+        let visual: THREE.Object3D | null = null;
+        const targetName = `clue_visual_${id}`;
 
-        // Zero-GC replacement for .find()
-        if (!visual) {
-            for (let i = 0; i < scene.children.length; i++) {
-                const child = scene.children[i];
-                if (child.userData.id === id && child.userData.type === 'clue_visual') {
-                    visual = child;
-                    break;
-                }
+        // 1. Iterativ sökning istället för scene.getObjectByName (Zero-GC)
+        _traverseStack.length = 0;
+        _traverseStack.push(scene);
+
+        while (_traverseStack.length > 0) {
+            const node = _traverseStack.pop() as THREE.Object3D;
+
+            if (node.name === targetName || (node.userData.id === id && node.userData.type === 'clue_visual')) {
+                visual = node;
+                _traverseStack.length = 0; // Clear immediately to free refs
+                break;
+            }
+
+            for (let i = 0; i < node.children.length; i++) {
+                _traverseStack.push(node.children[i]);
             }
         }
 
+        // 2. Iterativ uppdatering istället för visual.traverse (Zero-GC)
         if (visual) {
-            visual.traverse((child) => {
-                if (child instanceof THREE.PointLight || child instanceof THREE.SpotLight || child instanceof THREE.DirectionalLight) {
+            _traverseStack.length = 0;
+            _traverseStack.push(visual);
+
+            while (_traverseStack.length > 0) {
+                const child = _traverseStack.pop() as any;
+
+                // Använd Three.js snabba boolean-flaggor istället för trög instanceof
+                if (child.isPointLight || child.isSpotLight || child.isDirectionalLight) {
                     child.intensity = 0;
-                } else if (child instanceof THREE.Mesh) {
+                } else if (child.isMesh) {
                     child.visible = false;
                 }
-            });
+
+                for (let i = 0; i < child.children.length; i++) {
+                    _traverseStack.push(child.children[i]);
+                }
+            }
         }
     };
 
@@ -217,13 +238,25 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
             return null;
         }
+
         if (ownerId) {
             const scene = engine.scene;
-            const obj = scene.getObjectByName(ownerId);
-            if (obj) return obj.position;
 
-            for (let i = 0; i < scene.children.length; i++) {
-                if (scene.children[i].userData.id === ownerId) return scene.children[i].position;
+            // [VINTERDÖD FIX] Zero-GC iterative traversal instead of .getObjectByName
+            _traverseStack.length = 0;
+            _traverseStack.push(scene);
+
+            while (_traverseStack.length > 0) {
+                const node = _traverseStack.pop() as THREE.Object3D;
+
+                if (node.name === ownerId || node.userData.id === ownerId) {
+                    _traverseStack.length = 0; // Free refs
+                    return node.position;
+                }
+
+                for (let i = 0; i < node.children.length; i++) {
+                    _traverseStack.push(node.children[i]);
+                }
             }
             return null;
         }
@@ -293,11 +326,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             (hudData as any).systems = session.getSystems();
 
             // Always copy interactionPrompt from the store into the freshly swapped buffer.
-            // HudSystem alternates _bufferA/_bufferB: the "other" buffer still holds a stale
-            // non-null prompt from two ticks ago. A conditional guard would skip the copy and
-            // resurrect a ghost prompt every other 15fps tick after the player has left.
-            // Step 12 (later this same frame) is the sole authority: it writes null when the
-            // player leaves / interacts, or the live prompt when in range.
             (hudData as any).interactionPrompt = HudStore.getState().interactionPrompt;
 
             HudStore.update(hudData);
@@ -450,8 +478,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         session.cameraAngle = engine.camera.angle;
 
         monitor.begin('session_update');
-        // [VINTERDÖD FIX] Keep the session.playerPos synchronized with the playerGroup reference
-        // This is critical for EnemyDetectionSystem and EnemySystem to work correctly.
         if (playerGroup) {
             session.playerPos = playerGroup.position;
         }
@@ -514,7 +540,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 } else {
                     _vCamera.copy(engine.camera.position).lerp(override.targetPos, 1.0 - Math.exp(-10.0 * delta));
                     engine.camera.setPosition(_vCamera, true);
-                    engine.camera.lookAt(override.lookAtPos, true); // (Denna hade du redan fixat, snyggt!)
+                    engine.camera.lookAt(override.lookAtPos, true);
                 }
             } else {
                 if (state.hurtShake > 0) {
@@ -594,8 +620,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         hData.interactionPrompt.pos.y = screenY;
                     }
 
-                    // Optimization: Only update the store if the prompt position or data changed significantly
-                    const lastPos = refs.lastInteractionPosRef.current;
                     const moved = !lastPos || Math.abs(lastPos.x - screenX) > 1 || Math.abs(lastPos.y - screenY) > 1;
                     const stateChanged = refs.interactionTypeRef.current !== currentInter || (state as any).lastInteractionLabel !== currentLabel;
 
@@ -670,16 +694,14 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 16. Emitters Update
         monitor.begin('active_effects');
         if (state.activeEffects) {
-            // --- BACKLOG AWARENESS ---
-            const isBacklogged = (FXSystem as any).ambientQueue.length > 1000;
+            const isBacklogged = (FXSystem as any).ambientQueue && (FXSystem as any).ambientQueue.length > 1000;
 
             for (let i = 0; i < state.activeEffects.length; i++) {
                 const obj = state.activeEffects[i];
                 if (!obj.visible || !obj.userData.effects) continue;
 
-                // --- DISTANCE CULLING ---
                 const distSq = obj.position.distanceToSquared(playerGroup.position);
-                if (distSq > 3600) { // 60 units radius
+                if (distSq > 3600) {
                     continue;
                 }
 
@@ -687,7 +709,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 for (let j = 0; j < effects.length; j++) {
                     const eff = effects[j];
                     if (eff.type === 'emitter') {
-                        // Skip non-essential ambient effects if backlogged
                         if (isBacklogged && !eff.essential) continue;
 
                         if (!eff.lastEmit) eff.lastEmit = 0;

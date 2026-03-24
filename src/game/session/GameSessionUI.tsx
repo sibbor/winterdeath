@@ -1,9 +1,34 @@
-import React, { useCallback } from 'react';
-import { GameCanvasProps } from '../../game/session/SessionTypes';;
+import React, { useCallback, memo } from 'react';
+import { GameCanvasProps } from '../../game/session/SessionTypes';
 import { UIState } from './useGameSessionState';
 import TouchController from '../../components/ui/hud/TouchController';
 import CinematicBubble from '../../components/ui/hud/CinematicBubble';
 import GameUI from '../../components/ui/hud/GameUI';
+
+// Zero-GC: Static empty function to prevent allocation and VDOM thrashing on every render
+const _NOOP = () => { };
+
+// Zero-GC: Static styles extracted from the render loop to prevent VDOM diffing overhead
+const STATIC_STYLES = `
+@keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+@keyframes narrative-fade {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+@keyframes glitch {
+    0% { transform: translate(0) }
+    20% { transform: translate(-2px, 2px) }
+    40% { transform: translate(-2px, -2px) }
+    60% { transform: translate(2px, 2px) }
+    80% { transform: translate(2px, -2px) }
+    100% { transform: translate(0) }
+}
+`;
 
 interface GameSessionUIProps {
     refs: any;
@@ -24,7 +49,7 @@ interface GameSessionUIProps {
     }
 }
 
-export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gameProps, callbacks }) => {
+export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState, gameProps, callbacks }) => {
 
     const state = refs.stateRef.current || {} as any;
 
@@ -50,12 +75,16 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
 
     return (
         <div className="absolute inset-0 w-full h-full pointer-events-none">
-            {/* The main click-catcher for pointer lock / cinematic advance */}
-            <div
-                ref={refs.containerRef}
-                className="absolute inset-0 pointer-events-auto"
-                onClick={handleContainerClick}
-            />
+            <style>{STATIC_STYLES}</style>
+
+            {/* The main click-catcher for pointer lock / cinematic advance (Disabled on mobile to avoid blocking joysticks) */}
+            {!gameProps.isMobileDevice && (
+                <div
+                    ref={refs.containerRef}
+                    className="absolute inset-0 pointer-events-auto"
+                    onClick={handleContainerClick}
+                />
+            )}
 
             {/* Mobile Touch Controls */}
             {gameProps.isMobileDevice && gameProps.isRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && refs.engineRef.current && (
@@ -85,35 +114,13 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = ({ refs, uiState, gam
 
             {!uiState.isSectorLoading && !uiState.cinematicActive && !uiState.forceHideHUD && (
                 <GameUI
-                    onCloseClue={() => { }}
+                    onCloseClue={_NOOP}
                     isMobileDevice={gameProps.isMobileDevice}
                     onInteract={callbacks.onInteract}
                 />
             )}
-
-            <style>{`
-            @keyframes fadeIn {
-                0% { opacity: 0; }
-                100% { opacity: 1; }
-            }
-            @keyframes narrative-fade {
-                0% { opacity: 0; }
-                20% { opacity: 1; }
-                80% { opacity: 1; }
-                100% { opacity: 0; }
-            }
-            @keyframes glitch 
-            {
-                0% { transform: translate(0) }
-                20% { transform: translate(-2px, 2px) }
-                40% { transform: translate(-2px, -2px) }
-                60% { transform: translate(2px, 2px) }
-                80% { transform: translate(2px, -2px) }
-                100% { transform: translate(0) }
-            }
-            `}</style>
         </div>
     );
-};
+});
 
 export default GameSessionUI;

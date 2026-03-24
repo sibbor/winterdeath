@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SectorTrigger } from '../systems/TriggerTypes';
 import { SectorState } from '../game/session/SessionTypes';
-import { PlayerStats } from '../entities/player/PlayerTypes';;
+import { PlayerStats } from '../entities/player/PlayerTypes';
 import { StatusEffectType, PlayerDeathState, ActiveStatusEffect } from '../entities/player/CombatTypes';
 import { WeaponType } from '../content/weapons';
 import { VehicleType } from '../content/vehicles';
@@ -44,7 +44,8 @@ export interface RuntimeState {
 
     // --- OBJECT POOLS ---
     enemies: Enemy[];
-    particles: any[]; // [VINTERDÖD TIPS] Framtida optimering: Gör till ParticleItem[] pool
+    // Future optimization: Convert to a strict ParticleItem[] pool
+    particles: any[];
     activeEffects: any[];
     projectiles: any[];
     fireZones: any[];
@@ -65,7 +66,7 @@ export interface RuntimeState {
     incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
     outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
     killsByType: Record<string, number>;
-    applyDamage?: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
+    applyDamage: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
 
     // --- COMBAT & STATUS (Zero-GC) ---
     isDisoriented: boolean;
@@ -142,13 +143,14 @@ export interface RuntimeState {
     // --- INTERACTION ---
     interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
     interactionLabel: string | null;
-    hasInteractionTarget: boolean; // Nyckel för att slippa null
+    // Flag to avoid null checks
+    hasInteractionTarget: boolean;
     interactionTargetPos: THREE.Vector3;
 
-    nearestCollectible?: SectorTrigger | null; // Kan städas om till ID-sträng istället för referens
-    onClueFound?: ((clue: SectorTrigger) => void) | null;
-    onCollectibleDiscovered?: ((id: string) => void) | null;
-    gainXp?: ((amount: number) => void) | null;
+    // Refactored to primitive types to prevent memory leaks from object retention
+    hasNearestCollectible: boolean;
+    nearestCollectibleId: string;
+
     bossIntroActive: boolean;
     sessionCollectiblesDiscovered: string[];
     collectiblesDiscovered: string[];
@@ -169,6 +171,6 @@ export interface RuntimeState {
         object: THREE.Object3D | null;
         type: 'sector_specific' | 'global' | null;
     };
-    callbacks?: any;
+    callbacks: any;
     stats: PlayerStats;
 }

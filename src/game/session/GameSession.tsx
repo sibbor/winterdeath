@@ -1,6 +1,6 @@
 import React, { useEffect, useImperativeHandle, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';;
+import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { soundManager } from '../../utils/SoundManager';
@@ -33,6 +33,9 @@ export interface GameSessionHandle {
 // Zero-GC fallback constants to prevent allocating new objects/arrays on every stat fetch
 const EMPTY_ARRAY: any[] = [];
 const EMPTY_OBJECT: any = {};
+
+// Scratchpad for trigger event spawn positions
+const _spawnPosScratch = new THREE.Vector3();
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
 
@@ -81,6 +84,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const now = performance.now();
         const pStats = latestStateRef.current.props.stats; // Always use latest safely
 
+        // Zero-GC Boss concatenation
+        const finalSeenBosses = [];
+        const stateSeenBosses = state.seenBosses || EMPTY_ARRAY;
+        const refBossesDefeated = refs.stateRef.current.bossesDefeated || EMPTY_ARRAY;
+        for (let i = 0; i < stateSeenBosses.length; i++) finalSeenBosses.push(stateSeenBosses[i]);
+        for (let i = 0; i < refBossesDefeated.length; i++) finalSeenBosses.push(refBossesDefeated[i]);
+
         return {
             timeElapsed: now - (state.startTime || now),
             timePlayed: now - (state.startTime || now),
@@ -108,12 +118,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             aborted,
             spEarned: (state.level - pStats.level) + (state.sessionCollectiblesDiscovered?.length || 0) + ((state.bossesDefeated?.length || 0) > 0 ? 1 : 0) + (state.familyFound ? 1 : 0),
             seenEnemies: state.seenEnemies || EMPTY_ARRAY,
-            seenBosses: (state.seenBosses || EMPTY_ARRAY).concat(refs.stateRef.current.bossesDefeated || EMPTY_ARRAY),
+            seenBosses: finalSeenBosses,
             discoveredPOIs: state.discoveredPOIs || EMPTY_ARRAY,
             incomingDamageBreakdown: state.incomingDamageBreakdown || EMPTY_OBJECT,
             outgoingDamageBreakdown: state.outgoingDamageBreakdown || EMPTY_OBJECT
         };
-    }, [refs]); // Removed props dependency to prevent GC thrashing
+    }, [refs]);
 
     const concludeSector = useCallback((isExtraction: boolean) => {
         if (!refs.hasEndedSector.current) {
@@ -188,13 +198,25 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             let target: THREE.Object3D | null | undefined = null;
 
             if (payload?.familyId !== undefined && refs.activeFamilyMembers.current) {
-                target = refs.activeFamilyMembers.current.find((m: any) => m.id === payload.familyId)?.mesh;
+                const members = refs.activeFamilyMembers.current;
+                for (let i = 0; i < members.length; i++) {
+                    if (members[i].id === payload.familyId) {
+                        target = members[i].mesh;
+                        break;
+                    }
+                }
             }
 
             if (!target && (payload?.targetName || payload?.id)) {
                 target = engine?.scene.getObjectByName(payload?.targetName || payload?.id);
                 if (!target && payload?.id) {
-                    target = engine?.scene.children.find((c: any) => c.userData?.id === payload.id);
+                    const children = engine?.scene.children || [];
+                    for (let i = 0; i < children.length; i++) {
+                        if (children[i].userData?.id === payload.id) {
+                            target = children[i];
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -248,10 +270,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs.stateRef.current.loadout = newLoadout;
             refs.stateRef.current.weaponLevels = newLevels;
             refs.stateRef.current.sectorState = { ...refs.stateRef.current.sectorState, ...newSectorState };
-            Object.keys(refs.stateRef.current.weaponAmmo).forEach(key => {
+
+            // Zero-GC object property reset
+            for (const key in refs.stateRef.current.weaponAmmo) {
                 const wepType = key as any;
                 refs.stateRef.current.weaponAmmo[wepType] = WEAPONS[wepType]?.magSize || 0;
-            });
+            }
             closeModal();
             soundManager.playUiConfirm();
         },
@@ -259,8 +283,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             for (let i = 0; i < newEnemies.length; i++) {
                 const e = newEnemies[i];
                 refs.stateRef.current.enemies.push(e);
-                if (e.type && !refs.stateRef.current.seenEnemies.includes(e.type)) {
-                    refs.stateRef.current.seenEnemies.push(e.type);
+
+                if (e.type) {
+                    let seen = false;
+                    for (let j = 0; j < refs.stateRef.current.seenEnemies.length; j++) {
+                        if (refs.stateRef.current.seenEnemies[j] === e.type) { seen = true; break; }
+                    }
+                    if (!seen) refs.stateRef.current.seenEnemies.push(e.type);
                 }
             }
         },
@@ -296,7 +325,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, []);
 
     // --- ZERO-GC: Global Event Listeners ---
-    // Moved out of the initialization effect to prevent teardown/rebuild
     useEffect(() => {
         const handleBossSpawn = (e: any) => {
             const { type, pos } = e.detail || {};
@@ -337,19 +365,22 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         const handleFamilyFollow = (e: any) => {
             const { active } = e.detail || {};
-            refs.activeFamilyMembers.current.forEach(fm => {
-                if (fm.found) fm.following = active;
-            });
+            const fms = refs.activeFamilyMembers.current;
+            for (let i = 0; i < fms.length; i++) {
+                if (fms[i].found) fms[i].following = active;
+            }
         };
 
         const handleFamilyMemberFound = (e: any) => {
             const { name, id } = e.detail || {};
-            refs.activeFamilyMembers.current.forEach(fm => {
+            const fms = refs.activeFamilyMembers.current;
+            for (let i = 0; i < fms.length; i++) {
+                const fm = fms[i];
                 if ((name && fm.name === name) || (id && fm.id === id)) {
                     fm.found = true;
                     fm.following = true;
                 }
-            });
+            }
         };
 
         const handleKeepCamera = (e: any) => {
@@ -451,8 +482,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             for (let i = 0; i < newEnemies.length; i++) {
                 const e = newEnemies[i];
                 refs.stateRef.current.enemies.push(e);
-                if (e.type && !refs.stateRef.current.seenEnemies.includes(e.type)) {
-                    refs.stateRef.current.seenEnemies.push(e.type);
+                if (e.type) {
+                    let seen = false;
+                    for (let j = 0; j < refs.stateRef.current.seenEnemies.length; j++) {
+                        if (refs.stateRef.current.seenEnemies[j] === e.type) { seen = true; break; }
+                    }
+                    if (!seen) refs.stateRef.current.seenEnemies.push(e.type);
                 }
             }
         }
@@ -599,12 +634,19 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                     const count = payload.count || 1;
                                     for (let i = 0; i < count; i++) {
                                         const spread = payload.spread || 0;
-                                        const spawnPos = payload.pos ? new THREE.Vector3(payload.pos.x, 0, payload.pos.z) : refs.playerGroupRef.current?.position.clone() || new THREE.Vector3();
-                                        if (spread > 0) {
-                                            spawnPos.x += (Math.random() - 0.5) * spread;
-                                            spawnPos.z += (Math.random() - 0.5) * spread;
+                                        if (payload.pos) {
+                                            _spawnPosScratch.set(payload.pos.x, 0, payload.pos.z);
+                                        } else if (refs.playerGroupRef.current) {
+                                            _spawnPosScratch.copy(refs.playerGroupRef.current.position);
+                                        } else {
+                                            _spawnPosScratch.set(0, 0, 0);
                                         }
-                                        refs.sectorContextRef.current?.spawnZombie(payload.type, spawnPos);
+
+                                        if (spread > 0) {
+                                            _spawnPosScratch.x += (Math.random() - 0.5) * spread;
+                                            _spawnPosScratch.z += (Math.random() - 0.5) * spread;
+                                        }
+                                        refs.sectorContextRef.current?.spawnZombie(payload.type, _spawnPosScratch);
                                     }
                                 }
                                 break;

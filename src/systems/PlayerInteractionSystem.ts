@@ -7,10 +7,11 @@ import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
 import type React from 'react';
 
-// --- PERFORMANCE SCRATCHPADS ---
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _traverseStack: THREE.Object3D[] = [];
 
 // Shared object for detection returns to eliminate garbage allocation
 const _detectionResult = {
@@ -27,7 +28,7 @@ interface ActiveAnimation {
     startZ: number;
     progress: number;
     duration: number;
-    collectibleId?: string;
+    collectibleId: string;
 }
 
 export class PlayerInteractionSystem implements System {
@@ -56,15 +57,13 @@ export class PlayerInteractionSystem implements System {
         if (now - this.lastDetectionTime > 100) {
             this.lastDetectionTime = now;
 
-            // Hämta endast det som är nära spelaren från SpatialGrid
+            // Fetch local vicinity from SpatialGrid
             const nearbyTriggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(this.playerGroup.position, 15.0) : state.triggers;
             const nearbyInteractables = state.collisionGrid ? state.collisionGrid.getNearbyInteractables(this.playerGroup.position, 15.0) : (state.sectorState.ctx?.interactables || []);
 
             this.detectInteraction(
                 this.playerGroup.position,
-                state.chests, // Behåll som fallback för säkerhets skull
                 nearbyTriggers,
-                state.sectorState,
                 state,
                 nearbyInteractables
             );
@@ -82,7 +81,7 @@ export class PlayerInteractionSystem implements System {
 
             state.interactionLabel = label;
 
-            if (_detectionResult.position && _detectionResult.type) {
+            if (_detectionResult.type) {
                 if (!state.interactionTargetPos) state.interactionTargetPos = new THREE.Vector3();
                 state.interactionTargetPos.copy(_detectionResult.position);
                 state.hasInteractionTarget = true;
@@ -111,8 +110,7 @@ export class PlayerInteractionSystem implements System {
                             session
                         );
 
-                        // Immediately hide the interaction prompt. Without this, the prompt stays
-                        // visible for up to 100ms until the next throttled detection cycle clears it.
+                        // Clear prompt immediately for responsive feedback
                         state.hasInteractionTarget = false;
                         state.interactionType = null;
                         state.interactionLabel = null;
@@ -131,48 +129,40 @@ export class PlayerInteractionSystem implements System {
 
             if (anim.progress > 1) anim.progress = 1;
 
-            // Mjuk inbromsning (ease-out).
+            // Smooth braking (ease-out)
             const easeOut = 1.0 - Math.pow(1.0 - anim.progress, 3);
 
-            // Keep the main group fixed. By zeroing the rotation, local offsets perfectly match world offsets.
             _v1.set(anim.startX, anim.startY, anim.startZ);
             anim.obj.position.copy(_v1);
             anim.obj.rotation.set(0, 0, 0);
 
             const targetX = (this.playerGroup.position.x - anim.startX) * easeOut;
             const targetZ = (this.playerGroup.position.z - anim.startZ) * easeOut;
+            const fxTargetY = anim.progress * 15.0; // Vertical launch height
 
-            const fxTargetY = anim.progress * 15.0; // Shoot up 15 meters
-
-            // Iterate over all parts to separate behavior
             const children = anim.obj.children;
             const childLen = children.length;
             for (let j = 0; j < childLen; j++) {
-                const child = children[j];
+                const child = children[j] as any;
+
                 if (child.name === 'collectibleRing' || child.name === 'collectibleBeam' || child.name === 'collectibleInnerRing') {
-                    // Start relative positions + new vertical offset
                     if (child.name === 'collectibleRing') child.position.set(0, 0.05 + fxTargetY, 0);
                     else if (child.name === 'collectibleInnerRing') child.position.set(0, 1.0 + (fxTargetY * 0.8), 0);
                     else if (child.name === 'collectibleBeam') child.position.set(0, 2.0 + fxTargetY, 0);
 
-                    // Fade out and shrink effects over animation
                     const fxScale = 1.0 - anim.progress;
                     if (child.name === 'collectibleBeam') {
                         child.scale.set(0.05 * Math.max(0.001, fxScale), 4.0, 0.05 * Math.max(0.001, fxScale));
                     } else {
                         child.scale.setScalar(Math.max(0.001, fxScale));
                     }
-                } else if ((child instanceof THREE.Mesh || child instanceof THREE.Group) && !child.name.startsWith('collectible')) {
-                    // Skip internal lights explicitly
-                    if ((child as any).isLight) continue;
-
-                    // This is the actual collectible item! Let it geometrically fly to the player.
+                } else if (!child.name.startsWith('collectible') && !child.isLight) {
+                    // Actual item geometry
                     child.position.x = targetX;
                     child.position.z = targetZ;
                     child.position.y = (1.5 * easeOut) + Math.sin(anim.progress * Math.PI * 4) * 0.1;
                     child.rotation.y += 5.0 * dt;
 
-                    // Shrink the item FIRST during the last 10% of the animation
                     if (anim.progress > 0.9) {
                         const shrink = (1.0 - anim.progress) * 10.0;
                         child.scale.setScalar(Math.max(0.001, shrink));
@@ -182,10 +172,9 @@ export class PlayerInteractionSystem implements System {
                 }
             }
 
-            // [VINTERDÖD] High-Performance Matrix Sync
             anim.obj.matrixWorldNeedsUpdate = true;
 
-            // Se till att partiklarna (smoke/sparks) följer med strålen upp!
+            // Sync emitters (smoke/sparks) with the rising beam
             if (anim.obj.userData.effects) {
                 const effects = anim.obj.userData.effects;
                 const effLen = effects.length;
@@ -195,39 +184,36 @@ export class PlayerInteractionSystem implements System {
                         eff.originalOffset = eff.offset ? eff.offset.clone() : new THREE.Vector3();
                     }
                     if (!eff.offset) eff.offset = new THREE.Vector3();
-
                     eff.offset.copy(eff.originalOffset);
                     eff.offset.y += fxTargetY;
                 }
             }
 
             if (anim.progress >= 1) {
-                // Traverse and hide to avoid removing from scene (keeps GPU state stable)
-                const stack = [anim.obj as THREE.Object3D];
-                while (stack.length > 0) {
-                    const node = stack.pop()!;
-                    if (node instanceof THREE.PointLight || node instanceof THREE.SpotLight || node instanceof THREE.DirectionalLight) {
-                        node.intensity = 0;
-                    } else if (node instanceof THREE.Mesh) {
-                        node.visible = false;
-                    }
-                    const children = node.children;
-                    for (let j = 0; j < children.length; j++) {
-                        stack.push(children[j]);
+                // Finalize: Hide lights and meshes using iterative stack (Zero-GC)
+                _traverseStack.length = 0;
+                _traverseStack.push(anim.obj);
+
+                while (_traverseStack.length > 0) {
+                    const node = _traverseStack.pop() as any;
+                    if (node.isLight) node.intensity = 0;
+                    else if (node.isMesh) node.visible = false;
+
+                    for (let j = 0; j < node.children.length; j++) {
+                        _traverseStack.push(node.children[j]);
                     }
                 }
 
-                // Cleanup emitters to prevent "left behind" particles
                 anim.obj.userData.effects = [];
 
-                const idx = this.collectibles.indexOf(anim.obj);
-                if (idx > -1) {
-                    this.collectibles[idx] = this.collectibles[this.collectibles.length - 1];
+                // Swap-and-pop removal from pool
+                const collIdx = this.collectibles.indexOf(anim.obj);
+                if (collIdx > -1) {
+                    this.collectibles[collIdx] = this.collectibles[this.collectibles.length - 1];
                     this.collectibles.pop();
                 }
 
-                // HÄR triggas ScreenCollectibleDiscovered (När animationen är 100% klar)
-                if (this.onCollectibleDiscovered && anim.collectibleId) {
+                if (this.onCollectibleDiscovered) {
                     this.onCollectibleDiscovered(anim.collectibleId);
                 }
 
@@ -240,13 +226,10 @@ export class PlayerInteractionSystem implements System {
     /**
      * Scans the environment for the closest interactable object.
      * Priority: Collectibles > Chests > Vehicles > Mission Objects
-     * Modifies the global _detectionResult instead of returning a new object.
      */
     private detectInteraction(
         playerPos: THREE.Vector3,
-        chests: any[],
         triggers: any[],
-        sectorState: any,
         state: any,
         nearbyInteractables: THREE.Object3D[]
     ): void {
@@ -254,7 +237,7 @@ export class PlayerInteractionSystem implements System {
         _detectionResult.id = null;
         _detectionResult.object = null;
 
-        // --- EXPLICIT CHECK: Active Vehicle (Exit Prompt) ---
+        // --- Priority 1: Active Vehicle (Exit Prompt) ---
         if (state.activeVehicle) {
             _detectionResult.position.copy(state.activeVehicle.position);
             _detectionResult.position.y += 1.0;
@@ -263,38 +246,32 @@ export class PlayerInteractionSystem implements System {
             return;
         }
 
-        // --- USE SPATIAL GRID FOR ALL INTERACTABLES (Chests, Collectibles, Vehicles, Terminals) ---
-        if (nearbyInteractables && nearbyInteractables.length > 0) {
+        // --- Priority 2: Spatial Grid Objects (Chests, Collectibles, Vehicles) ---
+        if (nearbyInteractables) {
             const len = nearbyInteractables.length;
-
             for (let i = 0; i < len; i++) {
                 const obj = nearbyInteractables[i];
                 if (!obj || !obj.userData?.isInteractable) continue;
-
-                // For collectibles: Ignore if picked up
                 if (obj.userData.interactionType === 'collectible' && obj.userData.pickedUp) continue;
 
                 obj.getWorldPosition(_v1);
 
-                // Vehicle specific check (OBB)
                 if (obj.userData.vehicleDef && obj.userData.interactionType === 'VEHICLE') {
                     _v3.copy(playerPos);
                     obj.worldToLocal(_v3);
                     const margin = 2.0;
                     const def = obj.userData.vehicleDef;
 
-                    if (Math.abs(_v3.x) <= def.size.x + margin && Math.abs(_v3.z) <= def.size.z + margin) {
+                    if (Math.abs(_v3.x) <= (def.size.x * 0.5) + margin && Math.abs(_v3.z) <= (def.size.z * 0.5) + margin) {
                         _detectionResult.position.copy(_v1);
                         _detectionResult.position.y += 1.0;
                         _detectionResult.type = 'vehicle';
                         _detectionResult.object = obj;
-                        return; // Vehicles have high priority if close enough
+                        return;
                     }
                 } else {
-                    // Regular Point/Radius Interaction (Chests, Collectibles, etc.)
                     const r = obj.userData.interactionRadius || 4.0;
                     if (playerPos.distanceToSquared(_v1) < r * r) {
-                        // Chest specific opened check
                         if (obj.userData.interactionType === 'chest' && obj.userData.chestData?.opened) continue;
 
                         _detectionResult.position.copy(_v1);
@@ -307,38 +284,43 @@ export class PlayerInteractionSystem implements System {
             }
         }
 
-        // --- Check Mission Triggers (Already filtered by Grid) ---
+        // --- Priority 3: Mission Triggers ---
         const tLen = triggers.length;
         for (let i = 0; i < tLen; i++) {
             const t = triggers[i];
-
             if (t.type === 'INTERACT' || t.type === 'TERMINAL') {
-                let inRange = false;
-
-                // --- DYNAMIC POSITIONING ---
                 let tx = t.position.x;
                 let tz = t.position.z;
 
+                // Handle dynamic positioning (Family or Owner objects)
                 if (t.familyId !== undefined && this.activeFamilyMembers) {
                     const members = this.activeFamilyMembers.current;
-                    const fm = members.find((m: any) => m.id === t.familyId);
-                    if (fm && fm.mesh) {
-                        tx = fm.mesh.position.x;
-                        tz = fm.mesh.position.z;
+                    for (let mIdx = 0; mIdx < members.length; mIdx++) {
+                        if (members[mIdx].id === t.familyId) {
+                            tx = members[mIdx].mesh.position.x;
+                            tz = members[mIdx].mesh.position.z;
+                            break;
+                        }
                     }
                 } else if (t.ownerId && this.scene) {
-                    const obj = this.scene.getObjectByName(t.ownerId) || this.scene.children.find(o => o.userData.id === t.ownerId);
-                    if (obj) {
-                        tx = obj.position.x;
-                        tz = obj.position.z;
+                    _traverseStack.length = 0;
+                    _traverseStack.push(this.scene);
+                    while (_traverseStack.length > 0) {
+                        const node = _traverseStack.pop()!;
+                        if (node.name === t.ownerId || node.userData.id === t.ownerId) {
+                            tx = node.position.x;
+                            tz = node.position.z;
+                            break;
+                        }
+                        for (let cIdx = 0; cIdx < node.children.length; cIdx++) _traverseStack.push(node.children[cIdx]);
                     }
                 }
 
-                // Zero-GC manual squared distance
                 const dx = playerPos.x - tx;
                 const dz = playerPos.z - tz;
                 const distSq = dx * dx + dz * dz;
 
+                let inRange = false;
                 if (t.size) {
                     const maxDim = Math.max(t.size.width, t.size.depth) * 0.7;
                     if (distSq < maxDim * maxDim) inRange = true;
@@ -376,26 +358,22 @@ export class PlayerInteractionSystem implements System {
         }
 
         if (type === 'collectible') {
-            this.handleCollectiblePickup(playerPos, session);
+            this.handleCollectiblePickup(session);
         }
         else if (type === 'chest') {
-            // Find the specific chest object in the state array that matches our detected mesh
             const len = chests.length;
             for (let i = 0; i < len; i++) {
                 const c = chests[i];
                 if (c.mesh === _detectionResult.object && !c.opened) {
                     c.opened = true;
                     soundManager.playOpenChest();
-
                     WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
-                    const light = c.mesh.getObjectByName('chestLight') as THREE.PointLight | THREE.SpotLight;
-                    if (light) {
-                        light.intensity = 0;
-                    }
+                    const light = c.mesh.getObjectByName('chestLight') as THREE.Light;
+                    if (light) light.intensity = 0;
 
                     if (c.mesh.children[1]) {
-                        c.mesh.children[1].rotation.x = -Math.PI / 2;
+                        c.mesh.children[1].rotation.x = -Math.PI * 0.5;
                         c.mesh.children[1].position.y -= 0.5;
                     }
 
@@ -413,27 +391,19 @@ export class PlayerInteractionSystem implements System {
         }
     }
 
-    private handleCollectiblePickup(playerPos: THREE.Vector3, session: GameSessionLogic) {
-        // Hämta det redan detekterade objektet istället för att loopa!
+    private handleCollectiblePickup(session: GameSessionLogic) {
         const collectible = _detectionResult.object as THREE.Group;
-
         if (!collectible || collectible.userData.pickedUp) return;
 
         const collectibleId = collectible.userData.collectibleId;
         if (!getCollectibleById(collectibleId)) return;
 
         collectible.userData.pickedUp = true;
-
-        if ((soundManager as any).collectibleDiscovered) {
-            (soundManager as any).collectibleDiscovered();
-        } else {
-            soundManager.playUiPickup();
-        }
+        soundManager.playUiPickup();
 
         collectible.matrixAutoUpdate = true;
-        const children = collectible.children;
-        for (let i = 0; i < children.length; i++) {
-            children[i].matrixAutoUpdate = true;
+        for (let i = 0; i < collectible.children.length; i++) {
+            collectible.children[i].matrixAutoUpdate = true;
         }
 
         this.activeAnimations.push({
@@ -446,24 +416,10 @@ export class PlayerInteractionSystem implements System {
             collectibleId: collectibleId
         });
 
-        // Spawn initial blow-away burst
+        // Effect burst on pickup
         for (let i = 0; i < 15; i++) {
-            _v1.set(
-                (Math.random() - 0.5) * 2,
-                10 + Math.random() * 10,
-                (Math.random() - 0.5) * 2
-            );
-            FXSystem.spawnPart(
-                session.engine.scene,
-                session.state.particles,
-                collectible.position.x,
-                0.1,
-                collectible.position.z,
-                'spark',
-                1,
-                undefined,
-                _v1
-            );
+            _v1.set((Math.random() - 0.5) * 2, 10 + Math.random() * 10, (Math.random() - 0.5) * 2);
+            FXSystem.spawnPart(session.engine.scene, session.state.particles, collectible.position.x, 0.1, collectible.position.z, 'spark', 1, undefined, _v1);
         }
     }
 }

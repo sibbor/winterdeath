@@ -1,11 +1,11 @@
-
 import { PlayerStats } from '../../entities/player/PlayerTypes';
-import { SectorStats } from '../../game/session/SessionTypes';;
+import { SectorStats } from '../../game/session/SessionTypes';
 import { LEVEL_CAP } from '../../content/constants';
 
 /**
  * Aggregates sector performance into overall player statistics.
  * Handles XP leveling, scrap collection, and UNIQUE map-based SP rewards.
+ * Optimized for minimal GC allocation during level transitions.
  */
 export const aggregateStats = (
     prevStats: PlayerStats,
@@ -14,13 +14,16 @@ export const aggregateStats = (
     aborted: boolean,
     newUniqueAchievements: number = 0 // Number of NEW Boss + Family rewards to award
 ): PlayerStats => {
+    // Shallow clone the base object to respect React state immutability
     const s = { ...prevStats };
 
-    // Ensure lists exist
-    s.collectiblesDiscovered = s.collectiblesDiscovered || [];
-    s.cluesFound = s.cluesFound || [];
-    s.discoveredPOIs = s.discoveredPOIs || [];
+    // Shallow clone arrays/objects we will mutate to avoid mutating prevStats directly
+    s.collectiblesDiscovered = s.collectiblesDiscovered ? s.collectiblesDiscovered.slice() : [];
+    s.cluesFound = s.cluesFound ? s.cluesFound.slice() : [];
+    s.discoveredPOIs = s.discoveredPOIs ? s.discoveredPOIs.slice() : [];
     s.killsByType = { ...(s.killsByType || {}) };
+    s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
+    s.seenBosses = s.seenBosses ? s.seenBosses.slice() : [];
 
     // 1. Sector Completion Progress
     if (!died && !aborted) {
@@ -32,11 +35,16 @@ export const aggregateStats = (
     s.totalScrapCollected = (s.totalScrapCollected || 0) + (sectorStats.scrapLooted || 0);
 
     // 3. Combat & Performance
-    const sectorKills = (Object.values(sectorStats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
-    s.kills = (s.kills || 0) + sectorKills;
-    for (const [type, count] of Object.entries(sectorStats.killsByType || {})) {
-        s.killsByType[type] = (s.killsByType[type] || 0) + (count as number);
+    let sectorKills = 0;
+    if (sectorStats.killsByType) {
+        for (const type in sectorStats.killsByType) {
+            const count = sectorStats.killsByType[type];
+            sectorKills += count;
+            s.killsByType[type] = (s.killsByType[type] || 0) + count;
+        }
     }
+    s.kills = (s.kills || 0) + sectorKills;
+
     s.totalBulletsFired = (s.totalBulletsFired || 0) + (sectorStats.shotsFired || 0);
     s.totalBulletsHit = (s.totalBulletsHit || 0) + (sectorStats.shotsHit || 0);
     s.totalThrowablesThrown = (s.totalThrowablesThrown || 0) + (sectorStats.throwablesThrown || 0);
@@ -53,39 +61,69 @@ export const aggregateStats = (
     s.bigChestsOpened = (s.bigChestsOpened || 0) + (sectorStats.bigChestsOpened || 0);
 
     // 5. Discovery & Unique Items (SP Rewards)
-    if (sectorStats.cluesFound && sectorStats.cluesFound.length > 0) {
-        // [VINTERDÖD] Fix: Map SectorTrigger objects to IDs to avoid circular references in save file
-        const clueIds = sectorStats.cluesFound.map((c: any) => c.id || c).filter((id: any) => typeof id === 'string');
-        const newUniqueClues = clueIds.filter((id: string) => !s.cluesFound.includes(id));
-        s.cluesFound = [...s.cluesFound, ...newUniqueClues];
+    if (sectorStats.cluesFound) {
+        for (let i = 0; i < sectorStats.cluesFound.length; i++) {
+            const c = sectorStats.cluesFound[i] as any; // Tvinga TypeScript att acceptera båda
+            const id = typeof c === 'string' ? c : c.id;
+
+            if (typeof id === 'string') {
+                let found = false;
+                for (let j = 0; j < s.cluesFound.length; j++) {
+                    if (s.cluesFound[j] === id) { found = true; break; }
+                }
+                if (!found) s.cluesFound.push(id);
+            }
+        }
     }
 
-    if (sectorStats.discoveredPOIs && sectorStats.discoveredPOIs.length > 0) {
-        const newUniquePOIs = sectorStats.discoveredPOIs.filter((id: string) => !s.discoveredPOIs.includes(id));
-        s.discoveredPOIs = [...s.discoveredPOIs, ...newUniquePOIs];
+    if (sectorStats.discoveredPOIs) {
+        for (let i = 0; i < sectorStats.discoveredPOIs.length; i++) {
+            const poi = sectorStats.discoveredPOIs[i];
+            let found = false;
+            for (let j = 0; j < s.discoveredPOIs.length; j++) {
+                if (s.discoveredPOIs[j] === poi) { found = true; break; }
+            }
+            if (!found) s.discoveredPOIs.push(poi);
+        }
     }
 
     // 6. Enemy & Boss Discovery
-    if (sectorStats.seenEnemies && sectorStats.seenEnemies.length > 0) {
-        s.seenEnemies = s.seenEnemies || [];
-        const newEnemies = sectorStats.seenEnemies.filter(e => !s.seenEnemies.includes(e));
-        s.seenEnemies = [...s.seenEnemies, ...newEnemies];
+    if (sectorStats.seenEnemies) {
+        for (let i = 0; i < sectorStats.seenEnemies.length; i++) {
+            const enemyId = sectorStats.seenEnemies[i];
+            let found = false;
+            for (let j = 0; j < s.seenEnemies.length; j++) {
+                if (s.seenEnemies[j] === enemyId) { found = true; break; }
+            }
+            if (!found) s.seenEnemies.push(enemyId);
+        }
     }
 
-    if (sectorStats.seenBosses && sectorStats.seenBosses.length > 0) {
-        s.seenBosses = s.seenBosses || [];
-        const newBosses = sectorStats.seenBosses.filter(b => !s.seenBosses.includes(b));
-        s.seenBosses = [...s.seenBosses, ...newBosses];
+    if (sectorStats.seenBosses) {
+        for (let i = 0; i < sectorStats.seenBosses.length; i++) {
+            const bossId = sectorStats.seenBosses[i];
+            let found = false;
+            for (let j = 0; j < s.seenBosses.length; j++) {
+                if (s.seenBosses[j] === bossId) { found = true; break; }
+            }
+            if (!found) s.seenBosses.push(bossId);
+        }
     }
 
     // SP for Collectibles
-    if (sectorStats.collectiblesDiscovered && sectorStats.collectiblesDiscovered.length > 0) {
-        const newUnique = sectorStats.collectiblesDiscovered.filter(c => !s.collectiblesDiscovered.includes(c));
-        s.collectiblesDiscovered = [...s.collectiblesDiscovered, ...newUnique];
-
-        // Award SP for each new unique collectible
-        s.skillPoints += newUnique.length;
-        s.totalSkillPointsEarned += newUnique.length;
+    if (sectorStats.collectiblesDiscovered) {
+        for (let i = 0; i < sectorStats.collectiblesDiscovered.length; i++) {
+            const collectible = sectorStats.collectiblesDiscovered[i];
+            let found = false;
+            for (let j = 0; j < s.collectiblesDiscovered.length; j++) {
+                if (s.collectiblesDiscovered[j] === collectible) { found = true; break; }
+            }
+            if (!found) {
+                s.collectiblesDiscovered.push(collectible);
+                s.skillPoints++;
+                s.totalSkillPointsEarned++;
+            }
+        }
     }
 
     // 6. Mission Achievement SP (Boss & Family)

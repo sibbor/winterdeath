@@ -3,7 +3,7 @@ import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameCanvasProps } from '../../game/session/SessionTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
-import { SectorTrigger } from '../../systems/TriggerTypes';;
+import { SectorTrigger } from '../../systems/TriggerTypes';
 import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System } from '../../systems/System';
@@ -222,18 +222,39 @@ export class GameSessionLogic {
 
     dispose() {
         this.engine.onUpdateContext = null;
+        this.engine.clearActiveScene();
         this.engine.clearSystems();
         soundManager.stopAll();
 
         if (this.state) {
-            for (const key in this.state) {
-                if (Object.prototype.hasOwnProperty.call(this.state, key)) {
-                    const property = (this.state as any)[key];
-                    if (Array.isArray(property)) {
-                        property.length = 0;
-                    }
-                }
-            }
+            // Zero-GC: Explicit array clearing avoids V8 deoptimization from dynamic property iteration
+            this.state.enemies.length = 0;
+            this.state.particles.length = 0;
+            this.state.activeEffects.length = 0;
+            this.state.projectiles.length = 0;
+            this.state.fireZones.length = 0;
+            this.state.scrapItems.length = 0;
+            this.state.chests.length = 0;
+            this.state.bloodDecals.length = 0;
+            this.state.seenEnemies.length = 0;
+            this.state.seenBosses.length = 0;
+            this.state.discoveredPOIs.length = 0;
+            this.state.cluesFound.length = 0;
+            this.state.bossesDefeated.length = 0;
+            this.state.triggers.length = 0;
+            this.state.obstacles.length = 0;
+            this.state.sessionCollectiblesDiscovered.length = 0;
+            this.state.collectiblesDiscovered.length = 0;
+            this.state.mapItems.length = 0;
+            this.state.activePassives.length = 0;
+            this.state.activeBuffs.length = 0;
+            this.state.activeDebuffs.length = 0;
+
+            // Reset heavy dictionary objects
+            this.state.incomingDamageBreakdown = {};
+            this.state.outgoingDamageBreakdown = {};
+            this.state.killsByType = {};
+            this.state.statusEffects = {};
 
             this.state.activeVehicle = null;
             this.state.activeVehicleType = null;
