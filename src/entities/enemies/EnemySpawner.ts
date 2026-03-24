@@ -42,6 +42,8 @@ export const EnemySpawner = {
         e.speed = typeData.speed;
         e.color = typeData.color;
         e.attacks = typeData.attacks || [];
+
+        // Zero-GC loop to reset attack cooldowns
         for (const key in e.attackCooldowns) {
             e.attackCooldowns[key] = 0;
         }
@@ -50,14 +52,19 @@ export const EnemySpawner = {
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
 
-        // [VINTERDÖD FIX] Ringen ska ALLTID vara dold när zombien spawnar.
-        // Den aktiveras enbart inuti AIState.ATTACK_CHARGE i EnemyAI.
+        // The ring must ALWAYS be hidden when the zombie spawns.
+        // It is only activated inside AIState.ATTACK_CHARGE in EnemyAI.
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
         } else if (typeKey === EnemyType.BOMBER && e.mesh) {
-            // Unikt, transparent material för varje ring för att slippa färg-krockar
-            const ringMat = MATERIALS.blastRadius.clone() as THREE.MeshBasicMaterial;
-            ringMat.transparent = true;
+            // Unique, transparent material for each ring to avoid color/opacity state conflicts
+            // Use explicit material instantiation instead of the heavier .clone()
+            const ringMat = new THREE.MeshBasicMaterial({
+                map: (MATERIALS.blastRadius as THREE.MeshBasicMaterial).map,
+                color: 0xffffff,
+                transparent: true,
+                depthWrite: false
+            });
 
             const ring = new THREE.Mesh(GEOMETRY.blastRadius, ringMat);
             ring.rotation.x = -Math.PI / 2;
@@ -79,13 +86,13 @@ export const EnemySpawner = {
         enemyCount: number = 0
     ): Enemy | null => {
         if (enemyCount >= 100) {
-            console.warn(`[Spawner] Ignorerar spawn-förfrågan! Maxgräns nådd (100).`);
+            console.warn(`[Spawner] Ignoring spawn request! Max limit reached (100).`);
             return null;
         }
 
         let x: number, z: number;
         if (forcedPos) {
-            // FIX: Sprid ut dem mycket mer om de force-spawnas, annars exploderar fysiken!
+            // Spread them out significantly if force-spawned, otherwise physics will explode!
             x = forcedPos.x + (Math.random() - 0.5) * 8;
             z = forcedPos.z + (Math.random() - 0.5) * 8;
         } else {
@@ -105,11 +112,16 @@ export const EnemySpawner = {
         const ashPile = g.getObjectByName('AshPile');
         scene.add(g);
 
+        const currentPoolId = _nextPoolId++;
+
+        // V8 Shape Locking: All properties declared explicitly
         const enemy: Enemy = {
-            id: `z_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            poolId: _nextPoolId++,
+            id: `z_${currentPoolId}`,
+            poolId: currentPoolId,
             mesh: g,
-            type: typeKey,
+            indicatorRing: null,
+            ashPile: (ashPile as THREE.Object3D) || null,
+            type: typeKey as EnemyType,
             hp: typeData.hp,
             maxHp: typeData.hp,
             speed: typeData.speed,
@@ -117,11 +129,10 @@ export const EnemySpawner = {
             color: typeData.color,
             attacks: typeData.attacks || [],
             attackCooldowns: {},
+            abilityCooldown: 0,
 
             originalScale: typeData.scale || 1.0,
             widthScale: typeData.widthScale || 1.0,
-
-            ashPile: ashPile as THREE.Object3D,
 
             state: AIState.IDLE,
             idleTimer: 1.0 + Math.random() * 2.0,
@@ -132,11 +143,19 @@ export const EnemySpawner = {
             lastKnownPosition: new THREE.Vector3(x, 0, z),
             hearingThreshold: 1.0,
             awareness: 0,
+            lastHeardNoiseType: null,
 
             isBoss: false,
+            bossId: -1,
             dead: false,
             hitTime: 0,
+            lastStepTime: 0,
+            lastTackleTime: 0,
+            lastVehicleHit: 0,
             fleeing: false,
+
+            currentAttackIndex: -1,
+            attackTimer: 0,
 
             isBurning: false,
             burnTimer: 0,
@@ -160,12 +179,16 @@ export const EnemySpawner = {
             deathTimer: 0,
             lastHitWasHighImpact: false,
             lastDamageType: '',
+            hasLastTrailPos: false,
+            lastTrailPos: new THREE.Vector3(),
             fallForward: Math.random() > 0.5,
             bloodSpawned: false,
             lastKnockback: 0,
+
             // Water states
             isInWater: false, isWading: false, isDrowning: false,
             drownTimer: 0, drownDmgTimer: 0,
+
             // Airborne / fall damage
             isAirborne: false, fallStartY: 0,
             _accumulatedDamage: 0,
@@ -178,9 +201,12 @@ export const EnemySpawner = {
         g.userData.entity = enemy;
 
         if (typeKey === EnemyType.BOMBER) {
-            // [VINTERDÖD FIX] Klona materialet så ringarna inte synkar färg/opacitet med varandra
-            const ringMat = MATERIALS.blastRadius.clone() as THREE.MeshBasicMaterial;
-            ringMat.transparent = true;
+            const ringMat = new THREE.MeshBasicMaterial({
+                map: (MATERIALS.blastRadius as THREE.MeshBasicMaterial).map,
+                color: 0xffffff,
+                transparent: true,
+                depthWrite: false
+            });
 
             const ring = new THREE.Mesh(GEOMETRY.blastRadius, ringMat);
             ring.rotation.x = -Math.PI / 2;
@@ -211,10 +237,15 @@ export const EnemySpawner = {
 
         soundManager.playZombieGrowl('TANK');
 
+        const currentPoolId = _nextPoolId++;
+
+        // V8 Shape Locking: All properties declared explicitly
         const enemy: Enemy = {
             id: `boss_${bossData.id}`,
-            poolId: _nextPoolId++,
+            poolId: currentPoolId,
             mesh: boss,
+            indicatorRing: null,
+            ashPile: null,
             type: EnemyType.BOSS,
             hp: bossData.hp,
             maxHp: bossData.hp,
@@ -223,6 +254,7 @@ export const EnemySpawner = {
             color: bossData.color,
             attacks: bossData.attacks || [],
             attackCooldowns: {},
+            abilityCooldown: 0,
             originalScale: scale,
             widthScale: widthMod,
             state: AIState.IDLE,
@@ -233,11 +265,17 @@ export const EnemySpawner = {
             lastKnownPosition: new THREE.Vector3(pos.x, 0, pos.z),
             hearingThreshold: 1.5,
             awareness: 0.2,
+            lastHeardNoiseType: null,
             isBoss: true,
             bossId: bossData.id,
             dead: false,
             hitTime: 0,
+            lastStepTime: 0,
+            lastTackleTime: 0,
+            lastVehicleHit: 0,
             fleeing: false,
+            currentAttackIndex: -1,
+            attackTimer: 0,
             isBurning: false,
             burnTimer: 0,
             afterburnTimer: 0,
@@ -256,12 +294,16 @@ export const EnemySpawner = {
             lastDamageType: '',
             lastHitWasHighImpact: false,
             deathTimer: 0,
+            hasLastTrailPos: false,
+            lastTrailPos: new THREE.Vector3(),
             fallForward: false,
             bloodSpawned: false,
             lastKnockback: 0,
+
             // Water states
             isInWater: false, isWading: false, isDrowning: false,
             drownTimer: 0, drownDmgTimer: 0,
+
             // Airborne / fall damage
             isAirborne: false, fallStartY: 0,
             _accumulatedDamage: 0,

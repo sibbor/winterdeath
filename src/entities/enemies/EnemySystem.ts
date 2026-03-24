@@ -17,53 +17,65 @@ interface Callbacks {
 export class EnemySystem implements System {
     id = 'enemy_system';
 
-    private updateCallbacks: any = null;
-    private cleanupCallbacks: any = null;
+    private currentSession: GameSessionLogic | null = null;
+    private updateCallbacks: any;
+    private cleanupCallbacks: any;
 
     constructor(
         private playerGroup: THREE.Group,
         private callbacks: Callbacks
-    ) { }
-
-    init(session: GameSessionLogic) {
-        const state = session.state;
-        const scene = session.engine.scene;
-
-        // [VINTERDÖD FIX] Initialize the EnemyManager to setup ZombieRenderer for instanced drawing.
-        // This is mandatory for enemies to be visible.
-        EnemyManager.init(scene);
-
+    ) {
+        // Initialize callbacks exactly once to prevent GC allocation and closure memory leaks
         this.updateCallbacks = {
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
-            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
+            spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => {
+                if (this.currentSession) this.spawnPart(this.currentSession, x, y, z, t, c, m, v, col, s);
+            },
+            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => {
+                if (this.currentSession) this.spawnDecal(this.currentSession, x, z, s, mat, type);
+            },
             spawnBubble: (text: string, dur: number) => this.callbacks.spawnBubble(text, dur),
             applyDamage: (enemy: any, amount: number, type: string, isHighImpact: boolean = false) => {
-                if (session.state.applyDamage) {
-                    session.state.applyDamage(enemy, amount, type, isHighImpact);
+                if (!this.currentSession) return;
+
+                const state = this.currentSession.state;
+                if (state.applyDamage) {
+                    state.applyDamage(enemy, amount, type, isHighImpact);
                 } else {
                     // Fallback to basic tracking if applyDamage is missing
-                    const tracker = session.getSystem('damage_tracker_system') as any;
-                    if (tracker) tracker.recordOutgoingDamage(session, amount, type, enemy.isBoss);
+                    const tracker = this.currentSession.getSystem('damage_tracker_system') as any;
+                    if (tracker) tracker.recordOutgoingDamage(this.currentSession, amount, type, enemy.isBoss);
                 }
             }
         };
 
         this.cleanupCallbacks = {
-            spawnPart: (x: number, y: number, z: number, t: string, c: number, m?: THREE.Object3D, v?: THREE.Vector3, col?: number, s?: number) => this.spawnPart(session, x, y, z, t, c, m, v, col, s),
-            spawnDecal: (x: number, z: number, s: number, mat: THREE.Material, type?: string) => this.spawnDecal(session, x, z, s, mat, type),
-            spawnScrap: (x: number, z: number, amt: number) => WorldLootSystem.spawnScrapExplosion(scene, state.scrapItems, x, z, amt),
-            spawnBubble: this.callbacks.spawnBubble,
-            t: this.callbacks.t,
-            gainXp: this.callbacks.gainXp,
-            onBossKilled: this.callbacks.onBossKilled,
+            spawnPart: this.updateCallbacks.spawnPart,
+            spawnDecal: this.updateCallbacks.spawnDecal,
+            spawnScrap: (x: number, z: number, amt: number) => {
+                if (!this.currentSession) return;
+                WorldLootSystem.spawnScrapExplosion(this.currentSession.engine.scene, this.currentSession.state.scrapItems, x, z, amt);
+            },
+            spawnBubble: (text: string, dur: number) => this.callbacks.spawnBubble(text, dur),
+            t: (key: string) => this.callbacks.t(key),
+            gainXp: (amount: number) => this.callbacks.gainXp(amount),
+            onBossKilled: (id: number) => this.callbacks.onBossKilled(id),
         };
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
-        const state = session.state;
+    init(session: GameSessionLogic) {
+        this.currentSession = session;
         const scene = session.engine.scene;
 
-        if (!this.updateCallbacks) this.init(session);
+        // Initialize the EnemyManager to setup ZombieRenderer for instanced drawing.
+        // This is mandatory for enemies to be visible.
+        EnemyManager.init(scene);
+    }
+
+    update(session: GameSessionLogic, dt: number, now: number) {
+        this.currentSession = session;
+
+        const state = session.state;
+        const scene = session.engine.scene;
 
         if (!state.bossIntroActive) {
             EnemyManager.update(
@@ -103,7 +115,7 @@ export class EnemySystem implements System {
     }
 
     clear() {
-        this.updateCallbacks = null;
-        this.cleanupCallbacks = null;
+        // Zero-GC: Drop references to the session, but keep the callback objects intact
+        this.currentSession = null;
     }
 }

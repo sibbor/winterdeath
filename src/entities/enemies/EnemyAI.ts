@@ -21,17 +21,17 @@ const _v4 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3();
 
-function logAI(msg: string) {
-    if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
-        console.log(msg);
-    }
-}
+// --- PRE-CALCULATED CONSTANTS ---
+const TWO_PI = Math.PI * 2;
+const SEPARATION_RADIUS = 1.5;
+const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
+const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
 
 function logStateChange(now: number, e: Enemy, newState: AIState, reason?: string) {
-    if (e.state !== newState) {
+    if (PerformanceMonitor.getInstance().aiLoggingEnabled && e.state !== newState) {
         const oldState = e.state;
         const reasonStr = reason ? ` (${reason})` : '';
-        logAI(`[EnemyAI] ${e.type}_${e.id} changed state: ${AIState[oldState]} -> ${AIState[newState]}${reasonStr}`);
+        console.log(`[EnemyAI] ${e.type}_${e.id} changed state: ${AIState[oldState]} -> ${AIState[newState]}${reasonStr}`);
     }
 }
 
@@ -68,7 +68,7 @@ export const EnemyAI = {
         const isTier4 = !isTier1 && !isTier2 && !isTier3 && distSq <= 10000;
 
         // Amortization (Spread load across frames)
-        const frameTick = Math.floor(now / 16.6); // Approximate frame counter
+        const frameTick = Math.floor(now * 0.06); // Approx division by 16.6ms (1/16.6 ~= 0.06)
         const frameOffset = (frameTick + (e.poolId % 60));
 
         // 10000 = 100 units distance
@@ -76,7 +76,7 @@ export const EnemyAI = {
             e.deathState === EnemyDeathState.ALIVE &&
             !e.isBurning &&
             !e.isDrowning &&
-            (!e.knockbackVel || e.knockbackVel.lengthSq() < 0.1) &&
+            (!e.knockbackVel || (Math.abs(e.knockbackVel.x) < 0.1 && Math.abs(e.knockbackVel.z) < 0.1)) &&
             (!e.stunTimer || e.stunTimer <= 0)
         ) {
             if (e.state === AIState.CHASE || e.state === AIState.SEARCH) {
@@ -90,9 +90,13 @@ export const EnemyAI = {
             const dmgType = e.lastDamageType || '';
             const weapon = WEAPONS[dmgType as WeaponType];
 
-            const isWeapon = !!weapon;
-            const cause = isWeapon ? `Weapon (${e.lastDamageType})` : `Effect (${e.lastDamageType})`;
-            logAI(`[AI] ${e.type}_${e.id} killed by: ${cause}`);
+            // Zero-GC: String evaluation guarded by flag
+            if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                const isWeapon = !!weapon;
+                const cause = isWeapon ? `Weapon (${e.lastDamageType})` : `Effect (${e.lastDamageType})`;
+                console.log(`[AI] ${e.type}_${e.id} killed by: ${cause}`);
+            }
+
             e.deathTimer = now;
 
             const baseScale = e.originalScale || 1.0;
@@ -164,15 +168,12 @@ export const EnemyAI = {
         // --- 3. STATUS EFFECTS ---
         handleStatusEffects(e, delta, now, callbacks);
 
-        let isPhysicallyAirborne = false;
-
         // --- 4. MASS-BASED KNOCKBACK PHYSICS ---
-        if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.01) {
+        if (e.knockbackVel && (Math.abs(e.knockbackVel.x) > 0.01 || Math.abs(e.knockbackVel.z) > 0.01)) {
             if (!e.mesh.userData.wasKnockedBack) {
                 e.mesh.userData.wasKnockedBack = true;
             }
 
-            isPhysicallyAirborne = true;
             const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
             const moveInertia = delta / Math.max(0.5, mass);
 
@@ -203,7 +204,9 @@ export const EnemyAI = {
 
                     callbacks.spawnPart?.(e.mesh.position.x, 0.2, e.mesh.position.z, 'blood', 20);
                     if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
-                        logAI(`[AI] ${e.type}_${e.id} killed by: Environment (FALL)`);
+                        if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                            console.log(`[AI] ${e.type}_${e.id} killed by: Environment (FALL)`);
+                        }
                         e.deathState = EnemyDeathState.FALL;
                     }
                 }
@@ -264,7 +267,9 @@ export const EnemyAI = {
                 if (callbacks.applyDamage) callbacks.applyDamage(e, tickDmg, DamageType.DROWNING);
 
                 if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
-                    logAI(`[AI] ${e.type}_${e.id} killed by: Environment (DROWNED)`);
+                    if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
+                        console.log(`[AI] ${e.type}_${e.id} killed by: Environment (DROWNED)`);
+                    }
                     e.deathState = EnemyDeathState.DROWNED;
                     e.velocity.set(0, 0, 0);
                     e.knockbackVel.set(0, 0, 0);
@@ -279,7 +284,6 @@ export const EnemyAI = {
             e.stunTimer -= delta;
 
             if (e.mesh.userData.isRagdolling && e.mesh.userData.spinVel) {
-                isPhysicallyAirborne = true;
                 e.mesh.rotation.x += e.mesh.userData.spinVel.x * delta;
                 e.mesh.rotation.y += e.mesh.userData.spinVel.y * delta;
                 e.mesh.rotation.z += e.mesh.userData.spinVel.z * delta;
@@ -326,8 +330,6 @@ export const EnemyAI = {
         const seesPlayer = isFullyAware && e.lastKnownPosition && e.lastKnownPosition.distanceToSquared(playerPos) < 2.0;
 
         _v6.set(0, 0, 0);
-        const separationRadius = 1.5;
-        const separationRadiusSq = separationRadius * separationRadius;
 
         // LoD: Throttled separation queries
         let shouldCheckSeparation = isTier1;
@@ -335,7 +337,7 @@ export const EnemyAI = {
         if (isTier3) shouldCheckSeparation = false; // Skip entirely at Tier 3+
 
         if (shouldCheckSeparation && e.state !== AIState.ATTACK_CHARGE && e.state !== AIState.ATTACKING) {
-            const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, separationRadius);
+            const nearbyEnemies = collisionGrid.getNearbyEnemies(e.mesh.position, SEPARATION_RADIUS);
             for (let i = 0; i < nearbyEnemies.length; i++) {
                 const other = nearbyEnemies[i];
                 if (other === e || other.deathState !== EnemyDeathState.ALIVE) continue;
@@ -344,20 +346,20 @@ export const EnemyAI = {
                 const odz = e.mesh.position.z - other.mesh.position.z;
                 const odSq = odx * odx + odz * odz;
 
-                if (odSq < separationRadiusSq && odSq > 0.001) {
+                if (odSq < SEPARATION_RADIUS_SQ && odSq > 0.001) {
                     const od = Math.sqrt(odSq);
                     const invOd = 1.0 / od;
-                    const pushStrength = (separationRadius - od) / separationRadius;
+                    const pushStrength = (SEPARATION_RADIUS - od) * INV_SEPARATION_RADIUS;
                     _v6.x += (odx * invOd) * pushStrength * 1.5;
                     _v6.z += (odz * invOd) * pushStrength * 1.5;
                 }
             }
-            if (_v6.lengthSq() > 9.0) _v6.normalize().multiplyScalar(3.0);
+            if (Math.abs(_v6.x) > 0.001 || Math.abs(_v6.z) > 0.001) {
+                if (_v6.lengthSq() > 9.0) _v6.normalize().multiplyScalar(3.0);
+            }
         }
 
         // --- 9. STATE MACHINE ---
-        let doMovementBounce = false;
-
         switch (e.state) {
             case AIState.IDLE:
                 e.idleTimer -= delta;
@@ -372,7 +374,7 @@ export const EnemyAI = {
                 } else if (e.idleTimer <= 0) {
                     logStateChange(now, e, AIState.WANDER);
                     e.state = AIState.WANDER;
-                    const angle = Math.random() * Math.PI * 2;
+                    const angle = Math.random() * TWO_PI;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
                     e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
@@ -380,10 +382,9 @@ export const EnemyAI = {
                 break;
 
             case AIState.WANDER:
-                doMovementBounce = true;
                 e.searchTimer -= delta;
                 _v1.set(e.mesh.position.x + e.velocity.x * delta, e.mesh.position.y + e.velocity.y * delta, e.mesh.position.z + e.velocity.z * delta);
-                
+
                 // Tier 4: Minimal updates, skip movement physics
                 if (!isTier4) {
                     moveEntity(e, _v1, delta, e.speed * 0.5, collisionGrid, _v6, now, false, isTier1, isTier2, frameOffset);
@@ -419,7 +420,6 @@ export const EnemyAI = {
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 } else if (e.lastKnownPosition && e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
-                    doMovementBounce = true;
                     if (!isTier4) {
                         moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, now, false, isTier1, isTier2, frameOffset);
                     }
@@ -451,8 +451,7 @@ export const EnemyAI = {
 
                     const target = (seesPlayer) ? playerPos : e.lastKnownPosition!;
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
-                    doMovementBounce = true;
-                    
+
                     if (!isTier4) {
                         moveEntity(e, target, delta, chaseSpeed, collisionGrid, _v6, now, true, isTier1, isTier2, frameOffset);
                     }
@@ -474,11 +473,9 @@ export const EnemyAI = {
                             const rangeSq = range * range;
 
                             if (distSq < rangeSq) {
+                                bestAttackIndex = i;
                                 if (att.type !== EnemyAttackType.HIT) {
-                                    bestAttackIndex = i;
                                     break;
-                                } else {
-                                    bestAttackIndex = i;
                                 }
                             }
                         }
@@ -490,12 +487,12 @@ export const EnemyAI = {
                             if (att.chargeTime && att.chargeTime > 0) {
                                 logStateChange(now, e, AIState.ATTACK_CHARGE);
                                 e.state = AIState.ATTACK_CHARGE;
-                                e.attackTimer = att.chargeTime / 1000;
+                                e.attackTimer = att.chargeTime * 0.001;
                             } else {
                                 EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks);
                                 logStateChange(now, e, AIState.ATTACKING);
                                 e.state = AIState.ATTACKING;
-                                e.attackTimer = (att.activeTime || 500) / 1000;
+                                e.attackTimer = (att.activeTime || 500) * 0.001;
                             }
                         }
                     }
@@ -510,12 +507,10 @@ export const EnemyAI = {
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
 
-                    EnemyAnimator.updateAttackAnim(e, now, delta);
-
                     if (e.attackTimer <= 0) {
                         logStateChange(now, e, AIState.ATTACKING);
                         e.state = AIState.ATTACKING;
-                        e.attackTimer = (att.activeTime || 100) / 1000;
+                        e.attackTimer = (att.activeTime || 100) * 0.001;
                         EnemyAttackHandler.executeAttack(e, att, distSq, playerPos, callbacks);
                     }
                 }
@@ -533,8 +528,6 @@ export const EnemyAI = {
                         EnemyAttackHandler.updateContinuousAttack(e, att, delta, playerPos, callbacks);
                     }
 
-                    EnemyAnimator.updateAttackAnim(e, now, delta);
-
                     if (e.attackTimer <= 0) {
                         logStateChange(now, e, AIState.CHASE, 'VISUAL');
                         e.state = AIState.CHASE;
@@ -543,7 +536,10 @@ export const EnemyAI = {
                 break;
         }
 
-        // --- 10. COOLDOWNS ---
+        // --- 10. PROCEDURAL ANIMATION ---
+        EnemyAnimator.updateAttackAnim(e, now, delta);
+
+        // --- 11. COOLDOWNS ---
         if (e.attacks) {
             for (let i = 0; i < e.attacks.length; i++) {
                 const atkType = e.attacks[i].type;
@@ -570,12 +566,13 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     _v2.y *= invDist;
     _v2.z *= invDist;
 
-    let curSpeed = (speed / 3.6);
+    // Use multiplication instead of division (speed * 0.277777... is approx speed/3.6)
+    let curSpeed = speed * 0.2777777777777778;
     if (e.slowTimer > 0) curSpeed *= 0.55;
 
     _v3.copy(_v2).multiplyScalar(curSpeed * delta);
 
-    if (sepForce.lengthSq() > 0) {
+    if (Math.abs(sepForce.x) > 0.001 || Math.abs(sepForce.z) > 0.001) {
         _v3.addScaledVector(sepForce, delta * 5.0);
     }
 
@@ -615,7 +612,7 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
 }
 
 function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
-    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3(); // Note: Will be pre-allocated in EnemyManager moving forward
+    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3(); // Handled during spawning, safe fallback
     e.lastKnownPosition.copy(pos);
     e.lastSeenTime = now;
 }

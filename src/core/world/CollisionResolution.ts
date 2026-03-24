@@ -91,10 +91,10 @@ export const applyCollisionResolution = (
                 _v1.applyQuaternion(_q1);
             }
             if (obstacle.scale) {
-                // Inverse Scale
-                if (obstacle.scale.x !== 0) _v1.x /= obstacle.scale.x;
-                if (obstacle.scale.y !== 0) _v1.y /= obstacle.scale.y;
-                if (obstacle.scale.z !== 0) _v1.z /= obstacle.scale.z;
+                // Inverse Scale (Multiplication by reciprocal is faster than division)
+                if (obstacle.scale.x !== 0) _v1.x *= (1.0 / obstacle.scale.x);
+                if (obstacle.scale.y !== 0) _v1.y *= (1.0 / obstacle.scale.y);
+                if (obstacle.scale.z !== 0) _v1.z *= (1.0 / obstacle.scale.z);
             }
         }
 
@@ -112,9 +112,14 @@ export const applyCollisionResolution = (
         // Local Y check
         if (_v1.y + height < -hY || _v1.y > hY) return false;
 
-        // Find closest point on box in local XZ plane
-        const closestX = Math.max(-hX, Math.min(_v1.x, hX));
-        const closestZ = Math.max(-hZ, Math.min(_v1.z, hZ));
+        // Find closest point on box in local XZ plane using fast branching
+        let closestX = _v1.x;
+        if (closestX < -hX) closestX = -hX;
+        else if (closestX > hX) closestX = hX;
+
+        let closestZ = _v1.z;
+        if (closestZ < -hZ) closestZ = -hZ;
+        else if (closestZ > hZ) closestZ = hZ;
 
         const dx = _v1.x - closestX;
         const dz = _v1.z - closestZ;
@@ -138,8 +143,9 @@ export const applyCollisionResolution = (
                 else _v2.set(0, 0, -(dZM + entityRadius));
             } else {
                 // Entity overlaps the edge: push away along the normal
-                const overlap = entityRadius - dist;
-                _v2.set((dx / dist) * overlap, 0, (dz / dist) * overlap);
+                // ALU optimization: Compute push scalar once (1 division)
+                const pushScalar = (entityRadius - dist) / dist;
+                _v2.set(dx * pushScalar, 0, dz * pushScalar);
             }
 
             // Convert push vector back to world space
@@ -186,11 +192,10 @@ export const applyCollisionResolution = (
                 // Exact center overlap fallback
                 entityPos.x += totalRadius;
             } else {
-                const overlap = totalRadius - dist;
-                const invDist = 1.0 / dist; // Multiplication is faster than division in the next step
-
-                entityPos.x += dx_bp * invDist * overlap;
-                entityPos.z += dz_bp * invDist * overlap;
+                // ALU optimization: Compute push scalar once
+                const pushScalar = (totalRadius - dist) / dist;
+                entityPos.x += dx_bp * pushScalar;
+                entityPos.z += dz_bp * pushScalar;
             }
             return true;
         }

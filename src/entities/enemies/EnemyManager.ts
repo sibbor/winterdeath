@@ -18,55 +18,93 @@ export type { Enemy };
 // --- INTERNAL POOLING & SCRATCHPADS (ZERO-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
+const _camDir = new THREE.Vector3();
+const _dummyQuat = new THREE.Quaternion();
 const _up = new THREE.Vector3(0, 5, 0);
+
 const _white = new THREE.Color(0xffffff);
 const _cyan = new THREE.Color(0x00ffff);
 const _flashColor = new THREE.Color();
 const _color = new THREE.Color();
+
 const _syncList: Enemy[] = [];
 const enemyPool: Enemy[] = [];
+
+// Shared iterative stack to avoid recursive stack frames and closures
+const _traverseStack: THREE.Object3D[] = [];
 
 let zombieRenderer: ZombieRenderer | null = null;
 let corpseRenderer: CorpseRenderer | null = null;
 let ashRenderer: AshRenderer | null = null;
 
 // --- ZERO-GC MATERIAL HELPERS ---
-function applyElectrifiedGlow(obj: any, colorObj: THREE.Color, intensity: number) {
-    if (obj.isMesh && obj.material) {
-        if (obj.material.emissive) {
-            obj.material.emissive.copy(colorObj);
-            obj.material.emissiveIntensity = intensity;
+function applyElectrifiedGlow(root: any, colorObj: THREE.Color, intensity: number) {
+    _traverseStack.length = 0;
+    _traverseStack.push(root);
+
+    while (_traverseStack.length > 0) {
+        const obj = _traverseStack.pop() as any;
+
+        if (obj.isMesh && obj.material) {
+            if (obj.material.emissive) {
+                obj.material.emissive.copy(colorObj);
+                obj.material.emissiveIntensity = intensity;
+            }
+            if (obj.material.color) {
+                obj.material.color.copy(colorObj);
+            }
         }
-        if (obj.material.color) {
+
+        if (obj.children) {
+            for (let i = 0; i < obj.children.length; i++) {
+                _traverseStack.push(obj.children[i]);
+            }
+        }
+    }
+}
+
+function resetMaterialEmissive(root: any) {
+    _traverseStack.length = 0;
+    _traverseStack.push(root);
+
+    while (_traverseStack.length > 0) {
+        const obj = _traverseStack.pop() as any;
+
+        if (obj.isMesh && obj.material && obj.material.emissive) {
+            obj.material.emissive.setHex(0x000000);
+            obj.material.emissiveIntensity = 0;
+        }
+
+        if (obj.children) {
+            for (let i = 0; i < obj.children.length; i++) {
+                _traverseStack.push(obj.children[i]);
+            }
+        }
+    }
+}
+
+function setBaseColor(root: any, colorObj: THREE.Color) {
+    _traverseStack.length = 0;
+    _traverseStack.push(root);
+
+    while (_traverseStack.length > 0) {
+        const obj = _traverseStack.pop() as any;
+
+        if (obj.isMesh && obj.material && obj.material.color) {
             obj.material.color.copy(colorObj);
         }
-    }
-    if (obj.children) {
-        for (let i = 0; i < obj.children.length; i++) applyElectrifiedGlow(obj.children[i], colorObj, intensity);
-    }
-}
 
-function resetMaterialEmissive(obj: any) {
-    if (obj.isMesh && obj.material && obj.material.emissive) {
-        obj.material.emissive.setHex(0x000000);
-        obj.material.emissiveIntensity = 0;
-    }
-    if (obj.children) {
-        for (let i = 0; i < obj.children.length; i++) resetMaterialEmissive(obj.children[i]);
-    }
-}
-
-function setBaseColor(obj: any, colorObj: THREE.Color) {
-    if (obj.isMesh && obj.material && obj.material.color) {
-        obj.material.color.copy(colorObj);
-    }
-    if (obj.children) {
-        for (let i = 0; i < obj.children.length; i++) setBaseColor(obj.children[i], colorObj);
+        if (obj.children) {
+            for (let i = 0; i < obj.children.length; i++) {
+                _traverseStack.push(obj.children[i]);
+            }
+        }
     }
 }
 
 // --- REUSABLE UPDATE CALLBACKS (100% Zero-GC) --- 
-// Pre-allocated object to prevent massive GC spikes during the update loop
 const _aiContext: any = {
     spawnPart: null,
     spawnDecal: null,
@@ -75,7 +113,6 @@ const _aiContext: any = {
     onEffectTick: null,
     playSound: (id: string) => soundManager.playEffect(id),
 
-    // Called from within EnemyAI, routes to the actual game session callback
     onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
         if (_aiContext._realOnPlayerHit) {
             _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
@@ -113,12 +150,10 @@ export const EnemyManager = {
         const typeToSpawn = forcedType || EnemySpawner.determineType(enemyCount, bossSpawned);
 
         if (enemyPool.length > 0) {
-            // Recycle from memory pool
             enemy = enemyPool.pop()!;
             EnemyManager.resetEnemy(enemy, typeToSpawn, playerPos, forcedPos);
             if (!enemy.mesh.parent) scene.add(enemy.mesh);
         } else {
-            // Create new instance if pool is empty
             enemy = EnemySpawner.spawn(scene, playerPos, typeToSpawn, forcedPos, bossSpawned, enemyCount);
         }
 
@@ -134,15 +169,14 @@ export const EnemyManager = {
         EnemySpawner.applyTypeStats(e, newType);
 
         if (forcedPos) {
-            _v1.set((Math.random() - 0.5) * 4, 0, (Math.random() - 0.5) * 4);
-            e.mesh.position.copy(forcedPos).add(_v1);
+            _v2.set((Math.random() - 0.5) * 4, 0, (Math.random() - 0.5) * 4);
+            e.mesh.position.copy(forcedPos).add(_v2);
         } else {
             const angle = Math.random() * Math.PI * 2;
             const dist = 45 + Math.random() * 30;
             e.mesh.position.set(playerPos.x + Math.cos(angle) * dist, 0, playerPos.z + Math.sin(angle) * dist);
         }
 
-        // Reset runtime state
         e.dead = false;
         e.hp = e.maxHp;
         e.deathState = EnemyDeathState.ALIVE;
@@ -155,7 +189,6 @@ export const EnemyManager = {
         e._accumulatedDamage = 0;
         e._lastDamageTextTime = 0;
 
-        // Reset AI Knowledge
         e.lastSeenTime = 0;
         e.awareness = 0;
         if (e.lastKnownPosition) e.lastKnownPosition.copy(e.mesh.position);
@@ -186,7 +219,6 @@ export const EnemyManager = {
         e.mesh.userData.isFlashing = false;
         e.ashPile = undefined;
 
-        // ZERO-GC: Pre-allocate physics vector so we don't allocate during combat
         if (!e.mesh.userData.spinVel) e.mesh.userData.spinVel = new THREE.Vector3();
         e.mesh.userData.spinVel.set(0, 0, 0);
 
@@ -214,7 +246,6 @@ export const EnemyManager = {
                 startPos.z + Math.sin(theta) * radius
             );
 
-            // Anropar sin egen manager-funktion (vilket använder minnespoolen!)
             const enemy = EnemyManager.spawn(scene, startPos, undefined, _v1, bossSpawned, currentCount + i);
             if (enemy) horde.push(enemy);
         }
@@ -310,7 +341,7 @@ export const EnemyManager = {
 
                 e.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
 
-                _color.setHex(e.color || 0xffffff).lerp(_white.setHex(0x000000), progress);
+                _color.setHex(e.color || 0xffffff).lerp(_white, progress);
                 setBaseColor(e.mesh, _color);
 
                 if (progress >= 1.0) {
@@ -325,7 +356,6 @@ export const EnemyManager = {
             case EnemyDeathState.ELECTRIFIED:
                 if (!e.mesh.userData.electrocuted) {
                     e.mesh.userData.electrocuted = true;
-                    // PERFORMANCE: Lock death coordinates to prevent drifting during pool recycling
                     e.mesh.userData.deathPosX = e.mesh.position.x;
                     e.mesh.userData.deathPosZ = e.mesh.position.z;
                     e.mesh.userData.deathPosY = e.mesh.position.y;
@@ -343,21 +373,17 @@ export const EnemyManager = {
                 if (age < twitchDur) {
                     const fallProgress = Math.min(1.0, age / fallDur);
 
-                    // 1. Fall over animation using lerp
                     e.mesh.rotation.x = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotX, fallProgress);
                     e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotZ, fallProgress);
                     e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.userData.deathPosY, 0.2, fallProgress);
 
-                    // 2. Cyan High-Frequency Pulse (Zero-GC emissive update)
                     const pulse = Math.sin(now * 0.05) * 0.5 + 0.5;
                     _color.copy(_cyan).lerp(_white, Math.random() * 0.3);
                     applyElectrifiedGlow(e.mesh, _color, 1.0 + pulse * 4.0);
 
-                    // 3. Muscle Spasms: Use rotation jitter for better visual stability than position jitter
                     const jitter = (1.0 - fallProgress * 0.5) * 0.2;
                     e.mesh.rotation.y += (Math.random() - 0.5) * jitter;
 
-                    // 4. Fixed particles: Ensure sparks spawn relative to the locked death position
                     if (Math.random() > 0.85 && callbacks.spawnPart) {
                         _v1.set(
                             e.mesh.userData.deathPosX + (Math.random() - 0.5),
@@ -367,12 +393,10 @@ export const EnemyManager = {
                         callbacks.spawnPart(_v1.x, _v1.y, _v1.z, 'spark', 1);
                     }
                 } else {
-                    // Finalize: Reset to charred, static state
                     _color.setHex(e.color || 0xffffff).multiplyScalar(0.3);
                     resetMaterialEmissive(e.mesh);
                     setBaseColor(e.mesh, _color);
 
-                    // Ensure final snap to locked position
                     e.mesh.position.x = e.mesh.userData.deathPosX;
                     e.mesh.position.y = 0.2;
                     e.mesh.position.z = e.mesh.userData.deathPosZ;
@@ -410,11 +434,15 @@ export const EnemyManager = {
     },
 
     applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, now: number) => {
-        let shovedAnyone = false;
-        const enemies = state.enemies;
+        if (!state.collisionGrid) return;
 
-        for (let i = 0; i < enemies.length; i++) {
-            const enemy = enemies[i];
+        let shovedAnyone = false;
+        const radius = Math.sqrt(radiusSq);
+        const nearbyEnemies = state.collisionGrid.getNearbyEnemies(playerGroup.position, radius);
+        const len = nearbyEnemies.length;
+
+        for (let i = 0; i < len; i++) {
+            const enemy = nearbyEnemies[i];
 
             if (enemy.deathState === EnemyDeathState.ALIVE) {
                 const distSq = enemy.mesh.position.distanceToSquared(playerGroup.position);
@@ -449,7 +477,8 @@ export const EnemyManager = {
                     if (!enemy.isBoss) {
                         enemy.mesh.userData.isRagdolling = true;
                         if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
-                        enemy.mesh.userData.spinVel.set(
+                        const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
+                        sVel.set(
                             (Math.random() - 0.5) * 15,
                             (Math.random() - 0.5) * 20,
                             (Math.random() - 0.5) * 15
@@ -505,7 +534,8 @@ export const EnemyManager = {
         if (!enemy.isBoss) {
             enemy.mesh.userData.isRagdolling = true;
             if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
-            enemy.mesh.userData.spinVel.set(
+            const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
+            sVel.set(
                 (Math.random() - 0.5) * 25,
                 (Math.random() - 0.5) * 30,
                 (Math.random() - 0.5) * 25
@@ -528,7 +558,6 @@ export const EnemyManager = {
         const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
         const massRatio = (vehicleDef.mass * 0.001) / (mass || 1.0);
 
-        // Momentum-based damage
         const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;
 
         e.hp -= baseDamage;
@@ -536,31 +565,24 @@ export const EnemyManager = {
 
         const scene = session.engine.scene;
 
-        // --- FATAL HIT ---
         if (e.hp <= 0) {
             e.dead = true;
 
-            // 1. GIBBED (>= 80 km/h) - High speed splatter
             if (speedKmh >= 80) {
                 e.deathState = EnemyDeathState.GIBBED;
                 e.lastDamageType = DamageType.VEHICLE_SPLATTER;
 
-                // Force upward and forward momentum for gibbing
-                const forceDir = _v1.copy(knockDir).multiplyScalar(speedMS * 1.5).setY(3.0);
-
+                const forceDir = _v3.copy(knockDir).multiplyScalar(speedMS * 1.5).setY(3.0);
                 EnemyManager.explodeEnemy(e, _aiContext, forceDir, true);
 
                 session.engine.camera.shake(0.4);
                 soundManager.playImpact('flesh');
 
-                return true; // Heavy hit
-
-                // 2. FALL (20 - 79 km/h) - Airborne ragdoll effect
+                return true;
             } else if (speedKmh >= 20) {
                 e.deathState = EnemyDeathState.FALL;
                 e.lastDamageType = DamageType.VEHICLE_RAM;
 
-                // Arc through the air
                 const pushForce = speedMS * 0.8 * massRatio;
                 const upForce = speedMS * 0.6 * massRatio;
 
@@ -574,9 +596,7 @@ export const EnemyManager = {
                 session.engine.camera.shake(0.2);
                 soundManager.playImpact('flesh');
 
-                return true; // Heavy hit
-
-                // 3. GENERIC (< 20 km/h) - Low speed death, falls over
+                return true;
             } else {
                 e.deathState = EnemyDeathState.GENERIC;
                 e.lastDamageType = DamageType.VEHICLE_PUSH;
@@ -584,20 +604,16 @@ export const EnemyManager = {
                 e.deathVel.copy(knockDir).multiplyScalar(speedMS * massRatio * 0.2);
                 e.deathVel.y = 2.0;
 
-                return false; // Light hit
+                return false;
             }
-
-            // --- SURVIVED HIT (Knockback) ---
         } else {
             e.lastDamageType = DamageType.VEHICLE_PUSH;
 
-            // Create a velocity vector representing the car's impact to send to the knockback system
-            _v1.copy(knockDir).multiplyScalar(speedMS);
+            // Use dedicated V3 and V4 to avoid aliasing with V1 and V2 in applyKnockback
+            _v3.copy(knockDir).multiplyScalar(speedMS);
+            _v4.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
 
-            // Calculate precise point of impact backwards from the zombie
-            _v2.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
-
-            EnemyManager.applyKnockback(e, _v2, _v1, true, state, scene, now);
+            EnemyManager.applyKnockback(e, _v4, _v3, true, state, scene, now);
 
             e.slowTimer = 0.5;
             return false;
@@ -608,52 +624,45 @@ export const EnemyManager = {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
-        // Route external callbacks to our static context object
         _aiContext._realOnPlayerHit = onPlayerHit;
         _aiContext.spawnPart = spawnPart;
         _aiContext.spawnDecal = spawnDecal;
         _aiContext.spawnBubble = spawnBubble;
         _aiContext.applyDamage = applyDamage;
-        
-        // --- 1. PRE-CALCULATE CAMERA CULLING DATA ---
-        const cam = (playerPos as any)._engine?.camera?.threeCamera; // Fallback if engine not in context
-        // If we have engine access via context or singleton
+
+        const cam = (playerPos as any)._engine?.camera?.threeCamera;
         const engine = (window as any).WinterEngineInstance;
         const camera = engine?.camera;
         const cameraPos = camera?.threeCamera?.position;
-        const cameraDir = _v1.set(0, 0, -1).applyQuaternion(camera?.threeCamera?.quaternion || _up.set(0,0,0));
+
+        // --- 1. CRITICAL FIX: Dedicated camera vector to avoid pointer corruption ---
+        const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera?.threeCamera?.quaternion || _dummyQuat);
 
         const len = enemies.length;
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
-            // 1. Only process AI Logic if ALIVE
             if (e.deathState === EnemyDeathState.ALIVE) {
-                // ZERO-GC: Pass the pre-allocated static object instead of creating a new spread object
                 EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, isDead, _aiContext, water);
             }
 
-            // 2. Visual animations (Death states)
             if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
                 EnemyManager.processDeathAnimation(e, delta, now, _aiContext);
             }
 
             const deathState = e.deathState;
 
-            // 3. Rendering visibility decisions (Frustum Culling)
             if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTRIFIED || deathState === EnemyDeathState.DROWNED) {
                 e.mesh.visible = true;
                 e.mesh.matrixAutoUpdate = true;
             }
             else if (!e.isBoss && !e.mesh.userData.exploded && deathState !== EnemyDeathState.DEAD) {
-                // LoD RENDERING: Skip if behind camera and far away
                 let isVisible = true;
                 if (cameraPos && cameraDir) {
                     _v2.subVectors(e.mesh.position, cameraPos);
                     const dot = cameraDir.dot(_v2);
                     const distSq = _v2.lengthSq();
-                    
-                    // Behind camera (dot < -2) and outside a safety radius (25 units)
+
                     if (dot < -2.0 && distSq > 625) {
                         isVisible = false;
                     }
@@ -662,6 +671,8 @@ export const EnemyManager = {
                 if (isVisible) {
                     e.mesh.visible = false;
                     e.mesh.matrixAutoUpdate = false;
+                    // --- 2. CRITICAL FIX: Matrix must be explicitly updated since AutoUpdate is false ---
+                    e.mesh.updateMatrix();
                     _syncList.push(e);
                 } else {
                     e.mesh.visible = false;
@@ -669,7 +680,6 @@ export const EnemyManager = {
                 }
             }
 
-            // 4. Hit Flashes (Moved from AI for cleaner architecture)
             if (deathState === EnemyDeathState.ALIVE) {
                 if (e.isBoss && e.mesh && e.color !== undefined) {
                     const timeSinceHit = now - e.hitTime;
@@ -678,25 +688,38 @@ export const EnemyManager = {
                             e.mesh.userData.isFlashing = true;
                             const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
 
-                            if (isArc) _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4);
+                            if (isArc) _flashColor.setHex(0x00ffff).lerp(_white, 0.4);
                             else _flashColor.setHex(0xffffff);
 
-                            e.mesh.traverse((c: any) => {
+                            _traverseStack.length = 0;
+                            _traverseStack.push(e.mesh);
+                            while (_traverseStack.length > 0) {
+                                const c = _traverseStack.pop() as any;
                                 if (c.isMesh && c.material && c.material.emissive) {
                                     c.material.emissive.copy(_flashColor);
                                     c.material.emissiveIntensity = isArc ? 2.0 : 1.0;
                                 }
-                            });
+                                for (let k = 0; k < c.children.length; k++) {
+                                    _traverseStack.push(c.children[k]);
+                                }
+                            }
                         }
                     } else {
                         if (e.mesh.userData.isFlashing) {
                             e.mesh.userData.isFlashing = false;
-                            e.mesh.traverse((c: any) => {
+
+                            _traverseStack.length = 0;
+                            _traverseStack.push(e.mesh);
+                            while (_traverseStack.length > 0) {
+                                const c = _traverseStack.pop() as any;
                                 if (c.isMesh && c.material && c.material.emissive) {
                                     c.material.emissive.setHex(0x000000);
                                     c.material.emissiveIntensity = 0.0;
                                 }
-                            });
+                                for (let k = 0; k < c.children.length; k++) {
+                                    _traverseStack.push(c.children[k]);
+                                }
+                            }
                         }
                     }
                 } else if (!e.isBoss && e.color !== undefined) {
@@ -707,7 +730,7 @@ export const EnemyManager = {
                             e.mesh.userData.originalColor = e.color;
                             const isArc = e.lastDamageType === WeaponType.ARC_CANNON;
                             if (isArc) {
-                                e.color = _flashColor.setHex(0x00ffff).lerp(_white.setHex(0xffffff), 0.4).getHex();
+                                e.color = _flashColor.setHex(0x00ffff).lerp(_white, 0.4).getHex();
                             } else {
                                 e.color = 0xffffff;
                             }
@@ -788,7 +811,7 @@ export const EnemyManager = {
                 state.killsInRun++;
                 callbacks.gainXp(e.score || 10);
 
-                if (e.isBoss && e.bossId !== undefined) {
+                if (e.isBoss && e.bossId !== undefined && e.bossId !== -1) {
                     callbacks.onBossKilled(e.bossId);
                     callbacks.spawnScrap(e.mesh.position.x, e.mesh.position.z, 500);
                 } else if (Math.random() < 0.15) {
@@ -797,7 +820,6 @@ export const EnemyManager = {
 
                 if (e.indicatorRing?.parent) e.indicatorRing.parent.remove(e.indicatorRing);
 
-                // ZERO-GC: Array removal via swapping the last element
                 const recycled = enemies[i];
                 enemies[i] = enemies[enemies.length - 1];
                 enemies.pop();
@@ -805,7 +827,6 @@ export const EnemyManager = {
                 recycled.dead = true;
                 recycled.deathState = EnemyDeathState.DEAD;
 
-                // Push non-boss enemies back into the pool for immediate reuse later
                 if (!recycled.isBoss) enemyPool.push(recycled);
             }
         }

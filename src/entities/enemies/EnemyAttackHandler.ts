@@ -7,6 +7,15 @@ import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
+// Zero-GC String Cache to prevent heap allocations on concatenated sound names
+const _soundNameCache: Record<string, string> = {};
+function getStartSoundName(type: string): string {
+    if (!_soundNameCache[type]) {
+        _soundNameCache[type] = type + '_start';
+    }
+    return _soundNameCache[type];
+}
+
 export const EnemyAttackHandler = {
     /**
      * Main function called when `chargeTime` finishes and the attack executes.
@@ -116,7 +125,7 @@ export const EnemyAttackHandler = {
             case EnemyAttackType.ELECTRIC_BEAM:
             case EnemyAttackType.MAGNETIC_CHAIN:
                 // These are continuous. executeAttack runs only when charge completes.
-                callbacks.playSound(`${att.type}_start`);
+                callbacks.playSound(getStartSoundName(att.type));
                 break;
         }
     },
@@ -141,9 +150,10 @@ export const EnemyAttackHandler = {
             case EnemyAttackType.ELECTRIC_BEAM:
                 if (callbacks.spawnPart) {
                     const dist = Math.sqrt(currentDistSq);
-                    if (dist > 0.0001) {
-                        // Inlined normalize and multiplyScalar(5.0)
-                        const invDist = 5.0 / dist;
+
+                    // Branchless math to avoid CPU prediction misses
+                    const invDist = dist > 0.0001 ? 5.0 / dist : 0.0;
+                    if (invDist > 0.0) {
                         _v2.set(dx * invDist, dy * invDist, dz * invDist);
                         callbacks.spawnPart(pos.x, pos.y + 1.8, pos.z, 'electric_beam', 1, undefined, _v2);
                     }
@@ -166,9 +176,9 @@ export const EnemyAttackHandler = {
 
                     if (callbacks.applyExternalForce) {
                         const dist = Math.sqrt(currentDistSq);
-                        if (dist > 0.0001) {
-                            // Inlined negated normalization (pull player towards boss)
-                            const invDist = -1.0 / dist;
+                        const invDist = dist > 0.0001 ? -1.0 / dist : 0.0;
+
+                        if (invDist !== 0.0) {
                             _v2.set(dx * invDist, dy * invDist, dz * invDist);
                             callbacks.applyExternalForce(_v2, 0.9); // Pull with 90% strength
                         }

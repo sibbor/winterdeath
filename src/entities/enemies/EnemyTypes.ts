@@ -103,8 +103,6 @@ export enum EnemyType {
     BOSS = 'BOSS'
 }
 
-
-
 /**
  * Static data definitions for different zombie types
  */
@@ -114,13 +112,15 @@ export interface ZombieTypeData {
     score: number;
     color: number;
     scale: number;
-    widthScale?: number;
-    attacks?: AttackDefinition[];
+    widthScale: number;
+    attacks: AttackDefinition[];
 }
 
 /**
  * The core Enemy entity structure used across all systems.
- * Designed for Zero-GC updates by pre-allocating essential Vectors.
+ * Designed for Zero-GC updates by pre-allocating essential Vectors and removing Optionals (?).
+ * * Strict V8 Shape Locking: All properties MUST be initialized when spawned. 
+ * Use 0, false, null, or pre-allocated objects instead of undefined.
  */
 export interface Enemy {
     // Unique identifier for tracking and debugging
@@ -129,12 +129,12 @@ export interface Enemy {
 
     // Component References
     mesh: THREE.Group;
-    indicatorRing?: THREE.Mesh;
-    ashPile?: THREE.Object3D;
+    indicatorRing: THREE.Mesh | null;
+    ashPile: THREE.Object3D | null;
 
     // Identity & Stats
     type: EnemyType | string;
-    isBoss?: boolean;
+    isBoss: boolean;
     hp: number;
     maxHp: number;
     speed: number;
@@ -150,7 +150,7 @@ export interface Enemy {
     idleTimer: number;       // Seconds before switching from IDLE to WANDER
     searchTimer: number;     // Seconds spent searching at last known position
     attackCooldowns: Record<string, number>; // Individual timers for different attacks
-    abilityCooldown?: number;
+    abilityCooldown: number;
 
     // AI Knowledge & Sensors
     spawnPos: THREE.Vector3;           // Anchor point for WANDER behavior
@@ -158,19 +158,21 @@ export interface Enemy {
     lastKnownPosition: THREE.Vector3;  // Memory of where the player was last detected via sound/sight
     hearingThreshold: number;          // Range multiplier for sound detection (0.0 to 1.0+)
     awareness: number;                 // 0.0 to 1.0 representation of alertness
-    lastHeardNoiseType?: NoiseType;    // Type of the most recent noise sensed
+    lastHeardNoiseType: NoiseType | null; // Type of the most recent noise sensed
 
     // Interaction & Boss States
-    bossId?: number;         // Link to the BOSSES content data
+    bossId: number;          // Link to the BOSSES content data (-1 if not a boss)
     dead: boolean;           // Logic-level removal flag
     hitTime: number;         // Timestamp of the most recent damage event
-    lastStepTime?: number;   // Timestamp of the last footstep sound
-    lastTackleTime?: number; // Timestamp of the last physical collision with the player
-    lastVehicleHit?: number; // Timestamp of the last vehicle collision
+    lastStepTime: number;    // Timestamp of the last footstep sound
+    lastTackleTime: number;  // Timestamp of the last physical collision with the player
+    lastVehicleHit: number;  // Timestamp of the last vehicle collision
     fleeing: boolean;        // Flag for retreat behavior
-    attacks?: AttackDefinition[];
-    currentAttackIndex?: number;
-    attackTimer?: number;    // Multi-purpose timer for charging/attacking states
+
+    // Combat
+    attacks: AttackDefinition[];
+    currentAttackIndex: number; // -1 when not attacking
+    attackTimer: number;     // Multi-purpose timer for charging/attacking states
 
     // Status Effects (Timers are delta-based for consistency)
     isBurning: boolean;
@@ -178,7 +180,7 @@ export interface Enemy {
     afterburnTimer: number;  // Duration remaining for the burning state
 
     isBlinded: boolean;
-    blindTimer: number;      // Seconds remaining for the blind effect (Fixes TS error)
+    blindTimer: number;      // Seconds remaining for the blind effect
     blindUntil: number;      // Timestamp fallback for blind recovery
 
     slowTimer: number;       // Seconds remaining for movement speed penalty
@@ -198,10 +200,14 @@ export interface Enemy {
     deathVel: THREE.Vector3;     // Trajectory used during the falling animation
 
     // Death, Animation & Cleanup
-    lastDamageType?: string;       // Type of damage
+    lastDamageType: string;        // Type of damage
     lastHitWasHighImpact: boolean; // High-impacted
     deathTimer: number;            // Timestamp recording the moment of death
-    lastTrailPos?: THREE.Vector3;  // Spacing tracker for blood trail decals
+
+    // Zero-GC tracking for blood trail decals
+    hasLastTrailPos: boolean;
+    lastTrailPos: THREE.Vector3;
+
     fallForward: boolean;          // Determines the direction of the fall animation
     bloodSpawned: boolean;         // Boolean to ensure only one blood pool is spawned
     lastKnockback: number;         // Timestamp of the last force application
