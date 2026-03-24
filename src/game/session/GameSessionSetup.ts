@@ -41,6 +41,24 @@ const seededRandom = (seed: number) => {
     return () => { return (s = s * 16807 % 2147483647) / 2147483647; };
 };
 
+// --- ZERO-GC PRE-ALLOCATED SETS FOR DISPOSAL ---
+// Populated lazily on first run to avoid execution overhead
+let _sharedGeosSet: Set<THREE.BufferGeometry> | null = null;
+let _sharedMatsSet: Set<THREE.Material> | null = null;
+
+function _initDisposalSets() {
+    if (_sharedGeosSet && _sharedMatsSet) return;
+    _sharedGeosSet = new Set();
+    _sharedMatsSet = new Set();
+
+    for (const key in GEOMETRY) {
+        _sharedGeosSet.add((GEOMETRY as any)[key]);
+    }
+    for (const key in MATERIALS) {
+        _sharedMatsSet.add((MATERIALS as any)[key]);
+    }
+}
+
 export interface SetupContext {
     engine: WinterEngine;
     session: GameSessionLogic;
@@ -57,7 +75,7 @@ export interface SetupContext {
         setInteractionType: (val: any) => void;
         setFoundMemberName?: (val: string) => void;
         setOverlay: (type: string | null) => void;
-    },
+    };
     callbacks: {
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
@@ -117,6 +135,11 @@ export class GameSessionSetup {
 
             await AssetPreloader.warmupAsync('SECTOR', env, yielder, props.currentSector);
 
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) {
+                console.warn(`[GameSessionSetup] Aborting setup ${currentSetupId} after preloader (Superceded by ${setupIdRef.current})`);
+                return;
+            }
+
             const monitor = PerformanceMonitor.getInstance();
             camera.reset();
             camera.set('fov', env.fov);
@@ -126,7 +149,6 @@ export class GameSessionSetup {
             if (!props.isWarmup) {
                 engine.syncEnvironment(env);
 
-                // Track skyLight for the game loop and shadow following
                 const skyLight = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
                 if (skyLight) {
                     refs.skyLightRef.current = skyLight;
@@ -143,14 +165,19 @@ export class GameSessionSetup {
                 if (newEnemies) {
                     for (let i = 0; i < newEnemies.length; i++) {
                         state.enemies.push(newEnemies[i]);
-                        if (!state.seenEnemies.includes(newEnemies[i].type)) state.seenEnemies.push(newEnemies[i].type);
+
+                        let seen = false;
+                        for (let j = 0; j < state.seenEnemies.length; j++) {
+                            if (state.seenEnemies[j] === newEnemies[i].type) { seen = true; break; }
+                        }
+                        if (!seen) state.seenEnemies.push(newEnemies[i].type);
                     }
                 }
             };
 
             const mapItems: MapItem[] = [];
-            const flickeringLights: any[] = [];
             const burningObjects: any[] = [];
+            const flickeringLights: any[] = [];
 
             const spawnBoss = (type: string, pos?: THREE.Vector3) => {
                 const pSpawn = currentSector.playerSpawn;
@@ -159,7 +186,12 @@ export class GameSessionSetup {
                 if (boss) {
                     state.enemies.push(boss);
                     state.bossSpawned = true;
-                    if (!state.seenBosses.includes(type)) state.seenBosses.push(type);
+
+                    let seen = false;
+                    for (let j = 0; j < state.seenBosses.length; j++) {
+                        if (state.seenBosses[j] === type) { seen = true; break; }
+                    }
+                    if (!seen) state.seenBosses.push(type);
                 }
                 return boss;
             };
@@ -186,14 +218,12 @@ export class GameSessionSetup {
                 onPOIdiscovered: callbacks.onPOIdiscovered,
                 onTrigger: callbacks.onTrigger,
                 onAction: (action: any) => {
-                    // Logic from GameSession.tsx handleTriggerAction
                     if (action.type === 'HEAL') {
                         state.hp = Math.min(state.maxHp, state.hp + action.amount);
                         soundManager.playUiConfirm();
                     }
                     if (action.type === 'SOUND' && action.id) soundManager.playEffect(action.id);
 
-                    // Route to GameSession handleTriggerAction for visual/UI effects
                     callbacks.handleTriggerAction(action, engine.scene);
                 },
                 explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
@@ -207,9 +237,11 @@ export class GameSessionSetup {
                 },
                 addFireZone: (z: any) => state.fireZones.push(z),
                 onBossKilled: (id: number) => {
-                    if (!state.bossesDefeated.includes(id)) {
-                        state.bossesDefeated.push(id);
+                    let seen = false;
+                    for (let j = 0; j < state.bossesDefeated.length; j++) {
+                        if (state.bossesDefeated[j] === id) { seen = true; break; }
                     }
+                    if (!seen) state.bossesDefeated.push(id);
                     state.bossDefeatedTime = performance.now();
                     callbacks.onBossKilled(id);
                 },
@@ -218,12 +250,19 @@ export class GameSessionSetup {
             };
 
             PathGenerator.resetPathLayer();
+
+            const lightSystem = new LightSystem(flickeringLights, refs.sectorContextRef, refs.playerGroupRef);
+            session.addSystem(lightSystem);
+
             await SectorGenerator.build(sectorCtx, currentSector);
 
-            // [VINTERDÖD] FIX: Assign generated map items to runtime state for HUD/Map system
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) {
+                console.warn(`[GameSessionSetup] Aborting setup ${currentSetupId} after build (Superceded by ${setupIdRef.current})`);
+                return;
+            }
+
             state.mapItems = mapItems;
 
-            // [VINTERDÖD] FIX: Stat Safety. Ensure stats are valid numbers before starting game systems
             state.maxHp = isNaN(state.maxHp) ? 100 : Math.max(100, state.maxHp);
             state.hp = isNaN(state.hp) ? state.maxHp : Math.min(state.maxHp, state.hp);
             state.maxStamina = isNaN(state.maxStamina) ? 100 : Math.max(100, state.maxStamina);
@@ -231,7 +270,6 @@ export class GameSessionSetup {
 
 
             AssetPreloader.setLastSectorIndex(props.currentSector);
-
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
@@ -265,7 +303,13 @@ export class GameSessionSetup {
             const playerGroup = ModelFactory.createPlayer();
             refs.playerGroupRef.current = playerGroup;
 
-            const bodyMesh = playerGroup.children.find(c => c.userData.isBody || c.userData.isPlayer) || playerGroup.children[0] as THREE.Mesh;
+            let bodyMesh = playerGroup.children[0];
+            for (let i = 0; i < playerGroup.children.length; i++) {
+                if (playerGroup.children[i].userData.isBody || playerGroup.children[i].userData.isPlayer) {
+                    bodyMesh = playerGroup.children[i];
+                    break;
+                }
+            }
             refs.playerMeshRef.current = bodyMesh as THREE.Group;
 
             const playerSpawn = { ...currentSector.playerSpawn };
@@ -300,10 +344,11 @@ export class GameSessionSetup {
             const fSpawn = currentSector.familySpawn;
             const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
 
-            // Debug Mode Override: Automatically rescue previous family members for testing
             if (props.debugMode && props.currentSector >= 1 && rescuedIndices.length === 0) {
                 for (let i = 0; i < props.currentSector; i++) {
-                    if (!rescuedIndices.includes(i)) rescuedIndices.push(i);
+                    let hasI = false;
+                    for (let r = 0; r < rescuedIndices.length; r++) { if (rescuedIndices[r] === i) { hasI = true; break; } }
+                    if (!hasI) rescuedIndices.push(i);
                 }
             }
 
@@ -317,23 +362,36 @@ export class GameSessionSetup {
                             const mesh = ModelFactory.createFamilyMember(fmData);
                             mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
                             this.addFamilyMarker(mesh, fmData, scene);
-                            const ring = mesh.children.find(c => c.userData.isRing);
+
+                            let ring = null;
+                            for (let c = 0; c < mesh.children.length; c++) {
+                                if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
+                            }
+
                             refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring });
                         }
                     }
                 }
             }
 
+            let hasRescuedCurrent = false;
+            for (let r = 0; r < rescuedIndices.length; r++) { if (rescuedIndices[r] === props.currentSector) { hasRescuedCurrent = true; break; } }
+
             if (!props.familyAlreadyRescued) {
                 const theme = SECTOR_THEMES[props.currentSector];
                 const fmId = theme ? theme.familyMemberId : 0;
-                if (!rescuedIndices.includes(props.currentSector)) {
+                if (!hasRescuedCurrent) {
                     const fmData = FAMILY_MEMBERS[fmId];
                     if (fmData) {
                         const mesh = ModelFactory.createFamilyMember(fmData);
                         mesh.position.set(fSpawn.x, 0, fSpawn.z); if (fSpawn.y) mesh.position.y = fSpawn.y;
                         this.addFamilyMarker(mesh, fmData, scene);
-                        const ring = mesh.children.find(c => c.userData.isRing);
+
+                        let ring = null;
+                        for (let c = 0; c < mesh.children.length; c++) {
+                            if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
+                        }
+
                         const currentFM = { mesh, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring };
                         refs.activeFamilyMembers.current.push(currentFM);
                         refs.familyMemberRef.current = currentFM;
@@ -387,7 +445,11 @@ export class GameSessionSetup {
                 gainXp: callbacks.gainXp,
                 t: callbacks.t,
                 onBossKilled: (id: number) => {
-                    if (!state.bossesDefeated.includes(id)) state.bossesDefeated.push(id);
+                    let seen = false;
+                    for (let j = 0; j < state.bossesDefeated.length; j++) {
+                        if (state.bossesDefeated[j] === id) { seen = true; break; }
+                    }
+                    if (!seen) state.bossesDefeated.push(id);
                     state.bossDefeatedTime = performance.now();
                     soundManager.stopMusic();
                     if (currentSector.environment.ambientLoop) soundManager.playMusic(currentSector.environment.ambientLoop);
@@ -423,11 +485,6 @@ export class GameSessionSetup {
                 startCinematic: callbacks.startCinematic
             }));
 
-            // LightSystem
-            const lightSystem = new LightSystem(flickeringLights, refs.sectorContextRef, refs.playerGroupRef);
-            session.addSystem(lightSystem);
-
-            // CinematicSystem
             session.addSystem(new CinematicSystem({
                 cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
                 bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
@@ -438,7 +495,6 @@ export class GameSessionSetup {
                 }
             }));
 
-            // DeathSystem
             session.addSystem(new DeathSystem({
                 playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any,
                 fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
@@ -452,7 +508,6 @@ export class GameSessionSetup {
             scene.traverse((obj) => {
                 if (obj.userData?.isPlayer || obj.userData?.isEnemy || obj.userData?.isProjectile || obj.userData?.vehicleDef ||
                     obj.userData?.isFamilyMember || obj.userData?.isBody || obj.userData?.isCorpse || obj.userData?.dynamic) {
-                    // Skip children of dynamic objects
                     obj.traverse((child) => {
                         child.matrixAutoUpdate = true;
                     });
@@ -470,7 +525,6 @@ export class GameSessionSetup {
             FXSystem.preload(scene);
             monitor.begin('render_compile');
 
-            // Force castShadow for budget before compile
             lightSystem.update(session as any, 16, performance.now());
             engine.renderer.compile(scene, camera.threeCamera);
             monitor.end('render_compile');
@@ -482,7 +536,6 @@ export class GameSessionSetup {
                     framesToWait--;
                     requestAnimationFrame(checkReady);
                 } else {
-                    // LÄGG TILL setupIdRef-KOLLEN HÄR:
                     if (isMounted.current && setupIdRef.current === currentSetupId) {
                         ui.setIsSectorLoading(false);
                         if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
@@ -514,26 +567,21 @@ export class GameSessionSetup {
         scene.add(mesh);
     }
 
-    // THE WEBGL BLACK HOLE FIX
     static disposeSector(session: GameSessionLogic, state: RuntimeState) {
         const scene = WinterEngine.getInstance().scene;
         EnemyManager.clear();
 
-        // 1. Manually tear down GPU memory to avoid the WebGL Black Hole Context leak
-        const sharedGeos = Object.values(GEOMETRY);
-        const sharedMats = Object.values(MATERIALS);
+        _initDisposalSets();
 
-        // Clear asset cache
         AssetLoader.getInstance().clearCache();
 
         scene.traverse((obj: any) => {
-            // [VINTERDÖD FIX] Expand protection to persistent engine systems (Weather/Water)
             if (obj.userData?.isEngineStatic || obj.userData?.isSharedAsset || obj.userData?.isPersistent) return;
-            if (obj.name.includes('Weather') || obj.name.includes('Water')) return; // Explicit safeguard
+            // Explicit string search without array allocation
+            if (obj.name.indexOf('Weather') !== -1 || obj.name.indexOf('Water') !== -1) return;
 
             if (obj.isMesh && obj.geometry) {
-                // DO NOT dispose shared library geometries
-                if (!sharedGeos.includes(obj.geometry)) {
+                if (!_sharedGeosSet!.has(obj.geometry)) {
                     obj.geometry.dispose();
                 }
             }
@@ -541,18 +589,16 @@ export class GameSessionSetup {
                 const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
                 for (let i = 0; i < mats.length; i++) {
                     const m = mats[i];
-                    // DO NOT dispose shared library materials or those strictly tagged as shared
-                    if (!sharedMats.includes(m) && !m.userData?.isSharedAsset) {
+                    if (!_sharedMatsSet!.has(m) && !m.userData?.isSharedAsset) {
                         this.disposeMaterial(m);
                     }
                 }
             }
         });
 
-        // 2. Clear out scene children manually, but PRESERVE the engine systems
         for (let i = scene.children.length - 1; i >= 0; i--) {
             const child = scene.children[i];
-            const isPersistent = child.userData?.isPersistent || child.name.includes('Weather') || child.name.includes('Water');
+            const isPersistent = child.userData?.isPersistent || child.name.indexOf('Weather') !== -1 || child.name.indexOf('Water') !== -1;
 
             if (!isPersistent) {
                 scene.remove(child);

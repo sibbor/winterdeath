@@ -49,7 +49,8 @@ export class LightSystem implements System {
     private flickeringLights: FlickeringLight[];
     private sectorContext: { current: SectorContext | null };
     private playerGroup: { current: THREE.Group | null };
-    private frame: number = 14;
+    private frame: number = 0;
+    private lightPool: THREE.PointLight[] = [];
 
     constructor(
         flickeringLights: FlickeringLight[],
@@ -65,31 +66,87 @@ export class LightSystem implements System {
         const sectorCtx = this.sectorContext.current;
         if (!sectorCtx) return;
 
+        // 0. CLEANUP EXISTING PROXIES TO PREVENT PERFORMANCE LEAKS
+        if (this.lightPool && this.lightPool.length > 0) {
+            for (let i = 0; i < this.lightPool.length; i++) {
+                const p = this.lightPool[i];
+                if (p.parent && p.parent !== session.engine.scene) {
+                    p.parent.remove(p);
+                }
+                if (!p.parent) session.engine.scene.add(p);
+
+                // Reset proxy state for fresh start
+                p.intensity = 0;
+                p.visible = true; // Stay technically visible to avoid shader change
+                p.position.set(0, -1000, 0);
+            }
+        } else {
+            this.lightPool = [];
+        }
+
+        // 1. Identify all static lights from the level data
         session.engine.scene.traverse((obj) => {
             if (obj instanceof THREE.PointLight) {
-                // Flashlight is ignored. It is handled separately and can never be turned off.
                 if (obj.name === FLASHLIGHT.name) return;
+                if (obj.userData.isProxy) return;
 
-                if (!sectorCtx.dynamicLights.includes(obj)) {
+                // SPECIAL GUARD: Fast loop instead of traverseAncestors (Zero-GC)
+                let isPartOfActor = false;
+                let parent = obj.parent;
+
+                while (parent) {
+                    if (parent.userData.isActor || parent.name.indexOf('enemy') !== -1 || parent.name.indexOf('zombie') !== -1) {
+                        isPartOfActor = true;
+                        break;
+                    }
+                    parent = parent.parent;
+                }
+
+                if (isPartOfActor) return;
+
+                // Zero-GC array scan
+                let isTracked = false;
+                for (let i = 0; i < sectorCtx.dynamicLights.length; i++) {
+                    if (sectorCtx.dynamicLights[i] === obj) {
+                        isTracked = true;
+                        break;
+                    }
+                }
+
+                if (!isTracked) {
                     sectorCtx.dynamicLights.push(obj);
-                    if (obj.userData.isCulled === undefined) obj.userData.isCulled = false;
-                    if (obj.userData.baseIntensity === undefined) obj.userData.baseIntensity = obj.intensity;
+                    obj.userData.isCulled = true;
+                    obj.userData.baseIntensity = obj.intensity;
+                    obj.visible = false;
                 }
             }
         });
 
-        // GUARANTEE: Fill up with dummy lights so we ALWAYS have exactly as many 
-        // lights in the scene as the shader program expects. This solves black screens and recompiles.
-        const ENGINE_MAX_VISIBLE = (session.engine as any).maxVisibleLights || LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
-        while (sectorCtx.dynamicLights.length < ENGINE_MAX_VISIBLE) {
-            const dummy = new THREE.PointLight(0x000000, 0, 0.1);
-            dummy.position.set(0, -1000, 0); // Hide far away
-            dummy.userData.isCulled = true;
-            dummy.userData.baseIntensity = 0;
-            dummy.name = 'DummyPaddingLight';
-            session.engine.scene.add(dummy);
-            sectorCtx.dynamicLights.push(dummy);
+        // 2. Spawn the Fixed Proxy Pool
+        const isMobile = !!session.isMobileDevice;
+        const ENGINE_MAX_VISIBLE = isMobile ? Math.min(8, LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS) : LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
+        const SHADOW_BUDGET = isMobile ? 1 : LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS;
+
+        for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
+            const proxy = new THREE.PointLight(0x000000, 0, 10);
+            proxy.name = `LightProxy_${i}`;
+            proxy.userData.isProxy = true;
+            proxy.userData.isCulled = true;
+            proxy.position.set(0, -1000, 0);
+
+            if (i < SHADOW_BUDGET) {
+                proxy.castShadow = true;
+                proxy.shadow.bias = isMobile ? -0.01 : -0.005;
+                proxy.shadow.mapSize.set(isMobile ? 128 : 256, isMobile ? 128 : 256);
+            } else {
+                proxy.castShadow = false;
+            }
+
+            session.engine.scene.add(proxy);
+            this.lightPool.push(proxy);
         }
+
+        console.log(`[LightSystem] Initialized pool with ${ENGINE_MAX_VISIBLE} proxies (${SHADOW_BUDGET} shadows). Mobile: ${isMobile}`);
     }
 
     update(session: GameSessionLogic, _dt: number, _now: number) {
@@ -97,168 +154,105 @@ export class LightSystem implements System {
         const time = _now * 0.001;
 
         const sectorCtx = this.sectorContext.current;
-        if (!sectorCtx) return;
+        if (!sectorCtx || this.lightPool.length === 0) return;
 
-        // 1. DYNAMIC LIGHT ANIMATIONS (Every frame)
-        if (sectorCtx.dynamicLights) {
-            const dynamicLights = sectorCtx.dynamicLights;
-            const lightCount = dynamicLights.length;
+        const dynamicLights = sectorCtx.dynamicLights;
+        const lightCount = dynamicLights.length;
 
-            for (let i = 0; i < lightCount; i++) {
-                const light = dynamicLights[i] as THREE.PointLight;
-                const userData = light.userData;
+        // 1. SOURCE DATA ANIMATION (Swing, Pulse, Flicker)
+        for (let i = 0; i < lightCount; i++) {
+            const light = dynamicLights[i] as THREE.PointLight;
+            const userData = light.userData;
 
-                if (userData.isCulled) continue;
-
-                if (userData.swing) {
-                    if (!userData.origin) {
-                        userData.origin = light.position.clone();
-                    }
-                    const swing = userData.swing;
-                    const phase = swing.phase || 0;
-                    const timeSpeedPhase = time * swing.speed + phase;
-
-                    light.position.x = userData.origin.x + Math.sin(timeSpeedPhase) * swing.radius;
-                    light.position.z = userData.origin.z + Math.cos(time * swing.speed * 0.8 + phase) * (swing.radius * 0.5);
+            if (userData.swing) {
+                // Initialize origin once without cloning in the hot loop
+                if (!userData.origin) {
+                    userData.origin = new THREE.Vector3().copy(light.position);
                 }
+                const s = userData.swing;
+                const t = time * s.speed + (s.phase || 0);
+                light.position.x = userData.origin.x + Math.sin(t) * s.radius;
+                light.position.z = userData.origin.z + Math.cos(time * s.speed * 0.8 + (s.phase || 0)) * (s.radius * 0.5);
+            }
 
-                if (userData.pulse) {
-                    const pulse = userData.pulse;
-                    const base = userData.baseIntensity || 1;
-                    const factor = (Math.sin(time * pulse.speed) + 1) * 0.5;
-                    light.intensity = base * (pulse.min + factor * (pulse.max - pulse.min));
-                }
+            if (userData.pulse) {
+                const s = userData.pulse;
+                const base = userData.baseIntensity || 1;
+                const factor = (Math.sin(time * s.speed) + 1) * 0.5;
+                light.intensity = base * (s.min + factor * (s.max - s.min));
             }
         }
 
-        // 2. ORGANIC FLICKER LOGIC (Every frame)
         const flickerCount = this.flickeringLights.length;
         for (let i = 0; i < flickerCount; i++) {
             const fl = this.flickeringLights[i];
-            if (fl.light.userData.isCulled) continue;
-
             const t = time * fl.flickerRate;
             const noise = (Math.sin(t) + Math.sin(t * 1.3) + Math.sin(t * 2.1)) * 0.3333;
             const normalizedNoise = (noise + 1) * 0.5;
             const pop = Math.random() > 0.95 ? 1.3 : 1.0;
-
             fl.light.intensity = fl.baseInt * (0.4 + normalizedNoise * 0.8) * pop;
         }
 
-        // 3. ZERO-RECOMPILE CULLING & SHADOW BUDGETING (Every 15 frames)
-        if (this.frame % 15 === 0 && this.playerGroup.current && sectorCtx.dynamicLights && session.engine.camera) {
-            const dynamicLights = sectorCtx.dynamicLights;
+        // 2. PROXY MAPPING
+        if (this.frame % 15 === 0 && this.playerGroup.current && session.engine.camera) {
             const pPos = this.playerGroup.current.position;
-            const totalLights = dynamicLights.length;
-
             const engineCamera = session.engine.camera.threeCamera;
+
             engineCamera.updateMatrixWorld();
             _projScreenMatrix.multiplyMatrices(engineCamera.projectionMatrix, engineCamera.matrixWorldInverse);
             _frustum.setFromProjectionMatrix(_projScreenMatrix);
 
             let sortableCount = 0;
 
-            // Pass 1: Gather ALL active lights and calculate their influence
-            for (let i = 0; i < totalLights; i++) {
+            for (let i = 0; i < lightCount; i++) {
                 if (sortableCount >= MAX_LIGHTS) break;
 
                 const light = dynamicLights[i] as THREE.PointLight;
-                const baseIntensity = light.userData.baseIntensity || 1;
-
                 const dx = light.position.x - pPos.x;
                 const dy = light.position.y - pPos.y;
                 const dz = light.position.z - pPos.z;
                 const distSq = dx * dx + dy * dy + dz * dz;
 
-                // If the light belongs to a Throwable (e.g. a Molotov), 
-                // give it extremely high priority (influence + 1000) so it never turns off while flying.
-                const isThrowable = light.name.includes('throwable') || light.parent?.name.includes('throwable');
-                const prioBoost = isThrowable ? 1000 : 0;
+                // Cache the 'isThrowable' flag to avoid string operations per frame
+                if (light.userData.isThrowable === undefined) {
+                    const isNameT = light.name.indexOf('throwable') !== -1;
+                    const isParentT = light.parent ? light.parent.name.indexOf('throwable') !== -1 : false;
+                    light.userData.isThrowable = isNameT || isParentT;
+                }
 
+                const isThrowable = light.userData.isThrowable;
+                const prioBoost = isThrowable ? 1000 : 0;
                 let influence = 0;
 
                 if (distSq <= 15000 || isThrowable) {
                     _lightSphere.set(light.position, light.distance > 0 ? light.distance : 15);
-                    if (_frustum.intersectsSphere(_lightSphere) || isThrowable) {
-                        influence = (baseIntensity / (distSq + 0.1)) + prioBoost;
+                    if (isThrowable || _frustum.intersectsSphere(_lightSphere)) {
+                        influence = ((light.userData.baseIntensity || 1) / (distSq + 0.1)) + prioBoost;
                     }
                 }
 
-                const scratchObj = _sortableLightsScratch[sortableCount];
-                scratchObj.light = light;
-                scratchObj.influence = influence;
+                _sortableLightsScratch[sortableCount].light = light;
+                _sortableLightsScratch[sortableCount].influence = influence;
                 sortableCount++;
             }
 
-            if (sortableCount > 1) {
-                quickSortLightsDesc(_sortableLightsScratch, 0, sortableCount - 1);
-            }
+            if (sortableCount > 1) quickSortLightsDesc(_sortableLightsScratch, 0, sortableCount - 1);
 
-            // --- VITAL GPU SAFEGUARDS ---
-            // Get the dynamic limit from the engine, fallback to constants if not loaded yet
-            const ENGINE_MAX_VISIBLE = (session.engine as any).maxVisibleLights || LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
-            const SHADOW_BUDGET = (session.engine as any).maxSafeShadows ?? LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS;
-
-            let visibleAssigned = 0; // Added this back to track active visible slots for padding logic!
-
-            // Pass 2: STRICT ASSIGNMENT. We force exactly N lights to be visible and exactly M to cast shadows.
-            // This prevents Three.js from ever changing the shader signature.
-            for (let i = 0; i < sortableCount; i++) {
-                const lightInfo = _sortableLightsScratch[i];
-                const light = lightInfo.light!;
-                const influence = lightInfo.influence;
-                const userData = light.userData;
-
-                const isVisibleSlot = i < ENGINE_MAX_VISIBLE;
-                const isShadowSlot = i < SHADOW_BUDGET;
-
-                if (isVisibleSlot) {
-                    visibleAssigned++; // We have occupied a visible slot
-
-                    // This light MUST be visible to fill the shader quota
-                    if (!light.visible) light.visible = true;
-                    if (light.castShadow !== isShadowSlot) light.castShadow = isShadowSlot;
-
-                    if (influence > 0) {
-                        // Real light that the player should see
-                        if (userData.isCulled) {
-                            light.intensity = userData.baseIntensity !== undefined ? userData.baseIntensity : 1;
-                            userData.isCulled = false;
-                        }
-                    } else {
-                        // This is a padding light to prevent shader crashes
-                        if (!userData.isCulled) {
-                            light.intensity = 0;
-                            userData.isCulled = true;
-                        }
-                    }
+            // Apply best sources to physical proxies
+            for (let i = 0; i < this.lightPool.length; i++) {
+                const proxy = this.lightPool[i];
+                if (i < sortableCount && _sortableLightsScratch[i].influence > 0) {
+                    const src = _sortableLightsScratch[i].light!;
+                    proxy.position.copy(src.position);
+                    proxy.color.copy(src.color);
+                    proxy.intensity = src.intensity;
+                    proxy.distance = src.distance;
+                    proxy.decay = src.decay;
+                    proxy.visible = true;
                 } else {
-                    // Completely outside the quota - turn everything off.
-                    if (light.visible) light.visible = false;
-                    if (light.castShadow) light.castShadow = false;
-                    if (!userData.isCulled) {
-                        light.intensity = 0;
-                        userData.isCulled = true;
-                    }
-                }
-            }
-
-            // PADDING FIX: If there are FEWER lights in the level than the engine's MAX_VISIBLE_LIGHTS
-            // we must ensure we don't force shader recompiles. The WebGL engine always wants the same number.
-            // Solution: Keep the "fake" lights visible=true with intensity=0.
-            if (visibleAssigned < ENGINE_MAX_VISIBLE && dynamicLights.length > visibleAssigned) {
-                for (let i = 0; i < dynamicLights.length; i++) {
-                    if (visibleAssigned >= ENGINE_MAX_VISIBLE) break;
-
-                    const paddingLight = dynamicLights[i] as THREE.PointLight;
-                    // Find lights that were turned off due to Frustum Culling and use them as "dummies"
-                    if (!paddingLight.visible) {
-                        paddingLight.visible = true;
-                        paddingLight.intensity = 0;
-                        paddingLight.castShadow = false;
-                        paddingLight.userData.isCulled = true;
-                        visibleAssigned++;
-                    }
+                    proxy.visible = true; // Stay technically visible to avoid shader change
+                    proxy.intensity = 0;
+                    proxy.position.set(0, -1000, 0);
                 }
             }
         }

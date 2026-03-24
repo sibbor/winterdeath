@@ -17,6 +17,7 @@ import { NoiseType } from '../../entities/enemies/EnemyTypes';
 const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _v1 = new THREE.Vector3();
+const _traverseStack: THREE.Object3D[] = [];
 
 export type { GraphicsSettings };
 
@@ -74,6 +75,11 @@ export class WinterEngine {
     // --- HYBRID SYSTEM REGISTRY (Zero-GC) ---
     private _systemsMap: Map<string, System> = new Map();
     private _systemArray: System[] = [];
+
+    // --- CACHED SCENE REFERENCES ---
+    private _cachedSkyLight: THREE.DirectionalLight | null = null;
+    private _cachedAmbientLight: THREE.AmbientLight | null = null;
+    private _cachedGround: THREE.Mesh | null = null;
 
     constructor(initialSettings?: Partial<GraphicsSettings>) {
         this.settings = { ...DEFAULT_GRAPHICS, ...initialSettings };
@@ -138,8 +144,6 @@ export class WinterEngine {
         this._calculateHardwareLimits();
 
         // --- RESOLUTION MULTIPLIER LOGIC ---
-        // devicePixelRatio can be 2.0 or 3.0 on modern devices.
-        // We cap the base ratio at 1.5 to prevent absurd 4K+ internal resolutions.
         const maxRatio = Math.min(window.devicePixelRatio, 1.5);
         this.renderer.setPixelRatio(Math.min(maxRatio, this.settings.pixelRatio || 1));
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -177,7 +181,6 @@ export class WinterEngine {
     }
 
     private applySettings() {
-        // Re-apply the resolution logic when settings change
         const maxRatio = Math.min(window.devicePixelRatio, 1.5);
         this.renderer.setPixelRatio(Math.min(maxRatio, this.settings.pixelRatio || 1));
 
@@ -188,9 +191,13 @@ export class WinterEngine {
             this.renderer.shadowMap.enabled = shadowsEnabled;
             this.renderer.shadowMap.type = shadowType;
 
-            // Force material recompilation for shadows
-            // Zero-GC loop, avoids allocating functions in a massive scene traversal
-            this.scene.traverse((obj: any) => {
+            // Force material recompilation for shadows (Zero-GC iterative traversal)
+            _traverseStack.length = 0;
+            _traverseStack.push(this.scene);
+
+            while (_traverseStack.length > 0) {
+                const obj = _traverseStack.pop() as any;
+
                 if (obj.isMesh && obj.material) {
                     if (Array.isArray(obj.material)) {
                         const len = obj.material.length;
@@ -201,7 +208,11 @@ export class WinterEngine {
                         obj.material.needsUpdate = true;
                     }
                 }
-            });
+
+                for (let i = 0; i < obj.children.length; i++) {
+                    _traverseStack.push(obj.children[i]);
+                }
+            }
         }
     }
 
@@ -213,7 +224,6 @@ export class WinterEngine {
         container.appendChild(this.renderer.domElement);
         this.handleResize();
 
-        // Reset pause states on mount to ensure fresh state
         this.isRenderingPaused = false;
         this.isSimulationPaused = false;
 
@@ -251,7 +261,6 @@ export class WinterEngine {
         this.renderer.dispose();
 
         // Aggressive Garbage Collection flagging
-        // Helps the browser instantly reclaim VRAM and RAM when switching main states
         this.sceneStack.length = 0;
         this.onUpdate = null;
         this.onRender = null;
@@ -280,7 +289,6 @@ export class WinterEngine {
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
 
-            // Added Fog to the persistent protection list
             const isPersistent = child.userData.isPersistent ||
                 child.name.indexOf('Weather') !== -1 ||
                 child.name.indexOf('Fog') !== -1 ||
@@ -292,21 +300,30 @@ export class WinterEngine {
             }
         }
 
-        // Initialize Sets lazily to avoid heavy computations at engine boot
-        if (!this.sharedGeoSet) this.sharedGeoSet = new Set(Object.values(GEOMETRY));
-        if (!this.sharedMatSet) this.sharedMatSet = new Set(Object.values(MATERIALS));
+        // Initialize Sets lazily, using flat loops (Zero-GC)
+        if (!this.sharedGeoSet) {
+            this.sharedGeoSet = new Set();
+            for (const key in GEOMETRY) this.sharedGeoSet.add((GEOMETRY as any)[key]);
+        }
+        if (!this.sharedMatSet) {
+            this.sharedMatSet = new Set();
+            for (const key in MATERIALS) this.sharedMatSet.add((MATERIALS as any)[key]);
+        }
 
-        // 2. Dispose of Geometries and Materials
+        // 2. Dispose of Geometries and Materials iteratively
         for (let i = 0; i < disposableObjects.length; i++) {
             const obj = disposableObjects[i];
 
-            obj.traverse((child: any) => {
-                // Safeguard: Check if this object or any children are explicitly protected
+            _traverseStack.length = 0;
+            _traverseStack.push(obj);
+
+            while (_traverseStack.length > 0) {
+                const child = _traverseStack.pop() as any;
+
                 const isProtected = child.userData?.isEngineStatic || child.userData?.isSharedAsset;
-                if (isProtected) return;
+                if (isProtected) continue;
 
                 if (child.isMesh || child.isLine || child.isPoints || child.isSprite) {
-
                     if (child.geometry) {
                         const isSharedGeo = this.sharedGeoSet!.has(child.geometry) || child.geometry.userData?.isSharedAsset;
                         if (!isSharedGeo && child.geometry.dispose) {
@@ -328,11 +345,19 @@ export class WinterEngine {
                         }
                     }
                 }
-            });
 
-            // If it's a shared asset group, we still remove it from scene but DON'T traverse for disposal
+                for (let c = 0; c < child.children.length; c++) {
+                    _traverseStack.push(child.children[c]);
+                }
+            }
+
             this.scene.remove(obj);
         }
+
+        // Reset references
+        this._cachedSkyLight = null;
+        this._cachedAmbientLight = null;
+        this._cachedGround = null;
 
         monitor.end('cleanup');
         if (monitor.consoleLoggingEnabled) {
@@ -347,6 +372,7 @@ export class WinterEngine {
         this.scene = newScene;
         this.syncSystemsToScene();
         this.applySettings();
+        this.cacheSceneReferences();
     }
 
     public popScene() {
@@ -354,6 +380,7 @@ export class WinterEngine {
             this.scene = this.sceneStack.pop()!;
             this.syncSystemsToScene();
             this.applySettings();
+            this.cacheSceneReferences();
         }
     }
 
@@ -365,6 +392,30 @@ export class WinterEngine {
         for (let i = 0; i < len; i++) {
             const sys = systems[i];
             if (sys.reAttach) sys.reAttach(scene);
+        }
+    }
+
+    /**
+     * Builds O(1) references to key scene objects to prevent string lookups in hot loops.
+     */
+    private cacheSceneReferences() {
+        this._cachedSkyLight = null;
+        this._cachedAmbientLight = null;
+        this._cachedGround = null;
+
+        _traverseStack.length = 0;
+        _traverseStack.push(this.scene);
+
+        while (_traverseStack.length > 0) {
+            const node = _traverseStack.pop() as THREE.Object3D;
+
+            if (node.name === LIGHT_SYSTEM.SKY_LIGHT) this._cachedSkyLight = node as THREE.DirectionalLight;
+            else if (node.name === LIGHT_SYSTEM.AMBIENT_LIGHT) this._cachedAmbientLight = node as THREE.AmbientLight;
+            else if (node.name === 'GROUND') this._cachedGround = node as THREE.Mesh;
+
+            for (let i = 0; i < node.children.length; i++) {
+                _traverseStack.push(node.children[i]);
+            }
         }
     }
 
@@ -395,7 +446,6 @@ export class WinterEngine {
         monitor.startFrame();
 
         // 1. Logic Update (Physics, Movement, Systems)
-        // This must happen BEFORE the camera/fx update to avoid 1-frame lag.
         monitor.begin('logic');
         if (this.onUpdate) this.onUpdate(dt);
         monitor.end('logic');
@@ -405,8 +455,7 @@ export class WinterEngine {
             this.updateSystems(this.onUpdateContext, dt, now);
         }
 
-        // 3. Camera Update — runs after all environment systems so thunder/weather
-        // effects applied this frame (shake, FOV changes) are reflected immediately.
+        // 3. Camera Update
         monitor.begin('camera');
         this.camera.update(dt, now);
         monitor.end('camera');
@@ -417,7 +466,6 @@ export class WinterEngine {
             if (this.onRender) {
                 this.onRender();
             } else {
-                // Split standard render into setup (CPU) and draw (GPU/Driver payload)
                 monitor.begin('render_setup');
                 this.scene.updateMatrixWorld();
                 this.camera.threeCamera.updateMatrixWorld();
@@ -430,23 +478,16 @@ export class WinterEngine {
         }
         monitor.end('render');
 
-        // Feed renderer stats into the monitor — used both for heavy-frame logs and DebugDisplay live view
         monitor.setRendererStats(this.renderer.info);
 
         const totalTime = performance.now() - frameStart;
         monitor.printIfHeavy('Game Engine Performance', totalTime, 50);
     };
 
-    /**
-     * Note: Returns a new object. Only call in UI/Menus, not in the game loop.
-     */
     public getSettings(): GraphicsSettings {
         return { ...this.settings };
     }
 
-    /**
-     * Registers a new system. Adds to Map for O(1) lookup and flat Array for Zero-GC iteration.
-     */
     public registerSystem(system: System) {
         if (!this._systemsMap.has(system.id)) {
             this._systemsMap.set(system.id, system);
@@ -454,9 +495,6 @@ export class WinterEngine {
         }
     }
 
-    /**
-     * Unregisters a system using Swap-and-Pop for O(1) array removal (Zero-GC).
-     */
     public unregisterSystem(id: string) {
         const sys = this._systemsMap.get(id);
         if (sys) {
@@ -471,27 +509,14 @@ export class WinterEngine {
         }
     }
 
-    /**
-     * Type-safe system retrieval from the Map.
-     */
     public getSystem<T extends System>(id: string): T | null {
         return (this._systemsMap.get(id) as T) || null;
     }
 
-    /**
-     * Returns the flat system array for the main update loop (Zero-GC).
-     */
     public getSystems(): System[] {
         return this._systemArray;
     }
 
-    /**
-     * Centralized high-performance system update loop.
-     * Skips disabled systems and handles performance monitoring automatically.
-     * @param context Usually GameSessionLogic or null (for Camp)
-     * @param dt Delta time in seconds
-     * @param now performance.now() timestamp
-     */
     public updateSystems(context: any, dt: number, now: number): void {
         const monitor = PerformanceMonitor.getInstance();
         const systems = this._systemArray;
@@ -500,7 +525,6 @@ export class WinterEngine {
         for (let i = 0; i < len; i++) {
             const sys = systems[i];
 
-            // Fast skip for disabled systems
             if (sys.enabled === false) continue;
 
             const id = sys.id;
@@ -510,9 +534,6 @@ export class WinterEngine {
         }
     }
 
-    /**
-     * Synchronizes the enabled state of a system.
-     */
     public setSystemEnabled(id: string, enabled: boolean) {
         const sys = this._systemsMap.get(id);
         if (sys) {
@@ -520,25 +541,23 @@ export class WinterEngine {
         }
     }
 
-    /**
-     * Synchronizes all environmental systems to a new state.
-     * Used for initial sector setup and major transitions.
-     * @param env The target environment or override.
-     */
     public syncEnvironment(env: SectorEnvironment | EnvironmentOverride, targetScene?: THREE.Scene) {
         const scene = targetScene || this.scene;
-        
+        let requiresRecache = false;
+
         // 1. Light Setup (Ambient)
         if (env.ambientIntensity !== undefined) {
-            const ambient = scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+            let ambient = this._cachedAmbientLight;
+            if (!ambient && targetScene) ambient = targetScene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+
             if (ambient) {
                 ambient.intensity = env.ambientIntensity;
                 if (env.ambientColor !== undefined) ambient.color.setHex(env.ambientColor);
             } else {
-                // If it doesn't exist (e.g. in AssetPreloader's ghost scene), create it
                 const amb = new THREE.AmbientLight(env.ambientColor || 0x404050, env.ambientIntensity);
                 amb.name = LIGHT_SYSTEM.AMBIENT_LIGHT;
                 scene.add(amb);
+                requiresRecache = true;
             }
         }
 
@@ -572,7 +591,6 @@ export class WinterEngine {
             volDensity = env.fog.density;
             fogHeight = env.fog.height;
         } else if ((env as any).fogDensity !== undefined) {
-            // Legacy support
             fogColorHex = (env as any).fogColor !== undefined ? (env as any).fogColor : (env.bgColor || 0x000000);
             volDensity = (env as any).fogDensity;
         }
@@ -580,19 +598,17 @@ export class WinterEngine {
         _c1.setHex(fogColorHex);
 
         if (this.fog) {
+            this.fog.reAttach(scene);
             if (this.settings.volumetricFog) {
-                // [VINTERDÖD FIX] Always re-attach to the current scene (ensures persistence across sector loads)
-                this.fog.reAttach(scene);
                 this.fog.sync(volDensity, fogHeight, _c1);
-                
+
                 if (volDensity > 0) {
-                    const distFog = volDensity * 0.0001; 
+                    const distFog = volDensity * 0.0001;
                     scene.fog = new THREE.FogExp2(fogColorHex, distFog);
                 } else {
                     scene.fog = null;
                 }
             } else {
-                this.fog.reAttach(scene);
                 this.fog.sync(0, undefined, _c1);
                 if (volDensity > 0) {
                     const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
@@ -603,11 +619,10 @@ export class WinterEngine {
             }
         }
 
-        // Apply background to target scene
         if (scene.background && (scene.background as THREE.Color).isColor) {
             (scene.background as THREE.Color).copy(_c1);
         } else {
-            scene.background = _c1.clone(); 
+            scene.background = _c1.clone();
         }
 
         // 4. Weather Sync
@@ -622,7 +637,6 @@ export class WinterEngine {
         // 5. Water Sync
         if (this.water) {
             this.water.reAttach(scene);
-            // Sync skyLight position if available
             if (env.skyLight?.visible && env.skyLight.position) {
                 _v1.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
                 this.water.setLightPosition(_v1);
@@ -634,24 +648,26 @@ export class WinterEngine {
             this.camera.set('fov', env.fov);
         }
 
-        // 7. SkyLight Setup (Discrete)
+        // 7. SkyLight Setup
         if (env.skyLight) {
-            let sky = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+            let sky = this._cachedSkyLight;
+            if (!sky && targetScene) sky = targetScene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+
             if (!sky) {
                 sky = new THREE.DirectionalLight(env.skyLight.color, env.skyLight.intensity);
                 sky.name = LIGHT_SYSTEM.SKY_LIGHT;
                 scene.add(sky);
-                scene.add(sky.target); // MUST be added to scene
+                scene.add(sky.target);
+                requiresRecache = true;
             }
-            
+
             sky.color.setHex(env.skyLight.color);
             sky.intensity = env.skyLight.visible ? env.skyLight.intensity : 0;
-            
+
             if (env.skyLight.position) {
                 sky.position.set(env.skyLight.position.x, env.skyLight.position.y || 100, env.skyLight.position.z);
             }
 
-            // Shadow Configuration
             if (this.settings.shadows) {
                 sky.castShadow = true;
                 const shadowRes = this.settings.shadowResolution;
@@ -668,6 +684,8 @@ export class WinterEngine {
                 sky.castShadow = false;
             }
         }
+
+        if (requiresRecache) this.cacheSceneReferences();
     }
 
     /**
@@ -714,14 +732,13 @@ export class WinterEngine {
                     if (dist > inner) {
                         weight = 1.0 - ((dist - inner) / (outer - inner));
                     }
-                    weight = weight * weight; 
+                    weight = weight * weight;
 
                     _c2.setHex(z.bgColor);
                     blendedR += _c2.r * weight;
                     blendedG += _c2.g * weight;
                     blendedB += _c2.b * weight;
 
-                    // Support both old z.fogDensity and new z.fog.density
                     const zFogDensity = z.fogDensity ?? 0;
                     blendedDensity += zFogDensity * weight;
                     blendedAmbient += z.ambient * weight;
@@ -752,8 +769,7 @@ export class WinterEngine {
             if (override.fog?.density !== undefined) targetFogDensity = override.fog.density;
             if (override.ambientIntensity !== undefined) targetAmbient = override.ambientIntensity;
             if (override.groundColor !== undefined) targetGroundColor = override.groundColor;
-            
-            // Apply discrete overrides immediately
+
             if (override.fov !== undefined) this.camera.set('fov', override.fov);
             if (override.weather !== undefined) {
                 const type = typeof override.weather === 'string' ? override.weather : override.weather.type;
@@ -761,8 +777,7 @@ export class WinterEngine {
                 this.weather.sync(type as WeatherType, count);
             }
 
-            // SkyLight Override
-            const skyLight = this.scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+            const skyLight = this._cachedSkyLight;
             if (skyLight) {
                 if (override.skyLightColor !== undefined) skyLight.color.setHex(override.skyLightColor);
                 if (override.skyLightIntensity !== undefined) skyLight.intensity = override.skyLightIntensity;
@@ -788,12 +803,12 @@ export class WinterEngine {
             (this.fog as any).fogMaterial.uniforms.uColor.value.lerp(targetFogColor, 0.05);
         }
 
-        const ambient = this.scene.getObjectByName(LIGHT_SYSTEM.AMBIENT_LIGHT) as THREE.AmbientLight;
+        const ambient = this._cachedAmbientLight;
         if (ambient) {
             ambient.intensity = THREE.MathUtils.lerp(ambient.intensity, targetAmbient, 0.05);
         }
 
-        const ground = this.scene.getObjectByName('GROUND') as THREE.Mesh;
+        const ground = this._cachedGround;
         if (ground && ground.material) {
             (ground.material as THREE.MeshStandardMaterial).color.lerp(_c2.setHex(targetGroundColor), 0.05);
         }
@@ -808,21 +823,25 @@ export class WinterEngine {
 
     /**
      * Clears all non-persistent systems and calls their cleanup functions.
+     * Uses in-place array filtering (O(N), Zero-GC) to prevent array shifting.
      */
     public clearSystems() {
-        // Zero-GC loop (backward for safe removal)
-        for (let i = this._systemArray.length - 1; i >= 0; i--) {
+        let keepCount = 0;
+
+        for (let i = 0; i < this._systemArray.length; i++) {
             const sys = this._systemArray[i];
+
             if (sys.persistent) {
-                // Keep persistent systems (Environmental)
-                continue;
+                // Keep persistent systems in place
+                this._systemArray[keepCount++] = sys;
+            } else {
+                // Cleanup removed system
+                if (sys.clear) sys.clear();
+                this._systemsMap.delete(sys.id);
             }
-
-            if (sys.clear) sys.clear();
-
-            // Remove from array and map
-            this._systemArray.splice(i, 1);
-            this._systemsMap.delete(sys.id);
         }
+
+        // Truncate the array to the new length (Zero-GC removal)
+        this._systemArray.length = keepCount;
     }
 }

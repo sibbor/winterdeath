@@ -31,8 +31,8 @@ const SHARED_GEO = {
     cone: new THREE.ConeGeometry(1, 1, 8),
     ring: new THREE.RingGeometry(0.8, 1.0, 32).rotateX(-Math.PI / 2),
     fencePost: new THREE.BoxGeometry(0.2, 1.2, 0.2),
-    fenceRail: new THREE.BoxGeometry(0.1, 0.15, 1), // Skalas i Z per anrop
-    meshFencePost: new THREE.BoxGeometry(0.12, 1, 0.12), // Skalas i Y per anrop
+    fenceRail: new THREE.BoxGeometry(0.1, 0.15, 1), // Scaled in Z per call
+    meshFencePost: new THREE.BoxGeometry(0.12, 1, 0.12), // Scaled in Y per call
     meshFenceRail: new THREE.CylinderGeometry(0.04, 0.04, 1).rotateX(Math.PI / 2),
     log: new THREE.CylinderGeometry(0.3, 0.3, 6, 8).rotateX(Math.PI / 2),
     stalk: new THREE.PlaneGeometry(0.1, 1).translate(0, 0.5, 0),
@@ -44,6 +44,7 @@ const SHARED_GEO = {
 let _scarecrowHeadGeo: THREE.SphereGeometry | null = null;
 let _scarecrowShirtGeo: THREE.CylinderGeometry | null = null;
 let _scarecrowHatGeo: THREE.ConeGeometry | null = null;
+let _sharedNeonHeartGeo: THREE.ShapeGeometry | null = null;
 
 let fenceMat: THREE.MeshStandardMaterial | null = null;
 
@@ -62,14 +63,24 @@ const LOCAL_MATS = {
 const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
 const terminalMaterialCache: Record<string, THREE.MeshBasicMaterial> = {};
 
+// Material Caches to prevent massive shader recompile leaks
+const brickCache: Record<number, THREE.MeshStandardMaterial> = {};
+const containerCache: Record<number, THREE.MeshStandardMaterial> = {};
+const woodCache: Record<number, THREE.MeshStandardMaterial> = {};
+const concreteCache: Record<string, THREE.MeshStandardMaterial> = {}; // key for special props like doubleSide
+const neonSignCache: Record<number, THREE.MeshStandardMaterial> = {};
+
 export const ObjectGenerator = {
 
     createFence: (length: number = 3.0) => {
         const group = new THREE.Group();
 
         if (!fenceMat) {
-            fenceMat = MATERIALS.wood.clone();
-            fenceMat.color.setHex(0x4a3728);
+            if (!woodCache[0x4a3728]) {
+                woodCache[0x4a3728] = MATERIALS.wood.clone();
+                woodCache[0x4a3728].color.setHex(0x4a3728);
+            }
+            fenceMat = woodCache[0x4a3728];
         }
 
         const p1 = new THREE.Mesh(SHARED_GEO.fencePost, fenceMat); p1.position.set(0, 0.6, -length / 2); group.add(p1);
@@ -116,7 +127,7 @@ export const ObjectGenerator = {
 
         const start = points[0];
         const end = points[points.length - 1];
-        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        const mid = _v1_og.copy(start).add(end).multiplyScalar(0.5);
 
         const tunnelGroup = new THREE.Group();
         tunnelGroup.position.copy(mid);
@@ -148,8 +159,11 @@ export const ObjectGenerator = {
         const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
         archGeo.translate(0, 0, -tunnelDepth / 2);
 
-        const tunnelMat = MATERIALS.concrete.clone();
-        tunnelMat.side = THREE.DoubleSide;
+        if (!concreteCache['doubleside']) {
+            concreteCache['doubleside'] = MATERIALS.concrete.clone();
+            concreteCache['doubleside'].side = THREE.DoubleSide;
+        }
+        const tunnelMat = concreteCache['doubleside'];
 
         const mesh = new THREE.Mesh(archGeo, tunnelMat);
         tunnelGroup.add(mesh);
@@ -159,11 +173,6 @@ export const ObjectGenerator = {
         floor.rotation.x = -Math.PI / 2;
         floor.position.y = 0.02;
         tunnelGroup.add(floor);
-
-        // Disposing geometries inside the group is tricky if we ever copy it, 
-        // but for procedural generation where it's kept alive in scene, it's ok.
-        // Wait, Three.js meshes retain reference to geometry. It shouldn't be disposed
-        // immediately if the mesh is using it. But if we regenerate often, we must handle it on cleanup.
 
         return tunnelGroup;
     },
@@ -210,8 +219,12 @@ export const ObjectGenerator = {
 
     createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) => {
         const group = new THREE.Group();
-        const material = MATERIALS.brick.clone();
-        material.color.setHex(color);
+
+        if (!brickCache[color]) {
+            brickCache[color] = MATERIALS.brick.clone();
+            brickCache[color].color.setHex(color);
+        }
+        const material = brickCache[color];
 
         let bodyGeo = new THREE.BoxGeometry(width, height, depth);
         bodyGeo.translate(0, height / 2, 0);
@@ -254,48 +267,47 @@ export const ObjectGenerator = {
             let litCount = 0;
             let darkCount = 0;
 
-            // 1. Spara fönstrens konfiguration en gång för alla
-            const windowConfig = [];
-
+            // 1. Determine window configuration without allocating objects
+            const winStates: boolean[] = [];
             for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                 for (let y = 2; y < height - 1; y += 4) {
                     const isLit = Math.random() < lightProbability;
-                    windowConfig.push({ x, y, isLit });
-
+                    winStates.push(isLit);
                     if (isLit) litCount++;
                     else darkCount++;
                 }
             }
 
-            // 2. Bygg instanserna
-            if (litCount > 0) {
-                const litWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.litWindow, litCount);
-                let idx = 0;
-                for (let i = 0; i < windowConfig.length; i++) {
-                    if (windowConfig[i].isLit) {
-                        _matrix.makeTranslation(windowConfig[i].x, windowConfig[i].y, depth / 2 + 0.05);
-                        _scale.set(1.2, 1.5, 1);
-                        _matrix.scale(_scale);
-                        litWindows.setMatrixAt(idx++, _matrix);
-                    }
-                }
-                litWindows.instanceMatrix.needsUpdate = true;
-                group.add(litWindows);
-            }
+            // 2. Build the instances
+            if (litCount > 0 || darkCount > 0) {
+                const litWindows = litCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.litWindow, litCount) : null;
+                const darkWindows = darkCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.darkWindow, darkCount) : null;
 
-            if (darkCount > 0) {
-                const darkWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.darkWindow, darkCount);
-                let idx = 0;
-                for (let i = 0; i < windowConfig.length; i++) {
-                    if (!windowConfig[i].isLit) {
-                        _matrix.makeTranslation(windowConfig[i].x, windowConfig[i].y, depth / 2 + 0.05);
+                let idx = 0, litIdx = 0, darkIdx = 0;
+
+                for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
+                    for (let y = 2; y < height - 1; y += 4) {
+                        const isLit = winStates[idx++];
+                        _matrix.makeTranslation(x, y, depth / 2 + 0.05);
                         _scale.set(1.2, 1.5, 1);
                         _matrix.scale(_scale);
-                        darkWindows.setMatrixAt(idx++, _matrix);
+
+                        if (isLit && litWindows) {
+                            litWindows.setMatrixAt(litIdx++, _matrix);
+                        } else if (!isLit && darkWindows) {
+                            darkWindows.setMatrixAt(darkIdx++, _matrix);
+                        }
                     }
                 }
-                darkWindows.instanceMatrix.needsUpdate = true;
-                group.add(darkWindows);
+
+                if (litWindows) {
+                    litWindows.instanceMatrix.needsUpdate = true;
+                    group.add(litWindows);
+                }
+                if (darkWindows) {
+                    darkWindows.instanceMatrix.needsUpdate = true;
+                    group.add(darkWindows);
+                }
             }
         }
 
@@ -325,7 +337,6 @@ export const ObjectGenerator = {
         arms.position.y = 1.8;
         group.add(arms);
 
-        // Reusing custom geometries to avoid VRAM leak
         if (!_scarecrowHeadGeo) _scarecrowHeadGeo = new THREE.SphereGeometry(0.3);
         const head = new THREE.Mesh(_scarecrowHeadGeo, LOCAL_MATS.scarecrowHead);
         head.position.y = 2.4;
@@ -431,7 +442,6 @@ export const ObjectGenerator = {
 
         ctx.scene.add(group);
 
-        // Mathematical calculation instead of expensive getWorldPosition/getWorldQuaternion
         const halfWidth = width / 2;
         const halfWall = wallThick / 2;
         const offsetDist = halfWidth + halfWall;
@@ -514,7 +524,9 @@ export const ObjectGenerator = {
         p1.rotation.set((Math.random() - 0.5) * 0.2, Math.random() * Math.PI, 0);
         group.add(p1);
 
-        const p2 = p1.clone();
+        const p2 = new THREE.Mesh(SHARED_GEO.stalk, MATERIALS.wheat);
+        p2.scale.y = height;
+        p2.rotation.copy(p1.rotation);
         p2.rotation.y += Math.PI / 2;
         group.add(p2);
 
@@ -545,8 +557,13 @@ export const ObjectGenerator = {
 
     createContainer: (colorOverride?: number, addSnow: boolean = true) => {
         const group = new THREE.Group();
-        const mat = MATERIALS.container.clone();
-        if (colorOverride !== undefined) mat.color.setHex(colorOverride);
+        const color = colorOverride ?? 0xffffff;
+
+        if (!containerCache[color]) {
+            containerCache[color] = MATERIALS.container.clone();
+            if (colorOverride !== undefined) containerCache[color].color.setHex(colorOverride);
+        }
+        const mat = containerCache[color];
 
         const body = new THREE.Mesh(SHARED_GEO.box, mat);
         body.scale.set(6.0, 2.6, 2.4);
@@ -569,9 +586,11 @@ export const ObjectGenerator = {
     createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
         const group = new THREE.Group();
         if (withBacking) {
-            const mat = MATERIALS.blackMetal.clone();
-            mat.color.setHex(backgroundColor);
-            const base = new THREE.Mesh(SHARED_GEO.box, mat);
+            if (!neonSignCache[backgroundColor]) {
+                neonSignCache[backgroundColor] = MATERIALS.blackMetal.clone();
+                neonSignCache[backgroundColor].color.setHex(backgroundColor);
+            }
+            const base = new THREE.Mesh(SHARED_GEO.box, neonSignCache[backgroundColor]);
             base.scale.set(text.length * 0.4 + 1, 0.8, 0.2);
             group.add(base);
         }
@@ -600,11 +619,6 @@ export const ObjectGenerator = {
         const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.5, 6, 1, true), LOCAL_MATS.caveLampCage);
         cage.position.y = -0.2;
         group.add(cage);
-
-        // TODO: think about what I want to do here:
-        //const light = new THREE.PointLight(0xffffcc, 10, 25);
-        //light.position.y = -0.2;
-        //group.add(light);
 
         group.userData.material = 'METAL';
         return group;
@@ -691,11 +705,16 @@ export const ObjectGenerator = {
 
         let finalUpperMat = upperMat || MATERIALS.wooden_fasade;
         if (mapRepeat && (finalUpperMat as any).map) {
-            finalUpperMat = finalUpperMat.clone();
-            (finalUpperMat as any).map = (finalUpperMat as any).map.clone();
-            (finalUpperMat as any).map.repeat.set(mapRepeat.x, mapRepeat.y);
-            (finalUpperMat as any).map.wrapS = (finalUpperMat as any).map.wrapT = THREE.RepeatWrapping;
-            (finalUpperMat as any).map.needsUpdate = true;
+            const cacheKey = `storefront_${mapRepeat.x}_${mapRepeat.y}`;
+            if (!concreteCache[cacheKey]) {
+                const clones = finalUpperMat.clone();
+                (clones as any).map = (clones as any).map.clone();
+                (clones as any).map.repeat.set(mapRepeat.x, mapRepeat.y);
+                (clones as any).map.wrapS = (clones as any).map.wrapT = THREE.RepeatWrapping;
+                (clones as any).map.needsUpdate = true;
+                concreteCache[cacheKey] = clones as any;
+            }
+            finalUpperMat = concreteCache[cacheKey];
         }
 
         const upperMesh = new THREE.Mesh(SHARED_GEO.box, finalUpperMat);
@@ -816,23 +835,26 @@ export const ObjectGenerator = {
 
     createNeonHeart: (color: number = 0xff0000, scale: number = 1.0) => {
         const group = new THREE.Group();
-        const x = 0, y = 0;
-        const heartShape = new THREE.Shape();
-        heartShape.moveTo(x + 5, y + 5);
-        heartShape.bezierCurveTo(x + 5, y + 5, x + 4, y, x, y);
-        heartShape.bezierCurveTo(x - 6, y, x - 6, y + 7, x - 6, y + 7);
-        heartShape.bezierCurveTo(x - 6, y + 11, x - 3, y + 15.4, x + 5, y + 19);
-        heartShape.bezierCurveTo(x + 12, y + 15.4, x + 16, y + 11, x + 16, y + 7);
-        heartShape.bezierCurveTo(x + 16, y + 7, x + 16, y, x + 10, y);
-        heartShape.bezierCurveTo(x + 7, y, x + 5, y + 5, x + 5, y + 5);
 
-        const geo = new THREE.ShapeGeometry(heartShape);
-        geo.scale(0.10, -0.10, 0.10);
-        geo.translate(-0.2, 0.4, 0);
+        if (!_sharedNeonHeartGeo) {
+            const x = 0, y = 0;
+            const heartShape = new THREE.Shape();
+            heartShape.moveTo(x + 5, y + 5);
+            heartShape.bezierCurveTo(x + 5, y + 5, x + 4, y, x, y);
+            heartShape.bezierCurveTo(x - 6, y, x - 6, y + 7, x - 6, y + 7);
+            heartShape.bezierCurveTo(x - 6, y + 11, x - 3, y + 15.4, x + 5, y + 19);
+            heartShape.bezierCurveTo(x + 12, y + 15.4, x + 16, y + 11, x + 16, y + 7);
+            heartShape.bezierCurveTo(x + 16, y + 7, x + 16, y, x + 10, y);
+            heartShape.bezierCurveTo(x + 7, y, x + 5, y + 5, x + 5, y + 5);
+
+            _sharedNeonHeartGeo = new THREE.ShapeGeometry(heartShape);
+            _sharedNeonHeartGeo.scale(0.10, -0.10, 0.10);
+            _sharedNeonHeartGeo.translate(-0.2, 0.4, 0);
+        }
 
         if (!neonHeartCache[color]) neonHeartCache[color] = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
 
-        group.add(new THREE.Mesh(geo, neonHeartCache[color]));
+        group.add(new THREE.Mesh(_sharedNeonHeartGeo, neonHeartCache[color]));
 
         const light = new THREE.PointLight(color, 50, 50);
         light.position.set(0, 0, 0.5);

@@ -37,7 +37,7 @@ export const WATER_SYSTEM = {
 // LightSystem
 export const LIGHT_SYSTEM = {
     MAX_VISIBLE_LIGHTS: 16,
-    MAX_SHADOW_CASTING_LIGHTS: 12,
+    MAX_SHADOW_CASTING_LIGHTS: 2,
     SKY_LIGHT: 'SKY_LIGHT',
     AMBIENT_LIGHT: 'AMBIENT_LIGHT'
 };
@@ -46,7 +46,7 @@ export const LIGHT_SYSTEM = {
 export const FLASHLIGHT = {
     name: 'FLASHLIGHT',
     color: 0xffffee,
-    intensity: 250.0,
+    intensity: 150.0,
     distance: 60,
     angle: Math.PI / 3,
     penumbra: 0.6,

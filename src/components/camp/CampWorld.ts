@@ -3,7 +3,7 @@ import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
 import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
-import { WeatherType } from '../../core/engine/EngineTypes';;
+import { WeatherType } from '../../core/engine/EngineTypes';
 
 // ============================================================================
 // CONFIGURATION CONSTANTS (Source of truth for Camp & AssetPreloader)
@@ -79,6 +79,7 @@ interface Textures {
     wood: THREE.Texture;
     pine: THREE.Texture;
     halo: THREE.Texture;
+    moon_halo?: THREE.Texture;
     tacticalMap: THREE.Texture;
 }
 
@@ -101,11 +102,14 @@ const _v1 = new THREE.Vector3();
 const _q1 = new THREE.Quaternion();
 const _s1 = new THREE.Vector3();
 const _e1 = new THREE.Euler();
+const _traverseStack: THREE.Object3D[] = [];
 
 const FLAME_VARS = 8; // [life, px, py, pz, speed, rx, ry, rz]
 const SPARKLE_VARS = 7; // [life, px, py, pz, vx, vy, vz]
 const SMOKE_VARS = 5; // [life, px, py, pz, speed]
 const _c1 = new THREE.Color();
+const _flameStartColor = new THREE.Color(0xffaa22);
+const _flameEndColor = new THREE.Color(0xff2200);
 
 // ============================================================================
 // SHARED CONSTANTS (Internal use)
@@ -135,7 +139,9 @@ export const CONST_MAT = {
 };
 
 // Tag materials as shared assets to prevent disposal during clearActiveScene
-Object.values(CONST_MAT).forEach(m => { m.userData = { isSharedAsset: true }; });
+for (const key in CONST_MAT) {
+    (CONST_MAT as any)[key].userData = { isSharedAsset: true };
+}
 
 // --- PROCEDURAL TEXTURES ---
 const createSmokeTexture = () => {
@@ -186,7 +192,9 @@ export const stationMaterials: Record<string, THREE.MeshStandardMaterial> = {
 };
 
 // Tag station materials as shared assets
-Object.values(stationMaterials).forEach(m => { m.userData = { isSharedAsset: true }; });
+for (const key in stationMaterials) {
+    (stationMaterials as any)[key].userData = { isSharedAsset: true };
+}
 
 const CAMP_ENV_CACHE = {
     sky: null as any,
@@ -301,7 +309,7 @@ const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) =
         const skyMat = new THREE.MeshBasicMaterial({ color: CAMP_SCENE.colors.moon, fog: false });
 
         const moonHaloMat = new THREE.SpriteMaterial({
-            map: textures.halo, color: CAMP_SCENE.colors.moonHalo, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false
+            map: textures.halo || textures.moon_halo || null, color: CAMP_SCENE.colors.moonHalo, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false
         });
 
         // Pre-calculate stars once
@@ -369,8 +377,6 @@ const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) =
     starSystem.rotation.z = 0.1;
     scene.add(starSystem);
 
-    // [VINTERDÖD] Ljusen läggs ALLTID till, även under warmup, för att 
-    // garantera att WebGL bygger shaders med rätt antal ljuskällor (Directional + Point).
     const skyLight = new THREE.DirectionalLight(CAMP_SCENE.skyLight.color, CAMP_SCENE.skyLight.intensity);
     skyLight.name = 'SKY_LIGHT';
     skyLight.position.set(-80, 150, -100);
@@ -445,7 +451,6 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
 
     scene.add(fireGroup);
 
-    // [VINTERDÖD] Ljuset läggs ALLTID till, även under warmup.
     const fireLight = new THREE.PointLight(
         CAMP_SCENE.campfireLight.color,
         CAMP_SCENE.campfireLight.intensity,
@@ -503,7 +508,7 @@ export const CampWorld = {
                     scene.fog = null;
                 }
             } else {
-                // Fallback dimma
+                // Fallback fog
                 if (engine.fog) engine.fog.sync(0, undefined, fogColor);
 
                 if (volDensity > 0) {
@@ -700,13 +705,21 @@ export const CampWorld = {
 
         const stationGroups = [rackGroup, deskGroup, mapGroup, medGroup];
         for (let i = 0; i < stationGroups.length; i++) {
-            stationGroups[i].traverse(c => {
-                if ((c as THREE.Mesh).isMesh) {
+            _traverseStack.length = 0;
+            _traverseStack.push(stationGroups[i]);
+
+            while (_traverseStack.length > 0) {
+                const c = _traverseStack.pop() as any;
+                for (let childIdx = 0; childIdx < c.children.length; childIdx++) {
+                    _traverseStack.push(c.children[childIdx]);
+                }
+
+                if (c.isMesh) {
                     c.castShadow = true;
                     c.userData = c.userData || {};
                     c.userData.isSharedAsset = true;
                 }
-            });
+            }
         }
 
         return { interactables, outlines };
@@ -780,7 +793,7 @@ export const CampWorld = {
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 
-        // 1. FLAMES: Increased frequency (frame % 2) and count for "richer" look
+        // 1. FLAMES
         if (frame % 2 === 0) {
             for (let i = 0; i < flames.count; i++) {
                 const idx = i * FLAME_VARS;
@@ -800,7 +813,7 @@ export const CampWorld = {
         for (let i = 0; i < flames.count; i++) {
             const idx = i * FLAME_VARS;
             if (flameData[idx] > 0) {
-                flameData[idx] -= 0.015; // Match original decay
+                flameData[idx] -= 0.015;
                 flameData[idx + 1] += wind.x;
                 flameData[idx + 2] += flameData[idx + 4];
                 flameData[idx + 3] += wind.y;
@@ -814,9 +827,8 @@ export const CampWorld = {
                 _m1.compose(_v1, _q1, _s1);
                 flames.setMatrixAt(i, _m1);
 
-                // Additive blending handles alpha-via-blackening perfectly
-                // Fading from yellow-orange to red-orange
-                _c1.setHex(0xffaa22).lerp(_c1.setHex(0xff2200), 1.0 - flameData[idx]).multiplyScalar(flameData[idx]);
+                // Zero-GC fix: Avoid .setHex() overwriting the object while lerping
+                _c1.copy(_flameStartColor).lerp(_flameEndColor, 1.0 - flameData[idx]).multiplyScalar(flameData[idx]);
                 flames.setColorAt(i, _c1);
 
                 if (flameData[idx] <= 0) { _m1.makeScale(0, 0, 0); flames.setMatrixAt(i, _m1); }
@@ -859,7 +871,7 @@ export const CampWorld = {
         }
         sparkles.instanceMatrix.needsUpdate = true;
 
-        // 3. SMOKES: Faster spawning (frame % 10) and per-instance alpha
+        // 3. SMOKES
         if (frame % 10 === 0) {
             for (let i = 0; i < smokes.count; i++) {
                 const idx = i * SMOKE_VARS;
@@ -877,27 +889,23 @@ export const CampWorld = {
         for (let i = 0; i < smokes.count; i++) {
             const idx = i * SMOKE_VARS;
             if (smokeData[idx] > 0) {
-                smokeData[idx] -= 0.005; // 200 frame life
+                smokeData[idx] -= 0.005;
                 smokeData[idx + 2] += smokeData[idx + 4];
                 smokeData[idx + 1] += wind.x * 1.5;
                 smokeData[idx + 3] += wind.y * 1.5;
 
                 _v1.set(smokeData[idx + 1], smokeData[idx + 2], smokeData[idx + 3]);
 
-                // Gentler growth: starts at 1.2, grows to ~3.5
                 const age = (1.0 - smokeData[idx]);
                 const s = 1.2 + age * 2.5;
                 _s1.set(s, s, s);
 
-                // billboard to camera
                 _q1.copy(camera.quaternion);
                 _m1.compose(_v1, _q1, _s1);
                 smokes.setMatrixAt(i, _m1);
 
-                // Real alpha via attribute
                 smokeAlphas.setX(i, smokeData[idx] * 0.3);
 
-                // Constant grey color
                 _c1.setHex(0x444444);
                 smokes.setColorAt(i, _c1);
 
@@ -964,15 +972,32 @@ export const CampWorld = {
             member.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius);
             member.lookAt(0, 0, 0);
 
-            // Din ursprungliga raycast-logik!
-            const bodyMesh = member.children.find(c => c.userData.isBody);
+            // Zero-GC replacement for .find()
+            let bodyMesh = null;
+            for (let c = 0; c < member.children.length; c++) {
+                if (member.children[c].userData.isBody) {
+                    bodyMesh = member.children[c];
+                    break;
+                }
+            }
+
             if (bodyMesh) interactables.push(bodyMesh as THREE.Mesh);
 
             const emissiveMaterials: THREE.MeshStandardMaterial[] = [];
 
-            member.traverse(c => {
-                if ((c as any).isMesh) {
-                    const m = c as THREE.Mesh;
+            // Zero-GC Stack Traversal instead of .traverse(closure)
+            _traverseStack.length = 0;
+            _traverseStack.push(member);
+
+            while (_traverseStack.length > 0) {
+                const current = _traverseStack.pop() as any;
+
+                for (let c = 0; c < current.children.length; c++) {
+                    _traverseStack.push(current.children[c]);
+                }
+
+                if (current.isMesh) {
+                    const m = current as THREE.Mesh;
                     m.castShadow = true;
                     m.userData.groupId = member.userData.id;
                     m.userData.id = member.userData.id;
@@ -984,8 +1009,7 @@ export const CampWorld = {
                         const clonedMats = [];
 
                         for (let i = 0; i < mats.length; i++) {
-                            // [VINTERDÖD OPTIMIZATION] Vi separerar material med 'emissive'
-                            // för hover-effekten utan att använda dyr .clone()
+                            // [VINTERDÖD OPTIMIZATION] Avoid .clone() on materials unless strictly necessary
                             if ('emissive' in mats[i]) {
                                 const newMat = new THREE.MeshStandardMaterial().copy(mats[i] as THREE.MeshStandardMaterial);
                                 newMat.userData = newMat.userData || {};
@@ -998,10 +1022,12 @@ export const CampWorld = {
                                 clonedMats.push(mats[i]);
                             }
                         }
-                        m.material = Array.isArray(m.material) ? clonedMats : clonedMats[0];
+
+                        // Avoid array wrapper if there's only one material
+                        m.material = Array.isArray(m.material) || clonedMats.length > 1 ? clonedMats : clonedMats[0];
                     }
                 }
-            });
+            }
             familyGroup.add(member);
 
             let baseY = member.userData.baseY ?? 0;

@@ -63,7 +63,8 @@ export class SpatialGrid {
         for (let ix = sX; ix <= eX; ix++) {
             for (let iz = sZ; iz <= eZ; iz++) {
                 const hash = Math.abs((ix * 73856093) ^ (iz * 19349663)) % HASH_SIZE;
-                // FIX: Säkerställ att vi inte skriver utanför minnet
+
+                // Prevent out-of-bounds writes to the fixed-size scratchpad
                 if (this._hashCount < 1024) {
                     this._hashScratchpad[this._hashCount++] = hash;
                 }
@@ -86,20 +87,21 @@ export class SpatialGrid {
     updateObstacle(obstacle: Obstacle, oldPos?: THREE.Vector3, oldRadius?: number) {
         if (!obstacle || !obstacle.position) return;
 
-        // OPTIMERING: Om vi vet den gamla positionen behöver vi inte loopa 4093 gånger!
+        // OPTIMIZATION: If the old position is known, we avoid iterating the entire grid
         if (oldPos && oldRadius !== undefined) {
             this.computeHashesInRange(oldPos.x, oldPos.z, oldRadius);
             for (let i = 0; i < this._hashCount; i++) {
                 const cell = this.obstacleCells[this._hashScratchpad[i]];
                 let index = cell.indexOf(obstacle);
                 while (index !== -1) {
+                    // Swap and pop to avoid Array.splice memory allocation
                     cell[index] = cell[cell.length - 1];
                     cell.pop();
                     index = cell.indexOf(obstacle);
                 }
             }
         } else {
-            // Fallback (Flat iteration)
+            // Fallback (Flat iteration over all cells)
             for (let i = 0; i < HASH_SIZE; i++) {
                 const cell = this.obstacleCells[i];
                 if (cell.length > 0) {
@@ -150,7 +152,7 @@ export class SpatialGrid {
         const sZ = Math.floor(minZ / this.cellSize);
         const eZ = Math.floor(maxZ / this.cellSize);
 
-        // 1. Förberäknar siktlinjens vektor (A -> B) på XZ-planet
+        // 1. Pre-calculate the Line of Sight vector (A -> B) on the XZ plane
         this._vLineAB.set(end.x - start.x, 0, end.z - start.z);
         const abLenSq = this._vLineAB.lengthSq();
 
@@ -166,42 +168,42 @@ export class SpatialGrid {
                             (obs as any)._sqf = this._queryFrame;
 
                             // --- 2. ZERO-GC LINE-SEGMENT CULLING ---
-                            // Räkna ut kortaste avståndet från hindret till siktlinjen
+                            // Calculate the shortest distance from the obstacle to the Line of Sight
                             const px = obs.position.x;
                             const pz = obs.position.z;
 
                             this._vLineAP.set(px - start.x, 0, pz - start.z);
 
-                            // Projicera P på AB, clamp mellan 0 (start) och 1 (end)
+                            // Project P onto AB, clamp between 0 (start) and 1 (end)
                             let t = 0;
                             if (abLenSq > 0.0001) {
                                 t = this._vLineAP.dot(this._vLineAB) / abLenSq;
                                 t = Math.max(0, Math.min(1, t));
                             }
 
-                            // Punkten på linjen närmast hindret
+                            // The point on the line closest to the obstacle
                             const closestX = start.x + this._vLineAB.x * t;
                             const closestZ = start.z + this._vLineAB.z * t;
 
-                            // Avstånd i kvadrat
+                            // Distance squared
                             const dx = px - closestX;
                             const dz = pz - closestZ;
                             const distSq = dx * dx + dz * dz;
 
-                            // Vad är hindrets maxradie? (Box eller sfär)
+                            // What is the maximum radius of the obstacle? (Box or Sphere)
                             let cullRadius = obs.radius || 2.0;
 
-                            // Typsäkert och snabbt: kolla om collider och size finns
+                            // Type-safe and fast check for collider size
                             if (obs.collider && obs.collider.size) {
                                 const halfX = obs.collider.size.x * 0.5;
                                 const halfZ = obs.collider.size.z * 0.5;
                                 cullRadius = Math.max(cullRadius, Math.sqrt(halfX * halfX + halfZ * halfZ));
                             }
 
-                            // Lägg till ~1 meter marginal för geometrins variationer
+                            // Add a 1-meter margin for geometry variations
                             cullRadius += 1.0;
 
-                            // 3. Om hindret är tillräckligt nära siktlinjen -> lägg till för Raycast!
+                            // 3. If the obstacle is close enough to the Line of Sight -> add to Raycast results
                             if (distSq <= cullRadius * cullRadius) {
                                 this.obstacleQueryResults.push(obs);
                             }
