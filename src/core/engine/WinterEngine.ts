@@ -11,7 +11,6 @@ import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { GEOMETRY, MATERIALS } from '../../utils/assets';
 import { System } from '../../systems/System';
 import { SectorEnvironment, EnvironmentOverride, EnvironmentalZone, EnvironmentalWeather, WeatherType } from '../../core/engine/EngineTypes';
-import { NoiseType } from '../../entities/enemies/EnemyTypes';
 
 // Module-level scratchpads for Zero-GC operations
 const _c1 = new THREE.Color();

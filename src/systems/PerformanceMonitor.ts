@@ -11,6 +11,7 @@ export class PerformanceMonitor {
     }
 
     // --- ZERO-GC DYNAMIC SYSTEM TRACKING ---
+    private readonly RECORD_FRAMES = 400;
     private readonly MAX_SYSTEMS = 64;
     private _keyMap: Record<string, number> = {};
     private _keys: string[] = [];
@@ -69,6 +70,7 @@ export class PerformanceMonitor {
     private _isRecording = false;
     private _recordingPending = false;
     private _recordingFramesLeft = 0;
+    private _recordingStartRecompiles = 0;
 
     constructor() {
         this.timings = new Float32Array(this.MAX_SYSTEMS);
@@ -241,9 +243,10 @@ export class PerformanceMonitor {
         setTimeout(() => {
             this._recordingPending = false;
             this._isRecording = true;
-            this._recordingFramesLeft = 300; // 5 sekunder i 60 FPS
+            this._recordingFramesLeft = this.RECORD_FRAMES;
             this._reports = {};
-            console.log("🔴 [WinterEngine] Recording active gameplay for 300 frames...");
+            this._recordingStartRecompiles = this._shaderRecompileCount;
+            console.log(`🔴 [WinterEngine] Recording active gameplay for ${this.RECORD_FRAMES} frames...`);
         }, 2000);
     }
 
@@ -254,7 +257,7 @@ export class PerformanceMonitor {
 
     private dumpReport() {
         console.log("📊 ========================================================");
-        console.log("📊 --- WINTER ENGINE 300-FRAME PERFORMANCE REPORT ---");
+        console.log(`📊 --- WINTER ENGINE ${this.RECORD_FRAMES}-FRAME PERFORMANCE REPORT ---`);
         console.log("📊 ========================================================");
 
         // Refresh caches before dumping
@@ -264,16 +267,18 @@ export class PerformanceMonitor {
 
         // 1. WORLD & MEMORY
         console.log("🌍 [WORLD & MEMORY]");
-        console.log(`   Player: X:${world.playerX}, Z:${world.playerZ} | Cam: ${world.camX}, ${world.camY}, ${world.camZ}`);
+        console.log(`   Player: X: ${world.playerX}, Z: ${world.playerZ} | Cam: ${world.camX}, ${world.camY}, ${world.camZ}`);
         console.log(`   Entities: ${world.enemies} Enemies | ${world.objects} Objects`);
-        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB (Dropped: ${gc.droppedMB} MB)`);
+        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB(Dropped: ${gc.droppedMB} MB)`);
 
         // 2. RENDERER
         console.log("🎨 [RENDERER]");
         console.log(`   Draw Calls: ${render.drawCalls}`);
-        console.log(`   Triangles:  ${render.triangles}k`);
+        console.log(`   Triangles: ${render.triangles}k`);
         console.log(`   Geometries: ${render.geometries} | Textures: ${render.textures}`);
-        console.log(`   Shaders:    ${render.shaderPrograms} (Recompiles during 300 frames: ${render.shaderRecompiles})`);
+
+        const sessionRecompiles = render.shaderRecompiles - this._recordingStartRecompiles;
+        console.log(`   Shaders: ${render.shaderPrograms}(Recompiles during ${this.RECORD_FRAMES} frames: ${sessionRecompiles} | Lifetime: ${render.shaderRecompiles})`);
 
         // 3. SYSTEMS
         console.log("⚙️  [SYSTEMS]");
@@ -282,7 +287,7 @@ export class PerformanceMonitor {
         console.log(`   Active tracked systems: ${activeSystems.join(', ')}`);
 
         // 4. TIMINGS
-        console.log("⏱️  [CPU TIMINGS (Avg over 300 frames)]");
+        console.log(`⏱️[CPU TIMINGS(Avg over ${this.RECORD_FRAMES} frames)]`);
         const report: any = {};
         let totalFrameTime = 0;
 
@@ -299,7 +304,7 @@ export class PerformanceMonitor {
             }
         }
         console.table(report);
-        console.log(`🔥 Avg Total Frame Time: ${totalFrameTime.toFixed(2)} ms (Target for 60FPS: 16.6ms)`);
+        console.log(`🔥 Avg Total Frame Time: ${totalFrameTime.toFixed(2)} ms(Target for 60FPS: 16.6ms)`);
         console.log("==========================================================");
     }
 
@@ -382,7 +387,7 @@ export class PerformanceMonitor {
         this._lastFrameTotal = totalTime;
 
         if (totalTime > threshold && this._consoleLoggingEnabled) {
-            console.warn(`[${context}] HEAVY FRAME: ${Math.round(totalTime)}ms. Check Performance Tab.`);
+            console.warn(`[${context}] HEAVY FRAME: ${Math.round(totalTime)} ms.Check Performance Tab.`);
         }
     }
 }

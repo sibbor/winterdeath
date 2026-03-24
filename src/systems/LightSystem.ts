@@ -75,9 +75,8 @@ export class LightSystem implements System {
                 }
                 if (!p.parent) session.engine.scene.add(p);
 
-                // Reset proxy state for fresh start
+                // ZERO-GC: No visibility toggling.
                 p.intensity = 0;
-                p.visible = true; // Stay technically visible to avoid shader change
                 p.position.set(0, -1000, 0);
             }
         } else {
@@ -117,36 +116,56 @@ export class LightSystem implements System {
                     sectorCtx.dynamicLights.push(obj);
                     obj.userData.isCulled = true;
                     obj.userData.baseIntensity = obj.intensity;
+
+                    // ZERO-GC: Hide the logical source completely for the GPU.
+                    // Only our proxies should be visible to Three.js!
+                    obj.intensity = 0;
                     obj.visible = false;
                 }
             }
         });
 
-        // 2. Spawn the Fixed Proxy Pool
-        const isMobile = !!session.isMobileDevice;
-        const ENGINE_MAX_VISIBLE = isMobile ? Math.min(8, LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS) : LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
-        const SHADOW_BUDGET = isMobile ? 1 : LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS;
+        // 2. Spawn the Fixed Proxy Pool (ONLY if not already present from Preloader)
+        // Check how many proxy lights the Preloader already placed in the scene.
+        let existingProxies = 0;
+        session.engine.scene.traverse((obj) => {
+            if (obj instanceof THREE.PointLight && obj.userData.isProxy) {
+                existingProxies++;
+                if (this.lightPool.indexOf(obj) === -1) {
+                    this.lightPool.push(obj);
+                }
+            }
+        });
 
-        for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
+        // Let WinterEngine dictate the ceiling based on the GPU's actual hardware!
+        const ENGINE_MAX_VISIBLE = session.engine.maxVisibleLights;
+        const SHADOW_BUDGET = session.engine.maxSafeShadows;
+
+        // Only spawn missing proxies
+        const proxiesToSpawn = ENGINE_MAX_VISIBLE - existingProxies;
+
+        for (let i = 0; i < proxiesToSpawn; i++) {
             const proxy = new THREE.PointLight(0x000000, 0, 10);
-            proxy.name = `LightProxy_${i}`;
+            proxy.name = `LightProxy_${existingProxies + i}`;
             proxy.userData.isProxy = true;
             proxy.userData.isCulled = true;
             proxy.position.set(0, -1000, 0);
 
-            if (i < SHADOW_BUDGET) {
+            if ((existingProxies + i) < SHADOW_BUDGET) {
                 proxy.castShadow = true;
-                proxy.shadow.bias = isMobile ? -0.01 : -0.005;
-                proxy.shadow.mapSize.set(isMobile ? 128 : 256, isMobile ? 128 : 256);
+                proxy.shadow.bias = -0.005;
+                proxy.shadow.mapSize.set(256, 256);
             } else {
                 proxy.castShadow = false;
             }
 
+            // Always visible, just intensity 0
+            proxy.visible = true;
             session.engine.scene.add(proxy);
             this.lightPool.push(proxy);
         }
 
-        console.log(`[LightSystem] Initialized pool with ${ENGINE_MAX_VISIBLE} proxies (${SHADOW_BUDGET} shadows). Mobile: ${isMobile}`);
+        console.log(`[LightSystem] Initialized pool with ${this.lightPool.length} proxies (${SHADOW_BUDGET} shadows)`);
     }
 
     update(session: GameSessionLogic, _dt: number, _now: number) {
@@ -165,7 +184,6 @@ export class LightSystem implements System {
             const userData = light.userData;
 
             if (userData.swing) {
-                // Initialize origin once without cloning in the hot loop
                 if (!userData.origin) {
                     userData.origin = new THREE.Vector3().copy(light.position);
                 }
@@ -179,7 +197,10 @@ export class LightSystem implements System {
                 const s = userData.pulse;
                 const base = userData.baseIntensity || 1;
                 const factor = (Math.sin(time * s.speed) + 1) * 0.5;
-                light.intensity = base * (s.min + factor * (s.max - s.min));
+                // We store the pulsing target in user data, the proxy reads it.
+                userData.currentIntensity = base * (s.min + factor * (s.max - s.min));
+            } else {
+                userData.currentIntensity = userData.baseIntensity || 1;
             }
         }
 
@@ -190,7 +211,8 @@ export class LightSystem implements System {
             const noise = (Math.sin(t) + Math.sin(t * 1.3) + Math.sin(t * 2.1)) * 0.3333;
             const normalizedNoise = (noise + 1) * 0.5;
             const pop = Math.random() > 0.95 ? 1.3 : 1.0;
-            fl.light.intensity = fl.baseInt * (0.4 + normalizedNoise * 0.8) * pop;
+            // Write to currentIntensity
+            fl.light.userData.currentIntensity = fl.baseInt * (0.4 + normalizedNoise * 0.8) * pop;
         }
 
         // 2. PROXY MAPPING
@@ -213,7 +235,6 @@ export class LightSystem implements System {
                 const dz = light.position.z - pPos.z;
                 const distSq = dx * dx + dy * dy + dz * dz;
 
-                // Cache the 'isThrowable' flag to avoid string operations per frame
                 if (light.userData.isThrowable === undefined) {
                     const isNameT = light.name.indexOf('throwable') !== -1;
                     const isParentT = light.parent ? light.parent.name.indexOf('throwable') !== -1 : false;
@@ -245,14 +266,24 @@ export class LightSystem implements System {
                     const src = _sortableLightsScratch[i].light!;
                     proxy.position.copy(src.position);
                     proxy.color.copy(src.color);
-                    proxy.intensity = src.intensity;
+                    proxy.intensity = src.userData.currentIntensity !== undefined ? src.userData.currentIntensity : (src.userData.baseIntensity || 1);
                     proxy.distance = src.distance;
                     proxy.decay = src.decay;
-                    proxy.visible = true;
                 } else {
-                    proxy.visible = true; // Stay technically visible to avoid shader change
+                    // ZERO-GC: Hide proxy by burying it and setting intensity to 0
                     proxy.intensity = 0;
                     proxy.position.set(0, -1000, 0);
+                }
+            }
+        } else {
+            // Frame update: sync intensities for active proxies smoothly
+            for (let i = 0; i < this.lightPool.length; i++) {
+                const proxy = this.lightPool[i];
+                if (proxy.intensity > 0 && i < _sortableLightsScratch.length) {
+                    const src = _sortableLightsScratch[i].light;
+                    if (src && src.userData.currentIntensity !== undefined) {
+                        proxy.intensity = src.userData.currentIntensity;
+                    }
                 }
             }
         }

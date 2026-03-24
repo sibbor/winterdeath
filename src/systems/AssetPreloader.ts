@@ -3,7 +3,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures } from '../utils/assets';
 import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../utils/assets/materials_water';
-import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, WEATHER_SYSTEM, LIGHT_SYSTEM } from '../content/constants';
+import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, WEATHER_SYSTEM, LIGHT_SYSTEM, FLASHLIGHT } from '../content/constants';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { VEHICLES, VehicleType } from '../content/vehicles';
 import { ObjectGenerator } from '../core/world/ObjectGenerator';
@@ -94,8 +94,6 @@ export const AssetPreloader = {
                     const { createMusicBuffer } = await import('../utils/audio/SoundLib');
                     const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
 
-                    // createMusicBuffer returns an AudioBuffer synchronously.
-                    // Flat loop, zero promise arrays.
                     for (let i = 0; i < music.length; i++) {
                         createMusicBuffer(soundManager.core.ctx, music[i]);
                     }
@@ -114,7 +112,6 @@ export const AssetPreloader = {
 
                 const uiAssetsSet = new Set<string>(['/assets/icons/ui/icon_dash.png', '/assets/icons/ui/icon_reload.png', '/assets/icons/ui/icon_flashlight.png']);
 
-                // Zero-GC iteration over weapons
                 for (const key in WEAPONS) {
                     const w = (WEAPONS as any)[key];
                     if (w.icon && w.iconIsPng) uiAssetsSet.add(w.icon);
@@ -130,7 +127,6 @@ export const AssetPreloader = {
                 await Promise.all(imagePromises);
                 endInternal('core_assets');
 
-                // Populate the Shared Pool in memory (JS side), but do NOT compile it yet.
                 if (!sharedPoolPopulated) {
                     beginInternal('shared_init');
                     await AssetPreloader._populateSharedPool(engine, yieldToMain);
@@ -171,29 +167,39 @@ export const AssetPreloader = {
             scene.add(sceneRoot);
 
             if (isCamp) {
+                // --- CAMP LOGIK (Inga proxies, inga dolda lampor) ---
                 const textures = createProceduralTextures();
                 await CampWorld.build(scene, textures as any, 'snow', true);
+
+                let lampsInScene = 0;
+                scene.traverse((obj) => { if (obj instanceof THREE.PointLight) lampsInScene++; });
+                console.log(`[AssetPreloader] CAMP: Compiling native shader for ${lampsInScene} natural light(s).`);
+
             } else if (isSector) {
+                // --- SEKTOR LOGIK (Strict LightSystem Proxy matching) ---
+                const ENGINE_MAX_VISIBLE = engine.maxVisibleLights;
+                const SHADOW_BUDGET = engine.maxSafeShadows;
+
+                for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
+                    const proxy = new THREE.PointLight(0x000000, 0, 10);
+                    proxy.name = `PreloadProxy_${i}`;
+                    proxy.userData.isProxy = true;
+                    proxy.position.set(0, -1000, 0);
+
+                    if (i < SHADOW_BUDGET) {
+                        proxy.castShadow = true;
+                        proxy.shadow.mapSize.set(256, 256);
+                        proxy.shadow.bias = -0.005;
+                    }
+                    sceneRoot.add(proxy);
+                }
+
                 const sectorIndex = sectorId ?? 0;
                 const sectorDef = SectorSystem.getSector(sectorIndex);
 
                 if (sectorDef) {
                     const warmupCtx = SectorGenerator.createWarmupContext(scene, sectorIndex, yieldToMain);
                     await SectorGenerator.build(warmupCtx, sectorDef);
-                }
-
-                const maxVisibleLights = (engine as any).maxVisibleLights || LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS || 6;
-                const maxShadows = (engine as any).maxSafeShadows ?? LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS ?? 2;
-
-                for (let i = 0; i < maxVisibleLights; i++) {
-                    const pl = new THREE.PointLight(0xffaaaa, 1, 50);
-                    pl.position.set(i * 10, 10, i * 10);
-                    pl.castShadow = i < maxShadows;
-                    if (pl.castShadow) {
-                        pl.shadow.mapSize.set(256, 256);
-                        pl.shadow.bias = -0.005;
-                    }
-                    sceneRoot.add(pl);
                 }
 
                 const dummyFlashlight = ModelFactory.createFlashlight();
@@ -203,7 +209,20 @@ export const AssetPreloader = {
 
                 const bossData = BOSSES[sectorIndex];
                 if (bossData) sceneRoot.add(ModelFactory.createBoss('Boss', bossData));
+
+                // [CRITICAL FIX]: Dölj de logiska lamporna bara i sektorer!
+                let lampsInScene = 0;
+                scene.traverse((obj) => {
+                    if (obj instanceof THREE.PointLight) {
+                        lampsInScene++;
+                        if (!obj.userData.isProxy && obj.name.indexOf(FLASHLIGHT.name) === -1) {
+                            obj.visible = false;
+                        }
+                    }
+                });
+                console.log(`[AssetPreloader] SECTOR: Compiling strict shader for ${lampsInScene} proxied light(s).`);
             }
+
             endInternal('scene_inject');
 
             // 3. SMART COMPILE SHARED POOL
@@ -218,7 +237,6 @@ export const AssetPreloader = {
                     const obj = sharedPool[i];
                     let isUniquePermutation = false;
 
-                    // Zero-GC Stack Traversal instead of inline closures
                     _traverseStack.length = 0;
                     _traverseStack.push(obj);
 
@@ -233,7 +251,6 @@ export const AssetPreloader = {
                             const isInstanced = !!current.isInstancedMesh;
                             const isSkinned = !!current.isSkinnedMesh;
 
-                            // High-performance string building, no .map().join(',')
                             let matIds = '';
                             if (Array.isArray(current.material)) {
                                 for (let m = 0; m < current.material.length; m++) {
@@ -298,13 +315,8 @@ export const AssetPreloader = {
         return promise;
     },
 
-    /**
-     * Builds the persistent JS memory structures for the shared pool.
-     * Separated to ensure Zero-GC and clean architecture.
-     */
     _populateSharedPool: async (engine: WinterEngine, yieldToMain?: () => Promise<void>) => {
 
-        // Zero-GC helper inside the async scope, uses static _traverseStack
         const add = (obj: THREE.Object3D, createInstanced: boolean = true, forceShadow: boolean = false) => {
             obj.visible = false;
 
@@ -434,11 +446,6 @@ export const AssetPreloader = {
         sharedPool.length = 0;
     },
 
-    /**
-     * Resets only the compilation state, keeping the shared pool intact.
-     * This allows the engine to recompile shaders without rebuilding the entire asset pool.
-     * e.g. when graphics settings are changed.
-     */
     resetCompilationOnly: () => {
         warmedModules.clear();
         activePromises.clear();
