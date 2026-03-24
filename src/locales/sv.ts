@@ -239,6 +239,7 @@ export const sv = {
         no_reload: "INGEN OMLADDNING",
         TERMINAL_SKILLS: "FÄRDIGHETSSTATION",
         other: "Övrigt",
+        radius: "Radie"
     },
     camp_tooltips: {
         equipped: "VALD UTRUSTNING",

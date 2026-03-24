@@ -246,6 +246,7 @@ export const en = {
         no_reload: "NO RELOADING",
         TERMINAL_SKILLS: "SKILL STATION",
         other: "Other",
+        radius: "Radius"
     },
     camp_tooltips: {
         equipped: "EQUIPPED",
