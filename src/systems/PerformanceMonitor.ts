@@ -62,6 +62,10 @@ export class PerformanceMonitor {
     private _shaderRecompileCount: number = 0;
     private _knownPrograms = new Set<string>();
 
+    // --- RECORDING STATE ---
+    private _reports: Record<string, number[]> = {};
+    private _isRecording = false;
+
     constructor() {
         this.timings = new Float32Array(this.MAX_SYSTEMS);
         this.startTimes = new Float32Array(this.MAX_SYSTEMS);
@@ -190,7 +194,15 @@ export class PerformanceMonitor {
         const idx = this._getIndex(id);
         const start = this.startTimes[idx];
         if (start === 0) return;
-        this.timings[idx] += performance.now() - start;
+
+        const time = performance.now() - start;
+        this.timings[idx] += time;
+
+        // Only allocates arrays during the specific 5-second debug window
+        if (this._isRecording) {
+            if (!this._reports[id]) this._reports[id] = [];
+            this._reports[id].push(time);
+        }
     }
 
     public track(id: string, fn: () => void) {
@@ -201,6 +213,44 @@ export class PerformanceMonitor {
 
     public addTime(id: string, ms: number) {
         this.timings[this._getIndex(id)] += ms;
+    }
+
+    // ============================================================================
+    // PROFILING & DUMPING
+    // ============================================================================
+
+    public startRecording() {
+        if (this._isRecording) return;
+        this._isRecording = true;
+        this._reports = {};
+        console.log("🔴 [WinterEngine] Recording performance data for 5 seconds...");
+
+        setTimeout(() => {
+            this._isRecording = false;
+            this.dumpReport();
+        }, 5000);
+    }
+
+    private dumpReport() {
+        console.log("📊 --- WINTER ENGINE PERFORMANCE REPORT ---");
+        const report: any = {};
+        let totalFrameTime = 0;
+
+        for (const [id, times] of Object.entries(this._reports)) {
+            if (times.length === 0) continue;
+            let sum = 0;
+            for (let i = 0; i < times.length; i++) sum += times[i];
+            const avg = sum / times.length;
+            report[id] = `${avg.toFixed(2)} ms (avg over ${times.length} samples)`;
+
+            // Only sum top-level domains to prevent counting sub-systems twice
+            if (id === 'logic' || id === 'camera' || id === 'render') {
+                totalFrameTime += avg;
+            }
+        }
+        console.table(report);
+        console.log(`⏱️ Average Total Frame Time: ${totalFrameTime.toFixed(2)} ms (Target for 60fps is 16.6ms)`);
+        console.log("------------------------------------------");
     }
 
     // ============================================================================

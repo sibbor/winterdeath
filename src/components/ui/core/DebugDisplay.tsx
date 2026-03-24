@@ -157,7 +157,18 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
 
                 {stats.logging && (
                     <div className="border-t border-white/10 pt-1 space-y-0.5">
-                        <div className="text-white/40 uppercase text-[10px] mb-1">Logging</div>
+                        <div className="flex justify-between items-center mb-1">
+                            <div className="text-white/40 uppercase text-[10px]">Logging</div>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    PerformanceMonitor.getInstance().startRecording();
+                                }}
+                                className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/40 px-1.5 py-0.5 rounded cursor-pointer transition-colors font-bold tracking-wider"
+                            >
+                                DUMP 5S
+                            </button>
+                        </div>
                         <div onClick={(e) => { e.stopPropagation(); PerformanceMonitor.getInstance().consoleLoggingEnabled = !stats.logging.engine; }} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors">
                             <span className="text-white/60">Engine Perf</span>
                             <span className={`font-bold ${stats.logging.engine ? 'text-green-400' : 'text-red-400'}`}>{stats.logging.engine ? 'ON' : 'OFF'}</span>
