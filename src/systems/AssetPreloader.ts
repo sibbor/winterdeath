@@ -167,7 +167,7 @@ export const AssetPreloader = {
             scene.add(sceneRoot);
 
             if (isCamp) {
-                // --- CAMP LOGIK (Inga proxies, inga dolda lampor) ---
+                // --- CAMP LOGIC (Native lighting, no proxies) ---
                 const textures = createProceduralTextures();
                 await CampWorld.build(scene, textures as any, 'snow', true);
 
@@ -176,7 +176,7 @@ export const AssetPreloader = {
                 console.log(`[AssetPreloader] CAMP: Compiling native shader for ${lampsInScene} natural light(s).`);
 
             } else if (isSector) {
-                // --- SEKTOR LOGIK (Strict LightSystem Proxy matching) ---
+                // --- SECTOR LOGIC (Strict LightSystem Proxy matching) ---
                 const ENGINE_MAX_VISIBLE = engine.maxVisibleLights;
                 const SHADOW_BUDGET = engine.maxSafeShadows;
 
@@ -210,7 +210,7 @@ export const AssetPreloader = {
                 const bossData = BOSSES[sectorIndex];
                 if (bossData) sceneRoot.add(ModelFactory.createBoss('Boss', bossData));
 
-                // [CRITICAL FIX]: Dölj de logiska lamporna bara i sektorer!
+                // Hide logical lights to ensure shader compiles only against proxies and the flashlight
                 let lampsInScene = 0;
                 scene.traverse((obj) => {
                     if (obj instanceof THREE.PointLight) {
@@ -320,11 +320,19 @@ export const AssetPreloader = {
         const add = (obj: THREE.Object3D, createInstanced: boolean = true, forceShadow: boolean = false) => {
             obj.visible = false;
 
+            // Force disable matrix updates for the root object to save CPU
+            obj.matrixAutoUpdate = false;
+            obj.updateMatrix();
+
             _traverseStack.length = 0;
             _traverseStack.push(obj);
 
             while (_traverseStack.length > 0) {
                 const current = _traverseStack.pop() as any;
+
+                // Disable auto update for all children traversing the tree
+                current.matrixAutoUpdate = false;
+                current.updateMatrix();
 
                 for (let c = 0; c < current.children.length; c++) {
                     _traverseStack.push(current.children[c]);
@@ -342,6 +350,11 @@ export const AssetPreloader = {
                     if (createInstanced && !current.isInstancedMesh) {
                         const iMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, 1);
                         iMesh.visible = false;
+
+                        // Enforce static matrix on InstancedMesh wrappers
+                        iMesh.matrixAutoUpdate = false;
+                        iMesh.updateMatrix();
+
                         iMesh.setMatrixAt(0, _dummyMatrix);
                         iMesh.castShadow = mesh.castShadow;
                         iMesh.receiveShadow = mesh.receiveShadow;
@@ -378,6 +391,9 @@ export const AssetPreloader = {
             const fxType = ALL_FX[f];
             const fxMesh = FXSystem._getInstancedMesh(null as any, fxType);
             const dummy = new THREE.InstancedMesh(fxMesh.geometry, fxMesh.material, 1);
+
+            dummy.matrixAutoUpdate = false;
+            dummy.updateMatrix();
             dummy.setMatrixAt(0, _dummyMatrix);
 
             const isSolid = FX_SOLID.indexOf(fxType) !== -1;
@@ -390,6 +406,8 @@ export const AssetPreloader = {
 
         for (let i = 0; i < WEATHER_MATS.length; i++) {
             const iMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, WEATHER_MATS[i], 1);
+            iMesh.matrixAutoUpdate = false;
+            iMesh.updateMatrix();
             iMesh.setMatrixAt(0, _dummyMatrix);
             iMesh.castShadow = false;
             add(iMesh, false);
