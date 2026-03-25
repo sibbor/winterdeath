@@ -9,6 +9,7 @@ import { soundManager } from '../utils/SoundManager';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';
+import { EnemyManager } from '../entities/enemies/EnemyManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -181,7 +182,7 @@ export class DeathSystem implements System {
                 // Ash Pile Logic
                 if (!state.playerAshSpawned) {
                     state.playerAshSpawned = true;
-                    const ashRenderer = (session as any).engine.getRenderer('ash');
+                    const ashRenderer = EnemyManager.getAshRenderer();
                     if (ashRenderer) {
                         ashRenderer.addAsh(playerMesh.position, playerMesh.rotation, 1.0, 1.0, 0x333333, now, 1500);
                     }
