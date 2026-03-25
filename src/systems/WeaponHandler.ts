@@ -195,8 +195,13 @@ export const WeaponHandler = {
 
         if (state.isReloading && now > state.reloadEndTime) {
             state.isReloading = false;
-            state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
-            soundManager.playMagIn();
+
+            // VINTERDÖD FIX: Throwables use reloadTime as a cooldown, NOT an ammo refill.
+            // Only guns and special weapons (Continuous) should refill their mag on reload.
+            if (wep.category !== WeaponCategory.THROWABLE) {
+                state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
+                soundManager.playMagIn();
+            }
         }
     },
 

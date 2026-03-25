@@ -188,9 +188,9 @@ export const FXSystem = {
     _getUniqueMaterial: (baseMat: THREE.Material, type: string): THREE.Material => {
         if (!baseMat) {
             console.error(`[FXSystem] _getUniqueMaterial called with undefined material for type: ${type}. Falling back to default.`);
-            return MATERIALS.blood;
+            return MATERIALS.blood || new THREE.MeshBasicMaterial({ color: 0xff0000 });
         }
-        const poolKey = type + '_' + baseMat.uuid;
+        const poolKey = type + '_' + (baseMat.uuid || 'unknown');
         if (!FXSystem.MATERIAL_POOL[poolKey]) FXSystem.MATERIAL_POOL[poolKey] = [];
         if (FXSystem.MATERIAL_POOL[poolKey].length > 0) {
             const mat = FXSystem.MATERIAL_POOL[poolKey].pop()! as FXMaterial;
