@@ -14,9 +14,9 @@ export class CampEffectsSystem implements System {
     enabled = true;
 
     update(ctx: any, dt: number, now: number): void {
-        const { scene, envState, frameCount } = ctx;
+        const { scene, envState } = ctx;
         if (envState) {
-            CampWorld.updateEffects(scene, envState, dt, now, frameCount);
+            CampWorld.updateEffects(scene, envState, dt, now);
         }
     }
 }
@@ -29,7 +29,7 @@ export class FamilyAnimationSystem implements System {
     enabled = true;
 
     update(ctx: any, dt: number, now: number): void {
-        const { familyMembers, activeChats, frameCount, hoveredId } = ctx;
+        const { familyMembers, activeChats, hoveredId } = ctx;
         if (!familyMembers) return;
 
         for (let i = 0; i < familyMembers.length; i++) {
@@ -57,7 +57,7 @@ export class FamilyAnimationSystem implements System {
             }, now, dt);
 
             const isHov = hoveredId === (fm.mesh.userData.id);
-            const emissiveIntensity = isHov ? 0.5 + Math.sin(frameCount * 0.2) * 0.5 : 0;
+            const emissiveIntensity = isHov ? 0.5 + Math.sin(now * 0.005) * 0.5 : 0;
 
             for (let j = 0; j < fm.emissiveMaterials.length; j++) {
                 const mat = fm.emissiveMaterials[j];
@@ -126,8 +126,12 @@ export class CampChatterSystem implements System {
 
         // 2. Chat Bubble Positioning & Expiry
         const _v1 = new THREE.Vector3();
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+
         for (let i = activeChats.length - 1; i >= 0; i--) {
             const c = activeChats[i];
+
             if (now > c.startTime + c.duration) {
                 if (c.element.parentNode) c.element.parentNode.removeChild(c.element);
                 activeChats[i] = activeChats[activeChats.length - 1];
@@ -152,18 +156,13 @@ export class CampChatterSystem implements System {
                 vec.y += 2.2;
                 vec.project(camera);
 
-                const width = container.clientWidth;
-                const height = container.clientHeight;
-
-                // Round to nearest pixel to avoid blurry text and unnecessary DOM updates
-                const px = Math.round((vec.x * 0.5 + 0.5) * width);
-                const py = Math.round((-(vec.y * 0.5) + 0.5) * height);
+                const px = Math.round((vec.x * 0.5 + 0.5) * screenWidth);
+                const py = Math.round((-(vec.y * 0.5) + 0.5) * screenHeight);
 
                 // Update DOM ONLY if the bubble has moved at least 1 pixel since the last frame
                 if (px !== c._lastX || py !== c._lastY) {
                     c._lastX = px;
                     c._lastY = py;
-                    // Use translate3d (GPU) instead of left/top (CPU)
                     c.element.style.transform = `translate3d(calc(-50% + ${px}px), calc(-100% + ${py}px), 0)`;
                 }
             }

@@ -42,6 +42,16 @@ export const LIGHT_SYSTEM = {
     AMBIENT_LIGHT: 'AMBIENT_LIGHT'
 };
 
+export const LIGHT_SETTINGS = {
+    MAX_PROXIES: 6,
+    SHADOW_BUDGET: 3,
+    DEFAULT_DISTANCE: 10,
+    SHADOW_MAP_SIZE: 256,
+    SHADOW_BIAS: -0.005,
+    SHADOW_RADIUS: 2,
+    DEFAULT_COLOR: 0x000000,
+};
+
 // Flashlight
 export const FLASHLIGHT = {
     name: 'FLASHLIGHT',

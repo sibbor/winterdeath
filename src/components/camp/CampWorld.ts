@@ -35,8 +35,8 @@ export const CAMP_SCENE = {
     dirLight: { color: 0xaaccff, intensity: 0.4, bias: -0.0002 },
     campfireLight: {
         color: 0xff7722,
-        intensity: 40,
-        distance: 90,
+        intensity: 100,
+        distance: 10,
         bias: -0.0005,
         normalBias: 0.02,
         castShadow: true,
@@ -96,6 +96,7 @@ export interface CampEffectsState {
     };
     starSystem: THREE.Points;
     fireLight: LogicalLight;
+    timers: { flames: number, sparkles: number, smokes: number };
 }
 
 const _m1 = new THREE.Matrix4();
@@ -454,7 +455,7 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
 
     // Logical Light - handled by LightSystem
     /*
-    OLD POINT LIGHT CONVERTED TO LOGICAL LIGHT:
+    // OLD POINT LIGHT CONVERTED TO LOGICAL LIGHT:
     const fireLight = new THREE.PointLight(
             CAMP_SCENE.campfireLight.color,
             CAMP_SCENE.campfireLight.intensity,
@@ -466,6 +467,8 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
     fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
     fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
     fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
+
+    return fireLight;
     */
     const fireLightData: LogicalLight = {
         isLogicalLight: true,
@@ -473,15 +476,15 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
         color: CAMP_SCENE.campfireLight.color,
         intensity: CAMP_SCENE.campfireLight.intensity,
         distance: CAMP_SCENE.campfireLight.distance,
-        flickerRate: 0.08,    // Subtle staccato
-        flickerSpeed: 0.012,  // Smooth pulse speed
-        flickerSpread: 6.0,   // Smooth pulse amplitude (15% of 40)
+        //flickerRate: 0.08,    // Subtle staccato
+        //flickerSpeed: 0.012,  // Smooth pulse speed
+        //flickerSpread: 6.0,   // Smooth pulse amplitude (15% of 40)
 
         // Shadow Specs
-        castShadow: CAMP_SCENE.campfireLight.castShadow,
-        shadowBias: CAMP_SCENE.campfireLight.bias,
-        shadowNormalBias: CAMP_SCENE.campfireLight.normalBias,
-        shadowMapSize: CAMP_SCENE.campfireLight.shadowMapSizeWidth
+        //castShadow: CAMP_SCENE.campfireLight.castShadow,
+        //shadowBias: CAMP_SCENE.campfireLight.bias,
+        //shadowNormalBias: CAMP_SCENE.campfireLight.normalBias,
+        //shadowMapSize: CAMP_SCENE.campfireLight.shadowMapSizeWidth
     };
 
     return fireLightData;
@@ -496,10 +499,10 @@ export const CampWorld = {
 
     build: async (scene: THREE.Scene, textures: Textures, weather: WeatherType, isWarmup = false) => {
 
-        if (!isWarmup) {
-            const engine = WinterEngine.getInstance();
+        const engine = WinterEngine.getInstance();
 
-            // Clear SAFE! Keep FogSystem, WeatherSystem and WaterSystem intact
+        // Warm-up Camp
+        if (!isWarmup) {
             engine.clearActiveScene(false);
 
             const camera = engine.camera;
@@ -559,7 +562,6 @@ export const CampWorld = {
         CampWorld.setupTerrain(scene, textures);
 
         const { interactables, outlines } = CampWorld.setupStations(scene, textures, CAMP_SCENE.stationPositions);
-
         const envState = CampWorld.initEffects(scene, textures, weather, isWarmup);
 
         return { interactables, outlines, envState };
@@ -787,31 +789,41 @@ export const CampWorld = {
         const state: CampEffectsState = {
             particles: { flames, sparkles, smokes, flameData, sparkleData, smokeData },
             starSystem,
-            fireLight: fireData
+            fireLight: fireData,
+            timers: { flames: 0, sparkles: 0, smokes: 0 }
         };
 
         // Pre-warm the simulation
         for (let i = 0; i < 20; i++) {
-            CampWorld.updateEffects(scene, state, 0.016, i * 0.016, i);
+            CampWorld.updateEffects(scene, state, 0.016, i * 0.016);
         }
         return state;
     },
 
-    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number, frame: number) => {
+    updateEffects: (scene: THREE.Scene, state: CampEffectsState, delta: number, now: number) => {
         const engine = WinterEngine.getInstance();
         const wind = engine.wind.current;
         const camera = engine.camera.threeCamera;
 
         if (state.starSystem) {
-            (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = frame * 0.05;
-            state.starSystem.rotateY(-0.00008);
+            // Delta används för jämn stjärnrotation
+            (state.starSystem.material as THREE.ShaderMaterial).uniforms.uTime.value = now * 0.001;
+            state.starSystem.rotateY(-0.005 * delta);
         }
 
-        // Update particles (Smoke, Sparks, etc.) handled here
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 
-        // 1. FLAMES
-        if (frame % 2 === 0) {
+        // VINTERDÖD FIX: Skapa en TimeScale (1.0 vid 60 FPS, 2.0 vid 30 FPS)
+        const timeScale = delta * 60.0;
+
+        // Uppdatera våra timers
+        state.timers.flames += delta;
+        state.timers.sparkles += delta;
+        state.timers.smokes += delta;
+
+        // 1. FLAMES (Spawnade förut varannan frame = ~0.033s)
+        if (state.timers.flames > 0.033) {
+            state.timers.flames = 0; // Nollställ
             for (let i = 0; i < flames.count; i++) {
                 const idx = i * FLAME_VARS;
                 if (flameData[idx] <= 0) {
@@ -827,14 +839,16 @@ export const CampWorld = {
                 }
             }
         }
+
         for (let i = 0; i < flames.count; i++) {
             const idx = i * FLAME_VARS;
             if (flameData[idx] > 0) {
-                flameData[idx] -= 0.015;
-                flameData[idx + 1] += wind.x;
-                flameData[idx + 2] += flameData[idx + 4];
-                flameData[idx + 3] += wind.y;
-                flameData[idx + 6] += 0.05;
+                // Applicera timeScale på alla rörelser!
+                flameData[idx] -= 0.015 * timeScale;
+                flameData[idx + 1] += wind.x * timeScale;
+                flameData[idx + 2] += flameData[idx + 4] * timeScale;
+                flameData[idx + 3] += wind.y * timeScale;
+                flameData[idx + 6] += 0.05 * timeScale;
 
                 _v1.set(flameData[idx + 1], flameData[idx + 2], flameData[idx + 3]);
                 const s = Math.max(0.01, flameData[idx]);
@@ -844,7 +858,6 @@ export const CampWorld = {
                 _m1.compose(_v1, _q1, _s1);
                 flames.setMatrixAt(i, _m1);
 
-                // Zero-GC fix: Avoid .setHex() overwriting the object while lerping
                 _c1.copy(_flameStartColor).lerp(_flameEndColor, 1.0 - flameData[idx]).multiplyScalar(flameData[idx]);
                 flames.setColorAt(i, _c1);
 
@@ -854,8 +867,9 @@ export const CampWorld = {
         flames.instanceMatrix.needsUpdate = true;
         if (flames.instanceColor) flames.instanceColor.needsUpdate = true;
 
-        // 2. SPARKLES
-        if (frame % 2 === 0) {
+        // 2. SPARKLES (Samma logik, spawna var ~0.033s)
+        if (state.timers.sparkles > 0.033) {
+            state.timers.sparkles = 0;
             for (let i = 0; i < sparkles.count; i++) {
                 const idx = i * SPARKLE_VARS;
                 if (sparkleData[idx] <= 0) {
@@ -870,13 +884,14 @@ export const CampWorld = {
                 }
             }
         }
+
         for (let i = 0; i < sparkles.count; i++) {
             const idx = i * SPARKLE_VARS;
             if (sparkleData[idx] > 0) {
-                sparkleData[idx] -= 0.01;
-                sparkleData[idx + 1] += sparkleData[idx + 4] + wind.x * 2.5;
-                sparkleData[idx + 2] += sparkleData[idx + 5];
-                sparkleData[idx + 3] += sparkleData[idx + 6] + wind.y * 2.5;
+                sparkleData[idx] -= 0.01 * timeScale;
+                sparkleData[idx + 1] += (sparkleData[idx + 4] + wind.x * 2.5) * timeScale;
+                sparkleData[idx + 2] += sparkleData[idx + 5] * timeScale;
+                sparkleData[idx + 3] += (sparkleData[idx + 6] + wind.y * 2.5) * timeScale;
 
                 _v1.set(sparkleData[idx + 1], sparkleData[idx + 2], sparkleData[idx + 3]);
                 const s = Math.max(0.001, sparkleData[idx] * 0.5);
@@ -888,8 +903,9 @@ export const CampWorld = {
         }
         sparkles.instanceMatrix.needsUpdate = true;
 
-        // 3. SMOKES
-        if (frame % 10 === 0) {
+        // 3. SMOKES (Spawnade förut var 10:e frame = ~0.16s)
+        if (state.timers.smokes > 0.166) {
+            state.timers.smokes = 0;
             for (let i = 0; i < smokes.count; i++) {
                 const idx = i * SMOKE_VARS;
                 if (smokeData[idx] <= 0) {
@@ -902,19 +918,20 @@ export const CampWorld = {
                 }
             }
         }
+
         const smokeAlphas = smokes.geometry.getAttribute('instanceAlpha') as THREE.InstancedBufferAttribute;
         for (let i = 0; i < smokes.count; i++) {
             const idx = i * SMOKE_VARS;
             if (smokeData[idx] > 0) {
-                smokeData[idx] -= 0.005;
-                smokeData[idx + 2] += smokeData[idx + 4];
-                smokeData[idx + 1] += wind.x * 1.5;
-                smokeData[idx + 3] += wind.y * 1.5;
+                smokeData[idx] -= 0.005 * timeScale;
+                smokeData[idx + 2] += smokeData[idx + 4] * timeScale;
+                smokeData[idx + 1] += wind.x * 1.5 * timeScale;
+                smokeData[idx + 3] += wind.y * 1.5 * timeScale;
 
                 _v1.set(smokeData[idx + 1], smokeData[idx + 2], smokeData[idx + 3]);
 
                 const age = (1.0 - smokeData[idx]);
-                const s = 1.2 + age * 2.5;
+                const s = 1.2 + age * 2.5; // Scale behöver inte timeScale, den är baserad på 'age'
                 _s1.set(s, s, s);
 
                 _q1.copy(camera.quaternion);

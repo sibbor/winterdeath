@@ -25,7 +25,7 @@ export const DEFAULT_STATE: GameState = {
         [WeaponType.NONE]: 0
     },
     sectorBriefing: '',
-    debugMode: false,
+    debugMode: true,
     showFps: false,
     rescuedFamilyIndices: [],
     deadBossIndices: [],
@@ -72,7 +72,7 @@ export const loadGameState = (): GameState => {
                 loadout: { ...DEFAULT_STATE.loadout, ...(loaded.loadout || {}) },
                 weaponLevels: { ...DEFAULT_STATE.weaponLevels, ...(loaded.weaponLevels || {}) },
                 screen: loaded.stats?.prologueSeen ? GameScreen.CAMP : GameScreen.PROLOGUE,
-                debugMode: loaded.debugMode || false,
+                debugMode: typeof loaded.debugMode !== 'undefined' ? loaded.debugMode : true,
                 showFps: loaded.showFps || false,
                 graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) },
                 weather: loaded.weather || DEFAULT_STATE.weather,

@@ -55,7 +55,7 @@ export class WinterEngine {
     public settings: GraphicsSettings;
 
     // Lifecycle & Timing
-    private clock: THREE.Clock;
+    private lastTime: number = 0;
     private requestID: number | null = null;
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
@@ -85,7 +85,6 @@ export class WinterEngine {
     constructor(initialSettings?: Partial<GraphicsSettings>) {
         this.settings = { ...DEFAULT_GRAPHICS, ...initialSettings };
         this.scene = new THREE.Scene();
-        this.clock = new THREE.Clock();
 
         this.initRenderer();
 
@@ -93,7 +92,7 @@ export class WinterEngine {
         this.input.enable();
 
         this.camera = new CameraSystem();
-        this.light = new LightSystem(this.scene);
+        this.light = new LightSystem(this.scene, this.maxVisibleLights, this.maxSafeShadows);
         this.wind = new WindSystem();
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
@@ -110,17 +109,17 @@ export class WinterEngine {
         window.addEventListener('resize', this.handleResize);
     }
 
-    private _calculateHardwareLimits() {
+    private _setHardwareLimits() {
         const maxTextures = this.renderer.capabilities.maxTextures;
 
         // Reserve slots for PBR, Water, EnvMaps, etc.
         const safeShadowLimit = Math.max(0, maxTextures - 12);
-        this.maxSafeShadows = Math.min(LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, safeShadowLimit);
+        this.maxSafeShadows = 1; //Math.min(LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS, safeShadowLimit);
 
         // We trust the user's UI settings for performance scaling, but we establish the absolute engine bounds here.
-        this.maxVisibleLights = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
+        this.maxVisibleLights = 3;//LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS;
 
-        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Max Allowed Shadows: ${this.maxSafeShadows}`);
+        console.log(`[WinterEngine] GPU MaxTextures: ${maxTextures}. Max Visible Lights: ${this.maxVisibleLights}. Max Allowed Shadows: ${this.maxSafeShadows}`);
     }
 
     /**
@@ -138,7 +137,7 @@ export class WinterEngine {
         };
 
         this.renderer = new THREE.WebGLRenderer(params);
-        this._calculateHardwareLimits();
+        this._setHardwareLimits();
 
         // Strictly respect the user's graphical settings from the UI
         this.renderer.setPixelRatio(this.settings.pixelRatio || 1);
@@ -224,7 +223,7 @@ export class WinterEngine {
     public start() {
         if (!this.isRunning) {
             this.isRunning = true;
-            this.clock.start();
+            this.lastTime = performance.now();
             this.animate();
         }
     }
@@ -275,11 +274,7 @@ export class WinterEngine {
         for (let i = 0; i < children.length; i++) {
             const child = children[i];
 
-            const isPersistent = child.userData.isPersistent ||
-                child.name.indexOf('Weather') !== -1 ||
-                child.name.indexOf('Fog') !== -1 ||
-                child.name.indexOf('Water') !== -1 ||
-                child.name.indexOf('Wind') !== -1;
+            const isPersistent = child.userData.isPersistent || child.userData.isSystemic;
 
             if (!isPersistent || includingPersistent) {
                 disposableObjects.push(child);
@@ -424,10 +419,12 @@ export class WinterEngine {
         if (!this.isRunning) return;
         this.requestID = requestAnimationFrame(this.animate);
 
-        const frameStart = performance.now();
-        // Delta time clamping prevents physics-warp during frame drops
-        const dt = Math.min(this.clock.getDelta(), 0.05);
         const now = performance.now();
+        const frameStart = now;
+        let dt = (now - this.lastTime) / 1000;
+        if (dt > 0.05) dt = 0.05;
+        this.lastTime = now;
+
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 
@@ -452,11 +449,6 @@ export class WinterEngine {
             if (this.onRender) {
                 this.onRender();
             } else {
-                monitor.begin('render_setup');
-                this.scene.updateMatrixWorld(); // TODO: WHAT?
-                this.camera.threeCamera.updateMatrixWorld();
-                monitor.end('render_setup');
-
                 monitor.begin('render_draw');
                 this.renderer.render(this.scene, this.camera.threeCamera);
                 monitor.end('render_draw');
@@ -590,8 +582,13 @@ export class WinterEngine {
                 this.fog.sync(volDensity, fogHeight, _c1);
 
                 if (volDensity > 0) {
-                    const distFog = volDensity * 0.0001;
-                    scene.fog = new THREE.FogExp2(fogColorHex, distFog);
+                    const fallbackDensity = volDensity < 1.0 ? volDensity : volDensity * 0.0005;
+                    if (scene.fog && (scene.fog as THREE.FogExp2).isFogExp2) {
+                        (scene.fog as THREE.FogExp2).color.setHex(fogColorHex);
+                        (scene.fog as THREE.FogExp2).density = fallbackDensity;
+                    } else {
+                        scene.fog = new THREE.FogExp2(fogColorHex, fallbackDensity);
+                    }
                 } else {
                     scene.fog = null;
                 }

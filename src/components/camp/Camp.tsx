@@ -15,6 +15,7 @@ import { CampEffectsSystem, FamilyAnimationSystem, CampChatterSystem } from './C
 
 // Zero-GC Scratchpads
 const _v1 = new THREE.Vector3();
+const _campCtx: any = { dynamicLights: [] };
 
 // Import UI Components
 import CampHUD from '../ui/hud/CampHUD';
@@ -47,6 +48,8 @@ interface CampProps {
 }
 
 const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, initialGraphics, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+    const monitor = PerformanceMonitor.getInstance();
+
     const containerRef = useRef<HTMLDivElement>(null);
     const chatOverlayRef = useRef<HTMLDivElement>(null);
     const lastDrawCallsRef = useRef(0);
@@ -79,7 +82,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     const activeChats = useRef<Array<{ id: string, mesh: THREE.Object3D, text: string, startTime: number, duration: number, element: HTMLDivElement, playedSound: boolean }>>([]);
 
     const envStateRef = useRef<CampEffectsState | null>(null);
-    const frameRef = useRef(0);
 
     const textures = useMemo(() => createProceduralTextures(), []);
 
@@ -172,7 +174,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         setup();
 
-        let framesToWait = 10;
+        let framesToWait = 0;
         const checkReady = () => {
             if (framesToWait > 0) {
                 framesToWait--;
@@ -195,12 +197,16 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2(-1000, -1000);
+        let mouseMoved = false;
+        let lastRaycastTime = 0
 
         const onMM = (e: MouseEvent) => {
-            if (!isRunning || !containerRef.current) return;
-            const rect = containerRef.current.getBoundingClientRect();
-            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            if (!isRunning) return;
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            mouseMoved = true;
         };
 
         const onCL = () => {
@@ -270,43 +276,35 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
         window.addEventListener('touchstart', onTS, { passive: false });
         window.addEventListener('resize', onResize);
 
-        let frameCount = 0;
-
         engine.onUpdate = (dt: number) => {
             const now = performance.now();
 
             if (nextWildlifeTime.current === 0) {
                 nextWildlifeTime.current = now + 5000 + Math.random() * 10000;
             }
-            const monitor = PerformanceMonitor.getInstance();
             const familyMembers = sceneFamilyMembersRef.current;
             const interactables = sceneInteractablesRef.current;
             const outlines = sceneOutlinesRef.current;
             const outlineKeys = sceneOutlineKeysRef.current;
 
-            // Run centralized Camp Systems
-            const ctx = {
-                scene,
-                camera: camera.threeCamera,
-                container,
-                envState: envStateRef.current,
-                dynamicLights: envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [],
-                playerPos: camera.threeCamera.position,
-                familyMembers,
-                activeMembers: sceneActiveMembersRef.current,
-                activeChats: activeChats.current,
-                chatOverlay: chatOverlayRef.current,
-                frameCount,
-                isRunning,
-                nextChatterTime: { val: nextChatterTime.current, set: (v: number) => nextChatterTime.current = v },
-                nextWildlifeTime: { val: nextWildlifeTime.current, set: (v: number) => nextWildlifeTime.current = v },
-                hoveredId: hoveredRef.current
-            };
+            // Zero-GC for Camp context
+            _campCtx.scene = scene;
+            _campCtx.camera = camera.threeCamera;
+            _campCtx.container = container;
+            _campCtx.envState = envStateRef.current;
+            _campCtx.dynamicLights = envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [];
+            _campCtx.playerPos = camera.threeCamera.position;
+            _campCtx.familyMembers = familyMembers;
+            _campCtx.activeMembers = sceneActiveMembersRef.current;
+            _campCtx.activeChats = activeChats.current;
+            _campCtx.chatOverlay = chatOverlayRef.current;
+            _campCtx.isRunning = isRunning;
+            _campCtx.nextChatterTime = { val: nextChatterTime.current, set: (v: number) => nextChatterTime.current = v };
+            _campCtx.nextWildlifeTime = { val: nextWildlifeTime.current, set: (v: number) => nextWildlifeTime.current = v };
+            _campCtx.hoveredId = hoveredRef.current
 
-            engine.onUpdateContext = ctx;
-
-            frameCount++;
-            frameRef.current = frameCount;
+            // Tell engine to update the systems:
+            engine.onUpdateContext = _campCtx;
 
             // Camera logic (still manual for now due to complex state)
             const CINEMATIC_LOOK_AT = sceneCinematicLookAtRef.current;
@@ -320,15 +318,15 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             const isMobileLabels = isMobileDevice && !isIdleRef.current;
 
             if (isRunning && !activeOverlayRef.current) {
-                frameRef.current++;
-                const shouldUpdateInteractions = (frameRef.current % 2 === 0);
-
-                if (shouldUpdateInteractions) {
-                    scene.updateMatrixWorld();
-                    const width = container.clientWidth, height = container.clientHeight;
+                if (mouseMoved && (now - lastRaycastTime > 100)) {
+                    lastRaycastTime = now;
+                    mouseMoved = false;
 
                     raycaster.setFromCamera(mouse, camera.threeCamera);
                     const hits = raycaster.intersectObjects(interactables);
+                    const width = container.clientWidth;
+                    const height = container.clientHeight;
+
                     let newHover = null, toolTipText = '', toolTipSubText = '', tooltipX = 0, tooltipY = 0;
 
                     if (hits.length > 0) {
@@ -352,7 +350,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                                 }
                             }
                             const vec = _v1; target.getWorldPosition(vec); vec.y += 1.8; vec.project(camera.threeCamera);
-                            tooltipX = (vec.x * 0.5 + 0.5) * width; tooltipY = (-(vec.y * 0.5) + 0.5) * height;
+                            tooltipX = (vec.x * 0.5 + 0.5) * width;
+                            tooltipY = (-(vec.y * 0.5) + 0.5) * height;
                         }
                     }
 
@@ -381,14 +380,14 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                         showIdleTooltipsRef.current = !!isMobileLabels;
                         setShowIdleTooltips(!!isMobileLabels);
                     }
-
+    
                     if (isMobileLabels && showIdleTooltipsRef.current) {
                         for (let i = 0; i < CAMP_SCENE.stationPositions.length; i++) {
                             const station = CAMP_SCENE.stationPositions[i];
                             const vec = _v1.copy(station.pos);
                             vec.y += 2.2;
                             vec.project(camera.threeCamera);
-
+    
                             const el = idleTooltipDOMRefs.current[i];
                             if (el) {
                                 el.style.left = `${(vec.x * 0.5 + 0.5) * width}px`;

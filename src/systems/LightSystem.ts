@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { System } from './System'; // Uppdatera sökvägen till din System-fil om det behövs!
+import { System } from './System';
+import { LIGHT_SYSTEM, LIGHT_SETTINGS } from '../content/constants';
 
 export interface LogicalLight {
     isLogicalLight: boolean;
@@ -9,57 +10,59 @@ export interface LogicalLight {
     color: number;
     intensity: number;
     distance: number;
-    flickerRate?: number;    // Staccato drops (0.0-1.0)
-    flickerSpeed?: number;   // Smooth oscillation frequency
-    flickerSpread?: number;  // Smooth oscillation amplitude
-
-    // --- Shadow System ---
+    flickerRate?: number;
+    flickerSpeed?: number;
+    flickerSpread?: number;
     castShadow?: boolean;
-    shadowBias?: number;
-    shadowNormalBias?: number;
-    shadowMapSize?: number;
 
+    // Zero-GC data
     _sqDist?: number;
     _worldPos?: THREE.Vector3;
 }
-
-const MAX_PROXIES = 16;
-const MAX_SHADOW_CASTERS = 2;
 
 const _tempLights: LogicalLight[] = [];
 
 export class LightSystem implements System {
     public id: string = 'light_system';
-
     private scene: THREE.Scene;
     private proxyPool: THREE.PointLight[] = [];
+    private maxProxies: number;
+    private maxShadows: number;
 
-    constructor(scene: THREE.Scene) {
+    constructor(scene: THREE.Scene, maxProxies: number = LIGHT_SYSTEM.MAX_VISIBLE_LIGHTS,
+        maxShadows: number = LIGHT_SYSTEM.MAX_SHADOW_CASTING_LIGHTS) {
         this.scene = scene;
+        this.maxProxies = maxProxies;
+        this.maxShadows = maxShadows;
         this.initPool();
     }
 
     private initPool() {
-        for (let i = 0; i < MAX_PROXIES; i++) {
-            const proxy = new THREE.PointLight(); // defaults set here
+        for (let i = 0; i < this.maxProxies; i++) {
+            const proxy = new THREE.PointLight(
+                LIGHT_SETTINGS.DEFAULT_COLOR,
+                0,
+                LIGHT_SETTINGS.DEFAULT_DISTANCE);
             proxy.name = `ProxyLight_${i}`;
+            proxy.userData.isPersistent = true;
             proxy.userData.isProxy = true;
             proxy.position.set(0, -1000, 0);
 
-            if (i < MAX_SHADOW_CASTERS) {
+            // Shadow settings locked for all future
+            if (i < this.maxShadows) {
                 proxy.castShadow = true;
-                proxy.shadow.mapSize.set(256, 256);
-                proxy.shadow.bias = -0.005;
-                proxy.shadow.radius = 2;
+                proxy.shadow.mapSize.set(LIGHT_SETTINGS.SHADOW_MAP_SIZE, LIGHT_SETTINGS.SHADOW_MAP_SIZE);
+                proxy.shadow.bias = LIGHT_SETTINGS.SHADOW_BIAS;
+                proxy.shadow.radius = LIGHT_SETTINGS.SHADOW_RADIUS;
+            } else {
+                proxy.castShadow = false;
             }
 
             this.scene.add(proxy);
             this.proxyPool.push(proxy);
         }
-        //console.log(`[LightSystem] Initialized pool with ${MAX_PROXIES} proxies (${MAX_SHADOW_CASTERS} shadows)`);
     }
 
-    // FIX 2: Signaturen matchar nu (context, delta, now)
     public update(context: any, delta: number, now: number): void {
         if (!context) return;
         const state = context.state || context;
@@ -68,15 +71,17 @@ export class LightSystem implements System {
         const playerPos = context.playerPos || state.playerPos;
         const logicalLights = state.dynamicLights || context.dynamicLights;
 
-        if (!logicalLights || logicalLights.length === 0 || !playerPos) return;
+        if (!logicalLights || logicalLights.length === 0 || !playerPos) {
+            this.hideAllProxies();
+            return;
+        }
 
         _tempLights.length = 0;
 
         for (let i = 0; i < logicalLights.length; i++) {
             const logicalLight = logicalLights[i];
 
-            console.log("[LightSystem] logicalLight: ", logicalLight);
-
+            // Initiera _worldPos en enda gång per ljus om det saknas
             if (!logicalLight._worldPos) logicalLight._worldPos = new THREE.Vector3();
 
             if (logicalLight.targetObject) {
@@ -91,67 +96,56 @@ export class LightSystem implements System {
             }
 
             const sqDist = logicalLight._worldPos.distanceToSquared(playerPos);
+
+            // 3600 = 60 enheter. Räcker gott och väl.
             if (sqDist < 3600) {
                 logicalLight._sqDist = sqDist;
                 _tempLights.push(logicalLight);
             }
         }
 
-        // Priority Sorting for Shadow Casters
-        // 1. Mandatory Shadow Casters (Closer is better)
-        // 2. Normal lights by Distance
+        // Sortera: Skugg-älskare först, sedan de som är närmast spelaren
         _tempLights.sort((a, b) => {
             if (a.castShadow && !b.castShadow) return -1;
             if (!a.castShadow && b.castShadow) return 1;
             return (a._sqDist as number) - (b._sqDist as number);
         });
 
-        for (let i = 0; i < MAX_PROXIES; i++) {
+        // Map logiska ljus till fysiska Proxies
+        for (let i = 0; i < this.maxProxies; i++) {
             const proxy = this.proxyPool[i];
-            const ll = _tempLights[i];
+            const logicLight = _tempLights[i];
 
-            if (ll && ll._worldPos) {
-                proxy.position.copy(ll._worldPos);
-                proxy.color.setHex(ll.color);
-                proxy.distance = ll.distance;
+            if (logicLight && logicLight._worldPos) {
+                proxy.position.copy(logicLight._worldPos);
+                proxy.color.setHex(logicLight.color);
+                proxy.distance = logicLight.distance;
 
-                // --- Apply Shadow Parameters if this proxy supports them ---
-                if (i < MAX_SHADOW_CASTERS) {
-                    // Force shadow toggle off if LogicLight doesn't request it (or another light took the slot)
-                    proxy.castShadow = !!ll.castShadow;
-                    if (proxy.castShadow) {
-                        proxy.shadow.bias = ll.shadowBias !== undefined ? ll.shadowBias : -0.005;
-                        proxy.shadow.normalBias = ll.shadowNormalBias !== undefined ? ll.shadowNormalBias : 0;
-                        // Map size is expensive to change at runtime, we only do it if explicitly requested
-                        if (ll.shadowMapSize && ll.shadowMapSize !== proxy.shadow.mapSize.x) {
-                            proxy.shadow.mapSize.set(ll.shadowMapSize, ll.shadowMapSize);
-                            if (proxy.shadow.map) {
-                                proxy.shadow.map.dispose();
-                                (proxy.shadow as any).map = null;
-                            }
-                        }
-                    }
-                }
+                let currentIntensity = logicLight.intensity;
 
-                // Intensity:
-                let currentIntensity = ll.intensity;
 
-                // 1. Organic Pulse (Sinus)
-                if (ll.flickerSpeed && ll.flickerSpread) {
-                    currentIntensity += Math.sin(now * ll.flickerSpeed) * ll.flickerSpread;
-                }
-                // 2. Wind/Fuel Staccato (Rapid drops)
-                if (ll.flickerRate && ll.flickerRate > 0) {
-                    if (Math.random() < ll.flickerRate) {
-                        currentIntensity *= (0.4 + Math.random() * 0.4);
-                    }
-                }
 
                 proxy.intensity = Math.max(0, currentIntensity);
             } else {
                 proxy.intensity = 0;
                 proxy.position.set(0, -1000, 0);
+                proxy.distance = 0.01;
             }
         }
     }
+
+    private hideAllProxies() {
+        for (let i = 0; i < this.maxProxies; i++) {
+            this.proxyPool[i].intensity = 0;
+            this.proxyPool[i].position.set(0, -1000, 0);
+        }
+    }
+
+    public reAttach(newScene: THREE.Scene): void {
+        this.scene = newScene;
+        for (let i = 0; i < this.proxyPool.length; i++) {
+            this.scene.add(this.proxyPool[i]);
+        }
+    }
+
 }
