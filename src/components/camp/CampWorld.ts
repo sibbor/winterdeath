@@ -453,13 +453,35 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
     scene.add(fireGroup);
 
     // Logical Light - handled by LightSystem
+    /*
+    OLD POINT LIGHT CONVERTED TO LOGICAL LIGHT:
+    const fireLight = new THREE.PointLight(
+            CAMP_SCENE.campfireLight.color,
+            CAMP_SCENE.campfireLight.intensity,
+            CAMP_SCENE.campfireLight.distance
+        );
+    fireLight.position.set(0, 3, 0);
+    fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
+    fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
+    fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
+    fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
+    fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
+    */
     const fireLightData: LogicalLight = {
         isLogicalLight: true,
-        position: new THREE.Vector3(0, 3, 0),
+        position: new THREE.Vector3(0, 3, 0), // Mid-fire height
         color: CAMP_SCENE.campfireLight.color,
         intensity: CAMP_SCENE.campfireLight.intensity,
         distance: CAMP_SCENE.campfireLight.distance,
-        flickerRate: 0.15
+        flickerRate: 0.08,    // Subtle staccato
+        flickerSpeed: 0.012,  // Smooth pulse speed
+        flickerSpread: 6.0,   // Smooth pulse amplitude (15% of 40)
+
+        // Shadow Specs
+        castShadow: CAMP_SCENE.campfireLight.castShadow,
+        shadowBias: CAMP_SCENE.campfireLight.bias,
+        shadowNormalBias: CAMP_SCENE.campfireLight.normalBias,
+        shadowMapSize: CAMP_SCENE.campfireLight.shadowMapSizeWidth
     };
 
     return fireLightData;
