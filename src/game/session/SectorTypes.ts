@@ -4,10 +4,7 @@ import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
-
-
-
-
+export type { AtmosphereZone };
 
 export interface SpawnPoint {
     x: number;

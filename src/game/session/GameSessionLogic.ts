@@ -28,16 +28,22 @@ export class GameSessionLogic {
     public detectionSystem!: EnemyDetectionSystem;
 
     constructor(engine: WinterEngine) {
+        console.log(`[GameSessionLogic] 0. constructor()`);
         this.engine = engine;
         this.engine.onUpdateContext = this;
     }
 
     static createInitialState(props: GameCanvasProps): RuntimeState {
         const now = performance.now();
+        console.log(`[GameSessionLogic] 1. createInitialState. HP: ${props.stats?.hp}/${props.stats?.maxHp}, Sector: ${props.currentSector}`);
+
+        if (!props.stats) {
+            console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
+        }
         return {
             isDead: false, score: 0, collectedScrap: 0,
-            hp: props.stats.maxHp, maxHp: props.stats.maxHp,
-            stamina: props.stats.maxStamina, maxStamina: props.stats.maxStamina,
+            hp: props.stats.hp, maxHp: props.stats.maxHp,
+            stamina: props.stats.stamina, maxStamina: props.stats.maxStamina,
             level: props.stats.level,
             currentXp: props.stats.currentXp,
             nextLevelXp: props.stats.nextLevelXp,
@@ -83,6 +89,7 @@ export class GameSessionLogic {
             incomingDamageBreakdown: {} as Record<string, Record<string, number>>,
             outgoingDamageBreakdown: {} as Record<string, number>,
             killsByType: {} as Record<string, number>,
+            applyDamage: () => false,
             seenEnemies: props.stats.seenEnemies || [],
             seenBosses: props.stats.seenBosses || [],
             discoveredPOIs: props.stats.discoveredPOIs || [],
@@ -156,6 +163,8 @@ export class GameSessionLogic {
             drawCalls: 0,
             triangles: 0,
             flashlightOn: false,
+            hasNearestCollectible: false,
+            nearestCollectibleId: '',
             currentInteraction: null,
             stats: props.stats,
 
@@ -172,15 +181,18 @@ export class GameSessionLogic {
             activeBuffs: [],
             activeDebuffs: [],
             statusEffects: {} as any,
+            callbacks: {},
             playerDeathState: PlayerDeathState.ALIVE
         };
     }
 
     init(state: RuntimeState) {
+        console.log(`[GameSessionLogic] 2. init()`);
         this.state = state;
     }
 
     update(dt: number, mapId: number = 0) {
+        console.log(`[GameSessionLogic] 3. update()`);
         this.mapId = mapId;
         if (!this.state) return;
     }
@@ -221,6 +233,7 @@ export class GameSessionLogic {
     }
 
     dispose() {
+        console.log(`[GameSessionLogic] 4. dispose()`);
         this.engine.onUpdateContext = null;
         this.engine.clearActiveScene();
         this.engine.clearSystems();

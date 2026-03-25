@@ -7,6 +7,34 @@ import { patchWindMaterial } from './materials_wind';
 // Pre-define common colors
 const DIFFUSE = createProceduralDiffuse();
 
+// Global cache
+let _sharedGlowTexture: THREE.CanvasTexture | null = null;
+
+export const getSharedGlowTexture = (): THREE.CanvasTexture => {
+    if (!_sharedGlowTexture) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d')!;
+
+        // VINTERDÖD: Perfekt radiell gradient för Additive Blending
+        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 64, 64);
+
+        _sharedGlowTexture = new THREE.CanvasTexture(canvas);
+
+        // Zero-GC Optimering: Stäng av mipmaps för mjuka gradienter
+        _sharedGlowTexture.generateMipmaps = false;
+        _sharedGlowTexture.minFilter = THREE.LinearFilter;
+    }
+    return _sharedGlowTexture;
+};
+
 export const MATERIALS = {
     // ---- WEATHER PARTICLES (not patched - the CPU handle these) ----
     particle_snow: new THREE.MeshBasicMaterial({
@@ -186,18 +214,18 @@ export const MATERIALS = {
 
     // Chests
     chestStandard: new THREE.MeshStandardMaterial({ color: 0x5c4033 }),
-    chestBig: new THREE.MeshStandardMaterial({ color: 0xffd700 }),
-    chestGlowStandard: new THREE.MeshBasicMaterial({
+    chestGlow: new THREE.MeshBasicMaterial({
+        map: getSharedGlowTexture(),
         color: 0xffcc00,
-        side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.6,
         blending: THREE.AdditiveBlending,
         depthWrite: false
     }),
-    chestGlowBig: new THREE.MeshBasicMaterial({
+    chestBig: new THREE.MeshStandardMaterial({ color: 0xffd700 }),
+    chestBigGlow: new THREE.MeshBasicMaterial({
+        map: getSharedGlowTexture(),
         color: 0xffaa00,
-        side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.6,
         blending: THREE.AdditiveBlending,

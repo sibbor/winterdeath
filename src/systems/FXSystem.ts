@@ -517,7 +517,7 @@ export const FXSystem = {
     },
 
     // --- MAIN UPDATE LOOP ---
-    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, playerPos: THREE.Vector3, callbacks: any) => {
+    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, callbacks: any) => {
         const safeDelta = Math.min(delta, 0.1);
 
         // ==========================================

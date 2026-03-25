@@ -350,39 +350,24 @@ export class PlayerInteractionSystem implements System {
     ) {
         if (!type) return;
 
+        // Vehicle
         if (type === 'vehicle' && _detectionResult.object) {
             state.activeVehicle = _detectionResult.object;
             _detectionResult.type = null;
             _detectionResult.object = null;
-            return;
         }
 
-        if (type === 'collectible') {
-            this.handleCollectiblePickup(session);
+        // Collectible
+        else if (type === 'collectible') {
+            this.pickupCollectible(session);
         }
+
+        // Chest
         else if (type === 'chest') {
-            const len = chests.length;
-            for (let i = 0; i < len; i++) {
-                const c = chests[i];
-                if (c.mesh === _detectionResult.object && !c.opened) {
-                    c.opened = true;
-                    soundManager.playOpenChest();
-                    WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
-
-                    const light = c.mesh.getObjectByName('chestLight') as THREE.Light;
-                    if (light) light.intensity = 0;
-
-                    if (c.mesh.children[1]) {
-                        c.mesh.children[1].rotation.x = -Math.PI * 0.5;
-                        c.mesh.children[1].position.y -= 0.5;
-                    }
-
-                    state.chestsOpened++;
-                    if (c.type === 'big') state.bigChestsOpened++;
-                    break;
-                }
-            }
+            this.openChest(session, chests, state);
         }
+
+        // Section specific:
         else if (type === 'sector_specific') {
             state.interactionRequest.active = true;
             state.interactionRequest.id = _detectionResult.id!;
@@ -391,7 +376,7 @@ export class PlayerInteractionSystem implements System {
         }
     }
 
-    private handleCollectiblePickup(session: GameSessionLogic) {
+    private pickupCollectible(session: GameSessionLogic) {
         const collectible = _detectionResult.object as THREE.Group;
         if (!collectible || collectible.userData.pickedUp) return;
 
@@ -422,4 +407,36 @@ export class PlayerInteractionSystem implements System {
             FXSystem.spawnPart(session.engine.scene, session.state.particles, collectible.position.x, 0.1, collectible.position.z, 'spark', 1, undefined, _v1);
         }
     }
+
+    private openChest(session: GameSessionLogic, chests: any[], state: any) {
+        for (let i = 0; i < chests.length; i++) {
+            const c = chests[i];
+            if (c.mesh === _detectionResult.object && !c.opened) {
+                c.opened = true;
+                soundManager.playOpenChest();
+                WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
+
+                // ========================================================
+                // VINTERDÖD FIX: Släck det nya Zero-GC skenet!
+                // Vi gömmer helt enkelt hela planet när kistan öppnas.
+                // ========================================================
+                const glowRing = c.mesh.getObjectByName('chestGlow');
+                if (glowRing) {
+                    glowRing.visible = false;
+                }
+
+                c.mesh.matrixAutoUpdate = true;
+                if (c.mesh.children[1]) {
+                    c.mesh.children[1].rotation.x = -Math.PI * 0.5;
+                    c.mesh.children[1].position.y -= 0.5;
+                    c.mesh.children[1].matrixAutoUpdate = true;
+                }
+
+                state.chestsOpened++;
+                if (c.type === 'big') state.bigChestsOpened++;
+                break;
+            }
+        }
+    }
+
 }

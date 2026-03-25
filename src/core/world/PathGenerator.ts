@@ -226,21 +226,6 @@ export const PathGenerator = {
         return curve;
     },
 
-    createWaterStream: (ctx: SectorContext, points: THREE.Vector3[], width: number) => {
-        const mat = new THREE.MeshStandardMaterial({ color: 0x004488, transparent: true, opacity: 0.6, metalness: 0.8 });
-        const curve = PathGenerator.createPointPath(ctx, points, width, mat, 'PATH');
-        const len = curve.getLength();
-        const lightPts = curve.getSpacedPoints(Math.ceil(len / 40));
-        for (let i = 0; i < lightPts.length; i++) {
-            const p = lightPts[i];
-            const light = new THREE.PointLight(0x00aaff, 5, 20);
-            light.position.set(p.x, 1, p.z);
-            ctx.scene.add(light);
-            ctx.flickeringLights.push({ light, baseInt: 5, flickerRate: 0.05 });
-        }
-        return curve;
-    },
-
     createRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, material?: THREE.Material, hasMarkings?: boolean, strict: boolean = false) => {
         return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, 'ROAD', false, false, strict);
     },

@@ -262,5 +262,6 @@ export class CameraSystem {
     public get fov() { return this.threeCamera.fov; }
     public get far() { return this.threeCamera.far; }
     public get position() { return this.threeCamera.position; }
+    public get lookAtTarget() { return this._currentLookAt; }
     public get angle() { return this._followAngle; }
 }

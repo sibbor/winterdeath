@@ -308,8 +308,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             uiSyncTimer = 0;
             state.lastHudUpdate = now;
 
-            const hudMesh = refs.familyMemberRef.current?.mesh || null;
+            if (!playerGroup || playerGroup.children.length === 0) {
+                if (now % 5000 < 16) console.error("[GameSessionLoop] ERROR: playerGroup missing or empty!");
+                return;
+            }
 
+            const hudMesh = refs.playerMeshRef.current;
             monitor.begin('hud_sync');
             const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);
             monitor.end('hud_sync');
@@ -524,13 +528,16 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         FootprintSystem.update(delta);
         monitor.end('footprints');
 
-        if (playerGroup) {
-            monitor.begin('fx');
-            FXSystem.update(engine.scene, state.particles, state.bloodDecals, delta, frame, now, playerGroup.position, _fxCallbacks);
-            monitor.end('fx');
+        // 10. FX System
+        monitor.begin('fx');
+        try {
+            FXSystem.update(engine.scene, state.particles, state.bloodDecals, delta, frame, now, _fxCallbacks);
+        } catch (e) {
+            console.error("[GameSessionLoop] FXSystem.update failed:", e);
         }
+        monitor.end('fx');
 
-        // 10. Camera Processing
+        // 11. Camera Processing
         if (!isCinematic && !isBossIntro) {
             if (refs.cameraOverrideRef.current && refs.cameraOverrideRef.current.active) {
                 const override = refs.cameraOverrideRef.current;
@@ -561,7 +568,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             engine.camera.setCinematic(true);
         }
 
-        // 11. TRACKING SHADOW CAMERA
+        // 12. TRACKING SHADOW CAMERA
         if (refs.skyLightRef?.current && refs.skyLightOffsetRef?.current && playerGroup) {
             let shadowTarget = playerGroup.position;
 
@@ -577,7 +584,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         lastTime = now;
 
-        // 12. Interaction Logic
+        // 13. Interaction Logic
         const currentInter = state.interactionType;
         const currentLabel = state.interactionLabel;
         const lastType = refs.interactionTypeRef.current;
@@ -653,7 +660,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
         }
 
-        // 13. Game Context
+        // 14. Game Context
         const activeCallbacks = getActiveCallbacks();
 
         _gameContext.scene = engine.scene;
@@ -673,12 +680,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         refs.gameContextRef.current = _gameContext;
 
-        // 14. ProjectileSystem
+        // 15. ProjectileSystem
         monitor.begin('projectiles');
         ProjectileSystem.update(delta, now, _gameContext, state.projectiles, state.fireZones);
         monitor.end('projectiles');
 
-        // 15. TriggerSystem
+        // 16. TriggerSystem
         monitor.begin('triggers');
         _triggerOptionsScratch.t = activeCallbacks.t || callbacks.t;
         _triggerOptionsScratch.spawnBubble = activeCallbacks.spawnBubble;

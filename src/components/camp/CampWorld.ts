@@ -4,6 +4,7 @@ import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
 import { WeatherType } from '../../core/engine/EngineTypes';
+import { LogicalLight } from '../../systems/LightSystem';
 
 // ============================================================================
 // CONFIGURATION CONSTANTS (Source of truth for Camp & AssetPreloader)
@@ -94,7 +95,7 @@ export interface CampEffectsState {
         smokeData: Float32Array;
     };
     starSystem: THREE.Points;
-    fireLight: THREE.PointLight;
+    fireLight: LogicalLight;
 }
 
 const _m1 = new THREE.Matrix4();
@@ -451,20 +452,17 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
 
     scene.add(fireGroup);
 
-    const fireLight = new THREE.PointLight(
-        CAMP_SCENE.campfireLight.color,
-        CAMP_SCENE.campfireLight.intensity,
-        CAMP_SCENE.campfireLight.distance
-    );
-    fireLight.position.set(0, 3, 0);
-    fireLight.castShadow = CAMP_SCENE.campfireLight.castShadow;
-    fireLight.shadow.mapSize.width = CAMP_SCENE.campfireLight.shadowMapSizeWidth;
-    fireLight.shadow.mapSize.height = CAMP_SCENE.campfireLight.shadowMapSizeHeight;
-    fireLight.shadow.bias = CAMP_SCENE.campfireLight.bias;
-    fireLight.shadow.normalBias = CAMP_SCENE.campfireLight.normalBias;
-    scene.add(fireLight);
+    // Logical Light - handled by LightSystem
+    const fireLightData: LogicalLight = {
+        isLogicalLight: true,
+        position: new THREE.Vector3(0, 3, 0),
+        color: CAMP_SCENE.campfireLight.color,
+        intensity: CAMP_SCENE.campfireLight.intensity,
+        distance: CAMP_SCENE.campfireLight.distance,
+        flickerRate: 0.15
+    };
 
-    return fireLight;
+    return fireLightData;
 };
 
 // ============================================================================
@@ -736,7 +734,7 @@ export const CampWorld = {
 
         const { objects: skyObjects } = CampWorld.setupSky(scene, textures, isWarmup);
         const starSystem = skyObjects.stars;
-        const fireLight = setupCampfire(scene, textures, isWarmup);
+        const fireData = setupCampfire(scene, textures, isWarmup);
 
         const flameCount = 40;
         const flames = new THREE.InstancedMesh(CONST_GEO.flame, CONST_MAT.flame, flameCount);
@@ -767,8 +765,11 @@ export const CampWorld = {
         const state: CampEffectsState = {
             particles: { flames, sparkles, smokes, flameData, sparkleData, smokeData },
             starSystem,
-            fireLight: fireLight as THREE.PointLight
+            fireLight: fireData
         };
+
+        // FIXME: NEEDED??
+        (state as any).dynamicLights = [fireData];
 
         // Pre-warm the simulation
         for (let i = 0; i < 20; i++) {
@@ -787,8 +788,18 @@ export const CampWorld = {
             state.starSystem.rotateY(-0.00008);
         }
 
-        if (state.fireLight) {
-            state.fireLight.intensity = CAMP_SCENE.campfireLight.intensity - 5 + Math.sin(frame * 0.1) * 12 + Math.random() * 5;
+        // Use the new LigjtSystem
+        if (engine.light && state.fireLight) {
+            engine.light.update(
+                {
+                    state: {
+                        dynamicLights: [state.fireLight],
+                        playerPos: engine.camera.threeCamera.position
+                    }
+                },
+                delta,
+                now
+            );
         }
 
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;

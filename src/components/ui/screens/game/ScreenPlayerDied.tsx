@@ -14,7 +14,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
 
     // Fetch data using optimized selectors
     const killerName = useHudStore(s => s.killerName || 'UNKNOWN');
-    const killerAttackName = useHudStore(s => s.killerAttackName || '');
+    const deathReason = useHudStore(s => s.killerAttackName || '');
     const killedByEnemy = useHudStore(s => s.killedByEnemy || false);
 
     useEffect(() => {
@@ -31,14 +31,14 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
     }, [onContinue]);
 
     // Zero-GC: Memoize death details
-    const { deathPhrase, killerDisplayName } = useMemo(() => {
+    const { deathPhrase, deathDisplayText } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
-        const displayName = killedByEnemy && killerAttackName
-            ? `${killerName.toUpperCase()} (${t(`attacks.${killerAttackName}.title`)})`
-            : killerName.toUpperCase();
+        const displayName = killedByEnemy && deathReason
+            ? `${killerName.toUpperCase()} (${t(`attacks.${deathReason}.title`)})`
+            : deathReason.toUpperCase();
 
         return { deathPhrase: phrase, killerDisplayName: displayName };
-    }, [killedByEnemy, killerName, killerAttackName]);
+    }, [killedByEnemy, killerName, deathReason]);
 
     return (
         <div
@@ -62,7 +62,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
                 {/* Killer Name / Death Cause */}
                 <div className="min-h-[100px] flex items-center justify-center px-4 relative w-full">
                     <p className={`${isMobileDevice ? 'text-3xl' : 'text-4xl md:text-6xl'} font-light italic leading-relaxed text-gray-200 drop-shadow-[0_0_15px_rgba(0,0,0,1)] z-20`}>
-                        {killerDisplayName}
+                        {deathDisplayText}
                     </p>
                 </div>
 

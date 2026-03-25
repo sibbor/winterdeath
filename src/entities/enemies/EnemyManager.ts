@@ -122,6 +122,7 @@ const _aiContext: any = {
 };
 
 export const EnemyManager = {
+
     init: (scene: THREE.Scene) => {
         if (!zombieRenderer) zombieRenderer = new ZombieRenderer(scene);
         else zombieRenderer.reAttach(scene);
@@ -134,6 +135,8 @@ export const EnemyManager = {
 
         enemyPool.length = 0;
     },
+
+    getAshRenderer: () => ashRenderer,
 
     clear: () => {
         zombieRenderer?.destroy();

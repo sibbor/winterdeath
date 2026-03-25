@@ -151,7 +151,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
             soundManager.playUiConfirm();
         }
-    }, [refs]);
+    }, []);
 
     const closeModal = useCallback(() => {
         const { props: currentProps } = latestStateRef.current;
@@ -227,11 +227,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (type === 'TRIGGER_FAMILY_FOLLOW') {
             window.dispatchEvent(new CustomEvent('family-follow', { detail: { active: true } }));
         }
-    }, [refs, gainXp, spawnBubble]);
+    }, []);
 
     // --- ZERO-GC: uiCallbacks Object ---
-    // Empty dependency array ensures this object is created EXACTLY ONCE.
-    // It reads dynamic values safely via `latestStateRef.current`.
     const uiCallbacks = React.useMemo(() => ({
         onContinue: () => {
             const { uiState: currentUi, props: currentProps } = latestStateRef.current;
@@ -262,7 +260,12 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         requestPointerLock: () => refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current!),
         triggerCinematicNext: () => {
             const wasTyping = refs.bubbleRef.current?.finishTyping();
-            if (!wasTyping) { /* Next line logic */ }
+            if (!wasTyping) {
+                const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                if (sys && sys.cinematicRef.current.active) {
+                    sys.playLine(sys.cinematicRef.current.lineIndex + 1);
+                }
+            }
         },
         saveArmory: (newLoadout: any, newLevels: any, newSectorState: any) => {
             const currentProps = latestStateRef.current.props;
@@ -314,15 +317,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         },
         onAction,
         gainXp
-    }), [refs, closeModal, spawnBubble, onAction, gainXp]); // Removed all volatile props from dependencies
+    }), []);
 
     // --- Wake Lock Management ---
+    /*
     useEffect(() => {
         requestWakeLock();
         return () => {
             releaseWakeLock();
         };
     }, []);
+    */
 
     // --- ZERO-GC: Global Event Listeners ---
     useEffect(() => {
@@ -451,7 +456,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }, currentSector.intro.delay || 1500);
             }
         }
-    }, [props.isRunning, props.isPaused, uiState.isSectorLoading, props.currentSector, refs]);
+    }, [props.isRunning, props.isPaused, uiState.isSectorLoading, props.currentSector]);
 
 
     // 3. Exposed API for the enclosing App component
@@ -491,7 +496,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }
         }
-    }));
+    }), []);
 
     // 4. Initialization and Teardown
     useEffect(() => {
@@ -543,181 +548,206 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         }
 
         // Call the setup routine
-        GameSessionSetup.runSectorSetup({
-            engine,
-            session,
-            state: refs.stateRef.current,
-            props: props,
-            refs: refs,
-            ui: {
-                setIsSectorLoading: (val: boolean) => updateUiState({ isSectorLoading: val }),
-                setDeathPhase: (val: any) => {
-                    updateUiState({ deathPhase: val });
-                    const pProps = latestStateRef.current.props;
-                    if ((val === 'MESSAGE' || val === 'CONTINUE') && pProps.onDeathStateChange) {
-                        pProps.onDeathStateChange(true);
-                    }
-                },
-                setBossIntroActive: (val: boolean) => {
-                    updateUiState({ bossIntroActive: val });
-                    if (latestStateRef.current.props.onBossIntroStateChange) latestStateRef.current.props.onBossIntroStateChange(val);
-                },
-                setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
-                setCurrentLine: (val: any) => {
-                    updateUiState({ currentLine: val });
-                    // Zero-GC HudStore update
-                    const hData = HudStore.getState();
-                    hData.currentLine = val;
-                    hData.cinematicActive = refs.gameSessionRef.current ? refs.gameSessionRef.current.getSystem('cinematic').cinematicRef.current.active : false;
-                    HudStore.update(hData);
-                },
-                setCinematicActive: (val: boolean) => {
-                    updateUiState({ cinematicActive: val });
-                    // Zero-GC HudStore update
-                    const hData = HudStore.getState();
-                    hData.cinematicActive = val;
-                    HudStore.update(hData);
-                    if (latestStateRef.current.props.onDialogueStateChange) latestStateRef.current.props.onDialogueStateChange(val);
-                },
-                setInteractionType: (val: any) => updateUiState({ interactionType: val }),
-                setFoundMemberName: (val: string) => updateUiState({ foundMemberName: val }),
-                setOverlay: (val: string | null) => {
-                    if (latestStateRef.current.props.onInteractionStateChange) latestStateRef.current.props.onInteractionStateChange(val);
-                }
-            },
-            callbacks: {
-                t,
-                showDamageText,
-                onCollectibleDiscovered: (collectibleId: string) => {
-                    if (!refs.stateRef.current.sessionCollectiblesDiscovered.includes(collectibleId)) {
-                        refs.stateRef.current.sessionCollectiblesDiscovered.push(collectibleId);
-                    }
-                    if (latestStateRef.current.props.onCollectibleDiscovered) {
-                        latestStateRef.current.props.onCollectibleDiscovered(collectibleId);
-                    }
-                },
-                spawnBubble: (text: string, duration?: number) => {
-                    window.dispatchEvent(new CustomEvent('spawn-bubble', {
-                        detail: { text, duration: duration || 3000 }
-                    }));
-                },
-                spawnPart: (x, y, z, type, count, customMesh, customVel, color, scale) => {
-                    FXSystem.spawnPart(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
-                },
-                spawnDecal: (x, z, scale, material, type = 'decal') => {
-                    FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
-
-                },
-                onClueDiscovered: (clue: any) => {
-                    if (latestStateRef.current.props.onClueDiscovered) latestStateRef.current.props.onClueDiscovered(clue);
-                },
-                onPOIdiscovered: (poi: any) => {
-                    if (latestStateRef.current.props.onPOIdiscovered) latestStateRef.current.props.onPOIdiscovered(poi);
-                },
-                onTrigger: (type: string, duration: number) => {
-                    const state = refs.stateRef.current;
-                    if (type === 'SPEAK') state.speakingUntil = performance.now() + duration;
-                    else state.thinkingUntil = performance.now() + duration;
-                },
-                onAction: (action: any) => {
-                    onAction(action);
-                },
-                handleTriggerAction: (action: any, scene: THREE.Scene) => {
-                    const { type, payload, delay } = action;
-                    const execute = () => {
-                        switch (type) {
-                            case 'SHOW_TEXT':
-                                if (payload?.text) spawnBubble(t(payload.text), payload.duration || 3000);
-                                break;
-                            case 'SPAWN_ENEMY':
-                                if (payload) {
-                                    const count = payload.count || 1;
-                                    for (let i = 0; i < count; i++) {
-                                        const spread = payload.spread || 0;
-                                        if (payload.pos) {
-                                            _spawnPosScratch.set(payload.pos.x, 0, payload.pos.z);
-                                        } else if (refs.playerGroupRef.current) {
-                                            _spawnPosScratch.copy(refs.playerGroupRef.current.position);
-                                        } else {
-                                            _spawnPosScratch.set(0, 0, 0);
-                                        }
-
-                                        if (spread > 0) {
-                                            _spawnPosScratch.x += (Math.random() - 0.5) * spread;
-                                            _spawnPosScratch.z += (Math.random() - 0.5) * spread;
-                                        }
-                                        refs.sectorContextRef.current?.spawnZombie(payload.type, _spawnPosScratch);
-                                    }
-                                }
-                                break;
-                            case 'CAMERA_SHAKE':
-                                if (payload?.amount) refs.engineRef.current?.camera.shake(payload.amount);
-                                break;
-                            case 'CAMERA_PAN':
-                                if (payload?.target && payload.duration) {
-                                    refs.engineRef.current?.camera.setCinematic(true);
-                                    refs.engineRef.current?.camera.setPosition(payload.target.x, 30, payload.target.z + 20);
-                                    refs.engineRef.current?.camera.lookAt(payload.target.x, 0, payload.target.z);
-                                    setTimeout(() => {
-                                        refs.engineRef.current?.camera.setCinematic(false);
-                                    }, payload.duration);
-                                }
-                                break;
-                            case 'START_WAVE':
-                                if (payload?.count) {
-                                    refs.stateRef.current.sectorState.zombiesKilled = 0;
-                                    refs.stateRef.current.sectorState.targetKills = payload.count;
-                                    refs.stateRef.current.sectorState.waveActive = true;
-                                    spawnBubble(t('ui.wave_start'), 4000);
-                                }
-                                break;
-                            case 'GIVE_REWARD':
-                            case 'UNLOCK_OBJECT':
-                            case 'START_CINEMATIC':
-                            case 'TRIGGER_FAMILY_FOLLOW':
-                                onAction(action);
-                                break;
-                            case 'PLAY_SOUND':
-                                onAction({ type: 'SOUND', payload: { id: payload?.id || action.id } });
-                                break;
-                            default:
-                                onAction(action);
-                                break;
+        // Call the setup routine ASYNCHRONOUSLY
+        const initSector = async () => {
+            await GameSessionSetup.runSectorSetup({
+                engine,
+                session,
+                state: refs.stateRef.current,
+                props: props,
+                refs: refs,
+                ui: {
+                    setIsSectorLoading: (val: boolean) => updateUiState({ isSectorLoading: val }),
+                    setDeathPhase: (val: any) => {
+                        updateUiState({ deathPhase: val });
+                        const pProps = latestStateRef.current.props;
+                        if ((val === 'MESSAGE' || val === 'CONTINUE') && pProps.onDeathStateChange) {
+                            pProps.onDeathStateChange(true);
                         }
-                    };
-
-                    if (delay) setTimeout(execute, delay);
-                    else execute();
-                },
-                startCinematic: (mesh: any, scriptId?: number, params?: any) => {
-                    const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
-                    sys?.startCinematic(mesh, scriptId || 0, params);
-                },
-                endCinematic: () => {
-                },
-                playCinematicLine: (index: number) => {
-                    const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
-                    sys?.playLine(index);
-                },
-                spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
-                    const origin = (refs.playerGroupRef.current && refs.playerGroupRef.current.children.length > 0)
-                        ? refs.playerGroupRef.current.position
-                        : new THREE.Vector3(props.currentSectorData.playerSpawn.x, 0, props.currentSectorData.playerSpawn.z);
-                    refs.sectorContextRef.current?.spawnZombie(forcedType, forcedPos || origin);
-                },
-                concludeSector,
-                gainXp,
-                onSectorLoaded: props.onSectorLoaded,
-                onBossKilled: (id: number) => {
-                    soundManager.stopMusic();
-                    const pProps = latestStateRef.current.props;
-                    if (pProps.currentSectorData?.environment.ambientLoop) {
-                        soundManager.playMusic(pProps.currentSectorData.environment.ambientLoop);
+                    },
+                    setBossIntroActive: (val: boolean) => {
+                        updateUiState({ bossIntroActive: val });
+                        if (latestStateRef.current.props.onBossIntroStateChange) latestStateRef.current.props.onBossIntroStateChange(val);
+                    },
+                    setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
+                    setCurrentLine: (val: any) => {
+                        updateUiState({ currentLine: val });
+                        const hData = HudStore.getState();
+                        hData.currentLine = val;
+                        hData.cinematicActive = refs.gameSessionRef.current ? refs.gameSessionRef.current.getSystem('cinematic').cinematicRef.current.active : false;
+                        HudStore.update(hData);
+                    },
+                    setCinematicActive: (val: boolean) => {
+                        updateUiState({ cinematicActive: val });
+                        const hData = HudStore.getState();
+                        hData.cinematicActive = val;
+                        HudStore.update(hData);
+                        if (latestStateRef.current.props.onDialogueStateChange) latestStateRef.current.props.onDialogueStateChange(val);
+                    },
+                    setInteractionType: (val: any) => updateUiState({ interactionType: val }),
+                    setFoundMemberName: (val: string) => updateUiState({ foundMemberName: val }),
+                    setOverlay: (val: string | null) => {
+                        if (latestStateRef.current.props.onInteractionStateChange) latestStateRef.current.props.onInteractionStateChange(val);
                     }
                 },
-                collectedCluesRef: refs.collectedCluesRef,
-            }
-        }, currentSetupId);
+                callbacks: {
+                    t,
+                    showDamageText,
+                    onCollectibleDiscovered: (collectibleId: string) => {
+                        if (!refs.stateRef.current.sessionCollectiblesDiscovered.includes(collectibleId)) {
+                            refs.stateRef.current.sessionCollectiblesDiscovered.push(collectibleId);
+                        }
+                        if (latestStateRef.current.props.onCollectibleDiscovered) {
+                            latestStateRef.current.props.onCollectibleDiscovered(collectibleId);
+                        }
+                    },
+                    spawnBubble: (text: string, duration?: number) => {
+                        window.dispatchEvent(new CustomEvent('spawn-bubble', {
+                            detail: { text, duration: duration || 3000 }
+                        }));
+                    },
+                    spawnPart: (x, y, z, type, count, customMesh, customVel, color, scale) => {
+                        FXSystem.spawnPart(engine.scene, refs.stateRef.current.particles, x, y, z, type, count, customMesh, customVel, color, scale);
+                    },
+                    spawnDecal: (x, z, scale, material, type = 'decal') => {
+                        FXSystem.spawnDecal(engine.scene, refs.stateRef.current.bloodDecals, x, z, scale, material, type);
+                    },
+                    onClueDiscovered: (clue: any) => {
+                        if (latestStateRef.current.props.onClueDiscovered) latestStateRef.current.props.onClueDiscovered(clue);
+                    },
+                    onPOIdiscovered: (poi: any) => {
+                        if (latestStateRef.current.props.onPOIdiscovered) latestStateRef.current.props.onPOIdiscovered(poi);
+                    },
+                    onTrigger: (type: string, duration: number) => {
+                        const state = refs.stateRef.current;
+                        if (type === 'SPEAK') state.speakingUntil = performance.now() + duration;
+                        else state.thinkingUntil = performance.now() + duration;
+                    },
+                    onAction: (action: any) => {
+                        onAction(action);
+                    },
+                    handleTriggerAction: (action: any, scene: THREE.Scene) => {
+                        const { type, payload, delay } = action;
+                        const execute = () => {
+                            switch (type) {
+                                case 'SHOW_TEXT':
+                                    if (payload?.text) spawnBubble(t(payload.text), payload.duration || 3000);
+                                    break;
+                                case 'SPAWN_ENEMY':
+                                    if (payload) {
+                                        const count = payload.count || 1;
+                                        for (let i = 0; i < count; i++) {
+                                            const spread = payload.spread || 0;
+                                            if (payload.pos) {
+                                                _spawnPosScratch.set(payload.pos.x, 0, payload.pos.z);
+                                            } else if (refs.playerGroupRef.current) {
+                                                _spawnPosScratch.copy(refs.playerGroupRef.current.position);
+                                            } else {
+                                                _spawnPosScratch.set(0, 0, 0);
+                                            }
+
+                                            if (spread > 0) {
+                                                _spawnPosScratch.x += (Math.random() - 0.5) * spread;
+                                                _spawnPosScratch.z += (Math.random() - 0.5) * spread;
+                                            }
+                                            refs.sectorContextRef.current?.spawnZombie(payload.type, _spawnPosScratch);
+                                        }
+                                    }
+                                    break;
+                                case 'CAMERA_SHAKE':
+                                    if (payload?.amount) refs.engineRef.current?.camera.shake(payload.amount);
+                                    break;
+                                case 'CAMERA_PAN':
+                                    if (payload?.target && payload.duration) {
+                                        refs.engineRef.current?.camera.setCinematic(true);
+                                        refs.engineRef.current?.camera.setPosition(payload.target.x, 30, payload.target.z + 20);
+                                        refs.engineRef.current?.camera.lookAt(payload.target.x, 0, payload.target.z);
+                                        setTimeout(() => {
+                                            refs.engineRef.current?.camera.setCinematic(false);
+                                        }, payload.duration);
+                                    }
+                                    break;
+                                case 'START_WAVE':
+                                    if (payload?.count) {
+                                        refs.stateRef.current.sectorState.zombiesKilled = 0;
+                                        refs.stateRef.current.sectorState.targetKills = payload.count;
+                                        refs.stateRef.current.sectorState.waveActive = true;
+                                        spawnBubble(t('ui.wave_start'), 4000);
+                                    }
+                                    break;
+                                case 'GIVE_REWARD':
+                                case 'UNLOCK_OBJECT':
+                                case 'START_CINEMATIC':
+                                case 'TRIGGER_FAMILY_FOLLOW':
+                                    onAction(action);
+                                    break;
+                                case 'PLAY_SOUND':
+                                    onAction({ type: 'SOUND', payload: { id: payload?.id || action.id } });
+                                    break;
+                                default:
+                                    onAction(action);
+                                    break;
+                            }
+                        };
+
+                        if (delay) setTimeout(execute, delay);
+                        else execute();
+                    },
+                    startCinematic: (mesh: any, scriptId?: number, params?: any) => {
+                        const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                        sys?.startCinematic(mesh, scriptId || 0, params);
+                    },
+                    endCinematic: () => {
+                    },
+                    playCinematicLine: (index: number) => {
+                        const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                        sys?.playLine(index);
+                    },
+                    spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
+                        const origin = (refs.playerGroupRef.current && refs.playerGroupRef.current.children.length > 0)
+                            ? refs.playerGroupRef.current.position
+                            : new THREE.Vector3(props.currentSectorData.playerSpawn.x, 0, props.currentSectorData.playerSpawn.z);
+                        refs.sectorContextRef.current?.spawnZombie(forcedType, forcedPos || origin);
+                    },
+                    concludeSector,
+                    gainXp,
+                    // VINTERDÖD FIX: Vi skickar INTE onSectorLoaded här längre. Det sköts nedan.
+                    onBossKilled: (id: number) => {
+                        soundManager.stopMusic();
+                        const pProps = latestStateRef.current.props;
+                        if (pProps.currentSectorData?.environment.ambientLoop) {
+                            soundManager.playMusic(pProps.currentSectorData.environment.ambientLoop);
+                        }
+                    },
+                    collectedCluesRef: refs.collectedCluesRef,
+                }
+            }, currentSetupId);
+
+            // =====================================================================
+            // VINTERDÖD FIX: Låt GPU:n vakna och svälja all data INNAN laddningsskärmen försvinner
+            // =====================================================================
+            engine.isRenderingPaused = false;
+
+            await new Promise<void>((resolve) => {
+                let framesToWait = 5;
+                const checkReady = () => {
+                    if (framesToWait > 0) {
+                        framesToWait--;
+                        requestAnimationFrame(checkReady);
+                    } else {
+                        if (refs.isMounted.current && refs.setupIdRef.current === currentSetupId) {
+                            updateUiState({ isSectorLoading: false });
+                            if (props.onSectorLoaded) props.onSectorLoaded();
+                        }
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(checkReady);
+            });
+        };
+
+        // Kör den asynkrona funktionen!
+        initSector();
 
         // Bind the Update Loop
         engine.onUpdate = createGameLoop({
@@ -750,7 +780,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         };
 
-    }, [props.currentSector, props.currentSectorData]); // Intentionally omitting `refs` as it's stable
+    }, [props.currentSector]);
 
     // Environmental Sync Transition (RUNTIME ONLY)
     // Updates values dynamically (e.g., Sector 6 zones) WITHOUT altering the scene graph

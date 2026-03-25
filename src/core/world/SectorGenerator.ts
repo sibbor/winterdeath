@@ -182,7 +182,7 @@ export const SectorGenerator = {
 
         const env = def.environment;
         if (env) {
-            engine.syncEnvironment(env);
+            engine.syncEnvironment(env, ctx.scene);
         }
 
         if (def.setupEnvironment) {
@@ -319,14 +319,15 @@ export const SectorGenerator = {
         lid.castShadow = true;
         chest.add(lid);
 
-        const ringGeo = isBig ? GEOMETRY.chestGlowRingBig : GEOMETRY.chestGlowRingStandard;
-        const ringMat = isBig ? MATERIALS.chestGlowBig : MATERIALS.chestGlowStandard;
+        // "Fake Light" - Additive Blending
+        const glowGeo = isBig ? GEOMETRY.chestBigGlow : GEOMETRY.chestGlow;
+        const glowMat = isBig ? MATERIALS.chestBigGlow : MATERIALS.chestGlow;
 
-        const glowRing = new THREE.Mesh(ringGeo, ringMat);
-        glowRing.rotation.x = -Math.PI / 2;
-        glowRing.position.y = 0.05;
-        glowRing.name = 'chestGlowRing';
-        chest.add(glowRing);
+        const chestGlow = new THREE.Mesh(glowGeo, glowMat);
+        chestGlow.rotation.x = -Math.PI / 2;
+        chestGlow.position.y = 0.05;
+        chestGlow.name = 'chestGlow';
+        chest.add(chestGlow);
 
         ctx.scene.add(chest);
 
@@ -406,9 +407,16 @@ export const SectorGenerator = {
         innerRing.position.y = 1.0;
         group.add(innerRing);
 
-        const light = new THREE.PointLight(colorPrimary, 3, 10);
-        light.position.set(0, 1.2, 0);
-        group.add(light);
+        // Logical light - handled by LightSystem
+        const lightWorldPos = new THREE.Vector3(x, 1.7, z);
+        ctx.dynamicLights.push({
+            isLogicalLight: true,
+            position: lightWorldPos,
+            color: colorPrimary,
+            baseIntensity: 3.0,
+            distance: 10.0,
+            flickerRate: 0.0
+        } as any);
 
         if (!group.userData.effects) group.userData.effects = [];
         group.userData.effects.push({
@@ -895,28 +903,75 @@ export const SectorGenerator = {
     },
 
     spawnStreetLight: (ctx: SectorContext, x: number, z: number, rotation: number = 0) => {
-        const light = ObjectGenerator.createStreetLamp();
-        light.position.set(x, 0, z);
-        light.rotation.y = rotation;
-        ctx.scene.add(light);
+        const lightGroup = ObjectGenerator.createStreetLamp();
+        lightGroup.position.set(x, 0, z);
+        lightGroup.rotation.y = rotation;
+        lightGroup.matrixAutoUpdate = false;
+        lightGroup.updateMatrix();
+
+        ctx.scene.add(lightGroup);
 
         SectorGenerator.addObstacle(ctx, {
-            mesh: light,
-            position: light.position,
+            mesh: lightGroup,
+            position: lightGroup.position,
             collider: { type: 'sphere', radius: 1.0 }
         });
 
-        // Zero-GC: Use direct child scan if possible, but getObjectByProperty is fine during init
-        const pointLight = light.getObjectByProperty('isPointLight', true) as THREE.PointLight;
-        if (pointLight && ctx.dynamicLights) ctx.dynamicLights.push(pointLight);
+        // Add to LightSystem
+        if (ctx.dynamicLights) {
+            const offset = lightGroup.userData.lightOffset as THREE.Vector3;
+            const worldPos = new THREE.Vector3().copy(offset);
+            worldPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
+            worldPos.add(lightGroup.position);
 
-        return light;
+            ctx.dynamicLights.push({
+                isLogicalLight: true,
+                position: worldPos,
+                color: 0xaaddff,
+                baseIntensity: 4.0,
+                distance: 30.0,
+                flickerRate: Math.random() > 0.9 ? 0.1 : 0.0 // 10% chans att lyktan är trasig och flimrar!
+            } as any);
+        }
+
+        return lightGroup;
     },
 
     spawnCaveLamp: (ctx: SectorContext, x: number, y: number, z: number) => {
         const lamp = ObjectGenerator.createCaveLamp();
         lamp.position.set(x, y, z);
+
+        // Frys matrisen! Sparar extremt mycket CPU på fasta objekt.
+        lamp.matrixAutoUpdate = false;
+        lamp.updateMatrix();
+
         ctx.scene.add(lamp);
+
+        // ========================================================
+        // VINTERDÖD FIX: Skicka in datan till LightSystem
+        // ========================================================
+        if (lamp.userData.logicalLights && ctx.dynamicLights) {
+            for (let i = 0; i < lamp.userData.logicalLights.length; i++) {
+                const lData = lamp.userData.logicalLights[i];
+
+                // Räkna ut absolut position
+                const worldPos = new THREE.Vector3().copy(lData.offset);
+                worldPos.applyQuaternion(lamp.quaternion);
+                worldPos.add(lamp.position);
+
+                // LightSystem
+                ctx.dynamicLights.push({
+                    isLogicalLight: true,
+                    position: worldPos,
+                    color: lData.color,
+                    baseIntensity: lData.baseIntensity,
+                    distance: lData.distance,
+                    flickerRate: lData.flickerRate
+                } as any);
+            }
+            lamp.userData.logicalLights = null;
+        }
+
         return lamp;
     },
 
@@ -935,6 +990,31 @@ export const SectorGenerator = {
             quaternion: building.quaternion,
             collider: { type: 'box', size: size.clone() } // Struct needed, clone safe here
         });
+
+        // ========================================================
+        // VINTERDÖD FIX: Läs in husets inbyggda ljus-data
+        // Transformera Local Space (offset) till World Space
+        // ========================================================
+        if (building.userData.logicalLights && ctx.dynamicLights) {
+            for (let i = 0; i < building.userData.logicalLights.length; i++) {
+                const lData = building.userData.logicalLights[i];
+                const worldPos = new THREE.Vector3().copy(lData.offset);
+                worldPos.applyQuaternion(building.quaternion);
+                worldPos.add(building.position);
+
+                // LightSystem
+                ctx.dynamicLights.push({
+                    isLogicalLight: true,
+                    position: worldPos,
+                    color: lData.color,
+                    baseIntensity: lData.baseIntensity,
+                    distance: lData.distance,
+                    flickerRate: lData.flickerRate || 0
+                } as any);
+            }
+
+            building.userData.logicalLights = null;
+        }
 
         return building;
     },
@@ -1210,6 +1290,38 @@ export const SectorGenerator = {
         return PathGenerator.createGuardrail(ctx, points, floating);
     },
 
+    spawnMast: (ctx: SectorContext, x: number, z: number) => {
+        const mast = ObjectGenerator.createMast();
+        mast.position.set(x, 0, z);
+        ctx.scene.add(mast);
+
+        SectorGenerator.addObstacle(ctx, {
+            mesh: mast,
+            position: mast.position,
+            collider: { type: 'sphere', radius: 8 }
+        });
+
+        // ========================================================
+        // VINTERDÖD FIX: Koppla roterande logiska ljus
+        // ========================================================
+        if (ctx.dynamicLights) {
+            mast.traverse((child) => {
+                if (child.userData.needsLogicalLight) {
+                    ctx.dynamicLights.push({
+                        isLogicalLight: true,
+                        targetObject: child, // <-- Låser proxy-lampan till denna specifika mesh
+                        color: child.userData.lightColor,
+                        baseIntensity: child.userData.lightIntensity,
+                        distance: child.userData.lightDistance,
+                        flickerRate: 0.0 // En roterande mastlampa flimrar sällan
+                    } as any);
+                }
+            });
+        }
+
+        return mast;
+    },
+
     addTriggers: (ctx: SectorContext, triggers: any[]) => {
         for (let i = 0; i < triggers.length; i++) {
             const trigger = triggers[i] as any;
@@ -1272,27 +1384,37 @@ export const SectorGenerator = {
         const oY = eff.offset?.y || 0;
         const oZ = eff.offset?.z || 0;
 
-        parent.updateMatrixWorld();
+        // Logical Light - handled by LightSystem
+        if (eff.type === 'light' || eff.type === 'fire') {
+            const isFire = eff.type === 'fire';
+            const baseColor = isFire ? 0xff6600 : (eff.color || 0xffaa00);
+            const baseIntensity = isFire ? 2.0 : (eff.intensity || 1.0);
+            const yOffset = isFire ? oY + 1.0 : oY;
 
-        // Zero-GC: Use scratchpad vectors instead of new THREE.Vector3
-        _v1_sg.setFromMatrixPosition(parent.matrixWorld);
-        _v2_sg.set(oX, oY, oZ);
-        _v1_sg.add(_v2_sg);
-
-        if (eff.type === 'light') {
-            const light = new THREE.PointLight(eff.color || 0xffaa00, eff.intensity || 1, 25);
-            light.position.copy(_v1_sg);
-            ctx.scene.add(light);
-            if ((eff.color || 0) > 0xffaa00 || !eff.color) {
-                ctx.flickeringLights.push({ light, baseInt: eff.intensity || 1, flickerRate: 0.05 + Math.random() * 0.1 });
+            // Calculate flicker
+            let flicker = 0;
+            if (isFire) {
+                flicker = 0.15;
+            } else if ((eff.color || 0) > 0xffaa00 || !eff.color) {
+                flicker = 0.05 + Math.random() * 0.1;
             }
-        } else if (eff.type === 'fire') {
-            const light = new THREE.PointLight(0xff6600, 2, 25);
-            light.position.copy(_v1_sg);
-            light.position.y += 1;
-            ctx.scene.add(light);
-            ctx.flickeringLights.push({ light, baseInt: 2, flickerRate: 0.15 });
 
+            // LightSystem
+            if (ctx.dynamicLights) {
+                ctx.dynamicLights.push({
+                    isLogicalLight: true,
+                    targetObject: parent,
+                    offset: new THREE.Vector3(oX, yOffset, oZ),
+                    color: baseColor,
+                    baseIntensity: baseIntensity,
+                    distance: 25.0,
+                    flickerRate: flicker
+                } as any);
+            }
+        }
+
+        // Particle effects
+        if (eff.type === 'fire') {
             parent.userData.isFire = true;
             if (parent.userData.effects === undefined) parent.userData.effects = [];
 

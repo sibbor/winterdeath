@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getSharedGlowTexture } from '../materials';
 
 // --- PERFORMANCE CACHE (Zero-GC) ---
 const cache: Record<string, any> = {};
@@ -13,28 +14,6 @@ const getGeo = (key: string, create: () => THREE.BufferGeometry) => {
 const getMat = (key: string, create: () => THREE.Material) => {
     if (!cache[key]) cache[key] = create();
     return cache[key];
-};
-
-// Generate a glow texture with code (so we don't have to load an image file)
-const getGlowTexture = () => {
-    if (!cache['glow_texture']) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        const ctx = canvas.getContext('2d')!;
-
-        // Draw a radial transition (Sharp in the middle, transparent at the edge)
-        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-        gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.4)');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 64, 64);
-
-        cache['glow_texture'] = new THREE.CanvasTexture(canvas);
-    }
-    return cache['glow_texture'];
 };
 
 export const CollectibleModels = {
@@ -286,10 +265,10 @@ export const CollectibleModels = {
 
                 phoneGroup.add(crackGroup);
 
-                // 5. Screen light / Fake Glow (Replaces PointLight)
+                // 5. Screen light / Fake Glow
                 // AdditiveBlending together with the extended white plane creates the glow.
                 const screenGlowMat = getMat('phone_screen_glow', () => new THREE.MeshBasicMaterial({
-                    map: getGlowTexture(),
+                    map: getSharedGlowTexture(),
                     color: 0xffffff,
                     transparent: true,
                     blending: THREE.AdditiveBlending,
@@ -440,7 +419,7 @@ export const CollectibleModels = {
 
                 // Light from the diamond with Fake Glow
                 const diamondGlowMat = getMat('ring_diamond_glow', () => new THREE.SpriteMaterial({
-                    map: getGlowTexture(),
+                    map: getSharedGlowTexture(),
                     color: 0xffffff,
                     transparent: true,
                     blending: THREE.AdditiveBlending,
@@ -531,7 +510,7 @@ export const CollectibleModels = {
 
         // --- FAKE GLOW (Optimized lighting that surrounds all objects) ---
         const glowMat = getMat('collectible_glow_mat', () => new THREE.SpriteMaterial({
-            map: getGlowTexture(),
+            map: getSharedGlowTexture(),
             color: 0xffcc00, // Gold yellow color for items
             transparent: true,
             blending: THREE.AdditiveBlending,

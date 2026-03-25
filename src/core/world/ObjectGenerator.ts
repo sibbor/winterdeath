@@ -209,9 +209,12 @@ export const ObjectGenerator = {
         head.castShadow = true;
         group.add(head);
 
-        const light = new THREE.PointLight(0xaaddff, 4, 30);
-        light.position.set(0, 7.4, 1.5);
-        group.add(light);
+        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xaaddff });
+        const bulb = new THREE.Mesh(SHARED_GEO.box, bulbMat);
+        bulb.scale.set(0.4, 0.1, 0.6);
+        bulb.position.set(0, 7.4, 1.5);
+        group.add(bulb);
+        group.userData.lightOffset = new THREE.Vector3(0, 7.4, 1.5);
 
         group.userData.material = 'METAL';
         return group;
@@ -612,6 +615,8 @@ export const ObjectGenerator = {
         base.scale.set(0.3, 0.2, 0.3);
         group.add(base);
 
+        // Om LOCAL_MATS.caveLampBulb inte redan är ett MeshBasicMaterial, 
+        // överväg att göra det så det lyser av sig självt i mörkret!
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), LOCAL_MATS.caveLampBulb);
         bulb.position.y = -0.15;
         group.add(bulb);
@@ -621,6 +626,19 @@ export const ObjectGenerator = {
         group.add(cage);
 
         group.userData.material = 'METAL';
+
+        // ========================================================
+        // VINTERDÖD FIX: Det logiska ljuset.
+        // Skapar 0 lagg.
+        // ========================================================
+        group.userData.logicalLights = [{
+            offset: new THREE.Vector3(0, -0.5, 0),
+            color: 0xffddaa,
+            baseIntensity: 3.5,
+            distance: 20.0,
+            flickerRate: 0.1
+        }];
+
         return group;
     },
 
@@ -647,6 +665,48 @@ export const ObjectGenerator = {
 
         group.userData.material = 'WOOD';
         return group;
+    },
+
+    createMast: () => {
+        const mastGroup = new THREE.Group();
+
+        const mastBase = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 10), MATERIALS.concrete);
+        mastBase.position.y = 1;
+        mastBase.castShadow = true;
+        mastGroup.add(mastBase);
+
+        const mastMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 6, 60, 4), MATERIALS.mast);
+        mastMesh.position.y = 30;
+        mastMesh.castShadow = true;
+        mastGroup.add(mastMesh);
+
+        const lightHub = new THREE.Group();
+        lightHub.name = "mastWarningLights"; // Viktigt namn så vi kan rotera den sen!
+        lightHub.position.y = 60;
+
+        const lightXs = [2, -2];
+        for (let i = 0; i < lightXs.length; i++) {
+            const posX = lightXs[i];
+            // BasicMaterial gör att själva mesh-kulan lyser i mörkret oavsett skuggor
+            const lamp = new THREE.Mesh(
+                new THREE.SphereGeometry(0.4),
+                new THREE.MeshBasicMaterial({ color: 0xff0000 })
+            );
+            lamp.position.x = posX;
+
+            // ========================================================
+            // VINTERDÖD FIX: Märk upp glödlampan för Proxy-systemet
+            // ========================================================
+            lamp.userData.needsLogicalLight = true;
+            lamp.userData.lightColor = 0xff0000;
+            lamp.userData.lightIntensity = 10.0;
+            lamp.userData.lightDistance = 50.0;
+
+            lightHub.add(lamp);
+        }
+
+        mastGroup.add(lightHub);
+        return mastGroup;
     },
 
     createGlassStaircase: (width: number, height: number, depth: number) => {
@@ -769,10 +829,18 @@ export const ObjectGenerator = {
                         instancedWindows.setMatrixAt(idx++, _matrix);
 
                         if (withLights) {
-                            const light = new THREE.PointLight(0xffffaa, 4, 10);
+                            // Vi sätter positionen precis som förut
                             _v1_og.set(x, midPoint / 2, sideDepth / 2 - 1).applyQuaternion(_quat);
-                            light.position.copy(_v1_og);
-                            group.add(light);
+
+                            // LightSystem
+                            if (!group.userData.logicalLights) group.userData.logicalLights = [];
+                            group.userData.logicalLights.push({
+                                offset: _v1_og.clone(),
+                                color: 0xffffaa,
+                                baseIntensity: 4.0,
+                                distance: 10.0,
+                                flickerRate: Math.random() > 0.8 ? 0.2 : 0.0
+                            });
                         }
                     }
                 }
@@ -856,9 +924,22 @@ export const ObjectGenerator = {
 
         group.add(new THREE.Mesh(_sharedNeonHeartGeo, neonHeartCache[color]));
 
-        const light = new THREE.PointLight(color, 50, 50);
-        light.position.set(0, 0, 0.5);
-        group.add(light);
+        // ========================================================
+        // VINTERDÖD FIX: Zero-GC Neonljus
+        // Istället för PointLight sparar vi logisk ljus-data.
+        // För att det ska se ut att lysa "neråt" flyttar vi ljusets 
+        // mittpunkt ner (-1.5) och lite utåt (0.8) från väggen.
+        // Vi multiplicerar med 'scale' så ljuset följer med om hjärtat görs stort.
+        // ========================================================
+        const lightOffset = new THREE.Vector3(0, -1.5 * scale, 0.8 * scale);
+
+        group.userData.logicalLights = [{
+            offset: lightOffset,
+            color: color,
+            baseIntensity: 15.0, // Brutalt starkt neonljus
+            distance: 25.0 * scale, // Något längre räckvidd
+            flickerRate: 0.05 // Ett neonhjärta måste ju glappa lite ibland!
+        }];
 
         group.scale.setScalar(scale);
         return group;

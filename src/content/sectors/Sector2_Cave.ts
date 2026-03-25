@@ -335,9 +335,26 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         createRoomLight(new THREE.Vector3(r.x, 4.5, r.z));
 
         if (r.type === 'ShelterRoom') {
-            const light = new THREE.PointLight(0xff0000, 100, 50);
-            light.position.set(r.x, 8, r.z);
-            innerCave.add(light);
+            // ========================================================
+            // VINTERDÖD FIX: Logiskt varningsljus
+            // ========================================================
+            if (ctx.dynamicLights) {
+                // Vi sätter positionen. Om 'innerCave' har en egen offset 
+                // i världen behöver vi addera den, annars räcker r.x / r.z!
+                const worldPos = new THREE.Vector3(r.x, 8, r.z);
+
+                // Om innerCave faktiskt flyttas från origo (0,0,0) någonstans i koden:
+                // worldPos.add(innerCave.position); 
+
+                ctx.dynamicLights.push({
+                    isLogicalLight: true,
+                    position: worldPos,
+                    color: 0xff0000,
+                    baseIntensity: 100.0,
+                    distance: 50.0,
+                    flickerRate: 0.05
+                } as any);
+            }
         } else {
             // Decorate normal rooms
             //decorateRoom(r);

@@ -63,6 +63,9 @@ const LOCATIONS = {
     }
 } as const;
 
+// Mast light
+let mastLightHubRef: THREE.Object3D | null = null;
+
 export const Sector3: SectorDef = {
     id: 2,
     name: "sectors.sector_3_name",
@@ -334,38 +337,12 @@ export const Sector3: SectorDef = {
 
         SectorGenerator.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
 
+        // The Mast
         const mastGroup = new THREE.Group();
         mastGroup.position.set(mastPos.x, 5, mastPos.z);
 
-        const mastBase = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 10), MATERIALS.concrete);
-        mastBase.position.y = 1;
-        mastGroup.add(mastBase);
-
-        const mastMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 6, 60, 4), MATERIALS.mast);
-        mastMesh.position.y = 30;
-        mastGroup.add(mastMesh);
-
-        const lightHub = new THREE.Group();
-        lightHub.name = "mastWarningLights";
-        lightHub.position.y = 60;
-
-        const lightXs = [2, -2];
-        for (let i = 0; i < lightXs.length; i++) {
-            const posX = lightXs[i];
-            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000 }));
-            lamp.position.x = posX;
-            const pLight = new THREE.PointLight(0xff0000, 10, 50);
-            lamp.add(pLight);
-            lightHub.add(lamp);
-        }
-
-        mastGroup.add(lightHub);
-        mastGroup.userData.isObstacle = true;
-        scene.add(mastGroup);
-        SectorGenerator.addObstacle(ctx, {
-            mesh: mastGroup,
-            collider: { type: 'sphere', radius: 8 }
-        });
+        const mast = SectorGenerator.spawnMast(ctx, mastPos.x, mastPos.z);
+        mastLightHubRef = mast.getObjectByName("mastWarningLights") || null;
     },
 
     setupContent: async (ctx: SectorContext) => {
@@ -398,5 +375,9 @@ export const Sector3: SectorDef = {
         }
     },
 
-    onUpdate: (delta, now, playerPos, gameState, sectorState, events) => { }
+    onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
+        if (mastLightHubRef) {
+            mastLightHubRef.rotation.y += delta * 2.0;
+        }
+    }
 };

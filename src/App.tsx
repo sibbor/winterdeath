@@ -5,13 +5,15 @@ import { SectorTrigger } from './systems/TriggerTypes';
 import { loadGameState, saveGameState, clearSave } from './utils/persistence';
 import { aggregateStats } from './game/progression/ProgressionManager';
 import GameSession, { GameSessionHandle } from './game/session/GameSession';
+import ScreenStartGame from './components/ui/screens/shared/ScreenStartGame';
+import ScreenLoading from './components/ui/screens/shared/ScreenLoading';
+import Prologue from './components/ui/screens/Prologue';
 import Camp from './components/camp/Camp';
 import GameHUD from './components/ui/hud/GameHUD';
 import ScreenPause from './components/ui/screens/game/ScreenPause';
 import ScreenMap from './components/ui/screens/game/ScreenMap';
 import ScreenTeleport from './components/ui/screens/game/ScreenTeleport';
 import ScreenSectorReport from './components/ui/screens/game/ScreenSectorReport';
-import { CAMP_SCENE } from './components/camp/CampWorld';
 import ScreenBossKilled from './components/ui/screens/game/ScreenBossKilled';
 import ScreenCollectibleDiscovered from './components/ui/screens/game/ScreenCollectibleDiscovered';
 import ScreenAdventureLog from './components/ui/screens/camp/ScreenAdventureLog';
@@ -25,8 +27,6 @@ import ScreenArmory from './components/ui/screens/camp/ScreenArmory';
 import ScreenPlayerSkills from './components/ui/screens/camp/ScreenPlayerSkills';
 import ScreenSectorOverview from './components/ui/screens/camp/ScreenSectorOverview';
 import ScreenResetConfirm from './components/ui/screens/camp/ScreenResetConfirm';
-import Prologue from './components/ui/screens/Prologue';
-import ScreenLoading from './components/ui/screens/shared/ScreenLoading';
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
@@ -35,8 +35,10 @@ import { getCollectiblesBySector } from './content/collectibles';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
-import { SECTOR_THEMES } from './content/constants';
 import { HudStore } from './store/HudStore';
+import { PerformanceMonitor } from './systems/PerformanceMonitor';
+
+const performanceMonitor = PerformanceMonitor.getInstance();
 
 export type OverlayType =
     | 'PAUSE' | 'SETTINGS' | 'MAP' | 'TELEPORT' | 'COLLECTIBLE' | 'DIALOGUE'
@@ -60,20 +62,22 @@ const App: React.FC = () => {
         engineRef.current = WinterEngine.getInstance(gameState.graphics);
     }
 
-    const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
-    const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
-    const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
+    const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
+    const [isPointerLocked, setIsPointerLocked] = useState(false);
+
+    const [hasInteracted, setHasInteracted] = useState(!isMobileDevice);
+    const [isInitialBoot, setIsInitialBoot] = useState(true);
     const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE);
     const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
     const [showLoadingOverlay, setShowLoadingOverlay] = useState(isLoadingSector || isLoadingCamp);
     const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(gameState.screen === GameScreen.CAMP);
-    const [isInitialBoot, setIsInitialBoot] = useState(true);
-    const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
 
+    const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
+    const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
+    const [teleportTarget, setTeleportTarget] = useState<{ x: number, z: number, timestamp: number } | null>(null);
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
-    const [isPointerLocked, setIsPointerLocked] = useState(false);
     const showFPS = !!gameState.showFps;
 
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
@@ -168,24 +172,24 @@ const App: React.FC = () => {
 
     const isWarmedUpRef = useRef(false);
     useEffect(() => {
+        if (!hasInteracted) return;
         if (isWarmedUpRef.current) return;
         isWarmedUpRef.current = true;
 
         const warmup = async () => {
             const engine = WinterEngine.getInstance();
             const isCamp = gameState.screen === GameScreen.CAMP;
-            const envConfig = isCamp ? CAMP_SCENE : (gameState.currentSector !== undefined ? SECTOR_THEMES[gameState.currentSector] : SECTOR_THEMES[0]);
             const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
             await triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
                 const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
                 try {
                     engine.updateSettings(gameState.graphics);
-                    await AssetPreloader.warmupAsync('CORE', envConfig, yieldToMain);
+                    await AssetPreloader.warmupAsync('CORE', yieldToMain);
                     if (isCamp) {
-                        await AssetPreloader.warmupAsync('CAMP', envConfig, yieldToMain);
+                        await AssetPreloader.warmupAsync('CAMP', yieldToMain);
                     } else {
-                        await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
+                        await AssetPreloader.warmupAsync('SECTOR', yieldToMain, sectorIndex);
                     }
                 } catch (e) {
                     console.error("[App] Warmup Error:", e);
@@ -195,11 +199,10 @@ const App: React.FC = () => {
             });
         };
 
-        if (isInitialBoot) warmup();
-    }, []);
+        if (isInitialBoot && hasInteracted) warmup();
+    }, [hasInteracted]);
 
     // --- ZERO-GC STABLE CALLBACKS ---
-
     const handleDie = useCallback((stats: SectorStats, killer: string) => {
         setDeathDetails({ killer });
         setGameState(prev => {
@@ -458,31 +461,36 @@ const App: React.FC = () => {
         soundManager.playUiConfirm();
 
         triggerLoadingTransition('CAMP', async () => {
-            setGameState(prev => {
-                AssetPreloader.releaseSectorAssets(prev.currentSector);
+            AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
+            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
+            // VINTERDÖD FIX: Värm upp shaders FÖRST...
+            await AssetPreloader.warmupAsync('CAMP', yieldToMain);
+
+            // ...och mounta React-komponenterna SEN.
+            setGameState(prev => {
                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
-
                 return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
             });
-            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
-            await AssetPreloader.warmupAsync('CAMP', CAMP_SCENE, yieldToMain);
         });
     }, [triggerLoadingTransition]);
 
     const handleStartSector = useCallback(async () => {
         const { gameState: currentGameState } = latestStateRef.current;
         const sectorIndex = currentGameState.currentSector;
-        const envConfig = SECTOR_THEMES[sectorIndex];
+
         const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
         await triggerLoadingTransition('SECTOR', async () => {
-            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+            // VINTERDÖD FIX: Värm upp shaders FÖRST...
+            await AssetPreloader.warmupAsync('SECTOR', yieldToMain, sectorIndex);
+
+            // ...och mounta GameSession SEN.
             setTeleportTarget(null);
             setActiveCollectible(null);
             setActiveOverlay(null);
-            await AssetPreloader.warmupAsync('SECTOR', envConfig, yieldToMain, sectorIndex);
+            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         });
     }, [triggerLoadingTransition]);
 
@@ -545,6 +553,15 @@ const App: React.FC = () => {
 
     const cursorHidden = isMobileDevice || isPointerLocked || (gameState.screen === GameScreen.SECTOR && !activeOverlay);
 
+    if (!hasInteracted) {
+        return (
+            <ScreenStartGame
+                onStart={() => setHasInteracted(true)}
+                isMobileDevice={isMobileDevice}
+            />
+        );
+    }
+
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
             {gameState.screen === GameScreen.CAMP && (
@@ -579,6 +596,7 @@ const App: React.FC = () => {
             {(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE) && (
                 <>
                     <GameSession
+                        key={`gs-${gameState.currentSector}`}
                         ref={gameCanvasRef}
                         isWarmup={isLoadingSector}
                         stats={gameState.stats}
@@ -831,6 +849,14 @@ const App: React.FC = () => {
                 isInitialBoot={isInitialBoot}
                 isMobileDevice={isMobileDevice}
             />
+
+            {!hasInteracted && (
+                <ScreenStartGame
+                    onStart={() => setHasInteracted(true)}
+                    isMobileDevice={isMobileDevice}
+                />
+            )}
+
         </div>
     );
 };

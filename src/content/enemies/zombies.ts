@@ -31,6 +31,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
         score: 20,
         color: 0xc27ba0, // Pinkish
         scale: 1.0,
+        widthScale: 1.1,
         attacks: [
             {
                 type: EnemyAttackType.HIT,
@@ -54,6 +55,7 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
         score: 10,
         color: 0x33a366, // Green
         scale: 0.8,
+        widthScale: 1.0,
         attacks: [
             {
                 type: EnemyAttackType.HIT,

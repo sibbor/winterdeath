@@ -126,7 +126,7 @@ export const useGameInput = (
             window.removeEventListener('keyup', handleKeyUp);
         };
     }, [
-        props.isPaused, props.isRunning, p.isClueOpen, p.disableInput,
+        props.isPaused, props.isRunning, props.isCollectibleOpen, p.disableInput,
         props.onPauseToggle, p.onClueClose, refs
     ]);
 

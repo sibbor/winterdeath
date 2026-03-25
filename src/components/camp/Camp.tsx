@@ -411,10 +411,6 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             monitor.printIfHeavy('Camp Performance', performance.now() - now, 50);
         };
 
-        engine.onRender = () => {
-            engine.renderer.render(scene, camera.threeCamera);
-        };
-
         return () => {
             window.removeEventListener('mousemove', onMM);
             window.removeEventListener('click', onCL);

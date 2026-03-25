@@ -11,7 +11,6 @@ import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
-import { AssetPreloader } from '../../systems/AssetPreloader';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM } from '../../content/constants';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../utils/assets';
@@ -41,8 +40,6 @@ const seededRandom = (seed: number) => {
     return () => { return (s = s * 16807 % 2147483647) / 2147483647; };
 };
 
-// --- ZERO-GC PRE-ALLOCATED SETS FOR DISPOSAL ---
-// Populated lazily on first run to avoid execution overhead
 let _sharedGeosSet: Set<THREE.BufferGeometry> | null = null;
 let _sharedMatsSet: Set<THREE.Material> | null = null;
 
@@ -64,7 +61,7 @@ export interface SetupContext {
     session: GameSessionLogic;
     state: RuntimeState;
     props: GameCanvasProps;
-    refs: any; // GameSessionState refs
+    refs: any;
     ui: {
         setIsSectorLoading: (val: boolean) => void;
         setDeathPhase: (val: any) => void;
@@ -113,9 +110,8 @@ export class GameSessionSetup {
 
         if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
-        ui.setIsSectorLoading(true);
+        // VINTERDÖD FIX: App.tsx hanterar UI och pauser! Vi bygger bara scenen här.
         refs.isBuildingSectorRef.current = true;
-        engine.isRenderingPaused = true;
         state.startTime = performance.now();
 
         try {
@@ -123,38 +119,21 @@ export class GameSessionSetup {
             const rng = seededRandom(props.currentSector + 4242);
             const env = currentSector.environment;
 
-            const useInstantLoad = AssetPreloader.getLastSectorIndex() === props.currentSector && AssetPreloader.isWarmedUp();
-            let lastYieldTime = performance.now();
-            const yielder = useInstantLoad ? undefined : async () => {
-                const now = performance.now();
-                if (now - lastYieldTime > 12) {
-                    await new Promise<void>(resolve => { requestAnimationFrame(() => setTimeout(resolve, 0)); });
-                    lastYieldTime = performance.now();
-                }
+            const yielder = async () => {
+                await new Promise<void>(resolve => setTimeout(resolve, 0));
             };
-
-            await AssetPreloader.warmupAsync('SECTOR', env, yielder, props.currentSector);
-
-            if (!isMounted.current || setupIdRef.current !== currentSetupId) {
-                console.warn(`[GameSessionSetup] Aborting setup ${currentSetupId} after preloader (Superceded by ${setupIdRef.current})`);
-                return;
-            }
 
             const monitor = PerformanceMonitor.getInstance();
             camera.reset();
             camera.set('fov', env.fov);
             camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
 
-            // --- ENVIRONMENT SYNC (Centralized) ---
             if (!props.isWarmup) {
                 engine.syncEnvironment(env);
-
                 const skyLight = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
                 if (skyLight) {
                     refs.skyLightRef.current = skyLight;
-                    if (!refs.skyLightOffsetRef.current) {
-                        refs.skyLightOffsetRef.current = new THREE.Vector3();
-                    }
+                    if (!refs.skyLightOffsetRef.current) refs.skyLightOffsetRef.current = new THREE.Vector3();
                     refs.skyLightOffsetRef.current.copy(skyLight.position);
                 }
             }
@@ -165,7 +144,6 @@ export class GameSessionSetup {
                 if (newEnemies) {
                     for (let i = 0; i < newEnemies.length; i++) {
                         state.enemies.push(newEnemies[i]);
-
                         let seen = false;
                         for (let j = 0; j < state.seenEnemies.length; j++) {
                             if (state.seenEnemies[j] === newEnemies[i].type) { seen = true; break; }
@@ -186,7 +164,6 @@ export class GameSessionSetup {
                 if (boss) {
                     state.enemies.push(boss);
                     state.bossSpawned = true;
-
                     let seen = false;
                     for (let j = 0; j < state.seenBosses.length; j++) {
                         if (state.seenBosses[j] === type) { seen = true; break; }
@@ -208,14 +185,9 @@ export class GameSessionSetup {
             refs.sectorContextRef.current = sectorCtx;
             state.sectorState.ctx = sectorCtx;
 
-            // --- CALLBACK INITIALIZATION ---
             state.callbacks = {
-                spawnPart: callbacks.spawnPart,
-                spawnDecal: callbacks.spawnDecal,
-                showDamageText: callbacks.showDamageText,
-                spawnBubble: callbacks.spawnBubble,
-                onClueDiscovered: callbacks.onClueDiscovered,
-                onPOIdiscovered: callbacks.onPOIdiscovered,
+                spawnPart: callbacks.spawnPart, spawnDecal: callbacks.spawnDecal, showDamageText: callbacks.showDamageText,
+                spawnBubble: callbacks.spawnBubble, onClueDiscovered: callbacks.onClueDiscovered, onPOIdiscovered: callbacks.onPOIdiscovered,
                 onTrigger: callbacks.onTrigger,
                 onAction: (action: any) => {
                     if (action.type === 'HEAL') {
@@ -223,7 +195,6 @@ export class GameSessionSetup {
                         soundManager.playUiConfirm();
                     }
                     if (action.type === 'SOUND' && action.id) soundManager.playEffect(action.id);
-
                     callbacks.handleTriggerAction(action, engine.scene);
                 },
                 explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
@@ -251,27 +222,15 @@ export class GameSessionSetup {
 
             PathGenerator.resetPathLayer();
 
-            const lightSystem = new LightSystem(flickeringLights, refs.sectorContextRef, refs.playerGroupRef);
-            session.addSystem(lightSystem);
-
             await SectorGenerator.build(sectorCtx, currentSector);
 
-            if (!isMounted.current || setupIdRef.current !== currentSetupId) {
-                console.warn(`[GameSessionSetup] Aborting setup ${currentSetupId} after build (Superceded by ${setupIdRef.current})`);
-                return;
-            }
+            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             state.mapItems = mapItems;
-
             state.maxHp = isNaN(state.maxHp) ? 100 : Math.max(100, state.maxHp);
             state.hp = isNaN(state.hp) ? state.maxHp : Math.min(state.maxHp, state.hp);
             state.maxStamina = isNaN(state.maxStamina) ? 100 : Math.max(100, state.maxStamina);
             state.stamina = isNaN(state.stamina) ? state.maxStamina : Math.min(state.maxStamina, state.stamina);
-
-
-            AssetPreloader.setLastSectorIndex(props.currentSector);
-
-            if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
             const activeEffects: any[] = [];
             scene.traverse((child) => {
@@ -285,9 +244,7 @@ export class GameSessionSetup {
                             light.userData.isCulled = false;
                             if (eff.offset) light.position.copy(eff.offset);
                             child.add(light);
-                            if (eff.flicker) {
-                                flickeringLights.push({ light, baseInt: eff.intensity, flickerRate: 0.1 });
-                            }
+                            if (eff.flicker) flickeringLights.push({ light, baseInt: eff.intensity, flickerRate: 0.1 });
                             light.castShadow = false;
                             light.shadow.autoUpdate = false;
                             light.shadow.mapSize.set(256, 256);
@@ -299,7 +256,6 @@ export class GameSessionSetup {
             });
             state.activeEffects = activeEffects;
 
-            // --- Player Spawning ---
             const playerGroup = ModelFactory.createPlayer();
             refs.playerGroupRef.current = playerGroup;
 
@@ -325,7 +281,6 @@ export class GameSessionSetup {
 
             scene.add(playerGroup);
 
-            // --- Camera Setup ---
             const sectorEnv = (refs.propsRef.current as any).currentSectorData?.environment || refs.sectorContextRef.current?.sectorState?.ctx?.environment;
             const envCameraZ = sectorEnv?.cameraOffsetZ !== undefined ? sectorEnv.cameraOffsetZ : 40;
             const envCameraY = sectorEnv?.cameraHeight || CAMERA_HEIGHT;
@@ -340,7 +295,6 @@ export class GameSessionSetup {
             refs.hasSetPrevPosRef.current = true;
             refs.activeFamilyMembers.current.length = 0;
 
-            // --- Family Member Spawning ---
             const fSpawn = currentSector.familySpawn;
             const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
 
@@ -367,7 +321,6 @@ export class GameSessionSetup {
                             for (let c = 0; c < mesh.children.length; c++) {
                                 if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
                             }
-
                             refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring });
                         }
                     }
@@ -391,7 +344,6 @@ export class GameSessionSetup {
                         for (let c = 0; c < mesh.children.length; c++) {
                             if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
                         }
-
                         const currentFM = { mesh, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring };
                         refs.activeFamilyMembers.current.push(currentFM);
                         refs.familyMemberRef.current = currentFM;
@@ -399,7 +351,6 @@ export class GameSessionSetup {
                 }
             }
 
-            // --- Dynamic Scene Processing ---
             scene.traverse((obj) => {
                 if (obj instanceof THREE.Mesh && !obj.userData.isDynamic) {
                     obj.matrixAutoUpdate = false;
@@ -407,7 +358,6 @@ export class GameSessionSetup {
                 }
             });
 
-            // --- System Registration ---
             if (engine.water) {
                 engine.water.setPlayerRef(playerGroup);
                 engine.water.setCallbacks({
@@ -416,9 +366,7 @@ export class GameSessionSetup {
                 });
             }
 
-            const damageSystem = new DamageNumberSystem(scene);
-            session.addSystem(damageSystem);
-
+            session.addSystem(new DamageNumberSystem(scene));
             session.addSystem(new DamageTrackerSystem());
 
             const detectionSys = new EnemyDetectionSystem();
@@ -429,21 +377,14 @@ export class GameSessionSetup {
             session.addSystem(new VehicleMovementSystem(playerGroup));
             session.addSystem(new PlayerCombatSystem(playerGroup));
             session.addSystem(new PlayerInteractionSystem(
-                playerGroup,
-                callbacks.concludeSector,
-                sectorCtx.collectibles,
-                refs.activeFamilyMembers,
-                scene,
-                callbacks.onCollectibleDiscovered
+                playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, scene, callbacks.onCollectibleDiscovered
             ));
 
             const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
             session.addSystem(playerStatsSystem);
 
             session.addSystem(new EnemySystem(playerGroup, {
-                spawnBubble: callbacks.spawnBubble,
-                gainXp: callbacks.gainXp,
-                t: callbacks.t,
+                spawnBubble: callbacks.spawnBubble, gainXp: callbacks.gainXp, t: callbacks.t,
                 onBossKilled: (id: number) => {
                     let seen = false;
                     for (let j = 0; j < state.bossesDefeated.length; j++) {
@@ -459,24 +400,17 @@ export class GameSessionSetup {
 
             session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
                 setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
-                t: (key: string) => callbacks.t(key),
-                spawnPart: callbacks.spawnPart, startCinematic: callbacks.startCinematic,
+                t: (key: string) => callbacks.t(key), spawnPart: callbacks.spawnPart, startCinematic: callbacks.startCinematic,
                 setInteraction: (interaction: any) => {
                     if (interaction) { ui.setInteractionType('plant_explosive'); state.currentInteraction = interaction; }
                     else { ui.setInteractionType(null); state.currentInteraction = null; }
                 },
                 playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
                 playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
-                cameraShake: (amount: number) => engine.camera.shake(amount),
-                scene: engine.scene,
-                setCameraOverride: (params: any) => {
-                    refs.cameraOverrideRef.current = params;
-                    engine.camera.setCinematic(!!params);
-                },
+                cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
+                setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
                 makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-                spawnZombie: callbacks.spawnZombie,
-                spawnHorde: spawnHorde,
-                setOverlay: ui.setOverlay
+                spawnZombie: callbacks.spawnZombie, spawnHorde: spawnHorde, setOverlay: ui.setOverlay
             }));
             session.addSystem(new WorldLootSystem(playerGroup, scene));
 
@@ -489,28 +423,21 @@ export class GameSessionSetup {
                 cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
                 bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
                 callbacks: {
-                    setCurrentLine: ui.setCurrentLine, setCinematicActive: ui.setCinematicActive,
-                    endCinematic: callbacks.endCinematic, playCinematicLine: callbacks.playCinematicLine,
-                    setTailPosition: ui.setBubbleTailPosition
+                    setCurrentLine: ui.setCurrentLine, setCinematicActive: ui.setCinematicActive, endCinematic: callbacks.endCinematic,
+                    playCinematicLine: callbacks.playCinematicLine, setTailPosition: ui.setBubbleTailPosition
                 }
             }));
 
             session.addSystem(new DeathSystem({
-                playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any,
-                fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
-                deathPhaseRef: refs.deathPhaseRef, inputRef: () => engine.input.state,
-                cameraRef: () => engine.camera.threeCamera, propsRef: refs.propsRef,
-                distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: callbacks,
-                setDeathPhase: ui.setDeathPhase
+                playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any, fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
+                deathPhaseRef: refs.deathPhaseRef, inputRef: () => engine.input.state, cameraRef: () => engine.camera.threeCamera, propsRef: refs.propsRef,
+                distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: callbacks, setDeathPhase: ui.setDeathPhase
             }));
 
-            // --- Static Optimization ---
             scene.traverse((obj) => {
                 if (obj.userData?.isPlayer || obj.userData?.isEnemy || obj.userData?.isProjectile || obj.userData?.vehicleDef ||
                     obj.userData?.isFamilyMember || obj.userData?.isBody || obj.userData?.isCorpse || obj.userData?.dynamic) {
-                    obj.traverse((child) => {
-                        child.matrixAutoUpdate = true;
-                    });
+                    obj.traverse((child) => child.matrixAutoUpdate = true);
                     return;
                 }
                 const mesh = obj as THREE.Mesh;
@@ -521,33 +448,17 @@ export class GameSessionSetup {
                 }
             });
 
-            // --- Final WebGL Preparation ---
             FXSystem.preload(scene);
-            monitor.begin('render_compile');
 
-            lightSystem.update(session as any, 16, performance.now());
-            engine.renderer.compile(scene, camera.threeCamera);
-            monitor.end('render_compile');
+            // VINTERDÖD FIX: Handshake! Säg till App.tsx att släppa laddningsskärmen!
+            if (isMounted.current && setupIdRef.current === currentSetupId) {
+                if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
+            }
 
-            // --- Buffer Frames ---
-            let framesToWait = 30;
-            const checkReady = () => {
-                if (framesToWait > 0) {
-                    framesToWait--;
-                    requestAnimationFrame(checkReady);
-                } else {
-                    if (isMounted.current && setupIdRef.current === currentSetupId) {
-                        ui.setIsSectorLoading(false);
-                        if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
-                    }
-                }
-            };
-            requestAnimationFrame(checkReady);
         } catch (e) {
             console.error("[GameSessionSetup] Critical Error:", e);
         } finally {
             refs.isBuildingSectorRef.current = false;
-            engine.isRenderingPaused = false;
         }
     }
 
@@ -577,23 +488,7 @@ export class GameSessionSetup {
 
         scene.traverse((obj: any) => {
             if (obj.userData?.isEngineStatic || obj.userData?.isSharedAsset || obj.userData?.isPersistent) return;
-            // Explicit string search without array allocation
             if (obj.name.indexOf('Weather') !== -1 || obj.name.indexOf('Water') !== -1) return;
-
-            if (obj.isMesh && obj.geometry) {
-                if (!_sharedGeosSet!.has(obj.geometry)) {
-                    obj.geometry.dispose();
-                }
-            }
-            if (obj.isMesh && obj.material) {
-                const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-                for (let i = 0; i < mats.length; i++) {
-                    const m = mats[i];
-                    if (!_sharedMatsSet!.has(m) && !m.userData?.isSharedAsset) {
-                        this.disposeMaterial(m);
-                    }
-                }
-            }
         });
 
         for (let i = scene.children.length - 1; i >= 0; i--) {
@@ -629,5 +524,4 @@ export class GameSessionSetup {
         if (m.emissiveMap) m.emissiveMap.dispose();
         if (m.envMap) m.envMap.dispose();
     }
-
 }

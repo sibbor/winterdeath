@@ -54,48 +54,20 @@ export class CinematicSystem implements System {
 
     public startCinematic(target: THREE.Object3D, scriptId: number, params: any = {}) {
         const script = STORY_SCRIPTS[scriptId];
-        if (!script) {
-            console.warn(`[CinematicSystem] No script found for id ${scriptId}`);
-            return;
-        }
+        if (!script) return;
 
         const cinematic = this.cinematicRef.current;
-        const camera = this.camera;
-
         cinematic.active = true;
-        cinematic.startTime = performance.now();
+        cinematic.isClosing = false;
+        cinematic.target = target;
         cinematic.script = script;
-        cinematic.lineIndex = 0;
-        cinematic.speakers = [this.playerMeshRef.current, target]; // [Robert, Subject]
+        cinematic.lineIndex = -1;
+        cinematic.startTime = performance.now();
+        cinematic.zoom = params.zoom || 0.4; // Default zoom slightly stronger
 
-        // Camera setup
-        cinematic.cameraBasePos.copy(camera.position);
-        cinematic.cameraLookAt.copy(target.position);
-
-        // Midpoint and Relative Offset for zooming/rotating
-        const playerPos = this.playerMeshRef.current?.position || new THREE.Vector3();
-        cinematic.midPoint.copy(playerPos).lerp(target.position, 0.5);
-        cinematic.midPoint.y += 1.5; // Look at head level
-
-        if (params.targetPos) {
-            cinematic.cameraBasePos.copy(params.targetPos);
-            cinematic.customCameraOverride = true;
-        } else {
-            // Calculate a nice cinematic angle if not specified
-            _v1.copy(playerPos).sub(target.position).normalize();
-            _v2.set(_v1.z, 0, -_v1.x).normalize().multiplyScalar(10); // Perpendicular
-            _v2.y = 5;
-            cinematic.relativeOffset.copy(_v2);
-            cinematic.customCameraOverride = false;
-        }
-
-        if (params.lookAtPos) {
-            cinematic.cameraLookAt.copy(params.lookAtPos);
-        }
-
-        cinematic.rotationSpeed = params.rotationSpeed || 0;
-        cinematic.zoom = params.zoom || 0.2;
-        cinematic.fadingOut = false;
+        // Capture Start State for smooth transition
+        cinematic.startPos = this.camera.position.clone();
+        cinematic.startLookAt = this.camera.lookAtTarget ? this.camera.lookAtTarget.clone() : new THREE.Vector3(cinematic.target.position.x, 0, cinematic.target.position.z);
 
         this.callbacks.setCinematicActive(true);
         this.playLine(0);
@@ -123,140 +95,154 @@ export class CinematicSystem implements System {
     }
 
     public endCinematic() {
-        if (!this.cinematicRef.current.active) return;
-        this.cinematicRef.current.active = false;
-        this.callbacks.setCinematicActive(false);
+        const cinematic = this.cinematicRef.current;
+        
+        // Start Zoom-Out Phase
+        cinematic.active = false;
+        cinematic.isClosing = true;
+        cinematic.closeStartTime = performance.now();
+
         this.callbacks.setCurrentLine(null);
+        this.callbacks.setCinematicActive(false);
         this.callbacks.endCinematic();
     }
 
-    update(_session: GameSessionLogic, delta: number, now: number) {
+    /**
+     * Primary update loop for the Cinematic System.
+     * PERFORMANCE: High-frequency logic executed by the engine loop.
+     * [VINTERDÖD FIX]: Correct signature to match System update call (context, dt, now).
+     */
+    public update(context: any, dt: number, now: number) {
         const cinematic = this.cinematicRef.current;
-        if (!cinematic.active) return; // Skip immediately when not in a cinematic
+        if (!cinematic.active && !cinematic.isClosing) return;
 
-        this.frame++;
-        const frame = this.frame;
-        const camera = this.camera;
-        const playerMesh = this.playerMeshRef.current;
-        const familyMembers = this.activeFamilyMembers.current;
-
-        const timeInLine = now - cinematic.lineStartTime;
-        const activeScriptLine = cinematic.script[cinematic.lineIndex];
         const totalElapsed = now - cinematic.startTime;
-        const hasCustomCamera = cinematic.customCameraOverride;
+        const playerPos = this.playerMeshRef.current?.position || _v2;
 
-        // 1. Camera
-        _v1.copy(cinematic.cameraBasePos);
+        // --- 1. CAMERA INTERPOLATION (Zero-GC) ---
+        if (cinematic.target) {
+            const targetPos = cinematic.target.position;
+            
+            // Focused Midpoint Target (Always updated to follow moving characters)
+            _v1.set(
+                (targetPos.x + playerPos.x) * 0.5,
+                (targetPos.y + playerPos.y) * 0.5 + 1.0, 
+                (targetPos.z + playerPos.z) * 0.5
+            );
 
-        if (!hasCustomCamera) {
-            if (cinematic.rotationSpeed > 0) {
-                const rotAngle = totalElapsed * 0.001 * cinematic.rotationSpeed;
-                _v2.copy(cinematic.relativeOffset).applyAxisAngle(_UP, rotAngle);
-            } else {
-                _v2.copy(cinematic.relativeOffset);
-            }
+            const envCameraZ = 20; 
+            const envCameraY = 22; 
 
-            const zoomProgress = Math.min(1.0, totalElapsed / 5000);
-            const zoomFactor = 1.0 - (zoomProgress * (cinematic.zoom || 0));
-            _v1.copy(cinematic.midPoint).addScaledVector(_v2, zoomFactor);
-        }
+            // Smooth Interpolation Phases
+            let t = 0;
+            if (cinematic.active && !cinematic.isClosing) {
+                // IN-PHASE: Slide from start position to focused view
+                t = Math.min(1.0, totalElapsed / 1500); 
+                t = 1.0 - Math.pow(1.0 - t, 3); // Ease out cubic
+            } else if (cinematic.isClosing) {
+                // OUT-PHASE: Slide back to player view
+                const elapsedSinceClose = now - cinematic.closeStartTime;
+                t = 1.0 - Math.min(1.0, elapsedSinceClose / 1000);
+                t = Math.pow(t, 2); // Ease in quadratic
 
-        camera.setPosition(_v1);
-        camera.lookAt(cinematic.cameraLookAt);
-
-        // 2. Speaker Identification
-        const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
-        const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
-        let activeSpeakerMesh: THREE.Object3D | undefined = isPlayerSpeaking ? cinematic.speakers[0] : cinematic.speakers[1];
-
-        if (!isPlayerSpeaking && currentSpeakerName !== 'Unknown' && familyMembers) {
-            for (let i = 0; i < familyMembers.length; i++) {
-                const fm = familyMembers[i];
-                if (fm.name === currentSpeakerName || fm.mesh?.userData?.name === currentSpeakerName) {
-                    activeSpeakerMesh = fm.mesh;
-                    break;
+                if (elapsedSinceClose >= 1000) {
+                    cinematic.isClosing = false;
+                    return;
                 }
             }
+
+            // Focused position for the camera
+            const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
+            const focusPosX = _v1.x;
+            const focusPosY = envCameraY * zoomFactor;
+            const focusPosZ = _v1.z + (envCameraZ * zoomFactor);
+
+            // Blended Camera Position
+            this.camera.setPosition(
+                THREE.MathUtils.lerp(cinematic.startPos.x, focusPosX, t),
+                THREE.MathUtils.lerp(cinematic.startPos.y, focusPosY, t),
+                THREE.MathUtils.lerp(cinematic.startPos.z, focusPosZ, t)
+            );
+
+            // Blended LookAt
+            _v1.set(
+                THREE.MathUtils.lerp(cinematic.startLookAt.x, _v1.x, t),
+                THREE.MathUtils.lerp(cinematic.startLookAt.y, _v1.y, t),
+                THREE.MathUtils.lerp(cinematic.startLookAt.z, _v1.z, t)
+            );
+            this.camera.lookAt(_v1);
         }
 
-        // 3. Bubble Positioning (3D → 2D) [REMOVED - Handled statically by UI]
+        if (cinematic.isClosing) return;
 
-        // 4. Animation & Sound
-        if (timeInLine < cinematic.typingDuration && frame % 6 === 0) {
+        const timeInLine = now - cinematic.lineStartTime;
+
+        // --- 3. ANIMATION & TRIGGERS ---
+        const activeScriptLine = cinematic.script[cinematic.lineIndex];
+        const familyMembers = this.activeFamilyMembers.current;
+
+        // Speaker Identification
+        const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
+        const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
+        
+        // Voice sound (Zero-GC Throttled)
+        if (timeInLine < cinematic.typingDuration && (now % 200 < 32)) {
             soundManager.playVoice(currentSpeakerName);
         }
 
+        // Animator Sync (Zero-GC iterative loop)
+        for (let i = -1; i < familyMembers.length; i++) {
+            const fm = i === -1 ? { mesh: this.playerMeshRef.current, name: 'Robert' } : familyMembers[i];
+            const mesh = fm.mesh;
+            if (!mesh) continue;
+
+            const isCurrentSpeaker = (fm.name === currentSpeakerName) || (i === -1 && isPlayerSpeaking);
+            const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
+            const isThinking = isCurrentSpeaker && activeScriptLine?.type === 'thought';
+
+            // Find body for animator
+            const body = mesh.userData.isBody ? mesh : mesh.children.find((c: any) => c.userData?.isBody);
+            if (body) {
+                PlayerAnimator.update(body as THREE.Mesh, {
+                    isMoving: false, isRushing: false, isRolling: false,
+                    rollStartTime: 0, staminaRatio: 1.0,
+                    isSpeaking, isThinking, isIdleLong: false,
+                    isSwimming: false, isWading: false,
+                    seed: mesh.userData.seed || 0
+                }, now, dt);
+            }
+        }
+
+        // Line Conclusion (Triggers)
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             cinematic.fadingOut = true;
+            
+            // Fire Script Triggers
             if (activeScriptLine.trigger) {
                 const triggers = activeScriptLine.trigger.split(',');
-                for (let i = 0; i < triggers.length; i++) {
-                    const rawTrigger = triggers[i].trim();
+                for (let j = 0; j < triggers.length; j++) {
+                    const rawTrigger = triggers[j].trim();
                     let finalTrigger = rawTrigger;
                     let payload: any = null;
 
-                    // Normalize shorthand triggers to engine events
                     if (rawTrigger === 'boss_start') {
                         finalTrigger = 'boss-spawn-trigger';
-                        payload = { type: 'BIG_ZOMBIE' }; // Default boss type
+                        payload = { type: 'BIG_ZOMBIE' };
                     } else if (rawTrigger === 'family_follow') {
                         finalTrigger = 'family-follow';
                         payload = { active: true };
                     }
-
                     window.dispatchEvent(new CustomEvent(finalTrigger, { detail: payload }));
                 }
             }
-            this.callbacks.playCinematicLine(cinematic.lineIndex + 1);
-        }
-
-        // 5. Actor Animations (pre-allocated scratchpad per actor)
-        const currentSpeakerLower = currentSpeakerName.toLowerCase();
-
-        // Build actor list into reusable array (avoid spread+map allocation)
-        const actors: (THREE.Object3D | null)[] = [];
-        for (let i = 0; i < familyMembers.length; i++) actors.push(familyMembers[i].mesh);
-        actors.push(playerMesh);
-        if (cinematic.speakers[1] && !actors.includes(cinematic.speakers[1])) {
-            actors.push(cinematic.speakers[1]);
-        }
-
-        for (let i = 0; i < actors.length; i++) {
-            const actor = actors[i];
-            if (!actor) continue;
-
-            const actorName = (actor.userData.name || '').toLowerCase();
-            const isSpeaking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking) || (actor === cinematic.speakers[1] && !isPlayerSpeaking))
-                && timeInLine < cinematic.typingDuration;
-
-            const isThinking = (actorName === currentSpeakerLower || (actorName === 'player' && isPlayerSpeaking))
-                && activeScriptLine?.type === 'thought';
-
-            // Named Animation Clip Support (e.g. for Bosses or custom GLTFs)
-            if (actor.userData.mixer && isSpeaking) {
-                const action = actor.userData.mixer.clipAction('speak');
-                if (action) {
-                    action.play();
-                }
-            } else if (actor.userData.mixer && !isSpeaking) {
-                const action = actor.userData.mixer.clipAction('speak');
-                if (action) action.stop();
+            
+            // Advance Line
+            const nextIdx = cinematic.lineIndex + 1;
+            if (nextIdx >= cinematic.script.length) {
+                this.endCinematic();
+            } else {
+                this.playLine(nextIdx);
             }
-
-            if (!actor.userData.cachedBody) {
-                actor.userData.cachedBody = actor.userData.isBody ? actor : actor.children.find((c: any) => c.userData.isBody);
-            }
-
-            const body = actor.userData.cachedBody;
-            if (!body) continue;
-
-            PlayerAnimator.update(body as THREE.Mesh, {
-                isMoving: false, isRushing: false, isRolling: false,
-                rollStartTime: 0, staminaRatio: 1.0,
-                isSpeaking, isThinking, isIdleLong: false,
-                isSwimming: false, isWading: false,
-                seed: actor.userData.seed || 0
-            }, now, delta);
         }
     }
 }

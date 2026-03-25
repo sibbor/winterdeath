@@ -3,6 +3,7 @@ import { DEFAULT_GRAPHICS, LIGHT_SYSTEM } from '../../content/constants';
 import { GraphicsSettings } from '../../core/engine/EngineTypes';
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../../systems/CameraSystem';
+import { LightSystem } from '../../systems/LightSystem';
 import { WindSystem } from '../../systems/WindSystem';
 import { WeatherSystem } from '../../systems/WeatherSystem';
 import { FogSystem } from '../../systems/FogSystem';
@@ -48,6 +49,7 @@ export class WinterEngine {
     public weather: WeatherSystem;
     public fog: FogSystem;
     public water: WaterSystem;
+    public light: LightSystem;
 
     private sceneStack: THREE.Scene[] = [];
     public settings: GraphicsSettings;
@@ -57,7 +59,6 @@ export class WinterEngine {
     private requestID: number | null = null;
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
-    private contextLost: boolean = false;
 
     // Callbacks
     public onUpdate: ((dt: number) => void) | null = null;
@@ -92,6 +93,7 @@ export class WinterEngine {
         this.input.enable();
 
         this.camera = new CameraSystem();
+        this.light = new LightSystem(this.scene);
         this.wind = new WindSystem();
         this.weather = new WeatherSystem(this.scene, this.wind, this.camera.threeCamera);
         this.fog = new FogSystem(this.scene, this.wind, this.camera.threeCamera);
@@ -99,6 +101,7 @@ export class WinterEngine {
 
         (window as any).WinterEngineInstance = this;
 
+        this.registerSystem(this.light);
         this.registerSystem(this.wind);
         this.registerSystem(this.weather);
         this.registerSystem(this.fog);
@@ -144,27 +147,7 @@ export class WinterEngine {
         this.renderer.shadowMap.enabled = this.settings.shadows;
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-        // Bind Context Loss listeners to protect the render state
-        this.renderer.domElement.addEventListener('webglcontextlost', this.handleContextLost, false);
-        this.renderer.domElement.addEventListener('webglcontextrestored', this.handleContextRestored, false);
     }
-
-    private handleContextLost = (event: Event) => {
-        event.preventDefault(); // Prevents default browser behavior of permanently discarding the context
-        console.warn('🚨 [WinterEngine] WebGL Context Lost! Suspending render loop.');
-        this.contextLost = true;
-        this.stop();
-    };
-
-    private handleContextRestored = () => {
-        console.log('✅ [WinterEngine] WebGL Context Restored! Re-initializing textures and shaders.');
-        this.contextLost = false;
-
-        // Force a re-compile of active materials
-        this.renderer.compile(this.scene, this.camera.threeCamera);
-        this.start();
-    };
 
     public updateSettings(newSettings: Partial<GraphicsSettings>) {
         const needsRecreation = newSettings.antialias !== undefined && newSettings.antialias !== this.settings.antialias;
@@ -181,11 +164,6 @@ export class WinterEngine {
         const oldDom = this.renderer.domElement;
         const parent = oldDom.parentNode;
 
-        // Clean up event listeners on the old canvas to prevent ghost firing
-        oldDom.removeEventListener('webglcontextlost', this.handleContextLost);
-        oldDom.removeEventListener('webglcontextrestored', this.handleContextRestored);
-
-        this.clearActiveScene(true);
         this.renderer.dispose();
         if (parent) parent.removeChild(oldDom);
 
@@ -244,7 +222,7 @@ export class WinterEngine {
     }
 
     public start() {
-        if (!this.isRunning && !this.contextLost) {
+        if (!this.isRunning) {
             this.isRunning = true;
             this.clock.start();
             this.animate();
@@ -264,12 +242,8 @@ export class WinterEngine {
         window.removeEventListener('resize', this.handleResize);
         this.input.dispose();
 
-        const dom = this.renderer.domElement;
-        dom.removeEventListener('webglcontextlost', this.handleContextLost);
-        dom.removeEventListener('webglcontextrestored', this.handleContextRestored);
-
-        if (this.container && dom.parentNode === this.container) {
-            this.container.removeChild(dom);
+        if (this.container && this.renderer.domElement.parentNode === this.container) {
+            this.container.removeChild(this.renderer.domElement);
         }
 
         this.clearActiveScene(true);
@@ -479,7 +453,7 @@ export class WinterEngine {
                 this.onRender();
             } else {
                 monitor.begin('render_setup');
-                this.scene.updateMatrixWorld();
+                this.scene.updateMatrixWorld(); // TODO: WHAT?
                 this.camera.threeCamera.updateMatrixWorld();
                 monitor.end('render_setup');
 
