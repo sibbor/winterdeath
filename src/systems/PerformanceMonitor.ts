@@ -20,12 +20,17 @@ export class PerformanceMonitor {
     private timings: Float32Array;
     private startTimes: Float32Array;
 
-    // --- HÄR ÄR DEN SAKNADE VARIABELN ---
     private _lastFrameTotal: number = 0;
 
     private _consoleLoggingEnabled: boolean = true;
     private _aiLoggingEnabled: boolean = true;
     private _shaderLoggingEnabled: boolean = true;
+    private _logHijackEnabled: boolean = false;
+
+    // ZERO-GC: Pre-allokerad ring-buffer för loggar (100 platser som återanvänds)
+    private _logs: { msg: string, color: string, time: number }[] = new Array(100).fill(null).map(() => ({ msg: '', color: '', time: 0 }));
+    private _logIndex: number = 0;
+    private _originalConsole: any = null;
 
     // --- PRE-ALLOCATED CACHES FOR GETTERS (100% ZERO-GC UI POLLING) ---
     private _timingsObject: Record<string, number> = {};
@@ -84,6 +89,9 @@ export class PerformanceMonitor {
 
         const savedShaders = localStorage.getItem('vinterdod_debug_shader_logging');
         if (savedShaders !== null) this._shaderLoggingEnabled = savedShaders === 'true';
+
+        const savedHijack = localStorage.getItem('vinterdod_debug_logs_hijack');
+        if (savedHijack === 'true') this.logsHijackEnabled = true;
     }
 
     public startFrame() {
@@ -159,7 +167,6 @@ export class PerformanceMonitor {
                     const p = currentPrograms[i];
                     const key = p.cacheKey || p.id;
                     if (key && !this._knownPrograms.has(key)) {
-                        console.log(`   -> New Material Program: ${p.name || 'Unknown'}`);
                         this._knownPrograms.add(key);
                     }
                 }
@@ -186,37 +193,40 @@ export class PerformanceMonitor {
     // TIMING HELPERS (HOT PATH - 100% ZERO GC)
     // ============================================================================
 
-    private _getIndex(id: string): number {
-        let idx = this._keyMap[id];
-        if (idx === undefined) {
-            if (this._systemCount >= this.MAX_SYSTEMS) {
-                console.warn(`[PerformanceMonitor] Over ${this.MAX_SYSTEMS} systems tracked! Ignoring '${id}'.`);
-                return 0;
-            }
-            idx = this._systemCount;
-            this._keyMap[id] = idx;
-            this._keys.push(id);
-            this._systemCount++;
+    private _registerSystem(id: string): number {
+        if (this._systemCount >= this.MAX_SYSTEMS) {
+            console.warn(`[PerformanceMonitor] Over ${this.MAX_SYSTEMS} systems tracked! Ignoring '${id}'.`);
+            return 0;
         }
+        const idx = this._systemCount;
+        this._keyMap[id] = idx;
+        this._keys.push(id);
+        this._systemCount++;
         return idx;
     }
 
     public begin(id: string) {
-        this.startTimes[this._getIndex(id)] = performance.now();
+        let idx = this._keyMap[id];
+        if (idx === undefined) {
+            idx = this._registerSystem(id);
+        }
+        this.startTimes[idx] = performance.now();
     }
 
     public end(id: string) {
-        const idx = this._getIndex(id);
+        let idx = this._keyMap[id];
+        if (idx === undefined) return;
+
         const start = this.startTimes[idx];
         if (start === 0) return;
 
         const time = performance.now() - start;
         this.timings[idx] += time;
 
-        // Spara enbart data till arrayer när vi befinner oss i aktiv inspelning
         if (this._isRecording) {
-            if (!this._reports[id]) this._reports[id] = [];
-            this._reports[id].push(time);
+            const sysName = this._keys[idx];
+            if (!this._reports[sysName]) this._reports[sysName] = [];
+            this._reports[sysName].push(time);
         }
     }
 
@@ -227,7 +237,11 @@ export class PerformanceMonitor {
     }
 
     public addTime(id: string, ms: number) {
-        this.timings[this._getIndex(id)] += ms;
+        let idx = this._keyMap[id];
+        if (idx === undefined) {
+            idx = this._registerSystem(id);
+        }
+        this.timings[idx] += ms;
     }
 
     // ============================================================================
@@ -250,7 +264,6 @@ export class PerformanceMonitor {
         }, 2000);
     }
 
-    // Returnerar true om vi antingen väntar (delay) eller faktiskt spelar in
     public get isRecordingActive(): boolean {
         return this._isRecording || this._recordingPending;
     }
@@ -260,34 +273,28 @@ export class PerformanceMonitor {
         console.log(`📊 --- WINTER ENGINE ${this.RECORD_FRAMES}-FRAME PERFORMANCE REPORT ---`);
         console.log("📊 ========================================================");
 
-        // Refresh caches before dumping
         const world = this.getFormattedGameState();
         const render = this.getFormattedRendererStats();
         const gc = this.getFormattedGcInfo();
 
-        // 1. WORLD & MEMORY
         console.log("🌍 [WORLD & MEMORY]");
         console.log(`   Player: X: ${world.playerX}, Z: ${world.playerZ} | Cam: ${world.camX}, ${world.camY}, ${world.camZ}`);
         console.log(`   Entities: ${world.enemies} Enemies | ${world.objects} Objects`);
-        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB(Dropped: ${gc.droppedMB} MB)`);
+        console.log(`   Heap: ${gc.heapUsedMB} MB / ${gc.heapLimitMB} MB (Dropped: ${gc.droppedMB} MB)`);
 
-        // 2. RENDERER
         console.log("🎨 [RENDERER]");
         console.log(`   Draw Calls: ${render.drawCalls}`);
         console.log(`   Triangles: ${render.triangles}k`);
         console.log(`   Geometries: ${render.geometries} | Textures: ${render.textures}`);
 
         const sessionRecompiles = render.shaderRecompiles - this._recordingStartRecompiles;
-        console.log(`   Shaders: ${render.shaderPrograms}(Recompiles during ${this.RECORD_FRAMES} frames: ${sessionRecompiles} | Lifetime: ${render.shaderRecompiles})`);
+        console.log(`   Shaders: ${render.shaderPrograms} (Recompiles during ${this.RECORD_FRAMES} frames: ${sessionRecompiles} | Lifetime: ${render.shaderRecompiles})`);
 
-        // 3. SYSTEMS
         console.log("⚙️  [SYSTEMS]");
-        // Get all systems that registered a time > 0 during the recording
         const activeSystems = Object.keys(this._reports).filter(k => this._reports[k].length > 0);
         console.log(`   Active tracked systems: ${activeSystems.join(', ')}`);
 
-        // 4. TIMINGS
-        console.log(`⏱️[CPU TIMINGS(Avg over ${this.RECORD_FRAMES} frames)]`);
+        console.log(`⏱️  [CPU TIMINGS (Avg over ${this.RECORD_FRAMES} frames)]`);
         const report: any = {};
         let totalFrameTime = 0;
 
@@ -298,13 +305,12 @@ export class PerformanceMonitor {
             const avg = sum / times.length;
             report[id] = `${avg.toFixed(2)} ms`;
 
-            // Only sum top-level domains to prevent counting sub-systems twice
             if (id === 'logic' || id === 'camera' || id === 'render') {
                 totalFrameTime += avg;
             }
         }
         console.table(report);
-        console.log(`🔥 Avg Total Frame Time: ${totalFrameTime.toFixed(2)} ms(Target for 60FPS: 16.6ms)`);
+        console.log(`🔥 Avg Total Frame Time: ${totalFrameTime.toFixed(2)} ms (Target for 60FPS: 16.6ms)`);
         console.log("==========================================================");
     }
 
@@ -376,6 +382,94 @@ export class PerformanceMonitor {
         localStorage.setItem('vinterdod_debug_shader_logging', String(value));
     }
 
+    public get logsHijackEnabled(): boolean { return this._logHijackEnabled; }
+    public set logsHijackEnabled(value: boolean) {
+        if (this._logHijackEnabled === value) return;
+        this._logHijackEnabled = value;
+        localStorage.setItem('vinterdod_debug_logs_hijack', String(value));
+
+        if (value) {
+            this._applyHijack();
+        } else {
+            this._removeHijack();
+        }
+    }
+
+    private _applyHijack() {
+        if (this._originalConsole) return;
+        this._originalConsole = {
+            log: console.log,
+            warn: console.warn,
+            error: console.error,
+            info: console.info
+        };
+
+        const pushLog = (msg: any[], color: string) => {
+            let str = '';
+            for (let i = 0; i < msg.length; i++) {
+                const a = msg[i];
+                if (a instanceof Error) str += a.message + ' ';
+                else if (typeof a === 'object') {
+                    try { str += JSON.stringify(a) + ' '; }
+                    catch (e) { str += '[Circular] '; }
+                } else {
+                    str += String(a) + ' ';
+                }
+            }
+
+            const logObj = this._logs[this._logIndex];
+            logObj.msg = str;
+            logObj.color = color;
+            logObj.time = performance.now();
+
+            this._logIndex = (this._logIndex + 1) % 100;
+        };
+
+        console.log = (...args) => {
+            this._originalConsole.log(...args);
+            pushLog(args, '#ffffff');
+        };
+        console.warn = (...args) => {
+            this._originalConsole.warn(...args);
+            pushLog(args, '#ffcc00');
+        };
+        console.error = (...args) => {
+            this._originalConsole.error(...args);
+            pushLog(args, '#ff5555');
+        };
+        console.info = (...args) => {
+            if (this._originalConsole) this._originalConsole.info(...args);
+            pushLog(args, '#00ccff');
+        };
+    }
+
+    private _removeHijack() {
+        if (!this._originalConsole) return;
+        console.log = this._originalConsole.log;
+        console.warn = this._originalConsole.warn;
+        console.error = this._originalConsole.error;
+        console.info = this._originalConsole.info;
+        this._originalConsole = null;
+    }
+
+    public getLogs() {
+        // Omordnar loggen så att de äldsta kommer först och nyaste sist utan att skapa skräp
+        const sorted = [];
+        for (let i = 0; i < 100; i++) {
+            const idx = (this._logIndex + i) % 100;
+            const log = this._logs[idx];
+            if (log.time !== 0) sorted.push(log);
+        }
+        return sorted;
+    }
+
+    public clearLogs() {
+        for (let i = 0; i < 100; i++) {
+            this._logs[i].msg = '';
+            this._logs[i].time = 0;
+        }
+    }
+
     public getTimings(): Record<string, number> {
         for (let i = 0; i < this._systemCount; i++) {
             this._timingsObject[this._keys[i]] = this.timings[i];
@@ -387,7 +481,7 @@ export class PerformanceMonitor {
         this._lastFrameTotal = totalTime;
 
         if (totalTime > threshold && this._consoleLoggingEnabled) {
-            console.warn(`[${context}] HEAVY FRAME: ${Math.round(totalTime)} ms.Check Performance Tab.`);
+            console.warn(`[${context}] HEAVY FRAME: ${Math.round(totalTime)} ms. Check Performance Tab.`);
         }
     }
 }
