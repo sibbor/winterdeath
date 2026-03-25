@@ -16,6 +16,7 @@ export const sv = {
         level: "NIVÅ",
         level_up: "NIVÅ UPP!",
         xp: "EP",
+        collectible_discovered: "SAMLAROBJEKT HITTAT",
         xp_earned: "Intjänad EP",
         sp_earned: "Intjänad FP",
         scrap_scavenged: "Insamlat Skrot",
