@@ -5,7 +5,6 @@ import { WeaponType } from '../../content/weapons';
 import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
 import { soundManager } from '../../utils/SoundManager';
 import { t } from '../../utils/i18n';
-import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { createProceduralTextures } from '../../utils/assets';
 import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
@@ -303,7 +302,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             };
 
             engine.onUpdateContext = ctx;
-            
+
             frameCount++;
             frameRef.current = frameCount;
 
@@ -370,8 +369,11 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                         tooltipDOMRef.current.style.top = `${tooltipY}px`;
                     }
 
-                    for (let i = 0; i < outlineKeys.length; i++) { outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]); }
+                    for (let i = 0; i < outlineKeys.length; i++) {
+                        outlines[outlineKeys[i]].visible = (hoveredRef.current === outlineKeys[i]);
+                    }
 
+                    /*
                     // --- MOBILE LABELS DOM MANIPULATION ---
                     if (isMobileLabels !== showIdleTooltipsRef.current) {
                         showIdleTooltipsRef.current = !!isMobileLabels;
@@ -392,6 +394,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                             }
                         }
                     }
+                    */
                 }
 
             } else {

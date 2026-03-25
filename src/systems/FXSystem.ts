@@ -186,6 +186,10 @@ export const FXSystem = {
     },
 
     _getUniqueMaterial: (baseMat: THREE.Material, type: string): THREE.Material => {
+        if (!baseMat) {
+            console.error(`[FXSystem] _getUniqueMaterial called with undefined material for type: ${type}. Falling back to default.`);
+            return MATERIALS.blood;
+        }
         const poolKey = type + '_' + baseMat.uuid;
         if (!FXSystem.MATERIAL_POOL[poolKey]) FXSystem.MATERIAL_POOL[poolKey] = [];
         if (FXSystem.MATERIAL_POOL[poolKey].length > 0) {
@@ -288,7 +292,7 @@ export const FXSystem = {
             let mat: THREE.Material = MATERIALS.blood;
 
             if (t === 'gore') geo = GEOMETRY.gore;
-            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'];
+            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'] || MATERIALS.smoke; // [VINTERDÖD FIX] Fallback if preload was missed
             else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame' || t === 'enemy_effect_flame' || t === 'flamethrower_fire') {
                 geo = GEOMETRY.flame;
                 mat = (t === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
@@ -310,6 +314,12 @@ export const FXSystem = {
             else if (t === 'electric_beam') { geo = GEOMETRY.shard; mat = MATERIALS.flashWhite; }
             else if (t === 'ground_impact' || t === 'impact') { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
             else if (t === 'magnetic_sparks') { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
+
+            // [VINTERDÖD FIX] Final safety check to prevent crash in getPooledMesh -> _getUniqueMaterial
+            if (!mat) {
+                console.warn(`[FXSystem] Material for type '${t}' is undefined. Falling back to blood.`);
+                mat = MATERIALS.blood;
+            }
 
             p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, t, isInstanced);
         }

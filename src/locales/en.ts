@@ -357,7 +357,7 @@ export const en = {
         "Throwables are effective against crowds.",
         "Keep moving. Standing still is a death sentence.",
         "Auto-Reload is slower than manual Reload [R].",
-        "Upgrading 'Vitaltiy' helps you survive longer.",
+        "Upgrading 'Vitality' helps you survive longer.",
         "Upgrading 'Adrenaline' helps you run for longer periods of time.",
         "Upgrading 'Reflexes' helps you outrun the zombies."
     ],

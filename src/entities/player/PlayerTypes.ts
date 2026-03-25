@@ -3,7 +3,9 @@ export interface PlayerStats {
   xp: number;
   currentXp: number;
   nextLevelXp: number;
+  hp: number;
   maxHp: number;
+  stamina: number;
   maxStamina: number;
   skillPoints: number;
   totalSkillPointsEarned: number;
