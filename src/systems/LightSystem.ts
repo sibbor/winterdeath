@@ -52,6 +52,7 @@ export class LightSystem implements System {
 
     // FIX 2: Signaturen matchar nu (context, delta, now)
     public update(context: any, delta: number, now: number): void {
+        if (!context) return;
         // I din motor är context vanligtvis GameSessionLogic (session) 
         // Vi plockar ut state och playerPos ur contexten.
         const state = context.state || context;

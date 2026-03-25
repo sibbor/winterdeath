@@ -504,6 +504,7 @@ export class WinterEngine {
     }
 
     public updateSystems(context: any, dt: number, now: number): void {
+        if (!context) return;
         const monitor = PerformanceMonitor.getInstance();
         const systems = this._systemArray;
         const len = systems.length;
