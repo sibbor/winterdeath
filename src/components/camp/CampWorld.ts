@@ -768,9 +768,6 @@ export const CampWorld = {
             fireLight: fireData
         };
 
-        // FIXME: NEEDED??
-        (state as any).dynamicLights = [fireData];
-
         // Pre-warm the simulation
         for (let i = 0; i < 20; i++) {
             CampWorld.updateEffects(scene, state, 0.016, i * 0.016, i);
@@ -788,20 +785,7 @@ export const CampWorld = {
             state.starSystem.rotateY(-0.00008);
         }
 
-        // Use the new LigjtSystem
-        if (engine.light && state.fireLight) {
-            engine.light.update(
-                {
-                    state: {
-                        dynamicLights: [state.fireLight],
-                        playerPos: engine.camera.threeCamera.position
-                    }
-                },
-                delta,
-                now
-            );
-        }
-
+        // Update particles (Smoke, Sparks, etc.) handled here
         const { flames, sparkles, smokes, flameData, sparkleData, smokeData } = state.particles;
 
         // 1. FLAMES

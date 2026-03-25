@@ -290,6 +290,8 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
                 camera: camera.threeCamera,
                 container,
                 envState: envStateRef.current,
+                dynamicLights: envStateRef.current?.fireLight ? [envStateRef.current.fireLight] : [],
+                playerPos: camera.threeCamera.position,
                 familyMembers,
                 activeMembers: sceneActiveMembersRef.current,
                 activeChats: activeChats.current,
