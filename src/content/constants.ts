@@ -66,7 +66,8 @@ export const FLASHLIGHT = {
     castShadows: true,
     cameraNear: 1,
     cameraFar: 40,
-    shadowBias: -0.0001
+    shadowBias: -0.0001,
+    shadowMapSize: 512
 };
 
 export type ShadowQuality = 'OFF' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERYHIGH';

@@ -3,7 +3,7 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures } from '../utils/assets';
 import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../utils/assets/materials_water';
-import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, FLASHLIGHT } from '../content/constants';
+import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { VEHICLES, VehicleType } from '../content/vehicles';
 import { ObjectGenerator } from '../core/world/ObjectGenerator';
@@ -87,29 +87,28 @@ export const AssetPreloader = {
             // =========================================================
             if (isCore) {
                 beginInternal('core_assets');
+
                 registerSoundGenerators();
 
                 if (soundManager) {
-                    const isMobile = checkIsMobileDevice();
-                    if (isMobile) {
-                        try {
-                            await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || _NOOP_ASYNC);
-                        } catch (e) {
-                            console.error("[AssetPreloader] SoundBank preloading failed:", e);
-                        }
+                    try {
+                        await SoundBank.preloadAllAsync(soundManager.core, yieldToMain || _NOOP_ASYNC);
+                    } catch (e) {
+                        console.error("[AssetPreloader] SoundBank preloading failed:", e);
+                    }
 
-                        try {
-                            const { createMusicBuffer } = await import('../utils/audio/SoundLib');
-                            const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
+                    try {
+                        const { createMusicBuffer } = await import('../utils/audio/SoundLib');
+                        const music = ['ambient_wind_loop', 'ambient_forest_loop', 'ambient_scrapyard_loop', 'ambient_finale_loop', 'boss_metal', 'prologue_sad'];
 
-                            for (let i = 0; i < music.length; i++) {
-                                createMusicBuffer(soundManager.core.ctx, music[i]);
-                            }
-                        } catch (e) {
-                            console.warn("[AssetPreloader] Music buffering deferred.");
+                        for (let i = 0; i < music.length; i++) {
+                            createMusicBuffer(soundManager.core.ctx, music[i]);
                         }
+                    } catch (e) {
+                        console.warn("[AssetPreloader] Music buffering deferred.");
                     }
                 }
+
                 if (yieldToMain) await yieldToMain();
 
                 const procedural = createProceduralDiffuse();
@@ -165,23 +164,21 @@ export const AssetPreloader = {
             const SHADOW_BUDGET = engine.maxSafeShadows;
 
             for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
-                const proxy = new THREE.PointLight(0x000000, 0, 10);
-                proxy.name = `PreloadProxy_${i}`;
+                const proxy = new THREE.PointLight(LIGHT_SETTINGS.DEFAULT_COLOR, 0, LIGHT_SETTINGS.DEFAULT_DISTANCE); proxy.name = `PreloadProxy_${i}`;
                 proxy.userData.isProxy = true;
                 proxy.position.set(0, -1000, 0);
 
                 if (i < SHADOW_BUDGET) {
                     proxy.castShadow = true;
-                    proxy.shadow.mapSize.set(256, 256);
-                    proxy.shadow.bias = -0.005;
+                    proxy.shadow.mapSize.set(LIGHT_SETTINGS.SHADOW_MAP_SIZE, LIGHT_SETTINGS.SHADOW_MAP_SIZE);
+                    proxy.shadow.bias = LIGHT_SETTINGS.SHADOW_BIAS;
+                    proxy.shadow.radius = LIGHT_SETTINGS.SHADOW_RADIUS;
+                } else {
+                    proxy.castShadow = false;
                 }
+
                 dummyScene.add(proxy);
             }
-
-            // FIXME: DO I HAVE TO ADD SCENEROOT TO DUMMYSCENE
-            // OR CAN WE SIMPLY ADD STUFF TO DUMMYSCENE DIRECTLY?
-            const sceneRoot = new THREE.Group();
-            dummyScene.add(sceneRoot);
 
             // Sync environment
             let envConfig = null;
@@ -210,16 +207,16 @@ export const AssetPreloader = {
 
             // Sector
             else if (isSector) {
-                // FIXME: IS IT REALLY NEEDED NOW WHEN WE'RE USING PROXIES AND LIGHTSYSTEM??
+                // Players flashlight (PointLight!)
                 const dummyFlashlight = ModelFactory.createFlashlight();
                 dummyFlashlight.position.set(0, 5, 0);
-                sceneRoot.add(dummyFlashlight);
-                sceneRoot.add(dummyFlashlight.target);
+                dummyScene.add(dummyFlashlight);
+                dummyScene.add(dummyFlashlight.target);
 
                 // Boss
                 const bossData = BOSSES[sectorId ?? 0];
                 if (bossData) {
-                    sceneRoot.add(ModelFactory.createBoss('Boss', bossData));
+                    dummyScene.add(ModelFactory.createBoss('Boss', bossData));
                 }
 
                 // Zombies:
@@ -236,7 +233,7 @@ export const AssetPreloader = {
                             child.receiveShadow = true;
                         }
                     });
-                    sceneRoot.add(z);
+                    dummyScene.add(z);
                 }
 
                 // --- LIGHTING STABILIZATION ---
@@ -386,7 +383,7 @@ export const AssetPreloader = {
 
             // 4. COMPILE SCENE SPECIFICS & WARMUP FRAME
             // VINTERDÖD: Även detta tvingade tidigare fram sync-compiles som dödade iOS.
-            await safeCompileAsync(sceneRoot, "Sector Specifics");
+            await safeCompileAsync(dummyScene, "Sector Specifics");
 
             const originalVp = new THREE.Vector4();
             engine.renderer.getViewport(originalVp);

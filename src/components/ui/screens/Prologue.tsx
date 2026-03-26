@@ -32,10 +32,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
         const current = getLocale();
         const next = current === 'en' ? 'sv' : 'en';
 
-        // 1. Ändra den globala inställningen (triggat locale-changed eventet)
         setGlobalLocale(next);
-
-        // 2. Ge auditiv feedback
         soundManager.playUiClick();
     };
 

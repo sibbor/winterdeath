@@ -66,6 +66,7 @@ export const CharacterModels = {
         flashlight.shadow.camera.near = FLASHLIGHT.cameraNear;
         flashlight.shadow.camera.far = FLASHLIGHT.cameraFar;
         flashlight.shadow.bias = FLASHLIGHT.shadowBias;
+        flashlight.shadow.mapSize.set(FLASHLIGHT.shadowMapSize, FLASHLIGHT.shadowMapSize);
 
         // Tag for discovery and shadow budgeting
         // isPlayer: true prevents GameSession from setting matrixAutoUpdate = false

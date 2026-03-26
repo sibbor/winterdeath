@@ -106,7 +106,7 @@ const App: React.FC = () => {
 
         if (typeof screen !== 'undefined' && (screen as any).orientation && (screen.orientation as any).lock) {
             (screen.orientation as any).lock('landscape').catch((e: any) => {
-                console.warn("[App] Orientation lock failed (expected on some devices):", e);
+                //console.warn("[App] Orientation lock failed (expected on some devices):", e);
             });
         }
 
@@ -179,7 +179,11 @@ const App: React.FC = () => {
         const warmup = async () => {
             const engine = WinterEngine.getInstance();
             const isCamp = gameState.screen === GameScreen.CAMP;
-            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+            const yieldToMain = () => new Promise<void>(resolve => {
+                requestAnimationFrame(() => {
+                    setTimeout(resolve, 0);
+                });
+            });
 
             await triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
                 const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
@@ -196,6 +200,7 @@ const App: React.FC = () => {
                 }
 
                 setIsInitialBoot(false);
+                sceneReadyRef.current = true;
             });
         };
 
@@ -593,64 +598,66 @@ const App: React.FC = () => {
                 />
             )}
 
-            {(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE) && (
-                <>
-                    <GameSession
-                        key={`gs-${gameState.currentSector}`}
-                        ref={gameCanvasRef}
-                        isWarmup={isLoadingSector}
-                        stats={gameState.stats}
-                        loadout={gameState.loadout}
-                        weaponLevels={gameState.weaponLevels}
-                        currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
-                        debugMode={gameState.debugMode}
-                        isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
-                        isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE}
-                        disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
-                        onDie={handleDie}
-                        onSectorEnded={handleSectorEnded}
-                        onPauseToggle={handleTogglePauseAction}
-                        onOpenMap={handleOpenMap}
-                        triggerEndSector={false}
-                        familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
-                        rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                        bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
-                        onSectorLoaded={handleSceneReady}
-                        startAtCheckpoint={false}
-                        onCheckpointReached={handleCheckpointReached}
-                        teleportTarget={teleportTarget}
-                        onCollectibleDiscovered={handleCollectibleDiscoveredAction}
-                        onClueDiscovered={handleClueDiscoveredAction}
-                        onPOIdiscovered={handlePOIdiscoveredAction}
-                        isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
-                        onCollectibleClose={handleCollectibleClose}
-                        onDialogueStateChange={handleDialogueStateChangeAction}
-                        onDeathStateChange={handleDeathStateChangeAction}
-                        onBossIntroStateChange={handleBossIntroStateChangeAction}
-                        onInteractionStateChange={onStationInteraction}
-                        onUpdateLoadout={handleUpdateLoadoutAction}
-                        onEnvironmentOverrideChange={handleEnvironmentOverrideChangeAction}
-                        environmentOverrides={gameState.environmentOverrides}
-                        initialGraphics={gameState.graphics}
-                        isMobileDevice={isMobileDevice}
-                        weather={gameState.weather}
-                    />
-
-                    {(!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && (
-                        <GameHUD
+            {(gameState.screen === GameScreen.SECTOR ||
+                gameState.screen === GameScreen.PROLOGUE ||
+                gameState.screen === GameScreen.RECAP) && (
+                    <>
+                        <GameSession
+                            key={`gs-${gameState.currentSector}`}
+                            ref={gameCanvasRef}
+                            isWarmup={isLoadingSector}
+                            stats={gameState.stats}
                             loadout={gameState.loadout}
                             weaponLevels={gameState.weaponLevels}
+                            currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
                             debugMode={gameState.debugMode}
-                            isBossIntro={activeOverlay === 'INTRO'}
+                            isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
+                            isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE}
+                            disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
+                            onDie={handleDie}
+                            onSectorEnded={handleSectorEnded}
+                            onPauseToggle={handleTogglePauseAction}
+                            onOpenMap={handleOpenMap}
+                            triggerEndSector={false}
+                            familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
+                            rescuedFamilyIndices={gameState.rescuedFamilyIndices}
+                            bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
+                            onSectorLoaded={handleSceneReady}
+                            startAtCheckpoint={false}
+                            onCheckpointReached={handleCheckpointReached}
+                            teleportTarget={teleportTarget}
+                            onCollectibleDiscovered={handleCollectibleDiscoveredAction}
+                            onClueDiscovered={handleClueDiscoveredAction}
+                            onPOIdiscovered={handlePOIdiscoveredAction}
+                            isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
+                            onCollectibleClose={handleCollectibleClose}
+                            onDialogueStateChange={handleDialogueStateChangeAction}
+                            onDeathStateChange={handleDeathStateChangeAction}
+                            onBossIntroStateChange={handleBossIntroStateChangeAction}
+                            onInteractionStateChange={onStationInteraction}
+                            onUpdateLoadout={handleUpdateLoadoutAction}
+                            onEnvironmentOverrideChange={handleEnvironmentOverrideChangeAction}
+                            environmentOverrides={gameState.environmentOverrides}
+                            initialGraphics={gameState.graphics}
                             isMobileDevice={isMobileDevice}
-                            onTogglePause={handleTogglePauseAction}
-                            onToggleMap={handleToggleMapAction}
-                            onSelectWeapon={handleSelectWeaponAction}
-                            onRotateCamera={handleRotateCameraAction}
+                            weather={gameState.weather}
                         />
-                    )}
-                </>
-            )}
+
+                        {(!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && (
+                            <GameHUD
+                                loadout={gameState.loadout}
+                                weaponLevels={gameState.weaponLevels}
+                                debugMode={gameState.debugMode}
+                                isBossIntro={activeOverlay === 'INTRO'}
+                                isMobileDevice={isMobileDevice}
+                                onTogglePause={handleTogglePauseAction}
+                                onToggleMap={handleToggleMapAction}
+                                onSelectWeapon={handleSelectWeaponAction}
+                                onRotateCamera={handleRotateCameraAction}
+                            />
+                        )}
+                    </>
+                )}
 
             {/* UNIVERSAL OVERLAYS */}
             {activeOverlay === 'PAUSE' && (
