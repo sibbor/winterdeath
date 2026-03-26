@@ -522,9 +522,17 @@ export const ProjectileSystem = {
 
         // Update FireZones only if there are any:
         if (fireZones.length > 0) {
+            let playerHitThisFrame = false;
+            const frameCounter = (now * 0.06) | 0; // Simple frame-like counter from 'now'
+
             for (let i = fireZones.length - 1; i >= 0; i--) {
                 const fz = fireZones[i];
                 fz.life -= delta;
+
+                // Firezone visuals: Throttled to every 2nd frame per firezone to save fill-rate/drawcalls
+                if ((frameCounter + i) % 2 === 0) {
+                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
+                }
 
                 if (!fz._lastDamageTime || now - fz._lastDamageTime > 500) {
                     fz._lastDamageTime = now;
@@ -542,16 +550,14 @@ export const ProjectileSystem = {
                         }
                     }
 
-                    // Player Burn Interaction
-                    if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
+                    // Player Burn Interaction (Throttled per firezone AND per frame for overlapping zones)
+                    if (!playerHitThisFrame && ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
                         if (ctx.onPlayerHit) {
                             ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, DamageType.BURN);
+                            playerHitThisFrame = true;
                         }
                     }
                 }
-
-                // Firezone visuals
-                WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta, ctx);
 
                 if (fz.life <= 0) {
                     ctx.scene.remove(fz.mesh);

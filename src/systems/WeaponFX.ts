@@ -73,8 +73,13 @@ export const WeaponFX = {
     },
 
     updateFireZoneVisuals: (pos: THREE.Vector3, radius: number, delta: number, ctx: any) => {
-        const fireDensity = 10;
-        const targetFlameCount = (radius * radius * fireDensity) * delta;
+        // KEEP: const fireDensity = 10;
+        // KEEP: const targetFlameCount = (radius * radius * fireDensity) * delta;
+
+        // [PERFORMANCE] Reduced density and added performance cap for overlapping zones
+        const fireDensity = 6.0;
+        const targetFlameCount = Math.min(25, (radius * radius * fireDensity) * delta);
+
 
         let flameCount = Math.floor(targetFlameCount);
         if (Math.random() < (targetFlameCount - flameCount)) flameCount++;

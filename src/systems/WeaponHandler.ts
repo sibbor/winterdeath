@@ -357,8 +357,12 @@ export const WeaponHandler = {
                 if (state.throwChargeStart === 0) state.throwChargeStart = now;
 
                 const chargeTime = 1250;
+                const holdTime = 500; // [VINTERDÖD FIX] Hold at max for 500ms before reset
+                const totalCycle = chargeTime + holdTime;
+                
                 const elapsed = now - state.throwChargeStart;
-                const ratio = Math.min(1, elapsed / chargeTime);
+                const cycleElapsed = elapsed % totalCycle;
+                const ratio = cycleElapsed < chargeTime ? (cycleElapsed / chargeTime) : 1.0;
 
                 _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
@@ -426,12 +430,14 @@ export const WeaponHandler = {
                     (trajectoryLineMesh.material as THREE.MeshBasicMaterial).depthTest = false;
                 }
 
-                if (elapsed >= chargeTime + 2000) {
-                    _executeThrow(scene, playerGroup, state, loadout, now, wep, 1.0, aimCrossMesh, trajectoryLineMesh);
-                }
+                // [VINTERDÖD FIX] Removed auto-throw at max strength. Charge cycles indefinitely while fire is held.
 
             } else if (state.throwChargeStart > 0) {
-                const ratio = Math.min(1, (now - state.throwChargeStart) / 1250);
+                // Calculate release ratio with same cycling logic
+                const totalCycle = 1250 + 500;
+                const cycleElapsed = (now - state.throwChargeStart) % totalCycle;
+                const ratio = cycleElapsed < 1250 ? (cycleElapsed / 1250) : 1.0;
+                
                 _executeThrow(scene, playerGroup, state, loadout, now, wep, ratio, aimCrossMesh, trajectoryLineMesh);
             } else {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
