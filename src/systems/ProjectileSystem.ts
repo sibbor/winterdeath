@@ -43,15 +43,26 @@ export interface Projectile {
     mesh: THREE.Mesh;
     type: 'bullet' | 'throwable';
     weapon: string;
+
+    // --- Fysik & Vektorer ---
     vel: THREE.Vector3;
     origin: THREE.Vector3;
     speed: number;
-    damage: number;
     life: number;
+    active: boolean;
+    hitEntities: Set<string>;
+
+    // --- ZERO-GC FLATTENING (DOD) ---
+    damage: number;
+    baseDamage: number;
+    piercing: boolean;
+    pierceDecay: number;
+    impactType: EnemyDeathState;
+    highImpactDistSq: number;       // Avstånd från origin i kvadrat. 0 = inaktiv.
+    highImpactDamageFactor: number; // Procent av baseDamage. 0 = inaktiv.
+
     maxRadius?: number;
     marker?: THREE.Mesh;
-    hitEntities: Set<string>;
-    active: boolean;
 }
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -82,7 +93,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
     [WeaponType.GRENADE]: {
         onImpact: (ctx, pos, radius, damage, hitWater) => {
-            // --- 1. DYNAMIC NOISE & AUDIO ---
             if (hitWater) {
                 soundManager.playWaterExplosion();
                 haptic.explosionWater();
@@ -94,10 +104,8 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
             const effectiveNoiseRadius = hitWater ? (NOISE_RADIUS.GRENADE * 0.5) : NOISE_RADIUS.GRENADE;
             ctx.makeNoise(pos, NoiseType.GRENADE, effectiveNoiseRadius);
 
-            // --- 2. VISUALS (Helt inkapslat!) ---
             WeaponFX.createGrenadeImpact(pos, radius, hitWater, ctx);
 
-            // --- 3. HIT DETECTION ---
             const effectiveRadius = hitWater ? radius * 0.5 : radius;
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, effectiveRadius + 3.0);
 
@@ -130,7 +138,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
     [WeaponType.MOLOTOV]: {
         onImpact: (ctx, pos, radius, damage, hitWater) => {
-            // --- 1. DYNAMIC NOISE & AUDIO ---
             if (hitWater) {
                 ctx.makeNoise(pos, NoiseType.MOLOTOV, NOISE_RADIUS.BULLET_HIT);
                 soundManager.playWaterSplash();
@@ -141,13 +148,10 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
                 haptic.explosion();
             }
 
-            // --- 2. VISUALS (Delegated to WeaponFX) ---
             WeaponFX.createMolotovImpact(pos, radius, hitWater, ctx);
 
-            // Om den träffar vatten skapar vi ingen FireZone
             if (hitWater) return;
 
-            // --- 3. FIREZONE LOGIC (Physics/State) ---
             let fz: FireZone | null = null;
             for (let i = 0; i < FIREZONE_POOL.length; i++) {
                 if (FIREZONE_POOL[i].life <= 0) {
@@ -172,13 +176,10 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
             if (fz.mesh.parent !== ctx.scene) ctx.scene.add(fz.mesh);
             ctx.addFireZone(fz);
 
-            // --- 4. HIT DETECTION (Initial burn) ---
             const direct = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = fz.radiusSq;
             for (let i = 0; i < direct.length; i++) {
                 const e = direct[i];
-
-                // Säkerhetskoll (precis som vi gjorde för granaten)
                 if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
@@ -193,7 +194,6 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
     [WeaponType.FLASHBANG]: {
         onImpact: (ctx, pos, radius, damage, hitWater) => {
-            // --- 1. DYNAMIC NOISE & AUDIO ---
             if (hitWater) {
                 ctx.makeNoise(pos, NoiseType.FLASHBANG, NOISE_RADIUS.BULLET_HIT);
                 soundManager.playWaterSplash();
@@ -204,25 +204,19 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
                 haptic.explosion();
             }
 
-            // --- 2. VISUALS (Delegated to WeaponFX) ---
             WeaponFX.createFlashbangImpact(pos, hitWater, ctx);
 
-            // --- 3. HIT DETECTION (Blind & Stun) ---
             const nearby = ctx.collisionGrid.getNearbyEnemies(pos, radius);
             const rSq = radius * radius;
 
             for (let i = 0; i < nearby.length; i++) {
                 const e = nearby[i];
-
-                // Ignore dead enemies
                 if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
                 if (e.mesh.position.distanceToSquared(pos) < rSq) {
                     e.isBlinded = true;
                     e.blindTimer = 4.0;
                     e.stunTimer = 1.5;
-
-                    // Stun sparks delegated to WeaponFX
                     WeaponFX.createStunSparks(e.mesh.position);
                 }
             }
@@ -250,6 +244,12 @@ export const ProjectileSystem = {
             origin: new THREE.Vector3(),
             speed: 0,
             damage: 0,
+            baseDamage: 0,
+            piercing: false,
+            pierceDecay: 1.0,
+            impactType: EnemyDeathState.SHOT,
+            highImpactDistSq: 0,
+            highImpactDamageFactor: 0,
             life: 0,
             hitEntities: new Set(),
             active: true
@@ -287,8 +287,19 @@ export const ProjectileSystem = {
         p.speed = data.bulletSpeed || 70;
         p.vel.copy(_v1).multiplyScalar(p.speed);
         p.origin.copy(origin);
-        p.damage = damage !== undefined ? damage : data.damage;
         p.life = 1.5;
+
+        // VINTERDÖD DOD FLATTENING: Kopiera vapnets DNA till skottet
+        p.baseDamage = data.damage;
+        p.damage = damage !== undefined ? damage : data.damage;
+        p.piercing = data.piercing || false;
+        p.pierceDecay = data.pierceDecay || 1.0;
+        p.impactType = data.impactType;
+
+        // Sätt de generiska High Impact-reglerna för skottet (Data-Driven)
+        p.highImpactDistSq = weapon === WeaponType.SHOTGUN ? 144.0 : 0;
+        p.highImpactDamageFactor = weapon === WeaponType.REVOLVER ? 0.5 : 0;
+
         projectiles.push(p);
     },
 
@@ -302,15 +313,19 @@ export const ProjectileSystem = {
         p.mesh.position.copy(origin);
         p.mesh.rotation.set(0, 0, 0);
 
-        if (weapon == WeaponType.MOLOTOV) {
-            p.mesh.geometry = GEOMETRY.molotov;
-            p.mesh.material = MATERIALS.molotov;
-        } else if (weapon == WeaponType.FLASHBANG) {
-            p.mesh.geometry = GEOMETRY.flashbang;
-            p.mesh.material = MATERIALS.flashbang
-        } else {
-            p.mesh.geometry = GEOMETRY.grenade;
-            p.mesh.material = MATERIALS.grenade;
+        switch (weapon) {
+            case WeaponType.MOLOTOV:
+                p.mesh.geometry = GEOMETRY.molotov;
+                p.mesh.material = MATERIALS.molotov;
+                break;
+            case WeaponType.FLASHBANG:
+                p.mesh.geometry = GEOMETRY.flashbang;
+                p.mesh.material = MATERIALS.flashbang;
+                break;
+            default:
+                p.mesh.geometry = GEOMETRY.grenade;
+                p.mesh.material = MATERIALS.grenade;
+                break;
         }
 
         if (p.mesh.parent !== scene) scene.add(p.mesh);
@@ -324,9 +339,16 @@ export const ProjectileSystem = {
 
         p.speed = p.vel.length();
         p.origin.copy(origin);
+
+        // Throwable DNA
+        p.baseDamage = data.damage;
         p.damage = damage !== undefined ? damage : data.damage;
         p.life = time + 0.5;
         p.maxRadius = data.radius || 10;
+
+        // Reset irrelevant bullet DNA
+        p.highImpactDistSq = 0;
+        p.highImpactDamageFactor = 0;
 
         if (!p.marker) {
             p.marker = new THREE.Mesh(GEOMETRY.landingMarker, MATERIALS.landingMarker);
@@ -341,164 +363,159 @@ export const ProjectileSystem = {
         projectiles.push(p);
     },
 
-    // --- CONTINUOUS WEAPON HANDLING ---
     handleContinuousFire: (weapon: WeaponType, origin: THREE.Vector3, direction: THREE.Vector3, delta: number, ctx: GameContext, damageOverride?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
         const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * delta);
 
-        if (weapon === WeaponType.FLAMETHROWER) {
-            if (Math.random() < 0.3) {
-                WeaponFX.createMuzzleFlash(origin, direction, false);
-            }
+        switch (weapon) {
+            case WeaponType.FLAMETHROWER: {
+                if (Math.random() < 0.3) {
+                    WeaponFX.createMuzzleFlash(origin, direction, false);
+                }
 
-            // Skapa elden (vi ökar till 4 partiklar per tick för att molnet ska bli riktigt tätt)
-            const count = 4;
-            for (let i = 0; i < count; i++) {
-                // Sprid ut startpunkten marginellt för att elden ska se oregelbunden ut direkt från mynningen
-                _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.8);
-                WeaponFX.createFlame(_v1, direction);
-            }
+                const count = 4;
+                for (let i = 0; i < count; i++) {
+                    _v1.copy(origin).addScaledVector(direction, 0.5 + Math.random() * 0.8);
+                    WeaponFX.createFlame(_v1, direction);
+                }
 
-            const range = data.range;
-            const rangeSq = range * range;
+                const range = data.range;
+                const rangeSq = range * range;
 
-            const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
-            for (let _fi = 0; _fi < enemies.length; _fi++) {
-                const e = enemies[_fi];
-                if (e.deathState !== EnemyDeathState.ALIVE) continue;
+                const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
+                for (let _fi = 0; _fi < enemies.length; _fi++) {
+                    const e = enemies[_fi];
+                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
-                _v1.subVectors(e.mesh.position, origin);
-                const distSq = _v1.lengthSq();
+                    _v1.subVectors(e.mesh.position, origin);
+                    const distSq = _v1.lengthSq();
 
-                if (distSq > rangeSq) continue;
+                    if (distSq > rangeSq) continue;
 
-                const dist = Math.sqrt(distSq);
-                _v1.divideScalar(dist);
+                    const dist = Math.sqrt(distSq);
+                    _v1.divideScalar(dist);
 
-                const dot = direction.dot(_v1);
+                    const dot = direction.dot(_v1);
 
-                // Fienden måste befinna sig inuti den nya, bredare konen
-                if (dot > FLAMETHROWER_CONE_ANGLE) {
-                    e.isBurning = true;
-                    e.burnTimer = 0.5;
-                    e.afterburnTimer = 5.0;
+                    if (dot > FLAMETHROWER_CONE_ANGLE) {
+                        e.isBurning = true;
+                        e.burnTimer = 0.5;
+                        e.afterburnTimer = 5.0;
 
-                    const chance = (delta * 1000) / (data.fireRate || 35);
-                    if (Math.random() < chance) {
-                        const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
-                        ctx.applyDamage(e, finalDmg, WeaponType.FLAMETHROWER);
+                        const chance = (delta * 1000) / (data.fireRate || 35);
+                        if (Math.random() < chance) {
+                            const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
+                            ctx.applyDamage(e, finalDmg, WeaponType.FLAMETHROWER);
+                        }
                     }
                 }
+                break;
             }
-        }
 
-        else if (weapon === WeaponType.ARC_CANNON) {
-            const range = data.range;
-            const rangeSq = range * range;
-            const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
+            case WeaponType.ARC_CANNON: {
+                const range = data.range;
+                const rangeSq = range * range;
+                const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
 
-            let target = null;
-            let minDist = Infinity;
-            const aimThreshold = 0.90;
+                let target = null;
+                let minDist = Infinity;
+                const aimThreshold = 0.90;
 
-            for (let _fi = 0; _fi < enemies.length; _fi++) {
-                const e = enemies[_fi];
-                if (e.deathState !== EnemyDeathState.ALIVE) continue;
+                for (let _fi = 0; _fi < enemies.length; _fi++) {
+                    const e = enemies[_fi];
+                    if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
-                _v1.subVectors(e.mesh.position, origin);
-                const distSq = _v1.lengthSq();
-                if (distSq > rangeSq) continue;
+                    _v1.subVectors(e.mesh.position, origin);
+                    const distSq = _v1.lengthSq();
+                    if (distSq > rangeSq) continue;
 
-                const dist = Math.sqrt(distSq);
-                _v1.divideScalar(dist);
+                    const dist = Math.sqrt(distSq);
+                    _v1.divideScalar(dist);
 
-                if (direction.dot(_v1) > aimThreshold) {
-                    if (dist < minDist) {
-                        minDist = dist;
-                        target = e;
+                    if (direction.dot(_v1) > aimThreshold) {
+                        if (dist < minDist) {
+                            minDist = dist;
+                            target = e;
+                        }
                     }
                 }
-            }
 
-            if (target) {
-                const chainMax = 5;
-                const chainRange = 8.0;
+                if (target) {
+                    const chainMax = 5;
+                    const chainRange = 8.0;
 
-                _arcCannonHitList.length = 0;
-                _arcCannonHitIds.clear();
+                    _arcCannonHitList.length = 0;
+                    _arcCannonHitIds.clear();
 
-                _arcCannonHitList.push(target);
-                _arcCannonHitIds.add(target.id);
+                    _arcCannonHitList.push(target);
+                    _arcCannonHitIds.add(target.id);
 
-                let curr = target;
-                while (_arcCannonHitList.length < chainMax) {
-                    const potential = ctx.collisionGrid.getNearbyEnemies(curr.mesh.position, chainRange);
-                    let next = null;
-                    let nextDist = Infinity;
+                    let curr = target;
+                    while (_arcCannonHitList.length < chainMax) {
+                        const potential = ctx.collisionGrid.getNearbyEnemies(curr.mesh.position, chainRange);
+                        let next = null;
+                        let nextDist = Infinity;
 
-                    for (let _pi = 0; _pi < potential.length; _pi++) {
-                        const p = potential[_pi];
-                        if (p.deathState !== EnemyDeathState.ALIVE || _arcCannonHitIds.has(p.id)) continue;
-                        const d = p.mesh.position.distanceToSquared(curr.mesh.position);
-                        if (d < nextDist) {
-                            nextDist = d;
-                            next = p;
+                        for (let _pi = 0; _pi < potential.length; _pi++) {
+                            const p = potential[_pi];
+                            if (p.deathState !== EnemyDeathState.ALIVE || _arcCannonHitIds.has(p.id)) continue;
+                            const d = p.mesh.position.distanceToSquared(curr.mesh.position);
+                            if (d < nextDist) {
+                                nextDist = d;
+                                next = p;
+                            }
+                        }
+
+                        if (next) {
+                            _arcCannonHitList.push(next);
+                            _arcCannonHitIds.add(next.id);
+                            curr = next;
+                        } else {
+                            break;
                         }
                     }
 
-                    if (next) {
-                        _arcCannonHitList.push(next);
-                        _arcCannonHitIds.add(next.id);
-                        curr = next;
-                    } else {
-                        break;
-                    }
-                }
+                    const finalDamage = damage / _arcCannonHitList.length;
+                    const stunDur = (data.statusEffect?.duration || 2.5) / _arcCannonHitList.length;
 
-                const finalDamage = damage / _arcCannonHitList.length;
-                const stunDur = (data.statusEffect?.duration || 2.5) / _arcCannonHitList.length;
+                    _v3.copy(origin);
+                    const primaryTarget = _arcCannonHitList[0];
+                    _v1.copy(primaryTarget.mesh.position).y += 1.0;
 
-                // 1. MAIN BOLT: Origin -> First Target (Thicker visual)
-                _v3.copy(origin);
-                const primaryTarget = _arcCannonHitList[0];
-                _v1.copy(primaryTarget.mesh.position).y += 1.0;
-
-                WeaponFX.createLightning(_v3, _v1, true);
-                ctx.applyDamage(primaryTarget, finalDamage, WeaponType.ARC_CANNON);
-                primaryTarget.stunTimer = stunDur;
-
-                // 2. BRANCHES: First Target -> Secondary Targets
-                // (chained lightning from enemy to enemy)
-                _v3.copy(_v1);
-
-                for (let i = 1; i < _arcCannonHitList.length; i++) {
-                    const e = _arcCannonHitList[i];
-                    _v1.copy(e.mesh.position).y += 1.0;
-
-                    WeaponFX.createLightning(_v3, _v1, false);
-                    ctx.applyDamage(e, finalDamage, WeaponType.ARC_CANNON);
-                    e.stunTimer = stunDur;
+                    WeaponFX.createLightning(_v3, _v1, true);
+                    ctx.applyDamage(primaryTarget, finalDamage, WeaponType.ARC_CANNON);
+                    primaryTarget.stunTimer = stunDur;
 
                     _v3.copy(_v1);
-                }
 
-                // Throttle the sound logic (approx 6 times per second)
-                if (ctx.now - _lastArcSoundTime > 150) {
-                    soundManager.playArcCannonZap();
-                    _lastArcSoundTime = ctx.now;
-                }
+                    for (let i = 1; i < _arcCannonHitList.length; i++) {
+                        const e = _arcCannonHitList[i];
+                        _v1.copy(e.mesh.position).y += 1.0;
 
-            } else {
-                // Shoot empty bolt into the void
-                _v1.copy(origin).addScaledVector(direction, range);
-                WeaponFX.createLightning(origin, _v1, true);
+                        WeaponFX.createLightning(_v3, _v1, false);
+                        ctx.applyDamage(e, finalDamage, WeaponType.ARC_CANNON);
+                        e.stunTimer = stunDur;
 
-                if (ctx.now - _lastArcSoundTime > 150) {
-                    soundManager.playArcCannonZap();
-                    _lastArcSoundTime = ctx.now;
+                        _v3.copy(_v1);
+                    }
+
+                    if (ctx.now - _lastArcSoundTime > 150) {
+                        soundManager.playArcCannonZap();
+                        _lastArcSoundTime = ctx.now;
+                    }
+
+                } else {
+                    _v1.copy(origin).addScaledVector(direction, range);
+                    WeaponFX.createLightning(origin, _v1, true);
+
+                    if (ctx.now - _lastArcSoundTime > 150) {
+                        soundManager.playArcCannonZap();
+                        _lastArcSoundTime = ctx.now;
+                    }
                 }
+                break;
             }
         }
     },
@@ -510,26 +527,27 @@ export const ProjectileSystem = {
             ctx.addFireZone = (z: FireZone) => fireZones.push(z);
         }
 
+        // VINTERDÖD FIX: Hämta vattnet en gång per frame!
+        const waterSystem = WinterEngine.getInstance()?.water;
+
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
 
             if (p.type === 'bullet') {
                 updateBullet(p, i, delta, ctx, projectiles);
             } else {
-                updateThrowable(p, i, delta, ctx, now, projectiles);
+                updateThrowable(p, i, delta, ctx, now, projectiles, waterSystem);
             }
         }
 
-        // Update FireZones only if there are any:
         if (fireZones.length > 0) {
             let playerHitThisFrame = false;
-            const frameCounter = (now * 0.06) | 0; // Simple frame-like counter from 'now'
+            const frameCounter = (now * 0.06) | 0;
 
             for (let i = fireZones.length - 1; i >= 0; i--) {
                 const fz = fireZones[i];
                 fz.life -= delta;
 
-                // Firezone visuals: Throttled to every 2nd frame per firezone to save fill-rate/drawcalls
                 if ((frameCounter + i) % 2 === 0) {
                     WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
                 }
@@ -540,9 +558,8 @@ export const ProjectileSystem = {
                     const rSq = fz.radiusSq;
                     for (let _ni = 0; _ni < nearby.length; _ni++) {
                         const e = nearby[_ni];
-                        if (e.deathState !== EnemyDeathState.ALIVE) {
-                            continue;
-                        }
+                        if (e.deathState !== EnemyDeathState.ALIVE) continue;
+
                         if (e.mesh.position.distanceToSquared(fz.mesh.position) < rSq) {
                             e.isBurning = true;
                             e.afterburnTimer = 5.0;
@@ -550,7 +567,6 @@ export const ProjectileSystem = {
                         }
                     }
 
-                    // Player Burn Interaction (Throttled per firezone AND per frame for overlapping zones)
                     if (!playerHitThisFrame && ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
                         if (ctx.onPlayerHit) {
                             ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, DamageType.BURN);
@@ -586,18 +602,12 @@ export const ProjectileSystem = {
 
 // --- INTERNAL HELPERS ---
 function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
-    const engine = WinterEngine.getInstance();
-
     _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-
     projectile.mesh.position.addScaledVector(projectile.vel, delta);
-
     _v4.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
     projectile.life -= delta;
 
     let destroyBullet = false;
-    const data = WEAPONS[projectile.weapon];
-    if (!data) return;
 
     _v2.subVectors(_v4, _v3);
     const lineLenSq = _v2.lengthSq();
@@ -610,7 +620,6 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     for (let i = 0; i < nearbyObs.length; i++) {
         const obs = nearbyObs[i];
 
-        // Ignore player's own collider
         if (Math.abs(obs.position.x - ctx.playerPos.x) < 0.5 && Math.abs(obs.position.z - ctx.playerPos.z) < 0.5) {
             continue;
         }
@@ -618,14 +627,12 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
         _v5.set(obs.position.x, 0, obs.position.z);
         const rad = obs.radius || 2.0;
 
-        // Use _v6 here so we don't overwrite _v1 used for Grid Search
         _v6.subVectors(_v5, _v3);
         let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v6.dot(_v2) / lineLenSq)) : 0;
         _v6.copy(_v3).addScaledVector(_v2, t);
 
         if (_v6.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
-            //ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'smoke', 3);
             soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
             ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS.BULLET_HIT);
             break;
@@ -653,12 +660,15 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             _v6.copy(_v3).addScaledVector(_v2, t);
 
             if (_v6.distanceToSquared(_v5) < hitRad * hitRad) {
+
+                // VINTERDÖD DOD FLATTENING: Ren matematisk utvärdering, noll kännedom om vapentyper!
                 let isHighImpact = false;
-                if (projectile.weapon === WeaponType.SHOTGUN) {
-                    const distFromOriginSq = Math.pow(_v6.x - projectile.origin.x, 2) + Math.pow(_v6.z - projectile.origin.z, 2);
-                    if (distFromOriginSq < 144.0) isHighImpact = true;
-                } else if (projectile.weapon === WeaponType.REVOLVER) {
-                    if (projectile.damage >= data.damage * 0.5) isHighImpact = true;
+
+                if (projectile.highImpactDistSq > 0) {
+                    const distFromOriginSq = (_v6.x - projectile.origin.x) ** 2 + (_v6.z - projectile.origin.z) ** 2;
+                    if (distFromOriginSq < projectile.highImpactDistSq) isHighImpact = true;
+                } else if (projectile.highImpactDamageFactor > 0) {
+                    if (projectile.damage >= projectile.baseDamage * projectile.highImpactDamageFactor) isHighImpact = true;
                 }
 
                 projectile.hitEntities.add(enemy.id);
@@ -681,8 +691,9 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 ctx.spawnPart(_v6.x, headY, _v6.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
                 soundManager.playImpact('flesh');
 
-                if (data.piercing) {
-                    projectile.damage *= data.pierceDecay;
+                // VINTERDÖD DOD FLATTENING: Läser primitiva variabler, noll pointer chasing!
+                if (projectile.piercing) {
+                    projectile.damage *= projectile.pierceDecay;
                     if (projectile.damage < 15) { destroyBullet = true; break; }
                 } else {
                     destroyBullet = true;
@@ -701,7 +712,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     }
 }
 
-function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number, projectiles: Projectile[]) {
+function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number, projectiles: Projectile[], waterSystem: any) {
     p.vel.y -= 30 * delta;
     p.mesh.position.addScaledVector(p.vel, delta);
     p.mesh.rotation.x += 8 * delta;
@@ -713,9 +724,9 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     let hitWater = false;
     let hitY = 0;
 
-    const engine = WinterEngine.getInstance();
-    if (engine && engine.water) {
-        engine.water.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+    // VINTERDÖD FIX: Broadphase Check! Räkna bara matte om vi faktiskt är nära vattnet.
+    if (p.mesh.position.y < 2.0 && waterSystem) {
+        waterSystem.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
         if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {
             destroyed = true;
             hitWater = true;
@@ -748,5 +759,4 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
     } else {
         p.life -= delta;
     }
-
 }
