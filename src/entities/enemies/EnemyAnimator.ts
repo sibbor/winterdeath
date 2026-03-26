@@ -87,25 +87,6 @@ export const EnemyAnimator = {
                             targetRotX += (Math.random() - 0.5) * shake;
                             targetRotZ += (Math.random() - 0.5) * shake;
 
-                            // --- VISUAL TELEGRAPHING (Indicator Ring) ---
-                            if (e.indicatorRing) {
-                                e.indicatorRing.visible = true;
-                                e.indicatorRing.matrixAutoUpdate = true;
-                                e.indicatorRing.position.set(0, -targetPosY + 0.05, 0);
-
-                                // Safe division to prevent Infinity scaling crash
-                                const safeScaleX = Math.max(0.01, targetScaleX);
-                                const targetRadius = (att.radius || 10.0);
-                                e.indicatorRing.scale.setScalar(targetRadius / safeScaleX);
-
-                                const flashSpeed = progress * 30;
-                                const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
-                                if (e.indicatorRing.material) {
-                                    const mat = e.indicatorRing.material as any;
-                                    mat.opacity = 0.3 + progress * 0.6;
-                                    mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
-                                }
-                            }
                             break;
 
                         case EnemyAttackType.ELECTRIC_BEAM:
@@ -114,6 +95,33 @@ export const EnemyAnimator = {
                             targetPosY += Math.sin(now * 0.01) * 0.2 * progress;
                             targetScaleY = baseScale * (1.0 + 0.2 * progress);
                             break;
+                    }
+
+                    // --- VISUAL TELEGRAPHING (Indicator Ring) ---
+                    // Universal for any attack that specifies a 'radius' (AoE)
+                    if (e.indicatorRing) {
+                        if (att.radius) {
+                            e.indicatorRing.visible = true;
+                            e.indicatorRing.matrixAutoUpdate = true;
+                            // Keep the ring on the ground (0.05) regardless of the enemy's vertical jump height
+                            e.indicatorRing.position.set(0, -targetPosY + 0.05, 0);
+
+                            // Safe division to prevent Infinity scaling crash
+                            // Note: RingGeometry(0.05, 1, 32) has outer radius 1.0
+                            const safeScaleX = Math.max(0.01, targetScaleX);
+                            e.indicatorRing.scale.setScalar(att.radius / safeScaleX);
+
+                            const flashSpeed = progress * 30;
+                            const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
+                            if (e.indicatorRing.material) {
+                                const mat = e.indicatorRing.material as any;
+                                mat.opacity = 0.3 + progress * 0.6;
+                                mat.color.setHex(pulse > 0.5 ? 0xffffff : 0xff0000);
+                            }
+                        } else {
+                            e.indicatorRing.visible = false;
+                            e.indicatorRing.matrixAutoUpdate = false;
+                        }
                     }
                 }
 
@@ -184,10 +192,10 @@ export const EnemyAnimator = {
         }
         // --- PHASE 3: RECOVERY / DEFAULT STATE ---
         else {
-            if (e.indicatorRing) e.indicatorRing.visible = false;
-
-            // We let the logic fall through to smoothly lerp the scale back to normal.
-            // Rotation targets are already 0.
+            if (e.indicatorRing) {
+                e.indicatorRing.visible = false;
+                e.indicatorRing.matrixAutoUpdate = false;
+            }
         }
 
         // --- APPLY TRANSFORMS (SMOOTH LERPING) ---
@@ -220,6 +228,11 @@ export const EnemyAnimator = {
                 mesh.position.y += (targetPosY - mesh.position.y) * 10 * delta;
             }
         }
-        // If not attacking, EnemyAI's 'moveEntity' will handle the ground bouncing automatically!
+        // 4. Add some random jitter to the enemy's rotation when it is hit
+        if (e.mesh.userData.isFlashing && (now - e.hitTime) < 200) {
+            const jitter = 0.15;
+            mesh.rotation.x += (Math.random() - 0.5) * jitter;
+            mesh.rotation.z += (Math.random() - 0.5) * jitter;
+        }
     }
 };

@@ -52,27 +52,23 @@ export const EnemySpawner = {
         e.originalScale = typeData.scale || 1.0;
         e.widthScale = typeData.widthScale || 1.0;
 
-        // The ring must ALWAYS be hidden when the zombie spawns.
-        // It is only activated inside AIState.ATTACK_CHARGE in EnemyAI.
-        if (e.indicatorRing) {
-            e.indicatorRing.visible = false;
-        } else if (typeKey === EnemyType.BOMBER && e.mesh) {
-            // Unique, transparent material for each ring to avoid color/opacity state conflicts
-            // Use explicit material instantiation instead of the heavier .clone()
-            const ringMat = new THREE.MeshBasicMaterial({
-                map: (MATERIALS.blastRadius as THREE.MeshBasicMaterial).map,
-                color: 0xffffff,
-                transparent: true,
-                depthWrite: false
-            });
-
-            const ring = new THREE.Mesh(GEOMETRY.blastRadius, ringMat);
+        if (!e.indicatorRing && e.mesh) {
+            const ring = new THREE.Mesh(
+                GEOMETRY.blastRadius,
+                new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.3,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                })
+            );
             ring.rotation.x = -Math.PI / 2;
-            ring.position.set(0, 0.1, 0);
-            ring.scale.setScalar(5.0);
             ring.visible = false;
             e.mesh.add(ring);
             e.indicatorRing = ring;
+        } else if (e.indicatorRing) {
+            e.indicatorRing.visible = false;
         }
     },
 
@@ -200,22 +196,20 @@ export const EnemySpawner = {
         g.scale.set(s * w, s, s * w);
         g.userData.entity = enemy;
 
-        if (typeKey === EnemyType.BOMBER) {
-            const ringMat = new THREE.MeshBasicMaterial({
-                map: (MATERIALS.blastRadius as THREE.MeshBasicMaterial).map,
+        const ring = new THREE.Mesh(
+            GEOMETRY.blastRadius,
+            new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide,
                 depthWrite: false
-            });
-
-            const ring = new THREE.Mesh(GEOMETRY.blastRadius, ringMat);
-            ring.rotation.x = -Math.PI / 2;
-            ring.position.set(0, 0.1, 0);
-            ring.scale.setScalar(5.0);
-            ring.visible = false;
-            g.add(ring);
-            enemy.indicatorRing = ring;
-        }
+            })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.visible = false;
+        g.add(ring);
+        enemy.indicatorRing = ring;
 
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
             console.log(`[EnemySpawner] Spawns ${typeKey}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
@@ -311,6 +305,23 @@ export const EnemySpawner = {
         };
 
         boss.userData.entity = enemy;
+
+        // Ensure boss has an indicator ring for its special attacks
+        const ring = new THREE.Mesh(
+            GEOMETRY.blastRadius,
+            new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.visible = false;
+        boss.add(ring);
+        enemy.indicatorRing = ring;
+
         console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
         return enemy;
     },

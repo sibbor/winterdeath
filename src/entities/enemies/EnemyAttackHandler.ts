@@ -95,7 +95,11 @@ export const EnemyAttackHandler = {
                 // BOMBER SUICIDE - Must kill the zombie!
                 e.hp = 0;
                 e.lastDamageType = DamageType.EXPLOSION;
-                if (callbacks.applyDamage) callbacks.applyDamage(e, 9999, DamageType.EXPLOSION, true);
+                if (callbacks.applyDamage) {
+                    callbacks.applyDamage(e, 9999, DamageType.EXPLOSION, true);
+                } else {
+                    e.hp = 0;
+                }
                 break;
 
             case EnemyAttackType.SMASH:

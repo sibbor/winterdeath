@@ -225,7 +225,10 @@ export const EnemyManager = {
         if (!e.mesh.userData.spinVel) e.mesh.userData.spinVel = new THREE.Vector3();
         e.mesh.userData.spinVel.set(0, 0, 0);
 
-        if (e.indicatorRing) e.indicatorRing.visible = false;
+        if (e.indicatorRing) {
+            e.indicatorRing.visible = false;
+            e.indicatorRing.matrixAutoUpdate = false;
+        }
     },
 
     spawnBoss: (scene: THREE.Scene, pos: { x: number, z: number }, bossData: any) => {
@@ -356,7 +359,7 @@ export const EnemyManager = {
                 }
                 break;
 
-            case EnemyDeathState.ELECTRIFIED:
+            case EnemyDeathState.ELECTROCUTED:
                 if (!e.mesh.userData.electrocuted) {
                     e.mesh.userData.electrocuted = true;
                     e.mesh.userData.deathPosX = e.mesh.position.x;
@@ -655,7 +658,7 @@ export const EnemyManager = {
 
             const deathState = e.deathState;
 
-            if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTRIFIED || deathState === EnemyDeathState.DROWNED) {
+            if (deathState === EnemyDeathState.BURNED || deathState === EnemyDeathState.ELECTROCUTED || deathState === EnemyDeathState.DROWNED) {
                 e.mesh.visible = true;
                 e.mesh.matrixAutoUpdate = true;
             }
@@ -671,15 +674,19 @@ export const EnemyManager = {
                     }
                 }
 
-                if (isVisible) {
+                const isTelegraphing = e.indicatorRing && e.indicatorRing.visible;
+
+                if (isVisible && !isTelegraphing) {
                     e.mesh.visible = false;
                     e.mesh.matrixAutoUpdate = false;
-                    // --- 2. CRITICAL FIX: Matrix must be explicitly updated since AutoUpdate is false ---
+                    // --- CRITICAL FIX: Matrix must be explicitly updated since AutoUpdate is false ---
                     e.mesh.updateMatrix();
                     _syncList.push(e);
                 } else {
-                    e.mesh.visible = false;
-                    e.mesh.matrixAutoUpdate = false;
+                    // Show the real mesh if it's telegraphing an attack (so children can render)
+                    // or if it's outside the view optimization range.
+                    e.mesh.visible = isVisible;
+                    e.mesh.matrixAutoUpdate = true;
                 }
             }
 

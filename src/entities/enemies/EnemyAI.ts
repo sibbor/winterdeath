@@ -109,8 +109,8 @@ export const EnemyAI = {
                 weaponImpact = weapon.impactType;
             }
 
-            if (weaponImpact === EnemyDeathState.ELECTRIFIED || dmgType === WeaponType.ARC_CANNON) {
-                e.deathState = EnemyDeathState.ELECTRIFIED;
+            if (weaponImpact === EnemyDeathState.ELECTROCUTED || dmgType === WeaponType.ARC_CANNON) {
+                e.deathState = EnemyDeathState.ELECTROCUTED;
                 e.deathVel.set(0, 0, 0);
             }
             else if (e.isBurning || dmgType === WeaponType.MOLOTOV || dmgType === WeaponType.FLAMETHROWER || dmgType === DamageType.BURN) {

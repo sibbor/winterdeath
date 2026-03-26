@@ -158,7 +158,7 @@ export const WEAPONS: Record<string, WeaponStats> = {
     name: WeaponType.ARC_CANNON, displayName: 'weapons.arc_cannon', category: WeaponCategory.SPECIAL, behavior: WeaponBehavior.CONTINUOUS,
     damage: 14, fireRate: 90, range: 15, spread: 0.05, magSize: 500,
     icon: PNG_PATH + 'arc_cannon.png', iconIsPng: true,
-    piercing: true, pierceDecay: 0.5, impactType: EnemyDeathState.ELECTRIFIED, statusEffect: { type: StatusEffectType.ELECTRIFIED, duration: 2.5 }
+    piercing: true, pierceDecay: 0.5, impactType: EnemyDeathState.ELECTROCUTED, statusEffect: { type: StatusEffectType.ELECTRIFIED, duration: 2.5 }
   },
 
   // --- TOOL ---

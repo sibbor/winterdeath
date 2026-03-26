@@ -77,7 +77,7 @@ export enum EnemyDeathState {
     GIBBED = 'GIBBED',
     EXPLODED = 'EXPLODED',
     BURNED = 'BURNED',
-    ELECTRIFIED = 'ELECTRIFIED',
+    ELECTROCUTED = 'ELECTROCUTED',
     GENERIC = 'GENERIC',
     DROWNED = 'DROWNED',
     FALL = 'FALL'
