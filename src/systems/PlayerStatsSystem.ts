@@ -12,6 +12,8 @@ const _v2 = new THREE.Vector3();
 export class PlayerStatsSystem implements System {
     id = 'player_stats_system';
 
+    private cachedPassives: string[] = [];
+
     constructor(
         private playerGroup: THREE.Group,
         private t: (key: string) => string,
@@ -19,7 +21,7 @@ export class PlayerStatsSystem implements System {
     ) { }
 
     init(session: GameSessionLogic) {
-        // Initialized at start
+        this.updatePassives();
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
@@ -29,39 +31,55 @@ export class PlayerStatsSystem implements System {
         this.applyStatusTicks(session, dt, now);
     }
 
-    private updateBuffsAndDebuffs(session: GameSessionLogic, dt: number, now: number) {
-        const state = session.state;
+    // Cached Base Multipliers
+    private cachedFamilyMultipliers = {
+        speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0
+    };
+
+    // Updates passive buffs from family members
+    // runs in init() and when a family member is found:
+    // GameSession.handleFamilyMemberFound()
+    public updatePassives() {
+        this.cachedFamilyMultipliers = { speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0 };
         const family = this.activeFamilyMembers.current;
 
-        // 1. Reset Multipliers and tracking arrays
-        state.multipliers.speed = 1.0;
-        state.multipliers.reloadTime = 1.0;
-        state.multipliers.fireRate = 1.0;
-        state.multipliers.damageResist = 1.0;
-        state.multipliers.range = 1.0;
-
-        state.activePassives.length = 0;
-        state.activeBuffs.length = 0;
-        state.activeDebuffs.length = 0;
-        state.isDisoriented = false;
-
-        // 2. Passives buffs - from Family members
+        let pIdx = 0;
         for (let i = 0; i < family.length; i++) {
             const member = family[i];
             if (!member.following) continue;
 
             const name = member.name.toLowerCase();
-            state.activePassives.push(name);
+            this.cachedPassives[pIdx++] = name;
 
-            // [VINTERDÖD RULE] Multipliers are now applied in their respective systems
-            // We just set the passive state here.
-            if (name === 'loke') state.multipliers.reloadTime *= 0.8;
-            if (name === 'jordan') state.multipliers.range *= 1.15;
-            if (name === 'esmeralda') state.multipliers.fireRate *= 1.2;
-            if (name === 'nathalie') state.multipliers.damageResist *= 0.9;
+            if (name === 'loke') this.cachedFamilyMultipliers.reloadTime *= 0.8;
+            if (name === 'jordan') this.cachedFamilyMultipliers.range *= 1.15;
+            if (name === 'esmeralda') this.cachedFamilyMultipliers.fireRate *= 1.2;
+            if (name === 'nathalie') this.cachedFamilyMultipliers.damageResist *= 0.9;
         }
 
-        // 3. Buffs and Debuffs from Status Effects
+        this.cachedPassives.length = pIdx;
+    }
+
+    private updateBuffsAndDebuffs(session: GameSessionLogic, dt: number, now: number) {
+        const state = session.state;
+
+        // 1. Copy the pre-calculated values (O(1) operation)
+        state.multipliers.speed = this.cachedFamilyMultipliers.speed;
+        state.multipliers.reloadTime = this.cachedFamilyMultipliers.reloadTime;
+        state.multipliers.fireRate = this.cachedFamilyMultipliers.fireRate;
+        state.multipliers.damageResist = this.cachedFamilyMultipliers.damageResist;
+        state.multipliers.range = this.cachedFamilyMultipliers.range;
+
+        // Sync UI-array from cache
+        for (let i = 0; i < this.cachedPassives.length; i++) {
+            state.activePassives[i] = this.cachedPassives[i];
+        }
+        state.activePassives.length = this.cachedPassives.length;
+
+        state.isDisoriented = false;
+        let debuffIdx = 0;
+
+        // 2. Apply only what changes often (Status Effects)
         const effects = state.statusEffects;
         for (const key in effects) {
             const type = key as StatusEffectType;
@@ -69,30 +87,22 @@ export class PlayerStatsSystem implements System {
             if (!effect || effect.duration <= 0) continue;
 
             effect.duration -= dt * 1000;
+            state.activeDebuffs[debuffIdx++] = type;
 
-            // Categorize for HUD
-            // Currently all effects in StatusEffectType are debuffs
-            state.activeDebuffs.push(type);
-
-            // [VINTERDÖD RULE] Logic below belongs in specific systems if it affects non-stats properties
-            // But stats-multipliers (speed, fireRate) can stay here if they are central.
-            // User requested "ONLY STATE DATA HERE", so we move specialized logic.
             switch (type) {
                 case StatusEffectType.DISORIENTED:
                     state.isDisoriented = true;
                     session.engine.camera.shake(0.05);
                     break;
                 case StatusEffectType.BLEEDING:
-                    state.multipliers.speed *= 0.9;
-                    break;
                 case StatusEffectType.BURNING:
-                    state.multipliers.speed *= 0.9;
-                    break;
                 case StatusEffectType.ELECTRIFIED:
-                    state.multipliers.speed *= 0.9;
+                    state.multipliers.speed *= 0.9; // Ovanpå familjens eventuella speed-buff
                     break;
             }
         }
+
+        state.activeDebuffs.length = debuffIdx;
     }
 
     private applyStatusTicks(session: GameSessionLogic, dt: number, now: number) {
@@ -122,13 +132,17 @@ export class PlayerStatsSystem implements System {
 
                     this.handlePlayerHit(session, dmg, attacker, dmgType, true, undefined, undefined, undefined, attackName);
 
-                    // Visuals for status
+                    // Visuals for status (Zero-GC: Use local constants or scratchpads if needed, but these are low-frequency)
                     if (type === StatusEffectType.BLEEDING) {
-                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 0.5 + Math.random(), this.playerGroup.position.z, 'blood', 3);
+                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8 + Math.random(), this.playerGroup.position.z, 'blood', 3);
                     } else if (type === StatusEffectType.BURNING) {
-                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 0.5 + Math.random(), this.playerGroup.position.z, 'flame', 5);
+                        // Attach high-quality fire to player head, same as enemies
+                        _v1.set(this.playerGroup.position.x + (Math.random() - 0.5) * 0.5, this.playerGroup.position.y + 1.8, this.playerGroup.position.z + (Math.random() - 0.5) * 0.5);
+                        FXSystem.spawnPart(session.engine.scene, state.particles, _v1.x, _v1.y, _v1.z, 'flame', 1);
+
+                        //FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8, this.playerGroup.position.z, 'enemy_effect_flame', 1);
                     } else if (type === StatusEffectType.ELECTRIFIED) {
-                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.0, this.playerGroup.position.z, 'spark', 4);
+                        FXSystem.spawnPart(session.engine.scene, state.particles, this.playerGroup.position.x, 1.8, this.playerGroup.position.z, 'spark', 4);
                     }
                 }
                 effect.lastTick = now;
@@ -182,6 +196,7 @@ export class PlayerStatsSystem implements System {
 
         // --- NEW: Register Status Effects ---
         if (effectType && effectDuration && effectDuration > 0) {
+            // console.log(`[DEBUG] Registering effect: ${effectType} for ${effectDuration}ms`);
             if (!state.statusEffects[effectType]) {
                 state.statusEffects[effectType] = { duration: 0, maxDuration: 0, intensity: 0, lastTick: 0 };
             }
@@ -309,6 +324,9 @@ export class PlayerStatsSystem implements System {
             state.killedByEnemy = true;
         } else if (type === DamageType.DROWNING) {
             state.killerName = this.t('ui.drowning');
+            state.killedByEnemy = false;
+        } else if (type === DamageType.BURN) {
+            state.killerName = this.t('ui.burning');
             state.killedByEnemy = false;
         } else if (type === DamageType.FALL) {
             state.killerName = this.t('ui.falling');

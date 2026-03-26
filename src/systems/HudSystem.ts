@@ -260,9 +260,16 @@ export const HudSystem = {
         _current.playerPos.z = playerPos.z;
 
         _current.isDisoriented = !!statusEffects[StatusEffectType.DISORIENTED] && statusEffects[StatusEffectType.DISORIENTED].duration > 0;
-        _current.activePassives = state.activePassives || [];
-        _current.activeBuffs = state.activeBuffs || [];
-        _current.activeDebuffs = state.activeDebuffs || [];
+        
+        // --- ZERO-GC COPY: Avoid passing mutable state array references directly to React ---
+        _current.activePassives.length = 0;
+        for (let i = 0; i < (state.activePassives?.length || 0); i++) _current.activePassives.push(state.activePassives[i]);
+        
+        _current.activeBuffs.length = 0;
+        for (let i = 0; i < (state.activeBuffs?.length || 0); i++) _current.activeBuffs.push(state.activeBuffs[i]);
+        
+        _current.activeDebuffs.length = 0;
+        for (let i = 0; i < (state.activeDebuffs?.length || 0); i++) _current.activeDebuffs.push(state.activeDebuffs[i]);
         _current.hp = state.hp;
         _current.maxHp = state.maxHp;
         _current.stamina = state.stamina;

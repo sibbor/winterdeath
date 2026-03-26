@@ -201,6 +201,7 @@ export const en = {
         log_poi: "POI",
         unknown_threat: "Unknown Threat",
         drowning: "Drowning",
+        burning: "Burning",
         falling: "Fall Damage",
         unknown_sector: "Unknown Sector",
         health: "Health",

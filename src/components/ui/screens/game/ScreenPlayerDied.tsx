@@ -33,11 +33,14 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
     // Zero-GC: Memoize death details
     const { deathPhrase, deathDisplayText } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
-        const displayName = killedByEnemy && deathReason
+        
+        // If environmental, killerName contains the hazard (Fire, Drowning)
+        // If enemy, killerName is enemy type, deathReason is attack type
+        const displayName = killedByEnemy && deathReason && deathReason !== 'HIT'
             ? `${killerName.toUpperCase()} (${t(`attacks.${deathReason}.title`)})`
-            : deathReason.toUpperCase();
+            : killerName.toUpperCase();
 
-        return { deathPhrase: phrase, killerDisplayName: displayName };
+        return { deathPhrase: phrase, deathDisplayText: displayName };
     }, [killedByEnemy, killerName, deathReason]);
 
     return (

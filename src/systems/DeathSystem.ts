@@ -97,12 +97,12 @@ export class DeathSystem implements System {
             HudStore.update(hudData);
 
         } else if (this.deathPhaseRef.current === 'ANIMATION') {
-            if (now - state.deathStartTime > 800) {
+            if (now - state.deathStartTime > 2500) {
                 this.deathPhaseRef.current = 'MESSAGE';
                 this.setDeathPhase('MESSAGE');
             }
         } else if (this.deathPhaseRef.current === 'MESSAGE') {
-            if (now - state.deathStartTime > 1500) {
+            if (now - state.deathStartTime > 3000) {
                 this.deathPhaseRef.current = 'CONTINUE';
                 this.setDeathPhase('CONTINUE');
             }
@@ -184,8 +184,13 @@ export class DeathSystem implements System {
                     state.playerAshSpawned = true;
                     const ashRenderer = EnemyManager.getAshRenderer();
                     if (ashRenderer) {
-                        ashRenderer.addAsh(playerMesh.position, playerMesh.rotation, 1.0, 1.0, 0x333333, now, 1500);
+                        // [VINTERDÖD FIX] Use world position (pgPos) and group rotation for the ash pile
+                        ashRenderer.addAsh(pgPos, playerGroup.rotation, 1.0, 1.0, 0x333333, now, 1500);
                     }
+                }
+
+                if (now % 100 < 16) {
+                    this.fxCallbacks.spawnPart(pgPos.x, pgPos.y + 1.8, pgPos.z, 'enemy_effect_flame', 1);
                 }
 
                 // Shrink and Char
