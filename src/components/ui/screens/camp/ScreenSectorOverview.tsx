@@ -46,7 +46,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
         let i = 0;
         const speed = 5; // Faster typing
         const briefingTextStr = briefingData.briefing;
-        
+
         const interval = setInterval(() => {
             if (textRef.current) {
                 textRef.current.innerText = briefingTextStr.slice(0, i);
@@ -120,7 +120,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
             onClose={onClose}
             onConfirm={handleDeploy}
             confirmLabel={t('ui.deploy_sector')}
-            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))} 
+            canConfirm={!(!debugMode && (selectedSectorIndex > 0 && !deadBossIndices.includes(selectedSectorIndex - 1)))}
             showCancel={true}
             titleColorClass="text-red-600"
             tabs={SECTOR_THEMES.map((_, i) => i)}
@@ -135,7 +135,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                         {SECTOR_THEMES.map((map, i) => {
                             const isSel = selectedSectorIndex === i;
                             const locked = !debugMode && (i > 0 && !deadBossIndices.includes(i - 1));
-                            const pulseColor = '#ef4444'; 
+                            const pulseColor = '#ef4444';
 
                             return (
                                 <button
@@ -147,9 +147,9 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                         ${isSel && !locked ? 'text-white animate-tab-pulsate' : (locked ? '' : 'bg-black text-zinc-400')}
                                         ${!effectiveLandscape ? 'min-w-[120px] py-3 px-4' : 'mx-2'}
                                     `}
-                                    style={isSel && !locked ? { 
+                                    style={isSel && !locked ? {
                                         backgroundColor: darkenColor(pulseColor, 20),
-                                        '--pulse-color': pulseColor 
+                                        '--pulse-color': pulseColor
                                     } as any : {}}
                                 >
                                     <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-semibold uppercase tracking-wider`}>
@@ -182,7 +182,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                             </div>
                         </div>
 
-                        <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-start">
+                        <div className="grid grid-cols-2 md:flex-row gap-2 md:gap-4 items-start">
                             {/* Boss Status Check */}
                             <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
                                 {t('ui.boss_status')}: {t(bossStatusKey)}
@@ -191,10 +191,8 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                             {/* Family Status Check */}
                             {selectedSectorIndex < 4 && (
                                 <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
-                                    {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name || 'Unknown') : '???'}
-                                    <span className="text-[10px] md:text-xs ml-1 md:ml-2 opacity-100">
-                                        ({t(familyStatusKey)})
-                                    </span>
+                                    {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name) : '???'}
+
                                 </div>
                             )}
                         </div>

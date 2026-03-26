@@ -66,11 +66,12 @@ const App: React.FC = () => {
     const [isPointerLocked, setIsPointerLocked] = useState(false);
 
     const [hasInteracted, setHasInteracted] = useState(!isMobileDevice);
+
     const [isInitialBoot, setIsInitialBoot] = useState(true);
-    const [isLoadingSector, setIsLoadingSector] = useState(gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE);
-    const [isLoadingCamp, setIsLoadingCamp] = useState(gameState.screen === GameScreen.CAMP);
-    const [showLoadingOverlay, setShowLoadingOverlay] = useState(isLoadingSector || isLoadingCamp);
-    const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(gameState.screen === GameScreen.CAMP);
+    const [isLoadingSector, setIsLoadingSector] = useState(false);
+    const [isLoadingCamp, setIsLoadingCamp] = useState(false);
+    const [loadingTargetIsCamp, setLoadingTargetIsCamp] = useState(false);
+    const [showLoadingOverlay, setShowLoadingOverlay] = useState(true);
 
     const [activeOverlay, setActiveOverlay] = useState<OverlayType | null>(null);
     const [teleportInitialCoords, setTeleportInitialCoords] = useState<{ x: number, z: number } | null>(null);
@@ -161,10 +162,6 @@ const App: React.FC = () => {
             console.error("[App] triggerLoadingTransition task failed:", e);
         } finally {
             transitionTaskRef.current = false;
-
-            // Resume engine operations post-compilation
-            engine.isRenderingPaused = false;
-            engine.isSimulationPaused = false;
 
             tryDismissLoading();
         }
@@ -467,12 +464,15 @@ const App: React.FC = () => {
 
         triggerLoadingTransition('CAMP', async () => {
             AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
-            const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
-            // VINTERDÖD FIX: Värm upp shaders FÖRST...
+            const yieldToMain = () => new Promise<void>(resolve => {
+                requestAnimationFrame(() => setTimeout(resolve, 0));
+            });
+
             await AssetPreloader.warmupAsync('CAMP', yieldToMain);
 
-            // ...och mounta React-komponenterna SEN.
+            sceneReadyRef.current = true;
+
             setGameState(prev => {
                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
@@ -485,16 +485,20 @@ const App: React.FC = () => {
         const { gameState: currentGameState } = latestStateRef.current;
         const sectorIndex = currentGameState.currentSector;
 
-        const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+        const yieldToMain = () => new Promise<void>(resolve => {
+            requestAnimationFrame(() => setTimeout(resolve, 0));
+        });
 
         await triggerLoadingTransition('SECTOR', async () => {
-            // VINTERDÖD FIX: Värm upp shaders FÖRST...
             await AssetPreloader.warmupAsync('SECTOR', yieldToMain, sectorIndex);
 
-            // ...och mounta GameSession SEN.
+            // CLean-up
             setTeleportTarget(null);
             setActiveCollectible(null);
             setActiveOverlay(null);
+
+            sceneReadyRef.current = true;
+
             setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         });
     }, [triggerLoadingTransition]);
@@ -533,6 +537,11 @@ const App: React.FC = () => {
 
     const handleSceneReady = useCallback(() => {
         sceneReadyRef.current = true;
+
+        const engine = WinterEngine.getInstance();
+        engine.isRenderingPaused = false;
+        engine.isSimulationPaused = false;
+
         tryDismissLoading();
     }, [tryDismissLoading]);
 
@@ -600,7 +609,8 @@ const App: React.FC = () => {
 
             {(gameState.screen === GameScreen.SECTOR ||
                 gameState.screen === GameScreen.PROLOGUE ||
-                gameState.screen === GameScreen.RECAP) && (
+                gameState.screen === GameScreen.RECAP)
+                && !transitionTaskRef.current && (
                     <>
                         <GameSession
                             key={`gs-${gameState.currentSector}`}

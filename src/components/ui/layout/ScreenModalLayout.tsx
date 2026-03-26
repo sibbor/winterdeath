@@ -48,12 +48,12 @@ interface ScreenModalLayoutProps {
 // ============================================================================
 const OVERLAY_BASE = "absolute inset-0 z-[100] flex items-center justify-center p-0 md:p-4 overflow-hidden font-mono pointer-events-auto touch-auto transition-opacity duration-300";
 const MODAL_BOX_BASE = "bg-zinc-950 border shadow-[0_0_50px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col transition-all duration-300 origin-center";
-const HEADER_CONTAINER = "p-6 md:p-12 pb-0 relative z-20 shrink-0 pl-safe pr-safe";
-const HEADER_INNER = "mb-4 md:mb-8 border-b-2 border-zinc-800/80 pb-4 md:pb-6 relative flex justify-between items-center w-full";
-const CONTENT_AREA = "flex-1 overflow-y-auto custom-scrollbar bg-transparent touch-auto relative z-20 px-safe px-8 md:px-16 pb-12";
+const HEADER_CONTAINER = "p-6 md:p-12 pb-0 relative z-20 shrink-0 pl-3 pr-3";
+const HEADER_INNER = "mb-2 md:mb-8 border-b-2 border-zinc-800/80 pb-4 md:pb-6 relative flex justify-between items-center w-full";
+const CONTENT_AREA = "flex-1 overflow-y-auto custom-scrollbar bg-transparent touch-auto relative z-20 px-safe px-4 md:px-14 pb-6";
 const FOOTER_CONTAINER = "bg-zinc-900/30 p-4 md:p-6 border-t border-zinc-800 flex justify-center gap-4 shrink-0 relative z-20 px-safe";
 
-const BUTTON_STYLE = "px-4 md:px-8 py-2 md:py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg text-xs md:text-base hover:scale-105 active:scale-95 whitespace-nowrap flex-1 md:flex-none";
+const BUTTON_STYLE = "px-4 md:px-8 py-3 md:py-4 font-black uppercase tracking-wider transition-all duration-200 border-2 shadow-lg text-xs md:text-base hover:scale-105 active:scale-95 whitespace-nowrap flex-1 md:flex-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]";
 const BTN_CONFIRM_ACTIVE = "bg-zinc-100 border-zinc-100 text-black";
 const BTN_CONFIRM_DISABLED = "bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed";
 const BTN_CANCEL = "bg-zinc-900 border-zinc-700 text-zinc-400 hover:bg-zinc-800";
@@ -66,7 +66,7 @@ const SCANLINE_EFFECT = "absolute inset-0 pointer-events-none z-10 opacity-[0.03
 // Extracted to prevent inline object creation during render (Zero-GC)
 const BACKGROUND_PATTERN_STYLE: React.CSSProperties = {
     backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
-    backgroundSize: '40px 40px'
+    backgroundSize: '30px 30px'
 };
 
 const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
@@ -215,8 +215,8 @@ const ScreenModalLayout: React.FC<ScreenModalLayoutProps> = React.memo(({
                 <div className={`${HARDWARE_CORNER} bottom-0 right-0 border-b-4 border-r-4`} />
 
                 {/* Decorative Elements */}
-                <div className={`${DECOR_LINE} top-4`} />
-                <div className={`${DECOR_LINE} bottom-4`} />
+                <div className={`${DECOR_LINE} top-2`} />
+                <div className={`${DECOR_LINE} bottom-2`} />
                 <div className={SCANLINE_EFFECT} />
                 <div className="absolute inset-0 opacity-[0.05] pointer-events-none z-0" style={BACKGROUND_PATTERN_STYLE} />
 

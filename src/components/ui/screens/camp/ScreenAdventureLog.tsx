@@ -288,15 +288,12 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.health')}</div>
                                     <div className="text-2xl font-bold text-white font-mono">{data.hp}</div>
                                 </div>
-                                <div className="text-center border-l border-gray-800">
+                                <div className="text-center border-l border-gray-800 ">
                                     <div className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{t('ui.speed')}</div>
-                                    <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)} <span className="text-sm">{t('ui.speed_unit')}</span></div>
+                                    <div className="text-2xl font-bold text-white font-mono">{data.speed.toFixed(1)}</div>
                                 </div>
                                 <div></div>
                             </div>
-                            <p className="text-sm text-gray-300 italic leading-relaxed pl-4 py-1">
-                                "{getEnemyDescription(key)}"
-                            </p>
 
                             {data.attacks && data.attacks.length > 0 && (
                                 <div className="space-y-2">
@@ -335,6 +332,10 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                             );
                                         })}
                                     </div>
+
+                                    <p className="text-sm text-gray-300 italic leading-relaxed pl-2 py-3">
+                                        "{getEnemyDescription(key)}"
+                                    </p>
                                 </div>
                             )}
                         </div>
@@ -426,7 +427,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                                             </div>
                                                                         </div>
                                                                         {hasDesc && (
-                                                                            <p className="text-[10px] text-gray-500 italic mt-1 line-clamp-2 leading-tight">
+                                                                            <p className="text-sm text-gray-500 italic mt-1 line-clamp-2 leading-tight">
                                                                                 {t(`attacks.${attackKey}.description`)}
                                                                             </p>
                                                                         )}
