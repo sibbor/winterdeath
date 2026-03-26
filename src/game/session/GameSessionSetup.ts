@@ -13,11 +13,8 @@ import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM } from '../../content/constants';
-import { GEOMETRY, MATERIALS, ModelFactory, createProceduralTextures } from '../../utils/assets';
+import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { soundManager } from '../../utils/SoundManager';
-import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
-
-const monitor = PerformanceMonitor.getInstance();
 
 // Systems
 import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
@@ -29,7 +26,6 @@ import { PlayerInteractionSystem } from '../../systems/PlayerInteractionSystem';
 import { EnemySystem } from '../../entities/enemies/EnemySystem';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { FamilySystem } from '../../systems/FamilySystem';
-import { LightSystem } from '../../systems/LightSystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
 import { DeathSystem } from '../../systems/DeathSystem';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
@@ -41,22 +37,6 @@ const seededRandom = (seed: number) => {
     if (s <= 0) s += 2147483646;
     return () => { return (s = s * 16807 % 2147483647) / 2147483647; };
 };
-
-let _sharedGeosSet: Set<THREE.BufferGeometry> | null = null;
-let _sharedMatsSet: Set<THREE.Material> | null = null;
-
-function _initDisposalSets() {
-    if (_sharedGeosSet && _sharedMatsSet) return;
-    _sharedGeosSet = new Set();
-    _sharedMatsSet = new Set();
-
-    for (const key in GEOMETRY) {
-        _sharedGeosSet.add((GEOMETRY as any)[key]);
-    }
-    for (const key in MATERIALS) {
-        _sharedMatsSet.add((MATERIALS as any)[key]);
-    }
-}
 
 export interface SetupContext {
     engine: WinterEngine;
@@ -130,7 +110,6 @@ export class GameSessionSetup {
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
             };
 
-            const monitor = PerformanceMonitor.getInstance();
             camera.reset();
             camera.set('fov', env.fov);
             camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
@@ -496,49 +475,27 @@ export class GameSessionSetup {
     }
 
     static disposeSector(session: GameSessionLogic, state: RuntimeState) {
-        const scene = WinterEngine.getInstance().scene;
         EnemyManager.clear();
-
-        _initDisposalSets();
-
         AssetLoader.getInstance().clearCache();
 
-        scene.traverse((obj: any) => {
-            if (obj.userData?.isEngineStatic || obj.userData?.isSharedAsset || obj.userData?.isPersistent) return;
-            if (obj.name.indexOf('Weather') !== -1 || obj.name.indexOf('Water') !== -1) return;
-        });
-
-        for (let i = scene.children.length - 1; i >= 0; i--) {
-            const child = scene.children[i];
-            const isPersistent = child.userData?.isPersistent || child.name.indexOf('Weather') !== -1 || child.name.indexOf('Water') !== -1;
-
-            if (!isPersistent) {
-                scene.remove(child);
-            }
-        }
-
-        WinterEngine.getInstance().input.disable();
-
+        // 1. Turn off hardware/engine connections
+        const engine = WinterEngine.getInstance();
+        engine.input.disable();
         soundManager.setReverb(0);
         soundManager.stopAll();
 
-        ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
-
-        if (session) session.dispose();
-        EnemyManager.clear();
+        // 2. Clear specific rendering systems
+        ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
         FXSystem.reset();
 
+        // 3. Delegate all graphics and logic cleanup to the session!
+        if (session) {
+            session.dispose();
+        }
+
+        // Reset last flags for this setup step
         state.sessionCollectiblesDiscovered = [];
         state.bossSpawned = false;
     }
 
-    private static disposeMaterial(m: any) {
-        m.dispose();
-        if (m.map) m.map.dispose();
-        if (m.normalMap) m.normalMap.dispose();
-        if (m.roughnessMap) m.roughnessMap.dispose();
-        if (m.metalnessMap) m.metalnessMap.dispose();
-        if (m.emissiveMap) m.emissiveMap.dispose();
-        if (m.envMap) m.envMap.dispose();
-    }
 }

@@ -16,6 +16,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { aggregateStats } from '../../game/progression/ProgressionManager';
 import { SectorSystem } from '../../systems/SectorSystem';
 import { HudStore } from '../../store/HudStore';
+import { PlayerStatsSystem } from '../../systems/PlayerStatsSystem';
 
 export interface GameSessionHandle {
     requestPointerLock: () => void;
@@ -379,11 +380,22 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const handleFamilyMemberFound = (e: any) => {
             const { name, id } = e.detail || {};
             const fms = refs.activeFamilyMembers.current;
+            let newlyFound = false;
+
             for (let i = 0; i < fms.length; i++) {
                 const fm = fms[i];
                 if ((name && fm.name === name) || (id && fm.id === id)) {
                     fm.found = true;
                     fm.following = true;
+                    newlyFound = true;
+                }
+            }
+
+            // TODO: Validate this fixes it:
+            if (newlyFound && refs.gameSessionRef.current) {
+                const statsSystem = refs.gameSessionRef.current.getSystem('player_stats_system') as PlayerStatsSystem;
+                if (statsSystem) {
+                    statsSystem.updatePassives();
                 }
             }
         };
@@ -771,6 +783,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         return () => {
             refs.isMounted.current = false;
             ++refs.setupIdRef.current; // Invalidate any in-flight initSector/runSectorSetup
+
+            if (refs.engineRef.current) {
+                refs.engineRef.current.onUpdate = null;
+            }
 
             if (refs.engineRef.current && refs.gameSessionRef.current) {
                 GameSessionSetup.disposeSector(refs.gameSessionRef.current, refs.stateRef.current);

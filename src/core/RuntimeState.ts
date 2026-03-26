@@ -9,6 +9,7 @@ import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
+import { ParticleState } from '../systems/FXSystem';
 
 export interface RuntimeState {
     isDead: boolean;
@@ -44,8 +45,7 @@ export interface RuntimeState {
 
     // --- OBJECT POOLS ---
     enemies: Enemy[];
-    // Future optimization: Convert to a strict ParticleItem[] pool
-    particles: any[];
+    particles: ParticleState[];
     activeEffects: any[];
     projectiles: any[];
     fireZones: any[];

@@ -10,7 +10,7 @@ type FXMaterial = THREE.Material & {
     color?: THREE.Color;
 };
 
-interface ParticleState {
+export interface ParticleState {
     mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
     vel: THREE.Vector3;
     rotVel: THREE.Vector3;

@@ -13,7 +13,7 @@ import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { Obstacle } from '../../core/world/CollisionResolution';
-import { soundManager } from '../../utils/SoundManager';
+import { ParticleState } from '../../systems/FXSystem';
 
 export class GameSessionLogic {
     public inputDisabled: boolean = false;
@@ -68,7 +68,7 @@ export class GameSessionLogic {
 
             // --- POOLS ---
             enemies: [] as Enemy[],
-            particles: [] as any[],
+            particles: [] as ParticleState[],
             activeEffects: [] as any[],
             projectiles: [] as any[],
             fireZones: [] as any[],
@@ -181,7 +181,6 @@ export class GameSessionLogic {
     }
 
     constructor(engine: WinterEngine) {
-        console.log(`[GameSessionLogic] 1. constructor()`);
         this.engine = engine;
         this.engine.onUpdateContext = this;
     }
@@ -231,14 +230,13 @@ export class GameSessionLogic {
     }
 
     dispose() {
-        console.log(`[GameSessionLogic] 4. dispose()`);
+        // 1. Detach from the engine
         this.engine.onUpdateContext = null;
         this.engine.clearActiveScene();
         this.engine.clearSystems();
-        soundManager.stopAll();
 
+        // 2. Zero-GC: Explicit array clearing avoids V8 deoptimization from dynamic property iteration
         if (this.state) {
-            // Zero-GC: Explicit array clearing avoids V8 deoptimization from dynamic property iteration
             this.state.enemies.length = 0;
             this.state.particles.length = 0;
             this.state.activeEffects.length = 0;
@@ -260,18 +258,16 @@ export class GameSessionLogic {
             this.state.activePassives.length = 0;
             this.state.activeBuffs.length = 0;
             this.state.activeDebuffs.length = 0;
-
-            // Reset heavy dictionary objects
             this.state.incomingDamageBreakdown = {};
             this.state.outgoingDamageBreakdown = {};
             this.state.killsByType = {};
             this.state.statusEffects = {};
-
             this.state.activeVehicle = null;
             this.state.activeVehicleType = null;
             this.state.vehicleSpeed = 0;
             this.state.vehicleEngineState = 'OFF';
 
+            // System's collision grid
             if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
                 this.state.collisionGrid.clear();
             }
