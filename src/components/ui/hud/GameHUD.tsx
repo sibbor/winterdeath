@@ -483,11 +483,13 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const wep = WEAPONS[activeWeapon];
     const catColor = wep ? (WeaponCategoryColors as any)[wep.category] || 'white' : 'white';
 
+    const hudVisible = useHudStore(s => s.hudVisible);
+
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
             <DamageVignette />
 
-            <div className={`${HUD_WRAPPER} ${isDead || isDisoriented ? 'opacity-0 scale-110 blur-[5px]' : 'opacity-100 scale-100 blur-0'}`}>
+            <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
                 <div className={`absolute ${isMobileDevice ? 'top-4 left-4 right-4' : 'top-8 left-8 right-12'} flex justify-between items-start`}>
 
@@ -542,6 +544,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                 )}
 
                 <style>{`
+                    @keyframes hudFadeIn {
+                        0% { opacity: 0; transform: translateY(-20px); filter: blur(10px); }
+                        100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+                    }
                     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
                     @keyframes buffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(168,85,247,0.4); border-color: rgba(168,85,247,0.8); } 50% { box-shadow: 0 0 15px rgba(168,85,247,0.8); border-color: #a855f7; } }
                     @keyframes debuffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(239,68,68,0.4); border-color: rgba(239,68,68,0.8); } 50% { box-shadow: 0 0 15px rgba(239,68,68,0.8); border-color: #ef4444; } }

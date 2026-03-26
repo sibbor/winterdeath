@@ -77,7 +77,8 @@ export const loadGameState = (): GameState => {
                 graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) },
                 weather: loaded.weather || DEFAULT_STATE.weather,
                 environmentOverrides: loaded.environmentOverrides || {},
-                sectorState: loaded.sectorState || DEFAULT_STATE.sectorState
+                sectorState: loaded.sectorState || DEFAULT_STATE.sectorState,
+                sessionToken: loaded.sessionToken || 0
             };
             // Compatibility checks
             if (mergedState.stats.totalDistanceTraveled === undefined) mergedState.stats.totalDistanceTraveled = 0;

@@ -130,7 +130,14 @@ const App: React.FC = () => {
             setIsLoadingCamp(false);
             setIsLoadingSector(false);
             requestAnimationFrame(() => {
-                setTimeout(() => setShowLoadingOverlay(false), 500);
+                setTimeout(() => {
+                    setShowLoadingOverlay(false);
+                    // Sync HUD visibility with loading screen fade-out
+                    const current = HudStore.getState();
+                    if (latestStateRef.current.gameState.screen !== GameScreen.PROLOGUE) {
+                        HudStore.update({ ...current, hudVisible: true });
+                    }
+                }, 500);
             });
         }
     }, []);
@@ -395,7 +402,13 @@ const App: React.FC = () => {
     }, []);
 
     const handlePrologueCompleteAction = useCallback(() => {
-        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, currentSector: 0, stats: { ...prev.stats, prologueSeen: true } }));
+        setGameState(prev => ({
+            ...prev,
+            screen: GameScreen.SECTOR,
+            currentSector: 0,
+            stats: { ...prev.stats, prologueSeen: true }
+        }));
+        HudStore.update({ ...HudStore.getState(), hudVisible: true });
         soundManager.playUiConfirm();
     }, []);
 
@@ -455,7 +468,7 @@ const App: React.FC = () => {
     }, []);
 
     const handleSelectSector = useCallback((sectorIndex: number) => {
-        setGameState(prev => ({ ...prev, currentSector: sectorIndex }));
+        setGameState(prev => ({ ...prev, currentSector: sectorIndex, sessionToken: (prev.sessionToken || 0) + 1 }));
     }, []);
 
     const handleReturnToCamp = useCallback(() => {
@@ -494,20 +507,23 @@ const App: React.FC = () => {
             setActiveCollectible(null);
             setActiveOverlay(null);
 
-            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, sessionToken: (prev.sessionToken || 0) + 1 }));
+            HudStore.update({ ...HudStore.getState(), hudVisible: false });
         });
     }, [triggerLoadingTransition]);
 
     const handleRespawnSector = useCallback(() => {
         soundManager.playUiConfirm();
 
-        // Respawn is instant. Since the sector has already been played, all 
-        // shaders and models are already in memory. No AssetPreloader or loading screen is needed.
-        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        // Respawn is instant but we Increment sessionToken to force a clean component remount
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, sessionToken: (prev.sessionToken || 0) + 1 }));
         setSectorStats(null);
         setDeathDetails(null);
         setActiveCollectible(null);
         setActiveOverlay(null);
+
+        // Explicitly trigger HUD visibility for the instant transition
+        HudStore.update({ ...HudStore.getState(), hudVisible: true });
     }, []);
 
     const handleAbortSector = useCallback(() => {
@@ -560,315 +576,307 @@ const App: React.FC = () => {
 
     useGlobalInput(activeOverlay, { screen: gameState.screen }, globalInputActions);
 
-    const cursorHidden = isMobileDevice || isPointerLocked || (gameState.screen === GameScreen.SECTOR && !activeOverlay);
-
-    if (!hasInteracted) {
-        return (
-            <ScreenStartGame
-                onStart={() => setHasInteracted(true)}
-                isMobileDevice={isMobileDevice}
-            />
-        );
-    }
+    const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && !activeOverlay);
+    const showHUD = hasInteracted && (!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
 
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
-            {gameState.screen === GameScreen.CAMP && (
-                <Camp
-                    key="camp-main"
-                    stats={gameState.stats}
-                    currentLoadout={gameState.loadout}
-                    weaponLevels={gameState.weaponLevels}
-                    currentSector={gameState.currentSector}
-                    rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                    deadBossIndices={gameState.deadBossIndices}
-                    debugMode={gameState.debugMode}
-                    onSaveStats={handleSaveStats}
-                    onSaveLoadout={handleSaveLoadout}
-                    onSelectSector={handleSelectSector}
-                    onStartSector={handleStartSector}
-                    onToggleDebug={handleToggleDebug}
-                    onResetGame={handleResetGame}
-                    onSaveGraphics={handleSaveGraphics}
-                    initialGraphics={gameState.graphics}
-                    onCampLoaded={handleSceneReady}
-                    isMobileDevice={isMobileDevice}
-                    weather={gameState.weather}
-                    isRunning={!isInitialBoot}
-                    activeOverlay={activeOverlay}
-                    setActiveOverlay={setActiveOverlay}
-                    onPauseToggle={handlePauseToggle}
-                    onInteractionStateChange={onStationInteraction}
-                />
-            )}
-
-            {(gameState.screen === GameScreen.SECTOR ||
-                gameState.screen === GameScreen.PROLOGUE ||
-                gameState.screen === GameScreen.RECAP)
-                && !transitionTaskRef.current && (
-                    <>
-                        <GameSession
-                            key={`gs-${gameState.currentSector}`}
-                            ref={gameCanvasRef}
-                            isWarmup={isLoadingSector}
-                            stats={gameState.stats}
-                            loadout={gameState.loadout}
-                            weaponLevels={gameState.weaponLevels}
-                            currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
-                            debugMode={gameState.debugMode}
-                            isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
-                            isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE}
-                            disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
-                            onDie={handleDie}
-                            onSectorEnded={handleSectorEnded}
-                            onPauseToggle={handleTogglePauseAction}
-                            onOpenMap={handleOpenMap}
-                            triggerEndSector={false}
-                            familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
-                            rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                            bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
-                            onSectorLoaded={handleSceneReady}
-                            startAtCheckpoint={false}
-                            onCheckpointReached={handleCheckpointReached}
-                            teleportTarget={teleportTarget}
-                            onCollectibleDiscovered={handleCollectibleDiscoveredAction}
-                            onClueDiscovered={handleClueDiscoveredAction}
-                            onPOIdiscovered={handlePOIdiscoveredAction}
-                            isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
-                            onCollectibleClose={handleCollectibleClose}
-                            onDialogueStateChange={handleDialogueStateChangeAction}
-                            onDeathStateChange={handleDeathStateChangeAction}
-                            onBossIntroStateChange={handleBossIntroStateChangeAction}
-                            onInteractionStateChange={onStationInteraction}
-                            onUpdateLoadout={handleUpdateLoadoutAction}
-                            onEnvironmentOverrideChange={handleEnvironmentOverrideChangeAction}
-                            environmentOverrides={gameState.environmentOverrides}
-                            initialGraphics={gameState.graphics}
-                            isMobileDevice={isMobileDevice}
-                            weather={gameState.weather}
-                        />
-
-                        {(!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && (
-                            <GameHUD
-                                loadout={gameState.loadout}
-                                weaponLevels={gameState.weaponLevels}
-                                debugMode={gameState.debugMode}
-                                isBossIntro={activeOverlay === 'INTRO'}
-                                isMobileDevice={isMobileDevice}
-                                onTogglePause={handleTogglePauseAction}
-                                onToggleMap={handleToggleMapAction}
-                                onSelectWeapon={handleSelectWeaponAction}
-                                onRotateCamera={handleRotateCameraAction}
-                            />
-                        )}
-                    </>
-                )}
-
-            {/* UNIVERSAL OVERLAYS */}
-            {activeOverlay === 'PAUSE' && (
-                <ScreenPause
-                    onResume={handleResumeAction}
-                    onAbort={handleAbortSector}
-                    onOpenMap={handleToggleMapAction}
-                    onOpenSettings={handleOpenSettingsAction}
-                    onOpenAdventureLog={handleOpenAdventureLogAction}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeOverlay === 'SETTINGS' && (
-                <ScreenSettings
-                    onClose={handleCloseAction}
-                    graphics={gameState.graphics}
-                    onUpdateGraphics={handleSaveGraphics}
-                    showFps={showFPS}
-                    onToggleShowFps={handleToggleShowFps}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeOverlay === 'ADVENTURE_LOG' && (
-                <ScreenAdventureLog
-                    stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
-                    onClose={handleCloseAction}
-                    onMarkCollectiblesViewed={handleMarkCollectiblesViewedAction}
-                    isMobileDevice={isMobileDevice}
-                    debugMode={gameState.debugMode}
-                />
-            )}
-
-            {activeOverlay === 'COLLECTIBLE' && activeCollectible && (
-                <ScreenCollectibleDiscovered
-                    collectibleId={activeCollectible}
-                    onClose={handleCollectibleClose}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeOverlay === 'STATION_STATISTICS' && (
-                <ScreenAdventureLog
-                    stats={gameState.stats}
-                    onClose={handleOverlayClose}
-                    isMobileDevice={isMobileDevice}
-                    debugMode={gameState.debugMode}
-                />
-            )}
-
-            {activeOverlay === 'DEATH' && (
-                <ScreenPlayerDied
-                    onContinue={handleContinueFromDeath}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeOverlay === 'STATION_ARMORY' && (
-                gameState.screen === GameScreen.CAMP ? (
-                    <ScreenArmory
-                        stats={gameState.stats}
-                        currentLoadout={gameState.loadout}
-                        weaponLevels={gameState.weaponLevels}
-                        onClose={handleOverlayClose}
-                        onSave={handleSaveArmoryAction}
-                        isMobileDevice={isMobileDevice}
-                    />
-                ) : (
-                    <ScreenPlaygroundArmoryStation
-                        currentLoadout={gameState.loadout}
-                        weaponLevels={gameState.weaponLevels}
-                        isMobileDevice={isMobileDevice}
-                        sectorState={gameState.sectorState || EMPTY_SECTOR_STATE}
-                        onClose={handleCloseAction}
-                        onSave={handleSaveArmoryPlaygroundAction}
-                        stats={gameState.stats}
-                    />
-                )
-            )}
-
-            {activeOverlay === 'STATION_SKILLS' && (
-                gameState.screen === GameScreen.CAMP ? (
-                    <ScreenPlayerSkills
-                        stats={gameState.stats}
-                        onSave={handleSaveStats}
-                        onClose={handleOverlayClose}
-                        isMobileDevice={isMobileDevice}
-                    />
-                ) : (
-                    <ScreenPlaygroundSkillStation
-                        stats={gameState.stats}
-                        isMobileDevice={isMobileDevice}
-                        sectorState={gameState.sectorState || EMPTY_SECTOR_STATE}
-                        onClose={handleCloseAction}
-                        onSave={handleSaveSkillsPlaygroundAction}
-                    />
-                )
-            )}
-
-            {activeOverlay === 'STATION_ENVIRONMENT' && (
-                <ScreenPlaygroundEnvironmentStation
-                    onClose={handleCloseAction}
-                    isMobileDevice={isMobileDevice}
-                    currentWeather={gameState.weather}
-                    onWeatherChange={handleWeatherChangeAction}
-                    currentOverride={gameState.environmentOverrides?.[gameState.currentSector]}
-                    onOverrideChange={handleEnvironmentOverrideChangeAction}
-                    transparent={true}
-                />
-            )}
-
-            {activeOverlay === 'STATION_SPAWNER' && (
-                <ScreenPlaygroundEnemyStation
-                    onClose={handleCloseAction}
-                    isMobileDevice={isMobileDevice}
-                    onSpawnEnemies={handleSpawnEnemiesAction}
-                />
-            )}
-
-            {activeOverlay === 'MAP' && (
-                <ScreenMap
-                    onClose={handleCloseAction}
-                    onSelectCoords={handleMapSelectCoordsAction}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeOverlay === 'TELEPORT' && (
-                <ScreenTeleport
-                    initialCoords={teleportInitialCoords}
-                    onJump={handleJumpAction}
-                    onCancel={handleTeleportCancelAction}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {gameState.screen === GameScreen.BOSS_KILLED && (
-                <ScreenBossKilled
-                    sectorIndex={gameState.currentSector}
-                    stats={sectorStats || undefined}
-                    onProceed={handleBossKilledProceed}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {gameState.screen === GameScreen.RECAP && sectorStats && (
-                <ScreenSectorReport
-                    stats={sectorStats}
-                    deathDetails={deathDetails}
-                    currentSector={gameState.currentSector}
-                    onReturnCamp={handleReturnToCamp}
-                    onRetry={handleRespawnSector}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {gameState.screen === GameScreen.PROLOGUE && !isLoadingSector && (
-                <Prologue onComplete={handlePrologueCompleteAction} isMobileDevice={isMobileDevice} />
-            )}
-
-            <CustomCursor hidden={cursorHidden} />
-
-            {activeOverlay === 'STATION_SECTORS' && (
-                <ScreenSectorOverview
-                    currentSector={gameState.currentSector}
-                    rescuedFamilyIndices={gameState.rescuedFamilyIndices}
-                    deadBossIndices={gameState.deadBossIndices}
-                    debugMode={gameState.debugMode}
-                    stats={gameState.stats}
-                    onClose={handleOverlayClose}
-                    onSelectSector={handleSelectSector}
-                    onStartSector={handleStartSector}
-                    isMobileDevice={isMobileDevice}
-                />
-            )}
-
-            {activeOverlay === 'RESET_CONFIRM' && (
-                <ScreenResetConfirm
-                    onConfirm={handleResetGame}
-                    onCancel={handleCancelReset}
-                />
-            )}
-
-            {(showFPS || gameState.debugMode) && (
-                <DebugDisplay
-                    debugMode={gameState.debugMode}
-                />
-            )}
-
-            <ScreenLoading
-                isDone={!showLoadingOverlay}
-                sectorIndex={gameState.screen === GameScreen.PROLOGUE ? 0 : (gameState.currentSector || 0)}
-                isPrologue={gameState.screen === GameScreen.PROLOGUE}
-                isCamp={loadingTargetIsCamp}
-                isInitialBoot={isInitialBoot}
-                isMobileDevice={isMobileDevice}
-            />
-
-            {!hasInteracted && (
+            {!hasInteracted ? (
                 <ScreenStartGame
                     onStart={() => setHasInteracted(true)}
                     isMobileDevice={isMobileDevice}
                 />
+            ) : (
+                <>
+                    {gameState.screen === GameScreen.CAMP && (
+                        <Camp
+                            key="camp-main"
+                            stats={gameState.stats}
+                            currentLoadout={gameState.loadout}
+                            weaponLevels={gameState.weaponLevels}
+                            currentSector={gameState.currentSector}
+                            rescuedFamilyIndices={gameState.rescuedFamilyIndices}
+                            deadBossIndices={gameState.deadBossIndices}
+                            debugMode={gameState.debugMode}
+                            onSaveStats={handleSaveStats}
+                            onSaveLoadout={handleSaveLoadout}
+                            onSelectSector={handleSelectSector}
+                            onStartSector={handleStartSector}
+                            onToggleDebug={handleToggleDebug}
+                            onResetGame={handleResetGame}
+                            onSaveGraphics={handleSaveGraphics}
+                            initialGraphics={gameState.graphics}
+                            onCampLoaded={handleSceneReady}
+                            isMobileDevice={isMobileDevice}
+                            weather={gameState.weather}
+                            isRunning={!isInitialBoot}
+                            activeOverlay={activeOverlay}
+                            setActiveOverlay={setActiveOverlay}
+                            onPauseToggle={handlePauseToggle}
+                            onInteractionStateChange={onStationInteraction}
+                        />
+                    )}
+
+                    {(gameState.screen === GameScreen.SECTOR ||
+                        gameState.screen === GameScreen.PROLOGUE ||
+                        gameState.screen === GameScreen.RECAP)
+                        && !transitionTaskRef.current && (
+                            <>
+                                <GameSession
+                                    ref={gameCanvasRef}
+                                    isWarmup={isLoadingSector}
+                                    stats={gameState.stats}
+                                    loadout={gameState.loadout}
+                                    weaponLevels={gameState.weaponLevels}
+                                    currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
+                                    debugMode={gameState.debugMode}
+                                    isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
+                                    isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP}
+                                    disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
+                                    onDie={handleDie}
+                                    onSectorEnded={handleSectorEnded}
+                                    onPauseToggle={handleTogglePauseAction}
+                                    onOpenMap={handleOpenMap}
+                                    triggerEndSector={false}
+                                    familyAlreadyRescued={gameState.rescuedFamilyIndices.includes(gameState.currentSector)}
+                                    rescuedFamilyIndices={gameState.rescuedFamilyIndices}
+                                    bossPermanentlyDefeated={gameState.deadBossIndices.includes(gameState.currentSector)}
+                                    onSectorLoaded={handleSceneReady}
+                                    startAtCheckpoint={false}
+                                    onCheckpointReached={handleCheckpointReached}
+                                    teleportTarget={teleportTarget}
+                                    onCollectibleDiscovered={handleCollectibleDiscoveredAction}
+                                    onClueDiscovered={handleClueDiscoveredAction}
+                                    onPOIdiscovered={handlePOIdiscoveredAction}
+                                    isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
+                                    onCollectibleClose={handleCollectibleClose}
+                                    onDialogueStateChange={handleDialogueStateChangeAction}
+                                    onDeathStateChange={handleDeathStateChangeAction}
+                                    onBossIntroStateChange={handleBossIntroStateChangeAction}
+                                    onInteractionStateChange={onStationInteraction}
+                                    onUpdateLoadout={handleUpdateLoadoutAction}
+                                    onEnvironmentOverrideChange={handleEnvironmentOverrideChangeAction}
+                                    environmentOverrides={gameState.environmentOverrides}
+                                    initialGraphics={gameState.graphics}
+                                    isMobileDevice={isMobileDevice}
+                                    weather={gameState.weather}
+                                />
+
+                                {showHUD && (
+                                    <GameHUD
+                                        loadout={gameState.loadout}
+                                        weaponLevels={gameState.weaponLevels}
+                                        debugMode={gameState.debugMode}
+                                        isBossIntro={activeOverlay === 'INTRO'}
+                                        isMobileDevice={isMobileDevice}
+                                        onTogglePause={handleTogglePauseAction}
+                                        onToggleMap={handleToggleMapAction}
+                                        onSelectWeapon={handleSelectWeaponAction}
+                                        onRotateCamera={handleRotateCameraAction}
+                                    />
+                                )}
+                            </>
+                        )}
+
+                    {/* UNIVERSAL OVERLAYS */}
+                    {activeOverlay === 'PAUSE' && (
+                        <ScreenPause
+                            onResume={handleResumeAction}
+                            onAbort={handleAbortSector}
+                            onOpenMap={handleToggleMapAction}
+                            onOpenSettings={handleOpenSettingsAction}
+                            onOpenAdventureLog={handleOpenAdventureLogAction}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {activeOverlay === 'SETTINGS' && (
+                        <ScreenSettings
+                            onClose={handleCloseAction}
+                            graphics={gameState.graphics}
+                            onUpdateGraphics={handleSaveGraphics}
+                            showFps={showFPS}
+                            onToggleShowFps={handleToggleShowFps}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {activeOverlay === 'ADVENTURE_LOG' && (
+                        <ScreenAdventureLog
+                            stats={gameState.screen === GameScreen.SECTOR ? (gameCanvasRef.current?.getMergedSessionStats() || gameState.stats) : gameState.stats}
+                            onClose={handleCloseAction}
+                            onMarkCollectiblesViewed={handleMarkCollectiblesViewedAction}
+                            isMobileDevice={isMobileDevice}
+                            debugMode={gameState.debugMode}
+                        />
+                    )}
+
+                    {activeOverlay === 'COLLECTIBLE' && activeCollectible && (
+                        <ScreenCollectibleDiscovered
+                            collectibleId={activeCollectible}
+                            onClose={handleCollectibleClose}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {activeOverlay === 'STATION_STATISTICS' && (
+                        <ScreenAdventureLog
+                            stats={gameState.stats}
+                            onClose={handleOverlayClose}
+                            isMobileDevice={isMobileDevice}
+                            debugMode={gameState.debugMode}
+                        />
+                    )}
+
+                    {activeOverlay === 'DEATH' && (
+                        <ScreenPlayerDied
+                            onContinue={handleContinueFromDeath}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {activeOverlay === 'STATION_ARMORY' && (
+                        gameState.screen === GameScreen.CAMP ? (
+                            <ScreenArmory
+                                stats={gameState.stats}
+                                currentLoadout={gameState.loadout}
+                                weaponLevels={gameState.weaponLevels}
+                                onClose={handleOverlayClose}
+                                onSave={handleSaveArmoryAction}
+                                isMobileDevice={isMobileDevice}
+                            />
+                        ) : (
+                            <ScreenPlaygroundArmoryStation
+                                currentLoadout={gameState.loadout}
+                                weaponLevels={gameState.weaponLevels}
+                                isMobileDevice={isMobileDevice}
+                                sectorState={gameState.sectorState || EMPTY_SECTOR_STATE}
+                                onClose={handleCloseAction}
+                                onSave={handleSaveArmoryPlaygroundAction}
+                                stats={gameState.stats}
+                            />
+                        )
+                    )}
+
+                    {activeOverlay === 'STATION_SKILLS' && (
+                        gameState.screen === GameScreen.CAMP ? (
+                            <ScreenPlayerSkills
+                                stats={gameState.stats}
+                                onSave={handleSaveStats}
+                                onClose={handleOverlayClose}
+                                isMobileDevice={isMobileDevice}
+                            />
+                        ) : (
+                            <ScreenPlaygroundSkillStation
+                                stats={gameState.stats}
+                                isMobileDevice={isMobileDevice}
+                                sectorState={gameState.sectorState || EMPTY_SECTOR_STATE}
+                                onClose={handleCloseAction}
+                                onSave={handleSaveSkillsPlaygroundAction}
+                            />
+                        )
+                    )}
+
+                    {activeOverlay === 'STATION_ENVIRONMENT' && (
+                        <ScreenPlaygroundEnvironmentStation
+                            onClose={handleCloseAction}
+                            isMobileDevice={isMobileDevice}
+                            currentWeather={gameState.weather}
+                            onWeatherChange={handleWeatherChangeAction}
+                            currentOverride={gameState.environmentOverrides?.[gameState.currentSector]}
+                            onOverrideChange={handleEnvironmentOverrideChangeAction}
+                            transparent={true}
+                        />
+                    )}
+
+                    {activeOverlay === 'STATION_SPAWNER' && (
+                        <ScreenPlaygroundEnemyStation
+                            onClose={handleCloseAction}
+                            isMobileDevice={isMobileDevice}
+                            onSpawnEnemies={handleSpawnEnemiesAction}
+                        />
+                    )}
+
+                    {activeOverlay === 'MAP' && (
+                        <ScreenMap
+                            onClose={handleCloseAction}
+                            onSelectCoords={handleMapSelectCoordsAction}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {activeOverlay === 'TELEPORT' && (
+                        <ScreenTeleport
+                            initialCoords={teleportInitialCoords}
+                            onJump={handleJumpAction}
+                            onCancel={handleTeleportCancelAction}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {gameState.screen === GameScreen.BOSS_KILLED && (
+                        <ScreenBossKilled
+                            sectorIndex={gameState.currentSector}
+                            stats={sectorStats || undefined}
+                            onProceed={handleBossKilledProceed}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {gameState.screen === GameScreen.RECAP && sectorStats && (
+                        <ScreenSectorReport
+                            stats={sectorStats}
+                            deathDetails={deathDetails}
+                            currentSector={gameState.currentSector}
+                            onReturnCamp={handleReturnToCamp}
+                            onRetry={handleRespawnSector}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {gameState.screen === GameScreen.PROLOGUE && !isLoadingSector && (
+                        <Prologue onComplete={handlePrologueCompleteAction} isMobileDevice={isMobileDevice} />
+                    )}
+
+                    {activeOverlay === 'STATION_SECTORS' && (
+                        <ScreenSectorOverview
+                            currentSector={gameState.currentSector}
+                            rescuedFamilyIndices={gameState.rescuedFamilyIndices}
+                            deadBossIndices={gameState.deadBossIndices}
+                            debugMode={gameState.debugMode}
+                            stats={gameState.stats}
+                            onClose={handleOverlayClose}
+                            onSelectSector={handleSelectSector}
+                            onStartSector={handleStartSector}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
+                    {activeOverlay === 'RESET_CONFIRM' && (
+                        <ScreenResetConfirm
+                            onConfirm={handleResetGame}
+                            onCancel={handleCancelReset}
+                        />
+                    )}
+
+                    {(showFPS || gameState.debugMode) && (
+                        <DebugDisplay
+                            debugMode={gameState.debugMode}
+                        />
+                    )}
+
+                    <ScreenLoading
+                        isDone={!showLoadingOverlay}
+                        sectorIndex={gameState.screen === GameScreen.PROLOGUE ? 0 : (gameState.currentSector || 0)}
+                        isPrologue={gameState.screen === GameScreen.PROLOGUE}
+                        isCamp={loadingTargetIsCamp}
+                        isInitialBoot={isInitialBoot}
+                        isMobileDevice={isMobileDevice}
+                    />
+                </>
             )}
 
+            <CustomCursor hidden={cursorHidden} />
         </div>
     );
 };

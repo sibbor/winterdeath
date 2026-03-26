@@ -66,7 +66,7 @@ const Prologue: React.FC<PrologueProps> = ({ onComplete, isMobileDevice }) => {
     const currentStep = prologueData[currentPage];
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black p-4 sm:p-8 text-white font-sans select-none overflow-hidden">
+        <div className="fixed inset-0 z-[150] flex flex-col items-center justify-center bg-black p-4 sm:p-8 text-white font-sans select-none overflow-hidden">
             {/* Background Aesthetic (Simple Snowy Overlay Placeholder) */}
             <div className="absolute inset-0 pointer-events-none opacity-20">
                 <div className="w-full h-full bg-[radial-gradient(circle_at_center,_transparent_0%,_black_90%)]" />

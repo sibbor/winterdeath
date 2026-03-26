@@ -1,6 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 import { InputState } from '../../../core/engine/InputManager';
 import { useOrientation } from '../../../hooks/useOrientation';
+import { useHudStore } from '../../../hooks/useHudStore';
 
 interface TouchControllerProps {
     inputState: InputState;
@@ -13,6 +14,7 @@ const MAX_DIST = 50;
 
 const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
+    const hudVisible = useHudStore(s => s.hudVisible);
 
     // --- REFS FÖR DIREKT DOM-MANIPULATION (Zero-GC) ---
     const leftStickContainerRef = useRef<HTMLDivElement>(null);
@@ -159,7 +161,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
     }, [inputState]);
 
     return (
-        <div className="absolute inset-0 pointer-events-none z-[40] overflow-hidden select-none touch-none">
+        <div className={`absolute inset-0 pointer-events-none z-[40] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
             {/* Full-screen joystick capture layer — sits BELOW GameHUD (z-50).
                 pointer-events-auto only for touch, so joystick gestures anywhere work.
                 GameHUD renders at z-[60]+ as a sibling in App.tsx and sits above this. */}

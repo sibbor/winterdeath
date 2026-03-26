@@ -136,4 +136,5 @@ export interface HudState {
   currentLine: DialogueLineData | null;
   cinematicActive: boolean;
   interactionPrompt: InteractionPromptData | null;
+  hudVisible: boolean;
 }

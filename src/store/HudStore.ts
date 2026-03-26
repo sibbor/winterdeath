@@ -55,6 +55,7 @@ const INITIAL_HUD_STATE: HudState = {
     currentLine: null,
     cinematicActive: false,
     interactionPrompt: null,
+    hudVisible: false,
 
     // Nested structures pre-allocated to lock Hidden Class "Shapes"
     sectorStats: null,

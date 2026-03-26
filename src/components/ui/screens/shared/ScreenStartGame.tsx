@@ -33,7 +33,7 @@ const ScreenStartGame: React.FC<ScreenStartUpProps> = ({ onStart, isMobileDevice
     };
 
     return (
-        <div className={`fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-black text-white select-none transition-opacity duration-500 ${isStarting ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`fixed inset-0 z-[2000] flex flex-col items-center justify-center bg-black text-white select-none cursor-none transition-opacity duration-500 ${isStarting ? 'opacity-0' : 'opacity-100'}`}>
             <div className="absolute inset-0 opacity-30">
                 <div className="w-full h-full bg-[radial-gradient(circle_at_center,_rgba(50,50,50,0.4)_0%,_black_80%)]" />
             </div>

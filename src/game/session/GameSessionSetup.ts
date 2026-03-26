@@ -95,8 +95,6 @@ export class GameSessionSetup {
             return;
         }
 
-        console.log('[GameSessionSetup] A. Starting setup for sector ' + props.currentSector);
-        // VINTERDÖD FIX: App.tsx hanterar UI och pauser! Vi bygger bara scenen här.
         refs.isBuildingSectorRef.current = true;
         state.startTime = performance.now();
         let sectorLoaded = false;
@@ -106,7 +104,7 @@ export class GameSessionSetup {
             const rng = seededRandom(props.currentSector + 4242);
             const env = currentSector.environment;
 
-            // VINTERDÖD FIX: The Poisoned Yielder
+            // The Poisoned Yielder
             const yielder = async () => {
                 if (!isMounted.current || setupIdRef.current !== currentSetupId) {
                     throw new Error("ABORT_SETUP");
@@ -212,9 +210,7 @@ export class GameSessionSetup {
 
             PathGenerator.resetPathLayer();
 
-            console.log('[GameSessionSetup] B. Building sector geometry...');
             await SectorGenerator.build(sectorCtx, currentSector);
-            console.log('[GameSessionSetup] C. Sector geometry done.');
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
@@ -442,9 +438,8 @@ export class GameSessionSetup {
 
             FXSystem.preload(scene);
 
-            // VINTERDÖD FIX: Handshake! Säg till App.tsx att släppa laddningsskärmen!
+            // Handshake: Tell App.tsx to release the loading screen
             if (isMounted.current && setupIdRef.current === currentSetupId) {
-                console.log('[GameSessionSetup] Z. Firing onSectorLoaded (success path).');
                 sectorLoaded = true;
                 if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
             }
@@ -463,7 +458,6 @@ export class GameSessionSetup {
             // FALLBACK: If setup crashed before firing onSectorLoaded, do it now.
             // This ensures the loading screen always dismisses even on iOS errors.
             if (!sectorLoaded && isMounted.current && setupIdRef.current === currentSetupId) {
-                console.warn('[GameSessionSetup] Z. Firing onSectorLoaded (fallback after error).');
                 if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
             }
         }

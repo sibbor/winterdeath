@@ -61,7 +61,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
 
     return (
         <div
-            className={`fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-black text-white font-sans overflow-hidden select-none transition-opacity duration-500 ease-in-out ${finalOpacity} ${isDone ? 'pointer-events-none' : ''}`}
+            className={`fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-black text-white font-sans overflow-hidden select-none transition-all duration-1000 ease-in-out ${isActuallyDone ? 'opacity-0 scale-105' : 'opacity-100 scale-100'} ${isDone ? 'pointer-events-none' : ''}`}
         >
             {/* Background Aesthetic */}
             <div className="absolute inset-0 opacity-20">

@@ -146,7 +146,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                                             const def = getCollectibleById(id);
                                             return (
                                                 <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
-                                                    {def ? t(def.nameKey) : id}
+                                                    {def ? t(`collectibles.${def.sector - 1}.${def.index}.title`) : id}
                                                 </li>
                                             );
                                         })}
