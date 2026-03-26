@@ -39,6 +39,7 @@ export interface MapItem {
 export interface StatusEffectData {
   type: string;
   duration: number;
+  maxDuration: number;
   intensity: number;
 }
 

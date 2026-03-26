@@ -185,7 +185,7 @@ export class PlayerMovementSystem implements System {
                 if (now - (state.lastDrownTick || 0) > 1000) {
                     state.lastDrownTick = now;
                     if (state.callbacks && state.callbacks.onPlayerHit) {
-                        state.callbacks.onPlayerHit(15, null, DamageType.DROWNING, true);
+                        state.callbacks.onPlayerHit(15, null, DamageType.DROWNING, true, StatusEffectType.DROWNING, 2000, 15, DamageType.DROWNING);
                     }
                 }
             }

@@ -52,6 +52,7 @@ const getStatusIcon = (type: StatusEffectType | string) => {
         case StatusEffectType.ELECTRIFIED: return '⚡';
         case StatusEffectType.SLOWED: return '🐌';
         case StatusEffectType.DISORIENTED: return '😵';
+        case StatusEffectType.DROWNING: return '🫧';
         default: return '❓';
     }
 };
@@ -77,32 +78,32 @@ const isFamilyMember = (name: string) => {
 // SUB-COMPONENTS (Refactored to accept Refs)
 // ============================================================================
 
-const BuffIcon = React.memo(({ type, isMobileDevice, isLandscapeMode, handleActionEnter }: any) => {
+const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandscapeMode, handleActionEnter }: any) => {
     const barRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Individual buffs still use store subscription for simplicity as they are less frequent than vitals
         const unsubscribe = HudStore.subscribe((state) => {
             if (!barRef.current) return;
             let progress = 0;
-            for (let i = 0; i < state.statusEffects.length; i++) {
-                if (state.statusEffects[i].type === type) {
-                    progress = Math.min(1.0, state.statusEffects[i].duration / 5000);
-                    break;
-                }
+            const effect = state.statusEffects.find(e => e.type === type);
+            if (effect) {
+                progress = Math.min(1.0, effect.duration / (effect.maxDuration || 5000));
             }
             barRef.current.style.transform = `scaleX(${progress})`;
         });
         return unsubscribe;
     }, [type]);
 
+    const pulseClass = isDebuff ? 'hud-debuff-pulse border-red-500' : 'hud-buff-pulse border-purple-500';
+    const fillClass = isDebuff ? 'bg-red-500' : 'bg-purple-500';
+
     return (
-        <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm hud-buff-pulse relative cursor-help border-purple-500`}
+        <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
             data-tooltip={t(`attacks.${type}.title`)}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
             <span>{getStatusIcon(type)}</span>
             <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-black/40">
-                <div ref={barRef} className="w-full h-full bg-purple-500 origin-left will-change-transform" style={{ transform: 'scaleX(1)' }} />
+                <div ref={barRef} className={`w-full h-full ${fillClass} origin-left will-change-transform`} style={{ transform: 'scaleX(1)' }} />
             </div>
         </div>
     );
@@ -168,6 +169,7 @@ const VitalsPanel = React.memo(({ isMobileDevice, isBossIntro, hpBarRef, hpTextR
 const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handleActionEnter, handleActionLeave }: any) => {
     const activePassives = useHudStore(s => s.activePassives);
     const activeBuffs = useHudStore(s => s.activeBuffs);
+    const activeDebuffs = useHudStore(s => s.activeDebuffs);
 
     return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
@@ -182,9 +184,20 @@ const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handle
                 </div>
             ))}
             {activeBuffs.map((type, i) => (
-                <BuffIcon
+                <StatusEffectIcon
                     key={`b-${i}`}
                     type={type}
+                    isDebuff={false}
+                    isMobileDevice={isMobileDevice}
+                    isLandscapeMode={isLandscapeMode}
+                    handleActionEnter={handleActionEnter}
+                />
+            ))}
+            {activeDebuffs.map((type, i) => (
+                <StatusEffectIcon
+                    key={`d-${i}`}
+                    type={type}
+                    isDebuff={true}
                     isMobileDevice={isMobileDevice}
                     isLandscapeMode={isLandscapeMode}
                     handleActionEnter={handleActionEnter}

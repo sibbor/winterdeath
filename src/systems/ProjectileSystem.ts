@@ -545,7 +545,7 @@ export const ProjectileSystem = {
                     // Player Burn Interaction
                     if (ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
                         if (ctx.onPlayerHit) {
-                            ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, 'Fire');
+                            ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, DamageType.BURN);
                         }
                     }
                 }

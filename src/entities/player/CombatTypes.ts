@@ -59,7 +59,8 @@ export interface AttackDefinition {
 }
 
 export interface ActiveStatusEffect {
-    duration: number;   // Remaining time in ms
+    duration: number;     // Remaining time in ms
+    maxDuration: number;  // Original time in ms
     intensity: number;  // Multiplier or value
     lastTick: number;   // Timestamp of last DoT tick
     sourceType?: string; // e.g. "WALKER"

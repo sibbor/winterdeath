@@ -11,7 +11,7 @@ import { StatusEffectType } from '../entities/player/CombatTypes';
 // to detect a change and re-render, without ever allocating new objects.
 // ============================================================================
 
-const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: '', duration: 0, intensity: 0 }));
+const createStatusPool = () => Array.from({ length: 16 }, () => ({ type: '', duration: 0, maxDuration: 0, intensity: 0 }));
 
 const createDebugInfo = () => ({
     aim: { x: 0, y: 0 },
@@ -248,6 +248,7 @@ export const HudSystem = {
                 if (poolItem) {
                     poolItem.type = key;
                     poolItem.duration = effect.duration;
+                    poolItem.maxDuration = effect.maxDuration || effect.duration; // Fallback to current if max not set
                     poolItem.intensity = effect.intensity;
                     _current.statusEffects.push(poolItem);
                     effectIndex++;

@@ -3,7 +3,7 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { soundManager } from '../utils/SoundManager';
 import { FXSystem } from './FXSystem';
-import { StatusEffectType, PlayerDeathState, DamageType } from '../entities/player/CombatTypes';
+import { StatusEffectType, PlayerDeathState, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -174,7 +174,7 @@ export class PlayerStatsSystem implements System {
         // --- NEW: Centralized Damage Tracking ---
         const damageTracker = session.getSystem('damage_tracker_system') as any;
         const sourceName = attacker ? (attacker.isBoss ? 'Boss' : attacker.type) : 'Other';
-        const attackName = specificAttackType || (type === DamageType.BITE ? 'BITE' : (isDoT ? type : 'HIT'));
+        const attackName = specificAttackType || (type === DamageType.BITE ? EnemyAttackType.BITE : (isDoT ? type : EnemyAttackType.HIT));
 
         if (damageTracker) {
             damageTracker.recordIncomingDamage(session, actualDmg, sourceName, attackName, attacker?.isBoss);
@@ -183,11 +183,12 @@ export class PlayerStatsSystem implements System {
         // --- NEW: Register Status Effects ---
         if (effectType && effectDuration && effectDuration > 0) {
             if (!state.statusEffects[effectType]) {
-                state.statusEffects[effectType] = { duration: 0, intensity: 0, lastTick: 0 };
+                state.statusEffects[effectType] = { duration: 0, maxDuration: 0, intensity: 0, lastTick: 0 };
             }
 
-            // Set/Overwrite the duration and intensity (damage per second)
+            // Set/Overwrite the duration, maxDuration and intensity (damage per second)
             state.statusEffects[effectType]!.duration = effectDuration;
+            state.statusEffects[effectType]!.maxDuration = effectDuration;
             state.statusEffects[effectType]!.intensity = effectDamage || 0;
 
             // Track source for DoT
