@@ -106,7 +106,11 @@ export class GameSessionSetup {
             const rng = seededRandom(props.currentSector + 4242);
             const env = currentSector.environment;
 
+            // VINTERDÖD FIX: The Poisoned Yielder
             const yielder = async () => {
+                if (!isMounted.current || setupIdRef.current !== currentSetupId) {
+                    throw new Error("ABORT_SETUP");
+                }
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
             };
 
@@ -445,8 +449,15 @@ export class GameSessionSetup {
                 if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
             }
 
-        } catch (e) {
-            console.error("[GameSessionSetup] Critical Error:", e);
+        } catch (e: any) {
+            // VINTERDÖD FIX: Om det var vi som dödade spöket, ignorera felet.
+            if (e.message === "ABORT_SETUP") {
+                console.log("[GameSessionSetup] Ghost setup safely killed mid-generation.");
+                return;
+            } else {
+                console.error("[GameSessionSetup] Critical Error:", e);
+            }
+            return;
         } finally {
             refs.isBuildingSectorRef.current = false;
             // FALLBACK: If setup crashed before firing onSectorLoaded, do it now.
