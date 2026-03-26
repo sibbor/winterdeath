@@ -31,7 +31,7 @@ export enum FamilyMember {
 }
 
 // --- PERFORMANCE: Static CSS ---
-const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duration-500 ease-in";
+const HUD_WRAPPER = "absolute inset-0 pointer-events-none transition-all duration-500 ease-in z-[60]";
 const BAR_WRAPPER = "hud-bar-container relative overflow-hidden";
 const SLOT_BASE = "hud-slot flex items-center justify-center relative transition-transform duration-200 overflow-hidden pointer-events-auto hud-gritty-base hud-gritty-texture";
 

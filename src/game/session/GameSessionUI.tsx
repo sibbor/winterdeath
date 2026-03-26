@@ -77,14 +77,15 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
         <div className="absolute inset-0 w-full h-full pointer-events-none">
             <style>{STATIC_STYLES}</style>
 
-            {/* The main click-catcher for pointer lock / cinematic advance (Disabled on mobile to avoid blocking joysticks) */}
-            {!gameProps.isMobileDevice && (
-                <div
-                    ref={refs.containerRef}
-                    className="absolute inset-0 pointer-events-auto"
-                    onClick={handleContainerClick}
-                />
-            )}
+            {/* Engine canvas mount target + desktop pointer-lock click catcher.
+                CRITICAL: containerRef must ALWAYS be rendered — even on mobile.
+                If this is inside a mobile conditional, containerRef.current is null
+                and initSector() never runs (black screen on iPhone). */}
+            <div
+                ref={refs.containerRef}
+                className={`absolute inset-0 ${gameProps.isMobileDevice ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                onClick={!gameProps.isMobileDevice ? handleContainerClick : undefined}
+            />
 
             {/* Mobile Touch Controls */}
             {gameProps.isMobileDevice && gameProps.isRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && refs.engineRef.current && (

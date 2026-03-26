@@ -197,7 +197,6 @@ const App: React.FC = () => {
                 }
 
                 setIsInitialBoot(false);
-                sceneReadyRef.current = true;
             });
         };
 
@@ -471,8 +470,6 @@ const App: React.FC = () => {
 
             await AssetPreloader.warmupAsync('CAMP', yieldToMain);
 
-            sceneReadyRef.current = true;
-
             setGameState(prev => {
                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
@@ -492,12 +489,10 @@ const App: React.FC = () => {
         await triggerLoadingTransition('SECTOR', async () => {
             await AssetPreloader.warmupAsync('SECTOR', yieldToMain, sectorIndex);
 
-            // CLean-up
+            // Clean-up
             setTeleportTarget(null);
             setActiveCollectible(null);
             setActiveOverlay(null);
-
-            sceneReadyRef.current = true;
 
             setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         });

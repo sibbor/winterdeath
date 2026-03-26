@@ -27,15 +27,9 @@ export class GameSessionLogic {
     public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
 
-    constructor(engine: WinterEngine) {
-        console.log(`[GameSessionLogic] 0. constructor()`);
-        this.engine = engine;
-        this.engine.onUpdateContext = this;
-    }
-
     static createInitialState(props: GameCanvasProps): RuntimeState {
         const now = performance.now();
-        console.log(`[GameSessionLogic] 1. createInitialState. HP: ${props.stats?.hp}/${props.stats?.maxHp}, Sector: ${props.currentSector}`);
+        console.log(`[GameSessionLogic] 0. createInitialState. HP: ${props.stats?.hp}/${props.stats?.maxHp}, Sector: ${props.currentSector}`);
 
         if (!props.stats) {
             console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
@@ -186,13 +180,17 @@ export class GameSessionLogic {
         };
     }
 
+    constructor(engine: WinterEngine) {
+        console.log(`[GameSessionLogic] 1. constructor()`);
+        this.engine = engine;
+        this.engine.onUpdateContext = this;
+    }
+
     init(state: RuntimeState) {
-        console.log(`[GameSessionLogic] 2. init()`);
         this.state = state;
     }
 
     update(dt: number, mapId: number = 0) {
-        console.log(`[GameSessionLogic] 3. update()`);
         this.mapId = mapId;
         if (!this.state) return;
     }

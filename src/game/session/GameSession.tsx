@@ -506,7 +506,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const engine = WinterEngine.getInstance();
         const currentSetupId = ++refs.setupIdRef.current;
 
-        // Clean previous instances
+        // Explicitly purge scene before building.
+        // This prevents StrictMode double-invocation from leaving orphaned
+        // objects (chests, collectibles) from the aborted first run in the scene.
         if (refs.playerGroupRef.current) {
             engine.scene.remove(refs.playerGroupRef.current);
             refs.playerGroupRef.current = null as any;
@@ -529,25 +531,23 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         engine.onUpdate = null;
         engine.onRender = null;
-        engine.isRenderingPaused = false;
 
         const session = new GameSessionLogic(engine);
         if (refs.stateRef.current) session.init(refs.stateRef.current);
         refs.gameSessionRef.current = session;
 
-        // [VINTERDÖD FIX] Attach the player reference for systems (EnemyDetection, etc)
+        // Attach the player reference for systems (EnemyDetection, etc)
         if (refs.playerGroupRef.current) {
             session.playerPos = refs.playerGroupRef.current.position;
         }
 
-        // [VINTERDÖD FIX] Bind the session as the logic context for all engine systems
+        // Bind the session as the logic context for all engine systems
         engine.onUpdateContext = session;
 
         if (props.debugMode) {
             (window as any).gameSession = session;
         }
 
-        // Call the setup routine
         // Call the setup routine ASYNCHRONOUSLY
         const initSector = async () => {
             await GameSessionSetup.runSectorSetup({
@@ -711,7 +711,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     },
                     concludeSector,
                     gainXp,
-                    // VINTERDÖD FIX: Vi skickar INTE onSectorLoaded här längre. Det sköts nedan.
+                    onSectorLoaded: props.onSectorLoaded,
                     onBossKilled: (id: number) => {
                         soundManager.stopMusic();
                         const pProps = latestStateRef.current.props;
@@ -723,13 +723,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
             }, currentSetupId);
 
-            // =====================================================================
-            // VINTERDÖD FIX: Låt GPU:n vakna och svälja all data INNAN laddningsskärmen försvinner
-            // =====================================================================
-            engine.isRenderingPaused = false;
 
             await new Promise<void>((resolve) => {
-                let framesToWait = 5;
+                let framesToWait = 3;
                 const checkReady = () => {
                     if (framesToWait > 0) {
                         framesToWait--;
@@ -737,7 +733,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     } else {
                         if (refs.isMounted.current && refs.setupIdRef.current === currentSetupId) {
                             updateUiState({ isSectorLoading: false });
-                            if (props.onSectorLoaded) props.onSectorLoaded();
                         }
                         resolve();
                     }
@@ -771,9 +766,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             }
         });
 
-        // Cleanup
+        // Cleanup: signal abort to any in-flight async setup FIRST,
+        // then dispose scene resources.
         return () => {
             refs.isMounted.current = false;
+            ++refs.setupIdRef.current; // Invalidate any in-flight initSector/runSectorSetup
 
             if (refs.engineRef.current && refs.gameSessionRef.current) {
                 GameSessionSetup.disposeSector(refs.gameSessionRef.current, refs.stateRef.current);

@@ -146,6 +146,11 @@ export class WinterEngine {
         this.renderer.shadowMap.enabled = this.settings.shadows;
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        // The canvas never needs pointer events — InputManager binds to window.
+        // Without this, the canvas (absolute full-screen) eats all touch/click
+        // events on mobile, making the HUD action bar and pause button non-interactive.
+        this.renderer.domElement.style.pointerEvents = 'none';
     }
 
     public updateSettings(newSettings: Partial<GraphicsSettings>) {
@@ -213,10 +218,6 @@ export class WinterEngine {
         }
         container.appendChild(this.renderer.domElement);
         this.handleResize();
-
-        this.isRenderingPaused = false;
-        this.isSimulationPaused = false;
-
         this.start();
     }
 

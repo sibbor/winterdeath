@@ -159,14 +159,18 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
     }, [inputState]);
 
     return (
-        <div
-            className="absolute inset-0 pointer-events-auto z-[100] overflow-hidden select-none touch-none"
-            style={{ touchAction: 'none' }}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            onTouchCancel={handleTouchEnd}
-        >
+        <div className="absolute inset-0 pointer-events-none z-[40] overflow-hidden select-none touch-none">
+            {/* Full-screen joystick capture layer — sits BELOW GameHUD (z-50).
+                pointer-events-auto only for touch, so joystick gestures anywhere work.
+                GameHUD renders at z-[60]+ as a sibling in App.tsx and sits above this. */}
+            <div
+                className="absolute inset-0 pointer-events-auto"
+                style={{ touchAction: 'none' }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+            >
             {/* VÄNSTER JOYSTICK (Renderas alltid men döljs via CSS) */}
             <div
                 ref={leftStickContainerRef}
@@ -209,6 +213,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                     </button>
                 </div>
             </div>
+            </div>  {/* joystick capture layer */}
         </div>
     );
 };
