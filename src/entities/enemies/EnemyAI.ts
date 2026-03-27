@@ -172,7 +172,8 @@ export const EnemyAI = {
         let checkedWaterThisFrame = false;
 
         // --- 4. MASS-BASED KNOCKBACK PHYSICS ---
-        if (e.knockbackVel && (Math.abs(e.knockbackVel.x) > 0.01 || Math.abs(e.knockbackVel.z) > 0.01)) {
+        // Use lengthSq() to catch movement on all axes (including Y straight up)
+        if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.001) {
             if (!e.mesh.userData.wasKnockedBack) {
                 e.mesh.userData.wasKnockedBack = true;
             }
@@ -181,10 +182,13 @@ export const EnemyAI = {
             const moveInertia = delta / Math.max(0.5, mass);
 
             e.mesh.position.addScaledVector(e.knockbackVel, moveInertia);
-            e.knockbackVel.y -= 50 * delta;
+            e.knockbackVel.y -= 50 * delta; // Gravitation
 
+            // Apply friction only on X and Z (horizontally)
             const friction = 1.0 + (mass * 2.0);
-            e.knockbackVel.multiplyScalar(Math.max(0, 1 - friction * delta));
+            const drag = Math.max(0, 1 - friction * delta);
+            e.knockbackVel.x *= drag;
+            e.knockbackVel.z *= drag;
 
             if (e.mesh.position.y > e.fallStartY) {
                 e.fallStartY = e.mesh.position.y;
@@ -202,9 +206,11 @@ export const EnemyAI = {
                     checkedWaterThisFrame = true; // Mark that we already calculated this
                 }
 
+                // Lands in water
                 if (_buoyancyResult.inWater) {
                     water?.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
                 } else if (peakY > 1.5) {
+                    // FALL DAMAGE
                     const fallDamage = Math.min(e.maxHp * 0.6, peakY * 8);
                     e.hp -= fallDamage;
                     if (callbacks.applyDamage) callbacks.applyDamage(e, fallDamage, DamageType.FALL, true);
