@@ -239,7 +239,17 @@ export class InputManager {
 
     public requestPointerLock(element: HTMLElement) {
         if (this.state.locked || !element.requestPointerLock) return;
-        element.requestPointerLock();
+
+        try {
+            const promise = element.requestPointerLock() as any;
+            if (promise && promise.catch) {
+                promise.catch(() => {
+                    // Silently catch: Uncaught (in promise) NotAllowedError: A user gesture is required to request Pointer Lock.
+                });
+            }
+        } catch (err) {
+            // Fallback for older browsers that don't return a promise
+        }
     }
 
     public setJoystickMove(x: number, y: number) {
