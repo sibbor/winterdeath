@@ -71,6 +71,82 @@ const Generators = {
     ignite: (ctx: AudioContext) => createNoise(ctx, 0.2, 0.2),
     explosion: (ctx: AudioContext) => createExplosion(ctx),
 
+    grenade_impact: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const clank = (Math.sin(2 * Math.PI * 400 * t) + Math.sin(2 * Math.PI * 850 * t)) * 0.4;
+            const noise = (Math.random() * 2 - 1) * 0.4;
+            const env = Math.exp(-20 * t);
+            data[i] = (clank + noise) * env * 0.7;
+        }
+        return buffer;
+    },
+
+    molotov_impact: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.4;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env1 = Math.exp(-30 * t);
+            const env2 = t > 0.05 ? Math.exp(-25 * (t - 0.05)) : 0;
+            const env3 = t > 0.12 ? Math.exp(-20 * (t - 0.12)) : 0;
+            const noise = (Math.random() * 2 - 1);
+            const ring = Math.sin(2 * Math.PI * 4500 * t) * Math.exp(-12 * t) * 0.2;
+            data[i] = (noise * (env1 + env2 * 0.6 + env3 * 0.4) + ring) * 0.6;
+        }
+        return buffer;
+    },
+
+    flashbang_impact: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.3;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const ping1 = Math.sin(2 * Math.PI * 2000 * t);
+            const ping2 = Math.sin(2 * Math.PI * 3200 * t);
+            const noise = (Math.random() * 2 - 1) * Math.exp(-40 * t);
+            const env = Math.exp(-8 * t);
+            data[i] = (ping1 * 0.4 + ping2 * 0.2 + noise * 0.4) * env * 0.6;
+        }
+        return buffer;
+    },
+
+    water_explosion: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 1.0;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = t < 0.05 ? (t / 0.05) : Math.exp(-4 * (t - 0.05));
+            const freq = Math.max(30, 150 - 300 * t);
+            const sub = Math.sin(2 * Math.PI * freq * t) * 0.8;
+            const rumble = Math.sin(2 * Math.PI * (freq * 2.3) * t) * 0.4;
+            const noise = (Math.random() * 2 - 1) * Math.exp(-12 * t) * 0.3;
+            data[i] = (sub + rumble + noise) * env * 0.9;
+        }
+        return buffer;
+    },
+
+    water_splash: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.5;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = t < 0.02 ? (t / 0.02) : Math.exp(-8 * (t - 0.02));
+            const noise = (Math.random() * 2 - 1);
+            const bubble1 = Math.sin(2 * Math.PI * (400 + 300 * t) * t) * Math.exp(-10 * t);
+            const bubble2 = Math.sin(2 * Math.PI * (600 + 500 * t) * t) * Math.exp(-12 * t);
+            data[i] = (noise * 0.4 + bubble1 * 0.3 + bubble2 * 0.3) * env * 0.7;
+        }
+        return buffer;
+    },
+
     // CASING
     casing_standard: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.1),
 
@@ -713,6 +789,11 @@ export function registerSoundGenerators() {
     SoundBank.register('pin_pull', Generators.pin_pull);
     SoundBank.register('ignite', Generators.ignite);
     SoundBank.register('explosion', Generators.explosion);
+    SoundBank.register('molotov_impact', Generators.molotov_impact);
+    SoundBank.register('grenade_impact', Generators.grenade_impact);
+    SoundBank.register('flashbang_impact', Generators.flashbang_impact);
+    SoundBank.register('water_explosion', Generators.water_explosion);
+    SoundBank.register('water_splash', Generators.water_splash);
 
     // Zombies
     SoundBank.register('walker_groan', Generators.walker_groan);
@@ -881,100 +962,11 @@ export const WeaponSounds = {
 
     playExplosion: (core: SoundCore) => SoundBank.play(core, 'explosion', 0.7, 1.0, false, true),
 
-    playGrenadeImpact: (core: SoundCore) => {
-        const length = core.ctx.sampleRate * 0.25;
-        const buffer = core.ctx.createBuffer(1, length, core.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / core.ctx.sampleRate;
-            // Heavy metallic clank (dissonant sine waves)
-            const clank = (Math.sin(2 * Math.PI * 400 * t) + Math.sin(2 * Math.PI * 850 * t)) * 0.4;
-            // Short impact noise
-            const noise = (Math.random() * 2 - 1) * 0.4;
-            // Fast exponential decay
-            const env = Math.exp(-20 * t);
-            data[i] = (clank + noise) * env * 0.7;
-        }
-        return buffer;
-    },
-
-    playMolotovImpact: (core: SoundCore) => {
-        const length = core.ctx.sampleRate * 0.4;
-        const buffer = core.ctx.createBuffer(1, length, core.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / core.ctx.sampleRate;
-            // Multiple sharp spikes to simulate glass shattering
-            const env1 = Math.exp(-30 * t);
-            const env2 = t > 0.05 ? Math.exp(-25 * (t - 0.05)) : 0;
-            const env3 = t > 0.12 ? Math.exp(-20 * (t - 0.12)) : 0;
-
-            // White noise for the shatter
-            const noise = (Math.random() * 2 - 1);
-            // High-pitched glass ring
-            const ring = Math.sin(2 * Math.PI * 4500 * t) * Math.exp(-12 * t) * 0.2;
-
-            data[i] = (noise * (env1 + env2 * 0.6 + env3 * 0.4) + ring) * 0.6;
-        }
-        return buffer;
-    },
-
-    playFlashbangImpact: (core: SoundCore) => {
-        const length = core.ctx.sampleRate * 0.3;
-        const buffer = core.ctx.createBuffer(1, length, core.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / core.ctx.sampleRate;
-            // High-pitched aluminum "ping"
-            const ping1 = Math.sin(2 * Math.PI * 2000 * t);
-            const ping2 = Math.sin(2 * Math.PI * 3200 * t);
-            const noise = (Math.random() * 2 - 1) * Math.exp(-40 * t);
-            const env = Math.exp(-8 * t);
-            data[i] = (ping1 * 0.4 + ping2 * 0.2 + noise * 0.4) * env * 0.6;
-        }
-        return buffer;
-    },
-
-    playWaterExplosion: (core: SoundCore) => {
-        const length = core.ctx.sampleRate * 1.0;
-        const buffer = core.ctx.createBuffer(1, length, core.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / core.ctx.sampleRate;
-            // Envelope with a slight attack to soften the hit, then slow decay
-            const env = t < 0.05 ? (t / 0.05) : Math.exp(-4 * (t - 0.05));
-
-            // Frequency sweep (Pitch drop) simulating expanding underwater gas bubble
-            const freq = Math.max(30, 150 - 300 * t);
-            const sub = Math.sin(2 * Math.PI * freq * t) * 0.8;
-            const rumble = Math.sin(2 * Math.PI * (freq * 2.3) * t) * 0.4;
-
-            // Initial muffled shockwave noise
-            const noise = (Math.random() * 2 - 1) * Math.exp(-12 * t) * 0.3;
-
-            data[i] = (sub + rumble + noise) * env * 0.9;
-        }
-        return buffer;
-    },
-
-    playWaterSplash: (core: SoundCore) => {
-        const length = core.ctx.sampleRate * 0.5;
-        const buffer = core.ctx.createBuffer(1, length, core.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / core.ctx.sampleRate;
-            // Splash envelope
-            const env = t < 0.02 ? (t / 0.02) : Math.exp(-8 * (t - 0.02));
-            const noise = (Math.random() * 2 - 1);
-
-            // Upward frequency sweeps simulating small bubbles rising
-            const bubble1 = Math.sin(2 * Math.PI * (400 + 300 * t) * t) * Math.exp(-10 * t);
-            const bubble2 = Math.sin(2 * Math.PI * (600 + 500 * t) * t) * Math.exp(-12 * t);
-
-            data[i] = (noise * 0.4 + bubble1 * 0.3 + bubble2 * 0.3) * env * 0.7;
-        }
-        return buffer;
-    },
+    playGrenadeImpact: (core: SoundCore) => SoundBank.play(core, 'grenade_impact', 0.6, 1.0, false, true),
+    playMolotovImpact: (core: SoundCore) => SoundBank.play(core, 'molotov_impact', 0.8, 1.0, false, true),
+    playFlashbangImpact: (core: SoundCore) => SoundBank.play(core, 'flashbang_impact', 0.5, 1.0, false, true),
+    playWaterExplosion: (core: SoundCore) => SoundBank.play(core, 'water_explosion', 0.8, 1.0, false, true),
+    playWaterSplash: (core: SoundCore) => SoundBank.play(core, 'water_splash', 0.5, 1.0, false, true),
 
     playMagOut: (core: SoundCore) => SoundBank.play(core, 'mech_mag_out', 0.2),
     playMagIn: (core: SoundCore) => SoundBank.play(core, 'mech_mag_in', 0.2),

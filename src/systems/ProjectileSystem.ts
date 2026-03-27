@@ -77,8 +77,9 @@ const _v6 = new THREE.Vector3();
 const _arcCannonHitList: Enemy[] = [];
 const _arcCannonHitIds = new Set<string>();
 
-// Audio Throttling for Arc-Cannon
-let _lastArcSoundTime = 0;
+// Audio Throttling for Arc-Cannon & Flamethrower
+let _lastArcCannonSoundTime = 0;
+let _lastFlameSoundTime = 0;
 
 // CONSTANTS (Pre-calculated math to save CPU cycles)
 const FLAMETHROWER_CONE_ANGLE = Math.cos(28 * Math.PI / 180);
@@ -384,6 +385,24 @@ export const ProjectileSystem = {
                 const range = data.range;
                 const rangeSq = range * range;
 
+                // Fire won't get through obstacles:
+                let maxReach = range;
+                const obstacles = ctx.collisionGrid.getNearbyObstacles(origin, range);
+                for (let i = 0; i < obstacles.length; i++) {
+                    const obs = obstacles[i];
+                    _v1.subVectors(obs.position, origin);
+                    const d = _v1.length();
+                    if (d < 0.5) continue; // Skippa om vi står inuti något
+
+                    _v1.divideScalar(d);
+                    if (direction.dot(_v1) > 0.96) { // Snäv stråle för hinder-koll
+                        const obsRad = obs.radius || 1.5;
+                        if (d - obsRad < maxReach) {
+                            maxReach = d - obsRad;
+                        }
+                    }
+                }
+
                 const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
                 for (let _fi = 0; _fi < enemies.length; _fi++) {
                     const e = enemies[_fi];
@@ -395,11 +414,22 @@ export const ProjectileSystem = {
                     if (distSq > rangeSq) continue;
 
                     const dist = Math.sqrt(distSq);
-                    _v1.divideScalar(dist);
 
+                    // If the enemy is behind an obstacle, skip it
+                    if (dist > maxReach + 1.2) continue;
+
+                    _v1.divideScalar(dist);
                     const dot = direction.dot(_v1);
 
                     if (dot > FLAMETHROWER_CONE_ANGLE) {
+                        // No fire in water, but smoke
+                        if (e.isInWater) {
+                            if (Math.random() < 0.1) {
+                                ctx.spawnPart(e.mesh.position.x, 0.5, e.mesh.position.z, 'large_smoke', 1);
+                            }
+                            continue;
+                        }
+
                         e.isBurning = true;
                         e.burnTimer = 0.5;
                         e.afterburnTimer = 5.0;
@@ -411,6 +441,13 @@ export const ProjectileSystem = {
                         }
                     }
                 }
+
+                // Audio Throttling för Flamethrower
+                if (ctx.now - _lastFlameSoundTime > 200) {
+                    soundManager.playFlamethrowerStart();
+                    _lastFlameSoundTime = ctx.now;
+                }
+
                 break;
             }
 
@@ -501,18 +538,18 @@ export const ProjectileSystem = {
                         _v3.copy(_v1);
                     }
 
-                    if (ctx.now - _lastArcSoundTime > 150) {
+                    if (ctx.now - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
-                        _lastArcSoundTime = ctx.now;
+                        _lastArcCannonSoundTime = ctx.now;
                     }
 
                 } else {
                     _v1.copy(origin).addScaledVector(direction, range);
                     WeaponFX.createLightning(origin, _v1, true);
 
-                    if (ctx.now - _lastArcSoundTime > 150) {
+                    if (ctx.now - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
-                        _lastArcSoundTime = ctx.now;
+                        _lastArcCannonSoundTime = ctx.now;
                     }
                 }
                 break;

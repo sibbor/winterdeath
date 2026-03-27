@@ -251,10 +251,6 @@ export const WeaponHandler = {
                     _v2.copy(playerGroup.position).add(_v1);
                     _v3.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
-                    if (state.activeWeapon === WeaponType.FLAMETHROWER) {
-                        soundManager.playFlamethrowerStart();
-                    }
-
                     const cb = state.callbacks;
                     _continuousCtx.scene = scene;
                     _continuousCtx.enemies = state.enemies || [];
@@ -278,15 +274,21 @@ export const WeaponHandler = {
                             state.weaponLevels[state.activeWeapon]) * (60 * delta)
                     );
                 } else {
-                    if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
+                    if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
+                        soundManager.playFlamethrowerEnd();
+                    }
+
                     if (input.fire && now > state.lastShotTime + 500) {
                         soundManager.playEmptyClick();
                         state.lastShotTime = now;
                     }
                 }
             } else {
-                if (state.activeWeapon === WeaponType.FLAMETHROWER) soundManager.playFlamethrowerEnd();
+                if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
+                    soundManager.playFlamethrowerEnd();
+                }
             }
+            (state as any).lastFireState = !!input.fire;
             return;
         }
 
@@ -359,7 +361,7 @@ export const WeaponHandler = {
                 const chargeTime = 1250;
                 const holdTime = 500; // [VINTERDÖD FIX] Hold at max for 500ms before reset
                 const totalCycle = chargeTime + holdTime;
-                
+
                 const elapsed = now - state.throwChargeStart;
                 const cycleElapsed = elapsed % totalCycle;
                 const ratio = cycleElapsed < chargeTime ? (cycleElapsed / chargeTime) : 1.0;
@@ -437,7 +439,7 @@ export const WeaponHandler = {
                 const totalCycle = 1250 + 500;
                 const cycleElapsed = (now - state.throwChargeStart) % totalCycle;
                 const ratio = cycleElapsed < 1250 ? (cycleElapsed / 1250) : 1.0;
-                
+
                 _executeThrow(scene, playerGroup, state, loadout, now, wep, ratio, aimCrossMesh, trajectoryLineMesh);
             } else {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
