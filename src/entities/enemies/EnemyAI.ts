@@ -168,6 +168,9 @@ export const EnemyAI = {
         // --- 3. STATUS EFFECTS ---
         handleStatusEffects(e, delta, now, callbacks);
 
+        // Zero-GC flag to avoid double-dipping in the water mat
+        let checkedWaterThisFrame = false;
+
         // --- 4. MASS-BASED KNOCKBACK PHYSICS ---
         if (e.knockbackVel && (Math.abs(e.knockbackVel.x) > 0.01 || Math.abs(e.knockbackVel.z) > 0.01)) {
             if (!e.mesh.userData.wasKnockedBack) {
@@ -193,7 +196,11 @@ export const EnemyAI = {
                 e.isAirborne = false;
                 e.fallStartY = 0;
 
-                if (water) water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+                if (water) {
+                    // We just landed (y <= 0), so we KNOW we are below the 2.0 limit. Run the check!
+                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+                    checkedWaterThisFrame = true; // Mark that we already calculated this
+                }
 
                 if (_buoyancyResult.inWater) {
                     water?.spawnRipple(e.mesh.position.x, e.mesh.position.z, 1.5);
@@ -224,7 +231,18 @@ export const EnemyAI = {
 
         // --- 5. WATER STATE EVALUATION ---
         if (water) {
-            water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+            // Y-axis Broadphase & Double-Dip Prevention
+            if (!checkedWaterThisFrame) {
+                if (e.mesh.position.y < 2.0) {
+                    // Zombie is on the ground/near the ground. Do the heavy math.
+                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+                } else {
+                    // Broadphase Early-Out: Zombie is flying high!
+                    // MUST be reset manually otherwise we inherit another zombie's water status
+                    _buoyancyResult.inWater = false;
+                }
+            }
+
             if (_buoyancyResult.inWater) {
                 _waterCheckResult.flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
                 e.isInWater = true;
