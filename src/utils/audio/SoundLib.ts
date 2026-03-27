@@ -60,6 +60,44 @@ const Generators = {
     shot_revolver: (ctx: AudioContext) => createGunshot(ctx, 0.25, 0.5, 'square', 150, 30, 0.5, 0.3),
     shot_shotgun: (ctx: AudioContext) => createGunshot(ctx, 0.3, 0.6, 'sawtooth', 100, 20, 0.6, 0.35),
     shot_minigun: (ctx: AudioContext) => createGunshot(ctx, 0.05, 0.2, 'sawtooth', 400, 200, 0.15, 0.06),
+    shot_arc_cannon: (ctx: AudioContext) => {
+        const duration = 0.25;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // High frequency zap
+            const zap = Math.sin(2 * Math.PI * (1200 + Math.random() * 400) * t) * 0.4;
+            // Low buzz
+            const buzz = (Math.sin(2 * Math.PI * 60 * t) > 0 ? 0.2 : -0.2);
+            // Noise burst
+            const noise = (Math.random() * 2 - 1) * 0.3;
+            const env = Math.exp(-15 * t);
+            data[i] = (zap + buzz + noise) * env * 0.7;
+        }
+        return buffer;
+    },
+    shot_flamethrower: (ctx: AudioContext) => {
+        // Continuous hiss/roar (0.4s loopable)
+        const duration = 0.4;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const noise = (Math.random() * 2 - 1);
+            // Low-pass noise for the roar
+            last = (last + 0.1 * noise) / 1.1;
+            // High-pass noise for the hiss
+            const hiss = (Math.random() * 2 - 1) * 0.15;
+            // Envelope for volume pulse
+            const pulse = 0.8 + 0.2 * Math.sin(t * Math.PI * 40);
+            data[i] = (last * 1.5 + hiss) * pulse * 0.6;
+        }
+        return buffer;
+    },
 
     // MECHANICAL
     mech_mag_out: (ctx: AudioContext) => createTone(ctx, 'square', 150, 0.1, 0.5),
@@ -148,7 +186,25 @@ const Generators = {
     },
 
     // CASING
+    // CASING
     casing_standard: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.1),
+
+    glass_shatter: (ctx: AudioContext) => {
+        const duration = 0.6;
+        const length = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = Math.exp(-8 * t);
+            // High frequency tinkling
+            const tink = Math.sin(2 * Math.PI * (3000 + Math.random() * 2000) * t) * 0.3;
+            // Noise burst for the impact
+            const noise = (Math.random() * 2 - 1) * 0.5;
+            data[i] = (tink + noise) * env * 0.5;
+        }
+        return buffer;
+    },
 
     // ZOMBIES (Shared)
     step_zombie: (ctx: AudioContext) => {
@@ -439,14 +495,21 @@ const Generators = {
         return buffer;
     },
     chest_open: (ctx: AudioContext) => {
-        const length = ctx.sampleRate * 0.6;
+        const length = ctx.sampleRate * 0.8;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < length; i++) {
             const t = i / ctx.sampleRate;
-            const thud = Math.sin(2 * Math.PI * 100 * t) * 0.3 * Math.exp(-20 * t);
-            const creak = Math.sin(2 * Math.PI * (120 + t * 40) * t) * 0.1 * Math.exp(-10 * t);
-            data[i] = thud + creak;
+            // 1. Heavy thud
+            const thud = Math.sin(2 * Math.PI * 80 * t) * 0.4 * Math.exp(-15 * t);
+            // 2. Metallic creak
+            const creak = Math.sin(2 * Math.PI * (120 + t * 60) * t) * 0.2 * Math.exp(-8 * t);
+            // 3. High-frequency latch click (New)
+            const click = (Math.random() * 2 - 1) * 0.15 * Math.exp(-80 * t);
+            // 4. Resonance
+            const ring = Math.sin(2 * Math.PI * 1800 * t) * 0.05 * Math.exp(-40 * t);
+            
+            data[i] = (thud + creak + click + ring) * 0.8;
         }
         return buffer;
     },
@@ -782,8 +845,8 @@ export function registerSoundGenerators() {
     SoundBank.register('shot_revolver', Generators.shot_revolver);
     SoundBank.register('shot_shotgun', Generators.shot_shotgun);
     SoundBank.register('shot_minigun', Generators.shot_minigun);
-    SoundBank.register('shot_arc_cannon', (ctx) => Generators.uiChime(ctx));
-    SoundBank.register('shot_flamethrower', Generators.ignite);
+    SoundBank.register('shot_arc_cannon', Generators.shot_arc_cannon);
+    SoundBank.register('shot_flamethrower', Generators.shot_flamethrower);
 
     // Throawables
     SoundBank.register('pin_pull', Generators.pin_pull);
@@ -843,6 +906,7 @@ export function registerSoundGenerators() {
     SoundBank.register('impact_concrete', Generators.impact_concrete);
     SoundBank.register('impact_stone', Generators.impact_stone);
     SoundBank.register('impact_wood', Generators.impact_wood);
+    SoundBank.register('glass_shatter', Generators.glass_shatter);
 
     // Doors
     SoundBank.register('door_metal_shut', Generators.door_metal_shut);
@@ -896,8 +960,8 @@ export const UiSounds = {
 };
 
 export const GamePlaySounds = {
-    playOpenChest: (core: SoundCore) => SoundBank.play(core, 'chest_open', 0.25),
-    playPickupCollectiblee: (core: SoundCore) => SoundBank.play(core, 'ui_chime', 0.15)?.source,
+    playOpenChest: (core: SoundCore) => SoundBank.play(core, 'chest_open', 0.6, 1.0, false, true),
+    playPickupCollectible: (core: SoundCore) => SoundBank.play(core, 'ui_chime', 0.15)?.source,
     playLootingScrap: (core: SoundCore) => SoundBank.play(core, 'loot_scrap', 0.15),
 
     playMetalDoorShut: (core: SoundCore) => SoundBank.play(core, 'door_metal_shut', 0.4),
@@ -933,6 +997,11 @@ export const GamePlaySounds = {
         const key = `impact_${type}`;
         const pitch = 0.9 + Math.random() * 0.2;
         SoundBank.play(core, key, 0.3, pitch, false, true);
+    },
+
+    playGlassShatter: (core: SoundCore) => {
+        const pitch = 0.9 + Math.random() * 0.2;
+        SoundBank.play(core, 'glass_shatter', 0.5, pitch, false, true);
     }
 };
 

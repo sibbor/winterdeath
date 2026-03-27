@@ -115,6 +115,8 @@ export interface RuntimeState {
     lastActionTime: number;
     thinkingUntil: number;
     speakingUntil: number;
+    sectorName: string | null;
+    initialAim: { x: number, y: number } | null;
     deathStartTime: number;
     killerType: string;
     killerName: string;

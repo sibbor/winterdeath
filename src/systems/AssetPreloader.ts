@@ -6,13 +6,13 @@ import { createWaterMaterial } from '../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { VEHICLES, VehicleType } from '../content/vehicles';
-import { ObjectGenerator } from '../core/world/ObjectGenerator';
-import { VehicleGenerator } from '../core/world/VehicleGenerator';
-import { EnvironmentGenerator } from '../core/world/EnvironmentGenerator';
+import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
+import { VehicleGenerator } from '../core/world/generators/VehicleGenerator';
+import { VegetationGenerator } from '../core/world/generators/VegetationGenerator';
 import { CampWorld, CAMP_SCENE, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
 import { registerSoundGenerators } from '../utils/audio/SoundLib';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { SoundBank } from '../utils/audio/SoundBank';
 import { FXSystem } from './FXSystem';
 import { COLLECTIBLES } from '../content/collectibles';
@@ -504,6 +504,7 @@ export const AssetPreloader = {
             if (yieldToMain) await yieldToMain();
         }
 
+        // Weather materials (instanced)
         for (let i = 0; i < WEATHER_MATS.length; i++) {
             const iMesh = new THREE.InstancedMesh(GEOMETRY.weatherParticle, WEATHER_MATS[i], 1);
             iMesh.matrixAutoUpdate = false;
@@ -513,6 +514,8 @@ export const AssetPreloader = {
             add(iMesh, false);
         }
 
+        add(ObjectGenerator.createChest('standard'), true, true);
+        add(ObjectGenerator.createChest('big'), true, true);
         add(ObjectGenerator.createBarrel(false), true, true);
         add(ObjectGenerator.createStreetLamp(), true, true);
         add(ObjectGenerator.createFence(), true, true);
@@ -541,8 +544,8 @@ export const AssetPreloader = {
             }
         }
 
-        await EnvironmentGenerator.initNaturePrototypes(yieldToMain);
-        for (let i = 0; i < TREE_TYPES.length; i++) add(EnvironmentGenerator.createTree(TREE_TYPES[i], 1.0, 0), true, true);
+        await VegetationGenerator.initNaturePrototypes(yieldToMain);
+        for (let i = 0; i < TREE_TYPES.length; i++) add(VegetationGenerator.createTree(TREE_TYPES[i], 1.0, 0), true, true);
 
         for (const key in stationMaterials) {
             add(new THREE.Mesh(GEOMETRY.box, (stationMaterials as any)[key]), false);
@@ -555,6 +558,22 @@ export const AssetPreloader = {
         const outlineGeo = new THREE.EdgesGeometry(GEOMETRY.box);
         const outlineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
         add(new THREE.LineSegments(outlineGeo, outlineMat), false);
+
+        // --- SPECIAL SHADER PERMUTATIONS (Bypass Runtime Compilation Stutter) ---
+        // These ensure the GPU has compiled the EXACT shader combinations used in-game.
+        // Redundant body/lid meshes removed as ObjectGenerator covers them above.
+
+        // 1. CHEST GLOWS (Require forceShadow: false to prevent incorrect shader logic)
+        add(new THREE.Mesh(GEOMETRY.chestGlow, MATERIALS.chestGlow), false, false);
+        add(new THREE.Mesh(GEOMETRY.chestBigGlow, MATERIALS.chestBigGlow), false, false);
+
+        // 2. GLASS (Shattering effects)
+        add(new THREE.Mesh(GEOMETRY.shard, MATERIALS.glassShard), true, false);
+
+        // 3. THROWABLES (Meshes visible during projectile flight)
+        add(new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade), false, true);
+        add(new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov), false, true);
+        add(new THREE.Mesh(GEOMETRY.flashbang, MATERIALS.flashbang), false, true);
     },
 
     getLastSectorIndex: () => lastSectorIndex,

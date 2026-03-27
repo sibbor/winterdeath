@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System } from '../../systems/System';
 import { CampWorld, CampEffectsState } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { t } from '../../utils/i18n';
 import { CHATTER_LINES } from '../../content/constants';
 

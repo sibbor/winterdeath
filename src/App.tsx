@@ -30,15 +30,13 @@ import ScreenResetConfirm from './components/ui/screens/camp/ScreenResetConfirm'
 import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
-import { soundManager } from './utils/SoundManager';
+import { soundManager } from './utils/audio/SoundManager';
 import { getCollectiblesBySector } from './content/collectibles';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
-import { PerformanceMonitor } from './systems/PerformanceMonitor';
-
-const performanceMonitor = PerformanceMonitor.getInstance();
+import { SectorSystem } from './systems/SectorSystem';
 
 export type OverlayType =
     | 'PAUSE' | 'SETTINGS' | 'MAP' | 'TELEPORT' | 'COLLECTIBLE' | 'DIALOGUE'
@@ -235,7 +233,7 @@ const App: React.FC = () => {
                 stats: newStats,
                 deadBossIndices: newBosses,
                 rescuedFamilyIndices: newFamily,
-                screen: GameScreen.RECAP
+                screen: GameScreen.DEATH // VINTERDÖD FIX: Go to Death Screen first, not Recap
             };
         });
     }, []);
@@ -353,9 +351,15 @@ const App: React.FC = () => {
     }, []);
 
     const handleContinueFromDeath = useCallback(() => {
-        const stats = gameCanvasRef.current?.getSectorStats() || latestStateRef.current.gameState.stats;
+        // VINTERDÖD FIX: Extract stats BEFORE unmounting or navigating away
+        const stats = gameCanvasRef.current?.getSectorStats(false, true) || latestStateRef.current.gameState.stats;
         const finalHud = HudStore.getState();
+
+        // 1. Process technical death (updates permanent stats)
         handleDie(stats as any, finalHud.killerName);
+
+        soundManager.playUiConfirm();
+        setGameState(prev => ({ ...prev, screen: GameScreen.RECAP }));
         setActiveOverlay(null);
     }, [handleDie]);
 
@@ -515,15 +519,35 @@ const App: React.FC = () => {
     const handleRespawnSector = useCallback(() => {
         soundManager.playUiConfirm();
 
-        // Respawn is instant but we Increment sessionToken to force a clean component remount
-        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, sessionToken: (prev.sessionToken || 0) + 1 }));
+        // VINTERDÖD FIX: Keep gameCanvasRef alive and trigger resurrection
+        if (gameCanvasRef.current) {
+            gameCanvasRef.current.respawnPlayer();
+        } else {
+            console.error("[App] VARNING: gameCanvasRef är null! GameSession har unmountats!");
+        }
+
+        // VINTERDÖD FIX: Clear UI state instantly for "blixtsnabb" feedback
+        setActiveOverlay(null);
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
         setSectorStats(null);
         setDeathDetails(null);
         setActiveCollectible(null);
-        setActiveOverlay(null);
 
-        // Explicitly trigger HUD visibility for the instant transition
-        HudStore.update({ ...HudStore.getState(), hudVisible: true });
+        HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
+    }, []);
+
+    const handleRestartSector = useCallback(() => {
+        soundManager.playUiConfirm();
+
+        gameCanvasRef.current?.restartSector();
+
+        setActiveOverlay(null);
+        setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR }));
+        setSectorStats(null);
+        setDeathDetails(null);
+        setActiveCollectible(null);
+
+        HudStore.update({ ...HudStore.getState(), hudVisible: true, isDead: false });
     }, []);
 
     const handleAbortSector = useCallback(() => {
@@ -538,6 +562,7 @@ const App: React.FC = () => {
         clearSave();
         window.location.reload();
     }, []);
+
 
     const handleCollectibleClose = useCallback(() => {
         const { isMobileDevice: isMobile } = latestStateRef.current;
@@ -579,6 +604,14 @@ const App: React.FC = () => {
     const cursorHidden = isMobileDevice || isPointerLocked || (hasInteracted && gameState.screen === GameScreen.SECTOR && !activeOverlay);
     const showHUD = hasInteracted && (!activeOverlay || activeOverlay === 'INTRO') && !isLoadingSector && !isLoadingCamp && !showLoadingOverlay && gameState.screen !== GameScreen.PROLOGUE;
 
+    // VINTERDÖD FIX: Boolean to check if we should mount/keep GameSession alive
+    const shouldKeepSessionAlive =
+        (gameState.screen === GameScreen.SECTOR ||
+            gameState.screen === GameScreen.PROLOGUE ||
+            gameState.screen === GameScreen.RECAP ||
+            gameState.screen === GameScreen.DEATH) // VINTERDÖD FIX: Keep canvas alive during death!
+        && !transitionTaskRef.current;
+
     return (
         <div className="relative w-full h-full overflow-hidden bg-black select-none cursor-none">
             {!hasInteracted ? (
@@ -617,21 +650,25 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    {(gameState.screen === GameScreen.SECTOR ||
-                        gameState.screen === GameScreen.PROLOGUE ||
-                        gameState.screen === GameScreen.RECAP)
-                        && !transitionTaskRef.current && (
+                    {/* VINTERDÖD FIX: GameSession is wrapped in a hidden div if it's not the active screen but needs to live */}
+                    <div
+                        className="absolute inset-0"
+                        style={{ display: gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.DEATH ? 'block' : 'none' }}
+                    >
+                        {shouldKeepSessionAlive && (
                             <>
                                 <GameSession
+                                    key={`gs-${gameState.currentSector}`}
                                     ref={gameCanvasRef}
                                     isWarmup={isLoadingSector}
                                     stats={gameState.stats}
                                     loadout={gameState.loadout}
                                     weaponLevels={gameState.weaponLevels}
                                     currentSector={gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector}
+                                    currentSectorData={SectorSystem.getSector(gameState.screen === GameScreen.PROLOGUE ? 0 : gameState.currentSector)}
                                     debugMode={gameState.debugMode}
                                     isRunning={gameState.screen === GameScreen.SECTOR && !activeOverlay && !isLoadingSector}
-                                    isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP}
+                                    isPaused={!!activeOverlay || isLoadingSector || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.RECAP || gameState.screen === GameScreen.DEATH}
                                     disableInput={activeOverlay === 'COLLECTIBLE' || isLoadingSector || activeOverlay === 'ADVENTURE_LOG'}
                                     onDie={handleDie}
                                     onSectorEnded={handleSectorEnded}
@@ -677,6 +714,7 @@ const App: React.FC = () => {
                                 )}
                             </>
                         )}
+                    </div>
 
                     {/* UNIVERSAL OVERLAYS */}
                     {activeOverlay === 'PAUSE' && (
@@ -725,13 +763,6 @@ const App: React.FC = () => {
                             onClose={handleOverlayClose}
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.debugMode}
-                        />
-                    )}
-
-                    {activeOverlay === 'DEATH' && (
-                        <ScreenPlayerDied
-                            onContinue={handleContinueFromDeath}
-                            isMobileDevice={isMobileDevice}
                         />
                     )}
 
@@ -823,13 +854,23 @@ const App: React.FC = () => {
                         />
                     )}
 
+                    {/* VINTERDÖD FIX: Unify Death Screen logic (Overlay or Screen State) */}
+                    {(gameState.screen === GameScreen.DEATH || activeOverlay === 'DEATH') && (
+                        <ScreenPlayerDied
+                            onRespawn={handleRespawnSector}
+                            onContinue={handleContinueFromDeath}
+                            isMobileDevice={isMobileDevice}
+                        />
+                    )}
+
                     {gameState.screen === GameScreen.RECAP && sectorStats && (
                         <ScreenSectorReport
                             stats={sectorStats}
                             deathDetails={deathDetails}
                             currentSector={gameState.currentSector}
                             onReturnCamp={handleReturnToCamp}
-                            onRetry={handleRespawnSector}
+                            onRestartSector={handleRestartSector}
+                            onRespawn={handleRespawnSector}
                             isMobileDevice={isMobileDevice}
                         />
                     )}

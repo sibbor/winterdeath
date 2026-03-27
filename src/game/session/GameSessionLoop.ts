@@ -10,7 +10,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../content/weapons';
 import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
@@ -167,7 +167,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
         applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType | string, isHighImpact: boolean = false) => {
-            if (enemy.deathState !== EnemyDeathState.ALIVE) return false;
+            // VINTERDÖD FIX: Safeguard against non-damaging hits skipping death state check
+            if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
@@ -600,7 +601,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 const screenY = Math.round((1 - vector.y) / 2 * engine.screenHeight);
 
                 const lastPos = refs.lastInteractionPosRef.current;
-                const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 1.0 || Math.abs(lastPos.y - screenY) > 1.0;
+
+                // VINTERDÖD FIX: More solid fast-check before writing object properties
+                const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 2.0;
                 const typeChanged = currentInter !== lastType;
                 const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
 
@@ -627,18 +630,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                         hData.interactionPrompt.pos.y = screenY;
                     }
 
-                    const moved = !lastPos || Math.abs(lastPos.x - screenX) > 1 || Math.abs(lastPos.y - screenY) > 1;
-                    const stateChanged = refs.interactionTypeRef.current !== currentInter || (state as any).lastInteractionLabel !== currentLabel;
-
-                    if (moved || stateChanged) {
-                        if (!refs.lastInteractionPosRef.current) refs.lastInteractionPosRef.current = { x: 0, y: 0 };
-                        refs.lastInteractionPosRef.current.x = screenX;
-                        refs.lastInteractionPosRef.current.y = screenY;
-                        refs.interactionTypeRef.current = currentInter;
-                        (state as any).lastInteractionLabel = currentLabel;
-
-                        HudStore.update(hData);
-                    }
+                    HudStore.update(hData);
                 }
             } else {
                 if (refs.interactionTypeRef.current !== null) {

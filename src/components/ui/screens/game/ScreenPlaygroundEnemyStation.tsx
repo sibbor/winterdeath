@@ -4,7 +4,7 @@ import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { EnemyManager } from '../../../../entities/enemies/EnemyManager';
 import { WinterEngine } from '../../../../core/engine/WinterEngine';
 import * as THREE from 'three';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import { HudStore } from '../../../../store/HudStore';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 

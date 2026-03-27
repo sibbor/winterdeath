@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenStartUpProps {
     onStart: () => void;

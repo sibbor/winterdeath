@@ -5,7 +5,7 @@ import { System } from './System';
 import { PlayerDeathState, DamageType } from '../entities/player/CombatTypes';
 import { PLAYER_CHARACTER } from '../content/constants';
 import { MATERIALS } from '../utils/assets';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { HudSystem } from './HudSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { HudStore } from '../store/HudStore';

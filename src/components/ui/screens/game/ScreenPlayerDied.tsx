@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import { PLAYER_CHARACTER } from '../../../../content/constants';
 import { useHudStore } from '../../../../hooks/useHudStore';
 
 interface ScreenPlayerDiedProps {
     onContinue: () => void;
+    onRespawn: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobileDevice }) => {
+const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, onRespawn, isMobileDevice }) => {
     const [isVisible, setIsVisible] = useState(false);
 
     // Fetch data using optimized selectors
@@ -33,7 +34,7 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
     // Zero-GC: Memoize death details
     const { deathPhrase, deathDisplayText } = useMemo(() => {
         const phrase = killedByEnemy ? t('ui.killed_by') : t('ui.died_from');
-        
+
         // If environmental, killerName contains the hazard (Fire, Drowning)
         // If enemy, killerName is enemy type, deathReason is attack type
         const displayName = killedByEnemy && deathReason && deathReason !== 'HIT'
@@ -69,15 +70,28 @@ const ScreenPlayerDied: React.FC<ScreenPlayerDiedProps> = ({ onContinue, isMobil
                     </p>
                 </div>
 
-                {/* Action Button */}
-                <div className={`relative flex flex-col items-center gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-deathFadeIn`}>
+                {/* Action Buttons */}
+                <div className={`relative flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 ${isMobileDevice ? 'mt-6' : 'mt-12'} w-full z-10 animate-deathFadeIn`}>
+
+                    {/* 1. Respawn Button (Instant) */}
+                    <button
+                        onClick={onRespawn}
+                        className={`group relative ${isMobileDevice ? 'px-10 py-4' : 'px-14 py-5'} bg-red-600 text-white border-4 border-black shadow-[0_0_40px_rgba(255,0,0,0.2)] transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] pointer-events-auto`}>
+                        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300" />
+                        <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
+                            {t('ui.respawn')}
+                        </span>
+                    </button>
+
+                    {/* 2. Continue Button (To Report) */}
                     <button
                         onClick={onContinue}
-                        className={`group relative ${isMobileDevice ? 'px-12 py-4' : 'px-16 py-5'} bg-white text-black border-4 border-black transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] sm:min-w-[280px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
+                        className={`group relative ${isMobileDevice ? 'px-10 py-4' : 'px-14 py-5'} bg-white text-black border-4 border-black hover:bg-gray-200 transition-all duration-200 hover:scale-105 active:scale-95 rounded-full overflow-hidden min-w-[240px] shadow-[0_0_30px_rgba(255,255,255,0.1)] pointer-events-auto`}>
                         <span className={`relative z-10 ${isMobileDevice ? 'text-lg' : 'text-xl'} font-black tracking-[0.2em] uppercase`}>
                             {t('ui.continue')}
                         </span>
                     </button>
+
                 </div>
             </div>
 

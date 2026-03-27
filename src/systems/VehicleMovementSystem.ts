@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { VehicleDef } from '../content/vehicles';
 import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';

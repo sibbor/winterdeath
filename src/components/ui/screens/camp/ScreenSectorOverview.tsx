@@ -6,7 +6,7 @@ import { useOrientation } from '../../../../hooks/useOrientation';
 import { en } from '../../../../locales/en';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';;
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenSectorOverviewProps {
     currentSector: number;

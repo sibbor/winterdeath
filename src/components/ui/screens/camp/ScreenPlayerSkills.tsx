@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';;
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { LEVEL_CAP } from '../../../../content/constants';
 import { useOrientation } from '../../../../hooks/useOrientation';
@@ -102,8 +102,8 @@ const ScreenPlayerSkills: React.FC<ScreenPlayerSkillsProps> = ({ stats, onSave, 
                             <button
                                 onClick={() => handleUpgradeSkill(skill.id, cost, skill.value)}
                                 disabled={!canAfford}
-                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford 
-                                    ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40' 
+                                className={`w-full ${isMobileDevice ? 'py-2' : 'py-4'} font-bold uppercase tracking-wider border-2 transition-all ${canAfford
+                                    ? 'bg-purple-900/20 border-purple-500 text-purple-400 hover:bg-purple-900/40'
                                     : 'bg-black border-gray-800 text-gray-600 cursor-not-allowed'}`}
                             >
                                 <span className={`${isMobileDevice ? 'text-xs' : 'text-base'} block`}>{t('ui.upgrade')} ({cost} SP)</span>

@@ -5,6 +5,7 @@ import { System } from './System';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from './WaterSystem';
+import { INITIAL_STATS } from '../content/constants';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3(); // Target Position / Offset
@@ -59,7 +60,7 @@ export class FamilySystem implements System {
         const state = _session.state;
 
         // --- Mirror player speed for the follow movement ---
-        const playerSpeedValue = (_session.state as any).stats?.speed ?? 1.0;
+        const playerSpeedValue = (_session.state as any).stats?.speed ?? INITIAL_STATS.speed;
 
         // [VINTERDÖD FIX] Om värdet är högt antar vi att det är km/h och konverterar till m/s.
         // Annars (om det är typ 1.0) agerar vi som förr.
@@ -163,6 +164,7 @@ export class FamilySystem implements System {
                     const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
                     ring.scale.set(pulse, pulse, pulse);
                     ring.rotation.y = now * 0.0005;
+                    ring.updateMatrix();
                 }
             }
 

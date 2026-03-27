@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 
 // --- TYPES & INTERFACES ---
 

@@ -3,7 +3,7 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
 import { CameraSystem } from './CameraSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { STORY_SCRIPTS } from '../content/dialogues';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -96,7 +96,7 @@ export class CinematicSystem implements System {
 
     public endCinematic() {
         const cinematic = this.cinematicRef.current;
-        
+
         // Start Zoom-Out Phase
         cinematic.active = false;
         cinematic.isClosing = true;
@@ -122,22 +122,22 @@ export class CinematicSystem implements System {
         // --- 1. CAMERA INTERPOLATION (Zero-GC) ---
         if (cinematic.target) {
             const targetPos = cinematic.target.position;
-            
+
             // Focused Midpoint Target (Always updated to follow moving characters)
             _v1.set(
                 (targetPos.x + playerPos.x) * 0.5,
-                (targetPos.y + playerPos.y) * 0.5 + 1.0, 
+                (targetPos.y + playerPos.y) * 0.5 + 1.0,
                 (targetPos.z + playerPos.z) * 0.5
             );
 
-            const envCameraZ = 20; 
-            const envCameraY = 22; 
+            const envCameraZ = 20;
+            const envCameraY = 22;
 
             // Smooth Interpolation Phases
             let t = 0;
             if (cinematic.active && !cinematic.isClosing) {
                 // IN-PHASE: Slide from start position to focused view
-                t = Math.min(1.0, totalElapsed / 1500); 
+                t = Math.min(1.0, totalElapsed / 1500);
                 t = 1.0 - Math.pow(1.0 - t, 3); // Ease out cubic
             } else if (cinematic.isClosing) {
                 // OUT-PHASE: Slide back to player view
@@ -184,7 +184,7 @@ export class CinematicSystem implements System {
         // Speaker Identification
         const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
         const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
-        
+
         // Voice sound (Zero-GC Throttled)
         if (timeInLine < cinematic.typingDuration && (now % 200 < 32)) {
             soundManager.playVoice(currentSpeakerName);
@@ -216,7 +216,7 @@ export class CinematicSystem implements System {
         // Line Conclusion (Triggers)
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             cinematic.fadingOut = true;
-            
+
             // Fire Script Triggers
             if (activeScriptLine.trigger) {
                 const triggers = activeScriptLine.trigger.split(',');
@@ -235,7 +235,7 @@ export class CinematicSystem implements System {
                     window.dispatchEvent(new CustomEvent(finalTrigger, { detail: payload }));
                 }
             }
-            
+
             // Advance Line
             const nextIdx = cinematic.lineIndex + 1;
             if (nextIdx >= cinematic.script.length) {

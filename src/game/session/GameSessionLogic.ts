@@ -29,7 +29,6 @@ export class GameSessionLogic {
 
     static createInitialState(props: GameCanvasProps): RuntimeState {
         const now = performance.now();
-        console.log(`[GameSessionLogic] 0. createInitialState. HP: ${props.stats?.hp}/${props.stats?.maxHp}, Sector: ${props.currentSector}`);
 
         if (!props.stats) {
             console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
@@ -111,6 +110,8 @@ export class GameSessionLogic {
             lastActionTime: now,
             thinkingUntil: 0,
             speakingUntil: 0,
+            sectorName: null,
+            initialAim: null,
             deathStartTime: 0,
             killerType: '',
             killerName: '',

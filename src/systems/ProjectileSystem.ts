@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { haptic } from '../utils/HapticManager';
 import { WEAPONS, WeaponType } from '../content/weapons';
 import { StatusEffectType, DamageType } from '../entities/player/CombatTypes';

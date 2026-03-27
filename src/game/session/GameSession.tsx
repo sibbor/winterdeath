@@ -3,15 +3,14 @@ import * as THREE from 'three';
 import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { t } from '../../utils/i18n';
 import { WEAPONS, LEVEL_CAP, BOSSES, WEATHER_SYSTEM, WIND_SYSTEM } from '../../content/constants';
 import { useGameSessionState } from './useGameSessionState';
 import { useGameInput } from './useGameInput';
-import { GameSessionSetup } from './GameSessionSetup';
+import { GameSessionSetup, SetupContext } from './GameSessionSetup'; // Added SetupContext import
 import { createGameLoop } from './GameSessionLoop';
 import { GameSessionUI } from './GameSessionUI';
-import { requestWakeLock, releaseWakeLock } from '../../utils/device';
 import { FXSystem } from '../../systems/FXSystem';
 import { aggregateStats } from '../../game/progression/ProgressionManager';
 import { SectorSystem } from '../../systems/SectorSystem';
@@ -29,6 +28,8 @@ export interface GameSessionHandle {
     getMergedSessionStats: () => any;
     spawnBoss: (type: string, pos?: THREE.Vector3) => any;
     spawnEnemies: (newEnemies: any[]) => void;
+    respawnPlayer: () => void; // Keep current session state
+    restartSector: () => Promise<void>; // Full sector reset
 }
 
 // Zero-GC fallback constants to prevent allocating new objects/arrays on every stat fetch
@@ -42,6 +43,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
     // 1. Core State and References
     const { refs, uiState, updateUiState, setUiState } = useGameSessionState(props);
+
+    // VINTERDÖD FIX: Keep a reference to the initial SetupContext for full restarts
+    const setupContextRef = useRef<SetupContext | null>(null);
 
     // --- ZERO-GC: Latest Props Ref ---
     // We store the latest closures and state here to prevent rebuilding the massive uiCallbacks object
@@ -320,16 +324,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         gainXp
     }), []);
 
-    // --- Wake Lock Management ---
-    /*
-    useEffect(() => {
-        requestWakeLock();
-        return () => {
-            releaseWakeLock();
-        };
-    }, []);
-    */
-
     // --- ZERO-GC: Global Event Listeners ---
     useEffect(() => {
         const handleBossSpawn = (e: any) => {
@@ -451,8 +445,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (props.isRunning && !props.isPaused && !uiState.isSectorLoading) {
             const currentSector = refs.propsRef.current.currentSectorData;
 
-            if (currentSector?.environment.ambientLoop && !soundManager.isMusicPlaying()) {
-                soundManager.playMusic(currentSector.environment.ambientLoop);
+            if (currentSector?.ambientLoop && !soundManager.isMusicPlaying()) {
+                soundManager.playMusic(currentSector.ambientLoop);
             }
 
             if (currentSector?.intro && !hasPlayedIntroRef.current) {
@@ -481,7 +475,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         getSectorStats,
         getMergedSessionStats: () => {
             const sessionStats = getSectorStats(false, false);
-            // Safe props read
             return aggregateStats(latestStateRef.current.props.stats, sessionStats, false, false, 0);
         },
         triggerInput: (key: string) => {
@@ -507,7 +500,30 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     if (!seen) refs.stateRef.current.seenEnemies.push(e.type);
                 }
             }
-        }
+        },
+
+        // VINTERDÖD FIX: Respawns player at spawn point. Keeps world state (chests, unlocked doors etc)
+        respawnPlayer: () => {
+            const engine = WinterEngine.getInstance();
+            const state = latestStateRef.current.runtimeState;
+            const setDeathPhase = (phase: string) => updateUiState({ deathPhase: phase as any });
+
+            GameSessionSetup.respawnPlayer(engine, state, refs, props, setDeathPhase);
+        },
+
+        // VINTERDÖD FIX: Full restart of the sector. Resets chests, loot, and enemies.
+        restartSector: async () => {
+            const currentSetupId = refs.setupIdRef.current;
+            const ctx = setupContextRef.current;
+
+            if (!ctx) {
+                console.error("[GameSession] Restarting sector failed: No SetupContext found");
+                return;
+            }
+
+            await GameSessionSetup.restartSector(ctx, currentSetupId);
+        },
+
     }), []);
 
     // 4. Initialization and Teardown
@@ -518,19 +534,14 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         const engine = WinterEngine.getInstance();
         const currentSetupId = ++refs.setupIdRef.current;
 
-        // Explicitly purge scene before building.
-        // This prevents StrictMode double-invocation from leaving orphaned
-        // objects (chests, collectibles) from the aborted first run in the scene.
+        // 1. Explicitly purge scene from previous sessions (Camp or aborted Sectors)
+        // VINTERDÖD FIX: Use engine's native clearActiveScene instead of manual loop
+        // to prevent over-clearing persistence (e.g. Light proxies).
+        engine.clearActiveScene(false);
+
         if (refs.playerGroupRef.current) {
             engine.scene.remove(refs.playerGroupRef.current);
             refs.playerGroupRef.current = null as any;
-        }
-
-        for (let i = engine.scene.children.length - 1; i >= 0; i--) {
-            const child = engine.scene.children[i];
-            if (child.name !== 'MainCamera' && !child.userData.isEngineStatic) {
-                engine.scene.remove(child);
-            }
         }
 
         if (props.initialGraphics) {
@@ -548,12 +559,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         if (refs.stateRef.current) session.init(refs.stateRef.current);
         refs.gameSessionRef.current = session;
 
-        // Attach the player reference for systems (EnemyDetection, etc)
         if (refs.playerGroupRef.current) {
             session.playerPos = refs.playerGroupRef.current.position;
         }
 
-        // Bind the session as the logic context for all engine systems
         engine.onUpdateContext = session;
 
         if (props.debugMode) {
@@ -562,7 +571,9 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
         // Call the setup routine ASYNCHRONOUSLY
         const initSector = async () => {
-            await GameSessionSetup.runSectorSetup({
+
+            // VINTERDÖD FIX: Assemble SetupContext and store it in our reference for future restarts
+            const ctx: SetupContext = {
                 engine,
                 session,
                 state: refs.stateRef.current,
@@ -666,6 +677,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                         }
                                     }
                                     break;
+                                case 'SPAWN_BOSS':
+                                    if (payload) {
+                                        window.dispatchEvent(new CustomEvent('boss-spawn-trigger', {
+                                            detail: { type: payload.type, pos: payload.pos }
+                                        }));
+                                    }
+                                    break;
                                 case 'CAMERA_SHAKE':
                                     if (payload?.amount) refs.engineRef.current?.camera.shake(payload.amount);
                                     break;
@@ -693,6 +711,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                 case 'TRIGGER_FAMILY_FOLLOW':
                                     onAction(action);
                                     break;
+                                case 'FAMILY_MEMBER_FOUND':
+                                    if (payload) {
+                                        window.dispatchEvent(new CustomEvent('family-member-found', {
+                                            detail: { id: payload.id, name: payload.name }
+                                        }));
+                                        spawnBubble(payload.name + " saved!", 3000);
+                                        soundManager.playVictory();
+                                    }
+                                    break;
                                 case 'PLAY_SOUND':
                                     onAction({ type: 'SOUND', payload: { id: payload?.id || action.id } });
                                     break;
@@ -716,9 +743,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         sys?.playLine(index);
                     },
                     spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
+                        // VINTERDÖD FIX: Use local fallback for currentSectorData to prevent crash on undefined
+                        const sectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+
                         const origin = (refs.playerGroupRef.current && refs.playerGroupRef.current.children.length > 0)
                             ? refs.playerGroupRef.current.position
-                            : new THREE.Vector3(props.currentSectorData.playerSpawn.x, 0, props.currentSectorData.playerSpawn.z);
+                            : new THREE.Vector3(sectorData?.playerSpawn?.x || 0, 0, sectorData?.playerSpawn?.z || 0);
+
                         refs.sectorContextRef.current?.spawnZombie(forcedType, forcedPos || origin);
                     },
                     concludeSector,
@@ -727,14 +758,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     onBossKilled: (id: number) => {
                         soundManager.stopMusic();
                         const pProps = latestStateRef.current.props;
-                        if (pProps.currentSectorData?.environment.ambientLoop) {
-                            soundManager.playMusic(pProps.currentSectorData.environment.ambientLoop);
+                        const sectorData = pProps.currentSectorData || SectorSystem.getSector(pProps.currentSector || 0);
+                        if (sectorData?.ambientLoop) {
+                            soundManager.playMusic(sectorData.ambientLoop);
                         }
                     },
                     collectedCluesRef: refs.collectedCluesRef,
                 }
-            }, currentSetupId);
+            };
 
+            setupContextRef.current = ctx; // Store for restarts
+            await GameSessionSetup.runSectorSetup(ctx, currentSetupId);
 
             await new Promise<void>((resolve) => {
                 let framesToWait = 3;
@@ -753,7 +787,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             });
         };
 
-        // Kör den asynkrona funktionen!
         initSector();
 
         // Bind the Update Loop
@@ -796,7 +829,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     }, [props.currentSector]);
 
     // Environmental Sync Transition (RUNTIME ONLY)
-    // Updates values dynamically (e.g., Sector 6 zones) WITHOUT altering the scene graph
     useEffect(() => {
         if (!props.isWarmup && refs.engineRef.current) {
             const engine = refs.engineRef.current;

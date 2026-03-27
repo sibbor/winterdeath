@@ -9,7 +9,8 @@ interface ScreenSectorReportProps {
     stats: SectorStats;
     deathDetails: { killer: string } | null;
     onReturnCamp: () => void;
-    onRetry: () => void;
+    onRestartSector: () => void;
+    onRespawn: () => void;
     currentSector: number;
     isMobileDevice?: boolean;
 }
@@ -26,7 +27,7 @@ const formatDistance = (meters: number) => {
     return `${Math.floor(meters)} m`;
 };
 
-const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRetry, currentSector, isMobileDevice }) => {
+const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, currentSector, isMobileDevice }) => {
 
     const accuracy = stats.shotsFired > 0
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
@@ -57,7 +58,6 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const showRespawn = !!deathDetails || !!stats.aborted;
 
-
     // Helper for Stat Blocks (Time elapsed style)
     const StatBlock = ({ label, value, color }: { label: string, value: string | number, color: string }) => (
         <div>
@@ -73,8 +73,8 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
             onClose={showRespawn ? onReturnCamp : undefined}
             onCancel={showRespawn ? onReturnCamp : undefined}
             cancelLabel={showRespawn ? t('ui.return_camp') : undefined}
-            onConfirm={showRespawn ? onRetry : onReturnCamp}
-            confirmLabel={showRespawn ? t('ui.respawn') : t('ui.return_camp')}
+            onConfirm={showRespawn ? onRestartSector : onReturnCamp}
+            confirmLabel={showRespawn ? t('ui.restart_sector') : t('ui.return_camp')}
             showCloseButton={showRespawn}
         >
             {/* Aborted Banner */}

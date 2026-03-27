@@ -6,7 +6,7 @@ import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { WeaponType, WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';

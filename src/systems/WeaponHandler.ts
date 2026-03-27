@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WeaponType, WeaponCategory, WeaponBehavior, WEAPONS } from '../content/weapons';
 import { ProjectileSystem } from './ProjectileSystem';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { haptic } from '../utils/HapticManager';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';

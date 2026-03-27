@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { SectorContext } from '../../game/session/SectorTypes';
-import { MATERIALS } from '../../utils/assets';
+import { SectorContext } from '../../../game/session/SectorTypes';
+import { MATERIALS } from '../../../utils/assets';
 import { ObjectGenerator } from './ObjectGenerator';
-import { SectorGenerator } from './SectorGenerator';
-import { EnvironmentGenerator } from './EnvironmentGenerator';
+import { SectorBuilder } from '../SectorBuilder';
+import { VegetationGenerator } from './VegetationGenerator';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _pos = new THREE.Vector3(); // Added missing scratchpad for positions
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
 const _matrix = new THREE.Matrix4();
@@ -17,7 +18,7 @@ const _scale = new THREE.Vector3();
 
 let pathLayer = 0; // Incremental Y-offset to prevent Z-fighting
 
-// --- [VINTERDÖD] CACHED ASSETS (ZERO-GC VRAM) ---
+// --- CACHED ASSETS (ZERO-GC VRAM) ---
 const SHARED_GEO = {
     box: new THREE.BoxGeometry(1, 1, 1),
     plane: new THREE.PlaneGeometry(1, 1),
@@ -48,6 +49,7 @@ export const PathGenerator = {
             else _v1.set(0, 0, 1);
 
             _v2.crossVectors(_v1, _up).normalize();
+            // Expected clone() here to generate actual unique points for the path
             result.push(pt.clone().addScaledVector(_v2, offset));
         }
         return result;
@@ -72,7 +74,7 @@ export const PathGenerator = {
 
             _quat.setFromAxisAngle(_up, angle);
 
-            SectorGenerator.addObstacle(ctx, {
+            SectorBuilder.addObstacle(ctx, {
                 position: _v2.clone().setY(height / 2),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) },
@@ -118,8 +120,15 @@ export const PathGenerator = {
             geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
             geo.setIndex(idx);
             geo.computeVertexNormals();
+
             const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = name; mesh.receiveShadow = true;
+            mesh.name = name;
+            mesh.receiveShadow = true;
+
+            // VINTERDÖD: Freeze ribbon matrix
+            mesh.matrixAutoUpdate = false;
+            mesh.updateMatrix();
+
             ctx.scene.add(mesh);
         };
 
@@ -131,8 +140,9 @@ export const PathGenerator = {
         const sleeperCount = Math.floor(length / sleeperSpacing);
         const sleeperPoints = curve.getSpacedPoints(sleeperCount);
 
-        // Zero-GC: Use shared box, apply scale via matrix
         const sleeperIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.brownBrick, sleeperCount + 1);
+        sleeperIM.matrixAutoUpdate = false;
+        sleeperIM.updateMatrix();
 
         for (let i = 0; i < sleeperPoints.length; i++) {
             const pt = sleeperPoints[i];
@@ -142,8 +152,8 @@ export const PathGenerator = {
             _matrix.lookAt(pt, _v3.copy(pt).add(_v1), _up);
             _quat.setFromRotationMatrix(_matrix);
 
-            // Apply size (3.0, 0.15, 0.4) directly in the matrix
-            _matrix.compose(pt.clone().setY(0.08), _quat, _v2.set(3.0, 0.15, 0.4));
+            // VINTERDÖD: Fixed GC leak (pt.clone().setY() -> _pos.copy(pt).setY())
+            _matrix.compose(_pos.copy(pt).setY(0.08), _quat, _v2.set(3.0, 0.15, 0.4));
             sleeperIM.setMatrixAt(i, _matrix);
         }
         sleeperIM.instanceMatrix.needsUpdate = true;
@@ -198,13 +208,16 @@ export const PathGenerator = {
             }
 
             if ((showBlood || showFootprints) && i % 6 === 0) {
-                // Använd en instans-lösning om det är väldigt många, annars är detta okej 
-                // då decals (enkel plane) drar väldigt lite draw calls i jämförelse med 3D-modeller.
                 const decal = new THREE.Mesh(SHARED_GEO.plane, showBlood ? MATERIALS.bloodStainDecal : MATERIALS.footprintDecal);
                 decal.position.set(pt.x + (Math.random() - 0.5), yOff + 0.01, pt.z + (Math.random() - 0.5));
                 decal.rotation.x = -Math.PI / 2;
                 decal.rotation.z = Math.random() * Math.PI * 2;
                 decal.scale.setScalar(0.5 + Math.random() * 0.5);
+
+                // VINTERDÖD: Freeze decal matrices
+                decal.matrixAutoUpdate = false;
+                decal.updateMatrix();
+
                 ctx.scene.add(decal);
             }
         }
@@ -216,7 +229,13 @@ export const PathGenerator = {
         geo.computeVertexNormals();
 
         const mesh = new THREE.Mesh(geo, material);
-        mesh.renderOrder = 2; mesh.receiveShadow = true;
+        mesh.renderOrder = 2;
+        mesh.receiveShadow = true;
+
+        // VINTERDÖD: Freeze path matrix
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+
         ctx.scene.add(mesh);
 
         for (let i = 0; i < pts.length; i += 10) {
@@ -260,9 +279,12 @@ export const PathGenerator = {
         const mat = options.material.clone();
         if (options.color !== undefined) (mat as any).color.setHex(options.color);
 
-        // Zero-GC: Shared Plane
         const im = new THREE.InstancedMesh(SHARED_GEO.plane, mat, count);
         im.renderOrder = 5;
+
+        // VINTERDÖD: Freeze InstancedMesh
+        im.matrixAutoUpdate = false;
+        im.updateMatrix();
 
         for (let i = 0; i < pts.length; i++) {
             const pt = pts[i];
@@ -315,11 +337,17 @@ export const PathGenerator = {
         for (let k = 0; k < parts.length; k++) {
             const p = parts[k];
             const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, segCount);
+
+            // VINTERDÖD: Freeze InstancedMesh
+            im.matrixAutoUpdate = false;
+            im.updateMatrix();
+
             if (color !== 'wood' && color !== 'mesh') {
                 const m = p.mesh.material.clone();
                 m.color.setHex(color === 'white' ? 0xffffff : 0x222222);
                 im.material = m;
             }
+
             for (let i = 0; i < segCount; i++) {
                 const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
                 _matrix.lookAt(mid, pts[i + 1], _up);
@@ -336,7 +364,7 @@ export const PathGenerator = {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
             _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
 
-            SectorGenerator.addObstacle(ctx, {
+            SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) }
@@ -348,13 +376,18 @@ export const PathGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const steps = Math.ceil(curve.getLength() / 2.0);
         const pts = curve.getSpacedPoints(steps);
-        const proto = EnvironmentGenerator.createHedge(2.2, height, thickness);
+        const proto = VegetationGenerator.createHedge(2.2, height, thickness);
         const parts: any[] = [];
         proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
 
         for (let k = 0; k < parts.length; k++) {
             const p = parts[k];
             const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, pts.length - 1);
+
+            // VINTERDÖD: Freeze InstancedMesh
+            im.matrixAutoUpdate = false;
+            im.updateMatrix();
+
             for (let i = 0; i < pts.length - 1; i++) {
                 const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
                 _matrix.lookAt(mid, pts[i + 1], _up);
@@ -371,7 +404,7 @@ export const PathGenerator = {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
             _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
 
-            SectorGenerator.addObstacle(ctx, {
+            SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) }
@@ -385,20 +418,20 @@ export const PathGenerator = {
         const steps = Math.ceil(curve.getLength() / dist);
         const pts = curve.getSpacedPoints(steps);
 
-        // Zero-GC: Använd delad box och sätt dist i scale
         const im = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.stone, pts.length - 1);
+        im.matrixAutoUpdate = false;
+        im.updateMatrix();
 
         for (let i = 0; i < pts.length - 1; i++) {
             const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
             _matrix.lookAt(mid, pts[i + 1], _up);
             _quat.setFromRotationMatrix(_matrix);
 
-            // Offset y since box geometry is centered
             mid.y += height / 2;
             _matrix.compose(mid, _quat, _v3.set(thickness, height, dist));
             im.setMatrixAt(i, _matrix);
 
-            SectorGenerator.addObstacle(ctx, {
+            SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) }
@@ -412,12 +445,13 @@ export const PathGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const pts = curve.getSpacedPoints(Math.ceil(curve.getLength() / 2.0));
 
-        // Zero-GC Geometry
         const postIM = new THREE.InstancedMesh(SHARED_GEO.cylinder, MATERIALS.blackMetal, pts.length);
+        postIM.matrixAutoUpdate = false; postIM.updateMatrix();
+
         const railIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.blackMetal, pts.length - 1);
+        railIM.matrixAutoUpdate = false; railIM.updateMatrix();
 
         for (let i = 0; i < pts.length; i++) {
-            // Apply scale (0.1 radius = 0.2 width, 1.0 height)
             _matrix.makeTranslation(pts[i].x, pts[i].y + 0.5, pts[i].z);
             _scale.set(0.2, 1.0, 0.2);
             _matrix.scale(_scale);
@@ -434,7 +468,7 @@ export const PathGenerator = {
 
             _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
 
-            SectorGenerator.addObstacle(ctx, {
+            SectorBuilder.addObstacle(ctx, {
                 position: mid.clone().setY(floating ? mid.y : mid.y / 2),
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) }
@@ -442,7 +476,8 @@ export const PathGenerator = {
         }
         postIM.instanceMatrix.needsUpdate = true;
         railIM.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(postIM); ctx.scene.add(railIM);
+        ctx.scene.add(postIM);
+        ctx.scene.add(railIM);
     },
 
     createEmbankment: (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
@@ -451,7 +486,6 @@ export const PathGenerator = {
         const pts = curve.getSpacedPoints(segments);
         const v: number[] = [], idx: number[] = [], uv: number[] = [];
 
-        // Local vectors to avoid GC and state collisions
         const _v1_local = new THREE.Vector3();
         const _v2_local = new THREE.Vector3();
         const _up_local = new THREE.Vector3(0, 1, 0);
@@ -493,7 +527,7 @@ export const PathGenerator = {
 
                 _quat_local.setFromAxisAngle(_up_local, angle);
 
-                SectorGenerator.addObstacle(ctx, {
+                SectorBuilder.addObstacle(ctx, {
                     position: mid.clone().setY(height / 2),
                     quaternion: _quat_local.clone(),
                     collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) }
@@ -512,6 +546,11 @@ export const PathGenerator = {
 
         const mesh = new THREE.Mesh(geo, material);
         mesh.receiveShadow = true;
+
+        // VINTERDÖD: Freeze matrix
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+
         ctx.scene.add(mesh);
     },
 };

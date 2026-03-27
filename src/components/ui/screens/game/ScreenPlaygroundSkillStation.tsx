@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { SectorState } from '../../../../game/session/SessionTypes';;
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
 const SKILLS_CONFIG = [

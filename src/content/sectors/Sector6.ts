@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext, AtmosphereZone } from '../../game/session/SectorTypes';
 import { MATERIALS, createTextSprite } from '../../utils/assets';
 import { t } from '../../utils/i18n';
-import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
-import { PathGenerator } from '../../core/world/PathGenerator';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
+import { PathGenerator } from '../../core/world/generators/PathGenerator';
+import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { CAMERA_HEIGHT } from '../constants';
 
 const _v1 = new THREE.Vector3();
@@ -67,7 +68,7 @@ export const Sector6: SectorDef = {
         const { scene } = ctx;
 
         // DUMMY COLLECTIBLE FOR TESTING
-        SectorGenerator.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge');
+        SectorBuilder.spawnCollectible(ctx, 0, 15, 'dummy_badge_test', 'badge');
 
         // --- PLAZA (Center 0,0) ---
         // Circular concrete plaza
@@ -89,28 +90,28 @@ export const Sector6: SectorDef = {
         const s_scale = 1.5;   // Magnificent Scale
 
         // 1. Armory (West)
-        SectorGenerator.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
+        SectorBuilder.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
         const armoryLabel = createTextSprite(t('stations.armory'));
         armoryLabel.position.set(-stationDist, 4.5, 0);
         armoryLabel.scale.set(10, 1.5, 1);
         scene.add(armoryLabel);
 
         // 2. Enemy Spawner (North)
-        SectorGenerator.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
+        SectorBuilder.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
         const spawnerLabel = createTextSprite(t('ui.enemy_spawner'));
         spawnerLabel.position.set(0, 4.5, -stationDist);
         spawnerLabel.scale.set(10, 1.5, 1);
         scene.add(spawnerLabel);
 
         // 3. Environment Control (East)
-        SectorGenerator.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
+        SectorBuilder.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
         const envLabel = createTextSprite(t('ui.environment_control'));
         envLabel.position.set(stationDist, 4.5, 0);
         envLabel.scale.set(10, 1.5, 1);
         scene.add(envLabel);
 
         // 4. Skill Station (South)
-        SectorGenerator.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
+        SectorBuilder.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
         const skillLabel = createTextSprite(t('stations.skills'));
         skillLabel.position.set(0, 4.5, stationDist);
         skillLabel.scale.set(10, 1.5, 1);
@@ -125,11 +126,11 @@ export const Sector6: SectorDef = {
         };
 
         // Vehicles at the spawn point
-        SectorGenerator.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
-        SectorGenerator.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
-        SectorGenerator.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
-        SectorGenerator.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police', undefined, false);
-        SectorGenerator.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance', undefined, false);
+        SectorBuilder.spawnDriveableVehicle(ctx, -20, 10, Math.PI / 1, 'sedan', undefined, false);
+        SectorBuilder.spawnDriveableVehicle(ctx, 0, 30, Math.PI / 2, 'timber_truck', undefined, false);
+        SectorBuilder.spawnDriveableVehicle(ctx, -20, 20, Math.PI / 3, 'bus', undefined, false);
+        SectorBuilder.spawnDriveableVehicle(ctx, 20, 10, Math.PI / 4, 'police', undefined, false);
+        SectorBuilder.spawnDriveableVehicle(ctx, 20, 20, Math.PI / 5, 'ambulance', undefined, false);
 
 
         // --- BIOME GENERATION ---
@@ -158,15 +159,15 @@ export const Sector6: SectorDef = {
 
         // 1. FOREST
         const p0 = SECTOR6_ZONES[0];
-        EnvironmentGenerator.createForest(ctx, { x: p0.x, z: p0.z, w: 180, d: 180 }, 120, 'PINE');
+        VegetationGenerator.createForest(ctx, { x: p0.x, z: p0.z, w: 180, d: 180 }, 120, 'PINE');
         for (let j = 0; j < 30; j++) {
             const rX = p0.x + (Math.random() - 0.5) * 160;
             const rZ = p0.z + (Math.random() - 0.5) * 160;
             if (Math.abs(rX - p0.x) < 15 && Math.abs(rZ - p0.z) < 15) continue;
-            const rock = EnvironmentGenerator.createRock(4 + Math.random() * 4, 2 + Math.random() * 2);
+            const rock = NaturePropGenerator.createRock(4 + Math.random() * 4, 2 + Math.random() * 2);
             rock.position.set(rX, 0, rZ);
             scene.add(rock);
-            SectorGenerator.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: 'sphere', radius: 3 } });
+            SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 4, collider: { type: 'sphere', radius: 3 } });
         }
 
         // 2. FARM
@@ -177,10 +178,10 @@ export const Sector6: SectorDef = {
             new THREE.Vector3(p1.x + 90, 0, p1.z + 90),
             new THREE.Vector3(p1.x - 90, 0, p1.z + 90),
         ];
-        EnvironmentGenerator.fillWheatField(ctx, farmRect, 0.4);
+        VegetationGenerator.fillWheatField(ctx, farmRect, 0.4);
 
         // --- Tractor (Driveable) ---
-        SectorGenerator.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');
+        SectorBuilder.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');
 
         // 3. VILLAGE
         const p2 = SECTOR6_ZONES[2];
@@ -200,26 +201,26 @@ export const Sector6: SectorDef = {
                 });
 
                 scene.add(house);
-                SectorGenerator.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: 'box', size: new THREE.Vector3(10, 8, 10) } });
+                SectorBuilder.addObstacle(ctx, { mesh: house, position: house.position, collider: { type: 'box', size: new THREE.Vector3(10, 8, 10) } });
             }
         }
 
         // --- Car (Driveable) ---
-        SectorGenerator.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
+        SectorBuilder.spawnDriveableVehicle(ctx, p2.x, p2.z, Math.PI / 2, 'station_wagon');
 
         // 4. WATER
         const p3 = SECTOR6_ZONES[3];
 
         // 4.1. Create the water body (The Lake) + Recessed Bed
-        const lake = SectorGenerator.addLake(ctx, p3.x, p3.z, 75, 5.0);
+        const lake = SectorBuilder.addLake(ctx, p3.x, p3.z, 75, 5.0);
 
         // 4.2. Large stone
-        const bigStone = EnvironmentGenerator.createRock(35, 15, 10);
+        const bigStone = NaturePropGenerator.createRock(35, 15, 10);
         bigStone.position.set(p3.x - 30, -2, p3.z + 20);
         bigStone.scale.set(1.5, 1.2, 1.5);
         scene.add(bigStone);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: bigStone,
             position: bigStone.position,
             radius: 10,
@@ -230,7 +231,7 @@ export const Sector6: SectorDef = {
         if (lake) lake.registerSplashSource(bigStone);
 
         // 4.3. Boat
-        const boatGroup = SectorGenerator.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
+        const boatGroup = SectorBuilder.spawnFloatableVehicle(ctx, p3.x, p3.z, Math.random() * Math.PI);
         if (lake && boatGroup) {
             lake.registerFloatingProp(boatGroup);
             lake.registerSplashSource(boatGroup);
@@ -266,7 +267,7 @@ export const Sector6: SectorDef = {
             collider: { type: 'sphere', radius: 1.5 },
             type: 'Ball'
         };
-        SectorGenerator.addObstacle(ctx, ballObstacle);
+        SectorBuilder.addObstacle(ctx, ballObstacle);
 
         // Save references in state so we can update physics in onUpdate
         ctx.state.interactiveBall = ball;
@@ -283,7 +284,7 @@ export const Sector6: SectorDef = {
             pillar.position.set(px, 8, pz);
             pillar.castShadow = true;
             scene.add(pillar);
-            SectorGenerator.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: 'box', size: new THREE.Vector3(4, 30, 4) } });
+            SectorBuilder.addObstacle(ctx, { mesh: pillar, position: pillar.position, collider: { type: 'box', size: new THREE.Vector3(4, 30, 4) } });
         }
         // Add a small pond in the center of the ruins
         const pondCenter = { x: p4.x, y: -0.25, z: p4.z };
@@ -298,14 +299,14 @@ export const Sector6: SectorDef = {
         // Add some rocks around the pond
         for (let i = 0; i < 8; i++) {
             const angle = (i / 8) * Math.PI * 2;
-            const rock = EnvironmentGenerator.createRock(8, 8);
+            const rock = NaturePropGenerator.createRock(8, 8);
             rock.position.set(
                 pondCenter.x + Math.cos(angle) * (pondRadius + 5),
                 -2,
                 pondCenter.z + Math.sin(angle) * (pondRadius + 5)
             );
             scene.add(rock);
-            SectorGenerator.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: 'sphere', radius: 5 } });
+            SectorBuilder.addObstacle(ctx, { mesh: rock, position: rock.position, radius: 5, collider: { type: 'sphere', radius: 5 } });
         }
     },
 

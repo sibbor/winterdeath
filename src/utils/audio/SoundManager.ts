@@ -1,7 +1,7 @@
-import { SoundCore } from './audio/SoundCore';
-import { SoundBank } from './audio/SoundBank';
-import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './audio/SoundLib';
-import { EnemyType } from '../entities/enemies/EnemyTypes';
+import { SoundCore } from './SoundCore';
+import { SoundBank } from './SoundBank';
+import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './SoundLib';
+import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.
@@ -78,7 +78,7 @@ export class SoundManager {
   playUiHover() { UiSounds.playUiHover(this.core); }
   playUiClick() { UiSounds.playClick(this.core); }
   playUiConfirm() { UiSounds.playConfirm(this.core); }
-  playUiPickup() { GamePlaySounds.playPickupCollectiblee(this.core); }
+  playUiPickup() { GamePlaySounds.playPickupCollectible(this.core); }
   playOpenChest() { GamePlaySounds.playOpenChest(this.core); }
   playLootingScrap() { GamePlaySounds.playLootingScrap(this.core); }
   playTone(freq: number, type: OscillatorType, duration: number, vol: number = 0.1) {
@@ -94,6 +94,7 @@ export class SoundManager {
     GamePlaySounds.playImpact(this.core, type);
   }
   playSwimming() { GamePlaySounds.playSwimming(this.core); }
+  playGlassShatter() { GamePlaySounds.playGlassShatter(this.core); }
   playDash() { SoundBank.play(this.core, 'dash', 0.25, 1.0 + Math.random() * 0.2); }
 
   // --- VOICE DELEGATES ---
@@ -450,7 +451,7 @@ export class SoundManager {
       SoundBank.play(this.core, 'door_metal_open', 0.3);
     }
   }
-  
+
   playVehicleImpact(type: 'light' | 'heavy') {
     const vol = type === 'heavy' ? 0.6 : 0.3;
     const pitch = type === 'heavy' ? 0.8 : 1.2;

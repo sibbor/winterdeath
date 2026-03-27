@@ -1,8 +1,8 @@
 
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
-import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 export const Sector5: SectorDef = {
@@ -42,7 +42,7 @@ export const Sector5: SectorDef = {
 
     setupProps: async (ctx: SectorContext) => {
         // Reward Chest at boss spawn
-        SectorGenerator.spawnChest(ctx, 0, 15, 'big');
+        SectorBuilder.spawnChest(ctx, 0, 15, 'big');
 
         // Add more fire/destruction
         for (let i = 0; i < 20; i++) {
@@ -64,7 +64,7 @@ export const Sector5: SectorDef = {
             new THREE.Vector3(30, 0, 30),
             new THREE.Vector3(-30, 0, 30)
         ];
-        await EnvironmentGenerator.fillAreaWithGrass(ctx, epilogueGrass, 2.5);
+        await VegetationGenerator.fillAreaWithGrass(ctx, epilogueGrass, 2.5);
 
         // Abundant flowers (peaceful ending)
         const epilogueFlowers1 = [
@@ -73,7 +73,7 @@ export const Sector5: SectorDef = {
             new THREE.Vector3(-10, 0, -10),
             new THREE.Vector3(-40, 0, -10)
         ];
-        await EnvironmentGenerator.fillAreaWithFlowers(ctx, epilogueFlowers1, 1.2);
+        await VegetationGenerator.fillAreaWithFlowers(ctx, epilogueFlowers1, 1.2);
 
         const epilogueFlowers2 = [
             new THREE.Vector3(10, 0, 10),
@@ -81,7 +81,7 @@ export const Sector5: SectorDef = {
             new THREE.Vector3(40, 0, 40),
             new THREE.Vector3(10, 0, 40)
         ];
-        await EnvironmentGenerator.fillAreaWithFlowers(ctx, epilogueFlowers2, 1.2);
+        await VegetationGenerator.fillAreaWithFlowers(ctx, epilogueFlowers2, 1.2);
 
         // ===== END EPILOGUE MEADOWS =====
     },
@@ -91,7 +91,7 @@ export const Sector5: SectorDef = {
         const { triggers } = ctx;
 
         // --- FIND PETS EVENT ---
-        SectorGenerator.addTriggers(ctx, [
+        SectorBuilder.addTriggers(ctx, [
             {
                 id: 'found_pets',
                 position: { x: 0, z: 15 }, // Inside Villa

@@ -96,7 +96,8 @@ const createHudBuffer = () => ({
     currentLine: null as any,
     cinematicActive: false,
     interactionPrompt: null as any,
-    hudVisible: true
+    hudVisible: true,
+    sectorName: null as string | null
 });
 
 const _bufferA = createHudBuffer();
@@ -316,6 +317,7 @@ export const HudSystem = {
         _current.mapItems = state.mapItems || [];
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
+        _current.sectorName = state.sectorName;
 
         // Debug Info Mapping
         if (input.aimVector) {

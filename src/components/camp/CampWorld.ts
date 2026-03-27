@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
 import { WeatherType } from '../../core/engine/EngineTypes';
@@ -275,7 +275,7 @@ const setupTrees = async (scene: THREE.Scene) => {
     treeInstances.push({ x: 15, z: 2, scale: 1.8, darken: 1.0 });
     treeInstances.push({ x: 0, z: -16, scale: 1, darken: 1.0 });
 
-    await EnvironmentGenerator.initNaturePrototypes();
+    await VegetationGenerator.initNaturePrototypes();
     const normalMatrices: Record<string, THREE.Matrix4[]> = {};
     const darkMatrices: Record<string, THREE.Matrix4[]> = {};
     const dummy = new THREE.Object3D();
@@ -300,8 +300,8 @@ const setupTrees = async (scene: THREE.Scene) => {
     }
 
     const silhouetteMat = MATERIALS.treeSilhouette;
-    for (const key in normalMatrices) EnvironmentGenerator.addInstancedTrees({ scene } as any, key, normalMatrices[key]);
-    for (const key in darkMatrices) EnvironmentGenerator.addInstancedTrees({ scene } as any, key, darkMatrices[key], silhouetteMat);
+    for (const key in normalMatrices) VegetationGenerator.addInstancedTrees({ scene } as any, key, normalMatrices[key]);
+    for (const key in darkMatrices) VegetationGenerator.addInstancedTrees({ scene } as any, key, darkMatrices[key], silhouetteMat);
 };
 
 const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) => {

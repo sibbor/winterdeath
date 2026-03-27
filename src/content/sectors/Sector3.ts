@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
-import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { PathGenerator } from '../../core/world/PathGenerator';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { PathGenerator } from '../../core/world/generators/PathGenerator';
+import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { CAMERA_HEIGHT } from '../../content/constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
@@ -139,42 +140,42 @@ export const Sector3: SectorDef = {
         fhGravel.receiveShadow = true;
         scene.add(fhGravel);
 
-        SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // --- 2. BUILDINGS & PROPS ---
-        const farm = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
-        SectorGenerator.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
+        const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
+        SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
 
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, EnemyType.RUNNER, Math.random() * Math.PI);
-        SectorGenerator.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, EnemyType.TANK, Math.random() * Math.PI);
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, EnemyType.RUNNER, Math.random() * Math.PI);
+        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, EnemyType.TANK, Math.random() * Math.PI);
 
-        SectorGenerator.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
-        SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
-        SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
-        SectorGenerator.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
+        SectorBuilder.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
+        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
 
-        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 15, LOCATIONS.POIS.FARM.z + 10, Math.PI / 4, 1.2);
-        SectorGenerator.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
+        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 15, LOCATIONS.POIS.FARM.z + 10, Math.PI / 4, 1.2);
+        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
 
-        SectorGenerator.spawnTimberPile(ctx, 122, -92, 0, 2.0);
-        SectorGenerator.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
+        SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
+        SectorBuilder.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
 
-        const farmHouse = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorGenerator.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
+        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
+        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
 
-        const barn = SectorGenerator.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorGenerator.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
+        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
+        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
 
         // Abandoned House 1: North of Farmhouse (Birch Forest)
         const house1Coords = { x: 285, z: -250 };
-        SectorGenerator.spawnBuilding(ctx, house1Coords.x, house1Coords.z, 12, 5, 12, Math.PI / 4, 0x445544, false);
-        SectorGenerator.spawnDeadBody(ctx, house1Coords.x + 5, house1Coords.z + 5, 'HUMAN', Math.random() * Math.PI);
+        SectorBuilder.spawnBuilding(ctx, house1Coords.x, house1Coords.z, 12, 5, 12, Math.PI / 4, 0x445544, false);
+        SectorBuilder.spawnDeadBody(ctx, house1Coords.x + 5, house1Coords.z + 5, 'HUMAN', Math.random() * Math.PI);
 
         // Abandoned House 2: South near boundary (Dead Forest)
         const house2Coords = { x: 300, z: 80 };
-        SectorGenerator.spawnBuilding(ctx, house2Coords.x, house2Coords.z, 15, 6, 15, -Math.PI / 3, 0x333333, false);
-        SectorGenerator.spawnDeadBody(ctx, house2Coords.x - 5, house2Coords.z - 5, 'HUMAN', Math.random() * Math.PI);
+        SectorBuilder.spawnBuilding(ctx, house2Coords.x, house2Coords.z, 15, 6, 15, -Math.PI / 3, 0x333333, false);
+        SectorBuilder.spawnDeadBody(ctx, house2Coords.x - 5, house2Coords.z - 5, 'HUMAN', Math.random() * Math.PI);
 
         // --- 3. SPLINE-BASED PROCEDURAL VEGETATION ---
         const trailPts = trailCurve.getSpacedPoints(80);
@@ -200,8 +201,8 @@ export const Sector3: SectorDef = {
         sprucePolyNorth.forEach(p => p.y = 0);
         sprucePolySouth.forEach(p => p.y = 0);
 
-        await SectorGenerator.createForest(ctx, sprucePolyNorth, 12, ['spruce', 'pine']);
-        await SectorGenerator.createForest(ctx, sprucePolySouth, 12, ['spruce', 'pine']);
+        await SectorBuilder.createForest(ctx, sprucePolyNorth, 12, ['spruce', 'pine']);
+        await SectorBuilder.createForest(ctx, sprucePolySouth, 12, ['spruce', 'pine']);
 
         // 4.6 Wheat Fields (Strictly SOUTH of Haglaredsvägen using offset spline)
         const wheatOffset = 7;
@@ -213,8 +214,8 @@ export const Sector3: SectorDef = {
             ...filterWheat1(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
         ];
         wheatPoly1.forEach(p => p.y = 0);
-        await SectorGenerator.fillWheatField(ctx, wheatPoly1, 0.4);
-        SectorGenerator.createScarecrow(ctx, 125, -95);
+        await SectorBuilder.fillWheatField(ctx, wheatPoly1, 0.4);
+        SectorBuilder.createScarecrow(ctx, 125, -95);
 
         const filterWheat2 = (points: THREE.Vector3[]) => points.filter(p => p.x > 170 && p.x < 240);
         const wheatPoly2 = [
@@ -222,8 +223,8 @@ export const Sector3: SectorDef = {
             ...filterWheat2(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
         ];
         wheatPoly2.forEach(p => p.y = 0);
-        await SectorGenerator.fillWheatField(ctx, wheatPoly2, 0.4);
-        SectorGenerator.createScarecrow(ctx, 205, -135);
+        await SectorBuilder.fillWheatField(ctx, wheatPoly2, 0.4);
+        SectorBuilder.createScarecrow(ctx, 205, -135);
 
         // 4.7 Flowers (Nested dynamically between Farm Path and Haglaredsvägen)
         const filterFlowersFarm = (points: THREE.Vector3[]) => points.filter(p => p.x > 160 && p.x < 250);
@@ -234,7 +235,7 @@ export const Sector3: SectorDef = {
             ...filterFlowersHag(PathGenerator.getOffsetPoints(hagPts, -4)).reverse()   // Inner north boundary of Haglaredsvägen
         ];
         flowerPoly.forEach(p => p.y = 0);
-        await SectorGenerator.fillAreaWithFlowers(ctx, flowerPoly, 0.9, 'flower');
+        await SectorBuilder.fillAreaWithFlowers(ctx, flowerPoly, 0.9, 'flower');
 
         // 4.8 Sunflowers (Strictly SOUTH of Haglaredsvägen, East of Mast Road)
         const sunflowerPoly1 = [
@@ -243,7 +244,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(360, 0, -80),
             new THREE.Vector3(310, 0, -80)
         ];
-        await SectorGenerator.fillAreaWithFlowers(ctx, sunflowerPoly1, 0.4, 'sunflower');
+        await SectorBuilder.fillAreaWithFlowers(ctx, sunflowerPoly1, 0.4, 'sunflower');
 
         const sunflowerPoly2 = [
             new THREE.Vector3(310, 0, -70),
@@ -251,7 +252,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(360, 0, -40),
             new THREE.Vector3(310, 0, -40)
         ];
-        await SectorGenerator.fillAreaWithFlowers(ctx, sunflowerPoly2, 0.4, 'sunflower');
+        await SectorBuilder.fillAreaWithFlowers(ctx, sunflowerPoly2, 0.4, 'sunflower');
 
         // 4.4 Birch Forest (Wrapping North and East of House 1)
         const birchPolyL = [
@@ -262,7 +263,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(300, 0, -240),
             new THREE.Vector3(260, 0, -240)
         ];
-        await SectorGenerator.createForest(ctx, birchPolyL, 15, ['birch']);
+        await SectorBuilder.createForest(ctx, birchPolyL, 15, ['birch']);
 
         // 4.5 Dead Trees (Wrapping House 2)
         const deadForestPoly = [
@@ -271,17 +272,17 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(340, 0, 110),
             new THREE.Vector3(270, 0, 110)
         ];
-        await SectorGenerator.createForest(ctx, deadForestPoly, 18, ['dead_tree']);
+        await SectorBuilder.createForest(ctx, deadForestPoly, 18, ['dead_tree']);
 
         // --- 4. LAKE & GRASS ---
         const lakeCoords = { x: 255, z: -117 };
-        const lake = SectorGenerator.addLake(ctx, lakeCoords.x, lakeCoords.z, 25, 7.0);
+        const lake = SectorBuilder.addLake(ctx, lakeCoords.x, lakeCoords.z, 25, 7.0);
 
-        const stone = EnvironmentGenerator.createRock(25, 25, 15);
+        const stone = NaturePropGenerator.createRock(25, 25, 15);
         stone.position.set(lakeCoords.x - 20, -2, lakeCoords.z + 10);
         scene.add(stone);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: stone,
             position: stone.position,
             collider: { type: 'sphere', radius: 12.5 }
@@ -289,7 +290,7 @@ export const Sector3: SectorDef = {
 
         if (lake) lake.registerSplashSource(stone);
 
-        const boatGroup = SectorGenerator.spawnFloatableVehicle(ctx, lakeCoords.x - 12.5, lakeCoords.z, Math.random() * Math.PI);
+        const boatGroup = SectorBuilder.spawnFloatableVehicle(ctx, lakeCoords.x - 12.5, lakeCoords.z, Math.random() * Math.PI);
         if (lake && boatGroup) {
             lake.registerFloatingProp(boatGroup);
             lake.registerSplashSource(boatGroup);
@@ -303,10 +304,10 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(180, 0, -10),
             new THREE.Vector3(120, 0, 10)
         ];
-        await EnvironmentGenerator.fillAreaWithGrass(ctx, sparseGrassPoly, 0.4);
+        await VegetationGenerator.fillAreaWithGrass(ctx, sparseGrassPoly, 0.4);
 
         // --- 5. MOUNTAIN BOUNDARY ---
-        SectorGenerator.createMountain(ctx, [
+        SectorBuilder.createMountain(ctx, [
             new THREE.Vector3(124, 0, 16),
             new THREE.Vector3(139, 0, -22),
             new THREE.Vector3(150, 0, -53),
@@ -322,33 +323,33 @@ export const Sector3: SectorDef = {
         asphalt.receiveShadow = true;
         scene.add(asphalt);
 
-        SectorGenerator.createFence(ctx, [
+        SectorBuilder.createFence(ctx, [
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30),
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z - 30),
             new THREE.Vector3(mastPos.x - 5, 0, mastPos.z - 30)
         ], 'black', 2.5);
 
-        SectorGenerator.createFence(ctx, [
+        SectorBuilder.createFence(ctx, [
             new THREE.Vector3(mastPos.x + 5, 0, mastPos.z - 30),
             new THREE.Vector3(mastPos.x + 30, 0, mastPos.z - 30),
             new THREE.Vector3(mastPos.x + 30, 0, mastPos.z + 30),
             new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30)
         ], 'black', 2.5);
 
-        SectorGenerator.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
+        SectorBuilder.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
 
         // The Mast
         const mastGroup = new THREE.Group();
         mastGroup.position.set(mastPos.x, 5, mastPos.z);
 
-        const mast = SectorGenerator.spawnMast(ctx, mastPos.x, mastPos.z);
+        const mast = SectorBuilder.spawnMast(ctx, mastPos.x, mastPos.z);
         mastLightHubRef = mast.getObjectByName("mastWarningLights") || null;
     },
 
     setupContent: async (ctx: SectorContext) => {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers:
-        SectorGenerator.addTriggers(ctx, [{ id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, familyId: 2, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
+        SectorBuilder.addTriggers(ctx, [{ id: 'found_esmeralda', position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA, familyId: 2, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
         { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: 'SPEAK', content: "clues.2.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
         { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'POI', content: "pois.2.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
         { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: 'POI', content: "pois.2.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },

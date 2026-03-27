@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
-import { soundManager } from '../../../utils/SoundManager';
+import { soundManager } from '../../../utils/audio/SoundManager';
 import { t } from '../../../utils/i18n';
 
 interface ScreenModalLayoutProps {

@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
-import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { PathGenerator } from '../../core/world/PathGenerator';
-import { ObjectGenerator } from '../../core/world/ObjectGenerator';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { PathGenerator } from '../../core/world/generators/PathGenerator';
+import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
+import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { generateCaveSystem } from './Sector2_Cave';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { CAMERA_HEIGHT } from '../../content/constants';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -49,15 +49,15 @@ const LOCATIONS = {
 async function addProps(ctx: SectorContext) {
     ctx.scene.add(ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0));
 
-    SectorGenerator.spawnBarrel(ctx, 106, -65);
-    SectorGenerator.spawnBarrel(ctx, 108, -67);
+    SectorBuilder.spawnBarrel(ctx, 106, -65);
+    SectorBuilder.spawnBarrel(ctx, 108, -67);
 
-    SectorGenerator.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
-    SectorGenerator.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
+    SectorBuilder.spawnTimberPile(ctx, 92, -60, Math.PI * 0.25, 2);
+    SectorBuilder.spawnTimberPile(ctx, 88, -55, Math.PI * 0.20, 1.5);
 
-    SectorGenerator.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
+    SectorBuilder.spawnVehicle(ctx, 111, -64, Math.PI * 1.25, 'timber_truck', undefined, true);
 
-    EnvironmentGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
+    VegetationGenerator.createDeforestation(ctx, 135, -75, 50, 30, 25);
 
     // Sparse grass
     /*
@@ -67,14 +67,14 @@ async function addProps(ctx: SectorContext) {
         new THREE.Vector3(20, 0, 190),
         new THREE.Vector3(-10, 0, 190)
     ];
-    EnvironmentGenerator.fillAreaWithGrass(ctx, sparseGrass, 0.8);
+    VegetationGenerator.fillAreaWithGrass(ctx, sparseGrass, 0.8);
     */
 
 
     // Fallen trees near cave
     /*
     for (let i = 0; i < 8; i++) {
-        const deadTree = EnvironmentGenerator.createDeadTree('fallen', 0.7 + Math.random() * 0.5);
+        const deadTree = VegetationGenerator.createDeadTree('fallen', 0.7 + Math.random() * 0.5);
         deadTree.position.set(85 + (Math.random() - 0.5) * 30, 0, -70 + (Math.random() - 0.5) * 20);
         ctx.scene.add(deadTree);
     }
@@ -106,32 +106,32 @@ function createBoundries(ctx: SectorContext, curve: THREE.Curve<THREE.Vector3>) 
         const part1 = blockPointsWest.slice(0, Math.max(0, splitIdx - gap));
         const part2 = blockPointsWest.slice(Math.min(blockPointsWest.length, splitIdx + gap));
 
-        if (part1.length > 1) SectorGenerator.createBoundry(ctx, part1, 'BoundryWall_West_A');
-        if (part2.length > 1) SectorGenerator.createBoundry(ctx, part2, 'BoundryWall_West_B');
+        if (part1.length > 1) SectorBuilder.createBoundry(ctx, part1, 'BoundryWall_West_A');
+        if (part2.length > 1) SectorBuilder.createBoundry(ctx, part2, 'BoundryWall_West_B');
     } else {
-        SectorGenerator.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
+        SectorBuilder.createBoundry(ctx, blockPointsWest, 'BoundryWall_West');
     }
 
     // East wall is continuous
-    SectorGenerator.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
+    SectorBuilder.createBoundry(ctx, blockPointsEast, 'BoundryWall_East');
 
-    SectorGenerator.createBoundry(ctx, [
+    SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(-34, 0, 213),
         new THREE.Vector3(34, 0, 213)
     ], 'BoundryWall_Back');
 
-    SectorGenerator.createBoundry(ctx, [
+    SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(158, 0, -88),
         new THREE.Vector3(158, 0, -17),
     ], 'BoundryWall_Tunnel');
 
-    SectorGenerator.createBoundry(ctx, [
+    SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(55, 0, -65),
         new THREE.Vector3(94, 0, -70),
 
     ], 'BoundryWall_LeftOfCave');
 
-    SectorGenerator.createBoundry(ctx, [
+    SectorBuilder.createBoundry(ctx, [
         new THREE.Vector3(107, 0, -70),
         new THREE.Vector3(118, 0, -85),
         new THREE.Vector3(135, 0, -90),
@@ -188,7 +188,7 @@ export const Sector2: SectorDef = {
         (ctx as any).sectorState.ctx = ctx;
 
         // Reward Chest at boss spawn
-        SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // --- RAILWAY ---
         const railRoadPath = [
@@ -205,7 +205,7 @@ export const Sector2: SectorDef = {
         const polyline = railTrackCurve.getSpacedPoints(15);
         for (let i = 0; i < polyline.length; i++) {
             if (i % 3 === 0) {
-                SectorGenerator.spawnElectricPole(ctx, polyline[i].x + 8, polyline[i].z, 0);
+                SectorBuilder.spawnElectricPole(ctx, polyline[i].x + 8, polyline[i].z, 0);
             }
         }
 
@@ -231,8 +231,8 @@ export const Sector2: SectorDef = {
         for (let i = 0; i < forestLeft.length; i++) forestLeft[i].y = 0;
         for (let i = 0; i < forestRight.length; i++) forestRight[i].y = 0;
 
-        SectorGenerator.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
-        SectorGenerator.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
+        SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
+        SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
 
         // --- BOUNDARIES ---
         createBoundries(ctx, railTrackCurve);
@@ -248,7 +248,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(200, 0, -14)
         ];
 
-        SectorGenerator.createMountain(ctx, mountainPoints, 20, 20,
+        SectorBuilder.createMountain(ctx, mountainPoints, 20, 20,
             {
                 position: new THREE.Vector3(LOCATIONS.POIS.CAVE_ENTRANCE.x, 0,
                     LOCATIONS.POIS.CAVE_ENTRANCE.z - 2),
@@ -262,7 +262,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
         ]);
         scene.add(trainTunnel);
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: trainTunnel,
             collider: { type: 'box', size: new THREE.Vector3(12, 6, 10) }
         });
@@ -289,7 +289,7 @@ export const Sector2: SectorDef = {
 
         if (!ctx.isWarmup) {
             // Triggers produce no GPU state — skip during preloader ghost-render
-            SectorGenerator.addTriggers(ctx, [
+            SectorBuilder.addTriggers(ctx, [
                 { id: 's2_start', position: LOCATIONS.TRIGGERS.START, radius: 10, type: 'THOUGHT', content: "clues.1.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
                 { id: 's2_combat', position: LOCATIONS.TRIGGERS.COMBAT, radius: 10, type: 'SPEAK', content: "clues.1.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
                 { id: 's2_cave_lights', position: LOCATIONS.TRIGGERS.CAVE_LIGHTS, radius: 10, type: 'SPEAK', content: "clues.1.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
@@ -311,7 +311,7 @@ export const Sector2: SectorDef = {
         // Make Door Interactable
         const doorFrame = scene.getObjectByName('s2_shelter_port_frame');
         if (doorFrame) {
-            SectorGenerator.addInteractable(ctx, doorFrame, {
+            SectorBuilder.addInteractable(ctx, doorFrame, {
                 id: 'cave_door',
                 label: 'ui.interact_knock_on_port',
                 type: 'sector_specific',

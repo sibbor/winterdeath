@@ -9,7 +9,7 @@ import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
 import { SECTOR_THEMES, ZOMBIE_TYPES, BOSSES, RANKS } from '../../../../content/constants';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;

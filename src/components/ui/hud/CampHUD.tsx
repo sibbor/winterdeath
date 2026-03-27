@@ -3,7 +3,7 @@ import React from 'react';
 import { PlayerStats } from '../../../entities/player/PlayerTypes';;
 import { t } from '../../../utils/i18n';
 import { RANKS } from '../../../content/constants';
-import { soundManager } from '../../../utils/SoundManager';
+import { soundManager } from '../../../utils/audio/SoundManager';
 
 interface CampHUDProps {
     stats: PlayerStats;

@@ -137,4 +137,5 @@ export interface HudState {
   cinematicActive: boolean;
   interactionPrompt: InteractionPromptData | null;
   hudVisible: boolean;
+  sectorName: string | null;
 }

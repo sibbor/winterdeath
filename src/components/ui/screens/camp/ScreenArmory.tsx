@@ -3,7 +3,7 @@ import { PlayerStats } from '../../../../entities/player/PlayerTypes';;
 import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../../../content/constants';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import { useOrientation } from '../../../../hooks/useOrientation';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
@@ -125,9 +125,9 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                                         } 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
-                                    style={isActive ? { 
+                                    style={isActive ? {
                                         backgroundColor: darkenColor(catColor, 20),
-                                        '--pulse-color': catColor 
+                                        '--pulse-color': catColor
                                     } as any : {}}
                                 >
                                     <span>{t(catKey)}</span>
@@ -139,118 +139,118 @@ const ScreenArmory: React.FC<ScreenArmoryProps> = ({ stats, currentLoadout, weap
                 </div>
 
                 <div className="flex-1 flex flex-col min-w-0 pr-safe min-h-0">
-                     {/* Main Content Area */}
+                    {/* Main Content Area */}
                     <div className={`${isMobileDevice && !isLandscapeMode ? 'flex flex-col gap-10' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'} overflow-y-auto pb-8 pr-1 custom-scrollbar`}>
-                    {Object.values(WEAPONS).filter(w => w.category === activeTab).map((weapon) => {
-                        const level = tempWeaponLevels[weapon.name] || 1;
-                        const cost = SCRAP_COST_BASE * level;
-                        const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
-                        const canAfford = tempStats.scrap >= cost;
-                        const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
-                        const isEquippable = weapon.category !== WeaponCategory.TOOL;
-                        const isUpgradeable = isEquippable;
+                        {Object.values(WEAPONS).filter(w => w.category === activeTab).map((weapon) => {
+                            const level = tempWeaponLevels[weapon.name] || 1;
+                            const cost = SCRAP_COST_BASE * level;
+                            const isEquipped = tempLoadout.primary === weapon.name || tempLoadout.secondary === weapon.name || tempLoadout.throwable === weapon.name || tempLoadout.special === weapon.name;
+                            const canAfford = tempStats.scrap >= cost;
+                            const categoryColor = WeaponCategoryColors[weapon.category as keyof typeof WeaponCategoryColors];
+                            const isEquippable = weapon.category !== WeaponCategory.TOOL;
+                            const isUpgradeable = isEquippable;
 
-                        return (
-                            <div
-                                key={weapon.name}
-                                onClick={() => !isEquipped && isEquippable && handleEquip(weapon.name, weapon.category)}
-                                className={`relative border-2 transition-all group overflow-hidden flex self-start flex-col
+                            return (
+                                <div
+                                    key={weapon.name}
+                                    onClick={() => !isEquipped && isEquippable && handleEquip(weapon.name, weapon.category)}
+                                    className={`relative border-2 transition-all group overflow-hidden flex self-start flex-col
                                     ${isEquipped ? 'cursor-default' : (isEquippable ? 'hover:bg-gray-800/60 cursor-pointer' : 'cursor-default')}
                                 `}
-                                style={{
-                                    borderColor: isEquipped ? categoryColor : '#374151',
-                                    backgroundColor: isEquipped ? `${categoryColor}15` : 'rgba(17, 24, 39, 0.4)',
-                                    boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none',
-                                    minHeight: isMobileDevice ? 'auto' : '300px'
-                                }}
-                            >
-                                {/* Top Side (Image & Level) */}
-                                 <div
-                                    className={`w-full flex flex-col border-b relative shrink-0 bg-black/40`}
-                                    style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
+                                    style={{
+                                        borderColor: isEquipped ? categoryColor : '#374151',
+                                        backgroundColor: isEquipped ? `${categoryColor}15` : 'rgba(17, 24, 39, 0.4)',
+                                        boxShadow: isEquipped ? `0 0 15px ${categoryColor}44` : 'none',
+                                        minHeight: isMobileDevice ? 'auto' : '300px'
+                                    }}
                                 >
-                                    <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
-                                        {weapon.iconIsPng ? (
-                                            <img src={weapon.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" />
-                                        ) : (
-                                            <div className="w-16 h-16 md:w-24 md:h-24" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                                    {/* Top Side (Image & Level) */}
+                                    <div
+                                        className={`w-full flex flex-col border-b relative shrink-0 bg-black/40`}
+                                        style={{ borderColor: isEquipped ? categoryColor : '#374151' }}
+                                    >
+                                        <div className={`${isMobileDevice ? 'h-32 min-h-[128px]' : 'h-40'} border-b border-gray-800/50 w-full flex items-center justify-center transition-transform group-hover:scale-110 duration-500`}>
+                                            {weapon.iconIsPng ? (
+                                                <img src={weapon.icon} alt="" className="w-full h-full object-contain filter brightness-0 invert" />
+                                            ) : (
+                                                <div className="w-16 h-16 md:w-24 md:h-24" dangerouslySetInnerHTML={{ __html: weapon.icon }} style={{ color: categoryColor }} />
+                                            )}
+                                        </div>
+
+
+                                        {/* Upgrade Button UNDER image */}
+                                        {isUpgradeable && (
+                                            <button
+                                                onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
+                                                disabled={!canAfford}
+                                                className={`w-full py-2.5 px-2 text-[10px] font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center transform ${canAfford
+                                                    ? 'bg-yellow-950/20 text-yellow-500 hover:bg-yellow-950/40 shadow-inner'
+                                                    : 'bg-black text-gray-700 cursor-not-allowed'
+                                                    }`}
+                                            >
+                                                {t('ui.upgrade')} ({cost})
+                                            </button>
+                                        )}
+
+                                        <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
+                                            {t('ui.lvl')} {level}
+                                        </div>
+
+                                        {isEquipped && (
+                                            <div className={`absolute top-0 right-0 px-1.5 py-0.5 bg-white text-black font-bold uppercase tracking-tighter text-[10px] border-b border-l border-black shadow-lg z-20`}>
+                                                {t('ui.equipped')}
+                                            </div>
                                         )}
                                     </div>
 
+                                    {/* Bottom Side (Stats) */}
+                                    <div className={`flex-1 flex flex-col justify-between ${isMobileDevice ? 'p-2 min-w-0' : 'p-5 gap-4'}`}>
+                                        <div className="min-w-0">
+                                            <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`}
+                                                style={{ color: isEquipped ? categoryColor : 'white' }}>
+                                                {t(weapon.displayName)}
+                                            </h3>
 
-                                    {/* Upgrade Button UNDER image */}
-                                    {isUpgradeable && (
-                                        <button
-                                            onClick={(e) => handleUpgradeWeapon(e, weapon.name)}
-                                            disabled={!canAfford}
-                                            className={`w-full py-2.5 px-2 text-[10px] font-bold uppercase transition-all duration-200 hover:scale-105 active:scale-95 flex items-center justify-center transform ${canAfford
-                                                ? 'bg-yellow-950/20 text-yellow-500 hover:bg-yellow-950/40 shadow-inner'
-                                                : 'bg-black text-gray-700 cursor-not-allowed'
-                                                }`}
-                                        >
-                                            {t('ui.upgrade')} ({cost})
-                                        </button>
-                                    )}
-
-                                    <div className={`absolute top-0 left-0 bg-gray-900/80 ${isMobileDevice ? 'text-[9px] px-1.5 py-0.5' : 'text-sm px-3 py-1'} font-bold text-gray-400 border-r border-b border-gray-700`}>
-                                        {t('ui.lvl')} {level}
-                                    </div>
-
-                                    {isEquipped && (
-                                        <div className={`absolute top-0 right-0 px-1.5 py-0.5 bg-white text-black font-bold uppercase tracking-tighter text-[10px] border-b border-l border-black shadow-lg z-20`}>
-                                            {t('ui.equipped')}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Bottom Side (Stats) */}
-                                <div className={`flex-1 flex flex-col justify-between ${isMobileDevice ? 'p-2 min-w-0' : 'p-5 gap-4'}`}>
-                                    <div className="min-w-0">
-                                        <h3 className={`${isMobileDevice ? 'text-lg leading-tight' : 'text-2xl'} font-semibold uppercase tracking-tighter truncate mb-1`}
-                                            style={{ color: isEquipped ? categoryColor : 'white' }}>
-                                            {t(weapon.displayName)}
-                                        </h3>
-
-                                        <div className={`flex flex-col gap-y-2 ${isMobileDevice ? 'text-xs' : 'text-sm'} font-mono text-gray-400`}>
-                                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                <span className="opacity-60">{t('ui.damage')}</span>
-                                                <div className="flex items-baseline gap-1.5">
-                                                    <span className="text-yellow-500 font-bold text-lg leading-none">
-                                                        {Math.floor(weapon.damage + (weapon.damage * (level - 1) * 0.1))}
-                                                    </span>
-                                                    <span className="text-white text-[10px] font-bold opacity-80 whitespace-nowrap">
-                                                        ({Math.floor(weapon.damage)} + <span className="text-yellow-500">{Math.floor(weapon.damage * (level - 1) * 0.1)}</span>)
-                                                    </span>
+                                            <div className={`flex flex-col gap-y-2 ${isMobileDevice ? 'text-xs' : 'text-sm'} font-mono text-gray-400`}>
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                    <span className="opacity-60">{t('ui.damage')}</span>
+                                                    <div className="flex items-baseline gap-1.5">
+                                                        <span className="text-yellow-500 font-bold text-lg leading-none">
+                                                            {Math.floor(weapon.damage + (weapon.damage * (level - 1) * 0.1))}
+                                                        </span>
+                                                        <span className="text-white text-[10px] font-bold opacity-80 whitespace-nowrap">
+                                                            ({Math.floor(weapon.damage)} + <span className="text-yellow-500">{Math.floor(weapon.damage * (level - 1) * 0.1)}</span>)
+                                                        </span>
+                                                    </div>
                                                 </div>
+                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                    <span className="opacity-60">{t('ui.range')}</span>
+                                                    <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
+                                                </div>
+                                                {weapon.radius && weapon.radius > 0 && (
+                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                        <span className="opacity-60">{t('ui.radius')}</span>
+                                                        <span className="text-white font-bold">{weapon.radius}m</span>
+                                                    </div>
+                                                )}
+                                                {weapon.magSize && weapon.magSize > 0 && (
+                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                        <span className="opacity-60">{t('ui.magazine')}</span>
+                                                        <span className="text-white font-bold">{weapon.magSize}</span>
+                                                    </div>
+                                                )}
+                                                {weapon.reloadTime && weapon.reloadTime > 0 && (
+                                                    <div className="flex justify-between border-b border-gray-800/50 pb-1">
+                                                        <span className="opacity-60">{t('ui.reload')}</span>
+                                                        <span className="text-white font-bold">{(weapon.reloadTime / 1000).toFixed(1)}s</span>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                <span className="opacity-60">{t('ui.range')}</span>
-                                                <span className="text-white font-bold">{weapon.range > 0 ? `${weapon.range}m` : '-'}</span>
-                                            </div>
-                                            {weapon.radius && weapon.radius > 0 && (
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                    <span className="opacity-60">{t('ui.radius')}</span>
-                                                    <span className="text-white font-bold">{weapon.radius}m</span>
-                                                </div>
-                                            )}
-                                            {weapon.magSize && weapon.magSize > 0 && (
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                    <span className="opacity-60">{t('ui.magazine')}</span>
-                                                    <span className="text-white font-bold">{weapon.magSize}</span>
-                                                </div>
-                                            )}
-                                            {weapon.reloadTime && weapon.reloadTime > 0 && (
-                                                <div className="flex justify-between border-b border-gray-800/50 pb-1">
-                                                    <span className="opacity-60">{t('ui.reload')}</span>
-                                                    <span className="text-white font-bold">{(weapon.reloadTime / 1000).toFixed(1)}s</span>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
                     </div>
                 </div>
             </div>

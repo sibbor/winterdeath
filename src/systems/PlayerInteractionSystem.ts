@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { WorldLootSystem } from './WorldLootSystem';
 import { getCollectibleById } from '../content/collectibles';
 import { FXSystem } from './FXSystem';
@@ -416,20 +416,47 @@ export class PlayerInteractionSystem implements System {
                 soundManager.playOpenChest();
                 WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
 
-                // ========================================================
-                // VINTERDÖD FIX: Släck det nya Zero-GC skenet!
-                // Vi gömmer helt enkelt hela planet när kistan öppnas.
-                // ========================================================
                 const glowRing = c.mesh.getObjectByName('chestGlow');
                 if (glowRing) {
                     glowRing.visible = false;
                 }
 
-                c.mesh.matrixAutoUpdate = true;
-                if (c.mesh.children[1]) {
-                    c.mesh.children[1].rotation.x = -Math.PI * 0.5;
-                    c.mesh.children[1].position.y -= 0.5;
-                    c.mesh.children[1].matrixAutoUpdate = true;
+                // Spawn magic sparkles using the correct parameters
+                const px = c.mesh.position.x;
+                const py = 1.0;
+                const pz = c.mesh.position.z;
+
+                FXSystem.spawnPart(session.engine.scene, state.particles, px, py, pz, 'spark', 15);
+
+                // Hinge animation for the lid
+                const lid = c.mesh.children[1];
+                if (lid) {
+                    c.mesh.matrixAutoUpdate = true;
+                    lid.matrixAutoUpdate = true;
+
+                    const targetRotationX = -Math.PI * 0.6; // Open slightly past 90 degrees
+                    let progress = 0;
+                    const duration = 400; // Animation duration in ms
+                    const startR = lid.rotation.x;
+
+                    const animateLid = (time: number, lastTime: number) => {
+                        const dt = time - lastTime;
+                        progress += dt;
+
+                        if (progress < duration) {
+                            // Ease-out cubic for a snappy open that slows down towards the end
+                            const t = progress / duration;
+                            const easeOut = 1 - Math.pow(1 - t, 3);
+
+                            lid.rotation.x = startR + (targetRotationX - startR) * easeOut;
+                            requestAnimationFrame((newTime) => animateLid(newTime, time));
+                        } else {
+                            // Ensure it sets exactly to target when finished
+                            lid.rotation.x = targetRotationX;
+                        }
+                    };
+
+                    requestAnimationFrame((time) => animateLid(time, time));
                 }
 
                 state.chestsOpened++;

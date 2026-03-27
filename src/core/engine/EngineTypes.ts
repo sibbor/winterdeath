@@ -70,6 +70,13 @@ export interface EnvironmentalZone {
 export interface EnvironmentOverride extends Partial<Omit<SectorEnvironment, 'weather'>> {
   weather?: WeatherType | EnvironmentalWeather;
   directionalIntensity?: number;
+  skyLightVisible?: boolean;
+  skyLightColor?: number;
+  skyLightIntensity?: number;
+  skyLightPosition?: { x: number, y: number, z: number };
+  fogColor?: number;
+  fogDensity?: number;
+  weatherDensity?: number;
   windStrength?: number;
   windDirection?: number;
   windRandomized?: boolean;

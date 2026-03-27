@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GameCanvasProps } from '../../game/session/SessionTypes';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { FLASHLIGHT } from '../../content/constants';
 
 export const useGameInput = (

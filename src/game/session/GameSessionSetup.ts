@@ -5,8 +5,8 @@ import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { PathGenerator } from '../../core/world/PathGenerator';
+import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ProjectileSystem } from '../../systems/ProjectileSystem';
 import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
@@ -14,9 +14,9 @@ import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
 import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
-import { soundManager } from '../../utils/SoundManager';
-
-// Systems
+import { soundManager } from '../../utils/audio/SoundManager';
+import { PlayerDeathState } from '../../entities/player/CombatTypes';
+import { WEAPONS } from '../../content/weapons';
 import { PlayerMovementSystem } from '../../systems/PlayerMovementSystem';
 import { VehicleMovementSystem } from '../../systems/VehicleMovementSystem';
 import { PlayerCombatSystem } from '../../systems/PlayerCombatSystem';
@@ -28,6 +28,7 @@ import { SectorSystem } from '../../systems/SectorSystem';
 import { FamilySystem } from '../../systems/FamilySystem';
 import { CinematicSystem } from '../../systems/CinematicSystem';
 import { DeathSystem } from '../../systems/DeathSystem';
+import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { RuntimeState } from '../../core/RuntimeState';
@@ -101,8 +102,26 @@ export class GameSessionSetup {
 
         try {
             const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+            state.sectorName = currentSector.name;
+            state.initialAim = currentSector.initialAim || null;
             const rng = seededRandom(props.currentSector + 4242);
             const env = currentSector.environment;
+
+            // 0. VINTERDÖD FIX: Aggressively clear the scene from previous session objects.
+            // true = KEEP persistent systems (Fog, Water, Light Pool) alive for performance.
+            engine.clearActiveScene(true);
+
+            // Unregister any non-persistent systems that might have been added by Camp or previous sector ghosts
+            const engineSystems = engine.getSystems();
+            for (let i = engineSystems.length - 1; i >= 0; i--) {
+                const sys = engineSystems[i];
+                if (!sys.persistent &&
+                    sys.id !== 'light_system' && sys.id !== 'wind_system' &&
+                    sys.id !== 'weather_system' && sys.id !== 'fog_system' &&
+                    sys.id !== 'water_system') {
+                    engine.unregisterSystem(sys.id);
+                }
+            }
 
             // The Poisoned Yielder
             const yielder = async () => {
@@ -145,6 +164,20 @@ export class GameSessionSetup {
             const burningObjects: any[] = [];
             const flickeringLights: any[] = [];
 
+            const realSpawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
+                const playerPos = refs.playerGroupRef.current ? refs.playerGroupRef.current.position : new THREE.Vector3(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z);
+                const enemy = EnemyManager.spawn(scene, playerPos, forcedType, forcedPos, state.bossSpawned, state.enemies.length);
+                if (enemy) {
+                    state.enemies.push(enemy);
+                    let seen = false;
+                    for (let j = 0; j < state.seenEnemies.length; j++) {
+                        if (state.seenEnemies[j] === enemy.type) { seen = true; break; }
+                    }
+                    if (!seen) state.seenEnemies.push(enemy.type);
+                }
+                return enemy;
+            };
+
             const spawnBoss = (type: string, pos?: THREE.Vector3) => {
                 const pSpawn = currentSector.playerSpawn;
                 const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x, 0, pSpawn.z));
@@ -164,7 +197,7 @@ export class GameSessionSetup {
             const sectorCtx: SectorContext = {
                 scene, engine, obstacles: state.obstacles, collisionGrid: state.collisionGrid, chests: state.chests,
                 flickeringLights, burningObjects, rng, triggers: state.triggers, mapItems, debugMode: props.debugMode,
-                textures: textures, spawnZombie: callbacks.spawnZombie, spawnHorde, spawnBoss,
+                textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
                 cluesFound: props.stats.cluesFound || [], collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
                 collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
                 sectorState: state.sectorState, state: state, yield: yielder,
@@ -210,7 +243,7 @@ export class GameSessionSetup {
 
             PathGenerator.resetPathLayer();
 
-            await SectorGenerator.build(sectorCtx, currentSector);
+            await SectorBuilder.build(sectorCtx, currentSector);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
@@ -256,6 +289,11 @@ export class GameSessionSetup {
             }
             refs.playerMeshRef.current = bodyMesh as THREE.Group;
 
+            if (state.initialAim && engine.input?.state) {
+                engine.input.state.aimVector.x = state.initialAim.x;
+                engine.input.state.aimVector.y = state.initialAim.y;
+            }
+
             const playerSpawn = { ...currentSector.playerSpawn };
             playerGroup.position.set(playerSpawn.x, 0, playerSpawn.z);
             if (playerSpawn.y) playerGroup.position.y = playerSpawn.y;
@@ -274,10 +312,27 @@ export class GameSessionSetup {
             const envCameraY = sectorEnv?.cameraHeight || CAMERA_HEIGHT;
             const envCameraAngle = sectorEnv?.cameraAngle || 0;
 
-            engine.camera.setCinematic(false);
-            engine.camera.setAngle(envCameraAngle, true);
-            engine.camera.follow(playerGroup.position, envCameraZ, envCameraY);
-            engine.camera.snapToTarget();
+            if (currentSector.cinematic) {
+                const c = currentSector.cinematic;
+                engine.camera.setCinematic(true);
+                engine.camera.setPosition(
+                    playerGroup.position.x + c.offset.x,
+                    (c.offset.y !== undefined ? c.offset.y : envCameraY),
+                    playerGroup.position.z + c.offset.z,
+                    true
+                );
+                engine.camera.lookAt(
+                    playerGroup.position.x + c.lookAtOffset.x,
+                    playerGroup.position.y + c.lookAtOffset.y,
+                    playerGroup.position.z + c.lookAtOffset.z,
+                    true
+                );
+            } else {
+                engine.camera.setCinematic(false);
+                engine.camera.setAngle(envCameraAngle, true);
+                engine.camera.follow(playerGroup.position, envCameraZ, envCameraY);
+                engine.camera.snapToTarget();
+            }
 
             refs.prevPosRef.current.copy(playerGroup.position);
             refs.hasSetPrevPosRef.current = true;
@@ -381,7 +436,7 @@ export class GameSessionSetup {
                     if (!seen) state.bossesDefeated.push(id);
                     state.bossDefeatedTime = performance.now();
                     soundManager.stopMusic();
-                    if (currentSector.environment.ambientLoop) soundManager.playMusic(currentSector.environment.ambientLoop);
+                    if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
                 },
                 onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName)
             }));
@@ -477,6 +532,112 @@ export class GameSessionSetup {
         mesh.add(markerGroup);
 
         scene.add(mesh);
+    }
+
+    /** * Resurrects player with full HP, stamina, ammo etc.
+     * Enemies are respawned. Chests already opened remain open.
+     */
+    static respawnPlayer(engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
+        console.log('[GameSessionSetup] Instant Resurrection Triggered.');
+        const scene = engine.scene;
+
+        // 1. Reset player state
+        console.log(`[GameSessionSetup] Respawning player. Current HP: ${state.hp}/${state.maxHp}`);
+        state.isDead = false;
+        state.playerDeathState = PlayerDeathState.ALIVE;
+        state.hp = state.maxHp;
+        state.stamina = state.maxStamina;
+        state.isReloading = false;
+        state.isInteractionOpen = false;
+
+        HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.maxHp });
+
+        // Reset ammo
+        for (const key in state.weaponAmmo) {
+            const wepType = key as any;
+            if (state.weaponAmmo[wepType] !== undefined) {
+                state.weaponAmmo[wepType] = WEAPONS[wepType]?.magSize || 0;
+            }
+        }
+
+        // 2. Move player to spawn point
+        const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+        if (refs.playerGroupRef.current) {
+            const spawn = currentSectorData.playerSpawn;
+            refs.playerGroupRef.current.position.set(spawn.x, spawn.y || 0, spawn.z);
+
+            // Fetch camera directly and snap to player
+            engine.camera.snapToTarget();
+        }
+
+        // 3. Clear projectiles and fire
+        ProjectileSystem.clear(scene, state.projectiles, state.fireZones);
+        FXSystem.reset();
+
+        // 4. Clear dynamic objects and enemies from the scene
+        const toRemove: THREE.Object3D[] = [];
+        scene.traverse(obj => {
+            if (obj.userData?.isDynamic || obj.userData?.isEnemy || obj.userData?.isCorpse) {
+                toRemove.push(obj);
+            }
+        });
+        for (let i = 0; i < toRemove.length; i++) {
+            if (toRemove[i].parent) toRemove[i].parent.remove(toRemove[i]);
+        }
+
+        EnemyManager.clear();
+        state.enemies.length = 0;
+        state.bloodDecals.length = 0;
+
+        // 5. Respawn zombies
+        const sCtx = refs.sectorContextRef.current;
+        if (sCtx && currentSectorData.setupZombies) {
+            currentSectorData.setupZombies(sCtx);
+        }
+
+        // 6. Fix UI via callback
+        setDeathPhase('NONE');
+    }
+
+    /** * Restarts the sector completely.
+     * Everything is reset (including chests, world loot and layout).
+     */
+    static async restartSector(ctx: SetupContext, currentSetupId: number) {
+        const { engine, state, ui } = ctx;
+
+        console.log('[GameSessionSetup] Restarting Sector (Full Build)...');
+
+        // Ensure UI knows we are loading if it takes a moment
+        ui.setIsSectorLoading(true);
+
+        // 1. Clean up ALL dynamic entities (including chests and obstacles)
+        EnemyManager.clear();
+        ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
+        FXSystem.reset();
+
+        // Remove everything generated
+        const toRemove: THREE.Object3D[] = [];
+        engine.scene.traverse(obj => {
+            if (obj.userData?.generated || obj.userData?.isEnemy || obj.userData?.isPlayer) {
+                toRemove.push(obj);
+            }
+        });
+        toRemove.forEach(obj => { if (obj.parent) obj.parent.remove(obj); });
+
+        // 2. Reset state arrays
+        state.enemies.length = 0;
+        state.obstacles.length = 0;
+        state.chests.length = 0;
+        state.triggers.length = 0;
+        state.bloodDecals.length = 0;
+        state.isDead = false;
+        state.hp = state.maxHp; // VINTERDÖD FIX: Force health to 100% on restart
+        state.stamina = state.maxStamina;
+
+        // 3. RUN SETUP AGAIN! (In the same React mount)
+        await this.runSectorSetup(ctx, currentSetupId);
+
+        ui.setDeathPhase('NONE');
     }
 
     static disposeSector(session: GameSessionLogic, state: RuntimeState) {

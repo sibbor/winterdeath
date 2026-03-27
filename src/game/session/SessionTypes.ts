@@ -130,6 +130,7 @@ export interface GameCanvasProps {
   isWarmup?: boolean;
   weather: WeatherType;
   initialGraphics: GraphicsSettings;
+  currentSectorData?: any;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

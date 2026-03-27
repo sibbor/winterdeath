@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
-import { SectorGenerator } from '../../core/world/SectorGenerator';
-import { EnvironmentGenerator } from '../../core/world/EnvironmentGenerator';
+import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
@@ -85,7 +85,7 @@ export const Sector4: SectorDef = {
         (ctx as any).sectorState.ctx = ctx;
 
         // Reward Chest at boss spawn
-        SectorGenerator.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
+        SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // Stacks of Cars (Maze) - Sektor 4 Bilskroten
         for (let i = 0; i < 60; i++) {
@@ -94,7 +94,7 @@ export const Sector4: SectorDef = {
             if (Math.abs(x) < 10 && z > -100) continue;
             const carStackHeight = 1 + Math.floor(Math.random() * 3);
             const rotY = Math.random() * Math.PI * 2;
-            await SectorGenerator.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
+            await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
         }
 
         // Perimeter Trees
@@ -103,7 +103,7 @@ export const Sector4: SectorDef = {
             const r = 100 + Math.random() * 60;
             const x = Math.cos(angle) * r;
             const z = -80 + Math.sin(angle) * r;
-            await SectorGenerator.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
+            await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
         }
 
         // The Dealership Building
@@ -113,7 +113,7 @@ export const Sector4: SectorDef = {
         shed.position.y = 4;
         shedGroup.add(shed);
         scene.add(shedGroup);
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: shedGroup,
             collider: { type: 'sphere', radius: 12 }
         });
@@ -127,11 +127,11 @@ export const Sector4: SectorDef = {
             new THREE.Vector3(20, 0, 20),
             new THREE.Vector3(-20, 0, 20)
         ];
-        await EnvironmentGenerator.fillAreaWithGrass(ctx, industrialWeeds, 0.4);
+        await VegetationGenerator.fillAreaWithGrass(ctx, industrialWeeds, 0.4);
 
         // Dead/dying trees (only standing, industrial feel)
         for (let i = 0; i < 15; i++) {
-            const deadTree = EnvironmentGenerator.createDeadTree('standing', 0.6 + Math.random() * 0.4);
+            const deadTree = VegetationGenerator.createDeadTree('standing', 0.6 + Math.random() * 0.4);
             const angle = Math.random() * Math.PI * 2;
             const dist = 30 + Math.random() * 40;
             deadTree.position.set(
@@ -148,7 +148,7 @@ export const Sector4: SectorDef = {
     setupContent: async (ctx: SectorContext) => {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers
-        SectorGenerator.addTriggers(ctx, [
+        SectorBuilder.addTriggers(ctx, [
             { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHT', content: "clues.3.0.reaction", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's4_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'POI', content: "pois.3.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
             { id: 'found_nathalie', position: LOCATIONS.TRIGGERS.FOUND_NATHALIE, familyId: 3, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },

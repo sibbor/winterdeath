@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SectorTrigger, TriggerAction } from '../systems/TriggerTypes';;
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { PLAYER_CHARACTER } from '../content/constants';
 import { RuntimeState } from '../core/RuntimeState';
 

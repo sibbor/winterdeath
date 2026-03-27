@@ -10,6 +10,7 @@ export interface SpawnPoint {
     x: number;
     z: number;
     y?: number; // Optional override
+    rot?: number; // Optional rotation
 }
 
 export interface CinematicConfig {

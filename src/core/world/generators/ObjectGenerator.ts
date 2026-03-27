@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createProceduralDiffuse, MATERIALS, GEOMETRY, ModelFactory, createSignMesh, createTextSprite } from '../../utils/assets';
-import { SectorContext } from '../../game/session/SectorTypes';
-import { SectorGenerator } from './SectorGenerator';
-import { ZOMBIE_TYPES } from '../../content/enemies/zombies';
-import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { EffectManager } from '../../systems/EffectManager';
+import { MATERIALS, GEOMETRY, ModelFactory, createTextSprite } from '../../../utils/assets';
+import { SectorContext } from '../../../game/session/SectorTypes';
+import { SectorBuilder } from '../SectorBuilder';
+import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
+import { EnemyType } from '../../../entities/enemies/EnemyTypes';
+import { EffectManager } from '../../../systems/EffectManager';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -15,15 +15,24 @@ const _rotation = new THREE.Euler();
 const _quat = new THREE.Quaternion();
 const _v1_og = new THREE.Vector3();
 
-// Pre-allocate static effect offsets to prevent GC leaks in createFire/createCampfire
+// Pre-allocate static effect offsets to prevent GC leaks
 const _FIRE_LIGHT_OFFSET = new THREE.Vector3(0, 1.5, 0);
 const _FIRE_FLAME_OFFSET = new THREE.Vector3(0, 0.5, 0);
 const _FIRE_SPARK_OFFSET = new THREE.Vector3(0, 1.0, 0);
 const _FIRE_SMOKE_OFFSET = new THREE.Vector3(0, 1.8, 0);
 
+// --- VINTERDÖD HELPER: Brutal Matrix Freezing ---
+// Recursively freezes all matrices in a hierarchy to completely eliminate CPU overhead.
+const freezeStatic = <T extends THREE.Object3D>(obj: T, excludeNames: string[] = []): T => {
+    obj.traverse((child) => {
+        if (excludeNames.length > 0 && excludeNames.indexOf(child.name) !== -1) return;
+        child.matrixAutoUpdate = false;
+        child.updateMatrix();
+    });
+    return obj;
+};
+
 // --- CACHED ASSETS (ZERO-GC VRAM) ---
-// Prevents massive GPU memory leaks and stuttering by reusing geometries
-// instead of creating 'new THREE.Geometry' inside generator functions.
 const SHARED_GEO = {
     box: new THREE.BoxGeometry(1, 1, 1),
     plane: new THREE.PlaneGeometry(1, 1),
@@ -31,8 +40,8 @@ const SHARED_GEO = {
     cone: new THREE.ConeGeometry(1, 1, 8),
     ring: new THREE.RingGeometry(0.8, 1.0, 32).rotateX(-Math.PI / 2),
     fencePost: new THREE.BoxGeometry(0.2, 1.2, 0.2),
-    fenceRail: new THREE.BoxGeometry(0.1, 0.15, 1), // Scaled in Z per call
-    meshFencePost: new THREE.BoxGeometry(0.12, 1, 0.12), // Scaled in Y per call
+    fenceRail: new THREE.BoxGeometry(0.1, 0.15, 1),
+    meshFencePost: new THREE.BoxGeometry(0.12, 1, 0.12),
     meshFenceRail: new THREE.CylinderGeometry(0.04, 0.04, 1).rotateX(Math.PI / 2),
     log: new THREE.CylinderGeometry(0.3, 0.3, 6, 8).rotateX(Math.PI / 2),
     stalk: new THREE.PlaneGeometry(0.1, 1).translate(0, 0.5, 0),
@@ -40,7 +49,7 @@ const SHARED_GEO = {
     terminalBeam: new THREE.CylinderGeometry(0.6, 0.6, 8, 16, 1, true)
 };
 
-// Unique geometries cache for Scarecrow to prevent rapid VRAM allocation
+// Unique geometries cache
 let _scarecrowHeadGeo: THREE.SphereGeometry | null = null;
 let _scarecrowShirtGeo: THREE.CylinderGeometry | null = null;
 let _scarecrowHatGeo: THREE.ConeGeometry | null = null;
@@ -63,14 +72,45 @@ const LOCAL_MATS = {
 const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
 const terminalMaterialCache: Record<string, THREE.MeshBasicMaterial> = {};
 
-// Material Caches to prevent massive shader recompile leaks
+// Material Caches
 const brickCache: Record<number, THREE.MeshStandardMaterial> = {};
 const containerCache: Record<number, THREE.MeshStandardMaterial> = {};
 const woodCache: Record<number, THREE.MeshStandardMaterial> = {};
-const concreteCache: Record<string, THREE.MeshStandardMaterial> = {}; // key for special props like doubleSide
+const concreteCache: Record<string, THREE.MeshStandardMaterial> = {};
 const neonSignCache: Record<number, THREE.MeshStandardMaterial> = {};
 
 export const ObjectGenerator = {
+
+    createChest: (type: 'standard' | 'big' = 'standard') => {
+        const chest = new THREE.Group();
+        const isBig = type === 'big';
+
+        if (isBig) chest.scale.set(1.5, 1.5, 1.5);
+
+        const body = new THREE.Mesh(GEOMETRY.chestBody, isBig ? MATERIALS.chestBig : MATERIALS.chestStandard);
+        body.position.y = 0.5;
+        body.castShadow = true;
+        chest.add(body);
+
+        const lid = new THREE.Mesh(GEOMETRY.chestLid, isBig ? MATERIALS.chestBig : MATERIALS.chestStandard);
+        lid.position.set(0, 1.0, -0.5);
+        lid.name = "chestLid"; // Tagged for animation later
+        lid.castShadow = true;
+        chest.add(lid);
+
+        // Glow
+        const glowGeo = isBig ? GEOMETRY.chestBigGlow : GEOMETRY.chestGlow;
+        const glowMat = isBig ? MATERIALS.chestBigGlow : MATERIALS.chestGlow;
+
+        const chestGlow = new THREE.Mesh(glowGeo, glowMat);
+        chestGlow.rotation.x = -Math.PI / 2;
+        chestGlow.position.y = 0.05;
+        chestGlow.name = 'chestGlow';
+        chest.add(chestGlow);
+
+        // Exclude the lid so it can be animated
+        return freezeStatic(chest, ['chestLid']);
+    },
 
     createFence: (length: number = 3.0) => {
         const group = new THREE.Group();
@@ -90,7 +130,7 @@ export const ObjectGenerator = {
         const r2 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r2.scale.z = length; r2.position.set(0, 0.9, 0); group.add(r2);
 
         group.userData.material = 'WOOD';
-        return group;
+        return freezeStatic(group);
     },
 
     createMeshFence: (length: number = 3.0, height: number = 2.5) => {
@@ -113,7 +153,7 @@ export const ObjectGenerator = {
         group.add(rail);
 
         group.userData.material = 'METAL';
-        return group;
+        return freezeStatic(group);
     },
 
     createTrainTunnel: (points: THREE.Vector3[]) => {
@@ -174,7 +214,7 @@ export const ObjectGenerator = {
         floor.position.y = 0.02;
         tunnelGroup.add(floor);
 
-        return tunnelGroup;
+        return freezeStatic(tunnelGroup);
     },
 
     createBarrel: (explosive: boolean = false) => {
@@ -185,7 +225,7 @@ export const ObjectGenerator = {
         mesh.castShadow = true;
         group.add(mesh);
         group.userData.material = 'METAL';
-        return group;
+        return freezeStatic(group);
     },
 
     createStreetLamp: () => {
@@ -217,7 +257,7 @@ export const ObjectGenerator = {
         group.userData.lightOffset = new THREE.Vector3(0, 7.4, 1.5);
 
         group.userData.material = 'METAL';
-        return group;
+        return freezeStatic(group);
     },
 
     createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) => {
@@ -270,7 +310,6 @@ export const ObjectGenerator = {
             let litCount = 0;
             let darkCount = 0;
 
-            // 1. Determine window configuration without allocating objects
             const winStates: boolean[] = [];
             for (let x = -width / 2 + 2; x < width / 2 - 1; x += 4) {
                 for (let y = 2; y < height - 1; y += 4) {
@@ -281,7 +320,6 @@ export const ObjectGenerator = {
                 }
             }
 
-            // 2. Build the instances
             if (litCount > 0 || darkCount > 0) {
                 const litWindows = litCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.litWindow, litCount) : null;
                 const darkWindows = darkCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.darkWindow, darkCount) : null;
@@ -322,7 +360,7 @@ export const ObjectGenerator = {
         bodyGeo.dispose();
         nonIndexedBody.dispose();
 
-        return group;
+        return freezeStatic(group);
     },
 
     createScarecrow(x: number, z: number) {
@@ -355,7 +393,7 @@ export const ObjectGenerator = {
         hat.position.y = 2.75;
         group.add(hat);
 
-        return group;
+        return freezeStatic(group);
     },
 
     createFire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
@@ -371,7 +409,7 @@ export const ObjectGenerator = {
             { type: 'emitter', particle: 'smoke', interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
         ];
 
-        ctx.scene.add(group);
+        ctx.scene.add(freezeStatic(group));
         if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
     },
 
@@ -416,7 +454,7 @@ export const ObjectGenerator = {
             { type: 'emitter', particle: 'campfire_smoke', interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
         ];
 
-        ctx.scene.add(group);
+        ctx.scene.add(freezeStatic(group));
         if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
         return group;
     },
@@ -443,7 +481,7 @@ export const ObjectGenerator = {
         roof.position.set(0, height + roofThick / 2, 0);
         group.add(roof);
 
-        ctx.scene.add(group);
+        ctx.scene.add(freezeStatic(group));
 
         const halfWidth = width / 2;
         const halfWall = wallThick / 2;
@@ -466,13 +504,13 @@ export const ObjectGenerator = {
 
         _quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             position: worldPosL,
             quaternion: _quat.clone(),
             collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) }
         });
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             position: worldPosR,
             quaternion: _quat.clone(),
             collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) }
@@ -492,7 +530,7 @@ export const ObjectGenerator = {
         group.add(mesh);
         group.scale.setScalar(scale);
         group.userData.material = 'WOOD';
-        return group;
+        return freezeStatic(group);
     },
 
     createTimberPile: (scale: number = 1.0) => {
@@ -515,7 +553,7 @@ export const ObjectGenerator = {
         group.castShadow = true;
         group.receiveShadow = true;
         group.scale.setScalar(scale);
-        return group;
+        return freezeStatic(group);
     },
 
     createWheatStalk: (scale: number = 1.0) => {
@@ -534,7 +572,7 @@ export const ObjectGenerator = {
         group.add(p2);
 
         group.scale.setScalar(scale);
-        return group;
+        return freezeStatic(group);
     },
 
     createDeadBody: (type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood?: boolean) => {
@@ -555,7 +593,7 @@ export const ObjectGenerator = {
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);
         group.userData.material = 'FLESH';
-        return group;
+        return freezeStatic(group);
     },
 
     createContainer: (colorOverride?: number, addSnow: boolean = true) => {
@@ -583,7 +621,7 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = 'METAL';
-        return group;
+        return freezeStatic(group);
     },
 
     createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
@@ -606,7 +644,7 @@ export const ObjectGenerator = {
         EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
         group.scale.setScalar(scale);
         group.userData.material = 'METAL';
-        return group;
+        return freezeStatic(group);
     },
 
     createCaveLamp: () => {
@@ -615,8 +653,6 @@ export const ObjectGenerator = {
         base.scale.set(0.3, 0.2, 0.3);
         group.add(base);
 
-        // Om LOCAL_MATS.caveLampBulb inte redan är ett MeshBasicMaterial, 
-        // överväg att göra det så det lyser av sig självt i mörkret!
         const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), LOCAL_MATS.caveLampBulb);
         bulb.position.y = -0.15;
         group.add(bulb);
@@ -627,10 +663,6 @@ export const ObjectGenerator = {
 
         group.userData.material = 'METAL';
 
-        // ========================================================
-        // VINTERDÖD FIX: Det logiska ljuset.
-        // Skapar 0 lagg.
-        // ========================================================
         group.userData.logicalLights = [{
             offset: new THREE.Vector3(0, -0.5, 0),
             color: 0xffddaa,
@@ -639,7 +671,7 @@ export const ObjectGenerator = {
             flickerRate: 0.1
         }];
 
-        return group;
+        return freezeStatic(group);
     },
 
     createElectricPole: (withWires: boolean = false) => {
@@ -664,7 +696,7 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = 'WOOD';
-        return group;
+        return freezeStatic(group);
     },
 
     createMast: () => {
@@ -681,22 +713,18 @@ export const ObjectGenerator = {
         mastGroup.add(mastMesh);
 
         const lightHub = new THREE.Group();
-        lightHub.name = "mastWarningLights"; // Viktigt namn så vi kan rotera den sen!
+        lightHub.name = "mastWarningLights";
         lightHub.position.y = 60;
 
         const lightXs = [2, -2];
         for (let i = 0; i < lightXs.length; i++) {
             const posX = lightXs[i];
-            // BasicMaterial gör att själva mesh-kulan lyser i mörkret oavsett skuggor
             const lamp = new THREE.Mesh(
                 new THREE.SphereGeometry(0.4),
                 new THREE.MeshBasicMaterial({ color: 0xff0000 })
             );
             lamp.position.x = posX;
 
-            // ========================================================
-            // VINTERDÖD FIX: Märk upp glödlampan för Proxy-systemet
-            // ========================================================
             lamp.userData.needsLogicalLight = true;
             lamp.userData.lightColor = 0xff0000;
             lamp.userData.lightIntensity = 10.0;
@@ -706,7 +734,9 @@ export const ObjectGenerator = {
         }
 
         mastGroup.add(lightHub);
-        return mastGroup;
+
+        // Exclude the warning lights hub so the engine can rotate it later!
+        return freezeStatic(mastGroup, ["mastWarningLights"]);
     },
 
     createGlassStaircase: (width: number, height: number, depth: number) => {
@@ -726,31 +756,18 @@ export const ObjectGenerator = {
         }
 
         EffectManager.attachEffect(group, 'flicker_light', { color: 0x88ccff, intensity: 10, distance: 15 });
-        return group;
+        return freezeStatic(group);
     },
 
     createStorefrontBuilding: (width: number, height: number, depth: number, opts: {
-        lowerMat?: THREE.Material,
-        upperMat?: THREE.Material,
-        withRoof?: boolean,
-        withLights?: boolean,
-        shopWindows?: boolean,
-        upperWindows?: boolean,
-        allSides?: boolean,
-        upperRows?: number,
-        mapRepeat?: { x: number, y: number }
+        lowerMat?: THREE.Material, upperMat?: THREE.Material, withRoof?: boolean,
+        withLights?: boolean, shopWindows?: boolean, upperWindows?: boolean,
+        allSides?: boolean, upperRows?: number, mapRepeat?: { x: number, y: number }
     } = {}) => {
         const group = new THREE.Group();
         const {
-            lowerMat,
-            upperMat,
-            withRoof = true,
-            withLights = true,
-            shopWindows = true,
-            upperWindows = true,
-            allSides = false,
-            upperRows = 1,
-            mapRepeat
+            lowerMat, upperMat, withRoof = true, withLights = true, shopWindows = true,
+            upperWindows = true, allSides = false, upperRows = 1, mapRepeat
         } = opts;
 
         const midPoint = height * 0.4;
@@ -829,10 +846,8 @@ export const ObjectGenerator = {
                         instancedWindows.setMatrixAt(idx++, _matrix);
 
                         if (withLights) {
-                            // Vi sätter positionen precis som förut
                             _v1_og.set(x, midPoint / 2, sideDepth / 2 - 1).applyQuaternion(_quat);
 
-                            // LightSystem
                             if (!group.userData.logicalLights) group.userData.logicalLights = [];
                             group.userData.logicalLights.push({
                                 offset: _v1_og.clone(),
@@ -898,7 +913,7 @@ export const ObjectGenerator = {
         }
 
         group.userData = { size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth), material: 'CONCRETE' };
-        return group;
+        return freezeStatic(group);
     },
 
     createNeonHeart: (color: number = 0xff0000, scale: number = 1.0) => {
@@ -924,31 +939,26 @@ export const ObjectGenerator = {
 
         group.add(new THREE.Mesh(_sharedNeonHeartGeo, neonHeartCache[color]));
 
-        // ========================================================
-        // VINTERDÖD FIX: Zero-GC Neonljus
-        // Istället för PointLight sparar vi logisk ljus-data.
-        // För att det ska se ut att lysa "neråt" flyttar vi ljusets 
-        // mittpunkt ner (-1.5) och lite utåt (0.8) från väggen.
-        // Vi multiplicerar med 'scale' så ljuset följer med om hjärtat görs stort.
-        // ========================================================
         const lightOffset = new THREE.Vector3(0, -1.5 * scale, 0.8 * scale);
 
         group.userData.logicalLights = [{
             offset: lightOffset,
             color: color,
-            baseIntensity: 15.0, // Brutalt starkt neonljus
-            distance: 25.0 * scale, // Något längre räckvidd
-            flickerRate: 0.05 // Ett neonhjärta måste ju glappa lite ibland!
+            baseIntensity: 15.0,
+            distance: 25.0 * scale,
+            flickerRate: 0.05
         }];
 
         group.scale.setScalar(scale);
-        return group;
+        return freezeStatic(group);
     },
 
+    // Note: Grass should be fully handled by VegetationGenerator, but keeping this optimized just in case.
     createGrassField: (ctx: SectorContext, x: number, z: number, width: number, depth: number, count: number) => {
         const mesh = new THREE.InstancedMesh(SHARED_GEO.cone, MATERIALS.grass, count);
         mesh.castShadow = false;
         mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
 
         for (let i = 0; i < count; i++) {
             _position.set(x + (Math.random() - 0.5) * width, 0, z + (Math.random() - 0.5) * depth);
@@ -962,6 +972,7 @@ export const ObjectGenerator = {
         }
 
         mesh.instanceMatrix.needsUpdate = true;
+        mesh.updateMatrix();
         ctx.scene.add(mesh);
     },
 
@@ -1001,58 +1012,6 @@ export const ObjectGenerator = {
         screen.rotation.x = -Math.PI / 6;
         group.add(screen);
 
-        return group;
-    },
-
-    createRubble: (x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
-        const mat = material == null ? MATERIALS.steel : material;
-
-        const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        const positions = new Float32Array(count * 3);
-        const velocities = new Float32Array(count * 3);
-        const rotations = new Float32Array(count * 3);
-        const spin = new Float32Array(count * 3);
-        const scales = new Float32Array(count);
-
-        for (let i = 0; i < count; i++) {
-            const ix = i * 3;
-
-            positions[ix] = x + (Math.random() - 0.5) * 4.0;
-            positions[ix + 1] = 2.0 + Math.random() * 2.0;
-            positions[ix + 2] = z + (Math.random() - 0.5) * 4.0;
-
-            const halfArc = Math.PI * 0.5;
-            const angle = (directionBias - halfArc) + Math.random() * (halfArc * 2.0);
-            const speed = 20.0 + Math.random() * 15.0;
-            velocities[ix] = Math.cos(angle) * speed;
-            velocities[ix + 1] = 12.0 + Math.random() * 18.0;
-            velocities[ix + 2] = Math.sin(angle) * speed;
-
-            rotations[ix] = Math.random() * Math.PI;
-            rotations[ix + 1] = Math.random() * Math.PI;
-            rotations[ix + 2] = Math.random() * Math.PI;
-
-            spin[ix] = (Math.random() - 0.5) * 15.0;
-            spin[ix + 1] = (Math.random() - 0.5) * 15.0;
-            spin[ix + 2] = (Math.random() - 0.5) * 15.0;
-
-            scales[i] = 0.5 + Math.random() * 0.8;
-
-            _position.set(positions[ix], positions[ix + 1], positions[ix + 2]);
-            _rotation.set(rotations[ix], rotations[ix + 1], rotations[ix + 2]);
-            _quat.setFromEuler(_rotation);
-            _scale.set(2 * scales[i], 2 * scales[i], 4 * scales[i]);
-
-            _matrix.compose(_position, _quat, _scale);
-            mesh.setMatrixAt(i, _matrix);
-        }
-
-        mesh.userData = { positions, velocities, rotations, spin, scales, active: true };
-        mesh.instanceMatrix.needsUpdate = true;
-
-        return mesh;
+        return freezeStatic(group);
     },
 };

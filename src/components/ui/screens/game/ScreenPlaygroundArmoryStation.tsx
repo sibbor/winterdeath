@@ -4,7 +4,7 @@ import { SectorState } from '../../../../game/session/SessionTypes';;
 import { WeaponType, WeaponCategory, WeaponCategoryColors } from '../../../../content/weapons';
 import { t } from '../../../../utils/i18n';
 import { WEAPONS, SCRAP_COST_BASE } from '../../../../content/constants';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 
 interface ScreenPlaygroundArmoryStationProps {

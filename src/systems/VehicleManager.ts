@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyDeathState } from '../entities/enemies/EnemyTypes';
 import { VehicleDef } from '../content/vehicles';
@@ -47,7 +47,7 @@ export const VehicleManager = {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
                 VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, now);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
-                
+
                 // --- ENGINE & MOVEMENT NOISE ---
                 const speedSq = vel.lengthSq();
                 const noiseType = speedSq > 5 ? NoiseType.VEHICLE_DRIVE : NoiseType.VEHICLE_IDLE;

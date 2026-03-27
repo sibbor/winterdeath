@@ -46,6 +46,7 @@ export class LightSystem implements System {
             proxy.name = `ProxyLight_${i}`;
             proxy.userData.isPersistent = true;
             proxy.userData.isProxy = true;
+            proxy.userData.isEngineStatic = true;
             proxy.position.set(0, -1000, 0);
 
             // Shadow settings locked for all future

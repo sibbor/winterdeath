@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { soundManager } from '../utils/SoundManager';
+import { soundManager } from '../utils/audio/SoundManager';
 import { OverlayType } from '../App';
 import { GameScreen } from '../game/session/SessionTypes';;
 import { HudStore } from '../store/HudStore';

@@ -3,7 +3,7 @@ import { t } from '../../../../utils/i18n';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { EnvironmentOverride, WeatherType } from '../../../../core/engine/EngineTypes';;
 import { Sector6 } from '../../../../content/sectors/Sector6';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenPlaygroundEnvironmentStationProps {
     onClose: () => void;
@@ -61,8 +61,8 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     const handleReset = () => {
         const def = Sector6.environment;
         setBgColor('#' + def.bgColor.toString(16).padStart(6, '0'));
-        setFogColor(def.fogColor ? '#' + def.fogColor.toString(16).padStart(6, '0') : '#' + def.bgColor.toString(16).padStart(6, '0'));
-        setFogDensity(def.fogDensity);
+        setFogColor(def.fog?.color ? '#' + def.fog.color.toString(16).padStart(6, '0') : '#' + def.bgColor.toString(16).padStart(6, '0'));
+        setFogDensity(def.fog?.density ?? 0.01);
         setAmbientIntensity(def.ambientIntensity);
         setGroundColor('#' + def.groundColor.toString(16).padStart(6, '0'));
         setFov(def.fov);
@@ -107,7 +107,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
                         <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest leading-none mt-4 mb-2">{t('ui.ground')}</label>
                         <input type="color" value={groundColor} onChange={(e) => setGroundColor(e.target.value)} className="w-full h-8 cursor-pointer bg-black border border-zinc-700" title={t('ui.ground_color')} />
                     </div>
-                    
+
                     <div className="flex flex-col gap-4 bg-zinc-900/40 p-4 border border-zinc-800 rounded-lg">
                         <div className="flex flex-col gap-1">
                             <label className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">{t('ui.fov')}: <span className="text-white font-mono">{fov}</span></label>

@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, createTextSprite, ModelFactory } from '../../utils/assets';
+import { MATERIALS, ModelFactory } from '../../utils/assets';
 import { SectorContext } from '../../game/session/SectorTypes';
-import { ObjectGenerator } from './ObjectGenerator';
-import { VehicleGenerator } from './VehicleGenerator';
-import { EnvironmentGenerator } from './EnvironmentGenerator';
-import { PathGenerator } from './PathGenerator';
+import { ObjectGenerator } from './generators/ObjectGenerator';
+import { VehicleGenerator } from './generators/VehicleGenerator';
+import { TerrainGenerator } from './generators/TerrainGenerator';
+import { VegetationGenerator } from './generators/VegetationGenerator';
+import { NaturePropGenerator } from './generators/NaturePropGenerator';
+import { PathGenerator } from './generators/PathGenerator';
 import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
@@ -14,36 +16,13 @@ import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
-// Shared Utilities for Zero-GC Operations (Scratchpads)
-const _c1 = new THREE.Color();
-const _c2 = new THREE.Color();
+// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
-const _v2_sg = new THREE.Vector3();
-const _v3_sg = new THREE.Vector3();
 const _q1_sg = new THREE.Quaternion();
 const _box_sg = new THREE.Box3();
 const _axisY = new THREE.Vector3(0, 1, 0);
 
-// Cached materials to prevent shader recompiles
-let _sharedLakeBedMat: THREE.Material | null = null;
-function getLakeBedMaterial(): THREE.Material {
-    if (!_sharedLakeBedMat) {
-        _sharedLakeBedMat = MATERIALS.gravel.clone();
-        (_sharedLakeBedMat as THREE.MeshStandardMaterial).color.setHex(0x1a212e);
-        (_sharedLakeBedMat as THREE.MeshStandardMaterial).bumpScale = 0.8;
-    }
-    return _sharedLakeBedMat;
-}
-
-// Zero-GC Payload object for light updates in the render loop
-const _lightOverrideCmd = {
-    skyLightColor: undefined as THREE.Color | undefined,
-    skyLightIntensity: undefined as number | undefined,
-    skyLightPosition: undefined as THREE.Vector3 | undefined,
-    skyLightVisible: undefined as boolean | undefined
-};
-
-export const SectorGenerator = {
+export const SectorBuilder = {
 
     addObstacle: (ctx: SectorContext, obstacle: any) => {
         // Zero-GC check instead of .includes()
@@ -70,7 +49,7 @@ export const SectorGenerator = {
         }
 
         if (!obstacle.position) {
-            console.warn('[SectorGenerator] Attempted to add obstacle without position or mesh:', obstacle);
+            console.warn('SectorBuilder: Attempted to add obstacle without position or mesh:', obstacle);
             return;
         }
 
@@ -105,7 +84,7 @@ export const SectorGenerator = {
 
     generateAutomaticContent: async (ctx: SectorContext, def: any) => {
         if (def.groundType && def.groundType !== 'NONE') {
-            await SectorGenerator.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
+            await SectorBuilder.generateGround(ctx, def.groundType, def.groundSize || { width: 2000, depth: 2000 });
         }
 
         if (def.collectibles) {
@@ -113,22 +92,16 @@ export const SectorGenerator = {
                 const c = def.collectibles[i];
                 const meta = getCollectibleById(c.id);
                 if (meta) {
-                    SectorGenerator.spawnCollectible(ctx, c.x, c.z, c.id, meta.modelType as any);
+                    SectorBuilder.spawnCollectible(ctx, c.x, c.z, c.id, meta.modelType as any);
                 }
                 if (ctx.yield) await ctx.yield();
             }
         }
 
         if (ctx.yield) await ctx.yield();
-        if (def.bounds) {
-            SectorGenerator.generateBoundaries(ctx, def.bounds);
-        }
 
-        if (ctx.debugMode) {
-            SectorGenerator.visualizeTriggers(ctx);
-            if (def.bounds) {
-                SectorGenerator.visualizeBounds(ctx, def.bounds);
-            }
+        if (def.bounds) {
+            SectorBuilder.generateBoundaries(ctx, def.bounds);
         }
 
         if (ctx.yield) await ctx.yield();
@@ -178,7 +151,7 @@ export const SectorGenerator = {
 
         if (engine?.water) engine.water.clear();
 
-        await SectorGenerator.generateAutomaticContent(ctx, def);
+        await SectorBuilder.generateAutomaticContent(ctx, def);
 
         const env = def.environment;
         if (env) {
@@ -200,50 +173,34 @@ export const SectorGenerator = {
         if (def.setupProps) await def.setupProps(ctx);
         if (def.setupContent) await def.setupContent(ctx);
         if (def.setupZombies) await def.setupZombies(ctx);
-        if (def.generate) await def.generate(ctx);
+        if (def.generate) await def.generate(ctx); // Legacy fallback
+
+        // ========================================================
+        // VINTERDÖD AUTOMAGIC DEBUGGER (Zero memory overhead in production)
+        // ========================================================
+        if (ctx.debugMode) {
+            const { DebugVisualizer } = await import('../../utils/DebugVisualizer');
+            DebugVisualizer.visualizeSector(ctx, def);
+        }
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {
-        let mat: THREE.Material;
-
-        if (type === 'GRAVEL') mat = MATERIALS.gravelCutout;
-        else if (type === 'DIRT') mat = MATERIALS.dirtCutout;
-        else mat = MATERIALS.snowCutout;
-
-        const geo = new THREE.PlaneGeometry(size.width, size.depth);
-        const repeatX = size.width / 10;
-        const repeatY = size.depth / 10;
-        const uvAttr = geo.attributes.uv;
-
-        for (let i = 0; i < uvAttr.count; i++) {
-            uvAttr.setXY(i, uvAttr.getX(i) * repeatX, uvAttr.getY(i) * repeatY);
-            if (ctx.yield && i % 1000 === 0) await ctx.yield();
-        }
-
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `GROUND`;
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.y = -0.05;
-        mesh.receiveShadow = true;
-
-        // Zero-GC: Static plane doesn't need per-frame matrix calculation
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
-
-        ctx.scene.add(mesh);
+        const ground = TerrainGenerator.createGroundLayer(type, size.width, size.depth);
+        ctx.scene.add(ground);
 
         const engine = WinterEngine.getInstance();
         if (engine && engine.water) {
-            engine.water.registerGround(mesh);
+            engine.water.registerGround(ground);
         }
 
         if (ctx.yield) await ctx.yield();
+        return ground;
     },
 
     spawnCollisionBox: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number = 0) => {
         _q1_sg.setFromAxisAngle(_axisY, rotation);
-        SectorGenerator.addObstacle(ctx, {
-            position: new THREE.Vector3(x, height / 2, z), // Ok to allocate for structural positions
+        SectorBuilder.addObstacle(ctx, {
+            position: new THREE.Vector3(x, height / 2, z),
             quaternion: _q1_sg.clone(), // Must clone since obstacle struct needs its own reference
             collider: { type: 'box', size: new THREE.Vector3(width, height, depth) }
         });
@@ -257,7 +214,7 @@ export const SectorGenerator = {
         if (w < 10 || d < 10) return;
 
         const createWall = (x: number, z: number, sx: number, sz: number) => {
-            SectorGenerator.addObstacle(ctx, {
+            SectorBuilder.addObstacle(ctx, {
                 position: new THREE.Vector3(x, h / 2, z),
                 collider: { type: 'box' as const, size: new THREE.Vector3(sx, h, sz) }
             });
@@ -269,82 +226,38 @@ export const SectorGenerator = {
         createWall(w / 2, 0, 2, d);
     },
 
-    visualizeBounds: (ctx: SectorContext, bounds: { width: number, depth: number }) => {
-        const w = bounds.width;
-        const d = bounds.depth;
-        const geo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(-w / 2, 0.5, -d / 2),
-            new THREE.Vector3(w / 2, 0.5, -d / 2),
-            new THREE.Vector3(w / 2, 0.5, d / 2),
-            new THREE.Vector3(-w / 2, 0.5, d / 2),
-            new THREE.Vector3(-w / 2, 0.5, -d / 2)
-        ]);
-        const mat = new THREE.LineBasicMaterial({ color: 0xff0000 });
-        const line = new THREE.Line(geo, mat);
-        ctx.scene.add(line);
-    },
-
-    visualizePolygon: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x00ff00, yOffset: number = 1) => {
-        if (!ctx.debugMode) return;
-        const pts = [...points, points[0]];
-        const geo = new THREE.BufferGeometry().setFromPoints(pts);
-        const mat = new THREE.LineBasicMaterial({ color });
-        const line = new THREE.Line(geo, mat);
-        line.position.y = yOffset;
-        ctx.scene.add(line);
-    },
-
-    visualizePath: (ctx: SectorContext, points: THREE.Vector3[], color: number = 0x0000ff, yOffset: number = 0) => {
-        if (!ctx.debugMode) return;
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const mat = new THREE.LineBasicMaterial({ color });
-        const line = new THREE.Line(geo, mat);
-        line.position.y = yOffset;
-        ctx.scene.add(line);
-    },
-
     spawnChest: (ctx: SectorContext, x: number, z: number, type: 'standard' | 'big', rot: number = 0) => {
-        const chest = new THREE.Group();
+        const chest = ObjectGenerator.createChest(type);
         chest.position.set(x, 0, z);
         chest.rotation.y = rot;
-        const isBig = type === 'big';
-
-        const body = new THREE.Mesh(GEOMETRY.chestBody, isBig ? MATERIALS.chestBig : MATERIALS.chestStandard);
-        body.position.y = 0.5;
-        body.castShadow = true;
-        chest.add(body);
-
-        const lid = new THREE.Mesh(GEOMETRY.chestLid, isBig ? MATERIALS.chestBig : MATERIALS.chestStandard);
-        lid.position.y = 1.2;
-        lid.castShadow = true;
-        chest.add(lid);
-
-        // "Fake Light" - Additive Blending
-        const glowGeo = isBig ? GEOMETRY.chestBigGlow : GEOMETRY.chestGlow;
-        const glowMat = isBig ? MATERIALS.chestBigGlow : MATERIALS.chestGlow;
-
-        const chestGlow = new THREE.Mesh(glowGeo, glowMat);
-        chestGlow.rotation.x = -Math.PI / 2;
-        chestGlow.position.y = 0.05;
-        chestGlow.name = 'chestGlow';
-        chest.add(chestGlow);
-
+        chest.updateMatrixWorld();
         ctx.scene.add(chest);
 
-        const obs = { mesh: chest, position: chest.position, type, scrap: isBig ? 100 : 25, radius: 2, opened: false };
+        const isBig = type === 'big';
+        const colRadius = isBig ? 3.0 : 2.0;
+        const scale = isBig ? 1.5 : 1.0;
+        const boxSize = new THREE.Vector3(1.5 * scale, 1.0 * scale, 1.0 * scale);
+
+        // Gameplay logic & Collision
+        const obs = {
+            mesh: chest,
+            position: chest.position,
+            type: type,
+            scrap: isBig ? 100 : 25,
+            opened: false,
+            collider: { type: 'box' as const, size: boxSize }
+        };
+
         ctx.chests.push(obs);
+        SectorBuilder.addObstacle(ctx, obs);
+        chest.userData.chestData = obs;
 
-        SectorGenerator.addObstacle(ctx, { mesh: chest, position: chest.position, collider: { type: 'sphere', radius: 2 } });
-
-        SectorGenerator.addInteractable(ctx, chest, {
+        SectorBuilder.addInteractable(ctx, chest, {
             type: 'chest',
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             radius: 3.0
         });
 
-        chest.userData.chestData = obs;
-
-        // Optimized Map Item push without Math.random() in ID
         ctx.mapItems.push({
             id: `chest_${x}_${z}`,
             x, z,
@@ -359,9 +272,10 @@ export const SectorGenerator = {
     spawnCollectible: (ctx: SectorContext, x: number, z: number, id: string, type: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy') => {
         if (Math.abs(x) < 0.001 && Math.abs(z) < 0.001) return;
 
+        // Persistence Check
         const foundList = (ctx as any).collectiblesDiscovered || [];
         for (let i = 0; i < foundList.length; i++) {
-            if (foundList[i] === id) return; // Zero-GC array scan
+            if (foundList[i] === id) return;
         }
 
         const group = new THREE.Group();
@@ -371,7 +285,6 @@ export const SectorGenerator = {
 
         const mesh = ModelFactory.createCollectible(type);
         group.add(mesh);
-
         group.rotation.y = Math.random() * Math.PI * 2;
 
         const colorPrimary = 0x00ffff;
@@ -387,12 +300,8 @@ export const SectorGenerator = {
 
         const beamGeo = new THREE.CylinderGeometry(0.4, 0.4, 4, 16, 1, true);
         const beamMat = new THREE.MeshBasicMaterial({
-            color: colorSecondary,
-            transparent: true,
-            opacity: 0.1,
-            side: THREE.DoubleSide,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
+            color: colorSecondary, transparent: true, opacity: 0.1,
+            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
         });
         const beam = new THREE.Mesh(beamGeo, beamMat);
         beam.name = 'collectibleBeam';
@@ -409,25 +318,21 @@ export const SectorGenerator = {
 
         // Logical light - handled by LightSystem
         const lightWorldPos = new THREE.Vector3(x, 1.7, z);
-        ctx.dynamicLights.push({
-            isLogicalLight: true,
-            position: lightWorldPos,
-            color: colorPrimary,
-            baseIntensity: 3.0,
-            distance: 10.0,
-            flickerRate: 0.0
-        } as any);
+        if (ctx.dynamicLights) {
+            ctx.dynamicLights.push({
+                isLogicalLight: true,
+                position: lightWorldPos,
+                color: colorPrimary,
+                baseIntensity: 3.0,
+                distance: 10.0,
+                flickerRate: 0.0
+            } as any);
+        }
 
         if (!group.userData.effects) group.userData.effects = [];
         group.userData.effects.push({
-            type: 'emitter',
-            particle: 'spark',
-            interval: 100,
-            count: 1,
-            offset: new THREE.Vector3(0, 0.2, 0),
-            spread: 0.2,
-            color: colorPrimary,
-            velocity: new THREE.Vector3(0, 2, 0)
+            type: 'emitter', particle: 'spark', interval: 100, count: 1,
+            offset: new THREE.Vector3(0, 0.2, 0), spread: 0.2, color: colorPrimary, velocity: new THREE.Vector3(0, 2, 0)
         });
 
         ctx.scene.add(group);
@@ -435,15 +340,10 @@ export const SectorGenerator = {
 
         ctx.mapItems.push({
             id: `collectible_${id}`,
-            x, z,
-            type: 'TRIGGER',
-            label: 'ui.collectible',
-            icon: '🎁',
-            color: '#ffd700',
-            radius: null
+            x, z, type: 'TRIGGER', label: 'ui.collectible', icon: '🎁', color: '#ffd700', radius: null
         });
 
-        SectorGenerator.addInteractable(ctx, group, {
+        SectorBuilder.addInteractable(ctx, group, {
             type: 'collectible',
             label: 'ui.interact_pickup_collectible',
             radius: 4.0
@@ -464,36 +364,6 @@ export const SectorGenerator = {
         };
         ctx.triggers.push(trigger);
         ctx.collisionGrid.addTrigger(trigger);
-
-        if (ctx.debugMode) {
-            SectorGenerator.spawnDebugMarker(ctx, x, z, 2, id);
-        }
-    },
-
-    spawnDebugMarker: (ctx: SectorContext, x: number, z: number, height: number, label: string) => {
-        const beamGeo = new THREE.CylinderGeometry(0.1, 0.1, 400, 8);
-        beamGeo.translate(0, 200, 0);
-        const beamMat = new THREE.MeshBasicMaterial({
-            color: 0x00ffff, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending
-        });
-        const beam = new THREE.Mesh(beamGeo, beamMat);
-        beam.position.set(x, 0, z);
-        ctx.scene.add(beam);
-
-        const sprite = createTextSprite(label);
-        sprite.scale.set(12, 3, 1);
-        sprite.position.set(x, height + 4, z);
-        ctx.scene.add(sprite);
-
-        ctx.mapItems.push({
-            id: `poi_${label}`,
-            x, z,
-            type: 'POI',
-            label: label,
-            icon: '📍',
-            color: '#ffffff',
-            radius: null
-        });
     },
 
     setOnFire: (ctx: SectorContext, object: THREE.Object3D, opts?: { smoke?: boolean, color?: number, intensity?: number, distance?: number, offset?: THREE.Vector3, onRoof?: boolean, area?: THREE.Vector3 }) => {
@@ -516,7 +386,6 @@ export const SectorGenerator = {
 
         EffectManager.attachEffect(object, 'fire', finalOpts);
 
-        // Zero-GC list check
         if (ctx.burningObjects) {
             let exists = false;
             for (let i = 0; i < ctx.burningObjects.length; i++) {
@@ -566,8 +435,8 @@ export const SectorGenerator = {
         bale.matrixAutoUpdate = false;
         bale.updateMatrix();
         ctx.scene.add(bale);
-        const obs = { mesh: bale, collider: { type: 'sphere' as const, radius: 1.2 * scale } };
-        SectorGenerator.addObstacle(ctx, obs);
+
+        SectorBuilder.addObstacle(ctx, { mesh: bale, collider: { type: 'sphere' as const, radius: 1.2 * scale } });
     },
 
     spawnTimberPile: (ctx: SectorContext, x: number, z: number, rotation: number = 0, scale: number = 1.0) => {
@@ -581,14 +450,13 @@ export const SectorGenerator = {
         const baseSize = new THREE.Vector3(2.5, 1.5, 6.0);
         const baseCenter = new THREE.Vector3(0, 0.75, 0);
 
-        const obs = {
+        SectorBuilder.addObstacle(ctx, {
             mesh: timber,
             position: timber.position,
             quaternion: timber.quaternion,
             collider: { type: 'box' as const, size: baseSize, center: baseCenter },
             type: 'TimberPile'
-        };
-        SectorGenerator.addObstacle(ctx, obs);
+        });
     },
 
     spawnBuilding(ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) {
@@ -597,10 +465,7 @@ export const SectorGenerator = {
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
         building.updateMatrixWorld();
-
-        // Zero-GC: Static buildings don't need matrix updates
         building.matrixAutoUpdate = false;
-
         building.castShadow = true;
         building.receiveShadow = true;
 
@@ -613,12 +478,7 @@ export const SectorGenerator = {
 
         ctx.mapItems.push({
             id: `building_${x}_${z}`,
-            x, z,
-            type: 'BUILDING',
-            label: 'ui.building',
-            icon: null,
-            color: '#1e293b',
-            radius: null,
+            x, z, type: 'BUILDING', label: 'ui.building', icon: null, color: '#1e293b', radius: null,
             points: [
                 { x: x + (-hw * cos - -hd * sin), z: z + (-hw * sin + -hd * cos) },
                 { x: x + (hw * cos - -hd * sin), z: z + (hw * sin + -hd * cos) },
@@ -627,13 +487,13 @@ export const SectorGenerator = {
             ]
         });
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: building,
             position: building.position,
             quaternion: building.quaternion,
             collider: {
                 type: 'box' as const,
-                size: (building.userData.size as THREE.Vector3).clone(), // Only clone once at creation
+                size: (building.userData.size as THREE.Vector3).clone(),
             }
         });
 
@@ -643,20 +503,20 @@ export const SectorGenerator = {
     createScarecrow(ctx: SectorContext, x: number, y: number) {
         const scarecrow = ObjectGenerator.createScarecrow(x, y);
         ctx.scene.add(scarecrow);
-        SectorGenerator.addObstacle(ctx, { mesh: scarecrow, collider: { type: 'sphere', radius: 0.5 } });
+        SectorBuilder.addObstacle(ctx, { mesh: scarecrow, collider: { type: 'sphere', radius: 0.5 } });
     },
 
     spawnVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, type: 'station wagon' | 'sedan' | 'police' | 'ambulance' | 'suv' | 'minivan' | 'pickup' | 'bus' | 'tractor' | 'timber_truck' = 'station wagon', colorOverride?: number, addSnow?: boolean) => {
         const vehicle = VehicleGenerator.createVehicle(type, colorOverride, addSnow);
 
         _box_sg.setFromObject(vehicle);
-        const size = _box_sg.getSize(new THREE.Vector3()); // Safe, needed struct
+        const size = _box_sg.getSize(new THREE.Vector3());
 
         vehicle.position.set(x, 0, z);
         vehicle.rotation.y = rotation;
         ctx.scene.add(vehicle);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: vehicle,
             position: vehicle.position,
             quaternion: vehicle.quaternion,
@@ -695,7 +555,7 @@ export const SectorGenerator = {
         vehicleRoot.rotation.y = rotation;
 
         vehicleRoot.userData.isInteractable = true;
-        vehicleRoot.userData.interactionId = `vehicle_${vehicleType}_${x}_${z}`; // Removed Math.random()
+        vehicleRoot.userData.interactionId = `vehicle_${vehicleType}_${x}_${z}`;
         vehicleRoot.userData.interactionLabel = 'ui.enter_vehicle';
         vehicleRoot.userData.interactionType = 'VEHICLE';
 
@@ -723,16 +583,16 @@ export const SectorGenerator = {
             type: `Vehicle_${vehicleType}`
         };
 
-        SectorGenerator.addObstacle(ctx, obs);
+        SectorBuilder.addObstacle(ctx, obs);
         vehicleRoot.userData.obstacleRef = obs;
         ctx.scene.add(vehicleRoot);
-        SectorGenerator.addInteractable(ctx, vehicleRoot);
+        SectorBuilder.addInteractable(ctx, vehicleRoot);
 
         return vehicleRoot;
     },
 
     spawnFloatableVehicle: (ctx: SectorContext, x: number, z: number, rotation: number, vehicleType: VehicleType = 'boat', colorOverride?: number) => {
-        return SectorGenerator.spawnDriveableVehicle(ctx, x, z, rotation, vehicleType, colorOverride, false);
+        return SectorBuilder.spawnDriveableVehicle(ctx, x, z, rotation, vehicleType, colorOverride, false);
     },
 
     addWaterBody: (ctx: SectorContext, type: WaterBodyType, x: number, z: number, width: number, depth: number, options?: { shape?: 'rect' | 'circle'; flowDirection?: THREE.Vector2; flowStrength?: number; maxDepth?: number; }): WaterBody | null => {
@@ -742,79 +602,19 @@ export const SectorGenerator = {
     },
 
     spawnLakeBed: (ctx: SectorContext, x: number, z: number, width: number, depth: number, floorDepth: number = 4.0, shape: 'rect' | 'circle' = 'rect') => {
-        const segmentsX = Math.max(16, Math.floor(width / 2));
-        const segmentsY = Math.max(16, Math.floor(depth / 2));
-        const geo = shape === 'circle'
-            ? new THREE.CircleGeometry(width / 2, segmentsX * 2)
-            : new THREE.PlaneGeometry(width, depth, segmentsX, segmentsY);
-
-        // Zero-GC: Get shared instance
-        const mat = getLakeBedMaterial();
-
-        const posAttr = geo.getAttribute('position');
-        const rX = width / 2;
-        const rZ = depth / 2;
-
-        for (let i = 0; i < posAttr.count; i++) {
-            const vx = posAttr.getX(i);
-            const vy = posAttr.getY(i);
-
-            let rawDist = 0;
-            if (shape === 'circle') {
-                rawDist = Math.sqrt((vx * vx) / (rX * rX) + (vy * vy) / (rZ * rZ));
-            } else {
-                rawDist = Math.max(Math.abs(vx) / rX, Math.abs(vy) / rZ);
-            }
-
-            const edgeDistMeters = (1.0 - rawDist) * Math.min(rX, rZ);
-            let slopeDepth = floorDepth;
-            const slopeSlopeWdith = 2.0;
-
-            if (edgeDistMeters < slopeSlopeWdith) {
-                const f = edgeDistMeters / slopeSlopeWdith;
-                slopeDepth = floorDepth * (f * f * (3 - 2 * f));
-            }
-
-            posAttr.setZ(i, -slopeDepth + (Math.random() - 0.5) * 0.1);
-        }
-
-        posAttr.needsUpdate = true;
-        geo.computeVertexNormals();
-
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.set(x, 0, z);
-        mesh.receiveShadow = true;
-
-        // Zero-GC: Static mesh
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
-
-        ctx.scene.add(mesh);
-
-        const repeatX = width / 8;
-        const repeatY = depth / 8;
-        const uvAttr = geo.attributes.uv;
-        for (let i = 0; i < uvAttr.count; i++) {
-            uvAttr.setXY(i, uvAttr.getX(i) * repeatX, uvAttr.getY(i) * repeatY);
-        }
-
-        return mesh;
+        const lake = TerrainGenerator.createLakeBed(width, depth, floorDepth, shape);
+        lake.position.set(x, -0.1, z);
+        ctx.scene.add(lake);
+        return lake;
     },
 
     addLake: (ctx: SectorContext, x: number, z: number, radius: number, floorDepth: number = 5.0) => {
-        const water = SectorGenerator.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle', maxDepth: floorDepth });
-        SectorGenerator.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, 'circle');
+        const water = SectorBuilder.addWaterBody(ctx, 'lake', x, z, radius * 2, radius * 2, { shape: 'circle', maxDepth: floorDepth });
+        SectorBuilder.spawnLakeBed(ctx, x, z, radius * 2, radius * 2, floorDepth, 'circle');
 
         ctx.mapItems.push({
             id: `lake_${x}_${z}`,
-            x, z,
-            type: 'LAKE',
-            label: 'ui.lake',
-            icon: null,
-            color: '#3b82f6',
-            radius,
-            points: null
+            x, z, type: 'LAKE', label: 'ui.lake', icon: null, color: '#3b82f6', radius, points: null
         });
 
         const numProps = Math.floor(radius * radius * 0.05);
@@ -827,7 +627,6 @@ export const SectorGenerator = {
             const pZ = z + Math.sin(angle) * r;
 
             const rand = Math.random();
-            // Using distance squared saves an expensive Math.sqrt here
             const distSq = (pX - x) * (pX - x) + (pZ - z) * (pZ - z);
             const distFromCenter = Math.sqrt(distSq);
 
@@ -839,7 +638,7 @@ export const SectorGenerator = {
             }
 
             if (rand < 0.3) {
-                const rock = EnvironmentGenerator.createRock(1.5 + Math.random() * 2, 1 + Math.random() * 1.5);
+                const rock = NaturePropGenerator.createRock(1.5 + Math.random() * 2, 1 + Math.random() * 1.5);
                 rock.position.set(pX, -currentDepth + 0.2, pZ);
                 rock.matrixAutoUpdate = false;
                 rock.updateMatrix();
@@ -878,7 +677,7 @@ export const SectorGenerator = {
         container.updateMatrix();
         ctx.scene.add(container);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: container,
             position: container.position,
             quaternion: container.quaternion,
@@ -911,17 +710,16 @@ export const SectorGenerator = {
 
         ctx.scene.add(lightGroup);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: lightGroup,
             position: lightGroup.position,
             collider: { type: 'sphere', radius: 1.0 }
         });
 
-        // Add to LightSystem
         if (ctx.dynamicLights) {
             const offset = lightGroup.userData.lightOffset as THREE.Vector3;
             const worldPos = new THREE.Vector3().copy(offset);
-            worldPos.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
+            worldPos.applyAxisAngle(_axisY, rotation);
             worldPos.add(lightGroup.position);
 
             ctx.dynamicLights.push({
@@ -930,7 +728,7 @@ export const SectorGenerator = {
                 color: 0xaaddff,
                 baseIntensity: 4.0,
                 distance: 30.0,
-                flickerRate: Math.random() > 0.9 ? 0.1 : 0.0 // 10% chans att lyktan är trasig och flimrar!
+                flickerRate: Math.random() > 0.9 ? 0.1 : 0.0
             } as any);
         }
 
@@ -940,26 +738,18 @@ export const SectorGenerator = {
     spawnCaveLamp: (ctx: SectorContext, x: number, y: number, z: number) => {
         const lamp = ObjectGenerator.createCaveLamp();
         lamp.position.set(x, y, z);
-
-        // Frys matrisen! Sparar extremt mycket CPU på fasta objekt.
         lamp.matrixAutoUpdate = false;
         lamp.updateMatrix();
 
         ctx.scene.add(lamp);
 
-        // ========================================================
-        // VINTERDÖD FIX: Skicka in datan till LightSystem
-        // ========================================================
         if (lamp.userData.logicalLights && ctx.dynamicLights) {
             for (let i = 0; i < lamp.userData.logicalLights.length; i++) {
                 const lData = lamp.userData.logicalLights[i];
-
-                // Räkna ut absolut position
                 const worldPos = new THREE.Vector3().copy(lData.offset);
                 worldPos.applyQuaternion(lamp.quaternion);
                 worldPos.add(lamp.position);
 
-                // LightSystem
                 ctx.dynamicLights.push({
                     isLogicalLight: true,
                     position: worldPos,
@@ -984,17 +774,13 @@ export const SectorGenerator = {
         ctx.scene.add(building);
 
         const size = building.userData.size;
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: building,
             position: building.position,
             quaternion: building.quaternion,
-            collider: { type: 'box', size: size.clone() } // Struct needed, clone safe here
+            collider: { type: 'box', size: size.clone() }
         });
 
-        // ========================================================
-        // VINTERDÖD FIX: Läs in husets inbyggda ljus-data
-        // Transformera Local Space (offset) till World Space
-        // ========================================================
         if (building.userData.logicalLights && ctx.dynamicLights) {
             for (let i = 0; i < building.userData.logicalLights.length; i++) {
                 const lData = building.userData.logicalLights[i];
@@ -1002,7 +788,6 @@ export const SectorGenerator = {
                 worldPos.applyQuaternion(building.quaternion);
                 worldPos.add(building.position);
 
-                // LightSystem
                 ctx.dynamicLights.push({
                     isLogicalLight: true,
                     position: worldPos,
@@ -1012,7 +797,6 @@ export const SectorGenerator = {
                     flickerRate: lData.flickerRate || 0
                 } as any);
             }
-
             building.userData.logicalLights = null;
         }
 
@@ -1033,7 +817,7 @@ export const SectorGenerator = {
         stairs.rotation.y = rotation;
         ctx.scene.add(stairs);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: stairs,
             position: stairs.position,
             quaternion: stairs.quaternion,
@@ -1050,7 +834,7 @@ export const SectorGenerator = {
         pole.matrixAutoUpdate = false;
         pole.updateMatrix();
         ctx.scene.add(pole);
-        SectorGenerator.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
+        SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
         return pole;
     },
 
@@ -1066,7 +850,7 @@ export const SectorGenerator = {
             group.add(container);
         }
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: group,
             position: group.position,
             quaternion: group.quaternion,
@@ -1110,7 +894,7 @@ export const SectorGenerator = {
 
         _box_sg.setFromObject(vehicleStack);
         const stackSize = _box_sg.getSize(new THREE.Vector3());
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: vehicleStack,
             position: vehicleStack.position,
             quaternion: vehicleStack.quaternion,
@@ -1123,18 +907,17 @@ export const SectorGenerator = {
         if (type === 'birch') genType = TREE_TYPE.BIRCH;
         if (type === 'spruce') genType = TREE_TYPE.SPRUCE;
 
-        const tree = EnvironmentGenerator.createTree(genType, scaleMultiplier);
+        const tree = VegetationGenerator.createTree(genType, scaleMultiplier);
         tree.position.set(x, 0, z);
         tree.rotation.y = Math.random() * Math.PI * 2;
         tree.matrixAutoUpdate = false;
         tree.updateMatrix();
         ctx.scene.add(tree);
 
-        const colRadius = 0.5 * scaleMultiplier;
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: tree,
             position: tree.position,
-            collider: { type: 'sphere', radius: colRadius }
+            collider: { type: 'sphere', radius: 0.5 * scaleMultiplier }
         });
     },
 
@@ -1149,7 +932,7 @@ export const SectorGenerator = {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
         ctx.scene.add(barrel);
-        SectorGenerator.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: 'sphere', radius: 0.6 } });
+        SectorBuilder.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: 'sphere', radius: 0.6 } });
     },
 
     updateAtmosphere: (dt: number, now: number, playerPos: THREE.Vector3, gameState: any, sectorState: any, events: any, sectorDef: any, zones?: any[]) => {
@@ -1160,101 +943,55 @@ export const SectorGenerator = {
     },
 
     fillArea: async (ctx: SectorContext, center: { x: number, z: number }, size: { width: number, height: number } | number, count: number, type: 'tree' | 'rock' | 'debris', avoidCenterRadius: number = 0, exclusionZones: { pos: THREE.Vector3, radius: number }[] = []) => {
-        if (ctx.debugMode) {
-            let w = 0, d = 0;
-            if (typeof size === 'number') { w = size / 2; d = size / 2; }
-            else { w = size.width / 2; d = size.height / 2; }
-
-            SectorGenerator.visualizePolygon(ctx, [
-                new THREE.Vector3(center.x - w, 0, center.z - d),
-                new THREE.Vector3(center.x + w, 0, center.z - d),
-                new THREE.Vector3(center.x + w, 0, center.z + d),
-                new THREE.Vector3(center.x - w, 0, center.z + d)
-            ], 0xffff00);
-        }
-        await EnvironmentGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius, exclusionZones);
+        await NaturePropGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius);
     },
 
     fillWheatField: async (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
-        if (ctx.debugMode) {
-            SectorGenerator.visualizePolygon(ctx, polygon, 0xffff00);
-        }
-
-        // Zero-GC loop instead of .map
         const pts = new Array(polygon.length);
         for (let i = 0; i < polygon.length; i++) pts[i] = { x: polygon[i].x, z: polygon[i].z };
 
         ctx.mapItems.push({
             id: `wheat_${polygon[0].x}_${polygon[0].z}`,
             x: polygon[0].x, z: polygon[0].z,
-            type: 'WHEAT',
-            label: 'ui.field',
-            icon: null,
-            color: '#eab308',
-            radius: null,
-            points: pts
+            type: 'WHEAT', label: 'ui.field', icon: null, color: '#eab308', radius: null, points: pts
         });
 
-        await EnvironmentGenerator.fillWheatField(ctx, polygon, density);
+        await VegetationGenerator.fillWheatField(ctx, polygon, density);
     },
 
     fillAreaWithFlowers: async (ctx: SectorContext, region: { x: number, z: number, w: number, d: number } | THREE.Vector3[], density: number = 2.0, type: 'flower' | 'sunflower' = 'flower') => {
-        if (ctx.debugMode && Array.isArray(region)) {
-            SectorGenerator.visualizePolygon(ctx, region, 0xff00ff);
-        }
-        await EnvironmentGenerator.fillAreaWithFlowers(ctx, region, density, type);
+        await VegetationGenerator.fillAreaWithFlowers(ctx, region, density, type);
     },
 
     createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
-        if (ctx.debugMode) {
-            SectorGenerator.visualizePath(ctx, polygon, 0xff0000);
-        }
         PathGenerator.createBoundry(ctx, polygon, name);
     },
 
     createMountain: (ctx: SectorContext, points: THREE.Vector3[], depth: number = 20, height: number = 15, caveConfig?: { position: THREE.Vector3, rotation?: number }) => {
-        if (ctx.debugMode) {
-            SectorGenerator.visualizePath(ctx, points, 0xffffff);
-        }
-
         const pts = new Array(points.length);
         for (let i = 0; i < points.length; i++) pts[i] = { x: points[i].x, z: points[i].z };
 
         ctx.mapItems.push({
             id: `mountain_${points[0].x}_${points[0].z}`,
             x: points[0].x, z: points[0].z,
-            type: 'MOUNTAIN',
-            label: 'ui.mountain',
-            icon: null,
-            color: '#64748b',
-            radius: null,
-            points: pts
+            type: 'MOUNTAIN', label: 'ui.mountain', icon: null, color: '#64748b', radius: null, points: pts
         });
 
-        EnvironmentGenerator.createMountain(ctx, points, depth, height, caveConfig);
+        TerrainGenerator.createMountain(ctx, points, depth, height, caveConfig);
     },
 
     createMountainOpening: (tunnelDepth: number = 10) => {
-        return EnvironmentGenerator.createMountainOpening(tunnelDepth);
+        return TerrainGenerator.createMountainOpening(tunnelDepth);
     },
 
     createForest: (ctx: SectorContext, polygon: THREE.Vector3[], spacing: number = 8, type: string | string[] = 'random') => {
-        if (ctx.debugMode) {
-            SectorGenerator.visualizePolygon(ctx, polygon, 0x00ff00);
-        }
-
         const pts = new Array(polygon.length);
         for (let i = 0; i < polygon.length; i++) pts[i] = { x: polygon[i].x, z: polygon[i].z };
 
         ctx.mapItems.push({
             id: `forest_${polygon[0].x}_${polygon[0].z}`,
             x: polygon[0].x, z: polygon[0].z,
-            type: 'FOREST',
-            label: 'ui.forest',
-            icon: null,
-            color: '#16a34a',
-            radius: null,
-            points: pts
+            type: 'FOREST', label: 'ui.forest', icon: null, color: '#16a34a', radius: null, points: pts
         });
 
         let genType = type;
@@ -1267,7 +1004,7 @@ export const SectorGenerator = {
             else if (lower === 'dead') genType = 'DEAD';
         }
 
-        EnvironmentGenerator.createForest(ctx, polygon, spacing, genType as any);
+        VegetationGenerator.createForest(ctx, polygon, spacing, genType as any);
     },
 
     createFence: (ctx: SectorContext, points: THREE.Vector3[], color: 'white' | 'wood' | 'black' | 'mesh' = 'wood', height: number = 1.2, strict: boolean = false) => {
@@ -1295,25 +1032,22 @@ export const SectorGenerator = {
         mast.position.set(x, 0, z);
         ctx.scene.add(mast);
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: mast,
             position: mast.position,
             collider: { type: 'sphere', radius: 8 }
         });
 
-        // ========================================================
-        // VINTERDÖD FIX: Koppla roterande logiska ljus
-        // ========================================================
         if (ctx.dynamicLights) {
             mast.traverse((child) => {
                 if (child.userData.needsLogicalLight) {
                     ctx.dynamicLights.push({
                         isLogicalLight: true,
-                        targetObject: child, // <-- Låser proxy-lampan till denna specifika mesh
+                        targetObject: child,
                         color: child.userData.lightColor,
                         baseIntensity: child.userData.lightIntensity,
                         distance: child.userData.lightDistance,
-                        flickerRate: 0.0 // En roterande mastlampa flimrar sällan
+                        flickerRate: 0.0
                     } as any);
                 }
             });
@@ -1331,12 +1065,8 @@ export const SectorGenerator = {
             if (trigger.type === 'POI') {
                 ctx.mapItems.push({
                     id: trigger.id || `poi_${trigger.position.x}_${trigger.position.z}`,
-                    x: trigger.position.x,
-                    z: trigger.position.z,
-                    type: 'POI',
-                    label: trigger.content || trigger.id,
-                    icon: '📍',
-                    color: '#f59e0b',
+                    x: trigger.position.x, z: trigger.position.z,
+                    type: 'POI', label: trigger.content || trigger.id, icon: '📍', color: '#f59e0b',
                     radius: trigger.radius || 10
                 });
             }
@@ -1344,38 +1074,11 @@ export const SectorGenerator = {
             if (trigger.type === 'EVENT' && trigger.familyId !== undefined) {
                 ctx.mapItems.push({
                     id: trigger.id || `family_${trigger.familyId}`,
-                    x: trigger.position.x,
-                    z: trigger.position.z,
-                    type: 'FAMILY',
-                    label: 'ui.family_hint',
-                    icon: '❤️',
-                    color: '#ef4444',
+                    x: trigger.position.x, z: trigger.position.z,
+                    type: 'FAMILY', label: 'ui.family_hint', icon: '❤️', color: '#ef4444',
                     radius: 12
                 });
             }
-        }
-
-        if (ctx.debugMode) {
-            SectorGenerator.visualizeTriggers(ctx);
-        }
-    },
-
-    visualizeTriggers: (ctx: SectorContext) => {
-        for (let i = 0; i < ctx.triggers.length; i++) {
-            const trig = ctx.triggers[i];
-
-            let drawRadius = trig.radius;
-            if (!drawRadius && trig.size) {
-                drawRadius = Math.max(trig.size.width, trig.size.depth);
-            }
-            if (!drawRadius) drawRadius = 2.0;
-
-            const ringGeo = new THREE.RingGeometry(drawRadius - 0.2, drawRadius, 32);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
-            const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.rotation.x = -Math.PI / 2;
-            ring.position.set(trig.position.x, 0.1, trig.position.z);
-            ctx.scene.add(ring);
         }
     },
 
@@ -1384,14 +1087,12 @@ export const SectorGenerator = {
         const oY = eff.offset?.y || 0;
         const oZ = eff.offset?.z || 0;
 
-        // Logical Light - handled by LightSystem
         if (eff.type === 'light' || eff.type === 'fire') {
             const isFire = eff.type === 'fire';
             const baseColor = isFire ? 0xff6600 : (eff.color || 0xffaa00);
             const baseIntensity = isFire ? 2.0 : (eff.intensity || 1.0);
             const yOffset = isFire ? oY + 1.0 : oY;
 
-            // Calculate flicker
             let flicker = 0;
             if (isFire) {
                 flicker = 0.15;
@@ -1399,7 +1100,6 @@ export const SectorGenerator = {
                 flicker = 0.05 + Math.random() * 0.1;
             }
 
-            // LightSystem
             if (ctx.dynamicLights) {
                 ctx.dynamicLights.push({
                     isLogicalLight: true,
@@ -1413,7 +1113,6 @@ export const SectorGenerator = {
             }
         }
 
-        // Particle effects
         if (eff.type === 'fire') {
             parent.userData.isFire = true;
             if (parent.userData.effects === undefined) parent.userData.effects = [];
@@ -1434,13 +1133,11 @@ export const SectorGenerator = {
         terminal.position.set(x, 0, z);
         ctx.scene.add(terminal);
 
-        SectorGenerator.addInteractable(ctx, terminal, {
-            id: type,
-            type: 'sector_specific',
-            label: 'ui.interact'
+        SectorBuilder.addInteractable(ctx, terminal, {
+            id: type, type: 'sector_specific', label: 'ui.interact'
         });
 
-        SectorGenerator.addObstacle(ctx, {
+        SectorBuilder.addObstacle(ctx, {
             mesh: terminal,
             position: terminal.position,
             collider: { type: 'box', size: new THREE.Vector3(1.2 * scale, 2.0 * scale, 1.2 * scale) }
@@ -1450,9 +1147,7 @@ export const SectorGenerator = {
     },
 
     spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias?: number) => {
-        const mesh = ObjectGenerator.createRubble(x, z, count, material, directionBias);
-        ctx.scene.add(mesh);
+        const mesh = NaturePropGenerator.spawnRubble(ctx, x, z, count, material, directionBias);
         return mesh;
     },
-
 };

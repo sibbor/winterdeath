@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MATERIALS, createSignMesh } from '../../utils/assets';
+import { MATERIALS, createSignMesh } from '../../../utils/assets';
 
 /**
  * VehicleGenerator

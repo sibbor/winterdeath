@@ -188,11 +188,19 @@ export const GEOMETRY = {
     zombie: createZombieBodyGeo(),
     petBody: createPetBodyGeo(),
     petTail: createPetTailGeo(),
-    fireZone: new THREE.CircleGeometry(3.5, 16),
+
+    // Chests
     chestBody: new THREE.BoxGeometry(1.5, 1.0, 1.0),
-    chestLid: new THREE.BoxGeometry(1.5, 0.4, 1.0),
+    chestLid: (() => {
+        const geo = new THREE.BoxGeometry(1.5, 0.4, 1.0);
+        geo.translate(0, 0.2, 0.5);
+        return geo;
+    })(),
     chestGlow: new THREE.PlaneGeometry(3.5, 3.5),
     chestBigGlow: new THREE.PlaneGeometry(5.0, 5.0),
+
+    // Combat
+    fireZone: new THREE.CircleGeometry(3.5, 16),
     blastRadius: new THREE.RingGeometry(0.05, 1, 32),
     decal: new THREE.CircleGeometry(1, 12),
     splatterDecal: createSplatterGeo(),

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { MapItem, MapItemType } from '../../hud/HudTypes';
 import { t } from '../../../../utils/i18n';
-import { soundManager } from '../../../../utils/SoundManager';
+import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { useHudStore } from '../../../../hooks/useHudStore';
 
@@ -203,7 +203,7 @@ const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
     const hasBoss = useHudStore(s => !!s.bossPos);
 
     const posP = getMapPercent(px, pz, bounds);
-    
+
     return (
         <>
             <div
@@ -271,7 +271,7 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
         // If max == min, add buffer to prevent div/0
         if (maxX <= minX) { maxX += 100; minX -= 100; }
         if (maxZ <= minZ) { maxZ += 100; minZ -= 100; }
-        
+
         const pad = 100;
         return { minX: minX - pad, maxX: maxX + pad, minZ: minZ - pad, maxZ: maxZ + pad };
     }, [mapItems]);
@@ -361,9 +361,9 @@ export const ScreenMap: React.FC<ScreenMapProps> = ({ onClose, onSelectCoords, i
             footer={footerNode}
         >
             <div className="relative flex-1 w-full bg-black/60 border border-white/10 overflow-hidden flex items-center justify-center">
-                <div 
+                <div
                     className="relative shadow-2xl"
-                    style={{ 
+                    style={{
                         aspectRatio: `${(bounds.maxX - bounds.minX) / (bounds.maxZ - bounds.minZ)}`,
                         width: '100%',
                         height: 'auto',

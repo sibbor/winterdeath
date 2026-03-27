@@ -4,7 +4,7 @@ import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType } from '../
 import { DamageType, StatusEffectType } from '../../entities/player/CombatTypes';
 import { EnemySpawner } from './EnemySpawner';
 import { EnemyAI } from './EnemyAI';
-import { soundManager } from '../../utils/SoundManager';
+import { soundManager } from '../../utils/audio/SoundManager';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { ZombieRenderer } from '../../core/renderers/ZombieRenderer';
 import { CorpseRenderer } from '../../core/renderers/CorpseRenderer';
