@@ -255,7 +255,7 @@ export const SectorBuilder = {
         SectorBuilder.addInteractable(ctx, chest, {
             type: 'chest',
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
-            radius: 3.0
+            radius: colRadius
         });
 
         ctx.mapItems.push({
