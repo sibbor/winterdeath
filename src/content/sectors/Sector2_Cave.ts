@@ -363,7 +363,7 @@ export const generateCaveSystem = async (ctx: SectorContext, innerCave: THREE.Gr
         // Chest spawns
         if (r.chests) {
             for (let i = 0; i < r.chests; i++) {
-                await SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
+                SectorBuilder.spawnChest(ctx, r.x + (Math.random() - 0.5) * (r.w - 6), r.z + (Math.random() - 0.5) * (r.d - 6), 'standard', Math.random() * Math.PI);
             }
         }
     }
