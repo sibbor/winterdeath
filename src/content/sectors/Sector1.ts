@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
-import { MATERIALS, createTextSprite } from '../../utils/assets';
+import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
@@ -394,25 +394,24 @@ export const Sector1: SectorDef = {
             withRoof: false,
             mapRepeat: { x: 40, y: 1 }
         });
+        const glassStaircase = SectorBuilder.spawnGlassStaircase(ctx, LOCATIONS.POIS.GYM.x - 23, LOCATIONS.POIS.GYM.z, 6, 12, 8, 0);
+        gym.add(glassStaircase);
 
-        SectorBuilder.spawnGlassStaircase(ctx, LOCATIONS.POIS.GYM.x - 23, LOCATIONS.POIS.GYM.z, 6, 12, 8, 0);
-
-        const gymSign = createTextSprite("Gånghester Gym");
-        gymSign.position.set(-10, 4.5, 10.1); // Repositioned for visibility
+        const gymSign = SectorBuilder.spawnNeonSign(ctx, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z - 6, 0, "Gånghester Gym", 0xffaa00);
+        gymSign.position.set(-10, 4.5, 10.1);
         gym.add(gymSign);
 
         // Pizzeria
-        SectorBuilder.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 20, 8, 15, 0, {
+        const pizzeria = SectorBuilder.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 20, 8, 15, 0, {
             lowerMat: MATERIALS.plaster,
             upperMat: MATERIALS.plaster,
             shopWindows: true,
             upperWindows: true,
             withRoof: true
         });
-        SectorBuilder.spawnNeonSign(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z + 7.6, Math.PI, "Gånghester Pizzera", 0xffffff, true, 1.0, 0x000000);
-        // Positioned at y:4.0 (halfway up the 8m building)
-        const pizSign = scene.children[scene.children.length - 1];
+        const pizSign = SectorBuilder.spawnNeonSign(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z + 7.6, Math.PI, "Gånghester Pizzera", 0xffffff, true, 1.0, 0x000000);
         pizSign.position.y = 4.0;
+        pizzeria.add(pizSign);
 
         // Embankment
         const embankmentWest = [

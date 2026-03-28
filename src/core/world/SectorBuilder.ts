@@ -693,11 +693,14 @@ export const SectorBuilder = {
 
     spawnNeonSign: (ctx: SectorContext, x: number, z: number, rotation: number, text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
         const sign = ObjectGenerator.createNeonSign(text, color, withBacking, scale, backgroundColor);
+
         sign.position.set(x, 5.5, z);
         sign.rotation.y = rotation;
         sign.matrixAutoUpdate = false;
         sign.updateMatrix();
+
         ctx.scene.add(sign);
+
         return sign;
     },
 
@@ -798,6 +801,7 @@ export const SectorBuilder = {
 
     spawnGlassStaircase: (ctx: SectorContext, x: number, z: number, width: number, height: number, depth: number, rotation: number) => {
         const stairs = ObjectGenerator.createGlassStaircase(width, height, depth);
+
         stairs.position.set(x, 0, z);
         stairs.rotation.y = rotation;
         ctx.scene.add(stairs);
@@ -818,8 +822,11 @@ export const SectorBuilder = {
         pole.rotation.y = rotation;
         pole.matrixAutoUpdate = false;
         pole.updateMatrix();
+
         ctx.scene.add(pole);
+
         SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
+
         return pole;
     },
 
