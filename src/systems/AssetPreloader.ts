@@ -27,8 +27,8 @@ let lastSectorIndex = -1;
 const sharedPool: THREE.Object3D[] = [];
 let sharedPoolPopulated = false;
 
-// Preloadern keeps track of what lighting the pool is baked for.
-let sharedPoolCompiledTarget: 'CAMP' | 'SECTOR' | null = null;
+// We no longer strictly care about sharedPoolCompiledTarget shifting if proxies are standardized
+let sharedPoolCompiled = false;
 
 // --- PERFORMANCE SCRATCHPADS & DUMMIES (Zero-GC) ---
 const _dummyMatrix = new THREE.Matrix4();
@@ -49,26 +49,37 @@ const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, Ene
 const TREE_TYPES = [TREE_TYPE.PINE, TREE_TYPE.SPRUCE, TREE_TYPE.OAK, TREE_TYPE.BIRCH, TREE_TYPE.DEAD];
 const WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIALS.particle_ash, MATERIALS.particle_ember];
 
+// Reusable dummy scene for compilation
+const _dummyScene = new THREE.Scene();
+
 export const AssetPreloader = {
 
     isWarmedUp: (module: string = 'CORE') => warmedModules.has(module),
 
     warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', yieldToMain?: () => Promise<void>, sectorId?: number) => {
         const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
-        const currentTargetType = target === 'CAMP' ? 'CAMP' : 'SECTOR';
 
-        // VINTERDÖD FIX: If we switch environments, we MUST recompile shaders for the different lighting proxy counts,
-        // even if the module was previously warmed.
-        if (target !== 'CORE' && sharedPoolPopulated && sharedPoolCompiledTarget !== currentTargetType) {
-            console.log(`[AssetPreloader] Context shift detected before warmup (${sharedPoolCompiledTarget} -> ${currentTargetType}). Un-caching ${moduleKey} for recompilation.`);
-            warmedModules.delete(moduleKey);
+        // Swap-and-go 1-Slot Cache for Sectors
+        if (target === 'SECTOR') {
+            const currentSectorId = sectorId ?? 0;
+
+            // If we are loading a NEW sector, evict the OLD sector from memory
+            if (lastSectorIndex !== -1 && lastSectorIndex !== currentSectorId) {
+                const oldModuleKey = `SECTOR_${lastSectorIndex}`;
+                console.log(`[AssetPreloader] ♻️ Swapping cached sector: Evicting ${oldModuleKey} to make room for ${moduleKey}.`);
+                warmedModules.delete(oldModuleKey);
+            }
+
+            lastSectorIndex = currentSectorId;
         }
 
         if (warmedModules.has(moduleKey)) {
+            console.log("[AssetPreloader] Already warmed up: ", moduleKey);
             return; // Already compiled
         }
 
         if (activePromises.has(moduleKey)) {
+            console.log("[AssetPreloader] Already warming up: ", moduleKey);
             return activePromises.get(moduleKey);
         }
 
@@ -164,15 +175,18 @@ export const AssetPreloader = {
             // =========================================================
             beginInternal('scene_inject');
 
-            // Dummy scene to compile shaders
-            const dummyScene = new THREE.Scene();
+            // Clean dummy scene beforehand
+            while (_dummyScene.children.length > 0) {
+                _dummyScene.remove(_dummyScene.children[0]);
+            }
 
             // Populate with proxy lights - LightSystem will handle it
             const ENGINE_MAX_VISIBLE = engine.maxVisibleLights;
             const SHADOW_BUDGET = engine.maxSafeShadows;
 
             for (let i = 0; i < ENGINE_MAX_VISIBLE; i++) {
-                const proxy = new THREE.PointLight(LIGHT_SETTINGS.DEFAULT_COLOR, 0, LIGHT_SETTINGS.DEFAULT_DISTANCE); proxy.name = `PreloadProxy_${i}`;
+                const proxy = new THREE.PointLight(LIGHT_SETTINGS.DEFAULT_COLOR, 0, LIGHT_SETTINGS.DEFAULT_DISTANCE);
+                proxy.name = `PreloadProxy_${i}`;
                 proxy.userData.isProxy = true;
                 proxy.position.set(0, -1000, 0);
 
@@ -185,7 +199,7 @@ export const AssetPreloader = {
                     proxy.castShadow = false;
                 }
 
-                dummyScene.add(proxy);
+                _dummyScene.add(proxy);
             }
 
             // Sync environment
@@ -197,19 +211,19 @@ export const AssetPreloader = {
             }
 
             if (envConfig) {
-                engine.syncEnvironment(envConfig, dummyScene);
+                engine.syncEnvironment(envConfig, _dummyScene);
             }
 
             // Preload FX materials (like _blackSmoke) now that we have a scene
-            FXSystem.preload(dummyScene);
+            FXSystem.preload(_dummyScene);
 
             // Camp
             if (isCamp) {
                 const textures = createProceduralTextures();
-                await CampWorld.build(dummyScene, textures as any, 'snow', true);
+                await CampWorld.build(_dummyScene, textures as any, 'snow', true);
 
                 let lampsInScene = 0;
-                dummyScene.traverse((obj) => { if (obj instanceof THREE.PointLight) lampsInScene++; });
+                _dummyScene.traverse((obj) => { if (obj instanceof THREE.PointLight) lampsInScene++; });
                 console.log(`[AssetPreloader] CAMP: Compiling native shader for ${lampsInScene} natural light(s).`);
             }
 
@@ -218,13 +232,13 @@ export const AssetPreloader = {
                 // Players flashlight (PointLight!)
                 const dummyFlashlight = ModelFactory.createFlashlight();
                 dummyFlashlight.position.set(0, 5, 0);
-                dummyScene.add(dummyFlashlight);
-                dummyScene.add(dummyFlashlight.target);
+                _dummyScene.add(dummyFlashlight);
+                _dummyScene.add(dummyFlashlight.target);
 
                 // Boss
                 const bossData = BOSSES[sectorId ?? 0];
                 if (bossData) {
-                    dummyScene.add(ModelFactory.createBoss('Boss', bossData));
+                    _dummyScene.add(ModelFactory.createBoss('Boss', bossData));
                 }
 
                 // Zombies:
@@ -235,34 +249,46 @@ export const AssetPreloader = {
 
                     const z = ModelFactory.createZombie(`warmup_zombie_${typeKey}`, zData);
                     z.position.set(0, -1000, 0);
-                    z.traverse(child => {
+
+                    _traverseStack.length = 0;
+                    _traverseStack.push(z);
+                    while (_traverseStack.length > 0) {
+                        const child = _traverseStack.pop() as THREE.Object3D;
                         if ((child as THREE.Mesh).isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
                         }
-                    });
-                    dummyScene.add(z);
+                        for (let c = 0; c < child.children.length; c++) {
+                            _traverseStack.push(child.children[c]);
+                        }
+                    }
+                    _dummyScene.add(z);
                 }
 
                 // --- LIGHTING STABILIZATION ---
-                // We must ensure the preloader compiles for EXACTLY the maximum allowed lights.
-                // If we have random lights from SectorGenerator, they will mess up the shader count.
                 let removedLamps = 0;
                 const toRemove: THREE.Object3D[] = [];
-                dummyScene.traverse((obj) => {
-                    if (obj instanceof THREE.PointLight || obj instanceof THREE.SpotLight) {
+
+                _traverseStack.length = 0;
+                _traverseStack.push(_dummyScene);
+
+                while (_traverseStack.length > 0) {
+                    const obj = _traverseStack.pop() as THREE.Object3D;
+                    if ((obj as any).isPointLight || (obj as any).isSpotLight) {
                         if (!obj.userData.isProxy && obj.name !== FLASHLIGHT.name) {
                             toRemove.push(obj);
                             removedLamps++;
                         }
                     }
-                });
+                    for (let i = 0; i < obj.children.length; i++) _traverseStack.push(obj.children[i]);
+                }
+
                 for (let i = 0; i < toRemove.length; i++) {
                     toRemove[i].removeFromParent();
                 }
 
                 let lampsInScene = 0;
-                dummyScene.traverse((obj) => {
+                _dummyScene.traverse((obj) => {
                     if (obj instanceof THREE.PointLight) {
                         lampsInScene++;
                     }
@@ -279,13 +305,11 @@ export const AssetPreloader = {
             const isMobile = checkIsMobileDevice();
 
             // =========================================================
-            // VINTERDÖD FIX: iOS WATCHDOG BYPASS (Time-Slicer)
-            // Ligger nu där den hör hemma: direkt i Preloadern.
+            // iOS WATCHDOG BYPASS (Time-Slicer)
             // =========================================================
             const safeCompileAsync = async (rootNode: THREE.Object3D, logName: string) => {
                 if (!isMobile) {
-                    // PC/Mac är starka nog att ta smällen synkront
-                    engine.renderer.compile(dummyScene, engine.camera.threeCamera);
+                    engine.renderer.compile(_dummyScene, engine.camera.threeCamera);
                     return;
                 }
 
@@ -293,23 +317,28 @@ export const AssetPreloader = {
                 const compileTargets: THREE.Object3D[] = [];
                 const visibilityMap = new Map<THREE.Object3D, boolean>();
 
-                rootNode.traverse((obj) => {
+                _traverseStack.length = 0;
+                _traverseStack.push(rootNode);
+
+                while (_traverseStack.length > 0) {
+                    const obj = _traverseStack.pop() as THREE.Object3D;
                     visibilityMap.set(obj, obj.visible);
-                    // Endast meshar som är tända för kompilering ska chunkas
                     if (((obj as any).isMesh || (obj as any).isSkinnedMesh) && obj.visible) {
                         obj.visible = false;
                         compileTargets.push(obj);
                     }
-                });
+                    for (let i = 0; i < obj.children.length; i++) _traverseStack.push(obj.children[i]);
+                }
 
                 const CHUNK_SIZE = 15;
                 for (let i = 0; i < compileTargets.length; i += CHUNK_SIZE) {
-                    const chunk = compileTargets.slice(i, i + CHUNK_SIZE);
-                    chunk.forEach(obj => obj.visible = true);
-                    engine.renderer.compile(dummyScene, engine.camera.threeCamera);
-                    chunk.forEach(obj => obj.visible = false);
+                    const chunkEnd = Math.min(i + CHUNK_SIZE, compileTargets.length);
+                    for (let c = i; c < chunkEnd; c++) compileTargets[c].visible = true;
 
-                    // Nollställ Apple's Watchdog Timer
+                    engine.renderer.compile(_dummyScene, engine.camera.threeCamera);
+
+                    for (let c = i; c < chunkEnd; c++) compileTargets[c].visible = false;
+
                     if (yieldToMain) {
                         await yieldToMain();
                     } else {
@@ -317,21 +346,18 @@ export const AssetPreloader = {
                     }
                 }
 
-                // Återställ
-                rootNode.traverse((obj) => {
-                    if (visibilityMap.has(obj)) {
-                        obj.visible = visibilityMap.get(obj)!;
-                    }
-                });
+                for (let i = 0; i < compileTargets.length; i++) {
+                    const obj = compileTargets[i];
+                    if (visibilityMap.has(obj)) obj.visible = visibilityMap.get(obj)!;
+                }
             };
 
-            const currentTargetType = isCamp ? 'CAMP' : 'SECTOR';
-
-            if (sharedPoolCompiledTarget !== currentTargetType && sharedPoolPopulated) {
-                console.log(`[AssetPreloader] Context shift detected (${sharedPoolCompiledTarget} -> ${currentTargetType}). Recompiling Shared Pool...`);
+            // Compile shared pool once globally!
+            if (!sharedPoolCompiled && sharedPoolPopulated) {
+                console.log(`[AssetPreloader] Compiling Shared Pool...`);
 
                 const dummyRoot = new THREE.Group();
-                dummyScene.add(dummyRoot);
+                _dummyScene.add(dummyRoot);
 
                 const compiledSignatures = new Set<string>();
 
@@ -378,33 +404,29 @@ export const AssetPreloader = {
                     }
                 }
 
-                // VINTERDÖD: Ersatt sync compile mot vår asynkrona räddare
                 await safeCompileAsync(dummyRoot, "Shared Pool");
 
                 for (let i = 0; i < dummyRoot.children.length; i++) {
                     dummyRoot.children[i].visible = false;
                 }
-                dummyScene.remove(dummyRoot);
-
-                sharedPoolCompiledTarget = currentTargetType;
+                _dummyScene.remove(dummyRoot);
+                sharedPoolCompiled = true;
             }
 
             // 4. COMPILE SCENE SPECIFICS & WARMUP FRAME
-            // VINTERDÖD: Även detta tvingade tidigare fram sync-compiles som dödade iOS.
-            await safeCompileAsync(dummyScene, "Sector Specifics");
+            await safeCompileAsync(_dummyScene, "Sector Specifics");
 
             const originalVp = new THREE.Vector4();
             engine.renderer.getViewport(originalVp);
             engine.renderer.setViewport(0, 0, 1, 1);
 
-            // Eftersom vi nu kompilerat allt via safeCompileAsync, är denna render-call extremt billig!
-            engine.renderer.render(dummyScene, engine.camera.threeCamera);
+            engine.renderer.render(_dummyScene, engine.camera.threeCamera);
             engine.renderer.setViewport(originalVp);
 
             // Dummy Scene Zero-GC clean-up
-            for (let i = dummyScene.children.length - 1; i >= 0; i--) {
-                const child = dummyScene.children[i];
-                dummyScene.remove(child);
+            for (let i = _dummyScene.children.length - 1; i >= 0; i--) {
+                const child = _dummyScene.children[i];
+                _dummyScene.remove(child);
             }
 
             warmedModules.add(moduleKey);
@@ -417,7 +439,6 @@ export const AssetPreloader = {
             const fmt = (k: string) => t[k] !== undefined ? `${t[k].toFixed(1)}ms` : 'skipped';
             console.info(
                 `[AssetPreloader] ✅ DONE [${moduleKey}] in ${(t['asset_warmup_total'] ?? 0).toFixed(0)}ms\n` +
-                `  ├─ lighting:     ${fmt('lighting')}\n` +
                 `  ├─ scene inject: ${fmt('scene_inject')}\n` +
                 `  └─ compilation:  ${fmt('compilation')}`
             );
@@ -568,17 +589,9 @@ export const AssetPreloader = {
         add(new THREE.LineSegments(outlineGeo, outlineMat), false);
 
         // --- SPECIAL SHADER PERMUTATIONS (Bypass Runtime Compilation Stutter) ---
-        // These ensure the GPU has compiled the EXACT shader combinations used in-game.
-        // Redundant body/lid meshes removed as ObjectGenerator covers them above.
-
-        // 1. CHEST GLOWS (Require forceShadow: false to prevent incorrect shader logic)
         add(new THREE.Mesh(GEOMETRY.chestGlow, MATERIALS.chestGlow), false, false);
         add(new THREE.Mesh(GEOMETRY.chestBigGlow, MATERIALS.chestBigGlow), false, false);
-
-        // 2. GLASS (Shattering effects)
         add(new THREE.Mesh(GEOMETRY.shard, MATERIALS.glassShard), true, false);
-
-        // 3. THROWABLES (Meshes visible during projectile flight)
         add(new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade), false, true);
         add(new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov), false, true);
         add(new THREE.Mesh(GEOMETRY.flashbang, MATERIALS.flashbang), false, true);
@@ -589,8 +602,9 @@ export const AssetPreloader = {
     setLastSectorIndex: (idx: number) => { lastSectorIndex = idx; },
 
     releaseSectorAssets: (index: number) => {
-        const moduleKey = `SECTOR_${index}`;
-        if (warmedModules.has(moduleKey)) warmedModules.delete(moduleKey);
+        // We DO NOT delete the sector from cache here anymore!
+        // By keeping it, we allow the sector to survive in memory when returning to Camp.
+        // It will be evicted automatically in warmupAsync if a completely new sector is loaded.
     }
 
 };
