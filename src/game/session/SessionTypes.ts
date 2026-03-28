@@ -1,6 +1,6 @@
 import { WeaponType } from '../../content/weapons';
 import { PlayerStats } from '../../entities/player/PlayerTypes';
-import { GraphicsSettings, WeatherType, EnvironmentOverride } from '../../core/engine/EngineTypes';
+import { GameSettings, WeatherType, EnvironmentOverride } from '../../core/engine/EngineTypes';
 
 export enum GameScreen {
   CAMP = 'CAMP',
@@ -75,7 +75,7 @@ export interface GameState {
     special: WeaponType;
   };
   weaponLevels: Record<WeaponType, number>;
-  graphics: GraphicsSettings;
+  settings: GameSettings;
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
   sectorState?: SectorState;
@@ -129,7 +129,7 @@ export interface GameCanvasProps {
   disableInput?: boolean;
   isWarmup?: boolean;
   weather: WeatherType;
-  initialGraphics: GraphicsSettings;
+  settings: GameSettings;
   currentSectorData?: any;
 }
 

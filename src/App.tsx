@@ -34,7 +34,7 @@ import { soundManager } from './utils/audio/SoundManager';
 import { getCollectiblesBySector } from './content/collectibles';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
-import { WinterEngine, GraphicsSettings } from './core/engine/WinterEngine';
+import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
 import { HudStore } from './store/HudStore';
 import { SectorSystem } from './systems/SectorSystem';
 
@@ -57,7 +57,7 @@ const App: React.FC = () => {
     // Efficient Engine Reference: Prevent instantiation evaluation on every render frame
     const engineRef = useRef<WinterEngine | null>(null);
     if (!engineRef.current) {
-        engineRef.current = WinterEngine.getInstance(gameState.graphics);
+        engineRef.current = WinterEngine.getInstance(gameState.settings);
     }
 
     const [isMobileDevice, setIsMobileDevice] = useState(checkIsMobileDevice());
@@ -77,6 +77,7 @@ const App: React.FC = () => {
     const [activeCollectible, setActiveCollectible] = useState<string | null>(null);
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
+    const [initialAdventureLogTab, setInitialAdventureLogTab] = useState<any>(null);
     const showFPS = !!gameState.showFps;
 
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
@@ -100,8 +101,16 @@ const App: React.FC = () => {
         const checkMobile = () => setIsMobileDevice(checkIsMobileDevice());
         const handleLockChange = () => setIsPointerLocked(!!document.pointerLockElement);
 
+        const handleOpenAdventureLogEvent = (e: any) => {
+            const tab = e.detail?.tab;
+            setInitialAdventureLogTab(tab || null);
+            setActiveOverlay('ADVENTURE_LOG');
+            soundManager.playUiConfirm();
+        };
+
         window.addEventListener('resize', checkMobile);
         document.addEventListener('pointerlockchange', handleLockChange);
+        window.addEventListener('open-adventure-log', handleOpenAdventureLogEvent);
 
         if (typeof screen !== 'undefined' && (screen as any).orientation && (screen.orientation as any).lock) {
             (screen.orientation as any).lock('landscape').catch((e: any) => {
@@ -112,6 +121,7 @@ const App: React.FC = () => {
         return () => {
             window.removeEventListener('resize', checkMobile);
             document.removeEventListener('pointerlockchange', handleLockChange);
+            window.removeEventListener('open-adventure-log', handleOpenAdventureLogEvent);
         };
     }, []);
 
@@ -190,7 +200,7 @@ const App: React.FC = () => {
             await triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
                 const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
                 try {
-                    engine.updateSettings(gameState.graphics);
+                    engine.updateSettings(gameState.settings);
                     await AssetPreloader.warmupAsync('CORE', yieldToMain);
                     if (isCamp) {
                         await AssetPreloader.warmupAsync('CAMP', yieldToMain);
@@ -462,8 +472,8 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, stats: newStats }));
     }, []);
 
-    const handleSaveGraphics = useCallback((newG: GraphicsSettings) => {
-        setGameState(prev => ({ ...prev, graphics: newG }));
+    const handleSaveGraphics = useCallback((newG: GameSettings) => {
+        setGameState(prev => ({ ...prev, settings: newG }));
         WinterEngine.getInstance().updateSettings(newG);
     }, []);
 
@@ -638,7 +648,7 @@ const App: React.FC = () => {
                             onToggleDebug={handleToggleDebug}
                             onResetGame={handleResetGame}
                             onSaveGraphics={handleSaveGraphics}
-                            initialGraphics={gameState.graphics}
+                            settings={gameState.settings}
                             onCampLoaded={handleSceneReady}
                             isMobileDevice={isMobileDevice}
                             weather={gameState.weather}
@@ -694,7 +704,7 @@ const App: React.FC = () => {
                                     onUpdateLoadout={handleUpdateLoadoutAction}
                                     onEnvironmentOverrideChange={handleEnvironmentOverrideChangeAction}
                                     environmentOverrides={gameState.environmentOverrides}
-                                    initialGraphics={gameState.graphics}
+                                    settings={gameState.settings}
                                     isMobileDevice={isMobileDevice}
                                     weather={gameState.weather}
                                 />
@@ -731,7 +741,7 @@ const App: React.FC = () => {
                     {activeOverlay === 'SETTINGS' && (
                         <ScreenSettings
                             onClose={handleCloseAction}
-                            graphics={gameState.graphics}
+                            settings={gameState.settings}
                             onUpdateGraphics={handleSaveGraphics}
                             showFps={showFPS}
                             onToggleShowFps={handleToggleShowFps}
@@ -746,6 +756,7 @@ const App: React.FC = () => {
                             onMarkCollectiblesViewed={handleMarkCollectiblesViewedAction}
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.debugMode}
+                            initialTab={initialAdventureLogTab}
                         />
                     )}
 

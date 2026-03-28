@@ -151,11 +151,6 @@ export class GameSessionSetup {
                 if (newEnemies) {
                     for (let i = 0; i < newEnemies.length; i++) {
                         state.enemies.push(newEnemies[i]);
-                        let seen = false;
-                        for (let j = 0; j < state.seenEnemies.length; j++) {
-                            if (state.seenEnemies[j] === newEnemies[i].type) { seen = true; break; }
-                        }
-                        if (!seen) state.seenEnemies.push(newEnemies[i].type);
                     }
                 }
             };
@@ -169,11 +164,6 @@ export class GameSessionSetup {
                 const enemy = EnemyManager.spawn(scene, playerPos, forcedType, forcedPos, state.bossSpawned, state.enemies.length);
                 if (enemy) {
                     state.enemies.push(enemy);
-                    let seen = false;
-                    for (let j = 0; j < state.seenEnemies.length; j++) {
-                        if (state.seenEnemies[j] === enemy.type) { seen = true; break; }
-                    }
-                    if (!seen) state.seenEnemies.push(enemy.type);
                 }
                 return enemy;
             };
@@ -185,11 +175,6 @@ export class GameSessionSetup {
                 if (boss) {
                     state.enemies.push(boss);
                     state.bossSpawned = true;
-                    let seen = false;
-                    for (let j = 0; j < state.seenBosses.length; j++) {
-                        if (state.seenBosses[j] === type) { seen = true; break; }
-                    }
-                    if (!seen) state.seenBosses.push(type);
                 }
                 return boss;
             };
@@ -438,7 +423,14 @@ export class GameSessionSetup {
                     soundManager.stopMusic();
                     if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
                 },
-                onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName)
+                onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName),
+                triggerDiscovery: (event: any) => {
+                    if (state.discovery && state.discovery.timestamp > Date.now() - 500) return; // Throttling
+                    state.discovery = {
+                        ...event,
+                        timestamp: Date.now()
+                    };
+                }
             }));
 
             session.addSystem(new SectorSystem(playerGroup, props.currentSector, {

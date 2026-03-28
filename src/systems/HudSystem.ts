@@ -97,7 +97,9 @@ const createHudBuffer = () => ({
     cinematicActive: false,
     interactionPrompt: null as any,
     hudVisible: true,
-    sectorName: null as string | null
+    sectorName: null as string | null,
+    discovery: null as any,
+    _discovery: { id: '', type: 'clue', title: '', details: '', timestamp: 0 } as any
 });
 
 const _bufferA = createHudBuffer();
@@ -292,6 +294,7 @@ export const HudSystem = {
         _current.throwableAmmo = state.weaponAmmo[props.loadout.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled);
         _current.kills = state.killsInRun;
+        _current.discovery = state.discovery;
 
         if (state.sectorState) {
             _current._sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
@@ -318,6 +321,17 @@ export const HudSystem = {
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName;
+
+        if (state.discovery) {
+            _current._discovery.id = state.discovery.id;
+            _current._discovery.type = state.discovery.type;
+            _current._discovery.title = state.discovery.title;
+            _current._discovery.details = state.discovery.details;
+            _current._discovery.timestamp = state.discovery.timestamp;
+            _current.discovery = _current._discovery;
+        } else {
+            _current.discovery = null;
+        }
 
         // Debug Info Mapping
         if (input.aimVector) {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext, AtmosphereZone } from '../../game/session/SectorTypes';
-import { MATERIALS, createTextSprite } from '../../utils/assets';
+import { MATERIALS } from '../../utils/assets';
 import { t } from '../../utils/i18n';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
@@ -91,35 +91,35 @@ export const Sector6: SectorDef = {
 
         // 1. Armory (West)
         SectorBuilder.spawnTerminal(ctx, -stationDist, 0, 'TERMINAL_ARMORY', s_scale);
-        const armoryLabel = createTextSprite(t('stations.armory'));
+        const armoryLabel = ObjectGenerator.createTextSprite(t('stations.armory'));
         armoryLabel.position.set(-stationDist, 4.5, 0);
         armoryLabel.scale.set(10, 1.5, 1);
         scene.add(armoryLabel);
 
         // 2. Enemy Spawner (North)
         SectorBuilder.spawnTerminal(ctx, 0, -stationDist, 'TERMINAL_SPAWNER', s_scale);
-        const spawnerLabel = createTextSprite(t('ui.enemy_spawner'));
+        const spawnerLabel = ObjectGenerator.createTextSprite(t('ui.enemy_spawner'));
         spawnerLabel.position.set(0, 4.5, -stationDist);
         spawnerLabel.scale.set(10, 1.5, 1);
         scene.add(spawnerLabel);
 
         // 3. Environment Control (East)
         SectorBuilder.spawnTerminal(ctx, stationDist, 0, 'TERMINAL_ENV', s_scale);
-        const envLabel = createTextSprite(t('ui.environment_control'));
+        const envLabel = ObjectGenerator.createTextSprite(t('ui.environment_control'));
         envLabel.position.set(stationDist, 4.5, 0);
         envLabel.scale.set(10, 1.5, 1);
         scene.add(envLabel);
 
         // 4. Skill Station (South)
         SectorBuilder.spawnTerminal(ctx, 0, stationDist, 'TERMINAL_SKILLS', s_scale);
-        const skillLabel = createTextSprite(t('stations.skills'));
+        const skillLabel = ObjectGenerator.createTextSprite(t('stations.skills'));
         skillLabel.position.set(0, 4.5, stationDist);
         skillLabel.scale.set(10, 1.5, 1);
         scene.add(skillLabel);
 
         // Helper for POI Markers
         const addPoiLabel = (label: string, pos: { x: number, z: number }) => {
-            const sprite = createTextSprite(label);
+            const sprite = ObjectGenerator.createTextSprite(label);
             sprite.position.set(pos.x, 25, pos.z);
             sprite.scale.set(20, 5, 1);
             scene.add(sprite);

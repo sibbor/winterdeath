@@ -1,4 +1,4 @@
-import { EnvironmentOverride } from '../core/engine/EngineTypes';
+import { GameSettings, EnvironmentOverride } from '../core/engine/EngineTypes';
 import { WeaponType } from '../content/weapons';
 import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '../components/ui/hud/HudTypes';
 
@@ -19,16 +19,7 @@ export enum GameScreen {
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
 
-export interface GraphicsSettings {
-  antialias: boolean;
-  shadows: boolean;
-  bloom: boolean;
-  shadowMapType: number;
-  shadowResolution: number;
-  pixelRatio: number;
-  weatherCount: number;
-  textureQuality: number;
-}
+
 
 export interface PlayerStats {
   level: number;
@@ -131,7 +122,7 @@ export interface GameState {
     special: WeaponType;
   };
   weaponLevels: Record<WeaponType, number>;
-  graphics: GraphicsSettings;
+  settings: GameSettings;
   deadBossIndices: number[];
   rescuedFamilyIndices: number[];
   sectorState?: SectorState;
@@ -218,7 +209,7 @@ export interface GameCanvasProps {
   disableInput?: boolean;
   isWarmup?: boolean;
   weather: WeatherType;
-  initialGraphics: GraphicsSettings;
+  settings: GameSettings;
 }
 
 export type DeathPhase = 'NONE' | 'ANIMATION' | 'MESSAGE' | 'CONTINUE';

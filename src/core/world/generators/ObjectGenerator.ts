@@ -81,10 +81,36 @@ const neonSignCache: Record<number, THREE.MeshStandardMaterial> = {};
 
 const spriteTextureCache: Record<string, THREE.CanvasTexture> = {};
 
-export const createTextSprite = (text: string) => {
-    if (spriteTextureCache[text]) {
+export const ObjectGenerator = {
+
+    createTextSprite: (text: string) => {
+        if (spriteTextureCache[text]) {
+            const mat = new THREE.SpriteMaterial({
+                map: spriteTextureCache[text],
+                transparent: true,
+                depthWrite: false,
+                depthTest: true
+            });
+            const sprite = new THREE.Sprite(mat);
+            sprite.scale.set(4, 1, 1);
+            return sprite;
+        }
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+        canvas.width = 256;
+        canvas.height = 64;
+        ctx.font = 'bold 20px Arial';
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        spriteTextureCache[text] = tex;
+
         const mat = new THREE.SpriteMaterial({
-            map: spriteTextureCache[text],
+            map: tex,
             transparent: true,
             depthWrite: false,
             depthTest: true
@@ -92,33 +118,7 @@ export const createTextSprite = (text: string) => {
         const sprite = new THREE.Sprite(mat);
         sprite.scale.set(4, 1, 1);
         return sprite;
-    }
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
-    canvas.width = 256;
-    canvas.height = 64;
-    ctx.font = 'bold 20px Arial';
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    spriteTextureCache[text] = tex;
-
-    const mat = new THREE.SpriteMaterial({
-        map: tex,
-        transparent: true,
-        depthWrite: false,
-        depthTest: true
-    });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(4, 1, 1);
-    return sprite;
-};
-
-export const ObjectGenerator = {
+    },
 
     createChest: (type: 'standard' | 'big' = 'standard') => {
         const chest = new THREE.Group();
@@ -680,7 +680,7 @@ export const ObjectGenerator = {
             group.add(base);
         }
 
-        const label = createTextSprite(text);
+        const label = ObjectGenerator.createTextSprite(text);
         label.position.z = withBacking ? 0.12 : 0;
         label.scale.set(text.length * 0.6, 0.8, 1);
         group.add(label);

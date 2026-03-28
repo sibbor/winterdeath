@@ -8,7 +8,7 @@ import { useOrientation } from '../../../../hooks/useOrientation';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
-import { SECTOR_THEMES, ZOMBIE_TYPES, BOSSES, RANKS } from '../../../../content/constants';
+import { SECTOR_THEMES, ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenAdventureLogProps {
@@ -17,14 +17,15 @@ interface ScreenAdventureLogProps {
     onMarkCollectiblesViewed?: (collectibleIds: string[]) => void;
     isMobileDevice?: boolean;
     debugMode?: boolean;
+    initialTab?: Tab;
 }
 
 type Tab = 'stats' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
-const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode }) => {
+const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
-    const [activeTab, setActiveTab] = useState<Tab>('stats');
+    const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'stats');
 
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
@@ -176,7 +177,6 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = ({ 
     const getRank = (level: number) => {
         const rankKey = Math.min(Math.max(0, level - 1), 19);
         const translated = t(`ranks.${rankKey}`);
-        if (translated.startsWith('ranks.')) return RANKS[rankKey];
         return translated;
     };
 

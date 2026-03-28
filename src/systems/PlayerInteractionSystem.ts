@@ -350,6 +350,8 @@ export class PlayerInteractionSystem implements System {
     ) {
         if (!type) return;
 
+        console.log('Interaction type: ' + type + ' ' + _detectionResult.object);
+
         // Vehicle
         if (type === 'vehicle' && _detectionResult.object) {
             state.activeVehicle = _detectionResult.object;
@@ -459,8 +461,10 @@ export class PlayerInteractionSystem implements System {
                     requestAnimationFrame((time) => animateLid(time, time));
                 }
 
-                state.chestsOpened++;
+                // For stats
                 if (c.type === 'big') state.bigChestsOpened++;
+                else state.chestsOpened++;
+
                 break;
             }
         }

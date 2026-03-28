@@ -2,7 +2,6 @@
 import React from 'react';
 import { PlayerStats } from '../../../entities/player/PlayerTypes';;
 import { t } from '../../../utils/i18n';
-import { RANKS } from '../../../content/constants';
 import { soundManager } from '../../../utils/audio/SoundManager';
 
 interface CampHUDProps {
@@ -47,7 +46,7 @@ const CampHUD: React.FC<CampHUDProps> = ({
     const getRank = (level: number) => {
         const rankKey = Math.min(Math.max(0, level - 1), 19);
         const translated = t(`ranks.${rankKey}`);
-        if (translated.startsWith('ranks.')) return RANKS[rankKey];
+
         return translated;
     };
 

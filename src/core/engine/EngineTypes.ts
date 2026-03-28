@@ -1,13 +1,13 @@
-export interface GraphicsSettings {
+export interface GameSettings {
   antialias: boolean;
   shadows: boolean;
-  bloom: boolean;
   shadowMapType: number;
   shadowResolution: number;
   pixelRatio: number;
   weatherCount: number;
   textureQuality: number;
   volumetricFog: boolean;
+  showDiscoveryPopups: boolean;
 }
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';

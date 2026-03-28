@@ -7,6 +7,7 @@ import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
 import { StatusEffectType } from '../../../entities/player/CombatTypes';
 import DamageVignette from './DamageVignette';
+import DiscoveryPopup from './DiscoveryPopup';
 
 interface GameHUDProps {
     loadout: { primary: WeaponType; secondary: WeaponType; throwable: WeaponType; special: WeaponType; };
@@ -225,6 +226,52 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
                 <span className={`${isMobileDevice ? 'text-[9px]' : 'text-sm'} font-bold text-[#ff3333] tracking-widest uppercase opacity-80`}>
                     {t('ui.kills')}
                 </span>
+            </div>
+        </div>
+    );
+});
+
+const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro }: any) => {
+    const scrap = useHudStore(s => s.scrap);
+    const spEarned = useHudStore(s => s.spEarned);
+    
+    const [scrapBling, setScrapBling] = useState(false);
+    const [spBling, setSpBling] = useState(false);
+    const prevScrap = useRef(scrap);
+    const prevSp = useRef(spEarned);
+
+    useEffect(() => {
+        if (scrap > prevScrap.current) {
+            setScrapBling(true);
+            const t = setTimeout(() => setScrapBling(false), 600);
+            prevScrap.current = scrap;
+            return () => clearTimeout(t);
+        }
+        prevScrap.current = scrap;
+    }, [scrap]);
+
+    useEffect(() => {
+        if (spEarned > prevSp.current) {
+            setSpBling(true);
+            const t = setTimeout(() => setSpBling(false), 600);
+            prevSp.current = spEarned;
+            return () => clearTimeout(t);
+        }
+        prevSp.current = spEarned;
+    }, [spEarned]);
+
+    return (
+        <div className={`flex flex-col gap-2 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'} items-end`}>
+            {/* SCRAP BOX */}
+            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/60 border-white/10'} ${scrapBling ? 'animate-bling-yellow' : ''} w-full flex flex-col items-end`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold ${scrap > 0 ? 'text-yellow-500' : 'text-white/20'}`}>{t('ui.scrap')}</span>
+                <span className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono ${scrap > 0 ? 'text-yellow-400' : 'text-white/40'}`}>{scrap}</span>
+            </div>
+
+            {/* SP BOX */}
+            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${spEarned > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/60 border-white/10'} ${spBling ? 'animate-bling' : ''} w-full flex flex-col items-end`}>
+                <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold ${spEarned > 0 ? 'text-purple-500' : 'text-white/20'}`}>{t('ui.sp')}</span>
+                <span className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono ${spEarned > 0 ? 'text-purple-400' : 'text-white/40'}`}>{spEarned}</span>
             </div>
         </div>
     );
@@ -488,6 +535,12 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
             <DamageVignette />
+            <DiscoveryPopup onOpenAdventureLog={(tab) => {
+                // We assume there's a prop or global way to open it, 
+                // but usually GameHUD is used inside a screen that handles this.
+                // In winterdeath, we often use CustomEvents or props.
+                window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab } }));
+            }} />
 
             <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
 
@@ -507,7 +560,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         )}
                     </div>
 
-                    <KillsPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} handlePauseInternal={handlePauseInternal} />
+                    <div className="flex flex-col items-end gap-2">
+                        <KillsPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} handlePauseInternal={handlePauseInternal} />
+                        <CurrencyPanel isMobileDevice={isMobileDevice} isBossIntro={isBossIntro} />
+                    </div>
 
                     {isMobileDevice && isLandscapeMode && (
                         <StatusEffectsPanel isMobileDevice={isMobileDevice} isLandscapeMode={true} handleActionEnter={handleActionEnter} handleActionLeave={handleActionLeave} />
@@ -594,6 +650,19 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
                     .hud-text-glow { text-shadow: 0 0 15px rgba(255,255,255,0.3); }
                     .hud-bar-glow { box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+
+                    @keyframes bling {
+                        0% { transform: scale(1); filter: brightness(1); }
+                        20% { transform: scale(1.2); filter: brightness(2) contrast(1.2); }
+                        100% { transform: scale(1); filter: brightness(1); }
+                    }
+                    @keyframes bling-yellow {
+                        0% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 0px rgba(234,179,8,0); }
+                        20% { transform: scale(1.1); filter: brightness(2); box-shadow: 0 0 30px rgba(234,179,8,0.8); }
+                        100% { transform: scale(1); filter: brightness(1); box-shadow: 0 0 15px rgba(234,179,8,0.3); }
+                    }
+                    .animate-bling { animation: bling 0.6s ease-out; }
+                    .animate-bling-yellow { animation: bling-yellow 0.6s ease-out; }
                 `}</style>
             </div>
         </div>

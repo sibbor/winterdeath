@@ -1,29 +1,29 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { t, setLocale, getLocale } from '../../../../utils/i18n';
 import { soundManager } from '../../../../utils/audio/SoundManager';
-import { GraphicsSettings } from '../../../../core/engine/EngineTypes';
+import { GameSettings } from '../../../../core/engine/EngineTypes';
 import { SHADOW_PRESETS } from '../../../../content/constants';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { useOrientation } from '../../../../hooks/useOrientation';
 
 interface ScreenSettingsProps {
     onClose: () => void;
-    graphics: GraphicsSettings;
-    onUpdateGraphics: (settings: GraphicsSettings) => void;
+    settings: GameSettings;
+    onUpdateGraphics: (settings: GameSettings) => void;
     showFps?: boolean;
     onToggleShowFps?: () => void;
     isMobileDevice?: boolean;
 }
 
-const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUpdateGraphics, showFps, onToggleShowFps, isMobileDevice }) => {
+const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUpdateGraphics, showFps, onToggleShowFps, isMobileDevice }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<'graphics' | 'general'>('graphics');
 
     // --- BUFFERED STATE ---
-    const [tempGraphics, setTempGraphics] = useState<GraphicsSettings>({ ...graphics });
+    const [tempGraphics, setTempGraphics] = useState<GameSettings>({ ...settings });
     const [showReloadConfirm, setShowReloadConfirm] = useState(false);
-    const prevTempGraphics = useRef<GraphicsSettings>(tempGraphics);
+    const prevTempGraphics = useRef<GameSettings>(tempGraphics);
 
     // Force update to re-render when language changes
     const [, setTick] = useState(0);
@@ -53,11 +53,11 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
 
     const handleSave = () => {
         const needsReload =
-            tempGraphics.antialias !== graphics.antialias ||
-            tempGraphics.shadows !== graphics.shadows ||
-            tempGraphics.shadowMapType !== graphics.shadowMapType ||
-            tempGraphics.textureQuality !== graphics.textureQuality ||
-            tempGraphics.volumetricFog !== graphics.volumetricFog;
+            tempGraphics.antialias !== settings.antialias ||
+            tempGraphics.shadows !== settings.shadows ||
+            tempGraphics.shadowMapType !== settings.shadowMapType ||
+            tempGraphics.textureQuality !== settings.textureQuality ||
+            tempGraphics.volumetricFog !== settings.volumetricFog;
 
         if (needsReload) {
             setShowReloadConfirm(true);
@@ -252,6 +252,18 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, graphics, onUp
                 <div className="flex gap-2">
                     <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${showFps ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
                     <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!showFps ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
+                </div>
+            </div>
+
+            {/* Discovery Popups Toggle */}
+            <div onClick={() => { setTempGraphics({ ...tempGraphics, showDiscoveryPopups: !tempGraphics.showDiscoveryPopups }); soundManager.playUiClick(); }} className="w-full bg-gray-900/50 p-4 md:p-6 border border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center transition-colors hover:border-white cursor-pointer group rounded-lg gap-4">
+                <div>
+                    <h3 className="text-xl font-semibold text-white uppercase tracking-wider mb-1 group-hover:text-blue-300 transition-colors">{t('ui.discovery_popups')}</h3>
+                    <p className="text-gray-400 text-xs font-mono">{t('ui.discovery_popups_sub')}</p>
+                </div>
+                <div className="flex gap-2">
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${tempGraphics.showDiscoveryPopups ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.on')}</button>
+                    <button className={`px-4 py-1 font-bold uppercase border-2 transition-all ${!tempGraphics.showDiscoveryPopups ? 'bg-white text-black border-white' : 'bg-black text-gray-500 border-gray-700'}`}>{t('ui.off')}</button>
                 </div>
             </div>
         </div>

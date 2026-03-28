@@ -12,6 +12,7 @@ interface Callbacks {
     t: (key: string) => string;
     onBossKilled: (id: number) => void;
     onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, effectDuration?: number, effectIntensity?: number, attackName?: string) => void;
+    triggerDiscovery: (event: { type: string, id: string, title: string, details: string }) => void;
 }
 
 export class EnemySystem implements System {
@@ -102,6 +103,39 @@ export class EnemySystem implements System {
             this.cleanupCallbacks,
             dt
         );
+
+        // --- ENCOUNTER DISCOVERY LOGIC ---
+        // Staggered check for new enemy/boss encounters based on awareness/proximity
+        if ((Math.floor(now / 100) % 5) === 0) {
+            const enemies = state.enemies;
+            for (let i = 0; i < enemies.length; i++) {
+                const e = enemies[i];
+                if (!e.dead && e.awareness > 0.1) {
+                    if (e.isBoss) {
+                        const bossId = e.type; // or whatever identifies the boss
+                        if (!state.seenBosses.includes(bossId)) {
+                            state.seenBosses.push(bossId);
+                            this.callbacks.triggerDiscovery({
+                                id: 'boss-' + bossId,
+                                type: 'boss',
+                                title: 'ui.boss_encountered',
+                                details: 'bosses.' + bossId + '.name'
+                            });
+                        }
+                    } else {
+                        if (!state.seenEnemies.includes(e.type)) {
+                            state.seenEnemies.push(e.type);
+                            this.callbacks.triggerDiscovery({
+                                id: 'enemy-' + e.type,
+                                type: 'enemy',
+                                title: 'ui.enemy_encountered',
+                                details: 'enemies.' + e.type + '.name'
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private spawnPart(session: GameSessionLogic, x: number, y: number, z: number, type: string, count: number, mesh?: THREE.Object3D, vel?: THREE.Vector3, color?: number, scale?: number) {

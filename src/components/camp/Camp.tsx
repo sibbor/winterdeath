@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { PlayerStats } from '../../entities/player/PlayerTypes';;
 import { WeaponType } from '../../content/weapons';
-import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER, CHATTER_LINES } from '../../content/constants';
+import { WEAPONS, SECTOR_THEMES, FAMILY_MEMBERS, PLAYER_CHARACTER } from '../../content/constants';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { t } from '../../utils/i18n';
 import { createProceduralTextures } from '../../utils/assets';
-import { WinterEngine, GraphicsSettings } from '../../core/engine/WinterEngine';
+import { WinterEngine, GameSettings } from '../../core/engine/WinterEngine';
 import { CampWorld } from './CampWorld';
 import { CampEffectsState, CAMP_SCENE } from './CampWorld';
 import { WeatherType } from '../../core/engine/EngineTypes';
@@ -35,8 +35,8 @@ interface CampProps {
     isSectorLoaded: boolean;
     deadBossIndices: number[];
     onResetGame: () => void;
-    onSaveGraphics: (graphics: GraphicsSettings) => void;
-    initialGraphics?: GraphicsSettings;
+    onSaveGraphics: (graphics: GameSettings) => void;
+    settings?: GameSettings;
     onCampLoaded?: () => void;
     isMobileDevice?: boolean;
     weather: WeatherType;
@@ -47,7 +47,7 @@ interface CampProps {
     onInteractionStateChange: (type: string | null) => void;
 }
 
-const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, initialGraphics, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
+const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, currentSector, debugMode, onToggleDebug, rescuedFamilyIndices, settings, onCampLoaded, isMobileDevice, weather, hasCheckpoint, isRunning = true, activeOverlay, setActiveOverlay, onInteractionStateChange }) => {
     const monitor = PerformanceMonitor.getInstance();
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -64,7 +64,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     const showIdleTooltipsRef = useRef(false);
     const idleTooltipDOMRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-    const [graphics, setGraphics] = useState<GraphicsSettings>(initialGraphics || WinterEngine.getInstance().getSettings());
+    const [graphics, setGraphics] = useState<GameSettings>(settings || WinterEngine.getInstance().getSettings());
 
     // Renderer Ref for live updates
     const engineRef = useRef<WinterEngine | null>(null);

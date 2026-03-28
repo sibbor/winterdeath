@@ -1,5 +1,5 @@
 import { WeaponType } from '../../../content/weapons';
-import { SectorState } from '../../../game/session/SessionTypes';
+import { SectorState, GameScreen } from '../../../game/session/SessionTypes';
 
 // ============================================================================
 // HUD & ZERO-GC TYPES
@@ -71,6 +71,16 @@ export interface DialogueLineData {
   speaker: string;
 }
 
+export type DiscoveryType = 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss';
+
+export interface DiscoveryEvent {
+  id: string;
+  type: DiscoveryType;
+  title: string;
+  details: string;
+  timestamp: number;
+}
+
 export interface HudState {
   hp: number;
   maxHp: number;
@@ -138,4 +148,5 @@ export interface HudState {
   interactionPrompt: InteractionPromptData | null;
   hudVisible: boolean;
   sectorName: string | null;
+  discovery: DiscoveryEvent | null;
 }

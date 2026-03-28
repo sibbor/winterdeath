@@ -295,9 +295,25 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 if (e.type) {
                     let seen = false;
                     for (let j = 0; j < refs.stateRef.current.seenEnemies.length; j++) {
-                        if (refs.stateRef.current.seenEnemies[j] === e.type) { seen = true; break; }
+                        if (refs.stateRef.current.seenEnemies[j] === e.type) {
+                            seen = true;
+                            break;
+                        }
                     }
-                    if (!seen) refs.stateRef.current.seenEnemies.push(e.type);
+                    if (!seen) {
+                        refs.stateRef.current.seenEnemies.push(e.type);
+
+                        // Push to HudStore if enabled
+                        if (latestStateRef.current.props.settings?.showDiscoveryPopups !== false) {
+                            refs.stateRef.current.discovery = {
+                                id: 'enemy-' + Date.now(),
+                                type: 'enemy',
+                                title: t('ui.enemy_encountered', { name: '' }).replace(': ', '').trim(),
+                                details: t(`enemies.${e.type}.name`),
+                                timestamp: Date.now()
+                            };
+                        }
+                    }
                 }
             }
         },
@@ -544,8 +560,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             refs.playerGroupRef.current = null as any;
         }
 
-        if (props.initialGraphics) {
-            engine.updateSettings(props.initialGraphics);
+        if (props.settings) {
+            engine.updateSettings(props.settings);
         }
 
         engine.mount(refs.containerRef.current);
@@ -623,6 +639,17 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (latestStateRef.current.props.onCollectibleDiscovered) {
                             latestStateRef.current.props.onCollectibleDiscovered(collectibleId);
                         }
+
+                        // Push to HudStore if enabled
+                        if (latestStateRef.current.props.settings?.showDiscoveryPopups !== false) {
+                            refs.stateRef.current.discovery = {
+                                id: 'coll-' + Date.now(),
+                                type: 'collectible',
+                                title: 'ui.collectible_discovered',
+                                details: `collectibles.${collectibleId}.title`,
+                                timestamp: Date.now()
+                            };
+                        }
                     },
                     spawnBubble: (text: string, duration?: number) => {
                         window.dispatchEvent(new CustomEvent('spawn-bubble', {
@@ -637,9 +664,31 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     },
                     onClueDiscovered: (clue: any) => {
                         if (latestStateRef.current.props.onClueDiscovered) latestStateRef.current.props.onClueDiscovered(clue);
+
+                        // Push to HudStore if enabled
+                        if (latestStateRef.current.props.settings?.showDiscoveryPopups !== false) {
+                            refs.stateRef.current.discovery = {
+                                id: 'clue-' + Date.now(),
+                                type: 'clue',
+                                title: 'ui.clue_discovered',
+                                details: `clues.${clue.sector}.${clue.index}.reaction`,
+                                timestamp: Date.now()
+                            };
+                        }
                     },
                     onPOIdiscovered: (poi: any) => {
                         if (latestStateRef.current.props.onPOIdiscovered) latestStateRef.current.props.onPOIdiscovered(poi);
+
+                        // Push to HudStore if enabled
+                        if (latestStateRef.current.props.settings?.showDiscoveryPopups !== false) {
+                            refs.stateRef.current.discovery = {
+                                id: 'poi-' + Date.now(),
+                                type: 'poi',
+                                title: 'ui.poi_discovered_title',
+                                details: `pois.${poi.sector}.${poi.index}.title`,
+                                timestamp: Date.now()
+                            };
+                        }
                     },
                     onTrigger: (type: string, duration: number) => {
                         const state = refs.stateRef.current;
@@ -710,6 +759,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                 case 'START_CINEMATIC':
                                 case 'TRIGGER_FAMILY_FOLLOW':
                                     onAction(action);
+                                    //TODO: does the new approach above work?
+                                    //old approach: window.dispatchEvent(new Event('family-follow'));
                                     break;
                                 case 'FAMILY_MEMBER_FOUND':
                                     if (payload) {
@@ -736,11 +787,11 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
                         sys?.startCinematic(mesh, scriptId || 0, params);
                     },
-                    endCinematic: () => {
-                    },
                     playCinematicLine: (index: number) => {
                         const sys = refs.gameSessionRef.current?.getSystem('cinematic') as any;
                         sys?.playLine(index);
+                    },
+                    endCinematic: () => {
                     },
                     spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
                         // VINTERDÖD FIX: Use local fallback for currentSectorData to prevent crash on undefined

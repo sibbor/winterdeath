@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SectorContext } from '../game/session/SectorTypes';
-import { createTextSprite } from './assets';
+import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
 
 // --- CACHED DEBUG RESOURCES (Zero-GC approach) ---
 const DEBUG_MATS = {
@@ -104,7 +104,7 @@ export const DebugVisualizer = {
         beam.position.set(x, 0, z);
         ctx.scene.add(beam);
 
-        const sprite = createTextSprite(label);
+        const sprite = ObjectGenerator.createTextSprite(label);
         sprite.scale.set(12, 3, 1);
         sprite.position.set(x, height + 4, z);
         ctx.scene.add(sprite);

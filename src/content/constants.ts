@@ -1,7 +1,7 @@
 
 import * as THREE from 'three';
 import { PlayerStats } from '../entities/player/PlayerTypes';
-import { GraphicsSettings } from '../core/engine/EngineTypes';
+import { GameSettings } from '../core/engine/EngineTypes';
 
 // Re-export Data
 export { ZOMBIE_TYPES } from './enemies/zombies';
@@ -80,16 +80,16 @@ export const SHADOW_PRESETS: Record<ShadowQuality, { shadows: boolean; shadowMap
     VERYHIGH: { shadows: true, shadowMapType: 3, shadowResolution: 4096, weatherCount: 1600 }  // VSMShadowMap
 };
 
-export const DEFAULT_GRAPHICS: GraphicsSettings = {
+export const DEFAULT_SETTINGS: GameSettings = {
     pixelRatio: 0.75,
     antialias: false,
     shadows: true,
-    bloom: true,
     shadowMapType: 1,
     shadowResolution: 256,
     weatherCount: WEATHER_SYSTEM.DEFAULT_NUM_PARTICLES,
     textureQuality: 1.0,
-    volumetricFog: true
+    volumetricFog: true,
+    showDiscoveryPopups: true
 };
 
 export const SCRAP_COST_BASE = 50;
@@ -152,22 +152,6 @@ export const FAMILY_MEMBERS = [
     { id: 4, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: 0xcccccc, scale: 0.6 },
     { id: 5, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: 0x222222, scale: 0.6 }
 ];
-
-export const RANKS: Record<number, string> = {
-    0: "Fresh Meat", 1: "Noobie", 2: "Rookie", 3: "Scavenger", 4: "Survivor",
-    5: "Rat Catcher", 6: "Walker Stalker", 7: "Bone Breaker", 8: "Gutsy", 9: "Bloody Mess",
-    10: "Wasteland Warrior", 11: "Horde Hunter", 12: "Skull Crusher", 13: "Executioner", 14: "Grim Reaper",
-    15: "Warlord", 16: "Apex Predator", 17: "Legend", 18: "Immortal", 19: "Mega Zombie Slayer"
-};
-
-export const CHATTER_LINES: Record<string, string[]> = {
-    Robert: ["We need to reinforce the perimeter.", "I hope the supplies last.", "Everyone doing okay?", "Check your gear, always.", "We'll get through this.", "Keep the fire going.", "Stay sharp.", "I won't let anything happen to you."],
-    Loke: ["Did you hear that noise?", "This fire is nice.", "I miss my video games.", "Dad, you think they are gone?", "It's really dark out there.", "I'm not scared... mostly."],
-    Jordan: ["PAPPA", "MAMMA", "LOKE", "ESME", "ELD", "KATT", "ZOMB"],
-    Esmeralda: ["The radio signal is weak.", "We should fix the generator.", "Dad, you look tired.", "I wish we could go home.", "Are we safe here?", "I hate this cold.", "Do you have any food?"],
-    Nathalie: ["We are together, that's what matters.", "Hush now, try to sleep.", "I'll take the next watch.", "Robert, be careful out there.", "My brave family.", "Keep close to the warmth.", "I love you all."]
-};
-
 
 /**
  * Standardized tree types for environment generation

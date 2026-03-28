@@ -165,6 +165,13 @@ export interface RuntimeState {
 
     flashlightOn: boolean;
     currentInteraction: any | null;
+    discovery: {
+        id: string;
+        type: string;
+        title: string;
+        details: string;
+        timestamp: number;
+    } | null;
 
     // --- PRE-ALLOCATED REQUEST OBJECT (Zero-GC) ---
     interactionRequest: {

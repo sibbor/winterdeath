@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { DEFAULT_GRAPHICS, LIGHT_SYSTEM } from '../../content/constants';
-import { GraphicsSettings } from '../../core/engine/EngineTypes';
+import { DEFAULT_SETTINGS, LIGHT_SYSTEM } from '../../content/constants';
+import { GameSettings } from '../../core/engine/EngineTypes';
 import { InputManager } from './InputManager';
 import { CameraSystem } from '../../systems/CameraSystem';
 import { LightSystem } from '../../systems/LightSystem';
@@ -19,7 +19,7 @@ const _c2 = new THREE.Color();
 const _v1 = new THREE.Vector3();
 const _traverseStack: THREE.Object3D[] = [];
 
-export type { GraphicsSettings };
+export type { GameSettings };
 
 /**
  * The Engine class acts as the central hub for the 3D environment.
@@ -29,7 +29,7 @@ export class WinterEngine {
     private static instance: WinterEngine | null = null;
 
     // Accepts initial settings to prevent double WebGL context creation on boot
-    public static getInstance(initialSettings?: Partial<GraphicsSettings>): WinterEngine {
+    public static getInstance(initialSettings?: Partial<GameSettings>): WinterEngine {
         if (!this.instance) this.instance = new WinterEngine(initialSettings);
         return this.instance;
     }
@@ -52,7 +52,7 @@ export class WinterEngine {
     public light: LightSystem;
 
     private sceneStack: THREE.Scene[] = [];
-    public settings: GraphicsSettings;
+    public settings: GameSettings;
 
     // Lifecycle & Timing
     private lastTime: number = 0;
@@ -82,8 +82,8 @@ export class WinterEngine {
     private _cachedAmbientLight: THREE.AmbientLight | null = null;
     private _cachedGround: THREE.Mesh | null = null;
 
-    constructor(initialSettings?: Partial<GraphicsSettings>) {
-        this.settings = { ...DEFAULT_GRAPHICS, ...initialSettings };
+    constructor(initialSettings?: Partial<GameSettings>) {
+        this.settings = { ...DEFAULT_SETTINGS, ...initialSettings };
         this.scene = new THREE.Scene();
 
         this.initRenderer();
@@ -153,7 +153,8 @@ export class WinterEngine {
         this.renderer.domElement.style.pointerEvents = 'none';
     }
 
-    public updateSettings(newSettings: Partial<GraphicsSettings>) {
+    public updateSettings(newSettings: Partial<GameSettings>) {
+        if (!newSettings) return;
         const needsRecreation = newSettings.antialias !== undefined && newSettings.antialias !== this.settings.antialias;
         this.settings = { ...this.settings, ...newSettings };
 
@@ -463,7 +464,7 @@ export class WinterEngine {
         monitor.printIfHeavy('Game Engine Performance', totalTime, 50);
     };
 
-    public getSettings(): GraphicsSettings {
+    public getSettings(): GameSettings {
         return { ...this.settings };
     }
 

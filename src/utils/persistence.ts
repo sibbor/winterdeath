@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GameState, GameScreen } from '../game/session/SessionTypes';;
 import { WeaponType } from '../content/weapons';
-import { INITIAL_STATS, DEFAULT_GRAPHICS } from '../content/constants';
+import { INITIAL_STATS, DEFAULT_SETTINGS } from '../content/constants';
 
 export const DEFAULT_STATE: GameState = {
     screen: GameScreen.PROLOGUE,
@@ -29,7 +29,7 @@ export const DEFAULT_STATE: GameState = {
     showFps: false,
     rescuedFamilyIndices: [],
     deadBossIndices: [],
-    graphics: DEFAULT_GRAPHICS,
+    settings: DEFAULT_SETTINGS,
     weather: 'snow',
     environmentOverrides: {},
     midRunCheckpoint: null,
@@ -51,7 +51,7 @@ export const getPersistentState = (state: GameState) => {
         showFps: state.showFps,
         rescuedFamilyIndices: state.rescuedFamilyIndices,
         deadBossIndices: state.deadBossIndices,
-        graphics: state.graphics,
+        settings: state.settings,
         weather: state.weather,
         environmentOverrides: state.environmentOverrides,
         sectorState: state.sectorState
@@ -74,7 +74,7 @@ export const loadGameState = (): GameState => {
                 screen: loaded.stats?.prologueSeen ? GameScreen.CAMP : GameScreen.PROLOGUE,
                 debugMode: typeof loaded.debugMode !== 'undefined' ? loaded.debugMode : true,
                 showFps: loaded.showFps || false,
-                graphics: { ...DEFAULT_STATE.graphics, ...(loaded.graphics || {}) },
+                settings: { ...DEFAULT_STATE.settings, ...(loaded.settings || loaded.graphics || {}) },
                 weather: loaded.weather || DEFAULT_STATE.weather,
                 environmentOverrides: loaded.environmentOverrides || {},
                 sectorState: loaded.sectorState || DEFAULT_STATE.sectorState,

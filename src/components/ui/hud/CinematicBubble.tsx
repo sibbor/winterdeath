@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
-import { getSpeakerColor } from '../../../utils/assets';
+import { PLAYER_CHARACTER, FAMILY_MEMBERS } from '../../../content/constants';
 
 interface CinematicBubbleProps {
     isMobileDevice?: boolean;
@@ -157,6 +157,25 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
             }
         };
     }, [translatedText, isVisible, fullTextLength, onComplete, updateDOMText]);
+
+    const getSpeakerColor = (speakerName: string) => {
+        const lower = speakerName.toLowerCase();
+
+        if (lower === 'robert')
+            return '#' + PLAYER_CHARACTER.color.toString(16).padStart(6, '0');
+
+        const member = FAMILY_MEMBERS.find(m => lower.includes(m.name.toLowerCase()));
+        if (member)
+            return '#' + member.color.toString(16).padStart(6, '0');
+
+        if (lower === 'narrator')
+            return '#ef4444';
+
+        if (['okänd', 'unknown', 'röst', 'radio', 'mannen'].some(k => lower.includes(k)))
+            return '#9ca3af';
+
+        return '#000000';
+    };
 
     const bgColor = useMemo(() => getSpeakerColor(speakerName), [speakerName]);
 
