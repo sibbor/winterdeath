@@ -24,6 +24,9 @@ const _tempLights: LogicalLight[] = [];
 
 export class LightSystem implements System {
     public id: string = 'light_system';
+    public enabled: boolean = true;
+    public persistent: boolean = true;
+    
     private scene: THREE.Scene;
     private proxyPool: THREE.PointLight[] = [];
     private maxProxies: number;
