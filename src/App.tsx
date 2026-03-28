@@ -78,6 +78,7 @@ const App: React.FC = () => {
     const [deathDetails, setDeathDetails] = useState<{ killer: string } | null>(null);
     const [sectorStats, setSectorStats] = useState<SectorStats | null>(null);
     const [initialAdventureLogTab, setInitialAdventureLogTab] = useState<any>(null);
+    const [initialAdventureLogItem, setInitialAdventureLogItem] = useState<string | null>(null);
     const showFPS = !!gameState.showFps;
 
     const gameCanvasRef = React.useRef<GameSessionHandle>(null);
@@ -103,7 +104,9 @@ const App: React.FC = () => {
 
         const handleOpenAdventureLogEvent = (e: any) => {
             const tab = e.detail?.tab;
+            const itemId = e.detail?.itemId;
             setInitialAdventureLogTab(tab || null);
+            setInitialAdventureLogItem(itemId || null);
             setActiveOverlay('ADVENTURE_LOG');
             soundManager.playUiConfirm();
         };
@@ -342,8 +345,9 @@ const App: React.FC = () => {
     }, []);
 
     const handleOpenSettingsAction = useCallback(() => setActiveOverlay('SETTINGS'), []);
-    const handleOpenAdventureLogAction = useCallback((tab?: string) => {
+    const handleOpenAdventureLogAction = useCallback((tab?: string, itemId?: string) => {
         if (tab) setInitialAdventureLogTab(tab);
+        if (itemId) setInitialAdventureLogItem(itemId);
         setActiveOverlay('ADVENTURE_LOG');
         soundManager.playUiConfirm();
     }, []);
@@ -811,6 +815,7 @@ const App: React.FC = () => {
                             isMobileDevice={isMobileDevice}
                             debugMode={gameState.debugMode}
                             initialTab={initialAdventureLogTab}
+                            initialItemId={initialAdventureLogItem}
                         />
                     )}
 

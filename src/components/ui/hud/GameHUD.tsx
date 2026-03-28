@@ -535,11 +535,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     return (
         <div ref={hudContainerRef} className="absolute inset-0 pointer-events-none">
             <DamageVignette />
-            <DiscoveryPopup onOpenAdventureLog={(tab) => {
+            <DiscoveryPopup onOpenAdventureLog={(tab, itemId) => {
                 // We assume there's a prop or global way to open it, 
                 // but usually GameHUD is used inside a screen that handles this.
                 // In winterdeath, we often use CustomEvents or props.
-                window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab } }));
+                window.dispatchEvent(new CustomEvent('open-adventure-log', { detail: { tab, itemId } }));
             }} />
 
             <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>

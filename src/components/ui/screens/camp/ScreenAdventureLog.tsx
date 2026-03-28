@@ -18,11 +18,12 @@ interface ScreenAdventureLogProps {
     isMobileDevice?: boolean;
     debugMode?: boolean;
     initialTab?: Tab;
+    initialItemId?: string | null;
 }
 
 type Tab = 'stats' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
-const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab }) => {
+const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'stats');
@@ -37,6 +38,21 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             onMarkCollectiblesViewed(newIds);
         }
     }, [stats.collectiblesDiscovered, stats.viewedCollectibles, onMarkCollectiblesViewed]);
+
+    // Scroll to item if provided
+    useEffect(() => {
+        if (initialItemId) {
+            // Need a slight delay to ensure rendering of the correct tab is complete
+            setTimeout(() => {
+                const el = document.getElementById(`log-item-${initialItemId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    el.classList.add('animate-discovery-flash');
+                    setTimeout(() => el.classList.remove('animate-discovery-flash'), 2500);
+                }
+            }, 100);
+        }
+    }, [initialItemId, activeTab]);
 
     const handleTabChange = (tab: Tab) => {
         soundManager.playUiClick();
@@ -169,6 +185,17 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                     </div>
                 </div>
             </div>
+
+            <style>{`
+                @keyframes discoveryFlash {
+                    0%, 100% { box-shadow: 0 0 0px rgba(220, 38, 38, 0); border-color: inherit; }
+                    50% { box-shadow: 0 0 30px rgba(220, 38, 38, 0.8), inset 0 0 15px rgba(220, 38, 38, 0.3); border-color: rgba(220, 38, 38, 1) !important; }
+                }
+                .animate-discovery-flash {
+                    animation: discoveryFlash 1.25s ease-in-out 2 !important;
+                    transition: border-color 0.2s;
+                }
+            `}</style>
         </ScreenModalLayout>
     );
 };
@@ -270,7 +297,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
 
                 return (
-                    <Card key={key} isLocked={!isSeen} color={itemColor}>
+                    <Card key={key} id={`log-item-${key}`} isLocked={!isSeen} color={itemColor}>
                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                             <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: isSeen ? itemColor : '#4b5563' }}>
                                 {isSeen ? key : '???'}
@@ -371,7 +398,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 
                         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-1 gap-8'}`}>
                             {isBossUnlocked ? (
-                                <Card isLocked={false} color={boss ? `#${boss.color.toString(16).padStart(6, '0')}` : '#4b5563'}>
+                                <Card isLocked={false} color={boss ? `#${boss.color.toString(16).padStart(6, '0')}` : '#4b5563'} id={boss ? `log-item-${boss.name}` : undefined}>
                                     <div className="flex flex-col h-full">
                                         <div className="flex justify-between items-start mb-4 border-b-2 border-gray-800 pb-3">
                                             <div className="flex flex-col">
@@ -482,7 +509,7 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
                             {sectorCollectibles.map(item => {
                                 const isFound = foundIds.includes(item.id);
                                 return (
-                                    <div key={item.id} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'mb-2' : ''}`}>
+                                    <div key={item.id} id={`log-item-${item.id}`} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'mb-2' : ''}`}>
                                         <DescriptionExpansion item={item} isFound={isFound} isMobileDevice={isMobileDevice} />
                                     </div>
                                 );
@@ -530,7 +557,7 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                 const typeColor = isThought ? '#3b82f6' : '#eab308';
 
                                 return (
-                                    <div key={clueId} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                                    <div key={clueId} id={`log-item-${clueId}`} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
                                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest" style={{ backgroundColor: isFound ? typeColor : '#333' }}>
@@ -583,7 +610,7 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
                                 const poiId = poi.id;
                                 const isFound = visitedList.includes(poiId);
                                 return (
-                                    <div key={poiId} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                                    <div key={poiId} id={`log-item-${poiId}`} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
                                         <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
                                                 <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
@@ -612,8 +639,8 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
     );
 };
 
-const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string }> = ({ children, isLocked, color = '#6b7280' }) => (
-    <div className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''}`}
+const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = ({ children, isLocked, color = '#6b7280', id, className = '' }) => (
+    <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
         style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
         <div className="">

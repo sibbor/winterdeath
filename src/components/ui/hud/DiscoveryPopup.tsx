@@ -4,7 +4,7 @@ import { t } from '../../../utils/i18n';
 import { soundManager } from '../../../utils/audio/SoundManager';
 
 interface DiscoveryPopupProps {
-  onOpenAdventureLog: (tab?: string) => void;
+  onOpenAdventureLog: (tab?: string, itemId?: string) => void;
 }
 
 const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) => {
@@ -13,17 +13,18 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) =
   const [activeDiscovery, setActiveDiscovery] = useState(discovery);
 
   useEffect(() => {
+    let timer: NodeJS.Timeout;
     if (discovery && discovery.timestamp !== activeDiscovery?.timestamp) {
       setActiveDiscovery(discovery);
       setVisible(true);
 
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         setVisible(false);
-      }, 2000);
-
-      return () => clearTimeout(timer);
+      }, 2500);
     }
-  }, [discovery, activeDiscovery]);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discovery]);
 
   const handleInteraction = () => {
     if (!visible) return;
@@ -39,7 +40,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) =
       boss: 'boss'
     };
 
-    onOpenAdventureLog(tabMap[activeDiscovery?.type || 'clues']);
+    onOpenAdventureLog(tabMap[activeDiscovery?.type || 'clues'], activeDiscovery?.id);
   };
 
   useEffect(() => {
