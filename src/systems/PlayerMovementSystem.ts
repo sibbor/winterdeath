@@ -16,6 +16,8 @@ const _v3 = new THREE.Vector3();
 const _v5 = new THREE.Vector3();
 const _v6 = new THREE.Vector3();
 const _UP = new THREE.Vector3(0, 1, 0);
+const _forward = new THREE.Vector3();
+const _right = new THREE.Vector3();
 
 export class PlayerMovementSystem implements System {
     id = 'player_movement';
@@ -263,6 +265,21 @@ export class PlayerMovementSystem implements System {
 
                 _v1.copy(_v6).normalize();
                 if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
+
+                // Calculate move direction vs facing direction (Zero-GC)
+                _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
+                const dot = _forward.dot(_v1);
+
+                state.isBacking = dot < -0.4;
+                state.isStrafing = Math.abs(dot) < 0.4;
+
+                if (state.isStrafing) {
+                    _right.crossVectors(_forward, _UP).normalize();
+                    state.strafeDirection = Math.sign(_right.dot(_v1)); // 1 or -1
+                } else {
+                    state.strafeDirection = 0;
+                }
+
                 _v1.multiplyScalar(speed * delta);
 
                 this.performMove(playerGroup, _v1, state, session, now, delta);
@@ -300,9 +317,13 @@ export class PlayerMovementSystem implements System {
                         }
                     }
 
-                    // Skicka ljudet till AI:n (gemensamt anrop för alla tillstånd!)
+                    // Send the sound to the AI (common call for all states!)
                     session.makeNoise(playerGroup.position, noiseType, noiseRadius);
                 }
+            } else {
+                state.isBacking = false;
+                state.isStrafing = false;
+                state.strafeDirection = 0;
             }
         }
 
@@ -324,19 +345,19 @@ export class PlayerMovementSystem implements System {
         for (let s = 0; s < steps; s++) {
             _v3.copy(playerGroup.position).add(_v2);
 
-            // --- OPTIMERING: Hämta hinder EN GÅNG per fysiskt steg! ---
-            // Vi behöver inte söka i gridden 4 gånger för mikro-justeringarna.
+            // --- OPTIMIZATION: Fetch obstacles ONCE per physical step! ---
+            // We don't need to search the grid 4 times for micro-adjustments.
             const nearbyEnemies = state.collisionGrid.getNearbyEnemies(_v3, searchRadius);
             const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
 
             const eLen = nearbyEnemies.length;
             const nLen = nearbyObs.length;
 
-            // Solver-loop för att knuffa ut spelaren ur överlappningar
+            // Solver-loop to push the player out of overlaps
             for (let i = 0; i < 4; i++) {
                 let adjusted = false;
 
-                // --- 1. FIENDE-KOLLISION (PLOGEN) ---
+                // --- 1. ENEMY COLLISION (THE PLOW) ---
                 for (let j = 0; j < eLen; j++) {
                     const enemy = nearbyEnemies[j];
                     const distSq = _v3.distanceToSquared(enemy.mesh.position);
@@ -376,7 +397,7 @@ export class PlayerMovementSystem implements System {
                     }
                 }
 
-                // Om ingen kollision inträffade under denna iteration behöver vi inte iterera igen!
+                // If no collision occurred during this iteration, we don't need to iterate again!
                 if (!adjusted) break;
             }
 

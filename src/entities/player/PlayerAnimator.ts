@@ -14,6 +14,9 @@ export interface AnimState {
     isIdleLong: boolean;
     isWading?: boolean;
     isSwimming?: boolean;
+    isStrafing?: boolean;
+    isBacking?: boolean;
+    strafeDirection?: number;
     seed: number;
 }
 
@@ -85,14 +88,32 @@ export const PlayerAnimator = {
             bob = Math.sin(now * moveSpeed * wadingFactor);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;
 
-            rotationX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2);
-            scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
-            scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
-            rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.05;
+            if (animState.isBacking) {
+                // Lean backwards, bouncy steps
+                rotationX = -0.15; // Lean backwards!
+                scaleY = 1.0 + (Math.abs(bob) * 0.15 * rushFactor); // More vertical bounce
+                scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
+                rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.08; // Exaggerated wobble
+                positionY = Math.abs(bob) * 0.1; // Add vertical bounce
+            } else if (animState.isStrafing) {
+                // Lean into the strafe, waddle
+                rotationX = 0.05; // Mostly upright
+                const strafeLean = (animState.strafeDirection || 0) * 0.2;
+                rotationZ = strafeLean + (Math.cos(now * moveSpeed * wadingFactor) * 0.05);
+                scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
+                scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
+                positionY = Math.abs(bob) * 0.15; // Waddling height bounce
+            } else {
+                // Standard forward movement
+                rotationX = animState.isRushing ? 0.4 : (animState.isWading ? 0.3 : 0.2);
+                scaleY = 1.0 + (Math.abs(bob) * 0.1 * rushFactor);
+                scaleXZ = 1.0 - (Math.abs(bob) * 0.05 * rushFactor);
+                rotationZ = Math.cos(now * moveSpeed * wadingFactor) * 0.05;
+            }
 
             // Wading Bobbing
             if (animState.isWading) {
-                positionY = Math.abs(bob) * 0.2;
+                positionY += Math.abs(bob) * 0.2;
             }
         }
 
