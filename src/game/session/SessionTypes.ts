@@ -116,6 +116,8 @@ export interface GameCanvasProps {
   onCollectibleDiscovered: (id: string) => void;
   onClueDiscovered: (clue: any) => void; // Using any for now to avoid circular or too many imports
   onPOIdiscovered: (poi: any) => void;
+  onEnemyDiscovered?: (type: string) => void;
+  onBossDiscovered?: (id: string) => void;
   isCollectibleOpen: boolean;
   onCollectibleClose: () => void;
   onDialogueStateChange: (active: boolean) => void;

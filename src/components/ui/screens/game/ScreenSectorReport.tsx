@@ -11,6 +11,7 @@ interface ScreenSectorReportProps {
     onReturnCamp: () => void;
     onRestartSector: () => void;
     onRespawn: () => void;
+    onNextSector?: () => void;
     currentSector: number;
     isMobileDevice?: boolean;
 }
@@ -27,7 +28,7 @@ const formatDistance = (meters: number) => {
     return `${Math.floor(meters)} m`;
 };
 
-const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, currentSector, isMobileDevice }) => {
+const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDetails, onReturnCamp, onRestartSector, onRespawn, onNextSector, currentSector, isMobileDevice }) => {
 
     const accuracy = stats.shotsFired > 0
         ? ((stats.shotsHit || 0) / stats.shotsFired * 100).toFixed(1)
@@ -56,7 +57,26 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         : 'border-red-600 bg-red-900/20';
     const bossTitleColor = bossKilled ? 'text-green-500' : 'text-red-500';
 
+    // Validation Flags
     const showRespawn = !!deathDetails || !!stats.aborted;
+    const isFinished = !showRespawn;
+    const isLastSector = currentSector >= 4; // Sector 5 is the final sector
+
+    let confirmLabel: string | undefined;
+    let confirmAction: (() => void) | undefined;
+    let hideConfirm = false;
+
+    if (showRespawn) {
+        confirmLabel = t('ui.respawn') !== 'ui.respawn' ? t('ui.respawn') : 'RESPAWN';
+        confirmAction = onRespawn;
+    } else if (isFinished) {
+        if (!isLastSector) {
+            confirmLabel = t('ui.next_sector') !== 'ui.next_sector' ? t('ui.next_sector') : 'NEXT SECTOR';
+            confirmAction = onNextSector;
+        } else {
+            hideConfirm = true; // No "Next Sector" if we beat the final boss!
+        }
+    }
 
     // Helper for Stat Blocks (Time elapsed style)
     const StatBlock = ({ label, value, color }: { label: string, value: string | number, color: string }) => (
@@ -70,12 +90,12 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
         <ScreenModalLayout
             title={t('ui.sector_report')}
             isMobileDevice={isMobileDevice}
-            onClose={showRespawn ? onReturnCamp : undefined}
-            onCancel={showRespawn ? onReturnCamp : undefined}
-            cancelLabel={showRespawn ? t('ui.return_camp') : undefined}
-            onConfirm={showRespawn ? onRestartSector : onReturnCamp}
-            confirmLabel={showRespawn ? t('ui.restart_sector') : t('ui.return_camp')}
-            showCloseButton={showRespawn}
+            onClose={onReturnCamp}
+            onCancel={onReturnCamp}
+            cancelLabel={t('ui.return_camp')}
+            onConfirm={!hideConfirm ? confirmAction : undefined}
+            confirmLabel={!hideConfirm ? confirmLabel : undefined}
+            showCloseButton={true}
         >
             {/* Aborted Banner */}
             {stats.aborted && !deathDetails && (

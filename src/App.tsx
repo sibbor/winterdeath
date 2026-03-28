@@ -203,7 +203,7 @@ const App: React.FC = () => {
                     // Safety check for undefined settings on initial boot
                     const defaultSettings = { shadowQuality: 1, antialias: true, resolutionScale: 1.0, postProcessing: true, renderDistance: 1.0 };
                     engine.updateSettings(gameState.settings || defaultSettings);
-                    
+
                     await AssetPreloader.warmupAsync('CORE', yieldToMain);
                     if (isCamp) {
                         await AssetPreloader.warmupAsync('CAMP', yieldToMain);
@@ -224,31 +224,11 @@ const App: React.FC = () => {
     // --- ZERO-GC STABLE CALLBACKS ---
     const handleDie = useCallback((stats: SectorStats, killer: string) => {
         setDeathDetails({ killer });
-        setGameState(prev => {
-            let newUniqueAchievements = 0;
-            const bossKilled = stats.killsByType['Boss'] > 0;
-            const newBosses = [...prev.deadBossIndices];
-
-            if (bossKilled && !prev.deadBossIndices.includes(prev.currentSector)) {
-                newBosses.push(prev.currentSector);
-                newUniqueAchievements++;
-            }
-
-            const newFamily = [...prev.rescuedFamilyIndices];
-            if ((stats.familyFound || bossKilled) && !prev.rescuedFamilyIndices.includes(prev.currentSector)) {
-                newFamily.push(prev.currentSector);
-                newUniqueAchievements++;
-            }
-
-            const newStats = aggregateStats(prev.stats, stats, true, false, newUniqueAchievements);
-            return {
-                ...prev,
-                stats: newStats,
-                deadBossIndices: newBosses,
-                rescuedFamilyIndices: newFamily,
-                screen: GameScreen.DEATH // VINTERDÖD FIX: Go to Death Screen first, not Recap
-            };
-        });
+        setSectorStats(stats); // Store to be viewed in Recap, but DONT aggregate yet!
+        setGameState(prev => ({
+            ...prev,
+            screen: GameScreen.DEATH // VINTERDÖD FIX: Go to Death Screen first, not Recap
+        }));
     }, []);
 
     const handleOpenMap = useCallback(() => {
@@ -287,7 +267,22 @@ const App: React.FC = () => {
         if (!poi.id) return;
         setGameState(prev => {
             if (prev.stats.discoveredPOIs.includes(poi.id as string)) return prev;
-            return { ...prev, stats: { ...prev.stats, discoveredPOIs: [...prev.stats.discoveredPOIs, poi.id as string] } };
+        });
+    }, []);
+
+    const handleEnemyDiscoveredAction = useCallback((type: string) => {
+        if (!type) return;
+        setGameState(prev => {
+            if (prev.stats.seenEnemies.includes(type)) return prev;
+            return { ...prev, stats: { ...prev.stats, seenEnemies: [...prev.stats.seenEnemies, type] } };
+        });
+    }, []);
+
+    const handleBossDiscoveredAction = useCallback((id: string) => {
+        if (!id) return;
+        setGameState(prev => {
+            if (prev.stats.seenBosses.includes(id)) return prev;
+            return { ...prev, stats: { ...prev.stats, seenBosses: [...prev.stats.seenBosses, id] } };
         });
     }, []);
 
@@ -434,37 +429,12 @@ const App: React.FC = () => {
 
     const handleSectorEnded = useCallback((stats: SectorStats) => {
         setDeathDetails(null);
+        setSectorStats(stats); // DONT aggregate yet!
 
         setGameState(prev => {
-            const prevSp = prev.stats.skillPoints;
-            let newUniqueAchievements = 0;
             const bossKilled = stats.killsByType['Boss'] > 0;
-            const newBosses = [...prev.deadBossIndices];
-
-            if (bossKilled && !prev.deadBossIndices.includes(prev.currentSector)) {
-                newBosses.push(prev.currentSector);
-                newUniqueAchievements++;
-            }
-
-            const newFamily = [...prev.rescuedFamilyIndices];
-            if ((stats.familyFound || bossKilled) && !prev.rescuedFamilyIndices.includes(prev.currentSector)) {
-                newFamily.push(prev.currentSector);
-                newUniqueAchievements++;
-            }
-
-            const newStats = aggregateStats(prev.stats, stats, false, !!stats.aborted, newUniqueAchievements);
-            stats.spEarned = newStats.skillPoints - prevSp;
-
-            const sectorCollectibles = getCollectiblesBySector(prev.currentSector + 1).map(c => c.id);
-            stats.collectiblesDiscovered = newStats.collectiblesDiscovered.filter(id => sectorCollectibles.includes(id));
-
-            setSectorStats(stats);
-
             return {
                 ...prev,
-                stats: newStats,
-                deadBossIndices: newBosses,
-                rescuedFamilyIndices: newFamily,
                 screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP,
                 midRunCheckpoint: null
             };
@@ -488,8 +458,39 @@ const App: React.FC = () => {
         setGameState(prev => ({ ...prev, currentSector: sectorIndex, sessionToken: (prev.sessionToken || 0) + 1 }));
     }, []);
 
+    const aggregatePendingStats = useCallback(() => {
+        if (!sectorStats) return;
+        setGameState(prev => {
+            let newUniqueAchievements = 0;
+            const bossKilled = sectorStats.killsByType['Boss'] > 0;
+            const newBosses = [...prev.deadBossIndices];
+
+            if (bossKilled && !prev.deadBossIndices.includes(prev.currentSector)) {
+                newBosses.push(prev.currentSector);
+                newUniqueAchievements++;
+            }
+
+            const newFamily = [...prev.rescuedFamilyIndices];
+            if ((sectorStats.familyFound || bossKilled) && !prev.rescuedFamilyIndices.includes(prev.currentSector)) {
+                newFamily.push(prev.currentSector);
+                newUniqueAchievements++;
+            }
+
+            const newStats = aggregateStats(prev.stats, sectorStats, !!deathDetails, !!sectorStats.aborted, newUniqueAchievements);
+
+            return {
+                ...prev,
+                stats: newStats,
+                deadBossIndices: newBosses,
+                rescuedFamilyIndices: newFamily
+            };
+        });
+        setSectorStats(null);
+    }, [sectorStats, deathDetails]);
+
     const handleReturnToCamp = useCallback(() => {
         soundManager.playUiConfirm();
+        aggregatePendingStats();
 
         triggerLoadingTransition('CAMP', async () => {
             AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
@@ -503,10 +504,44 @@ const App: React.FC = () => {
             setGameState(prev => {
                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
                 const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
-                return { ...prev, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
+                const isFinished = isCleared && prev.currentSector === 4;
+
+                const finalStats = isFinished ? { ...prev.stats, gameIsFinished: true } : prev.stats;
+                return { ...prev, stats: finalStats, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
             });
         });
-    }, [triggerLoadingTransition]);
+    }, [triggerLoadingTransition, aggregatePendingStats]);
+
+    const handleNextSector = useCallback(() => {
+        soundManager.playUiConfirm();
+        aggregatePendingStats();
+
+        triggerLoadingTransition('SECTOR', async () => {
+            const nextSector = latestStateRef.current.gameState.currentSector + 1;
+
+            // If it's the last sector (#4 = id 3), theoretically the handleNextSector button won't exist.
+            // But if it slips through, fallback to camp.
+            if (nextSector > 3) {
+                AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
+                setGameState(prev => ({ ...prev, screen: GameScreen.CAMP, currentSector: 3, weather: 'snow' }));
+                return;
+            }
+
+            AssetPreloader.releaseSectorAssets(latestStateRef.current.gameState.currentSector);
+
+            const yieldToMain = () => new Promise<void>(resolve => {
+                requestAnimationFrame(() => setTimeout(resolve, 0));
+            });
+            await AssetPreloader.warmupAsync('SECTOR', yieldToMain, nextSector);
+
+            setTeleportTarget(null);
+            setActiveCollectible(null);
+            setActiveOverlay(null);
+
+            setGameState(prev => ({ ...prev, screen: GameScreen.SECTOR, currentSector: nextSector, sessionToken: (prev.sessionToken || 0) + 1 }));
+            HudStore.update({ ...HudStore.getState(), hudVisible: false });
+        });
+    }, [triggerLoadingTransition, aggregatePendingStats]);
 
     const handleStartSector = useCallback(async () => {
         const { gameState: currentGameState } = latestStateRef.current;
@@ -698,6 +733,8 @@ const App: React.FC = () => {
                                     onCollectibleDiscovered={handleCollectibleDiscoveredAction}
                                     onClueDiscovered={handleClueDiscoveredAction}
                                     onPOIdiscovered={handlePOIdiscoveredAction}
+                                    onEnemyDiscovered={handleEnemyDiscoveredAction}
+                                    onBossDiscovered={handleBossDiscoveredAction}
                                     isCollectibleOpen={activeOverlay === 'COLLECTIBLE'}
                                     onCollectibleClose={handleCollectibleClose}
                                     onDialogueStateChange={handleDialogueStateChangeAction}
@@ -885,6 +922,7 @@ const App: React.FC = () => {
                             onReturnCamp={handleReturnToCamp}
                             onRestartSector={handleRestartSector}
                             onRespawn={handleRespawnSector}
+                            onNextSector={handleNextSector}
                             isMobileDevice={isMobileDevice}
                         />
                     )}

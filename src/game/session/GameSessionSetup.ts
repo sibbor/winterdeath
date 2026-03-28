@@ -534,13 +534,28 @@ export class GameSessionSetup {
         const scene = engine.scene;
 
         // 1. Reset player state
-        console.log(`[GameSessionSetup] Respawning player. Current HP: ${state.hp}/${state.maxHp}`);
+        console.log(`[GameSessionSetup] Respawning player`);
         state.isDead = false;
         state.playerDeathState = PlayerDeathState.ALIVE;
         state.hp = state.maxHp;
         state.stamina = state.maxStamina;
         state.isReloading = false;
         state.isInteractionOpen = false;
+        state.activeVehicle = null;
+        state.activeVehicleType = null;
+        state.vehicleSpeed = 0;
+        state.vehicleEngineState = 'OFF';
+
+        // Reset buffs/debuffs
+        state.activeBuffs.length = 0;
+        state.activeDebuffs.length = 0;
+        state.statusEffects = {};
+
+        // Recalculate passives (keeps family modifiers if they are following)
+        const statsSystem = engine.getSystem('player_stats_system') as any; // Cast to avoid circular import loops if it's strict
+        if (statsSystem && statsSystem.updatePassives) {
+            statsSystem.updatePassives();
+        }
 
         HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.maxHp });
 
@@ -560,6 +575,26 @@ export class GameSessionSetup {
 
             // Fetch camera directly and snap to player
             engine.camera.snapToTarget();
+
+            // Move family members: Keep saved/tracking members close to the player, 
+            // Return undiscovered members to their original sector location.
+            const members = refs.activeFamilyMembers.current || [];
+            const fSpawn = currentSectorData.familySpawn;
+            
+            for (let i = 0; i < members.length; i++) {
+                const fm = members[i];
+                if (fm.mesh) {
+                    if (fm.found || fm.following) {
+                        fm.mesh.position.set(
+                            spawn.x + (Math.random() - 0.5) * 5, 
+                            spawn.y || 0, 
+                            spawn.z + 5 + Math.random() * 5
+                        );
+                    } else if (fSpawn) {
+                        fm.mesh.position.set(fSpawn.x, fSpawn.y || 0, fSpawn.z);
+                    }
+                }
+            }
         }
 
         // 3. Clear projectiles and fire
