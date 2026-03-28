@@ -269,11 +269,25 @@ export class PlayerInteractionSystem implements System {
                         _detectionResult.object = obj;
                         return;
                     }
+                } else if (obj.userData.chestData && obj.userData.interactionType === 'chest') {
+                    if (obj.userData.chestData.opened) continue;
+                    
+                    _v3.copy(playerPos);
+                    obj.worldToLocal(_v3);
+                    const margin = 2.0;
+                    const size = obj.userData.chestData.collider.size;
+
+                    // OBB intersection on XZ plane
+                    if (Math.abs(_v3.x) <= (size.x * 0.5) + margin && Math.abs(_v3.z) <= (size.z * 0.5) + margin) {
+                        _detectionResult.position.copy(_v1);
+                        _detectionResult.type = 'chest';
+                        _detectionResult.id = obj.userData.interactionId;
+                        _detectionResult.object = obj;
+                        return;
+                    }
                 } else {
                     const r = obj.userData.interactionRadius || 4.0;
                     if (playerPos.distanceToSquared(_v1) < r * r) {
-                        if (obj.userData.interactionType === 'chest' && obj.userData.chestData?.opened) continue;
-
                         _detectionResult.position.copy(_v1);
                         _detectionResult.type = (obj.userData.interactionType as any) || 'sector_specific';
                         _detectionResult.id = obj.userData.interactionId;
