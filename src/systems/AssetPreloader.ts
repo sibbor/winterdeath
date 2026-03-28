@@ -55,6 +55,14 @@ export const AssetPreloader = {
 
     warmupAsync: async (target: 'CORE' | 'CAMP' | 'SECTOR', yieldToMain?: () => Promise<void>, sectorId?: number) => {
         const moduleKey = target === 'SECTOR' ? `SECTOR_${sectorId ?? 0}` : target;
+        const currentTargetType = target === 'CAMP' ? 'CAMP' : 'SECTOR';
+
+        // VINTERDÖD FIX: If we switch environments, we MUST recompile shaders for the different lighting proxy counts,
+        // even if the module was previously warmed.
+        if (target !== 'CORE' && sharedPoolPopulated && sharedPoolCompiledTarget !== currentTargetType) {
+            console.log(`[AssetPreloader] Context shift detected before warmup (${sharedPoolCompiledTarget} -> ${currentTargetType}). Un-caching ${moduleKey} for recompilation.`);
+            warmedModules.delete(moduleKey);
+        }
 
         if (warmedModules.has(moduleKey)) {
             return; // Already compiled

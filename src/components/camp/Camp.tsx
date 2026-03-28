@@ -149,6 +149,9 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
             if (setupCounterRef.current !== currentSetupId) return;
 
+            // VINTERDÖD FIX: Ensure persistent systems (like LightSystem proxies) are anchored natively to the Camp scene
+            engine.syncSystemsToScene(scene);
+
             const allInteractables = [...interactables, ...familyInteractables];
 
             const aspect = container.clientWidth / container.clientHeight;

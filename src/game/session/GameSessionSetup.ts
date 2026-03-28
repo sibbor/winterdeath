@@ -69,6 +69,8 @@ export interface SetupContext {
         concludeSector: (isExtraction: boolean) => void;
         handleTriggerAction: (action: any, scene: THREE.Scene) => void;
         onSectorLoaded?: () => void;
+        onEnemyDiscovered?: (type: string) => void;
+        onBossDiscovered?: (id: string) => void;
         gainXp: (amount: number) => void;
         onCollectibleDiscovered: (collectibleId: string) => void;
         onClueDiscovered: (clue: any) => void;
@@ -97,6 +99,7 @@ export class GameSessionSetup {
         }
 
         refs.isBuildingSectorRef.current = true;
+        refs.deathPhaseRef.current = 'NONE';
         state.startTime = performance.now();
         let sectorLoaded = false;
 
@@ -107,9 +110,10 @@ export class GameSessionSetup {
             const rng = seededRandom(props.currentSector + 4242);
             const env = currentSector.environment;
 
+            // --- POSITIONING ---
             // 0. VINTERDÖD FIX: Aggressively clear the scene from previous session objects.
-            // true = KEEP persistent systems (Fog, Water, Light Pool) alive for performance.
-            engine.clearActiveScene(true);
+            // false = KEEP persistent systems (Fog, Water, Light Pool) alive for performance.
+            engine.clearActiveScene(false);
 
             // Unregister any non-persistent systems that might have been added by Camp or previous sector ghosts
             const engineSystems = engine.getSystems();
@@ -413,6 +417,8 @@ export class GameSessionSetup {
 
             session.addSystem(new EnemySystem(playerGroup, {
                 spawnBubble: callbacks.spawnBubble, gainXp: callbacks.gainXp, t: callbacks.t,
+                onEnemyDiscovered: callbacks.onEnemyDiscovered,
+                onBossDiscovered: callbacks.onBossDiscovered,
                 onBossKilled: (id: number) => {
                     let seen = false;
                     for (let j = 0; j < state.bossesDefeated.length; j++) {
@@ -530,12 +536,11 @@ export class GameSessionSetup {
      * Enemies are respawned. Chests already opened remain open.
      */
     static respawnPlayer(engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
-        console.log('[GameSessionSetup] Instant Resurrection Triggered.');
         const scene = engine.scene;
 
         // 1. Reset player state
-        console.log(`[GameSessionSetup] Respawning player`);
         state.isDead = false;
+        refs.deathPhaseRef.current = 'NONE';
         state.playerDeathState = PlayerDeathState.ALIVE;
         state.hp = state.maxHp;
         state.stamina = state.maxStamina;
@@ -567,6 +572,10 @@ export class GameSessionSetup {
             }
         }
 
+        state.isInteractionOpen = false;
+        state.eDepressed = false;
+        state.interactionRequest.active = false;
+
         // 2. Move player to spawn point
         const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
         if (refs.playerGroupRef.current) {
@@ -580,14 +589,14 @@ export class GameSessionSetup {
             // Return undiscovered members to their original sector location.
             const members = refs.activeFamilyMembers.current || [];
             const fSpawn = currentSectorData.familySpawn;
-            
+
             for (let i = 0; i < members.length; i++) {
                 const fm = members[i];
                 if (fm.mesh) {
                     if (fm.found || fm.following) {
                         fm.mesh.position.set(
-                            spawn.x + (Math.random() - 0.5) * 5, 
-                            spawn.y || 0, 
+                            spawn.x + (Math.random() - 0.5) * 5,
+                            spawn.y || 0,
                             spawn.z + 5 + Math.random() * 5
                         );
                     } else if (fSpawn) {
@@ -631,8 +640,6 @@ export class GameSessionSetup {
      */
     static async restartSector(ctx: SetupContext, currentSetupId: number) {
         const { engine, state, ui } = ctx;
-
-        console.log('[GameSessionSetup] Restarting Sector (Full Build)...');
 
         // Ensure UI knows we are loading if it takes a moment
         ui.setIsSectorLoading(true);

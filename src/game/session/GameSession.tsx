@@ -308,7 +308,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                             refs.stateRef.current.discovery = {
                                 id: 'enemy-' + Date.now(),
                                 type: 'enemy',
-                                title: t('ui.enemy_encountered', { name: '' }).replace(': ', '').trim(),
+                                title: t('ui.enemy_encountered'),
                                 details: t(`enemies.${e.type}.name`),
                                 timestamp: Date.now()
                             };
@@ -534,7 +534,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         // VINTERDÖD FIX: Respawns player at spawn point. Keeps world state (chests, unlocked doors etc)
         respawnPlayer: () => {
             const engine = WinterEngine.getInstance();
-            const state = latestStateRef.current.runtimeState;
+            const state = refs.stateRef.current;
             const setDeathPhase = (phase: string) => updateUiState({ deathPhase: phase as any });
 
             GameSessionSetup.respawnPlayer(engine, state, refs, props, setDeathPhase);
@@ -684,7 +684,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                 id: 'clue-' + Date.now(),
                                 type: 'clue',
                                 title: 'ui.clue_discovered',
-                                details: `clues.${clue.sector}.${clue.index}.reaction`,
+                                details: clue.content,
                                 timestamp: Date.now()
                             };
                         }
@@ -779,13 +779,13 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                         refs.familyMemberRef.current.following = true;
                                         refs.stateRef.current.isInteractionOpen = false;
                                         refs.stateRef.current.familyFound = true;
-                                        
+
                                         // Update passive bonuses immediately
                                         const statsSystem = refs.gameSessionRef.current?.getSystem('player_stats_system') as any;
                                         if (statsSystem && statsSystem.updatePassives) {
                                             statsSystem.updatePassives();
                                         }
-                                        
+
                                         // Re-acquire pointer lock if not on mobile
                                         if (!latestStateRef.current.props.isMobileDevice && refs.containerRef.current) {
                                             refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
@@ -858,6 +858,8 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     concludeSector,
                     gainXp,
                     onSectorLoaded: props.onSectorLoaded,
+                    onEnemyDiscovered: props.onEnemyDiscovered,
+                    onBossDiscovered: props.onBossDiscovered,
                     onBossKilled: (id: number) => {
                         soundManager.stopMusic();
                         const pProps = latestStateRef.current.props;
@@ -910,7 +912,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     window.dispatchEvent(new CustomEvent('spawn-bubble', {
                         detail: { text, duration: duration || 3000 }
                     }));
-                }
+                },
+                onEnemyDiscovered: props.onEnemyDiscovered,
+                onBossDiscovered: props.onBossDiscovered,
+                onDeathStateChange: props.onDeathStateChange
             }
         });
 

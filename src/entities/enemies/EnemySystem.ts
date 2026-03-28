@@ -13,6 +13,8 @@ interface Callbacks {
     onBossKilled: (id: number) => void;
     onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, effectDuration?: number, effectIntensity?: number, attackName?: string) => void;
     triggerDiscovery: (event: { type: string, id: string, title: string, details: string }) => void;
+    onEnemyDiscovered?: (type: string) => void;
+    onBossDiscovered?: (id: string) => void;
 }
 
 export class EnemySystem implements System {
@@ -115,6 +117,14 @@ export class EnemySystem implements System {
                         const bossId = e.type; // or whatever identifies the boss
                         if (!state.seenBosses.includes(bossId)) {
                             state.seenBosses.push(bossId);
+
+                            // TODO: NEEDED??? Should perhaps have triggerDiscovery(TriggerType.BOSS)
+                            // Bridging to global callbacks
+                            if (this.callbacks.onBossDiscovered) {
+                                this.callbacks.onBossDiscovered(bossId);
+                            }
+
+                            // TODO: NEEDED??? Should perhaps have triggerDiscovery(TriggerType.BOSS)
                             this.callbacks.triggerDiscovery({
                                 id: 'boss-' + bossId,
                                 type: 'boss',
@@ -125,6 +135,13 @@ export class EnemySystem implements System {
                     } else {
                         if (!state.seenEnemies.includes(e.type)) {
                             state.seenEnemies.push(e.type);
+
+                            // Bridging to global callbacks
+                            if (this.callbacks.onEnemyDiscovered) {
+                                this.callbacks.onEnemyDiscovered(e.type);
+                            }
+
+                            // TODO: NEEDED??? Should perhaps have triggerDiscovery(TriggerType.ENEMY)
                             this.callbacks.triggerDiscovery({
                                 id: 'enemy-' + e.type,
                                 type: 'enemy',

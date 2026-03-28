@@ -1,4 +1,4 @@
-export type TriggerType = 'COLLECTIBLE' | 'CLUE' | 'POI' | 'INTERACTION' | 'STATION' | 'SECTOR_END' | 'SPEAK' | 'THOUGHT' | 'INFO' | 'AMBUSH' | string;
+export type TriggerType = 'COLLECTIBLE' | 'CLUE' | 'POI' | 'ENEMY' | 'BOSS' | 'INTERACTION' | 'STATION' | 'SECTOR_END' | 'SPEAK' | 'THOUGHT' | 'INFO' | 'AMBUSH' | string;
 
 export interface TriggerAction {
   type: string;

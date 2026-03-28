@@ -259,7 +259,13 @@ const App: React.FC = () => {
         if (!clue.id) return;
         setGameState(prev => {
             if (prev.stats.cluesFound.includes(clue.id as string)) return prev;
-            return { ...prev, stats: { ...prev.stats, cluesFound: [...prev.stats.cluesFound, clue.id as string] } };
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    cluesFound: [...prev.stats.cluesFound, clue.id as string]
+                }
+            };
         });
     }, []);
 
@@ -267,6 +273,13 @@ const App: React.FC = () => {
         if (!poi.id) return;
         setGameState(prev => {
             if (prev.stats.discoveredPOIs.includes(poi.id as string)) return prev;
+            return {
+                ...prev,
+                stats: {
+                    ...prev.stats,
+                    discoveredPOIs: [...prev.stats.discoveredPOIs, poi.id as string]
+                }
+            };
         });
     }, []);
 
@@ -329,7 +342,8 @@ const App: React.FC = () => {
     }, []);
 
     const handleOpenSettingsAction = useCallback(() => setActiveOverlay('SETTINGS'), []);
-    const handleOpenAdventureLogAction = useCallback(() => {
+    const handleOpenAdventureLogAction = useCallback((tab?: string) => {
+        if (tab) setInitialAdventureLogTab(tab);
         setActiveOverlay('ADVENTURE_LOG');
         soundManager.playUiConfirm();
     }, []);

@@ -32,6 +32,9 @@ interface LoopContext {
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
+        onEnemyDiscovered?: (type: string) => void;
+        onBossDiscovered?: (id: string) => void;
+        onDeathStateChange?: (val: boolean) => void;
     };
 }
 
@@ -281,6 +284,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         const now = performance.now();
+
+        // Death Trigger Bridge (VINTERDÖD FIX)
+        if (state.isDead && (refs.deathPhaseRef.current === 'NONE' || !refs.deathPhaseRef.current)) {
+            refs.deathPhaseRef.current = 'DEAD';
+            callbacks.onDeathStateChange?.(true);
+        }
+
         const monitor = PerformanceMonitor.getInstance();
         frame++;
 

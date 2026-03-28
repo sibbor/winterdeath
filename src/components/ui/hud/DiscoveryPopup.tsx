@@ -35,8 +35,8 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) =
       clue: 'clues',
       poi: 'poi',
       collectible: 'collectibles',
-      enemy: 'enemies',
-      boss: 'bosses'
+      enemy: 'enemy',
+      boss: 'boss'
     };
 
     onOpenAdventureLog(tabMap[activeDiscovery?.type || 'clues']);
