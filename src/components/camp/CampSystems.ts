@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { System } from '../../systems/System';
-import { CampWorld, CampEffectsState } from './CampWorld';
+import { CampWorld } from './CampWorld';
 import { PlayerAnimator } from '../../entities/player/PlayerAnimator';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { t } from '../../utils/i18n';
-import { CHATTER_LINES } from '../../content/constants';
 
 /**
  * Wraps CampWorld effects (Fire, Smoke, Stars, Wind)
@@ -68,6 +67,7 @@ export class FamilyAnimationSystem implements System {
     }
 }
 
+
 /**
  * Handles automatic chatter and ambient wildlife sounds
  */
@@ -92,8 +92,10 @@ export class CampChatterSystem implements System {
             for (let i = 0; i < numSpeakers; i++) {
                 const speaker = familyMembers[Math.floor(Math.random() * familyMembers.length)];
                 const linesKey = (speaker.name || '').toLowerCase();
+
+                // Speakers localized strings
                 let lines = t(`chatter.${linesKey}`) as unknown as string[];
-                if (!Array.isArray(lines)) lines = CHATTER_LINES[speaker.name] || ["..."];
+                if (!Array.isArray(lines)) lines = ["..."];
 
                 const text = lines[Math.floor(Math.random() * lines.length)];
                 const duration = 2000 + text.length * 60;
@@ -115,8 +117,8 @@ export class CampChatterSystem implements System {
                         duration,
                         element: el,
                         playedSound: false,
-                        _lastX: -9999, // NYTT: Cache för X-position
-                        _lastY: -9999  // NYTT: Cache för Y-position
+                        _lastX: -9999,
+                        _lastY: -9999
                     });
                     delayOffset += duration + 500;
                 }
