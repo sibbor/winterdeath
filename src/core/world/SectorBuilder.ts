@@ -716,21 +716,6 @@ export const SectorBuilder = {
             collider: { type: 'sphere', radius: 1.0 }
         });
 
-        if (ctx.dynamicLights) {
-            const offset = lightGroup.userData.lightOffset as THREE.Vector3;
-            const worldPos = new THREE.Vector3().copy(offset);
-            worldPos.applyAxisAngle(_axisY, rotation);
-            worldPos.add(lightGroup.position);
-
-            ctx.dynamicLights.push({
-                isLogicalLight: true,
-                position: worldPos,
-                color: 0xaaddff,
-                baseIntensity: 4.0,
-                distance: 30.0,
-                flickerRate: Math.random() > 0.9 ? 0.1 : 0.0
-            } as any);
-        }
 
         return lightGroup;
     },

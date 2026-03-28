@@ -254,7 +254,12 @@ export const ObjectGenerator = {
         bulb.scale.set(0.4, 0.1, 0.6);
         bulb.position.set(0, 7.4, 1.5);
         group.add(bulb);
-        group.userData.lightOffset = new THREE.Vector3(0, 7.4, 1.5);
+
+        const light = new THREE.SpotLight(0xaaddff, 100, 40, Math.PI / 5, 0.5, 1);
+        light.position.set(0, 7.4, 1.5);
+        light.target.position.set(0, 0, 1.5);
+        group.add(light);
+        group.add(light.target);
 
         group.userData.material = 'METAL';
         return freezeStatic(group);
@@ -666,7 +671,7 @@ export const ObjectGenerator = {
         group.userData.logicalLights = [{
             offset: new THREE.Vector3(0, -0.5, 0),
             color: 0xffddaa,
-            baseIntensity: 3.5,
+            baseIntensity: 20,
             distance: 20.0,
             flickerRate: 0.1
         }];
@@ -727,8 +732,8 @@ export const ObjectGenerator = {
 
             lamp.userData.needsLogicalLight = true;
             lamp.userData.lightColor = 0xff0000;
-            lamp.userData.lightIntensity = 10.0;
-            lamp.userData.lightDistance = 50.0;
+            lamp.userData.lightIntensity = 150.0;
+            lamp.userData.lightDistance = 100.0;
 
             lightHub.add(lamp);
         }
