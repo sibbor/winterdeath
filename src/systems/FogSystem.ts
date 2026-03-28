@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WindSystem } from './WindSystem';
+import { createFogMaterial } from '../utils/assets/materials_fog';
 
 const MAX_FOG_PLANES = 40; // Drastically reduced for Fill Rate performance
 const FOG_AREA_SIZE = 120.0;
@@ -73,36 +74,7 @@ export class FogSystem implements System {
 
         // Setup InstancedMesh lazily
         if (!this.fogMesh) {
-            // Procedural Volumetric Soft Fog Shader
-            this.fogMaterial = new THREE.ShaderMaterial({
-                uniforms: {
-                    uColor: { value: this.targetColor }
-                },
-                vertexShader: `
-                    varying vec2 vUv;
-                    void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-                    }
-                `,
-                fragmentShader: `
-                    uniform vec3 uColor;
-                    varying vec2 vUv;
-                    void main() {
-                        // Distance from center for soft sphere
-                        float dist = length(vUv - 0.5) * 2.0;
-                        
-                        // Very soft fade out to prevent hard clipping with the ground
-                        float alpha = smoothstep(1.0, 0.2, dist) * 0.12; 
-                        
-                        if (alpha <= 0.01) discard; // Save fill rate
-                        gl_FragColor = vec4(uColor, alpha);
-                    }
-                `,
-                transparent: true,
-                depthWrite: false, // Essential for transparency sorting
-                blending: THREE.NormalBlending
-            });
+            this.fogMaterial = createFogMaterial(this.targetColor);
 
             const planeGeo = new THREE.PlaneGeometry(1, 1);
             this.fogMesh = new THREE.InstancedMesh(planeGeo, this.fogMaterial, MAX_FOG_PLANES);
@@ -194,6 +166,13 @@ export class FogSystem implements System {
         const cxX = camWorld[0] * FOG_SCALE, cxY = camWorld[1] * FOG_SCALE, cxZ = camWorld[2] * FOG_SCALE;
         const cyX = camWorld[4] * FOG_SCALE, cyY = camWorld[5] * FOG_SCALE, cyZ = camWorld[6] * FOG_SCALE;
         const czX = camWorld[8] * FOG_SCALE, czY = camWorld[9] * FOG_SCALE, czZ = camWorld[10] * FOG_SCALE;
+
+        // Dynamic tilt compensation (Z Forward is col 3)
+        const tilt = Math.abs(-camWorld[9]);
+        if (this.fogMaterial) {
+            this.fogMaterial.uniforms.uCameraTilt.value = tilt;
+            this.fogMaterial.uniforms.uTime.value = this.globalTime;
+        }
 
         for (let i = 0; i < count; i++) {
             const i3 = i * 3;
