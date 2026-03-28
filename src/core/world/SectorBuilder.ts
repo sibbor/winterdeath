@@ -234,7 +234,6 @@ export const SectorBuilder = {
         ctx.scene.add(chest);
 
         const isBig = type === 'big';
-        const colRadius = isBig ? 3.0 : 2.0;
         const scale = isBig ? 1.5 : 1.0;
         const boxSize = new THREE.Vector3(1.5 * scale, 1.0 * scale, 1.0 * scale);
 
@@ -245,7 +244,7 @@ export const SectorBuilder = {
             type: type,
             scrap: isBig ? 100 : 25,
             opened: false,
-            collider: { type: 'box' as const, size: boxSize }
+            collider: { type: 'box', size: boxSize }
         };
 
         ctx.chests.push(obs);
@@ -255,7 +254,6 @@ export const SectorBuilder = {
         SectorBuilder.addInteractable(ctx, chest, {
             type: 'chest',
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
-            radius: colRadius
         });
 
         ctx.mapItems.push({
