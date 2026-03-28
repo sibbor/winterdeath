@@ -1403,7 +1403,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 stateRef.current.familyFound = true;
             }
         };
-        window.addEventListener('family-follow', onFamilyFollow);
         window.addEventListener('family_follow', onFamilyFollow);
 
         (window as any).setCameraOverride = (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => {

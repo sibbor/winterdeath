@@ -154,7 +154,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             state.currentXp -= state.nextLevelXp;
             state.level++;
             state.nextLevelXp = Math.floor(state.nextLevelXp * 1.2);
-            soundManager.playUiConfirm();
+            soundManager.playLevelUp();
         }
     }, []);
 
@@ -513,7 +513,20 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     for (let j = 0; j < refs.stateRef.current.seenEnemies.length; j++) {
                         if (refs.stateRef.current.seenEnemies[j] === e.type) { seen = true; break; }
                     }
-                    if (!seen) refs.stateRef.current.seenEnemies.push(e.type);
+                    if (!seen) {
+                        refs.stateRef.current.seenEnemies.push(e.type);
+
+                        // Push to HudStore if enabled
+                        if (latestStateRef.current.props.settings?.showDiscoveryPopups !== false) {
+                            refs.stateRef.current.discovery = {
+                                id: 'enemy-' + Date.now(),
+                                type: 'enemy',
+                                title: t('ui.enemy_encountered', { name: '' }).replace(': ', '').trim(),
+                                details: t(`enemies.${e.type}.name`),
+                                timestamp: Date.now()
+                            };
+                        }
+                    }
                 }
             }
         },
@@ -727,9 +740,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                     }
                                     break;
                                 case 'SPAWN_BOSS':
-                                    if (payload) {
+                                case 'boss_start':
+                                    if (payload || action.type === 'boss_start' || action === 'boss_start') {
                                         window.dispatchEvent(new CustomEvent('boss-spawn-trigger', {
-                                            detail: { type: payload.type, pos: payload.pos }
+                                            detail: { type: payload?.type || 'BIG_ZOMBIE', pos: payload?.pos }
                                         }));
                                     }
                                     break;
@@ -757,10 +771,26 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                                 case 'GIVE_REWARD':
                                 case 'UNLOCK_OBJECT':
                                 case 'START_CINEMATIC':
-                                case 'TRIGGER_FAMILY_FOLLOW':
                                     onAction(action);
-                                    //TODO: does the new approach above work?
-                                    //old approach: window.dispatchEvent(new Event('family-follow'));
+                                    break;
+                                case 'TRIGGER_FAMILY_FOLLOW':
+                                case 'family_follow':
+                                    if (refs.familyMemberRef.current && refs.stateRef.current) {
+                                        refs.familyMemberRef.current.following = true;
+                                        refs.stateRef.current.isInteractionOpen = false;
+                                        refs.stateRef.current.familyFound = true;
+                                        
+                                        // Update passive bonuses immediately
+                                        const statsSystem = refs.gameSessionRef.current?.getSystem('player_stats_system') as any;
+                                        if (statsSystem && statsSystem.updatePassives) {
+                                            statsSystem.updatePassives();
+                                        }
+                                        
+                                        // Re-acquire pointer lock if not on mobile
+                                        if (!latestStateRef.current.props.isMobileDevice && refs.containerRef.current) {
+                                            refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
+                                        }
+                                    }
                                     break;
                                 case 'FAMILY_MEMBER_FOUND':
                                     if (payload) {
@@ -792,6 +822,28 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         sys?.playLine(index);
                     },
                     endCinematic: () => {
+                        const cinematicSystem = refs.gameSessionRef.current?.getSystem('cinematic') as any;
+                        if (!cinematicSystem) return;
+
+                        const state = cinematicSystem.cinematicRef.current;
+                        if (!state.active) return;
+
+                        // Zero-GC: Fire any trigger on the last line if it hasn't fired yet
+                        const script = cinematicSystem.getScript(state.scriptId);
+                        if (script && script[state.lineIndex]?.trigger) {
+                            onAction(script[state.lineIndex].trigger);
+                        }
+
+                        cinematicSystem.stop();
+
+                        // Re-acquire pointer lock if not on mobile
+                        const { props: currentProps } = latestStateRef.current;
+                        if (!currentProps.isMobileDevice && refs.containerRef.current) {
+                            refs.engineRef.current?.input.requestPointerLock(refs.containerRef.current);
+                        }
+
+                        // Reset interaction state to allow world interactions again
+                        setUiState(prev => ({ ...prev, isInteractionOpen: false }));
                     },
                     spawnZombie: (forcedType?: string, forcedPos?: THREE.Vector3) => {
                         // VINTERDÖD FIX: Use local fallback for currentSectorData to prevent crash on undefined

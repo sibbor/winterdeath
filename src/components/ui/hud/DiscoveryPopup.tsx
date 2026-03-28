@@ -19,7 +19,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) =
 
       const timer = setTimeout(() => {
         setVisible(false);
-      }, 1500);
+      }, 2000);
 
       return () => clearTimeout(timer);
     }

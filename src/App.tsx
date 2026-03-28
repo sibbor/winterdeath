@@ -200,7 +200,10 @@ const App: React.FC = () => {
             await triggerLoadingTransition(isCamp ? 'CAMP' : 'SECTOR', async () => {
                 const sectorIndex = gameState.currentSector !== undefined ? gameState.currentSector : 0;
                 try {
-                    engine.updateSettings(gameState.settings);
+                    // Safety check for undefined settings on initial boot
+                    const defaultSettings = { shadowQuality: 1, antialias: true, resolutionScale: 1.0, postProcessing: true, renderDistance: 1.0 };
+                    engine.updateSettings(gameState.settings || defaultSettings);
+                    
                     await AssetPreloader.warmupAsync('CORE', yieldToMain);
                     if (isCamp) {
                         await AssetPreloader.warmupAsync('CAMP', yieldToMain);
