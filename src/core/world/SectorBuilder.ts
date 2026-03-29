@@ -22,6 +22,24 @@ const _q1_sg = new THREE.Quaternion();
 const _box_sg = new THREE.Box3();
 const _axisY = new THREE.Vector3(0, 1, 0);
 
+// VINTERDÖD: Nya gränssnitt för den datadrivna interaktionen
+export interface InteractionCollider {
+    type: 'sphere' | 'box';
+    radius?: number;       // For sphere
+    size?: THREE.Vector3;  // For box
+    margin?: number;       // Extra reach padding (default: 2.0)
+}
+
+export interface InteractableParams {
+    id?: string;
+    label?: string;
+    type?: string;
+    collider?: InteractionCollider;
+
+    // Legacy support (Converted to collider automatically)
+    radius?: number;
+}
+
 export const SectorBuilder = {
 
     addObstacle: (ctx: SectorContext, obstacle: any) => {
@@ -56,14 +74,31 @@ export const SectorBuilder = {
         ctx.collisionGrid.addObstacle(obstacle);
     },
 
-    addInteractable: (ctx: SectorContext, object: THREE.Object3D, params?: { id?: string, label?: string, type?: string, radius?: number }) => {
+    addInteractable: (ctx: SectorContext, object: THREE.Object3D, params?: InteractableParams) => {
         if (!object) return;
 
         object.userData.isInteractable = true;
         if (params?.id) object.userData.interactionId = params.id;
         if (params?.label) object.userData.interactionLabel = params.label;
         if (params?.type) object.userData.interactionType = params.type;
-        if (params?.radius) object.userData.interactionRadius = params.radius;
+
+        // VINTERDÖD: Data-Driven Interaction Shapes
+        if (params?.collider) {
+            object.userData.interactionShape = params.collider.type;
+            if (params.collider.type === 'box' && params.collider.size) {
+                object.userData.interactionSize = params.collider.size;
+            } else if (params.collider.type === 'sphere' && params.collider.radius) {
+                object.userData.interactionRadius = params.collider.radius;
+            }
+            if (params.collider.margin !== undefined) {
+                object.userData.interactionMargin = params.collider.margin;
+            }
+        }
+        // Legacy fallback
+        else if (params?.radius) {
+            object.userData.interactionShape = 'sphere';
+            object.userData.interactionRadius = params.radius;
+        }
 
         if (!ctx.interactables) {
             ctx.interactables = [];
@@ -244,16 +279,22 @@ export const SectorBuilder = {
             type: type,
             scrap: isBig ? 100 : 25,
             opened: false,
-            collider: { type: 'box', size: boxSize }
+            collider: { type: 'box' as const, size: boxSize } // as const added for type safety
         };
 
         ctx.chests.push(obs);
         SectorBuilder.addObstacle(ctx, obs);
         chest.userData.chestData = obs;
 
+        // VINTERDÖD FIX: Chests explicitly use Box Interaction Shape
         SectorBuilder.addInteractable(ctx, chest, {
             type: 'chest',
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
+            collider: {
+                type: 'box',
+                size: boxSize,
+                margin: 2.0
+            }
         });
 
         ctx.mapItems.push({
@@ -344,7 +385,7 @@ export const SectorBuilder = {
         SectorBuilder.addInteractable(ctx, group, {
             type: 'collectible',
             label: 'ui.interact_pickup_collectible',
-            radius: 4.0
+            collider: { type: 'sphere', radius: 4.0 }
         });
     },
 
@@ -552,11 +593,6 @@ export const SectorBuilder = {
         vehicleRoot.position.set(x, spawnY, z);
         vehicleRoot.rotation.y = rotation;
 
-        vehicleRoot.userData.isInteractable = true;
-        vehicleRoot.userData.interactionId = `vehicle_${vehicleType}_${x}_${z}`;
-        vehicleRoot.userData.interactionLabel = 'ui.enter_vehicle';
-        vehicleRoot.userData.interactionType = 'VEHICLE';
-
         if (vehicleType === 'boat') vehicleRoot.userData.floatOffset = 0.5;
 
         vehicleRoot.userData.vehicleDef = def;
@@ -564,10 +600,6 @@ export const SectorBuilder = {
         vehicleRoot.userData.angularVelocity = new THREE.Vector3();
         vehicleRoot.userData.suspY = 0;
         vehicleRoot.userData.suspVelY = 0;
-
-        const interactionRad = Math.max(def.size.x, def.size.z) * 0.5 + 2.0;
-        vehicleRoot.userData.interactionRadius = interactionRad;
-        vehicleRoot.userData.radius = Math.max(def.size.x, def.size.z) * 0.5;
 
         const obs = {
             mesh: vehicleRoot,
@@ -584,7 +616,18 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, obs);
         vehicleRoot.userData.obstacleRef = obs;
         ctx.scene.add(vehicleRoot);
-        SectorBuilder.addInteractable(ctx, vehicleRoot);
+
+        // Driveable vehicles explicitly use Box Interaction Shape based on their definition
+        SectorBuilder.addInteractable(ctx, vehicleRoot, {
+            id: `vehicle_${vehicleType}_${x}_${z}`,
+            type: 'vehicle',
+            label: 'ui.enter_vehicle',
+            collider: {
+                type: 'box',
+                size: new THREE.Vector3(def.size.x, def.size.y, def.size.z),
+                margin: 2.0
+            }
+        });
 
         return vehicleRoot;
     },
@@ -1123,14 +1166,24 @@ export const SectorBuilder = {
         terminal.position.set(x, 0, z);
         ctx.scene.add(terminal);
 
+        const boxSize = new THREE.Vector3(1.2 * scale, 2.0 * scale, 1.2 * scale);
+
+        // VINTERDÖD FIX: Terminals use Box Interaction
         SectorBuilder.addInteractable(ctx, terminal, {
-            id: type, type: 'sector_specific', label: 'ui.interact'
+            id: type,
+            type: 'sector_specific',
+            label: 'ui.interact',
+            collider: {
+                type: 'box',
+                size: boxSize,
+                margin: 1.5
+            }
         });
 
         SectorBuilder.addObstacle(ctx, {
             mesh: terminal,
             position: terminal.position,
-            collider: { type: 'box', size: new THREE.Vector3(1.2 * scale, 2.0 * scale, 1.2 * scale) }
+            collider: { type: 'box', size: boxSize }
         });
 
         return terminal;

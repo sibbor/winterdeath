@@ -48,7 +48,6 @@ export class PlayerInteractionSystem implements System {
         this.onCollectibleDiscovered = onCollectibleDiscovered;
     }
 
-
     update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const input = session.engine.input.state;
@@ -225,7 +224,7 @@ export class PlayerInteractionSystem implements System {
 
     /**
      * Scans the environment for the closest interactable object.
-     * Priority: Collectibles > Chests > Vehicles > Mission Objects
+     * Priority: Active Vehicle > Data-Driven Interactables > Mission Triggers
      */
     private detectInteraction(
         playerPos: THREE.Vector3,
@@ -246,54 +245,62 @@ export class PlayerInteractionSystem implements System {
             return;
         }
 
-        // --- Priority 2: Spatial Grid Objects (Chests, Collectibles, Vehicles) ---
+        // --- Priority 2: Spatial Grid Objects (Data-Driven Interaction) ---
         if (nearbyInteractables) {
             const len = nearbyInteractables.length;
             for (let i = 0; i < len; i++) {
                 const obj = nearbyInteractables[i];
-                if (!obj || !obj.userData?.isInteractable) continue;
-                if (obj.userData.interactionType === 'collectible' && obj.userData.pickedUp) continue;
+                const ud = obj.userData;
+
+                if (!obj || !ud?.isInteractable) continue;
+
+                // Prevent pickup of already opened/picked up items
+                if (ud.interactionType === 'collectible' && ud.pickedUp) continue;
+                if (ud.chestData?.opened) continue;
 
                 obj.getWorldPosition(_v1);
 
-                if (obj.userData.vehicleDef && obj.userData.interactionType === 'VEHICLE') {
+                // Data-Driven Interaction Shape
+                const shape = ud.interactionShape || 'sphere'; // Defaults to sphere if not defined
+                let inRange = false;
+
+                if (shape === 'box') {
+                    // OBB Box collision (Perfect for chests, vehicles, beds, tables)
                     _v3.copy(playerPos);
                     obj.worldToLocal(_v3);
-                    const margin = 2.0;
-                    const def = obj.userData.vehicleDef;
 
-                    if (Math.abs(_v3.x) <= (def.size.x * 0.5) + margin && Math.abs(_v3.z) <= (def.size.z * 0.5) + margin) {
-                        _detectionResult.position.copy(_v1);
-                        _detectionResult.position.y += 1.0;
-                        _detectionResult.type = 'vehicle';
-                        _detectionResult.object = obj;
-                        return;
-                    }
-                } else if (obj.userData.chestData && obj.userData.interactionType === 'chest') {
-                    if (obj.userData.chestData.opened) continue;
-                    
-                    _v3.copy(playerPos);
-                    obj.worldToLocal(_v3);
-                    const margin = 2.0;
-                    const size = obj.userData.chestData.collider.size;
+                    const margin = ud.interactionMargin ?? 2.0;
 
-                    // OBB intersection on XZ plane
-                    if (Math.abs(_v3.x) <= (size.x * 0.5) + margin && Math.abs(_v3.z) <= (size.z * 0.5) + margin) {
-                        _detectionResult.position.copy(_v1);
-                        _detectionResult.type = 'chest';
-                        _detectionResult.id = obj.userData.interactionId;
-                        _detectionResult.object = obj;
-                        return;
+                    // VINTERDÖD FIX: Zero-GC fallback if size is completely missing
+                    const size = ud.interactionSize || ud.chestData?.collider?.size || ud.vehicleDef?.size;
+                    const sx = size ? size.x : 1.0;
+                    const sz = size ? size.z : 1.0;
+
+                    if (Math.abs(_v3.x) <= (sx * 0.5) + margin && Math.abs(_v3.z) <= (sz * 0.5) + margin) {
+                        inRange = true;
                     }
                 } else {
-                    const r = obj.userData.interactionRadius || 4.0;
+                    // Spherical collision (Perfect for small collectibles, switches, NPCs)
+                    const r = ud.interactionRadius || 4.0;
                     if (playerPos.distanceToSquared(_v1) < r * r) {
-                        _detectionResult.position.copy(_v1);
-                        _detectionResult.type = (obj.userData.interactionType as any) || 'sector_specific';
-                        _detectionResult.id = obj.userData.interactionId;
-                        _detectionResult.object = obj;
-                        return;
+                        inRange = true;
                     }
+                }
+
+                if (inRange) {
+                    _detectionResult.position.copy(_v1);
+
+                    // Vehicle prompt height adjustment
+                    if (ud.interactionType === 'vehicle' || ud.interactionType === 'VEHICLE') {
+                        _detectionResult.position.y += 1.0;
+                        _detectionResult.type = 'vehicle';
+                    } else {
+                        _detectionResult.type = (ud.interactionType as any) || 'sector_specific';
+                    }
+
+                    _detectionResult.id = ud.interactionId;
+                    _detectionResult.object = obj;
+                    return; // Return closest/first matched
                 }
             }
         }
