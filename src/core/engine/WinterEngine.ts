@@ -63,8 +63,12 @@ export class WinterEngine {
     // Callbacks
     public onUpdate: ((dt: number) => void) | null = null;
     public onRender: (() => void) | null = null;
+
+    // VINTERDÖD FIX: Hard Paused stänger av allt (även miljö).
+    public isSoftPaused: boolean = false;
     public isRenderingPaused: boolean = false;
     public isSimulationPaused: boolean = false;
+
     public onUpdateContext: any = null;
     public screenWidth: number = window.innerWidth;
     public screenHeight: number = window.innerHeight;
@@ -76,6 +80,19 @@ export class WinterEngine {
     // --- HYBRID SYSTEM REGISTRY (Zero-GC) ---
     private _systemsMap: Map<string, System> = new Map();
     private _systemArray: System[] = [];
+
+    // VINTERDÖD FIX: Fast lookup for environment systems that must run during cinematics
+    private _envSystemIds: Set<string> = new Set([
+        'wind',
+        'weather',
+        'fog',
+        'water',
+        'light',
+        'cinematic',
+        //'damage_number_system',
+        //'player_combat',
+        //'player_movement'
+    ]);
 
     // --- CACHED SCENE REFERENCES ---
     private _cachedSkyLight: THREE.DirectionalLight | null = null;
@@ -431,13 +448,20 @@ export class WinterEngine {
         monitor.startFrame();
 
         // 1. Logic Update (Physics, Movement, Systems)
+        // Vi skickar in original-dt till onUpdate, GameSessionLoop kommer själv frysta sin delta vid behov
         monitor.begin('logic');
         if (this.onUpdate) this.onUpdate(dt);
         monitor.end('logic');
 
         // 2. High-Performance System Logic (Unified Registry)
         if (!this.isSimulationPaused) {
-            this.updateSystems(this.onUpdateContext, dt, now);
+            // VINTERDÖD FIX: Om kontexten har en egen simuleringsklocka (delta-ackumulering), 
+            // använd den istället för realtids-klockan för alla motorsystem.
+            let systemTime = now;
+            if (this.onUpdateContext?.state?.accumulatedTime !== undefined) {
+                systemTime = this.onUpdateContext.state.accumulatedTime;
+            }
+            this.updateSystems(this.onUpdateContext, dt, systemTime);
         }
 
         // 3. Camera Update
@@ -447,7 +471,7 @@ export class WinterEngine {
 
         // 4. Render Pass
         monitor.begin('render');
-        if (!this.isRenderingPaused) {
+        if (!this.isRenderingPaused && !this.isSimulationPaused) {
             if (this.onRender) {
                 this.onRender();
             } else {
@@ -507,6 +531,12 @@ export class WinterEngine {
             const sys = systems[i];
 
             if (sys.enabled === false) continue;
+
+            // VINTERDÖD FIX: Om Soft Paused (Cinematic), hoppa över 
+            // fiender och strid, MEN tillåt miljösystem (wind, weather)
+            if (this.isSoftPaused && !this._envSystemIds.has(sys.id)) {
+                continue;
+            }
 
             const id = sys.id;
             monitor.begin(id);

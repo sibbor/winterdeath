@@ -316,6 +316,13 @@ export const HudSystem = {
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
         _current.sectorName = state.sectorName;
+        
+        // --- SYNC CINEMATIC STATE (Zero-GC) ---
+        // We sync to BOTH buffers to prevent 1-frame flickering during swaps
+        _bufferA.cinematicActive = !!state.cinematicActive;
+        _bufferA.currentLine = state.currentLine;
+        _bufferB.cinematicActive = !!state.cinematicActive;
+        _bufferB.currentLine = state.currentLine;
 
         if (state.discovery) {
             _current._discovery.id = state.discovery.id;
@@ -371,5 +378,17 @@ export const HudSystem = {
         _current.debugInfo.objects = state.obstacles?.length || 0;
 
         return _current;
+    },
+
+    /** Explicitly clears cinematic and sector data from both buffers to prevent leakage */
+    reset: () => {
+        _bufferA.cinematicActive = false;
+        _bufferA.currentLine = null;
+        _bufferB.cinematicActive = false;
+        _bufferB.currentLine = null;
+        _bufferA.sectorStats = null;
+        _bufferB.sectorStats = null;
+        _bufferA.discovery = null;
+        _bufferB.discovery = null;
     }
 };

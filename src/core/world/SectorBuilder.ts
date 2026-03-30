@@ -283,7 +283,7 @@ export const SectorBuilder = {
             opened: false,
             collider: {
                 type: 'box',
-                size: boxSize
+                size: boxSize.clone()
             }
         };
 
@@ -297,7 +297,7 @@ export const SectorBuilder = {
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             collider: {
                 type: 'box',
-                size: boxSize
+                size: boxSize.clone()
             }
         });
 
@@ -613,7 +613,7 @@ export const SectorBuilder = {
             quaternion: vehicleRoot.quaternion,
             collider: {
                 type: 'box' as const,
-                size: boxSize,
+                size: boxSize.clone(),
                 //center: new THREE.Vector3(0, def.size.y / 2, 0)
             },
             type: `Vehicle_${vehicleType}`
@@ -630,7 +630,7 @@ export const SectorBuilder = {
             label: 'ui.enter_vehicle',
             collider: {
                 type: 'box',
-                size: boxSize
+                size: boxSize.clone()
             }
         });
 

@@ -11,6 +11,7 @@ export { SECTOR_THEMES } from './sectors/sector_themes';
 
 // 20% HP
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;
+export const DEFAULT_SPEED = 25.0; // kph
 
 export const CAMERA_HEIGHT = 50;
 
@@ -104,7 +105,7 @@ export const INITIAL_STATS: PlayerStats = {
     maxHp: 100,
     stamina: 100,
     maxStamina: 100,
-    speed: 25.0, // kph
+    speed: DEFAULT_SPEED, // kph
     skillPoints: 0,
     rescuedFamilyIds: [],
     kills: 0,

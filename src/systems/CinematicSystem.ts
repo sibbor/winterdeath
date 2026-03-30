@@ -6,7 +6,6 @@ import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { soundManager } from '../utils/audio/SoundManager';
 import { STORY_SCRIPTS } from '../content/dialogues';
 
-// --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -17,7 +16,7 @@ export class CinematicSystem implements System {
     public cinematicRef: React.MutableRefObject<any>;
     private camera: CameraSystem;
     private playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-    private bubbleRef: React.RefObject<HTMLDivElement>;
+    private bubbleRef: React.RefObject<any>;
     private activeFamilyMembers: React.MutableRefObject<any[]>;
     private callbacks: {
         setCurrentLine: (line: any) => void;
@@ -32,7 +31,7 @@ export class CinematicSystem implements System {
         cinematicRef: React.MutableRefObject<any>;
         camera: CameraSystem;
         playerMeshRef: React.MutableRefObject<THREE.Group | null>;
-        bubbleRef: React.RefObject<HTMLDivElement>;
+        bubbleRef: React.RefObject<any>;
         activeFamilyMembers: React.MutableRefObject<any[]>;
         callbacks: {
             setCurrentLine: (line: any) => void;
@@ -54,29 +53,27 @@ export class CinematicSystem implements System {
     public startCinematic(target: THREE.Object3D, scriptId: number, params: any = {}) {
         const script = STORY_SCRIPTS[scriptId];
 
-        // --- VINTERDÖD FIX: ANTI-CRASH SKÖLD ---
-        // Om scriptet inte finns (t.ex. om Sector 2 skickar fel ID), 
-        // avbryt omedelbart. Skapa INGEN endless loop!
         if (!script || script.length === 0) {
-            console.error(`[CinematicSystem] Kritiskt fel: Script ID ${scriptId} saknas eller är tomt! Avbryter.`);
-            this.callbacks.setCinematicActive(false); // Frigör UI
+            console.error(`[CinematicSystem] Kritiskt fel: Script ID ${scriptId} saknas!`);
+            this.callbacks.setCinematicActive(false);
             return;
         }
 
         const cinematic = this.cinematicRef.current;
 
-        // Anti-Spam: Ignorera om vi redan spelar detta exakta manus
         if (cinematic.active && cinematic.script === script) return;
 
         cinematic.active = true;
         cinematic.isClosing = false;
         cinematic.target = target;
         cinematic.script = script;
+        cinematic.scriptId = scriptId;
         cinematic.lineIndex = -1;
 
         const currentNow = performance.now();
         cinematic.startTime = currentNow;
         cinematic.lastFrameTime = currentNow;
+        cinematic.lastVoiceTime = 0;
 
         cinematic.zoom = params.zoom || 0.4;
         cinematic.rotationSpeed = params.rotationSpeed || 0.00015;
@@ -96,10 +93,25 @@ export class CinematicSystem implements System {
         const cinematic = this.cinematicRef.current;
         const currentNow = performance.now();
 
-        // Spärr mot dubbelklick och stamning
-        if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 100) return;
+        // 1. SKYDD: Stoppar loopen om vi når slutet
+        if (index >= cinematic.script.length) {
+            this.endCinematic();
+            return;
+        }
 
-        // VINTERDÖD FIX: GARANTI ATT TRIGGERS ALLTID KÖRS, ÄVEN OM MAN SPOLAR FÖRBI TEXTEN!
+        // 2. RPG SKIP: Spola texten om spelaren trycker förbi
+        if (index === cinematic.lineIndex + 1) {
+            const timeInLine = currentNow - cinematic.lineStartTime;
+            if (timeInLine < cinematic.typingDuration) {
+                cinematic.lineStartTime = currentNow - cinematic.typingDuration;
+                return;
+            }
+        }
+
+        // Anti-spam skydd
+        if (cinematic.lineIndex === index && (currentNow - cinematic.lineStartTime) < 50) return;
+
+        // 3. TRIGGERS: Kör eventuella händelser på den FÖRRA raden
         if (cinematic.lineIndex >= 0 && cinematic.lineIndex < cinematic.script.length) {
             const prevLine = cinematic.script[cinematic.lineIndex];
             if (prevLine.trigger && !cinematic.fadingOut) {
@@ -108,21 +120,19 @@ export class CinematicSystem implements System {
             }
         }
 
-        if (index >= cinematic.script.length) {
-            this.endCinematic();
-            return;
-        }
-
+        // 4. Ladda in nästa rad
         const line = cinematic.script[index];
         cinematic.lineIndex = index;
         cinematic.lineStartTime = currentNow;
         cinematic.fadingOut = false;
 
-        const textToDisplay = line.text || "";
-        cinematic.typingDuration = textToDisplay.length * 30;
-        cinematic.lineDuration = Math.max(2000, cinematic.typingDuration + 1500);
+        // VINTERDÖD FIX: Fast tidslängd. Längden på översättningsnyckeln ("dialogue.0_1") 
+        // fungerar inte för matte. Vi utgår från 2.5 sekunder skrivtid som default.
+        cinematic.typingDuration = line.typingDuration || 2500;
+        cinematic.lineDuration = line.duration || Math.max(4000, cinematic.typingDuration + 1500);
 
         this.callbacks.setCurrentLine(line);
+        if (line.tail) this.callbacks.setTailPosition(line.tail);
     }
 
     public getScript(scriptId: number) {
@@ -131,25 +141,25 @@ export class CinematicSystem implements System {
 
     public stop() {
         const cinematic = this.cinematicRef.current;
-        if (!cinematic.active && !cinematic.isClosing) return;
+        if (!cinematic.active) return;
 
         cinematic.active = false;
         cinematic.isClosing = true;
         cinematic.closeStartTime = performance.now();
 
-        // VINTERDÖD FIX: Lämna tillbaka kontrollen till spelkameran när vi är klara
         this.camera.setCinematic(false);
-
         this.callbacks.setCurrentLine(null);
         this.callbacks.setCinematicActive(false);
 
-        // SYNC CLEAR: Prevent "ghost" data from being accessed in the next sector
         cinematic.target = null;
         cinematic.script = [];
         cinematic.lineIndex = -1;
     }
 
     public endCinematic() {
+        // VINTERDÖD FIX: Vi tar BORT anropet till this.stop() härifrån!
+        // Nu hinner GameSession.tsx i lugn och ro läsa av manuset, se att vi är på 
+        // sista raden och avfyra SPAWN_BOSS, innan den själv rensar systemet.
         this.callbacks.endCinematic();
     }
 
@@ -160,8 +170,6 @@ export class CinematicSystem implements System {
         const now = performance.now();
         const totalElapsed = now - cinematic.startTime;
 
-        // VINTERDÖD FIX: Vår egen delta-tid! Detta gör att karaktärerna andas och pratar 
-        // ÄVEN OM spelets huvudsakliga 'dt' är fryst på 0 under dialogen!
         const cinematicDt = cinematic.lastFrameTime ? (now - cinematic.lastFrameTime) / 1000 : 0.016;
         cinematic.lastFrameTime = now;
 
@@ -170,7 +178,7 @@ export class CinematicSystem implements System {
             this.playerMeshRef.current.getWorldPosition(playerPos);
         }
 
-        // --- 1. CAMERA INTERPOLATION ---
+        // --- CAMERA ORBIT MATH ---
         if (cinematic.target) {
             const targetPos = _v3;
             cinematic.target.getWorldPosition(targetPos);
@@ -190,12 +198,10 @@ export class CinematicSystem implements System {
                 t = 1.0 - Math.min(1.0, Math.pow(elapsedSinceClose / 1500, 2));
                 if (elapsedSinceClose >= 1500) {
                     cinematic.isClosing = false;
-                    cinematic.target = null;
                     return;
                 }
             }
 
-            // OMLOPPSBANA RUNT SPELAREN
             const zoomFactor = 1.0 - (t * (cinematic.zoom || 0.4));
             const orbitRadius = 15 * zoomFactor;
             const orbitHeight = 12 * zoomFactor;
@@ -230,11 +236,15 @@ export class CinematicSystem implements System {
         const currentSpeakerName = activeScriptLine?.speaker || 'Unknown';
         const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
 
-        if (timeInLine < cinematic.typingDuration && (now % 200 < 32)) {
+        // --- VINTERDÖD FIX: Audio Sync ---
+        // Spela upp skrivmaskinsljudet exakt var 150:e millisekund medan texten typas.
+        const timeSinceLastVoice = now - (cinematic.lastVoiceTime || 0);
+        if (timeInLine < cinematic.typingDuration && timeSinceLastVoice > 150) {
+            cinematic.lastVoiceTime = now;
             soundManager.playVoice(currentSpeakerName);
         }
 
-        // Animator Sync (Nu med CinematicDt så de rör sig under paus!)
+        // Animator Sync (Nu med CinematicDt)
         for (let i = -1; i < familyMembers.length; i++) {
             const fm = i === -1 ? { mesh: this.playerMeshRef.current, name: 'Robert' } : familyMembers[i];
             const mesh = fm.mesh;
@@ -256,7 +266,7 @@ export class CinematicSystem implements System {
             }
         }
 
-        // Autoamtic ending (if the player does not skip)
+        // Auto-avancera till nästa rad
         if (timeInLine > cinematic.lineDuration && !cinematic.fadingOut) {
             const nextIdx = cinematic.lineIndex + 1;
             this.playLine(nextIdx);

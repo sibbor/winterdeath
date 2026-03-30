@@ -13,7 +13,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES } from '../../content/constants';
+import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, DEFAULT_SPEED } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { PlayerDeathState } from '../../entities/player/CombatTypes';
@@ -357,7 +357,7 @@ export class GameSessionSetup {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
                 const sets = state.discoverySets;
                 const stats = state.sessionStats;
-                
+
                 let alreadyFound = false;
                 if (type === 'clue') {
                     alreadyFound = sets.clues.has(id);
@@ -383,7 +383,7 @@ export class GameSessionSetup {
                 if (!alreadyFound) {
                     const tracker = session.getSystem('damage_tracker_system') as any;
                     if (tracker) tracker.recordSp(session, 1);
-                    
+
                     if (callbacks.onDiscovery) {
                         callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
                     }
@@ -392,7 +392,7 @@ export class GameSessionSetup {
             onBossKilled: (idStr: string) => {
                 const id = parseInt(idStr);
                 const stats = state.sessionStats;
-                
+
                 let alreadyDefeated = false;
                 const bdLen = state.bossesDefeated.length;
                 for (let j = 0; j < bdLen; j++) {
@@ -405,7 +405,7 @@ export class GameSessionSetup {
                 if (!alreadyDefeated) {
                     state.bossesDefeated.push(id);
                     state.bossDefeatedTime = performance.now();
-                    
+
                     const tracker = session.getSystem('damage_tracker_system') as any;
                     if (tracker) {
                         tracker.recordKill(session, idStr, true);
@@ -429,9 +429,10 @@ export class GameSessionSetup {
     private static finalizeStateLimits(state: RuntimeState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {
         state.mapItems = mapItems;
         state.maxHp = isNaN(state.maxHp) ? 100 : Math.max(100, state.maxHp);
-        state.hp = isNaN(state.hp) ? state.maxHp : Math.min(state.maxHp, state.hp);
+        state.hp = state.maxHp;
         state.maxStamina = isNaN(state.maxStamina) ? 100 : Math.max(100, state.maxStamina);
-        state.stamina = isNaN(state.stamina) ? state.maxStamina : Math.min(state.maxStamina, state.stamina);
+        state.stamina = state.maxStamina;
+        state.speed = isNaN(state.speed) ? DEFAULT_SPEED : Math.max(10.0, state.speed);
 
         const activeEffects: any[] = [];
         scene.traverse((child) => {
@@ -559,7 +560,7 @@ export class GameSessionSetup {
                 if (!seen) state.bossesDefeated.push(id);
                 state.bossDefeatedTime = performance.now();
                 state.familyFound = true;
-                
+
                 const tracker = session.getSystem('damage_tracker_system') as any;
                 if (tracker) tracker.recordKill(session, String(id), true);
 
@@ -654,6 +655,12 @@ export class GameSessionSetup {
     static respawnPlayer(engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
         const scene = engine.scene;
 
+        // --- VINTERDÖD FIX: PURGE STALE GRID STATE ---
+        // This prevents "ghost" interactions from previous lives blocking new ones.
+        if (state.collisionGrid) {
+            state.collisionGrid.clear();
+        }
+
         // 1. Reset player state
         state.isDead = false;
         refs.deathPhaseRef.current = 'NONE';
@@ -672,6 +679,18 @@ export class GameSessionSetup {
         state.activeDebuffs.length = 0;
         state.statusEffects = {};
         state.activePassives.length = 0;
+
+        // VINTERDÖD FIX: Reset simulation timers to prevent lockout
+        state.accumulatedTime = 0;
+        state.lastShotTime = 0;
+        state.reloadEndTime = 0;
+        state.throwChargeStart = 0;
+        state.lastDamageTime = 0;
+        state.lastStaminaUseTime = 0;
+        state.lastBiteTime = 0;
+        state.lastActionTime = 0;
+        state.bossDefeatedTime = 0;
+        state.lastDrownTick = 0;
 
         const statsSystem = engine.getSystem('player_stats_system') as any;
         if (statsSystem && statsSystem.updatePassives) {
@@ -765,6 +784,11 @@ export class GameSessionSetup {
         ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
         FXSystem.reset();
 
+        // --- VINTERDÖD FIX: PURGE STALE GRID STATE ---
+        if (state.collisionGrid) {
+            state.collisionGrid.clear();
+        }
+
         const toRemove: THREE.Object3D[] = [];
         engine.scene.traverse(obj => {
             if (obj.userData?.generated || obj.userData?.isEnemy || obj.userData?.isPlayer) {
@@ -783,6 +807,18 @@ export class GameSessionSetup {
         state.isDead = false;
         state.hp = state.maxHp;
         state.stamina = state.maxStamina;
+
+        // VINTERDÖD FIX: Reset simulation timers to prevent lockout
+        state.accumulatedTime = 0;
+        state.lastShotTime = 0;
+        state.reloadEndTime = 0;
+        state.throwChargeStart = 0;
+        state.lastDamageTime = 0;
+        state.lastStaminaUseTime = 0;
+        state.lastBiteTime = 0;
+        state.lastActionTime = 0;
+        state.bossDefeatedTime = 0;
+        state.lastDrownTick = 0;
 
         await this.runSectorSetup(ctx, currentSetupId);
 

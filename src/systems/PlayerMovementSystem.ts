@@ -25,7 +25,19 @@ export class PlayerMovementSystem implements System {
     constructor(private playerGroup: THREE.Group) { }
 
     update(session: GameSessionLogic, delta: number, now: number) {
+        if (!session.state) return;
         const state = session.state;
+
+        // --- CINEMATIC LOCK (Zero-Velocity) ---
+        // As per guardrail: Kill velocity and return early to prevent "sliding" during focus
+        if (state.cinematicActive) {
+            state.isMoving = false;
+            if (this.playerGroup.userData.velocity) {
+                this.playerGroup.userData.velocity.set(0, 0, 0);
+            }
+            return;
+        }
+
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
@@ -34,7 +46,7 @@ export class PlayerMovementSystem implements System {
 
         // --- APPLY DYNAMIC MULTIPLIERS ---
         const speedMult = state.multipliers.speed;
-        const baseSpeed = state.stats.speed;
+        const baseSpeed = state.speed;
         const currentSpeed = (baseSpeed * speedMult) / 3.6;
 
         if (state.activeVehicle) {
@@ -172,7 +184,7 @@ export class PlayerMovementSystem implements System {
         // --- 3. EXTINGUISH BURNING IN WATER ---
         if (inWater && state.statusEffects[StatusEffectType.BURNING]) {
             state.statusEffects[StatusEffectType.BURNING].duration = 0;
-            soundManager.playEffect('steam_hiss'); // Assume this exists or use fallback
+            soundManager.playEffect('steam_hiss');
         }
 
         // --- 4. STAMINA & REGENERATION ---
@@ -211,7 +223,7 @@ export class PlayerMovementSystem implements System {
             state.hp = Math.min(state.maxHp, state.hp + 3 * delta);
         }
 
-        let isMoving = false;
+        let isMovingVal = false;
 
         // --- 3. MOVE PROCESSING ---
         if (state.isRolling) {
@@ -234,6 +246,7 @@ export class PlayerMovementSystem implements System {
                 const rollSpeed = speed * 2.5;
                 _v1.copy(state.rollDir).multiplyScalar(rollSpeed * delta);
                 this.performMove(playerGroup, _v1, state, session, now, delta);
+                isMovingVal = true;
             } else {
                 state.isRolling = false;
                 state.rollSmokeSpawned = false;
@@ -250,7 +263,6 @@ export class PlayerMovementSystem implements System {
 
             const isDisoriented = !!state.statusEffects?.[StatusEffectType.DISORIENTED]?.duration && state.statusEffects[StatusEffectType.DISORIENTED].duration > 0;
             if (isDisoriented) {
-                // Jerky rotation and movement noise
                 const noise = Math.sin(now * 0.01) * 0.5;
                 _v6.x += noise;
                 if (now % 300 < 50) {
@@ -260,13 +272,12 @@ export class PlayerMovementSystem implements System {
             }
 
             if (_v6.lengthSq() > 0) {
-                isMoving = true;
+                isMovingVal = true;
                 const camAngle = session.cameraAngle || 0;
 
                 _v1.copy(_v6).normalize();
                 if (camAngle !== 0) _v1.applyAxisAngle(_UP, camAngle);
 
-                // Calculate move direction vs facing direction (Zero-GC)
                 _forward.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
                 const dot = _forward.dot(_v1);
 
@@ -275,7 +286,7 @@ export class PlayerMovementSystem implements System {
 
                 if (state.isStrafing) {
                     _right.crossVectors(_forward, _UP).normalize();
-                    state.strafeDirection = Math.sign(_right.dot(_v1)); // 1 or -1
+                    state.strafeDirection = Math.sign(_right.dot(_v1));
                 } else {
                     state.strafeDirection = 0;
                 }
@@ -299,12 +310,10 @@ export class PlayerMovementSystem implements System {
                             FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, playerGroup.position.y + 1.0, playerGroup.position.z, 'splash', 3);
                             session.engine.water?.spawnRipple(playerGroup.position.x, playerGroup.position.z, 4.0);
                         } else {
-                            // Wading in water
                             soundManager.playFootstep('water');
                             session.engine.water?.spawnRipple(playerGroup.position.x, playerGroup.position.z, 1.5);
                         }
                     } else {
-                        // On Land
                         soundManager.playFootstep('step');
                         if (state.isRushing) {
                             noiseType = NoiseType.PLAYER_RUSH;
@@ -317,7 +326,6 @@ export class PlayerMovementSystem implements System {
                         }
                     }
 
-                    // Send the sound to the AI (common call for all states!)
                     session.makeNoise(playerGroup.position, noiseType, noiseRadius);
                 }
             } else {
@@ -327,8 +335,8 @@ export class PlayerMovementSystem implements System {
             }
         }
 
-        if (isMoving || input.fire || input.space) state.lastActionTime = now;
-        return isMoving;
+        if (isMovingVal || input.fire || input.space) state.lastActionTime = now;
+        return isMovingVal;
     }
 
     private performMove(playerGroup: THREE.Group, baseMoveVec: THREE.Vector3, state: any, session: GameSessionLogic, now: number, delta: number) {
@@ -345,15 +353,12 @@ export class PlayerMovementSystem implements System {
         for (let s = 0; s < steps; s++) {
             _v3.copy(playerGroup.position).add(_v2);
 
-            // --- OPTIMIZATION: Fetch obstacles ONCE per physical step! ---
-            // We don't need to search the grid 4 times for micro-adjustments.
             const nearbyEnemies = state.collisionGrid.getNearbyEnemies(_v3, searchRadius);
             const nearbyObs = state.collisionGrid.getNearbyObstacles(_v3, 2.5);
 
             const eLen = nearbyEnemies.length;
             const nLen = nearbyObs.length;
 
-            // Solver-loop to push the player out of overlaps
             for (let i = 0; i < 4; i++) {
                 let adjusted = false;
 

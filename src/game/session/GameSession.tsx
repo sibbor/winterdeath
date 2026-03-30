@@ -237,7 +237,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 const currentFMDef = refs.familyMemberRef.current;
 
                 // --- VINTERDÖD FIX: NEW GAME+ / REPLAY LOGIC ---
-                // Vi måste kolla LIVE-objekten i världen, inte bara mallen!
                 let isFollowing = false;
                 const activeMembers = refs.activeFamilyMembers.current;
                 if (activeMembers) {
@@ -249,8 +248,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // --- VINTERDÖD FIX: NEW GAME+ / REPLAY LOGIC ---
-                // If the family member is already following or rescued, we skip the cutscene!
                 if (isFollowing || props.familyAlreadyRescued) {
                     const sectorData = props.currentSectorData || (window as any).SectorSystem?.getSector(props.currentSector || 0);
                     const bossPos = sectorData?.bossSpawn;
@@ -269,7 +266,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     }
                 }
 
-                // Priority 1: Specific Family ID (om angett manuellt)
+                // Priority 1: Specific Family ID
                 if (!target && payload.familyId !== undefined && refs.activeFamilyMembers.current) {
                     const members = refs.activeFamilyMembers.current;
                     const mLen = members.length;
@@ -372,7 +369,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }
                 break;
         }
-    }, [gainXp, refs, spawnBubble]);
+    }, [gainXp, props.currentSectorData, props.familyAlreadyRescued, refs, spawnBubble]);
 
     // --- ZERO-GC DISCOVERY HANDLER ---
     const handleDiscovery = useCallback((type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => {
@@ -500,7 +497,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             soundManager.playUiConfirm();
         },
         spawnEnemies: (newEnemies: any[]) => {
-            // Simplified: Just spawn. Discovery happens on damage/aggro.
             const enemies = refs.stateRef.current.enemies;
             const len = newEnemies.length;
             for (let i = 0; i < len; i++) {
@@ -686,7 +682,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         setSystemEnabled: (id: string, enabled: boolean) => refs.gameSessionRef.current?.setSystemEnabled(id, enabled),
         spawnBoss: (type: string, pos?: THREE.Vector3) => refs.sectorContextRef.current?.spawnBoss(type, pos),
         spawnEnemies: (newEnemies: any[]) => {
-            // Simplified: Direct push. Discovery handled by combat/aggro systems
             const enemies = refs.stateRef.current.enemies;
             const len = newEnemies.length;
             for (let i = 0; i < len; i++) {
@@ -762,18 +757,15 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         if (latestStateRef.current.props.onBossIntroStateChange) latestStateRef.current.props.onBossIntroStateChange(val);
                     },
                     setBubbleTailPosition: (val: any) => updateUiState({ bubbleTailPosition: val }),
+
+                    // VINTERDÖD FIX: Removed HudStore manual syncs!
                     setCurrentLine: (val: any) => {
                         updateUiState({ currentLine: val });
-                        const hData = HudStore.getState();
-                        hData.currentLine = val;
-                        hData.cinematicActive = refs.gameSessionRef.current ? refs.gameSessionRef.current.getSystem('cinematic').cinematicRef.current.active : false;
-                        HudStore.update(hData);
+                        refs.stateRef.current.currentLine = val;
                     },
                     setCinematicActive: (val: boolean) => {
                         updateUiState({ cinematicActive: val });
-                        const hData = HudStore.getState();
-                        hData.cinematicActive = val;
-                        HudStore.update(hData);
+                        refs.stateRef.current.cinematicActive = val;
                         if (latestStateRef.current.props.onDialogueStateChange) latestStateRef.current.props.onDialogueStateChange(val);
                     },
                     setInteractionType: (val: any) => updateUiState({ interactionType: val }),
@@ -802,7 +794,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     },
                     onAction: (action: any) => onAction(action),
                     handleTriggerAction: (action: any, scene: THREE.Scene) => {
-                        // VINTERDÖD: We unified this directly with onAction
                         onAction(action);
                     },
                     startCinematic: (mesh: any, scriptId?: number, params?: any) => {
@@ -961,8 +952,6 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (!queue || queue.length === 0) return;
 
             const hData = HudStore.getState();
-            // If there's an active discovery, let it show for at least 3 seconds (or whatever the UI logic is)
-            // But we want to ensure we don't spam. If discovery is null, we can show the next one.
             if (!hData.discovery) {
                 const next = queue.shift();
                 HudStore.update({

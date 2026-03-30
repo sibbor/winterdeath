@@ -429,62 +429,76 @@ export class PlayerInteractionSystem implements System {
     }
 
     private openChest(session: GameSessionLogic, chests: any[], state: any) {
-        for (let i = 0; i < chests.length; i++) {
-            const c = chests[i];
-            if (c.mesh === _detectionResult.object && !c.opened) {
-                c.opened = true;
-                soundManager.playOpenChest();
-                WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
+        const detectionObj = _detectionResult.object;
+        if (!detectionObj) return;
 
-                const glowRing = c.mesh.getObjectByName('chestGlow');
-                if (glowRing) {
-                    glowRing.visible = false;
+        let chestData = null;
+
+        // 1. Direct Metadata Lookup (Fastest & most robust)
+        if (detectionObj.userData.chestData) {
+            chestData = detectionObj.userData.chestData;
+        } 
+        // 2. Registry Search (Fallback)
+        else {
+            for (let i = 0; i < chests.length; i++) {
+                if (chests[i].mesh === detectionObj) {
+                    chestData = chests[i];
+                    break;
                 }
-
-                // Spawn magic sparkles using the correct parameters
-                const px = c.mesh.position.x;
-                const py = 1.0;
-                const pz = c.mesh.position.z;
-
-                FXSystem.spawnPart(session.engine.scene, state.particles, px, py, pz, 'spark', 15);
-
-                // Hinge animation for the lid
-                const lid = c.mesh.children[1];
-                if (lid) {
-                    c.mesh.matrixAutoUpdate = true;
-                    lid.matrixAutoUpdate = true;
-
-                    const targetRotationX = -Math.PI * 0.6; // Open slightly past 90 degrees
-                    let progress = 0;
-                    const duration = 400; // Animation duration in ms
-                    const startR = lid.rotation.x;
-
-                    const animateLid = (time: number, lastTime: number) => {
-                        const dt = time - lastTime;
-                        progress += dt;
-
-                        if (progress < duration) {
-                            // Ease-out cubic for a snappy open that slows down towards the end
-                            const t = progress / duration;
-                            const easeOut = 1 - Math.pow(1 - t, 3);
-
-                            lid.rotation.x = startR + (targetRotationX - startR) * easeOut;
-                            requestAnimationFrame((newTime) => animateLid(newTime, time));
-                        } else {
-                            // Ensure it sets exactly to target when finished
-                            lid.rotation.x = targetRotationX;
-                        }
-                    };
-
-                    requestAnimationFrame((time) => animateLid(time, time));
-                }
-
-                // For stats
-                if (c.type === 'big') state.bigChestsOpened++;
-                else state.chestsOpened++;
-
-                break;
             }
+        }
+
+        if (chestData && !chestData.opened) {
+            const c = chestData;
+            c.opened = true;
+            soundManager.playOpenChest();
+            
+            // Re-sync with state.chests if this was a loose object
+            let inRegistry = false;
+            for (let i = 0; i < chests.length; i++) {
+                if (chests[i] === c) { inRegistry = true; break; }
+            }
+            if (!inRegistry) chests.push(c);
+
+            WorldLootSystem.spawnScrapExplosion(session.engine.scene, state.scrapItems, c.mesh.position.x, c.mesh.position.z, c.scrap);
+
+            const glowRing = c.mesh.getObjectByName('chestGlow');
+            if (glowRing) {
+                glowRing.visible = false;
+            }
+
+            // Spawn magic sparkles
+            FXSystem.spawnPart(session.engine.scene, state.particles, c.mesh.position.x, 1.0, c.mesh.position.z, 'spark', 15);
+
+            // Hinge animation for the lid
+            const lid = c.mesh.children[1];
+            if (lid) {
+                c.mesh.matrixAutoUpdate = true;
+                lid.matrixAutoUpdate = true;
+
+                const targetRotationX = -Math.PI * 0.6; 
+                let progress = 0;
+                const duration = 400; 
+                const startR = lid.rotation.x;
+
+                const animateLid = (time: number, lastTime: number) => {
+                    const dt = time - lastTime;
+                    progress += dt;
+
+                    if (progress < duration) {
+                        const t = progress / duration;
+                        const easeOut = 1 - Math.pow(1 - t, 3);
+                        lid.rotation.x = startR + (targetRotationX - startR) * easeOut;
+                        requestAnimationFrame((newTime) => animateLid(newTime, time));
+                    } else {
+                        lid.rotation.x = targetRotationX;
+                    }
+                };
+                requestAnimationFrame((time) => animateLid(time, time));
+            }
+
+            if (c.type === 'big') state.bigChestsOpened++;
+            else state.chestsOpened++;
         }
     }
 

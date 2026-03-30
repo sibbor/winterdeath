@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../../../utils/i18n';
 import { SECTOR_THEMES, BOSSES, FAMILY_MEMBERS } from '../../../../content/constants';
 import { getCollectiblesBySector } from '../../../../content/collectibles';
+import { CLUES } from '../../../../content/clues';
+import { POIS } from '../../../../content/pois';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import { en } from '../../../../locales/en';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
-import { PlayerStats } from '../../../../entities/player/PlayerTypes';;
+import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenSectorOverviewProps {
@@ -63,25 +64,29 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
         // Accurate Collectible Count
         const sectorCollectibles = getCollectiblesBySector(sectorNum);
-        const foundCollectibles = (stats.collectiblesDiscovered || []).filter(id =>
+        const foundCollectiblesCount = (stats.collectiblesDiscovered || []).filter(id =>
             sectorCollectibles.some(c => c.id === id)
         ).length;
 
-        // Clues & POIs (Still based on prefix but more robust)
-        const sectorPrefix = `s${sectorNum}_`;
-        const allKeys = Object.keys(en.clues);
-        const sectorKeys = allKeys.filter(k => k.startsWith(sectorPrefix));
+        // Accurate Clue Count (using CLUES constant)
+        const sectorClueIds = Object.values(CLUES)
+            .filter(c => c.sector === sectorNum)
+            .map(c => c.id);
+        const foundCluesCount = (stats.cluesFound || []).filter(clueObj => {
+            const id = typeof clueObj === 'string' ? clueObj : (clueObj as any).id;
+            return sectorClueIds.includes(id);
+        }).length;
 
-        const clueKeys = sectorKeys.filter(k => !k.includes('collectible') && !k.includes('poi') && !k.endsWith('_description'));
-        const poiKeys = sectorKeys.filter(k => k.includes('poi'));
-
-        const foundCluesCount = (stats.cluesFound || []).filter(id => clueKeys.includes(id)).length;
-        const foundPoisCount = (stats.discoveredPOIs || []).filter(id => poiKeys.includes(id)).length;
+        // Accurate POI Count (using POIS constant)
+        const sectorPoiIds = Object.values(POIS)
+            .filter(p => p.sector === sectorNum)
+            .map(p => p.id);
+        const foundPoisCount = (stats.discoveredPOIs || []).filter(id => sectorPoiIds.includes(id)).length;
 
         return {
-            collectibles: { found: foundCollectibles, total: sectorCollectibles.length },
-            clues: { found: foundCluesCount, total: clueKeys.length },
-            pois: { found: foundPoisCount, total: poiKeys.length }
+            collectibles: { found: foundCollectiblesCount, total: sectorCollectibles.length },
+            clues: { found: foundCluesCount, total: sectorClueIds.length },
+            pois: { found: foundPoisCount, total: sectorPoiIds.length }
         };
     }, [selectedSectorIndex, stats]);
 
@@ -188,11 +193,11 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                             </h2>
                             {/* Stats Row */}
                             <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
-                                <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total || '?'}</span></span>
+                                <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total}</span></span>
                                 <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
-                                <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total || '?'}</span></span>
+                                <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total}</span></span>
                                 <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
-                                <span>{t('ui.log_poi')}: <span className="text-white">{pois.found}/{pois.total || '?'}</span></span>
+                                <span>{t('ui.log_poi')}: <span className="text-white">{pois.found}/{pois.total}</span></span>
                             </div>
                         </div>
 

@@ -22,6 +22,8 @@ export const DEFAULT_STATE: GameState = {
         [WeaponType.FLASHBANG]: 1,
         [WeaponType.FLAMETHROWER]: 1,
         [WeaponType.ARC_CANNON]: 1,
+        [WeaponType.RUSH]: 1,
+        [WeaponType.VEHICLE]: 1,
         [WeaponType.NONE]: 0
     },
     sectorBriefing: '',

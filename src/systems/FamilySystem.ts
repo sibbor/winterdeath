@@ -248,7 +248,7 @@ export class FamilySystem implements System {
             }
 
             if (body) {
-                const lastMove = userData.lastMoveTime ?? _session.state.startTime;
+                const lastMove = userData.lastMoveTime ?? 0;
                 const isIdleLong = now - lastMove > 10000;
 
                 _animState.seed = familyMember.seed;

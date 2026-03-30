@@ -4,7 +4,7 @@
 * ---------------------------------------------------------------------
 *
 */
-export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; text: string; trigger?: string[] }[]> = {
+export const STORY_SCRIPTS: Record<number, { speaker: string; type?: string; text: string; trigger?: string[]; duration?: number; typingDuration?: number; tail?: 'bottom' | 'top' | 'left' | 'right' }[]> = {
     0: [
         { speaker: 'Robert', text: "dialogue.0_0" },
         { speaker: 'Loke', text: "dialogue.0_1" },

@@ -8,6 +8,7 @@ export interface PlayerStats {
   stamina: number;
   maxStamina: number;
   skillPoints: number;
+  speed: number;
   totalSkillPointsEarned: number;
   kills: number;
   killsByType: Record<string, number>;
@@ -30,7 +31,6 @@ export interface PlayerStats {
   seenEnemies: string[];
   seenBosses: string[];
   prologueSeen?: boolean;
-  speed: number;
   rescuedFamilyIds: number[];
   familyFoundCount: number;
   mostUsedWeapon: string;

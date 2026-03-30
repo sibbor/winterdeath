@@ -21,25 +21,11 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   const [visible, setVisible] = useState(false);
   const [activeDiscovery, setActiveDiscovery] = useState(discovery);
 
-  // Använd useRef för att hålla timern stabil över renders
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
   useEffect(() => {
     if (discovery && discovery.timestamp !== activeDiscovery?.timestamp) {
       setActiveDiscovery(discovery);
       setVisible(true);
-
-      if (timerRef.current) clearTimeout(timerRef.current);
-
-      // 2500-4000ms är lagom för att hinna läsa i strid
-      timerRef.current = setTimeout(() => {
-        setVisible(false);
-      }, 2500);
     }
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
   }, [discovery, activeDiscovery?.timestamp]);
 
   // ZERO-GC: Stabil callback som undviker closures på 'visible'
@@ -69,6 +55,10 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [handleInteraction]);
 
+  const handleAnimationEnd = () => {
+    setVisible(false);
+  };
+
   if (!activeDiscovery) return null;
 
   const getIcon = () => {
@@ -84,8 +74,13 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
 
   return (
     <div
-      className={`fixed top-8 left-1/2 -translate-x-1/2 z-[200] transition-all duration-300 transform pointer-events-auto
-                ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95 pointer-events-none'}`}
+      key={activeDiscovery.timestamp}
+      onAnimationEnd={handleAnimationEnd}
+      className="fixed top-8 left-1/2 -translate-x-1/2 z-[200] pointer-events-auto"
+      style={{
+        display: visible ? 'block' : 'none',
+        animation: visible ? `discovery-pop 4000ms cubic-bezier(0.25, 1, 0.5, 1) forwards` : 'none'
+      }}
       onClick={handleInteraction}
     >
       <div className="bg-black/90 border-2 border-red-600 p-3 flex items-center gap-4 min-w-[280px] shadow-[0_0_20px_rgba(220,38,38,0.3)] cursor-pointer hover:bg-zinc-900 transition-colors">
@@ -115,6 +110,16 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-20">
         <div className="w-full h-[1px] bg-red-500 animate-scanline"></div>
       </div>
+
+      <style>{`
+        @keyframes discovery-pop {
+          0% { opacity: 0; transform: translateX(-50%) translateY(30px) scale(0.8); filter: blur(10px); }
+          10% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.1); filter: blur(0px); }
+          15% { transform: translateX(-50%) scale(1); }
+          85% { opacity: 1; transform: translateX(-50%) translateY(-10px) scale(1); }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-30px) scale(0.9); }
+        }
+      `}</style>
     </div>
   );
 });

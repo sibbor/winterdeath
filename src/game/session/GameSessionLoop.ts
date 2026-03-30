@@ -68,7 +68,9 @@ const _triggerOptionsScratch: any = {
     onAction: null,
     removeVisual: null,
     resolveDynamicPos: null,
-    onDiscovery: null
+    onDiscovery: null,
+    playSound: null,
+    isFamilyFollowing: null
 };
 
 // String cache for damage numbers to prevent GC spikes during rapid fire
@@ -287,28 +289,36 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // --- VINTERDÖD FIX: Pause & Cinematic Time Logic ---
         let delta = dt;
         if (delta > 0.1) delta = 0.016;
-        const realDt = delta; // Spara den ofrysta tiden för UI och system som måste rulla
 
-        const isCinematic = refs.cinematicRef.current?.active;
+        // Spara den ofrysta tiden för UI, session och miljösystem
+        const realDt = delta;
+
+        const isCinematic = state.cinematicActive;
         const isBossIntro = refs.bossIntroRef.current?.active;
         const isHardPaused = propsRef.current.isPaused || propsRef.current.isClueOpen;
         const isInteractionPaused = state.isInteractionOpen && !isCinematic;
 
-        // Om vi är pausade av en meny, OCH ingen cinematic spelas -> Frys allt.
+        // 1. ESC-Meny eller Clue = TOTAL FRYSNING (Bakåtkompatibelt)
         if (isHardPaused && !isCinematic && !isBossIntro) {
             engine.isSimulationPaused = true;
-            engine.isRenderingPaused = true;
+            engine.isSoftPaused = false;
             return;
         }
 
+        // Släpp den totala frysningen om vi inte är i en meny
         engine.isSimulationPaused = false;
-        engine.isRenderingPaused = false;
 
-        // Om en cinematic är igång fryser vi `delta` (så zombier och fysik stannar), 
-        // men låter loopen fortsätta köra!
-        if (isHardPaused || isCinematic || isBossIntro) {
-            delta = 0;
+        // 2. Cinematic = SOFT PAUSE (Fiender/Fysik stannar, Miljö lever)
+        if (isCinematic || isBossIntro) {
+            delta = 0; // Skickas till alla lokala spelsystem (fiender, projektiler)
+            engine.isSoftPaused = true;
+        } else {
+            engine.isSoftPaused = false;
         }
+
+        // --- VINTERDÖD FIX: Simulation Clock (Milliseconds) ---
+        state.accumulatedTime += delta * 1000;
+        const simTime = state.accumulatedTime;
 
         const now = performance.now();
 
@@ -391,7 +401,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (refs.playerMeshRef.current) {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
+                // VINTERDÖD FIX: Använd realDt för animationer under Boss Intro
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, realDt);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
             lastTime = now;
@@ -523,7 +534,11 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (playerGroup) {
             session.playerPos = playerGroup.position;
         }
-        session.update(delta, propsRef.current.mapId || 0);
+
+        // --- VINTERDÖD FIX: Session update ALWAYS gets realDt.
+        // This ensures triggers, state machines, and end-of-dialogue logic
+        // process correctly, even when enemies/physics are frozen (delta = 0).
+        session.update(realDt, propsRef.current.mapId || 0);
         monitor.end('session_update');
 
         // 8. Standard Gameplay State Updates
@@ -556,20 +571,23 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
-                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, delta);
+                // VINTERDÖD FIX: Player animation uses realDt during cinematics to breathe/talk!
+                PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, engine.isSoftPaused ? realDt : delta);
                 monitor.end('player_animation');
             }
         }
 
         // 9. Secondary Systems
         monitor.begin('footprints');
-        FootprintSystem.update(delta);
+        // VINTERDÖD FIX: Fotspår raderas långsamt i realtid även om spelet är fryst
+        FootprintSystem.update(realDt);
         monitor.end('footprints');
 
         // 10. FX System
         monitor.begin('fx');
         try {
-            FXSystem.update(engine.scene, state.particles, state.bloodDecals, delta, frame, now, _fxCallbacks);
+            // VINTERDÖD FIX: Använd realDt! Då fortsätter bränder, rök och snöstorm!
+            FXSystem.update(engine.scene, state.particles, state.bloodDecals, realDt, frame, now, _fxCallbacks);
         } catch (e) {
             console.error("[GameSessionLoop] FXSystem.update failed:", e);
         }
@@ -728,7 +746,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (activeCallbacks.trackStats) _gameContext.trackStats = activeCallbacks.trackStats;
         if (activeCallbacks.addFireZone) _gameContext.addFireZone = activeCallbacks.addFireZone;
 
-        _gameContext.now = now;
+        _gameContext.now = simTime;
         _gameContext.playerPos = playerGroup.position;
         _gameContext.session = session;
 
@@ -736,7 +754,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 15. ProjectileSystem
         monitor.begin('projectiles');
-        ProjectileSystem.update(delta, now, _gameContext, state.projectiles, state.fireZones);
+        ProjectileSystem.update(delta, simTime, _gameContext, state.projectiles, state.fireZones);
         monitor.end('projectiles');
 
         // 16. TriggerSystem
@@ -817,6 +835,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         );
 
         // 18. High-frequency HUD update (Zero-GC, bypasses React)
-        HudSystem.emitFastUpdate(state, engine.input.state, now);
+        HudSystem.emitFastUpdate(state, engine.input.state, simTime);
     };
 }

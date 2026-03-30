@@ -73,7 +73,7 @@ function _executeThrow(
 ) {
     const isUnlimited = !!state.sectorState?.unlimitedThrowables;
     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
-    
+
     const tracker = (session as any).getSystem('damage_tracker_system') as any;
     if (tracker) tracker.recordThrowable(session);
 
@@ -113,7 +113,8 @@ export const WeaponHandler = {
 
     // Handle switching weapons via 1-4 keys
     handleSlotSwitch: (state: any, loadout: any, key: string) => {
-        if (state.activeVehicle) return;
+        // VINTERDÖD FIX: Block input during cinematics
+        if (state.activeVehicle || state.cinematicActive) return;
         let next: WeaponType | null = null;
         if (key === '1') next = loadout.primary;
         else if (key === '2') next = loadout.secondary;
@@ -147,7 +148,8 @@ export const WeaponHandler = {
 
     // Handle weapon-related inputs (Scroll to switch, R to reload)
     handleInput: (input: any, state: any, loadout: any, now: number, disableInput: boolean) => {
-        if (disableInput || state.activeVehicle) return;
+        // VINTERDÖD FIX: Block input during cinematics
+        if (disableInput || state.activeVehicle || state.cinematicActive) return;
 
         // 1. Optimized Scroll Switching (Zero-GC)
         if (input.scrollDown || input.scrollUp) {
@@ -217,7 +219,8 @@ export const WeaponHandler = {
 
     // --- CORE FIRING LOGIC ---
     handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
-        if (state.activeVehicle) return;
+        // VINTERDÖD FIX: Block input during cinematics
+        if (state.activeVehicle || state.cinematicActive) return;
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];
@@ -247,7 +250,7 @@ export const WeaponHandler = {
                         if (now > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = now;
-                            
+
                             const tracker = session.getSystem('damage_tracker_system') as any;
                             if (tracker) tracker.recordShot(session, state.activeWeapon);
                         }
@@ -311,7 +314,7 @@ export const WeaponHandler = {
                 if (now > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = now;
                     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
-                    
+
                     const tracker = session.getSystem('damage_tracker_system') as any;
                     if (tracker) tracker.recordShot(session, state.activeWeapon);
 

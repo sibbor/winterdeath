@@ -13,7 +13,7 @@ export class PlayerCombatSystem implements System {
     private _p4: boolean = false;
     private _p5: boolean = false;
 
-    private _wasDead: boolean = false;
+    private _wasLocked: boolean = false;
 
     private aimCross: THREE.Group | null = null;
     private trajectoryLine: THREE.Mesh | null = null;
@@ -79,29 +79,41 @@ export class PlayerCombatSystem implements System {
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
+        if (!session.state) return;
         const state = session.state;
         const input = session.engine.input.state;
-        const disableInput = session.inputDisabled;
 
-        if (state.isDead) {
-            if (!this._wasDead) {
+        // VINTERDÖD FIX: Kombinera sessionens input-lås med cinematic-läget
+        const isLocked = session.inputDisabled || state.cinematicActive || state.isDead;
+
+        // --- CINEMATIC & DEATH LOCK ---
+        if (isLocked) {
+            if (!this._wasLocked) {
                 if (this.laserSight) this.laserSight.visible = false;
                 if (this.aimCross) this.aimCross.visible = false;
                 if (this.trajectoryLine) this.trajectoryLine.visible = false;
-                this._wasDead = true;
+
+                // Nollställ inputs internt så man inte håller inne en trigger genom en cinematic
+                input.fire = false;
+                input.r = false;
+
+                this._wasLocked = true;
             }
-            return;
+            return; // Spelaren får inte göra några combat-grejer alls
         }
-        this._wasDead = false;
+
+        // Återställning när man vaknar upp / cinematic är över
+        if (this._wasLocked) {
+            if (this.laserSight) this.laserSight.visible = !state.activeVehicle;
+            this._wasLocked = false;
+        }
 
         // --- Weapon Slot Switching ---
-        if (!disableInput) {
-            if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
-            if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
-            if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
-            if (input['4'] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
-            if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
-        }
+        if (input['1'] && !this._p1) WeaponHandler.handleSlotSwitch(state, state.loadout, '1');
+        if (input['2'] && !this._p2) WeaponHandler.handleSlotSwitch(state, state.loadout, '2');
+        if (input['3'] && !this._p3) WeaponHandler.handleSlotSwitch(state, state.loadout, '3');
+        if (input['4'] && !this._p4) WeaponHandler.handleSlotSwitch(state, state.loadout, '4');
+        if (input['5'] && !this._p5) WeaponHandler.handleSlotSwitch(state, state.loadout, '5');
 
         this._p1 = !!input['1'];
         this._p2 = !!input['2'];
@@ -109,24 +121,20 @@ export class PlayerCombatSystem implements System {
         this._p4 = !!input['4'];
         this._p5 = !!input['5'];
 
-        if (!disableInput) {
-            WeaponHandler.handleInput(input, state, state.loadout, now, disableInput);
-        }
+        WeaponHandler.handleInput(input, state, state.loadout, now, false); // Skickar in false eftersom vi redan checkat isLocked ovan
 
-        if (!disableInput) {
-            WeaponHandler.handleFiring(
-                session,
-                session.engine.scene,
-                this.playerGroup,
-                input,
-                state,
-                dt,
-                now,
-                state.loadout,
-                this.aimCross,
-                this.trajectoryLine,
-            );
-        }
+        WeaponHandler.handleFiring(
+            session,
+            session.engine.scene,
+            this.playerGroup,
+            input,
+            state,
+            dt,
+            now,
+            state.loadout,
+            this.aimCross,
+            this.trajectoryLine,
+        );
 
         if (this.laserSight) {
             this.laserSight.visible = !state.activeVehicle;

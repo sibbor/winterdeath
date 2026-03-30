@@ -19,6 +19,8 @@ export interface RuntimeState {
     maxHp: number;
     stamina: number;
     maxStamina: number;
+    speed: number;
+    startTime: number;
     level: number;
     currentXp: number;
     nextLevelXp: number;
@@ -42,6 +44,7 @@ export interface RuntimeState {
     rushCostPaid: boolean;
     wasFiring: boolean;
     throwChargeStart: number;
+    lastShotTime: number;
 
     // --- OBJECT POOLS ---
     enemies: Enemy[];
@@ -157,6 +160,8 @@ export interface RuntimeState {
 
     flashlightOn: boolean;
     currentInteraction: any | null;
+    
+    // --- DISCOVERY & CINEMATICS ---
     discovery: {
         id: string;
         type: string;
@@ -164,6 +169,9 @@ export interface RuntimeState {
         details: string;
         timestamp: number;
     } | null;
+
+    cinematicActive: boolean;
+    currentLine: any | null;
 
     // --- PRE-ALLOCATED REQUEST OBJECT (Zero-GC) ---
     interactionRequest: {
@@ -174,4 +182,7 @@ export interface RuntimeState {
     };
     callbacks: any;
     stats: PlayerStats;
+
+    // --- TIME & SIMULATION ---
+    accumulatedTime: number; // Sum of gameplay delta, used for cooldowns and effects
 }

@@ -8,7 +8,7 @@ import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System } from '../../systems/System';
 import { PlayerDeathState } from '../../entities/player/CombatTypes';
-import { WEAPONS, ZOMBIE_TYPES, BOSSES } from '../../content/constants';
+import { WEAPONS, ZOMBIE_TYPES, BOSSES, DEFAULT_SPEED } from '../../content/constants';
 import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
@@ -110,8 +110,10 @@ export class GameSessionLogic {
 
         return {
             isDead: false, score: 0, collectedScrap: 0,
-            hp: props.stats.hp, maxHp: props.stats.maxHp,
-            stamina: props.stats.stamina, maxStamina: props.stats.maxStamina,
+            hp: props.stats.maxHp, maxHp: props.stats.maxHp,
+            stamina: props.stats.maxStamina, maxStamina: props.stats.maxStamina,
+            speed: props.stats.speed || DEFAULT_SPEED,
+            startTime: performance.now(),
             level: props.stats.level,
             currentXp: props.stats.currentXp,
             nextLevelXp: props.stats.nextLevelXp,
@@ -139,6 +141,7 @@ export class GameSessionLogic {
             rushCostPaid: false,
             wasFiring: false,
             throwChargeStart: 0,
+            lastShotTime: 0,
 
             // --- POOLS ---
             enemies: [] as Enemy[],
@@ -155,15 +158,16 @@ export class GameSessionLogic {
             discovery: null,
 
             bossesDefeated: [],
-            familyFound: !!props.familyAlreadyRescued, 
+            familyFound: !!props.familyAlreadyRescued,
             familyAlreadyRescued: !!props.familyAlreadyRescued,
             familyExtracted: false,
             bossPermanentlyDefeated: !!props.bossPermanentlyDefeated,
             isInteractionOpen: false, bossSpawned: false,
-            lastDamageTime: 0, lastStaminaUseTime: 0,
+            lastDamageTime: 0,
+            lastStaminaUseTime: 0,
+            lastBiteTime: 0,
             noiseLevel: 0, speakBounce: 0,
             cameraShake: 0, hurtShake: 0,
-            lastBiteTime: 0,
 
             sectorState: {
                 envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
@@ -177,7 +181,7 @@ export class GameSessionLogic {
             bossIntroActive: false,
             clueActive: false,
             bossDefeatedTime: 0,
-            lastActionTime: now,
+            lastActionTime: 0,
             thinkingUntil: 0,
             speakingUntil: 0,
             sectorName: null,
@@ -247,8 +251,17 @@ export class GameSessionLogic {
             activeDebuffs: [],
             statusEffects: {} as any,
             callbacks: {},
+
+            // --- COMBAT & STATUS ---
+            applyDamage: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => false,
             playerDeathState: PlayerDeathState.ALIVE,
-            applyDamage: props.currentSectorData?.applyDamage || (() => false)
+
+            // --- CINEMATIC STATE ---
+            cinematicActive: false,
+            currentLine: null,
+
+            // --- TIME ---
+            accumulatedTime: 0,
         };
     }
 
@@ -337,7 +350,7 @@ export class GameSessionLogic {
             this.state.activePassives.length = 0;
             this.state.activeBuffs.length = 0;
             this.state.activeDebuffs.length = 0;
-            
+
             // Clean up sessionStats breakdowns (Zero-GC: keep object shape but nullify keys if needed, 
             // though usually we just let the whole sessionStats be replaced on next sector)
             // For now, just ensure the root references are cleared.
@@ -353,6 +366,10 @@ export class GameSessionLogic {
             if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
                 this.state.collisionGrid.clear();
             }
+
+            // --- CINEMATIC CLEANUP ---
+            this.state.cinematicActive = false;
+            this.state.currentLine = null;
         }
     }
 }
