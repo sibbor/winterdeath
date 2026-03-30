@@ -172,6 +172,8 @@ export const SectorBuilder = {
             spawnZombie: NOOP as any,
             spawnHorde: NOOP as any,
             spawnBoss: NOOP as any,
+            makeNoise: NOOP as any,
+            onAction: NOOP as any,
         };
     },
 
@@ -1164,6 +1166,11 @@ export const SectorBuilder = {
         }
     },
 
+    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias?: number) => {
+        const mesh = NaturePropGenerator.spawnRubble(ctx, x, z, count, material, directionBias);
+        return mesh;
+    },
+
     spawnTerminal: (ctx: SectorContext, x: number, z: number, type: 'TERMINAL_ARMORY' | 'TERMINAL_SPAWNER' | 'TERMINAL_ENV' | 'TERMINAL_SKILLS', scale: number = 1.0) => {
         const terminal = ObjectGenerator.createTerminal(type.replace('TERMINAL_', '') as any, scale);
         terminal.position.set(x, 0, z);
@@ -1190,10 +1197,6 @@ export const SectorBuilder = {
         });
 
         return terminal;
-    },
+    }
 
-    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias?: number) => {
-        const mesh = NaturePropGenerator.spawnRubble(ctx, x, z, count, material, directionBias);
-        return mesh;
-    },
 };

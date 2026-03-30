@@ -69,6 +69,61 @@ export const NaturePropGenerator = {
     /**
      * Spawns physics-based rubble using InstancedMesh.
      */
+    /**
+     * Spawns physics-based rubble using InstancedMesh.
+     */
+    spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
+        const mat = material == null ? MATERIALS.steel : material;
+
+        const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        const positions = new Float32Array(count * 3);
+        const velocities = new Float32Array(count * 3);
+        const rotations = new Float32Array(count * 3);
+        const spin = new Float32Array(count * 3);
+        const scales = new Float32Array(count);
+
+        for (let i = 0; i < count; i++) {
+            const ix = i * 3;
+
+            positions[ix] = x + (Math.random() - 0.5) * 4.0;
+            positions[ix + 1] = 2.0 + Math.random() * 2.0;
+            positions[ix + 2] = z + (Math.random() - 0.5) * 4.0;
+
+            const halfArc = Math.PI * 0.5;
+            const angle = (directionBias - halfArc) + Math.random() * (halfArc * 2.0);
+            const speed = 20.0 + Math.random() * 15.0;
+            velocities[ix] = Math.cos(angle) * speed;
+            velocities[ix + 1] = 12.0 + Math.random() * 18.0;
+            velocities[ix + 2] = Math.sin(angle) * speed;
+
+            rotations[ix] = Math.random() * Math.PI;
+            rotations[ix + 1] = Math.random() * Math.PI;
+            rotations[ix + 2] = Math.random() * Math.PI;
+
+            spin[ix] = (Math.random() - 0.5) * 15.0;
+            spin[ix + 1] = (Math.random() - 0.5) * 15.0;
+            spin[ix + 2] = (Math.random() - 0.5) * 15.0;
+
+            scales[i] = 0.5 + Math.random() * 0.8;
+
+            _position.set(positions[ix], positions[ix + 1], positions[ix + 2]);
+            _euler.set(rotations[ix], rotations[ix + 1], rotations[ix + 2]);
+            _quat.setFromEuler(_euler);
+            _scale.set(1.5 * scales[i], 0.05 * scales[i], 3.0 * scales[i]);
+
+            _matrix.compose(_position, _quat, _scale);
+            mesh.setMatrixAt(i, _matrix);
+        }
+
+        mesh.userData = { positions, velocities, rotations, spin, scales, active: true };
+        mesh.instanceMatrix.needsUpdate = true;
+
+        ctx.scene.add(mesh);
+        return mesh;
+    },
 
     /**
      * Fills an area with rocks or debris.

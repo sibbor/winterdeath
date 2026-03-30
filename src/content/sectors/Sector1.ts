@@ -1271,7 +1271,7 @@ export const Sector1: SectorDef = {
 
                         // [VINTERDÖD FIX] Återställ rätt rektangulära proportioner från ObjectGenerator istället för att platta till!
                         const s = data.scales ? data.scales[i] : 1.0;
-                        _scale.set(2 * s, 2 * s, 4 * s);
+                        _scale.set(1.5 * s, 0.05 * s, 3.0 * s);
 
                         _matrix.compose(_position, _quat, _scale);
                         rubble.setMatrixAt(i, _matrix);
