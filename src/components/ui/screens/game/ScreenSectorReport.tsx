@@ -36,8 +36,15 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
 
-    const bossKilled = (stats.killsByType && (stats.killsByType['Boss'] as number) > 0);
-    const bossName = t(BOSSES[currentSector]?.name || "Boss");
+    const rawBossId = BOSSES[currentSector]?.name || "GÅRDSHERREN";
+    const bossName = t(rawBossId);
+
+    // Check both for fallback string "Boss" AND the boss's actual data ID
+    const bossKilled = !!stats.killsByType && (
+        (stats.killsByType['Boss'] as number) > 0 ||
+        (stats.killsByType[rawBossId] as number) > 0 ||
+        (stats.killsByType['GÅRDSHERREN'] as number) > 0
+    );
 
     // Family Status Logic
     let familyStatusKey = 'ui.family_member_missing';
@@ -120,7 +127,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         {/* SP Box */}
                         <div className="bg-purple-900/20 p-4 border-l-4 border-purple-500 shadow-lg">
                             <span className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1">{t('ui.sp_earned')}</span>
-                            <span className="text-4xl font-semibold text-white">+{stats.spEarned || 0}</span>
+                            <span className="text-4xl font-semibold text-white">+{stats.spGained || 0}</span>
                         </div>
 
                         <div className="pt-2 space-y-4">
@@ -180,11 +187,15 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                             <div className="overflow-y-auto custom-scrollbar text-left max-h-48">
                                 {stats.cluesFound && stats.cluesFound.length > 0 ? (
                                     <ul className="space-y-2">
-                                        {stats.cluesFound.slice(0, 3).map((clue, i) => (
-                                            <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
-                                                {t(clue) === clue ? clue : t(clue)}
-                                            </li>
-                                        ))}
+                                        {stats.cluesFound.slice(0, 3).map((clueObj, i) => {
+                                            // VINTERDÖD FIX: clueObj är nu ett objekt {id, content}, inte en sträng!
+                                            const clueKey = clueObj?.content || clueObj;
+                                            return (
+                                                <li key={i} className="text-xs font-bold uppercase tracking-widest text-yellow-200">
+                                                    {typeof clueKey === 'string' ? t(clueKey) : 'UNKNOWN CLUE'}
+                                                </li>
+                                            );
+                                        })}
                                         {stats.cluesFound.length > 3 && <li className="text-xs text-gray-500 font-bold uppercase tracking-widest">...</li>}
                                     </ul>
                                 ) : (

@@ -75,10 +75,10 @@ const _scale = new THREE.Vector3();
 const _rotation = new THREE.Euler();
 const _quat = new THREE.Quaternion();
 
-// Offsets for Camera Panning Sequences — matched to Camp camera angle (low, close, south-facing)
-const _offsetTrainYard = new THREE.Vector3(0, 10, 22);   // Camp: y=10, z=22 from subject
-const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);  // Bus explode: east side, camp elevation — shows "159" sign
-const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);      // Camp lookAt: subject center + y2
+// Offsets for Camera Panning Sequences
+const _offsetTrainYard = new THREE.Vector3(0, 10, 22);
+const _zoomOffsetTarget = new THREE.Vector3(22, 10, 0);
+const _zoomOffsetLook = new THREE.Vector3(0, 2, 0);
 
 export const Sector1: SectorDef = {
     id: 0,
@@ -530,9 +530,11 @@ export const Sector1: SectorDef = {
         (ctx as any).busObjectIdx = busIdx;
 
         // [EXPLOSION LAG FIX] Pre-allocate bus rubble under the ground
+        // NaturePropGenerator now defaults to active: false
         const rubble = SectorBuilder.spawnRubble(ctx, LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.z, 20, MATERIALS.busBlue, Math.PI);
         rubble.position.y = -1000;
         rubble.visible = false;
+        rubble.frustumCulled = true;
         rubble.userData.hasLanded = new Uint8Array(rubble.count);
         (ctx as any).busRubble = rubble;
 
@@ -792,7 +794,6 @@ export const Sector1: SectorDef = {
 
             // THE NATIVE BUS EVENT TRIGGER
             { id: 's1_event_tunnel_blocked', position: LOCATIONS.TRIGGERS.BUS, radius: 15, type: 'SPEAK', content: "clues.0.5.reaction", triggered: false, actions: [] },
-
             {
                 id: 'found_loke',
                 position: LOCATIONS.SPAWN.FAMILY,
@@ -801,7 +802,7 @@ export const Sector1: SectorDef = {
                 type: 'EVENT',
                 content: '',
                 triggered: false,
-                actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }]
+                actions: [{ type: 'START_CINEMATIC', payload: { familyId: 0 } }]
             }
         ]);
     },
@@ -975,32 +976,30 @@ export const Sector1: SectorDef = {
             });
 
             // ZOMBIE WAVE
-            const LOCS = [
+            // Randomized 3-spot Horde Spawn (Bus Event Pincer)
+            const SPOTS = [
                 LOCATIONS.POIS.CHURCH,
                 LOCATIONS.POIS.CAFE,
-                LOCATIONS.POIS.PIZZERIA,
-                LOCATIONS.POIS.GYM,
                 LOCATIONS.POIS.GROCERY
             ];
 
-            let totalSpawned = 0;
-            for (let i = 0; i < LOCS.length; i++) {
-                for (let j = 0; j < 6; j++) {
-                    _viewPos.set(LOCS[i].x, 0, LOCS[i].z);
-                    if (events.spawnZombie) events.spawnZombie(EnemyType.WALKER, _viewPos.clone());
-                    totalSpawned++;
+            for (let i = 0; i < SPOTS.length; i++) {
+                _viewPos.set(SPOTS[i].x, 0, SPOTS[i].z);
+                if (events.spawnHorde) {
+                    // undefined type = engine randomizes (Walkers, Runners, etc.)
+                    events.spawnHorde(6, undefined, _viewPos.clone());
                 }
             }
 
-            // Adjust Target
-            sectorState.zombiesKillTarget = 1; // TODO: Increase for prod
+            // Sector tracking: 18 zombies in this wave
+            sectorState.zombiesKillTarget = 1;
             sectorState.zombiesKilled = 0;
-            sectorState.startingKills = gameState.killsInRun;
+            sectorState.startingKills = gameState.sessionStats.kills;
         }
 
         // State 5: Wait for player to kill the wave
         else if (sectorState.busEventState === 5) {
-            sectorState.zombiesKilled = gameState.killsInRun - sectorState.startingKills;
+            sectorState.zombiesKilled = gameState.sessionStats.kills - sectorState.startingKills;
 
             if (sectorState.zombiesKilled >= sectorState.zombiesKillTarget) {
                 sectorState.busEventState = 6;
@@ -1162,14 +1161,13 @@ export const Sector1: SectorDef = {
                 }
                 (sectorState.ctx as any).busObjectIdx = undefined;
 
-                // --- 3. SPAWN PRE-ALLOCATED RUBBLE BIASED AWAY FROM TUNNEL ---
+                // --- 3. ACTIVATE PRE-ALLOCATED RUBBLE ---
                 sectorState.busRubble = (sectorState.ctx as any).busRubble;
 
                 if (sectorState.busRubble) {
                     const rMesh = sectorState.busRubble;
                     rMesh.position.set(_busOriginalPos.x, _busOriginalPos.y, _busOriginalPos.z);
                     rMesh.visible = true;
-
                     rMesh.userData.active = true;
                     if (rMesh.userData.hasLanded) rMesh.userData.hasLanded.fill(0);
 

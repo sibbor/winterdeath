@@ -34,6 +34,7 @@ export interface PlayerStats {
   rescuedFamilyIds: number[];
   familyFoundCount: number;
   mostUsedWeapon: string;
-  incomingDamageBreakdown?: Record<string, any>;
-  outgoingDamageBreakdown?: Record<string, any>;
+  deathsByEnemyType: Record<string, number>;
+  incomingDamageBreakdown: Record<string, Record<string, number>>;
+  outgoingDamageBreakdown: Record<string, number>;
 }

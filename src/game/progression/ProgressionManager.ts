@@ -21,9 +21,12 @@ export const aggregateStats = (
     s.collectiblesDiscovered = s.collectiblesDiscovered ? s.collectiblesDiscovered.slice() : [];
     s.cluesFound = s.cluesFound ? s.cluesFound.slice() : [];
     s.discoveredPOIs = s.discoveredPOIs ? s.discoveredPOIs.slice() : [];
-    s.killsByType = { ...(s.killsByType || {}) };
-    s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
     s.seenBosses = s.seenBosses ? s.seenBosses.slice() : [];
+    s.seenEnemies = s.seenEnemies ? s.seenEnemies.slice() : [];
+    s.killsByType = { ...(s.killsByType || {}) };
+    s.deathsByEnemyType = { ...(s.deathsByEnemyType || {}) };
+    s.outgoingDamageBreakdown = { ...(s.outgoingDamageBreakdown || {}) };
+    s.incomingDamageBreakdown = { ...(s.incomingDamageBreakdown || {}) }; // Source -> Attack -> Amount
 
     // 1. Sector Completion Progress
     if (!died && !aborted) {
@@ -54,6 +57,26 @@ export const aggregateStats = (
 
     if (died) {
         s.deaths = (s.deaths || 0) + 1;
+        // Record who killed us (VINTERDÖD FIX)
+        const killer = sectorStats.killerType || 'Unknown';
+        s.deathsByEnemyType[killer] = (s.deathsByEnemyType[killer] || 0) + 1;
+    }
+
+    // New Breakdown Aggregation
+    if (sectorStats.outgoingDamageBreakdown) {
+        for (const weapon in sectorStats.outgoingDamageBreakdown) {
+            s.outgoingDamageBreakdown[weapon] = (s.outgoingDamageBreakdown[weapon] || 0) + sectorStats.outgoingDamageBreakdown[weapon];
+        }
+    }
+
+    if (sectorStats.incomingDamageBreakdown) {
+        for (const source in sectorStats.incomingDamageBreakdown) {
+            if (!s.incomingDamageBreakdown[source]) s.incomingDamageBreakdown[source] = {};
+            const attacks = sectorStats.incomingDamageBreakdown[source];
+            for (const attack in attacks) {
+                s.incomingDamageBreakdown[source][attack] = (s.incomingDamageBreakdown[source][attack] || 0) + attacks[attack];
+            }
+        }
     }
 
     // 4. Scavenging Objectives
@@ -126,11 +149,12 @@ export const aggregateStats = (
         }
     }
 
-    // 6. Mission Achievement SP (Boss & Family)
-    // Awarded based on brand new map completions passed from App.tsx
-    if (newUniqueAchievements > 0) {
-        s.skillPoints += newUniqueAchievements;
-        s.totalSkillPointsEarned += newUniqueAchievements;
+    // 6. Mission Achievement & Session SP
+    const sessionSp = (sectorStats.spGained || 0);
+    if (sessionSp > 0 || newUniqueAchievements > 0) {
+        const totalAdd = sessionSp + newUniqueAchievements;
+        s.skillPoints += totalAdd;
+        s.totalSkillPointsEarned += totalAdd;
     }
 
     // 7. Experience & Leveling

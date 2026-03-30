@@ -60,6 +60,7 @@ function _checkSlot(wepType: WeaponType | null | undefined, state: any) {
 
 // Extracted to prevent closure allocations per frame during throwing charge
 function _executeThrow(
+    session: any,
     scene: THREE.Scene,
     playerGroup: THREE.Group,
     state: any,
@@ -72,7 +73,9 @@ function _executeThrow(
 ) {
     const isUnlimited = !!state.sectorState?.unlimitedThrowables;
     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
-    state.throwablesThrown = (state.throwablesThrown || 0) + 1;
+    
+    const tracker = (session as any).getSystem('damage_tracker_system') as any;
+    if (tracker) tracker.recordThrowable(session);
 
     _v1.set(0, 0, 1).applyQuaternion(playerGroup.quaternion).normalize();
 
@@ -213,7 +216,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
+    handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
         if (state.activeVehicle) return;
         if (state.isRolling || state.isReloading) return;
 
@@ -244,6 +247,9 @@ export const WeaponHandler = {
                         if (now > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
                             state.lastShotTime = now;
+                            
+                            const tracker = session.getSystem('damage_tracker_system') as any;
+                            if (tracker) tracker.recordShot(session, state.activeWeapon);
                         }
                     }
 
@@ -305,7 +311,9 @@ export const WeaponHandler = {
                 if (now > state.lastShotTime + actualFireRate && hasAmmo) {
                     state.lastShotTime = now;
                     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
-                    state.shotsFired++;
+                    
+                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    if (tracker) tracker.recordShot(session, state.activeWeapon);
 
                     _v1.set(0.3, 1.4, 0.4).applyQuaternion(playerGroup.quaternion);
                     _v2.copy(playerGroup.position).add(_v1);
@@ -440,7 +448,7 @@ export const WeaponHandler = {
                 const cycleElapsed = (now - state.throwChargeStart) % totalCycle;
                 const ratio = cycleElapsed < 1250 ? (cycleElapsed / 1250) : 1.0;
 
-                _executeThrow(scene, playerGroup, state, loadout, now, wep, ratio, aimCrossMesh, trajectoryLineMesh);
+                _executeThrow(session, scene, playerGroup, state, loadout, now, wep, ratio, aimCrossMesh, trajectoryLineMesh);
             } else {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;

@@ -115,6 +115,7 @@ export class PlayerCombatSystem implements System {
 
         if (!disableInput) {
             WeaponHandler.handleFiring(
+                session,
                 session.engine.scene,
                 this.playerGroup,
                 input,

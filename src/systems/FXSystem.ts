@@ -414,6 +414,39 @@ export const FXSystem = {
     // --- INTERFACE ---
 
     preload: (scene: THREE.Scene) => {
+        // 1. Initiera material (som du redan gör)
+        if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
+        if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
+        if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
+
+        const types = Object.keys(INSTANCED_TYPES);
+        const dummyMatrix = new THREE.Matrix4();
+
+        // Vi sätter en dummy-position långt under marken
+        dummyMatrix.makeTranslation(0, -1000, 0);
+
+        for (let i = 0; i < types.length; i++) {
+            const type = types[i];
+            const imesh = FXSystem._getInstancedMesh(scene, type);
+
+            // Tvinga fram en instans även om den är osynlig/långt borta
+            // Detta gör att Three.js kompilerar shadern NU istället för vid explosionen
+            imesh.setMatrixAt(0, dummyMatrix);
+            imesh.instanceMatrix.needsUpdate = true;
+            imesh.count = 1; // Aktivera minst en partikel
+
+            if (imesh.parent !== scene) scene.add(imesh);
+
+            // VINTERDÖD OPTIMERING: 
+            // Förhindra att partiklar "poppar in" genom att låta frustumCulled vara false 
+            // på de mest kritiska effekterna (explosioner/shockwaves)
+            if (type === 'shockwave' || type === 'explosion' || type === 'debris') {
+                imesh.frustumCulled = false;
+            }
+        }
+    },
+    /*
+    preload: (scene: THREE.Scene) => {
         if (!MATERIALS['_blackSmoke']) MATERIALS['_blackSmoke'] = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
         if (!MATERIALS['flame']) MATERIALS['flame'] = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9, depthWrite: false });
         if (!MATERIALS['large_fire']) MATERIALS['large_fire'] = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.9, depthWrite: false });
@@ -424,6 +457,7 @@ export const FXSystem = {
             if (imesh.parent !== scene) scene.add(imesh);
         }
     },
+    */
 
     spawnDecal: (scene: THREE.Scene, decalList: THREE.Mesh[], x: number, z: number, scale: number, material?: THREE.Material, type: string = 'decal') => {
         // --- SPATIAL MERGING FOR DECALS ---

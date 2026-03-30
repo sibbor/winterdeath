@@ -18,7 +18,8 @@ const _detectionResult = {
     type: null as 'chest' | 'collectible' | 'sector_specific' | 'vehicle' | null,
     position: new THREE.Vector3(),
     id: null as string | null,
-    object: null as THREE.Object3D | null
+    object: null as THREE.Object3D | null,
+    label: null as string | null // NEW: Cleanly pass labels up without allocations
 };
 
 interface ActiveAnimation {
@@ -48,6 +49,7 @@ export class PlayerInteractionSystem implements System {
         this.onCollectibleDiscovered = onCollectibleDiscovered;
     }
 
+
     update(session: GameSessionLogic, dt: number, now: number) {
         const state = session.state;
         const input = session.engine.input.state;
@@ -68,17 +70,7 @@ export class PlayerInteractionSystem implements System {
             );
 
             state.interactionType = _detectionResult.type;
-
-            let label = (_detectionResult.object?.userData?.interactionLabel as string) || null;
-
-            // Dynamic label for vehicles
-            if (state.activeVehicle && _detectionResult.object === state.activeVehicle) {
-                label = 'ui.exit_vehicle';
-            } else if (_detectionResult.type === 'vehicle') {
-                label = 'ui.enter_vehicle';
-            }
-
-            state.interactionLabel = label;
+            state.interactionLabel = _detectionResult.label;
 
             if (_detectionResult.type) {
                 if (!state.interactionTargetPos) state.interactionTargetPos = new THREE.Vector3();
@@ -224,7 +216,7 @@ export class PlayerInteractionSystem implements System {
 
     /**
      * Scans the environment for the closest interactable object.
-     * Priority: Active Vehicle > Data-Driven Interactables > Mission Triggers
+     * Priority: Collectibles > Chests > Vehicles > Mission Objects
      */
     private detectInteraction(
         playerPos: THREE.Vector3,
@@ -235,6 +227,7 @@ export class PlayerInteractionSystem implements System {
         _detectionResult.type = null;
         _detectionResult.id = null;
         _detectionResult.object = null;
+        _detectionResult.label = null;
 
         // --- Priority 1: Active Vehicle (Exit Prompt) ---
         if (state.activeVehicle) {
@@ -242,65 +235,68 @@ export class PlayerInteractionSystem implements System {
             _detectionResult.position.y += 1.0;
             _detectionResult.type = 'vehicle';
             _detectionResult.object = state.activeVehicle;
+            _detectionResult.label = 'ui.exit_vehicle';
             return;
         }
 
-        // --- Priority 2: Spatial Grid Objects (Data-Driven Interaction) ---
+        // --- Priority 2: Spatial Grid Objects (Chests, Collectibles, Vehicles) ---
         if (nearbyInteractables) {
             const len = nearbyInteractables.length;
             for (let i = 0; i < len; i++) {
                 const obj = nearbyInteractables[i];
-                const ud = obj.userData;
+                if (!obj || !obj.userData?.isInteractable) continue;
+                if (obj.userData.interactionType === 'collectible' && obj.userData.pickedUp) continue;
 
-                if (!obj || !ud?.isInteractable) continue;
-
-                // Prevent pickup of already opened/picked up items
-                if (ud.interactionType === 'collectible' && ud.pickedUp) continue;
-                if (ud.chestData?.opened) continue;
-
+                // VINTERDÖD FIX: Forced matrix update to ensure worldToLocal is accurate
+                obj.updateMatrixWorld(true);
                 obj.getWorldPosition(_v1);
 
-                // Data-Driven Interaction Shape
-                const shape = ud.interactionShape || 'sphere'; // Defaults to sphere if not defined
-                let inRange = false;
-
-                if (shape === 'box') {
-                    // OBB Box collision (Perfect for chests, vehicles, beds, tables)
+                if (obj.userData.vehicleDef && obj.userData.interactionType === 'VEHICLE') {
                     _v3.copy(playerPos);
                     obj.worldToLocal(_v3);
+                    const margin = 2.0;
+                    const def = obj.userData.vehicleDef;
 
-                    const margin = ud.interactionMargin ?? 2.0;
-
-                    // VINTERDÖD FIX: Zero-GC fallback if size is completely missing
-                    const size = ud.interactionSize || ud.chestData?.collider?.size || ud.vehicleDef?.size;
-                    const sx = size ? size.x : 1.0;
-                    const sz = size ? size.z : 1.0;
-
-                    if (Math.abs(_v3.x) <= (sx * 0.5) + margin && Math.abs(_v3.z) <= (sz * 0.5) + margin) {
-                        inRange = true;
-                    }
-                } else {
-                    // Spherical collision (Perfect for small collectibles, switches, NPCs)
-                    const r = ud.interactionRadius || 4.0;
-                    if (playerPos.distanceToSquared(_v1) < r * r) {
-                        inRange = true;
-                    }
-                }
-
-                if (inRange) {
-                    _detectionResult.position.copy(_v1);
-
-                    // Vehicle prompt height adjustment
-                    if (ud.interactionType === 'vehicle' || ud.interactionType === 'VEHICLE') {
+                    if (Math.abs(_v3.x) <= (def.size.x * 0.5) + margin && Math.abs(_v3.z) <= (def.size.z * 0.5) + margin) {
+                        _detectionResult.position.copy(_v1);
                         _detectionResult.position.y += 1.0;
                         _detectionResult.type = 'vehicle';
+                        _detectionResult.object = obj;
+                        _detectionResult.label = 'ui.enter_vehicle';
+                        return;
+                    }
+                } else {
+                    let inRange = false;
+                    const shape = obj.userData.interactionShape;
+                    const margin = obj.userData.interactionMargin ?? 2.0;
+
+                    if (shape === 'box' || obj.userData.interactionSize) {
+                        _v3.copy(playerPos);
+                        obj.worldToLocal(_v3);
+                        // VINTERDÖD FIX: Support both explicit interactionSize and chest collider bounds
+                        const size = obj.userData.interactionSize || obj.userData.chestData?.collider?.size;
+                        if (size) {
+                            if (Math.abs(_v3.x) <= (size.x * 0.5) + margin && Math.abs(_v3.z) <= (size.z * 0.5) + margin) {
+                                inRange = true;
+                            }
+                        }
                     } else {
-                        _detectionResult.type = (ud.interactionType as any) || 'sector_specific';
+                        const r = obj.userData.interactionRadius || 4.0;
+                        if (playerPos.distanceToSquared(_v1) < r * r) {
+                            inRange = true;
+                        }
                     }
 
-                    _detectionResult.id = ud.interactionId;
-                    _detectionResult.object = obj;
-                    return; // Return closest/first matched
+                    if (inRange) {
+                        if (obj.userData.interactionType === 'chest' && obj.userData.chestData?.opened) continue;
+
+                        _detectionResult.position.copy(_v1);
+                        _detectionResult.type = (obj.userData.interactionType as any) || 'sector_specific';
+                        _detectionResult.id = obj.userData.interactionId;
+                        _detectionResult.object = obj;
+                        _detectionResult.label = obj.userData.interactionLabel || null;
+                        return;
+                    }
                 }
             }
         }
@@ -355,6 +351,7 @@ export class PlayerInteractionSystem implements System {
                     _detectionResult.type = 'sector_specific';
                     _detectionResult.id = t.id;
                     _detectionResult.object = null;
+                    _detectionResult.label = t.label || null; // Support trigger labels
                     return;
                 }
             }
@@ -371,7 +368,7 @@ export class PlayerInteractionSystem implements System {
     ) {
         if (!type) return;
 
-        console.log('Interaction type: ' + type + ' ' + _detectionResult.object);
+        console.log('[PlayerInteractionSystem] handleInteraction', type);
 
         // Vehicle
         if (type === 'vehicle' && _detectionResult.object) {

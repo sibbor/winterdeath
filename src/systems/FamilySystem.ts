@@ -206,8 +206,6 @@ export class FamilySystem implements System {
 
                         _v3.subVectors(_v1, fm.position).normalize();
 
-                        // [VINTERDÖD FIX] Overshoot-skydd! Vi rör oss max det avståndet som 
-                        // lämnar oss precis på gränsen av 2.0-meters radien (1.9 för säkerhets skull).
                         const maxAllowedStep = Math.max(0, dist - 1.9);
                         const moveDist = Math.min(step, maxAllowedStep);
 
@@ -216,6 +214,23 @@ export class FamilySystem implements System {
                     }
                     userData.lastMoveTime = now;
                     fmIsRushing = state.isRushing || state.isRolling;
+                }
+            }
+
+            // Return to origin logic
+            else if (!isCinematicActive && !inVehicle && familyMember.spawnPos) {
+                const distSq = fm.position.distanceToSquared(familyMember.spawnPos);
+                if (distSq > 1.0) {
+                    fmIsMoving = true;
+                    const dist = Math.sqrt(distSq);
+                    const step = followSpeed * 0.8 * delta; // Walk back slightly slower
+
+                    _v3.subVectors(familyMember.spawnPos, fm.position).normalize();
+                    const moveDist = Math.min(step, dist);
+
+                    fm.position.addScaledVector(_v3, moveDist);
+                    fm.lookAt(familyMember.spawnPos);
+                    userData.lastMoveTime = now;
                 }
             }
 

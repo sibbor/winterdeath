@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { System } from './System';
-import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { WeaponCategoryColors, WeaponType, WEAPONS } from '../content/weapons';
+import { DamageType } from '../entities/player/CombatTypes';
 
 interface DamageText {
     mesh: THREE.Sprite;
@@ -14,10 +15,57 @@ interface DamageText {
     numericValue: number;
 }
 
+const DEFAULT_COLOR = '#ffffff';
+
 export class DamageNumberSystem implements System {
     id = 'damage_number_system';
     private pool: DamageText[] = [];
     private scene: THREE.Scene;
+
+    /**
+     * Resolves the appropriate hex color for a damage number based on its source.
+     * Centralizing this here allows for easy adjustments to the visual design.
+     */
+    public static getColorForType(type: string, isHighImpact: boolean): string {
+        // High Impact (Crits/Heavy) fallback
+        if (isHighImpact) return '#ff0000';
+
+        switch (type) {
+            case DamageType.BURN:
+            case WeaponType.MOLOTOV:
+            case WeaponType.FLAMETHROWER:
+                return '#ffaa00';
+
+            case DamageType.ELECTRIC:
+            case WeaponType.ARC_CANNON:
+                return '#00ffff';
+
+            case DamageType.DROWNING:
+                return '#3b82f6';
+
+            case DamageType.FALL:
+            case DamageType.PHYSICAL:
+            case WeaponType.RUSH:
+                return '#e887a7';
+
+            case DamageType.VEHICLE_PUSH:
+            case DamageType.VEHICLE_RAM:
+            case WeaponType.VEHICLE:
+                return '#cccccc';
+
+            case DamageType.VEHICLE_SPLATTER:
+                return '#ff0000';
+
+
+            default:
+                const weaponData = (WEAPONS as any)[type];
+                if (weaponData && weaponData.category) {
+                    return (WeaponCategoryColors as any)[weaponData.category] || DEFAULT_COLOR;
+                }
+        }
+
+        return DEFAULT_COLOR;
+    }
 
     // Pre-allocate a reasonable pool size to avoid mid-combat hitching
     constructor(scene: THREE.Scene, initialPoolSize: number = 20) {
@@ -141,7 +189,7 @@ export class DamageNumberSystem implements System {
     }
 
     // --- 3. LIFECYCLE ANIMATION ---
-    update(session: GameSessionLogic, delta: number, now: number) {
+    update(session: any, delta: number, now: number) {
         const safeDelta = Math.min(delta, 0.1);
 
         for (let i = 0; i < this.pool.length; i++) {

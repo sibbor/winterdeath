@@ -131,7 +131,8 @@ export const INITIAL_STATS: PlayerStats = {
     incomingDamageBreakdown: {},
     outgoingDamageBreakdown: {},
     collectiblesDiscovered: [],
-    viewedCollectibles: []
+    viewedCollectibles: [],
+    deathsByEnemyType: {}
 };
 
 export const PLAYER_CHARACTER = {

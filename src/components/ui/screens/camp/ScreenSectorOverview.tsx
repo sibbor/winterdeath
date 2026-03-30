@@ -142,21 +142,35 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                     key={i}
                                     onClick={() => handleSelect(i)}
                                     disabled={locked}
-                                    className={`text-left p-4 md:p-6 group relative shrink-0 whitespace-nowrap md:whitespace-normal snap-center flex justify-between items-center border-2 border-zinc-700 transition-all duration-200
+                                    className={`
+                                        text-left p-4 md:p-6 group relative shrink-0 
+                                        whitespace-nowrap md:whitespace-normal snap-center 
+                                        flex flex-col justify-center items-start 
+                                        border-2 border-zinc-700 transition-all duration-200
                                         ${locked ? 'opacity-50 cursor-not-allowed bg-black text-zinc-600' : 'cursor-pointer hover:bg-zinc-900 hover:scale-[1.02] active:scale-95'}
                                         ${isSel && !locked ? 'text-white animate-tab-pulsate' : (locked ? '' : 'bg-black text-zinc-400')}
                                         ${!effectiveLandscape ? 'min-w-[120px] py-3 px-4' : 'mx-2'}
-                                    `}
+    `}
                                     style={isSel && !locked ? {
                                         backgroundColor: darkenColor(pulseColor, 20),
                                         '--pulse-color': pulseColor
                                     } as any : {}}
                                 >
+                                    {/* Sector Number (placed above name) */}
+                                    <h2 className={`${isMobileDevice ? 'text-[8px]' : 'text-xs'} font-light uppercase tracking-tighter opacity-80 mb-1`}>
+                                        {t('ui.sector')} 00{i}
+                                    </h2>
+
+                                    {/* Sector Name */}
                                     <h3 className={`${isMobileDevice ? 'text-[10px]' : 'text-xl'} font-semibold uppercase tracking-wider`}>
                                         {locked ? '???' : t(map.name)}
                                     </h3>
+
+                                    {/* Selection Indicator Arrow */}
                                     {isSel && !locked && effectiveLandscape && (
-                                        <span className="text-white font-bold ml-2">→</span>
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white font-bold">
+                                            →
+                                        </span>
                                     )}
                                 </button>
                             );
@@ -191,8 +205,9 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                             {/* Family Status Check */}
                             {selectedSectorIndex < 4 && (
                                 <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
-                                    {t('ui.family_member')}: {isRescued ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name) : '???'}
-
+                                    {t('ui.family_member')}: {isRescued
+                                        ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name)
+                                        : t(familyStatusKey)}
                                 </div>
                             )}
                         </div>

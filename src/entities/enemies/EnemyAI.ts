@@ -60,19 +60,19 @@ export const EnemyAI = {
         const dz = playerPos.z - e.mesh.position.z;
         const distSq = dx * dx + dz * dz;
 
-        // --- AI LoD (Level of Detail) TIERS ---
-        // 625 = 25u, 2500 = 50u, 6400 = 80u, 10000 = 100u
-        const isTier1 = distSq < 625;
-        const isTier2 = !isTier1 && distSq < 2500;
-        const isTier3 = !isTier1 && !isTier2 && distSq < 6400;
-        const isTier4 = !isTier1 && !isTier2 && !isTier3 && distSq <= 10000;
+        // --- AI LoD (Level of Detail) TIERS (+50% Distance) ---
+        // 1406 = ~37.5u, 5625 = 75u, 14400 = 120u, 22500 = 150u
+        const isTier1 = distSq < 1406;
+        const isTier2 = !isTier1 && distSq < 5625;
+        const isTier3 = !isTier1 && !isTier2 && distSq < 14400;
+        const isTier4 = !isTier1 && !isTier2 && !isTier3 && distSq <= 22500;
 
         // Amortization (Spread load across frames)
         const frameTick = Math.floor(now * 0.06); // Approx division by 16.6ms (1/16.6 ~= 0.06)
         const frameOffset = (frameTick + (e.poolId % 60));
 
-        // 10000 = 100 units distance
-        if (distSq > 10000 &&
+        // 22500 = 150 units distance
+        if (distSq > 22500 &&
             e.deathState === EnemyDeathState.ALIVE &&
             !e.isBurning &&
             !e.isDrowning &&

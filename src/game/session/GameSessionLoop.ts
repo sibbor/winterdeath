@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { RuntimeState } from '../../core/RuntimeState';
@@ -16,7 +17,8 @@ import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../content/weapons
 import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { DamageType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
-import { NoiseType, NOISE_RADIUS } from '../../entities/enemies/EnemyTypes';
+import { NoiseType } from '../../entities/enemies/EnemyTypes';
+import { PLAYER_CHARACTER } from '../../content/constants';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -32,9 +34,10 @@ interface LoopContext {
         showDamageText: (x: number, y: number, z: number, text: string, color?: string) => void;
         t: (k: string) => string;
         spawnBubble: (text: string, duration?: number) => void;
-        onEnemyDiscovered?: (type: string) => void;
-        onBossDiscovered?: (id: string) => void;
+        onAction: (action: any) => void;
+        onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
         onDeathStateChange?: (val: boolean) => void;
+        gainSp: (amount: number) => void;
     };
 }
 
@@ -61,13 +64,11 @@ const _fxCallbacks: any = {
 const _triggerOptionsScratch: any = {
     t: null,
     spawnBubble: null,
-    onClueDiscovered: null,
-    onPOIdiscovered: null,
     onTrigger: null,
     onAction: null,
-    collectedCluesRef: null,
     removeVisual: null,
-    resolveDynamicPos: null
+    resolveDynamicPos: null,
+    onDiscovery: null
 };
 
 // String cache for damage numbers to prevent GC spikes during rapid fire
@@ -154,6 +155,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         showDamageText: null,
         now: 0,
         playerPos: null,
+        session: null,
         makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
         explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, refs.sectorContextRef.current, force),
         trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
@@ -163,7 +165,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     damageTracker.recordOutgoingDamage(session, amt, 'Generic', isBoss);
                 }
             }
-            if (type === 'hit') state.shotsHit += amt;
+            if (type === 'hit') state.sessionStats.shotsHit += amt;
         },
         addFireZone: (z: any) => state.fireZones.push(z),
         onPlayerHit: (dmg: number, attacker: any, type: DamageType, isDoT: boolean = false, effect?: any, dur?: number, intense?: number, attackName?: string) => {
@@ -173,6 +175,22 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             // VINTERDÖD FIX: Safeguard against non-damaging hits skipping death state check
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
+
+            // --- O(1) ZERO-GC ENEMY DISCOVERY ---
+            if (!enemy.discovered) {
+                enemy.discovered = true;
+
+                if (!enemy.isBoss && callbacks.onDiscovery) {
+                    const sets = state.discoverySets;
+                    if (sets && !sets.seenEnemies.has(enemy.type)) {
+                        sets.seenEnemies.add(enemy.type);
+                        state.sessionStats.seenEnemies.push(enemy.type);
+                        callbacks.onDiscovery('enemy', enemy.type, 'ui.enemy_encountered', `enemies.${enemy.type}.name`);
+                    }
+                }
+            }
+
+            // Damage
             const actualDmg = Math.max(0, Math.min(enemy.hp, amount));
             enemy.hp -= actualDmg;
             enemy.lastDamageType = type as string;
@@ -187,23 +205,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 }
             }
 
-            // Determine Color based on Weapon Category
-            let color = '#ffffff';
+            // Resolve color using the centralized system
             const weaponData = (WEAPONS as any)[type];
-            if (weaponData && weaponData.category) {
-                color = (WeaponCategoryColors as any)[weaponData.category] || '#ffffff';
-            } else {
-                // FALLBACKS for non-weapon damage
-                if (type === DamageType.BURN) color = '#ffaa00';
-                else if (type === DamageType.ELECTRIC) color = '#00ffff';
-                else if (type === DamageType.FALL) color = '#ffffff';
-                else if (type === DamageType.DROWNING) color = '#3b82f6';
-            }
-
-            // High Impact (Crits/Heavy) can override color to be brighter or just use the weapon color
-            if (isHighImpact && !weaponData) {
-                color = '#ff0000';
-            }
+            const color = DamageNumberSystem.getColorForType(type as string, isHighImpact);
 
             // Throttle text spawning for performance (Zero-GC Accumulation)
             const isContinuous = weaponData?.behavior === 'CONTINUOUS' || type === DamageType.BURN || type === 'BURN' || type === DamageType.DROWNING;
@@ -214,7 +218,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (_gameContext.now - (enemy._lastDamageTextTime || 0) > textThrottle) {
                 if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
                     const textX = enemy.mesh.position.x;
-                    const textY = enemy.isBoss ? 4.0 : 2.5;
+                    // --- DYNAMIC HEIGHT FIX ---
+                    // 1.8 is the approximate visual top, 1.2 is the float offset
+                    const textY = (enemy.originalScale || 1.0) * 1.8 + 1.2;
                     const textZ = enemy.mesh.position.z;
 
                     _gameContext.showDamageText(
@@ -238,7 +244,13 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (familyId !== undefined) {
             const members = refs.activeFamilyMembers.current;
             for (let i = 0; i < members.length; i++) {
-                if (members[i].id === familyId) return members[i].mesh?.position || null;
+                if (members[i].id === familyId) {
+                    // If the family member is already following the player (Replay), don't move the trigger to them!
+                    // Let it stay at the end of the track so we can use it to start the boss fight.
+                    if (members[i].following) return null;
+
+                    return members[i].mesh?.position || null;
+                }
             }
             return null;
         }
@@ -267,25 +279,40 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         return null;
     };
 
+    let lastHudSyncTime = 0;
+
     return (dt: number) => {
         if (!refs.isMounted.current || refs.isBuildingSectorRef.current) return;
 
-        // --- Delta-Time Spike Guard ---
+        // --- VINTERDÖD FIX: Pause & Cinematic Time Logic ---
         let delta = dt;
-        if (delta > 0.1) delta = 0.016; // Prevent physics explosions after alt-tab
+        if (delta > 0.1) delta = 0.016;
+        const realDt = delta; // Spara den ofrysta tiden för UI och system som måste rulla
 
-        // Pause guard
-        if (propsRef.current.isPaused || propsRef.current.isClueOpen) {
+        const isCinematic = refs.cinematicRef.current?.active;
+        const isBossIntro = refs.bossIntroRef.current?.active;
+        const isHardPaused = propsRef.current.isPaused || propsRef.current.isClueOpen;
+        const isInteractionPaused = state.isInteractionOpen && !isCinematic;
+
+        // Om vi är pausade av en meny, OCH ingen cinematic spelas -> Frys allt.
+        if (isHardPaused && !isCinematic && !isBossIntro) {
             engine.isSimulationPaused = true;
             engine.isRenderingPaused = true;
             return;
-        } else {
-            engine.isSimulationPaused = false;
+        }
+
+        engine.isSimulationPaused = false;
+        engine.isRenderingPaused = false;
+
+        // Om en cinematic är igång fryser vi `delta` (så zombier och fysik stannar), 
+        // men låter loopen fortsätta köra!
+        if (isHardPaused || isCinematic || isBossIntro) {
+            delta = 0;
         }
 
         const now = performance.now();
 
-        // Death Trigger Bridge (VINTERDÖD FIX)
+        // Death Trigger Bridge
         if (state.isDead && (refs.deathPhaseRef.current === 'NONE' || !refs.deathPhaseRef.current)) {
             refs.deathPhaseRef.current = 'DEAD';
             callbacks.onDeathStateChange?.(true);
@@ -293,10 +320,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         const monitor = PerformanceMonitor.getInstance();
         frame++;
-
-        const isCinematic = refs.cinematicRef.current.active;
-        const isBossIntro = refs.bossIntroRef.current.active;
-        const isInteractionPaused = state.isInteractionOpen && !isCinematic;
 
         if (isInteractionPaused) {
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -313,15 +336,19 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         // 2. UI Throttling
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         state.framesSinceHudUpdate++;
-        uiSyncTimer += delta;
+        uiSyncTimer += realDt;
 
-        if (uiSyncTimer >= 0.066) { // ~15 FPS
-            uiSyncTimer = 0;
-            state.lastHudUpdate = now;
+        if (now - lastHudSyncTime >= 66) { // ~15 FPS
+            lastHudSyncTime = now;
+            state.framesSinceHudUpdate = 0;
 
             if (!playerGroup || playerGroup.children.length === 0) {
                 if (now % 5000 < 16) console.error("[GameSessionLoop] ERROR: playerGroup missing or empty!");
-                return;
+                return; if (!propsRef.current.isRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
+                    soundManager.stopRadioStatic();
+                    lastTime = now;
+                    return;
+                }
             }
 
             const hudMesh = refs.playerMeshRef.current;
@@ -442,7 +469,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             return;
         }
 
-        if (!propsRef.current.isRunning || propsRef.current.isPaused) {
+        if (!propsRef.current.isRunning || (propsRef.current.isPaused && !isCinematic && !isBossIntro)) {
             soundManager.stopRadioStatic();
             lastTime = now;
             return;
@@ -552,11 +579,35 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (!isCinematic && !isBossIntro) {
             if (refs.cameraOverrideRef.current && refs.cameraOverrideRef.current.active) {
                 const override = refs.cameraOverrideRef.current;
+
+                // --- VINTERDÖD FIX: The Epic Drone Camera ---
+                if (!override.startPos) {
+                    override.startPos = engine.camera.position.clone();
+                    override.startTime = now;
+                    // Tvinga exakt 4000ms visningstid
+                    override.endTime = now + 4000;
+                    // Göm UI (crosshair, hp, etc) under flygningen för en cinematisk look
+                    engine.camera.setCinematic(true);
+                }
+
                 if (now > override.endTime) {
                     refs.cameraOverrideRef.current = null;
                     engine.camera.setCinematic(false);
                 } else {
-                    _vCamera.copy(engine.camera.position).lerp(override.targetPos, 1.0 - Math.exp(-10.0 * delta));
+                    const elapsed = now - override.startTime;
+
+                    // Flyg i 1500ms, hovra kvar resten av tiden!
+                    let t = Math.min(1.0, elapsed / 1500);
+                    t = 1.0 - Math.pow(1.0 - t, 3); // Ease-out inbromsning
+
+                    // Drönar-Bågen: Lägg till höjd (y) i mitten av flygningen för ett top-down svep
+                    const heightArc = Math.sin(t * Math.PI) * 20;
+
+                    const currentX = THREE.MathUtils.lerp(override.startPos.x, override.targetPos.x, t);
+                    const currentY = THREE.MathUtils.lerp(override.startPos.y, override.targetPos.y, t) + heightArc;
+                    const currentZ = THREE.MathUtils.lerp(override.startPos.z, override.targetPos.z, t);
+
+                    _vCamera.set(currentX, currentY, currentZ);
                     engine.camera.setPosition(_vCamera, true);
                     engine.camera.lookAt(override.lookAtPos, true);
                 }
@@ -629,12 +680,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     // ZERO-GC: Mutate the prompt inside the HudStore buffer instead of allocating new objects
                     if (!hData.interactionPrompt) {
                         hData.interactionPrompt = {
-                            type: currentInter,
+                            type: currentInter as any,
                             label: currentLabel,
                             pos: { x: screenX, y: screenY }
                         };
                     } else {
-                        hData.interactionPrompt.type = currentInter;
+                        hData.interactionPrompt.type = currentInter as any;
                         hData.interactionPrompt.label = currentLabel;
                         hData.interactionPrompt.pos.x = screenX;
                         hData.interactionPrompt.pos.y = screenY;
@@ -679,6 +730,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         _gameContext.now = now;
         _gameContext.playerPos = playerGroup.position;
+        _gameContext.session = session;
 
         refs.gameContextRef.current = _gameContext;
 
@@ -691,11 +743,21 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         monitor.begin('triggers');
         _triggerOptionsScratch.t = activeCallbacks.t || callbacks.t;
         _triggerOptionsScratch.spawnBubble = activeCallbacks.spawnBubble;
-        _triggerOptionsScratch.onClueDiscovered = activeCallbacks.onClueDiscovered;
-        _triggerOptionsScratch.onPOIdiscovered = activeCallbacks.onPOIdiscovered;
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
-        _triggerOptionsScratch.collectedCluesRef = (activeCallbacks as any).collectedCluesRef || refs.collectedCluesRef;
+        _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
+        _triggerOptionsScratch.playSound = (id: string) => {
+            if (id === 'voice') soundManager.playVoice(PLAYER_CHARACTER.name);
+            else soundManager.playUiHover();
+        };
+        _triggerOptionsScratch.isFamilyFollowing = (familyId: number) => {
+            const members = refs.activeFamilyMembers.current;
+            if (!members) return false;
+            for (let i = 0; i < members.length; i++) {
+                if (members[i].id === familyId && members[i].following) return true;
+            }
+            return false;
+        };
 
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');

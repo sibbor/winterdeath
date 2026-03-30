@@ -16,10 +16,9 @@ const ScreenBossKilled: React.FC<ScreenBossKilledProps> = ({ sectorIndex, onProc
     const bossName = t(bossData?.name || "ui.boss").toUpperCase();
 
     return (
-        <ScreenModalLayout 
-            title={bossName} 
-            isMobileDevice={isMobileDevice} 
-            onClose={onProceed}
+        <ScreenModalLayout
+            title={bossName}
+            isMobileDevice={isMobileDevice}
             onConfirm={onProceed}
             confirmLabel={t('ui.continue')}
             titleColorClass="text-white"

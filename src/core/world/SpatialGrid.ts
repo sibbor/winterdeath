@@ -308,10 +308,16 @@ export class SpatialGrid {
     // --- INTERACTABLE MANAGEMENT ---
 
     addInteractable(obj: THREE.Object3D) {
+        // VINTERDÖD FIX: Read the newly structured Data-Driven Interaction Shape
         let radius = obj.userData.interactionRadius || 4.0;
-        if (obj.userData.vehicleDef) {
-            const size = obj.userData.vehicleDef.size;
-            radius = Math.max(radius, Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + 2.0);
+
+        if (obj.userData.interactionShape === 'box') {
+            const size = obj.userData.interactionSize || obj.userData.vehicleDef?.size || obj.userData.chestData?.collider?.size;
+            if (size) {
+                const margin = obj.userData.interactionMargin ?? 2.0;
+                // Calculate Pythagoras max bounds of the box (from center to corners) and add margin
+                radius = Math.sqrt((size.x / 2) ** 2 + (size.z / 2) ** 2) + margin;
+            }
         }
 
         obj.updateMatrixWorld(true);

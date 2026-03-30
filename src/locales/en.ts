@@ -204,7 +204,7 @@ export const en = {
         log_bosses: "BOSSES",
         log_collectibles: "COLLECTIBLES",
         log_clues: "CLUES",
-        log_poi: "POI",
+        log_poi: "POIS",
         unknown_threat: "Unknown Threat",
         drowning: "Drowning",
         burning: "Burning",

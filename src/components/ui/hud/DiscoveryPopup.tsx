@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { t } from '../../../utils/i18n';
 import { soundManager } from '../../../utils/audio/SoundManager';
@@ -7,51 +7,67 @@ interface DiscoveryPopupProps {
   onOpenAdventureLog: (tab?: string, itemId?: string) => void;
 }
 
-const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) => {
+// STATIC MAP: Undviker att allokera ett nytt objekt i minnet vid varje interaktion
+const TAB_MAP: Record<string, string> = {
+  clue: 'clues',
+  poi: 'poi',
+  collectible: 'collectibles',
+  enemy: 'enemy',
+  boss: 'boss'
+};
+
+const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdventureLog }) => {
   const discovery = useHudStore(s => s.discovery);
   const [visible, setVisible] = useState(false);
   const [activeDiscovery, setActiveDiscovery] = useState(discovery);
 
+  // Använd useRef för att hålla timern stabil över renders
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    let timer: NodeJS.Timeout;
     if (discovery && discovery.timestamp !== activeDiscovery?.timestamp) {
       setActiveDiscovery(discovery);
       setVisible(true);
 
-      timer = setTimeout(() => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      // 2500-4000ms är lagom för att hinna läsa i strid
+      timerRef.current = setTimeout(() => {
         setVisible(false);
       }, 2500);
     }
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discovery]);
 
-  const handleInteraction = () => {
-    if (!visible) return;
-    soundManager.playUiConfirm();
-    setVisible(false);
-
-    // Map discovery type to Adventure Log tab
-    const tabMap: Record<string, string> = {
-      clue: 'clues',
-      poi: 'poi',
-      collectible: 'collectibles',
-      enemy: 'enemy',
-      boss: 'boss'
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
+  }, [discovery, activeDiscovery?.timestamp]);
 
-    onOpenAdventureLog(tabMap[activeDiscovery?.type || 'clues'], activeDiscovery?.id);
-  };
+  // ZERO-GC: Stabil callback som undviker closures på 'visible'
+  const handleInteraction = useCallback(() => {
+    setVisible(prevVisible => {
+      if (!prevVisible) return prevVisible; // Avbryt om den redan är stängd
+
+      soundManager.playUiConfirm();
+      const tab = TAB_MAP[activeDiscovery?.type || 'clue'] || 'clues';
+
+      // Skickar med både tab och ID precis som du lade till!
+      onOpenAdventureLog(tab, activeDiscovery?.id);
+
+      return false; // Stänger popupen
+    });
+  }, [activeDiscovery, onOpenAdventureLog]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && visible) {
+      // Eftersom vi kollar 'visible' inuti state-settern i handleInteraction 
+      // behöver vi inte ha med 'visible' som dependency här längre! (Färre event re-binds)
+      if (e.key === 'Enter') {
         handleInteraction();
       }
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [visible, activeDiscovery]);
+  }, [handleInteraction]);
 
   if (!activeDiscovery) return null;
 
@@ -69,7 +85,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) =
   return (
     <div
       className={`fixed top-8 left-1/2 -translate-x-1/2 z-[200] transition-all duration-300 transform pointer-events-auto
-        ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95 pointer-events-none'}`}
+                ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-4 scale-95 pointer-events-none'}`}
       onClick={handleInteraction}
     >
       <div className="bg-black/90 border-2 border-red-600 p-3 flex items-center gap-4 min-w-[280px] shadow-[0_0_20px_rgba(220,38,38,0.3)] cursor-pointer hover:bg-zinc-900 transition-colors">
@@ -101,6 +117,6 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({ onOpenAdventureLog }) =
       </div>
     </div>
   );
-};
+});
 
 export default DiscoveryPopup;

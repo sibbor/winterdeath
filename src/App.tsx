@@ -31,7 +31,7 @@ import DebugDisplay from './components/ui/core/DebugDisplay';
 import CustomCursor from './components/ui/core/CustomCursor';
 import { useGlobalInput } from './hooks/useGlobalInput';
 import { soundManager } from './utils/audio/SoundManager';
-import { getCollectiblesBySector } from './content/collectibles';
+import { BOSSES } from './content/constants';
 import { checkIsMobileDevice } from './utils/device';
 import { AssetPreloader } from './systems/AssetPreloader';
 import { WinterEngine, GameSettings } from './core/engine/WinterEngine';
@@ -450,8 +450,11 @@ const App: React.FC = () => {
         setSectorStats(stats); // DONT aggregate yet!
 
         setGameState(prev => {
-            const bossKilled = stats.killsByType['Boss'] > 0;
-            return {
+            const bossRawId = BOSSES[prev.currentSector]?.name || "GÅRDSHERREN";
+            const bossKilled = stats.killsByType && (
+                (stats.killsByType['Boss'] || 0) > 0 ||
+                (stats.killsByType[bossRawId] || 0) > 0
+            ); return {
                 ...prev,
                 screen: bossKilled ? GameScreen.BOSS_KILLED : GameScreen.RECAP,
                 midRunCheckpoint: null
@@ -480,9 +483,14 @@ const App: React.FC = () => {
         if (!sectorStats) return;
         setGameState(prev => {
             let newUniqueAchievements = 0;
-            const bossKilled = sectorStats.killsByType['Boss'] > 0;
-            const newBosses = [...prev.deadBossIndices];
+            const bossRawId = (BOSSES as any)[prev.currentSector]?.name || "GÅRDSHERREN";
+            const bossKilled = sectorStats.killsByType && (
+                (sectorStats.killsByType['Boss'] || 0) > 0 ||
+                (sectorStats.killsByType[bossRawId] || 0) > 0 ||
+                (sectorStats.killsByType['GÅRDSHERREN'] || 0) > 0
+            );
 
+            const newBosses = [...prev.deadBossIndices];
             if (bossKilled && !prev.deadBossIndices.includes(prev.currentSector)) {
                 newBosses.push(prev.currentSector);
                 newUniqueAchievements++;
@@ -675,7 +683,8 @@ const App: React.FC = () => {
         (gameState.screen === GameScreen.SECTOR ||
             gameState.screen === GameScreen.PROLOGUE ||
             gameState.screen === GameScreen.RECAP ||
-            gameState.screen === GameScreen.DEATH) // VINTERDÖD FIX: Keep canvas alive during death!
+            gameState.screen === GameScreen.BOSS_KILLED ||
+            gameState.screen === GameScreen.DEATH)
         && !transitionTaskRef.current;
 
     return (
@@ -719,8 +728,12 @@ const App: React.FC = () => {
                     {/* VINTERDÖD FIX: GameSession is wrapped in a hidden div if it's not the active screen but needs to live */}
                     <div
                         className="absolute inset-0"
-                        style={{ display: gameState.screen === GameScreen.SECTOR || gameState.screen === GameScreen.PROLOGUE || gameState.screen === GameScreen.DEATH ? 'block' : 'none' }}
-                    >
+                        style={{
+                            display: gameState.screen === GameScreen.SECTOR ||
+                                gameState.screen === GameScreen.PROLOGUE ||
+                                gameState.screen === GameScreen.BOSS_KILLED ||
+                                gameState.screen === GameScreen.DEATH ? 'block' : 'none'
+                        }}                    >
                         {shouldKeepSessionAlive && (
                             <>
                                 <GameSession

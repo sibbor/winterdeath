@@ -37,6 +37,7 @@ export interface GameContext {
     onPlayerHit: (damage: number, attacker: any, type: string | DamageType, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
     weaponHandler?: any;
+    session?: any;
 }
 
 export interface Projectile {
@@ -710,6 +711,11 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
                 projectile.hitEntities.add(enemy.id);
                 enemy.slowTimer = 0.5;
+
+                if (ctx.session) {
+                    const tracker = ctx.session.getSystem('damage_tracker_system') as any;
+                    if (tracker) tracker.recordHit(ctx.session, projectile.weapon);
+                }
 
                 const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
 

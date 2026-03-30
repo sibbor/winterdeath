@@ -5,7 +5,6 @@ import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '..
 export type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState };
 
 // --- CORE TYPES ---
-
 export enum GameScreen {
   CAMP = 'CAMP',
   BRIEFING = 'BRIEFING',
@@ -18,8 +17,6 @@ export enum GameScreen {
 }
 
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
-
-
 
 export interface PlayerStats {
   level: number;

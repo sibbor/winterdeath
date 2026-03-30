@@ -2,18 +2,19 @@ import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { System } from './System';
 
 export class DamageTrackerSystem implements System {
-    id = 'DamageTrackerSystem';
+    id = 'damage_tracker_system';
 
     init(session: GameSessionLogic) {
-        // Initialization if needed
+        // Breakdowns are now pre-allocated in GameSessionLogic.createInitialState
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
-        // Continuous tracking logic if needed (e.g. DoT aggregation)
+        // Passive logger: No per-frame logic required
     }
 
     /**
      * Records damage taken by the player.
+     * V8-Opt: Keys are pre-allocated.
      */
     recordIncomingDamage(
         session: GameSessionLogic,
@@ -22,30 +23,20 @@ export class DamageTrackerSystem implements System {
         attackName: string,
         isBoss: boolean = false
     ) {
-        const state = session.state;
+        const stats = session.state.sessionStats;
+        stats.damageTaken += amount;
 
-        // Update Session State
-        state.damageTaken += amount;
-        if (isBoss) state.bossDamageTaken += amount;
-
-        if (!state.incomingDamageBreakdown) state.incomingDamageBreakdown = {};
-        if (!state.incomingDamageBreakdown[sourceName]) state.incomingDamageBreakdown[sourceName] = {};
-
-        state.incomingDamageBreakdown[sourceName][attackName] = (state.incomingDamageBreakdown[sourceName][attackName] || 0) + amount;
-
-        // Update Persistence Stats
-        if (state.stats) {
-            const pStats = state.stats as any;
-            if (!pStats.incomingDamageBreakdown) pStats.incomingDamageBreakdown = {};
-            if (!pStats.incomingDamageBreakdown[sourceName]) pStats.incomingDamageBreakdown[sourceName] = {};
-
-            pStats.incomingDamageBreakdown[sourceName][attackName] = (pStats.incomingDamageBreakdown[sourceName][attackName] || 0) + amount;
-            pStats.totalDamageTaken += amount;
+        const breakdown = stats.incomingDamageBreakdown;
+        const source = breakdown[sourceName];
+        if (source) {
+            // attackName can be dynamic from enemy logic, but we pre-allocated common ones.
+            // If it's missing, we add it (V8 dictionary penalty once, better than missing data).
+            source[attackName] = (source[attackName] || 0) + amount;
         }
     }
 
     /**
-     * Records damage dealt by the player to enemies.
+     * Records damage dealt by the player to actors.
      */
     recordOutgoingDamage(
         session: GameSessionLogic,
@@ -53,27 +44,69 @@ export class DamageTrackerSystem implements System {
         weaponName: string,
         isBoss: boolean = false
     ) {
-        const state = session.state;
+        const stats = session.state.sessionStats;
+        stats.damageDealt += amount;
 
-        // Update Session State
-        state.damageDealt += amount;
-        if (isBoss) state.bossDamageDealt += amount;
+        const breakdown = stats.outgoingDamageBreakdown;
+        // Weapon keys are pre-allocated for all known types
+        if (breakdown[weaponName] !== undefined) {
+            breakdown[weaponName] += amount;
+        }
+    }
 
-        if (!state.outgoingDamageBreakdown) state.outgoingDamageBreakdown = {};
-        state.outgoingDamageBreakdown[weaponName] = (state.outgoingDamageBreakdown[weaponName] || 0) + amount;
+    /**
+     * Records a shot fired by the player.
+     */
+    recordShot(session: GameSessionLogic, weaponName: string) {
+        const stats = session.state.sessionStats;
+        stats.shotsFired++;
+    }
 
-        // Reward XP (1 XP per point of damage)
-        if (state.callbacks?.gainXp) {
-            state.callbacks.gainXp(Math.ceil(amount));
+    /**
+     * Records a shot hit by the player.
+     */
+    recordHit(session: GameSessionLogic, weaponName: string) {
+        const stats = session.state.sessionStats;
+        stats.shotsHit++;
+    }
+
+    /**
+     * Records an enemy kill.
+     */
+    recordKill(session: GameSessionLogic, enemyType: string, isBoss: boolean = false) {
+        const stats = session.state.sessionStats;
+        stats.kills++;
+        
+        // Generic generic boss tracker
+        if (isBoss) {
+            stats.killsByType['Boss'] = (stats.killsByType['Boss'] || 0) + 1;
         }
 
-        // Update Persistence Stats
-        if (state.stats) {
-            const pStats = state.stats as any;
-            if (!pStats.outgoingDamageBreakdown) pStats.outgoingDamageBreakdown = {};
-            pStats.outgoingDamageBreakdown[weaponName] = (pStats.outgoingDamageBreakdown[weaponName] || 0) + amount;
-            pStats.totalDamageDealt += amount;
+        // Specific type tracker (Pre-allocated keys)
+        if (stats.killsByType[enemyType] !== undefined) {
+            stats.killsByType[enemyType]++;
         }
+    }
+
+    /**
+     * Records XP gained during the session.
+     */
+    recordXp(session: GameSessionLogic, amount: number) {
+        session.state.sessionStats.xpGained += amount;
+    }
+
+    /**
+     * Records SP earned during the session.
+     */
+    recordSp(session: GameSessionLogic, amount: number) {
+        session.state.sessionStats.spGained += amount;
+    }
+
+    /**
+     * Records a throwable thrown by the player.
+     */
+    recordThrowable(session: GameSessionLogic) {
+        session.state.sessionStats.throwablesThrown++;
     }
 
     clear() {

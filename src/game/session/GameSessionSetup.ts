@@ -1,5 +1,6 @@
+import React, { useEffect, useImperativeHandle, useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps } from '../../game/session/SessionTypes';
+import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
 import { MapItem } from '../../components/ui/hud/HudTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
@@ -12,7 +13,7 @@ import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM } from '../../content/constants';
+import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES } from '../../content/constants';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { PlayerDeathState } from '../../entities/player/CombatTypes';
@@ -69,38 +70,33 @@ export interface SetupContext {
         concludeSector: (isExtraction: boolean) => void;
         handleTriggerAction: (action: any, scene: THREE.Scene) => void;
         onSectorLoaded?: () => void;
-        onEnemyDiscovered?: (type: string) => void;
-        onBossDiscovered?: (id: string) => void;
         gainXp: (amount: number) => void;
-        onCollectibleDiscovered: (collectibleId: string) => void;
-        onClueDiscovered: (clue: any) => void;
-        onPOIdiscovered: (poi: any) => void;
         onTrigger: (type: string, duration: number) => void;
         onBossKilled: (id: number) => void;
         onAction: (action: any) => void;
         collectedCluesRef: any;
+
+        onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
+        gainSp: (amount: number) => void;
     }
 }
 
 export class GameSessionSetup {
 
     static async runSectorSetup(ctx: SetupContext, currentSetupId: number) {
-        const { engine, session, state, props, refs, ui, callbacks } = ctx;
+        const { engine, state, props, refs, callbacks } = ctx;
         const scene = engine.scene;
-        const camera = engine.camera;
-        const textures = createProceduralTextures();
-
         const isMounted = refs.isMounted;
         const setupIdRef = refs.setupIdRef;
 
         if (!isMounted.current || setupIdRef.current !== currentSetupId) {
-            console.warn('[GameSessionSetup] Early return: isMounted=' + isMounted.current + ' setupId=' + setupIdRef.current + ' expected=' + currentSetupId);
+            console.warn('[GameSessionSetup] Early return: Setup aborted.');
             return;
         }
 
         refs.isBuildingSectorRef.current = true;
         refs.deathPhaseRef.current = 'NONE';
-        state.startTime = performance.now();
+        state.sessionStats.timePlayed = 0; // Reset session timer
         let sectorLoaded = false;
 
         try {
@@ -108,386 +104,57 @@ export class GameSessionSetup {
             state.sectorName = currentSector.name;
             state.initialAim = currentSector.initialAim || null;
             const rng = seededRandom(props.currentSector + 4242);
-            const env = currentSector.environment;
 
-            // --- POSITIONING ---
-            // 0. VINTERDÖD FIX: Aggressively clear the scene from previous session objects.
-            // false = KEEP persistent systems (Fog, Water, Light Pool) alive for performance.
-            engine.clearActiveScene(false);
+            // 1. Prepare Scene
+            this.prepareScene(engine, props.isWarmup, refs, currentSector.environment);
 
-            // Unregister any non-persistent systems that might have been added by Camp or previous sector ghosts
-            const engineSystems = engine.getSystems();
-            for (let i = engineSystems.length - 1; i >= 0; i--) {
-                const sys = engineSystems[i];
-                if (!sys.persistent &&
-                    sys.id !== 'light_system' && sys.id !== 'wind_system' &&
-                    sys.id !== 'weather_system' && sys.id !== 'fog_system' &&
-                    sys.id !== 'water_system') {
-                    engine.unregisterSystem(sys.id);
-                }
-            }
-
-            // The Poisoned Yielder
             const yielder = async () => {
-                if (!isMounted.current || setupIdRef.current !== currentSetupId) {
-                    throw new Error("ABORT_SETUP");
-                }
+                if (!isMounted.current || setupIdRef.current !== currentSetupId) throw new Error("ABORT_SETUP");
                 await new Promise<void>(resolve => setTimeout(resolve, 0));
-            };
-
-            camera.reset();
-            camera.set('fov', env.fov);
-            camera.setPosition(currentSector.playerSpawn.x, env.cameraHeight || CAMERA_HEIGHT, currentSector.playerSpawn.z + env.cameraOffsetZ, true);
-
-            if (!props.isWarmup) {
-                engine.syncEnvironment(env);
-                const skyLight = scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
-                if (skyLight) {
-                    refs.skyLightRef.current = skyLight;
-                    if (!refs.skyLightOffsetRef.current) refs.skyLightOffsetRef.current = new THREE.Vector3();
-                    refs.skyLightOffsetRef.current.copy(skyLight.position);
-                }
-            }
-
-            const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
-                const startPos = pos || (refs.playerGroupRef.current ? refs.playerGroupRef.current.position : new THREE.Vector3(0, 0, 0));
-                const newEnemies = EnemyManager.spawnHorde(scene, startPos, count, state.bossSpawned, state.enemies.length);
-                if (newEnemies) {
-                    for (let i = 0; i < newEnemies.length; i++) {
-                        state.enemies.push(newEnemies[i]);
-                    }
-                }
             };
 
             const mapItems: MapItem[] = [];
             const burningObjects: any[] = [];
             const flickeringLights: any[] = [];
+            const textures = createProceduralTextures();
 
-            const realSpawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
-                const playerPos = refs.playerGroupRef.current ? refs.playerGroupRef.current.position : new THREE.Vector3(currentSector.playerSpawn.x, 0, currentSector.playerSpawn.z);
-                const enemy = EnemyManager.spawn(scene, playerPos, forcedType, forcedPos, state.bossSpawned, state.enemies.length);
-                if (enemy) {
-                    state.enemies.push(enemy);
-                }
-                return enemy;
-            };
+            // 2. Setup Player & Camera
+            const playerGroup = this.setupPlayerAndCamera(engine, currentSector, refs, state);
 
-            const spawnBoss = (type: string, pos?: THREE.Vector3) => {
-                const pSpawn = currentSector.playerSpawn;
-                const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x, 0, pSpawn.z));
-                const boss = EnemyManager.spawnBoss(scene, bossPos, type);
-                if (boss) {
-                    state.enemies.push(boss);
-                    state.bossSpawned = true;
-                }
-                return boss;
-            };
-
-            const sectorCtx: SectorContext = {
-                scene, engine, obstacles: state.obstacles, collisionGrid: state.collisionGrid, chests: state.chests,
-                flickeringLights, burningObjects, rng, triggers: state.triggers, mapItems, debugMode: props.debugMode,
-                textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
-                cluesFound: props.stats.cluesFound || [], collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
-                collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
-                sectorState: state.sectorState, state: state, yield: yielder,
-                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-            };
+            // 3. Create Sector Context
+            const sectorCtx = this.createSectorContext(ctx, currentSector, textures, flickeringLights, burningObjects, mapItems, rng, playerGroup, yielder);
             refs.sectorContextRef.current = sectorCtx;
             state.sectorState.ctx = sectorCtx;
 
-            state.callbacks = {
-                spawnPart: callbacks.spawnPart, spawnDecal: callbacks.spawnDecal, showDamageText: callbacks.showDamageText,
-                spawnBubble: callbacks.spawnBubble, onClueDiscovered: callbacks.onClueDiscovered, onPOIdiscovered: callbacks.onPOIdiscovered,
-                onTrigger: callbacks.onTrigger,
-                onAction: (action: any) => {
-                    if (action.type === 'HEAL') {
-                        state.hp = Math.min(state.maxHp, state.hp + action.amount);
-                        soundManager.playUiConfirm();
-                    }
-                    if (action.type === 'SOUND' && action.id) soundManager.playEffect(action.id);
-                    callbacks.handleTriggerAction(action, engine.scene);
-                },
-                explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
-                gainXp: callbacks.gainXp,
-                trackStats: (type: 'damage' | 'hit', amt: number, isBoss?: boolean) => {
-                    if (type === 'damage') {
-                        const tracker = session.getSystem('damage_tracker_system') as any;
-                        if (tracker) tracker.recordOutgoingDamage(session, amt, 'Generic', isBoss);
-                    }
-                    if (type === 'hit') state.shotsHit += amt;
-                },
-                addFireZone: (z: any) => state.fireZones.push(z),
-                onBossKilled: (id: number) => {
-                    let seen = false;
-                    for (let j = 0; j < state.bossesDefeated.length; j++) {
-                        if (state.bossesDefeated[j] === id) { seen = true; break; }
-                    }
-                    if (!seen) state.bossesDefeated.push(id);
-                    state.bossDefeatedTime = performance.now();
-                    callbacks.onBossKilled(id);
-                },
-                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-                collectedCluesRef: refs.collectedCluesRef
-            };
+            // 4. Bind State Callbacks
+            this.bindStateCallbacks(ctx, sectorCtx);
 
             PathGenerator.resetPathLayer();
-
             await SectorBuilder.build(sectorCtx, currentSector);
 
             if (!isMounted.current || setupIdRef.current !== currentSetupId) return;
 
-            state.mapItems = mapItems;
-            state.maxHp = isNaN(state.maxHp) ? 100 : Math.max(100, state.maxHp);
-            state.hp = isNaN(state.hp) ? state.maxHp : Math.min(state.maxHp, state.hp);
-            state.maxStamina = isNaN(state.maxStamina) ? 100 : Math.max(100, state.maxStamina);
-            state.stamina = isNaN(state.stamina) ? state.maxStamina : Math.min(state.maxStamina, state.stamina);
+            // 5. Finalize limits and parse effects
+            this.finalizeStateLimits(state, mapItems, flickeringLights, scene, sectorCtx);
 
-            const activeEffects: any[] = [];
-            scene.traverse((child) => {
-                if (child.userData && child.userData.effects) {
-                    const effects = child.userData.effects as any[];
-                    for (let j = 0; j < effects.length; j++) {
-                        const eff = effects[j];
-                        if (eff.type === 'light') {
-                            const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
-                            light.userData.baseIntensity = eff.intensity;
-                            light.userData.isCulled = false;
-                            if (eff.offset) light.position.copy(eff.offset);
-                            child.add(light);
-                            if (eff.flicker) flickeringLights.push({ light, baseInt: eff.intensity, flickerRate: 0.1 });
-                            light.castShadow = false;
-                            light.shadow.autoUpdate = false;
-                            light.shadow.mapSize.set(256, 256);
-                            sectorCtx.dynamicLights.push(light);
-                        }
-                    }
-                    activeEffects.push(child);
-                }
-            });
-            state.activeEffects = activeEffects;
+            // 6. Setup Family Members
+            this.setupFamily(currentSector, props, refs, scene);
 
-            const playerGroup = ModelFactory.createPlayer();
-            refs.playerGroupRef.current = playerGroup;
+            // 7. Initialize Systems
+            this.setupSystems(ctx, playerGroup, sectorCtx);
 
-            let bodyMesh = playerGroup.children[0];
-            for (let i = 0; i < playerGroup.children.length; i++) {
-                if (playerGroup.children[i].userData.isBody || playerGroup.children[i].userData.isPlayer) {
-                    bodyMesh = playerGroup.children[i];
-                    break;
-                }
-            }
-            refs.playerMeshRef.current = bodyMesh as THREE.Group;
-
-            if (state.initialAim && engine.input?.state) {
-                engine.input.state.aimVector.x = state.initialAim.x;
-                engine.input.state.aimVector.y = state.initialAim.y;
-            }
-
-            const playerSpawn = { ...currentSector.playerSpawn };
-            playerGroup.position.set(playerSpawn.x, 0, playerSpawn.z);
-            if (playerSpawn.y) playerGroup.position.y = playerSpawn.y;
-            if (playerSpawn.rot) playerGroup.rotation.y = playerSpawn.rot;
-
-            const flashlight = ModelFactory.createFlashlight();
-            playerGroup.add(flashlight);
-            playerGroup.add(flashlight.target);
-            refs.flashlightRef.current = flashlight;
-            state.flashlightOn = true;
-
-            scene.add(playerGroup);
-
-            const sectorEnv = (refs.propsRef.current as any).currentSectorData?.environment || refs.sectorContextRef.current?.sectorState?.ctx?.environment;
-            const envCameraZ = sectorEnv?.cameraOffsetZ !== undefined ? sectorEnv.cameraOffsetZ : 40;
-            const envCameraY = sectorEnv?.cameraHeight || CAMERA_HEIGHT;
-            const envCameraAngle = sectorEnv?.cameraAngle || 0;
-
-            if (currentSector.cinematic) {
-                const c = currentSector.cinematic;
-                engine.camera.setCinematic(true);
-                engine.camera.setPosition(
-                    playerGroup.position.x + c.offset.x,
-                    (c.offset.y !== undefined ? c.offset.y : envCameraY),
-                    playerGroup.position.z + c.offset.z,
-                    true
-                );
-                engine.camera.lookAt(
-                    playerGroup.position.x + c.lookAtOffset.x,
-                    playerGroup.position.y + c.lookAtOffset.y,
-                    playerGroup.position.z + c.lookAtOffset.z,
-                    true
-                );
-            } else {
-                engine.camera.setCinematic(false);
-                engine.camera.setAngle(envCameraAngle, true);
-                engine.camera.follow(playerGroup.position, envCameraZ, envCameraY);
-                engine.camera.snapToTarget();
-            }
-
-            refs.prevPosRef.current.copy(playerGroup.position);
-            refs.hasSetPrevPosRef.current = true;
-            refs.activeFamilyMembers.current.length = 0;
-
-            const fSpawn = currentSector.familySpawn;
-            const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
-
-            if (props.debugMode && props.currentSector >= 1 && rescuedIndices.length === 0) {
-                for (let i = 0; i < props.currentSector; i++) {
-                    let hasI = false;
-                    for (let r = 0; r < rescuedIndices.length; r++) { if (rescuedIndices[r] === i) { hasI = true; break; } }
-                    if (!hasI) rescuedIndices.push(i);
-                }
-            }
-
-            if (rescuedIndices.length > 0) {
-                for (let i = 0; i < rescuedIndices.length; i++) {
-                    const idx = rescuedIndices[i];
-                    const theme = SECTOR_THEMES[idx];
-                    if (theme && theme.familyMemberId !== undefined) {
-                        const fmData = FAMILY_MEMBERS[theme.familyMemberId];
-                        if (fmData) {
-                            const mesh = ModelFactory.createFamilyMember(fmData);
-                            mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
-                            this.addFamilyMarker(mesh, fmData, scene);
-
-                            let ring = null;
-                            for (let c = 0; c < mesh.children.length; c++) {
-                                if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
-                            }
-                            refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring });
-                        }
+            // --- VINTERDÖD FIX: BYPASS INTRO TRIGGERS ---
+            // If the sector is already cleared, mark the intro triggers as completed
+            if (state.familyAlreadyRescued || state.bossPermanentlyDefeated) {
+                const triggers = state.triggers;
+                for (let i = 0; i < triggers.length; i++) {
+                    const trig = triggers[i];
+                    // Intro triggers usually carry a scriptId or are of type SPEAK/INTERACTION at the family spawn
+                    if (trig.type === 'SPEAK' || (trig.actions && trig.actions.some((a: any) => a.type === 'START_CINEMATIC'))) {
+                        trig.triggered = true;
                     }
                 }
             }
-
-            let hasRescuedCurrent = false;
-            for (let r = 0; r < rescuedIndices.length; r++) { if (rescuedIndices[r] === props.currentSector) { hasRescuedCurrent = true; break; } }
-
-            if (!props.familyAlreadyRescued) {
-                const theme = SECTOR_THEMES[props.currentSector];
-                const fmId = theme ? theme.familyMemberId : 0;
-                if (!hasRescuedCurrent) {
-                    const fmData = FAMILY_MEMBERS[fmId];
-                    if (fmData) {
-                        const mesh = ModelFactory.createFamilyMember(fmData);
-                        mesh.position.set(fSpawn.x, 0, fSpawn.z); if (fSpawn.y) mesh.position.y = fSpawn.y;
-                        this.addFamilyMarker(mesh, fmData, scene);
-
-                        let ring = null;
-                        for (let c = 0; c < mesh.children.length; c++) {
-                            if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
-                        }
-                        const currentFM = { mesh, found: false, following: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring };
-                        refs.activeFamilyMembers.current.push(currentFM);
-                        refs.familyMemberRef.current = currentFM;
-                    }
-                }
-            }
-
-            scene.traverse((obj) => {
-                if (obj instanceof THREE.Mesh && !obj.userData.isDynamic) {
-                    obj.matrixAutoUpdate = false;
-                    obj.updateMatrix();
-                }
-            });
-
-            if (engine.water) {
-                engine.water.setPlayerRef(playerGroup);
-                engine.water.setCallbacks({
-                    spawnPart: (x, y, z, type, count) => callbacks.spawnPart(x, y, z, type, count),
-                    makeNoise: (pos, type, rad) => session.makeNoise(pos, type as NoiseType, rad)
-                });
-            }
-
-            session.addSystem(new DamageNumberSystem(scene));
-            session.addSystem(new DamageTrackerSystem());
-
-            const detectionSys = new EnemyDetectionSystem();
-            session.addSystem(detectionSys);
-            session.detectionSystem = detectionSys;
-
-            session.addSystem(new PlayerMovementSystem(playerGroup));
-            session.addSystem(new VehicleMovementSystem(playerGroup));
-            session.addSystem(new PlayerCombatSystem(playerGroup));
-            session.addSystem(new PlayerInteractionSystem(
-                playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, scene, callbacks.onCollectibleDiscovered
-            ));
-
-            const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
-            session.addSystem(playerStatsSystem);
-
-            session.addSystem(new EnemySystem(playerGroup, {
-                spawnBubble: callbacks.spawnBubble, gainXp: callbacks.gainXp, t: callbacks.t,
-                onEnemyDiscovered: callbacks.onEnemyDiscovered,
-                onBossDiscovered: callbacks.onBossDiscovered,
-                onBossKilled: (id: number) => {
-                    let seen = false;
-                    for (let j = 0; j < state.bossesDefeated.length; j++) {
-                        if (state.bossesDefeated[j] === id) { seen = true; break; }
-                    }
-                    if (!seen) state.bossesDefeated.push(id);
-                    state.bossDefeatedTime = performance.now();
-                    soundManager.stopMusic();
-                    if (currentSector.ambientLoop) soundManager.playMusic(currentSector.ambientLoop);
-                },
-                onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) => playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName),
-                triggerDiscovery: (event: any) => {
-                    if (state.discovery && state.discovery.timestamp > Date.now() - 500) return; // Throttling
-                    state.discovery = {
-                        ...event,
-                        timestamp: Date.now()
-                    };
-                }
-            }));
-
-            session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
-                setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
-                t: (key: string) => callbacks.t(key), spawnPart: callbacks.spawnPart, startCinematic: callbacks.startCinematic,
-                setInteraction: (interaction: any) => {
-                    if (interaction) { ui.setInteractionType('plant_explosive'); state.currentInteraction = interaction; }
-                    else { ui.setInteractionType(null); state.currentInteraction = null; }
-                },
-                playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
-                playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
-                cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
-                setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
-                makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
-                spawnZombie: callbacks.spawnZombie, spawnHorde: spawnHorde, setOverlay: ui.setOverlay
-            }));
-            session.addSystem(new WorldLootSystem(playerGroup, scene));
-
-            session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
-                setFoundMemberName: (n: string) => ui.setFoundMemberName && ui.setFoundMemberName(n),
-                startCinematic: callbacks.startCinematic
-            }));
-
-            session.addSystem(new CinematicSystem({
-                cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
-                bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
-                callbacks: {
-                    setCurrentLine: ui.setCurrentLine, setCinematicActive: ui.setCinematicActive, endCinematic: callbacks.endCinematic,
-                    playCinematicLine: callbacks.playCinematicLine, setTailPosition: ui.setBubbleTailPosition
-                }
-            }));
-
-            session.addSystem(new DeathSystem({
-                playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any, fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
-                deathPhaseRef: refs.deathPhaseRef, inputRef: () => engine.input.state, cameraRef: () => engine.camera.threeCamera, propsRef: refs.propsRef,
-                distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: callbacks, setDeathPhase: ui.setDeathPhase
-            }));
-
-            scene.traverse((obj) => {
-                if (obj.userData?.isPlayer || obj.userData?.isEnemy || obj.userData?.isProjectile || obj.userData?.vehicleDef ||
-                    obj.userData?.isFamilyMember || obj.userData?.isBody || obj.userData?.isCorpse || obj.userData?.dynamic) {
-                    obj.traverse((child) => child.matrixAutoUpdate = true);
-                    return;
-                }
-                const mesh = obj as THREE.Mesh;
-                if (mesh.isMesh || (obj as THREE.Group).isGroup) {
-                    obj.updateMatrix();
-                    obj.updateMatrixWorld(true);
-                    obj.matrixAutoUpdate = false;
-                }
-            });
 
             FXSystem.preload(scene);
 
@@ -498,22 +165,470 @@ export class GameSessionSetup {
             }
 
         } catch (e: any) {
-            // VINTERDÖD FIX: Om det var vi som dödade spöket, ignorera felet.
             if (e.message === "ABORT_SETUP") {
                 console.log("[GameSessionSetup] Ghost setup safely killed mid-generation.");
-                return;
             } else {
                 console.error("[GameSessionSetup] Critical Error:", e);
             }
             return;
         } finally {
             refs.isBuildingSectorRef.current = false;
-            // FALLBACK: If setup crashed before firing onSectorLoaded, do it now.
-            // This ensures the loading screen always dismisses even on iOS errors.
+            // Fallback to ensure loading screen drops
             if (!sectorLoaded && isMounted.current && setupIdRef.current === currentSetupId) {
                 if (callbacks.onSectorLoaded) callbacks.onSectorLoaded();
             }
         }
+    }
+
+    // --- HELPER METHODS FOR CLEANER SETUP ---
+
+    private static prepareScene(engine: WinterEngine, isWarmup: boolean | undefined, refs: any, env: any) {
+        // Aggressively clear the scene. KEEP persistent systems alive (false).
+        engine.clearActiveScene(false);
+
+        const engineSystems = engine.getSystems();
+        for (let i = engineSystems.length - 1; i >= 0; i--) {
+            const sys = engineSystems[i];
+            if (!sys.persistent &&
+                sys.id !== 'light_system' && sys.id !== 'wind_system' &&
+                sys.id !== 'weather_system' && sys.id !== 'fog_system' &&
+                sys.id !== 'water_system') {
+                engine.unregisterSystem(sys.id);
+            }
+        }
+
+        engine.camera.reset();
+        engine.camera.set('fov', env.fov);
+
+        if (!isWarmup) {
+            engine.syncEnvironment(env);
+            const skyLight = engine.scene.getObjectByName(LIGHT_SYSTEM.SKY_LIGHT) as THREE.DirectionalLight;
+            if (skyLight) {
+                refs.skyLightRef.current = skyLight;
+                if (!refs.skyLightOffsetRef.current) refs.skyLightOffsetRef.current = new THREE.Vector3();
+                refs.skyLightOffsetRef.current.copy(skyLight.position);
+            }
+        }
+    }
+
+    private static setupPlayerAndCamera(engine: WinterEngine, currentSector: any, refs: any, state: RuntimeState) {
+        const playerGroup = ModelFactory.createPlayer();
+        refs.playerGroupRef.current = playerGroup;
+
+        let bodyMesh = playerGroup.children[0];
+        const pLen = playerGroup.children.length;
+        for (let i = 0; i < pLen; i++) {
+            if (playerGroup.children[i].userData.isBody || playerGroup.children[i].userData.isPlayer) {
+                bodyMesh = playerGroup.children[i];
+                break;
+            }
+        }
+        refs.playerMeshRef.current = bodyMesh as THREE.Group;
+
+        if (state.initialAim && engine.input?.state) {
+            engine.input.state.aimVector.x = state.initialAim.x;
+            engine.input.state.aimVector.y = state.initialAim.y;
+        }
+
+        const spawn = currentSector.playerSpawn;
+        playerGroup.position.set(spawn.x, spawn.y || 0, spawn.z);
+        if (spawn.rot) playerGroup.rotation.y = spawn.rot;
+
+        const flashlight = ModelFactory.createFlashlight();
+        playerGroup.add(flashlight);
+        playerGroup.add(flashlight.target);
+        refs.flashlightRef.current = flashlight;
+        state.flashlightOn = true;
+
+        engine.scene.add(playerGroup);
+
+        const env = currentSector.environment;
+        const envCameraZ = env?.cameraOffsetZ !== undefined ? env.cameraOffsetZ : 40;
+        const envCameraY = env?.cameraHeight || CAMERA_HEIGHT;
+        const envCameraAngle = env?.cameraAngle || 0;
+
+        engine.camera.setPosition(spawn.x, envCameraY, spawn.z + envCameraZ, true);
+
+        if (currentSector.cinematic) {
+            const c = currentSector.cinematic;
+            engine.camera.setCinematic(true);
+            engine.camera.setPosition(playerGroup.position.x + c.offset.x, (c.offset.y !== undefined ? c.offset.y : envCameraY), playerGroup.position.z + c.offset.z, true);
+            engine.camera.lookAt(playerGroup.position.x + c.lookAtOffset.x, playerGroup.position.y + c.lookAtOffset.y, playerGroup.position.z + c.lookAtOffset.z, true);
+        } else {
+            engine.camera.setCinematic(false);
+            engine.camera.setAngle(envCameraAngle, true);
+            engine.camera.follow(playerGroup.position, envCameraZ, envCameraY);
+            engine.camera.snapToTarget();
+        }
+
+        refs.prevPosRef.current.copy(playerGroup.position);
+        refs.hasSetPrevPosRef.current = true;
+
+        return playerGroup;
+    }
+
+    private static createSectorContext(ctx: SetupContext, currentSector: any, textures: any, flickeringLights: any[], burningObjects: any[], mapItems: MapItem[], rng: () => number, playerGroup: THREE.Group, yielder: () => Promise<void>): SectorContext {
+        const { engine, state, props, callbacks } = ctx;
+
+        const spawnHorde = (count: number, type?: string, pos?: THREE.Vector3) => {
+            const startPos = pos || playerGroup.position;
+            const newEnemies = EnemyManager.spawnHorde(engine.scene, startPos, count, state.bossSpawned, state.enemies.length);
+            if (newEnemies) {
+                const len = newEnemies.length;
+                for (let i = 0; i < len; i++) state.enemies.push(newEnemies[i]);
+            }
+        };
+
+        const realSpawnZombie = (forcedType?: string, forcedPos?: THREE.Vector3) => {
+            const playerPos = playerGroup.position;
+            const enemy = EnemyManager.spawn(engine.scene, playerPos, forcedType, forcedPos, state.bossSpawned, state.enemies.length);
+            if (enemy) state.enemies.push(enemy);
+            return enemy;
+        };
+
+        const spawnBoss = (type: string, pos?: THREE.Vector3) => {
+            const pSpawn = currentSector.playerSpawn;
+            const bossPos = pos || (currentSector.bossSpawn ? new THREE.Vector3(currentSector.bossSpawn.x, 0, currentSector.bossSpawn.z) : new THREE.Vector3(pSpawn.x, 0, pSpawn.z));
+            const bossId = !isNaN(parseInt(type)) ? parseInt(type) : props.currentSector;
+            const bossData = (BOSSES as any)[bossId];
+
+            const boss = EnemyManager.spawnBoss(engine.scene, bossPos, bossData);
+            if (boss) {
+                state.enemies.push(boss);
+                state.bossSpawned = true;
+
+                const idStr = String(bossId);
+                let seen = false;
+                for (let j = 0; j < props.stats.seenBosses.length; j++) {
+                    if (props.stats.seenBosses[j] === idStr) {
+                        seen = true;
+                        break;
+                    }
+                }
+
+                if (!seen && callbacks.onDiscovery) {
+                    callbacks.onDiscovery('boss', idStr, 'ui.boss_encountered', `bosses.${idStr}.name`);
+                }
+            }
+            return boss;
+        };
+
+        return {
+            scene: engine.scene, engine, obstacles: state.obstacles, collisionGrid: state.collisionGrid, chests: state.chests,
+            flickeringLights, burningObjects, rng, triggers: state.triggers, mapItems, debugMode: props.debugMode,
+            textures: textures, spawnZombie: realSpawnZombie, spawnHorde, spawnBoss,
+            cluesFound: props.stats.cluesFound || [], collectiblesDiscovered: props.stats.collectiblesDiscovered || [],
+            collectibles: [], dynamicLights: [], interactables: [], sectorId: props.currentSector, smokeEmitters: [],
+            sectorState: state.sectorState, state: state, yield: yielder,
+            makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => ctx.session.makeNoise(pos, type, radius),
+
+            // --- VINTERDÖD FIX: Injecting the generic bridge into the sector events API ---
+            onAction: callbacks.onAction
+        };
+    }
+
+    private static bindStateCallbacks(ctx: SetupContext, sectorCtx: SectorContext) {
+        const { engine, session, state, callbacks, refs, props } = ctx;
+
+        state.callbacks = {
+            spawnPart: callbacks.spawnPart,
+            spawnDecal: callbacks.spawnDecal,
+            showDamageText: callbacks.showDamageText,
+            spawnBubble: callbacks.spawnBubble,
+            onTrigger: callbacks.onTrigger,
+            onAction: (action: any) => {
+                if (action.type === 'HEAL') {
+                    state.hp = Math.min(state.maxHp, state.hp + action.amount);
+                    soundManager.playUiConfirm();
+                }
+                if (action.type === 'SOUND' && action.id) soundManager.playEffect(action.id);
+                callbacks.handleTriggerAction(action, engine.scene);
+            },
+            explodeEnemy: (e: any, force: THREE.Vector3) => EnemyManager.explodeEnemy(e, sectorCtx, force),
+            gainXp: (amount: number) => {
+                const tracker = session.getSystem('damage_tracker_system') as any;
+                if (tracker) tracker.recordXp(session, amount);
+            },
+            gainSp: (amount: number) => {
+                const tracker = session.getSystem('damage_tracker_system') as any;
+                if (tracker) tracker.recordSp(session, amount);
+            },
+            onDiscovery: (type: 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss', id: string, titleKey: string, detailsKey: string, payload?: any) => {
+                // O(1) Optimization: Avoid React overhead if already found in this session or prior
+                const sets = state.discoverySets;
+                const stats = state.sessionStats;
+                
+                let alreadyFound = false;
+                if (type === 'clue') {
+                    alreadyFound = sets.clues.has(id);
+                    if (!alreadyFound) {
+                        sets.clues.add(id);
+                        stats.cluesFound.push(payload || { id });
+                    }
+                } else if (type === 'poi') {
+                    alreadyFound = sets.pois.has(id);
+                    if (!alreadyFound) {
+                        sets.pois.add(id);
+                        stats.discoveredPOIs.push(id);
+                    }
+                } else if (type === 'collectible') {
+                    alreadyFound = sets.collectibles.has(id);
+                    if (!alreadyFound) {
+                        sets.collectibles.add(id);
+                        stats.collectiblesDiscovered.push(id);
+                    }
+                }
+
+                // First time discovery awards SP (Plan overhaul)
+                if (!alreadyFound) {
+                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    if (tracker) tracker.recordSp(session, 1);
+                    
+                    if (callbacks.onDiscovery) {
+                        callbacks.onDiscovery(type, id, titleKey, detailsKey, payload);
+                    }
+                }
+            },
+            onBossKilled: (idStr: string) => {
+                const id = parseInt(idStr);
+                const stats = state.sessionStats;
+                
+                let alreadyDefeated = false;
+                const bdLen = state.bossesDefeated.length;
+                for (let j = 0; j < bdLen; j++) {
+                    if (state.bossesDefeated[j] === id) {
+                        alreadyDefeated = true;
+                        break;
+                    }
+                }
+
+                if (!alreadyDefeated) {
+                    state.bossesDefeated.push(id);
+                    state.bossDefeatedTime = performance.now();
+                    
+                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    if (tracker) {
+                        tracker.recordKill(session, idStr, true);
+                        tracker.recordSp(session, 2); // Boss Kill = +2 SP
+                    }
+
+                    const currentFM = refs.familyMemberRef.current;
+                    if (currentFM && !currentFM.rescued) {
+                        currentFM.rescued = true;
+                        // SP for family rescue (+2 SP)
+                        if (tracker) tracker.recordSp(session, 2);
+                    }
+                    callbacks.onBossKilled(id);
+                }
+            },
+            makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
+            collectedCluesRef: refs.collectedCluesRef
+        };
+    }
+
+    private static finalizeStateLimits(state: RuntimeState, mapItems: MapItem[], flickeringLights: any[], scene: THREE.Scene, sectorCtx: SectorContext) {
+        state.mapItems = mapItems;
+        state.maxHp = isNaN(state.maxHp) ? 100 : Math.max(100, state.maxHp);
+        state.hp = isNaN(state.hp) ? state.maxHp : Math.min(state.maxHp, state.hp);
+        state.maxStamina = isNaN(state.maxStamina) ? 100 : Math.max(100, state.maxStamina);
+        state.stamina = isNaN(state.stamina) ? state.maxStamina : Math.min(state.maxStamina, state.stamina);
+
+        const activeEffects: any[] = [];
+        scene.traverse((child) => {
+            if (child.userData && child.userData.effects) {
+                const effects = child.userData.effects as any[];
+                for (let j = 0; j < effects.length; j++) {
+                    const eff = effects[j];
+                    if (eff.type === 'light') {
+                        const light = new THREE.PointLight(eff.color, eff.intensity, eff.distance);
+                        light.userData.baseIntensity = eff.intensity;
+                        light.userData.isCulled = false;
+                        if (eff.offset) light.position.copy(eff.offset);
+                        child.add(light);
+                        if (eff.flicker) flickeringLights.push({ light, baseInt: eff.intensity, flickerRate: 0.1 });
+                        light.castShadow = false;
+                        light.shadow.autoUpdate = false;
+                        light.shadow.mapSize.set(256, 256);
+                        sectorCtx.dynamicLights.push(light);
+                    }
+                }
+                activeEffects.push(child);
+            }
+        });
+        state.activeEffects = activeEffects;
+    }
+
+    private static setupFamily(currentSector: any, props: GameCanvasProps, refs: any, scene: THREE.Scene) {
+        refs.activeFamilyMembers.current.length = 0;
+        const playerSpawn = currentSector.playerSpawn;
+        const fSpawn = currentSector.familySpawn;
+        const rescuedIndices = [...(props.rescuedFamilyIndices || [])];
+
+        // Developer override
+        if (props.debugMode && props.currentSector >= 1 && rescuedIndices.length === 0) {
+            for (let i = 0; i < props.currentSector; i++) {
+                if (rescuedIndices.indexOf(i) === -1) rescuedIndices.push(i);
+            }
+        }
+
+        if (rescuedIndices.length > 0) {
+            for (let i = 0; i < rescuedIndices.length; i++) {
+                const idx = rescuedIndices[i];
+                const theme = SECTOR_THEMES[idx];
+                if (theme && theme.familyMemberId !== undefined) {
+                    const fmData = FAMILY_MEMBERS[theme.familyMemberId];
+                    if (fmData) {
+                        const mesh = ModelFactory.createFamilyMember(fmData);
+                        mesh.position.set(playerSpawn.x + (Math.random() - 0.5) * 5, 0, playerSpawn.z + 5 + Math.random() * 5);
+                        this.addFamilyMarker(mesh, fmData, scene);
+
+                        let ring = null;
+                        for (let c = 0; c < mesh.children.length; c++) {
+                            if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
+                        }
+                        refs.activeFamilyMembers.current.push({ mesh, found: true, following: true, rescued: true, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: mesh.position.clone() });
+                    }
+                }
+            }
+        }
+
+        let hasRescuedCurrent = rescuedIndices.indexOf(props.currentSector) !== -1;
+
+        if (!props.familyAlreadyRescued) {
+            const theme = SECTOR_THEMES[props.currentSector];
+            const fmId = theme ? theme.familyMemberId : 0;
+            if (!hasRescuedCurrent) {
+                const fmData = FAMILY_MEMBERS[fmId];
+                if (fmData) {
+                    const mesh = ModelFactory.createFamilyMember(fmData);
+                    mesh.position.set(fSpawn.x, 0, fSpawn.z);
+                    if (fSpawn.y) mesh.position.y = fSpawn.y;
+                    this.addFamilyMarker(mesh, fmData, scene);
+
+                    let ring = null;
+                    for (let c = 0; c < mesh.children.length; c++) {
+                        if (mesh.children[c].userData.isRing) { ring = mesh.children[c]; break; }
+                    }
+                    const currentFM = { mesh, found: false, following: false, rescued: false, name: fmData.name, id: fmData.id, scale: fmData.scale, seed: Math.random() * 100, ring, spawnPos: new THREE.Vector3(fSpawn.x, fSpawn.y || 0, fSpawn.z) };
+                    refs.activeFamilyMembers.current.push(currentFM);
+                    refs.familyMemberRef.current = currentFM;
+                }
+            }
+        }
+    }
+
+    private static setupSystems(ctx: SetupContext, playerGroup: THREE.Group, sectorCtx: SectorContext) {
+        const { engine, session, state, callbacks, refs, props, ui } = ctx;
+
+        if (engine.water) {
+            engine.water.setPlayerRef(playerGroup);
+            engine.water.setCallbacks({
+                spawnPart: (x, y, z, type, count) => callbacks.spawnPart(x, y, z, type, count),
+                makeNoise: (pos, type, rad) => session.makeNoise(pos, type as NoiseType, rad)
+            });
+        }
+
+        session.addSystem(new DamageNumberSystem(engine.scene));
+        session.addSystem(new DamageTrackerSystem());
+
+        const detectionSys = new EnemyDetectionSystem();
+        session.addSystem(detectionSys);
+        session.detectionSystem = detectionSys;
+
+        session.addSystem(new PlayerMovementSystem(playerGroup));
+        session.addSystem(new VehicleMovementSystem(playerGroup));
+        session.addSystem(new PlayerCombatSystem(playerGroup));
+        session.addSystem(new PlayerInteractionSystem(
+            playerGroup, callbacks.concludeSector, sectorCtx.collectibles, refs.activeFamilyMembers, engine.scene,
+            (id) => callbacks.onDiscovery && callbacks.onDiscovery('collectible', id, 'ui.collectible_discovered', `collectibles.${id}.title`)
+        ));
+
+        const playerStatsSystem = new PlayerStatsSystem(playerGroup, callbacks.t, refs.activeFamilyMembers);
+        session.addSystem(playerStatsSystem);
+
+        session.addSystem(new EnemySystem(playerGroup, {
+            spawnBubble: callbacks.spawnBubble,
+            gainXp: callbacks.gainXp,
+            t: callbacks.t,
+            onDiscovery: callbacks.onDiscovery,
+            onBossKilled: (id: number) => {
+                let seen = false;
+                for (let j = 0; j < state.bossesDefeated.length; j++) {
+                    if (state.bossesDefeated[j] === id) { seen = true; break; }
+                }
+                if (!seen) state.bossesDefeated.push(id);
+                state.bossDefeatedTime = performance.now();
+                state.familyFound = true;
+                
+                const tracker = session.getSystem('damage_tracker_system') as any;
+                if (tracker) tracker.recordKill(session, String(id), true);
+
+                const currentFM = refs.familyMemberRef.current;
+                if (currentFM && !currentFM.rescued) {
+                    currentFM.rescued = true;
+                    if (!props.stats.rescuedFamilyIds.includes(currentFM.id)) props.stats.rescuedFamilyIds.push(currentFM.id);
+                }
+
+                soundManager.stopMusic();
+                const curSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
+                if (curSector?.ambientLoop) soundManager.playMusic(curSector.ambientLoop);
+            },
+            onPlayerHit: (damage, attacker, type, isDoT, effect, dur, intense, attackName) =>
+                playerStatsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName),
+        } as any));
+
+        session.addSystem(new SectorSystem(playerGroup, props.currentSector, {
+            setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
+            t: callbacks.t, spawnPart: callbacks.spawnPart, startCinematic: callbacks.startCinematic,
+            setInteraction: (interaction: any) => {
+                if (interaction) { ui.setInteractionType('plant_explosive'); state.currentInteraction = interaction; }
+                else { ui.setInteractionType(null); state.currentInteraction = null; }
+            },
+            playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
+            playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
+            cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
+            setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
+            makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => session.makeNoise(pos, type, radius),
+            spawnZombie: callbacks.spawnZombie, spawnHorde: sectorCtx.spawnHorde, setOverlay: ui.setOverlay
+        }));
+
+        session.addSystem(new WorldLootSystem(playerGroup, engine.scene));
+        session.addSystem(new FamilySystem(playerGroup, refs.activeFamilyMembers, refs.cinematicRef, {
+            setFoundMemberName: (n: string) => ui.setFoundMemberName && ui.setFoundMemberName(n),
+            startCinematic: callbacks.startCinematic
+        }));
+
+        session.addSystem(new CinematicSystem({
+            cinematicRef: refs.cinematicRef, camera: engine.camera as any, playerMeshRef: refs.playerMeshRef as any,
+            bubbleRef: refs.bubbleRef, activeFamilyMembers: refs.activeFamilyMembers,
+            callbacks: {
+                setCurrentLine: ui.setCurrentLine, setCinematicActive: ui.setCinematicActive, endCinematic: callbacks.endCinematic,
+                playCinematicLine: callbacks.playCinematicLine, setTailPosition: ui.setBubbleTailPosition,
+                onAction: callbacks.onAction // Hooked up!
+            }
+        }));
+
+        session.addSystem(new DeathSystem({
+            playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any, fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
+            deathPhaseRef: refs.deathPhaseRef, inputRef: () => engine.input.state, cameraRef: () => engine.camera.threeCamera, propsRef: refs.propsRef,
+            distanceTraveledRef: refs.distanceTraveledRef, fxCallbacks: callbacks, setDeathPhase: ui.setDeathPhase
+        }));
+
+        // Optimize static meshes
+        engine.scene.traverse((obj) => {
+            const ud = obj.userData;
+            if (ud?.isPlayer || ud?.isEnemy || ud?.isProjectile || ud?.vehicleDef ||
+                ud?.isFamilyMember || ud?.isBody || ud?.isCorpse || ud?.dynamic || ud?.isInteractable) {
+                obj.traverse((child) => child.matrixAutoUpdate = true);
+                return;
+            }
+            const mesh = obj as THREE.Mesh;
+            if (mesh.isMesh || (obj as THREE.Group).isGroup) {
+                obj.updateMatrix();
+                obj.updateMatrixWorld(true);
+                obj.matrixAutoUpdate = false;
+            }
+        });
     }
 
     private static addFamilyMarker(mesh: THREE.Group, fmData: any, scene: THREE.Scene) {
@@ -532,7 +647,8 @@ export class GameSessionSetup {
         scene.add(mesh);
     }
 
-    /** * Resurrects player with full HP, stamina, ammo etc.
+    /**
+     * Resurrects player with full HP, stamina, ammo etc.
      * Enemies are respawned. Chests already opened remain open.
      */
     static respawnPlayer(engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
@@ -551,20 +667,19 @@ export class GameSessionSetup {
         state.vehicleSpeed = 0;
         state.vehicleEngineState = 'OFF';
 
-        // Reset buffs/debuffs
+        // Reset buffs/debuffs (Zero-GC: Emptying arrays)
         state.activeBuffs.length = 0;
         state.activeDebuffs.length = 0;
         state.statusEffects = {};
+        state.activePassives.length = 0;
 
-        // Recalculate passives (keeps family modifiers if they are following)
-        const statsSystem = engine.getSystem('player_stats_system') as any; // Cast to avoid circular import loops if it's strict
+        const statsSystem = engine.getSystem('player_stats_system') as any;
         if (statsSystem && statsSystem.updatePassives) {
             statsSystem.updatePassives();
         }
 
         HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.maxHp });
 
-        // Reset ammo
         for (const key in state.weaponAmmo) {
             const wepType = key as any;
             if (state.weaponAmmo[wepType] !== undefined) {
@@ -581,24 +696,27 @@ export class GameSessionSetup {
         if (refs.playerGroupRef.current) {
             const spawn = currentSectorData.playerSpawn;
             refs.playerGroupRef.current.position.set(spawn.x, spawn.y || 0, spawn.z);
-
-            // Fetch camera directly and snap to player
             engine.camera.snapToTarget();
 
-            // Move family members: Keep saved/tracking members close to the player, 
-            // Return undiscovered members to their original sector location.
             const members = refs.activeFamilyMembers.current || [];
             const fSpawn = currentSectorData.familySpawn;
 
             for (let i = 0; i < members.length; i++) {
                 const fm = members[i];
                 if (fm.mesh) {
-                    if (fm.found || fm.following) {
+                    if (!fm.rescued && fm.following) {
+                        fm.following = false;
+                        fm.found = false;
+                    }
+
+                    if (fm.rescued || fm.following) {
                         fm.mesh.position.set(
                             spawn.x + (Math.random() - 0.5) * 5,
                             spawn.y || 0,
                             spawn.z + 5 + Math.random() * 5
                         );
+                    } else if (fm.spawnPos) {
+                        fm.mesh.position.copy(fm.spawnPos);
                     } else if (fSpawn) {
                         fm.mesh.position.set(fSpawn.x, fSpawn.y || 0, fSpawn.z);
                     }
@@ -631,25 +749,22 @@ export class GameSessionSetup {
             currentSectorData.setupZombies(sCtx);
         }
 
-        // 6. Fix UI via callback
+        // 6. Fix UI
         setDeathPhase('NONE');
     }
 
-    /** * Restarts the sector completely.
-     * Everything is reset (including chests, world loot and layout).
+    /**
+     * Restarts the sector completely.
      */
     static async restartSector(ctx: SetupContext, currentSetupId: number) {
         const { engine, state, ui } = ctx;
 
-        // Ensure UI knows we are loading if it takes a moment
         ui.setIsSectorLoading(true);
 
-        // 1. Clean up ALL dynamic entities (including chests and obstacles)
         EnemyManager.clear();
         ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
         FXSystem.reset();
 
-        // Remove everything generated
         const toRemove: THREE.Object3D[] = [];
         engine.scene.traverse(obj => {
             if (obj.userData?.generated || obj.userData?.isEnemy || obj.userData?.isPlayer) {
@@ -658,17 +773,17 @@ export class GameSessionSetup {
         });
         toRemove.forEach(obj => { if (obj.parent) obj.parent.remove(obj); });
 
-        // 2. Reset state arrays
+        // Zero-GC Arrays reset
         state.enemies.length = 0;
         state.obstacles.length = 0;
         state.chests.length = 0;
         state.triggers.length = 0;
         state.bloodDecals.length = 0;
+
         state.isDead = false;
-        state.hp = state.maxHp; // VINTERDÖD FIX: Force health to 100% on restart
+        state.hp = state.maxHp;
         state.stamina = state.maxStamina;
 
-        // 3. RUN SETUP AGAIN! (In the same React mount)
         await this.runSectorSetup(ctx, currentSetupId);
 
         ui.setDeathPhase('NONE');
@@ -678,24 +793,19 @@ export class GameSessionSetup {
         EnemyManager.clear();
         AssetLoader.getInstance().clearCache();
 
-        // 1. Turn off hardware/engine connections
         const engine = WinterEngine.getInstance();
         engine.input.disable();
         soundManager.setReverb(0);
         soundManager.stopAll();
 
-        // 2. Clear specific rendering systems
         ProjectileSystem.clear(engine.scene, state.projectiles, state.fireZones);
         FXSystem.reset();
 
-        // 3. Delegate all graphics and logic cleanup to the session!
         if (session) {
             session.dispose();
         }
 
-        // Reset last flags for this setup step
-        state.sessionCollectiblesDiscovered = [];
+        state.sessionCollectiblesDiscovered.length = 0;
         state.bossSpawned = false;
     }
-
 }

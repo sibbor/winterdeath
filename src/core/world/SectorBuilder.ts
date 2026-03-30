@@ -279,7 +279,10 @@ export const SectorBuilder = {
             type: type,
             scrap: isBig ? 100 : 25,
             opened: false,
-            collider: { type: 'box' as const, size: boxSize } // as const added for type safety
+            collider: {
+                type: 'box',
+                size: boxSize
+            }
         };
 
         ctx.chests.push(obs);
@@ -292,8 +295,7 @@ export const SectorBuilder = {
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             collider: {
                 type: 'box',
-                size: boxSize,
-                margin: 2.0
+                size: boxSize
             }
         });
 
@@ -601,14 +603,16 @@ export const SectorBuilder = {
         vehicleRoot.userData.suspY = 0;
         vehicleRoot.userData.suspVelY = 0;
 
+        const boxSize = new THREE.Vector3(def.size.x, def.size.y, def.size.z);
+
         const obs = {
             mesh: vehicleRoot,
             position: vehicleRoot.position,
             quaternion: vehicleRoot.quaternion,
             collider: {
                 type: 'box' as const,
-                size: new THREE.Vector3(def.size.x, def.size.y, def.size.z),
-                center: new THREE.Vector3(0, def.size.y / 2, 0)
+                size: boxSize,
+                //center: new THREE.Vector3(0, def.size.y / 2, 0)
             },
             type: `Vehicle_${vehicleType}`
         };
@@ -624,8 +628,7 @@ export const SectorBuilder = {
             label: 'ui.enter_vehicle',
             collider: {
                 type: 'box',
-                size: new THREE.Vector3(def.size.x, def.size.y, def.size.z),
-                margin: 2.0
+                size: boxSize
             }
         });
 

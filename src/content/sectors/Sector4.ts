@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
@@ -24,7 +23,11 @@ const LOCATIONS = {
     TRIGGERS: {
         NOISE: { x: 0, z: -50 },
         SHED_SIGHT: { x: -20, z: -120 },
-        FOUND_NATHALIE: { x: -40, z: -150 }
+        FOUND_NATHALIE: { x: -40, z: -150 },
+
+        // VINTERDÖD: Added the two on-the-move dialogue triggers
+        DIALOGUE_1: { x: 0, z: -20 }, // 20m from spawn
+        DIALOGUE_2: { x: 0, z: -50 }  // 50m from spawn
     },
     POIS: {
         SHED: { x: -40, z: -150 }
@@ -61,7 +64,6 @@ export const Sector4: SectorDef = {
     },
     // Automatic Content
     groundType: 'DIRT',
-    //bounds: { width: 350, depth: 350 },
     ambientLoop: 'ambient_scrapyard_loop',
     // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
@@ -141,7 +143,6 @@ export const Sector4: SectorDef = {
             );
             ctx.scene.add(deadTree);
         }
-
         // ===== END INDUSTRIAL DECAY =====
     },
 
@@ -149,9 +150,47 @@ export const Sector4: SectorDef = {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
         // Triggers
         SectorBuilder.addTriggers(ctx, [
+            // Dialogue Part 1 (Gravel Path)
+            {
+                id: 's4_dialogue_1',
+                position: LOCATIONS.TRIGGERS.DIALOGUE_1,
+                radius: 15,
+                type: 'EVENT',
+                content: '',
+                triggered: false,
+                // VINTERDÖD FIX: Points to index 3 (Sector 4), starts at line 0 automatically.
+                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3 } }]
+            },
+
+            // Dialogue Part 2 (RV40)
+            {
+                id: 's4_dialogue_2',
+                position: LOCATIONS.TRIGGERS.DIALOGUE_2,
+                radius: 15,
+                type: 'EVENT',
+                content: '',
+                triggered: false,
+                // VINTERDÖD FIX: Points to Sector 4 script, but we must start at line 6 (index 6 in the array)
+                // We pass 'lineIndex' to the payload so the cinematic system knows where to begin.
+                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3, lineIndex: 6 } }]
+            },
+
+            // Dialogue Part 3 (Final Boss/Nathalie)
+            {
+                id: 'found_nathalie',
+                position: LOCATIONS.TRIGGERS.FOUND_NATHALIE,
+                familyId: 3,
+                radius: 12,
+                type: 'EVENT',
+                content: '',
+                triggered: false,
+                // Starts the final dialogue at line 14. 
+                // The dialog script will then fire ['FAMILY_MEMBER_FOUND', 'SPAWN_BOSS']
+                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3, lineIndex: 14 } }]
+            },
+
             { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHT', content: "clues.3.0.reaction", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
             { id: 's4_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'POI', content: "pois.3.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 'found_nathalie', position: LOCATIONS.TRIGGERS.FOUND_NATHALIE, familyId: 3, radius: 8, type: 'EVENT', content: '', triggered: false, actions: [{ type: 'START_CINEMATIC' }, { type: 'TRIGGER_FAMILY_FOLLOW', delay: 2000 }] },
             { id: 's4_poi_scrapyard', position: { x: 0, z: -100 }, radius: 100, type: 'POI', content: "pois.3.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
         ]);
     },
@@ -174,7 +213,6 @@ export const Sector4: SectorDef = {
             const px = playerPos.x + Math.cos(angle) * dist;
             const pz = playerPos.z + Math.sin(angle) * dist;
 
-            // Check if position is occupied by obstacles would be ideal, but simple distance logic works for now
             events.spawnZombie(EnemyType.RUNNER, new THREE.Vector3(px, 0, pz));
         }
     }

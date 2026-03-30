@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { t } from '../../../utils/i18n';
 
 interface InteractionPromptProps {
-    type: 'collectible' | 'chest' | 'plant_explosive' | 'knock_on_port' | 'sector_specific' | 'vehicle' | null;
+    type: 'collectible' | 'chest' | 'sector_specific' | 'vehicle' | null;
     label?: string | null;
     screenPos?: { x: number, y: number } | null; // Kept for backwards compatibility
     isMobileDevice?: boolean;
@@ -16,9 +16,8 @@ interface InteractionPromptProps {
 const TYPE_CONFIG: Record<string, { key: string, color: string }> = {
     collectible: { key: 'ui.interact_pickup_collectible', color: 'border-green-400 text-green-100' },
     chest: { key: 'ui.interact_open_chest', color: 'border-yellow-500 text-yellow-100' },
-    plant_explosive: { key: 'ui.interact_plant_explosive', color: 'border-red-500 text-red-100' },
-    knock_on_port: { key: 'ui.interact_knock_on_port', color: 'border-gray-400 text-white' },
-    vehicle: { key: 'ui.enter_vehicle', color: 'border-blue-400 text-blue-100' }
+    vehicle: { key: 'ui.enter_vehicle', color: 'border-blue-400 text-blue-100' },
+    sector_specific: { key: 'ui.interact', color: 'border-gray-400 text-white' }
 };
 
 const DEFAULT_CONFIG = { key: 'ui.interact', color: 'border-gray-400 text-white' };
@@ -33,11 +32,11 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
 
     const inputKey = isMobileDevice ? "TAP" : "E";
 
-    // Select color and text key based on interaction type
+    // Select color and default text key based on interaction type
     const config = TYPE_CONFIG[type] || DEFAULT_CONFIG;
 
-    // Overrides logic
-    const textKey = (type === 'vehicle' || type === 'sector_specific') && label ? label : config.key;
+    // Overrides logic: If a label is explicitly provided by the game system, ALWAYS use it
+    const textKey = label ? label : config.key;
     const colorClass = config.color;
 
     // Failsafe: If i18n cannot find the word, show 'textKey' instead of an empty text box

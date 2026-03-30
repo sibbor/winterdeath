@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PlayerStats } from '../../../../entities/player/PlayerTypes';
 import { t } from '../../../../utils/i18n';
 import { COLLECTIBLES } from '../../../../content/collectibles';
@@ -23,18 +23,76 @@ interface ScreenAdventureLogProps {
 
 type Tab = 'stats' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
+// --- ZERO-GC STATIC ARRAYS & CONFIGS ---
+const EMPTY_ARRAY: any[] = [];
+const TABS: { id: Tab, label: string }[] = [
+    { id: 'stats', label: 'stations.stats' }, // t() applied in render
+    { id: 'collectibles', label: 'ui.log_collectibles' },
+    { id: 'clues', label: 'ui.log_clues' },
+    { id: 'poi', label: 'ui.log_poi' },
+    { id: 'enemy', label: 'ui.log_enemies' },
+    { id: 'boss', label: 'ui.log_bosses' },
+];
+const SECTORS = [1, 2, 3, 4];
+const THEME_COLOR = '#16a34a'; // green-600
+
+// Pre-compute object values to avoid GC allocation on every frame
+const COLLECTIBLES_ARRAY = Object.values(COLLECTIBLES);
+const CLUES_ARRAY = Object.values(CLUES);
+const POIS_ARRAY = Object.values(POIS);
+
+const darkenColor = (hex: string, percent: number) => {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) - amt;
+    const G = (num >> 8 & 0x00FF) - amt;
+    const B = (num & 0x0000FF) - amt;
+    return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
+};
+
+const getEnemyDescription = (type: string) => {
+    const key = `enemies.${type}.description`;
+    const loc = t(key);
+    if (loc === key) {
+        switch (type) {
+            case EnemyType.WALKER: return "Standard reanimated combatant. Low threat individually, dangerous in swarms.";
+            case EnemyType.RUNNER: return "Hyper-aggressive mutation. Closing speed is extreme.";
+            case EnemyType.TANK: return "Heavily armored juggernaut. Absorbs significant small-arms fire.";
+            case EnemyType.BOMBER: return "Unstable biological payload. Explodes on proximity.";
+            default: return t('enemies.unknown');
+        }
+    }
+    return loc;
+};
+
+const getBossDescription = (bossNameKey: string) => {
+    const index = bossNameKey.split('.')[1];
+    return t(`bosses.${index}.lore`);
+};
+
 const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab, initialItemId }) => {
     const { isLandscapeMode } = useOrientation();
     const effectiveLandscape = isLandscapeMode || !isMobileDevice;
     const [activeTab, setActiveTab] = useState<Tab>(initialTab || 'stats');
 
+    const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
+
     // Mark all found collectibles as viewed when the log is opened
     useEffect(() => {
-        const foundIds = stats.collectiblesDiscovered || [];
-        const viewedIds = stats.viewedCollectibles || [];
-        const newIds = foundIds.filter(id => !viewedIds.includes(id));
+        const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
+        const viewedIds = stats.viewedCollectibles || EMPTY_ARRAY;
 
-        if (newIds.length > 0 && onMarkCollectiblesViewed) {
+        let hasNew = false;
+        const newIds: string[] = [];
+
+        for (let i = 0; i < foundIds.length; i++) {
+            if (!viewedIds.includes(foundIds[i])) {
+                newIds.push(foundIds[i]);
+                hasNew = true;
+            }
+        }
+
+        if (hasNew && onMarkCollectiblesViewed) {
             onMarkCollectiblesViewed(newIds);
         }
     }, [stats.collectiblesDiscovered, stats.viewedCollectibles, onMarkCollectiblesViewed]);
@@ -54,25 +112,12 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
         }
     }, [initialItemId, activeTab]);
 
-    const handleTabChange = (tab: Tab) => {
+    const handleTabChange = useCallback((tab: Tab) => {
         soundManager.playUiClick();
         setActiveTab(tab);
-    };
+    }, []);
 
-    const tabs: { id: Tab, label: string }[] = [
-        { id: 'stats', label: t('stations.stats') },
-        { id: 'collectibles', label: t('ui.log_collectibles') },
-        { id: 'clues', label: t('ui.log_clues') },
-        { id: 'poi', label: t('ui.log_poi') },
-        { id: 'enemy', label: t('ui.log_enemies') },
-        { id: 'boss', label: t('ui.log_bosses') },
-    ];
-
-    const themeColor = '#16a34a'; // green-600
-
-    const isDebugMode = (debugMode !== undefined ? debugMode : false) || (window as any).gameEngine?.sectorContext?.debugMode || (window as any).WD_DEBUG === true || localStorage.getItem('wd_debug') === 'true';
-
-    const handleDebugShowAll = () => {
+    const handleDebugShowAll = useCallback(() => {
         switch (activeTab) {
             case 'collectibles': {
                 const allIds = Object.keys(COLLECTIBLES);
@@ -104,21 +149,11 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             }
         }
 
-        // Force refresh by toggling tab back and forth quickly
         soundManager.playUiConfirm();
         const current = activeTab;
         setActiveTab(current === 'poi' ? 'enemy' : 'poi');
         setTimeout(() => setActiveTab(current), 50);
-    };
-
-    const darkenColor = (hex: string, percent: number) => {
-        const num = parseInt(hex.replace('#', ''), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) - amt;
-        const G = (num >> 8 & 0x00FF) - amt;
-        const B = (num & 0x0000FF) - amt;
-        return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-    };
+    }, [activeTab, stats, onMarkCollectiblesViewed]);
 
     return (
         <ScreenModalLayout
@@ -129,7 +164,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
             cancelLabel={t('ui.close')}
             titleColorClass="text-green-600"
             debugAction={isDebugMode ? { label: "SHOW ALL (DEBUG)", action: handleDebugShowAll } : undefined}
-            tabs={tabs.map(t => t.id)}
+            tabs={TABS.map(t => t.id)}
             activeTab={activeTab}
             onTabChange={handleTabChange}
             tabOrientation={effectiveLandscape ? 'vertical' : 'horizontal'}
@@ -138,24 +173,17 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 {/* Tabs Bar */}
                 <div className={`relative shrink-0 ${effectiveLandscape ? 'w-1/3 flex flex-col gap-4 overflow-y-auto pl-safe custom-scrollbar' : ''}`}>
                     <div className={`${effectiveLandscape ? 'flex flex-col gap-4 pt-4 pr-10' : 'flex gap-2 border-b-2 border-zinc-800 pb-2 md:pb-4 overflow-x-auto px-4 pt-2 items-end scrollbar-hide'}`}>
-                        {tabs.map(tab => {
+                        {TABS.map(tab => {
                             const isActive = activeTab === tab.id;
-                            const pulseColor = themeColor;
                             return (
-                                <button key={tab.id} onClick={() => handleTabChange(tab.id)}
+                                <button key={tab.id} onClick={() => handleTabChange(tab.id as Tab)}
                                     className={`px-3 md:px-6 py-1.5 md:py-4 transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap flex justify-between items-center border-2 border-zinc-700
-                                        ${isActive
-                                            ? 'text-white animate-tab-pulsate'
-                                            : 'bg-black text-zinc-400 hover:bg-zinc-900'
-                                        } 
+                                        ${isActive ? 'text-white animate-tab-pulsate' : 'bg-black text-zinc-400 hover:bg-zinc-900'} 
                                         ${effectiveLandscape ? 'w-full text-left p-4 md:p-6 text-xl font-semibold uppercase tracking-wider mx-2' : 'text-[10px] md:text-lg font-bold uppercase tracking-widest'}
                                     `}
-                                    style={isActive ? {
-                                        backgroundColor: darkenColor(pulseColor, 20),
-                                        '--pulse-color': pulseColor
-                                    } as any : {}}
+                                    style={isActive ? { backgroundColor: darkenColor(THEME_COLOR, 20), '--pulse-color': THEME_COLOR } as any : {}}
                                 >
-                                    <span>{tab.label}</span>
+                                    <span>{t(tab.label)}</span>
                                     {isActive && effectiveLandscape && <span className="text-white font-bold ml-2">→</span>}
                                 </button>
                             );
@@ -169,10 +197,10 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                         <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />
                     </div>
                     <div className={activeTab === 'enemy' ? 'block' : 'hidden'}>
-                        <EnemyTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />
+                        <EnemyTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />
                     </div>
                     <div className={activeTab === 'boss' ? 'block' : 'hidden'}>
-                        <BossTab stats={stats} color={themeColor} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
+                        <BossTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
                     </div>
                     <div className={activeTab === 'collectibles' ? 'block' : 'hidden'}>
                         <CollectiblesTab stats={stats} isMobileDevice={!effectiveLandscape} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
@@ -200,7 +228,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
     );
 };
 
-const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = ({ stats, isMobileDevice }) => {
+const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = React.memo(({ stats, isMobileDevice }) => {
     const getRank = (level: number) => {
         const rankKey = Math.min(Math.max(0, level - 1), 19);
         const translated = t(`ranks.${rankKey}`);
@@ -236,7 +264,7 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = ({ 
                     <h3 className="text-xl font-semibold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-800 pb-2">{t('ui.family_header')}</h3>
                     <div className="space-y-3 text-sm">
                         <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.rescued_family_members')}</span><span className="text-white font-mono text-lg">{stats.familyFoundCount}</span></div>
-                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.clues_found')}</span><span className="text-white font-mono text-lg">{stats.cluesFound.length}</span></div>
+                        <div className="flex justify-between items-end"><span className="text-gray-500">{t('ui.clues_found')}</span><span className="text-white font-mono text-lg">{stats.cluesFound?.length || 0}</span></div>
                     </div>
                 </div>
             </div>
@@ -286,13 +314,13 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = ({ 
             </div>
         </div>
     );
-};
+});
 
-const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape }) => {
+const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape }) => {
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
-                const isSeen = (stats.seenEnemies || []).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
+                const isSeen = (stats.seenEnemies || EMPTY_ARRAY).includes(key) || (stats.killsByType && stats.killsByType[key] > 0);
                 if (!isSeen) return null;
                 const itemColor = `#${data.color.toString(16).padStart(6, '0')}`;
 
@@ -303,9 +331,15 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                 {isSeen ? key : '???'}
                             </h3>
                             {isSeen && (
-                                <div className="flex flex-col items-end">
-                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('ui.kills')}</span>
-                                    <span className="text-xl font-semibold text-white">{stats.killsByType?.[key] || 0}</span>
+                                <div className="flex gap-4">
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{t('ui.kills')}</span>
+                                        <span className="text-xl font-semibold text-white">{stats.killsByType?.[key] || 0}</span>
+                                    </div>
+                                    <div className="flex flex-col items-end pl-4 border-l border-gray-800">
+                                        <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short') || 'DIED TO'}</span>
+                                        <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[key] || 0}</span>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -371,21 +405,20 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
             })}
         </div>
     );
-};
+});
 
-const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const sectors = [0, 1, 2, 3];
-
+const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     return (
         <div className="space-y-16 pb-12">
-            {sectors.map(sectorIndex => {
-                const boss = BOSSES[sectorIndex];
-                const theme = SECTOR_THEMES[sectorIndex];
-                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= sectorIndex;
-                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex + 1}`) : '???';
+            {SECTORS.map(sectorIndex => {
+                const bossIdx = sectorIndex - 1;
+                const boss = BOSSES[bossIdx];
+                const theme = SECTOR_THEMES[bossIdx];
+                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= bossIdx;
+                const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorIndex}`) : '???';
 
-                const isSeen = boss && ((stats.seenBosses || []).includes(boss.name) || (stats.bossesDefeated || []).includes(sectorIndex));
-                const isDefeated = (stats.bossesDefeated || []).includes(sectorIndex);
+                const isSeen = boss && ((stats.seenBosses || EMPTY_ARRAY).includes(boss.name) || (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx));
+                const isDefeated = (stats.bossesDefeated || EMPTY_ARRAY).includes(bossIdx);
                 const isBossUnlocked = boss && (isSeen || isDefeated || isDebug);
 
                 return (
@@ -405,6 +438,10 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                 <h3 className="text-3xl font-light uppercase tracking-tighter" style={{ color: boss ? `#${boss.color.toString(16).padStart(6, '0')}` : 'white' }}>
                                                     {t(boss.name)}
                                                 </h3>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short') || 'DIED TO'}</span>
+                                                <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[boss.name] || 0}</span>
                                             </div>
                                         </div>
 
@@ -479,20 +516,23 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
             })}
         </div>
     );
-};
+});
 
-const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const foundIds = stats.collectiblesDiscovered || [];
-    const sectors = [1, 2, 3, 4];
+const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
+    const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
-            {sectors.map(sectorId => {
-                const sectorCollectibles = Object.values(COLLECTIBLES).filter(c => c.sector === sectorId);
+            {SECTORS.map(sectorId => {
+                const sectorCollectibles = COLLECTIBLES_ARRAY.filter(c => c.sector === sectorId);
                 const theme = SECTOR_THEMES[sectorId - 1];
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
-                const foundInSector = sectorCollectibles.filter(c => foundIds.includes(c.id)).length;
+
+                let foundInSector = 0;
+                for (let i = 0; i < sectorCollectibles.length; i++) {
+                    if (foundIds.includes(sectorCollectibles[i].id)) foundInSector++;
+                }
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -520,20 +560,23 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
             })}
         </div>
     );
-};
+});
 
-const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const cluesFound = stats.cluesFound || [];
-    const sectors = [1, 2, 3, 4];
+const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
+    const cluesFound = stats.cluesFound || EMPTY_ARRAY;
 
     return (
         <div className="space-y-16 pb-12">
-            {sectors.map(sectorId => {
+            {SECTORS.map(sectorId => {
                 const theme = SECTOR_THEMES[sectorId - 1];
-                const sectorClues = Object.values(CLUES).filter(clue => clue.sector === sectorId);
+                const sectorClues = CLUES_ARRAY.filter(clue => clue.sector === sectorId);
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
-                const foundInSector = sectorClues.filter(c => cluesFound.includes(c.id)).length;
+
+                let foundInSector = 0;
+                for (let i = 0; i < sectorClues.length; i++) {
+                    if (cluesFound.includes(sectorClues[i].id)) foundInSector++;
+                }
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -577,20 +620,23 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
             })}
         </div>
     );
-};
+});
 
-const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = ({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
-    const visitedList = stats.discoveredPOIs || [];
-    const sectors = [1, 2, 3, 4];
+const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
+    const visitedList = stats.discoveredPOIs || EMPTY_ARRAY;
 
     return (
         <div className="space-y-16 pb-12">
-            {sectors.map(sectorId => {
+            {SECTORS.map(sectorId => {
                 const theme = SECTOR_THEMES[sectorId - 1];
-                const sectorPOIs = Object.values(POIS).filter(poi => poi.sector === sectorId);
+                const sectorPOIs = POIS_ARRAY.filter(poi => poi.sector === sectorId);
                 const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
-                const foundInSector = sectorPOIs.filter(p => visitedList.includes(p.id)).length;
+
+                let foundInSector = 0;
+                for (let i = 0; i < sectorPOIs.length; i++) {
+                    if (visitedList.includes(sectorPOIs[i].id)) foundInSector++;
+                }
 
                 return (
                     <div key={sectorId} className="space-y-6">
@@ -637,9 +683,9 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
             })}
         </div>
     );
-};
+});
 
-const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = ({ children, isLocked, color = '#6b7280', id, className = '' }) => (
+const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: string, id?: string, className?: string }> = React.memo(({ children, isLocked, color = '#6b7280', id, className = '' }) => (
     <div id={id} className={`p-6 border-2 relative overflow-hidden transition-all duration-300 bg-black/60 shadow-2xl active:scale-[0.98] ${isLocked ? 'border-zinc-800' : ''} ${className}`}
         style={{ borderColor: isLocked ? '#1f2937' : `${color}66` }}
     >
@@ -647,27 +693,7 @@ const Card: React.FC<{ children: React.ReactNode, isLocked?: boolean, color?: st
             {children}
         </div>
     </div>
-);
-
-const getEnemyDescription = (type: string) => {
-    const key = `enemies.${type}.description`;
-    const loc = t(key);
-    if (loc === key) {
-        switch (type) {
-            case EnemyType.WALKER: return "Standard reanimated combatant. Low threat individually, dangerous in swarms.";
-            case EnemyType.RUNNER: return "Hyper-aggressive mutation. Closing speed is extreme.";
-            case EnemyType.TANK: return "Heavily armored juggernaut. Absorbs significant small-arms fire.";
-            case EnemyType.BOMBER: return "Unstable biological payload. Explodes on proximity.";
-            default: return t('enemies.unknown');
-        }
-    }
-    return loc;
-};
-
-const getBossDescription = (bossNameKey: string) => {
-    const index = bossNameKey.split('.')[1];
-    return t(`bosses.${index}.lore`);
-};
+));
 
 const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevice?: boolean }> = ({ item, isFound, isMobileDevice }) => {
     const [isExpanded, setIsExpanded] = useState(false);

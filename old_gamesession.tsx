@@ -1413,7 +1413,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
             if (cinematicRef.current.active || cinematicActive) {
                 cameraOverrideRef.current = {
                     active: true,
-                    targetPos: (cinematicRef.current.cameraBasePos || new THREE.Vector3()).clone(),
+                    targetPos: (Ref.current.cameraBasePos || new THREE.Vector3()).clone(),
                     lookAtPos: (cinematicRef.current.cameraLookAt || new THREE.Vector3()).clone(),
                     endTime: performance.now() + 30000
                 };

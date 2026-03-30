@@ -234,12 +234,7 @@ export const HudSystem = {
             ? 1 - ((state.reloadEndTime - now) / ((wep?.reloadTime || 1000) + (input.fire ? 1000 : 0)))
             : 0;
 
-        const newCollectiblesCount = (state.sessionCollectiblesDiscovered || []).length;
-        const levelGained = Math.max(0, state.level - (props.stats?.level || 1));
-        let spEarned = levelGained + newCollectiblesCount;
-
-        if (state.familyFound && !props.familyAlreadyRescued) spEarned++;
-        if (state.bossesDefeated?.length > 0 && !props.bossPermanentlyDefeated) spEarned++;
+        const spGained = state.sessionStats.spGained;
 
         // Status Effects (Zero-GC Pool Extraction into the active buffer)
         _current.statusEffects.length = 0;
@@ -293,7 +288,7 @@ export const HudSystem = {
         _current.nextLevelXp = state.nextLevelXp;
         _current.throwableAmmo = state.weaponAmmo[props.loadout.throwable] || 0;
         _current.distanceTraveled = Math.floor(distanceTraveled);
-        _current.kills = state.killsInRun;
+        _current.kills = state.sessionStats.kills;
         _current.discovery = state.discovery;
 
         if (state.sectorState) {
@@ -311,8 +306,8 @@ export const HudSystem = {
         _current.isDriving = !!state.activeVehicleType;
         _current.vehicleSpeed = state.vehicleSpeed || 0;
         _current.throttleState = state.vehicleThrottle || 0;
-        _current.spEarned = spEarned;
-        _current.skillPoints = (props.stats?.skillPoints || 0) + spEarned;
+        _current.spEarned = spGained;
+        _current.skillPoints = (props.stats?.skillPoints || 0) + spGained;
         _current.isDead = state.isDead;
         _current.killerName = state.killerName;
         _current.killerAttackName = state.killerAttackName;

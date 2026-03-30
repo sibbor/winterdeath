@@ -29,24 +29,28 @@ export interface SectorStats {
   distanceTraveled: number;
   chestsOpened: number;
   bigChestsOpened: number;
-  cluesFound: string[];
+
+  // VINTERDÖD FIX: cluesFound is an array of objects {id, content}, not strings
+  cluesFound: any[];
+
   discoveredPOIs: string[];
   seenEnemies: string[];
   seenBosses: string[];
   xpGained: number;
-  spEarned?: number;
-  collectiblesDiscovered?: string[];
-  aborted?: boolean;
-  familyFound?: boolean;
-  familyExtracted?: boolean;
-  isExtraction?: boolean;
-  bossDamageDealt?: number;
-  bossDamageTaken?: number;
-  incomingDamageBreakdown?: Record<string, Record<string, number>>;
-  outgoingDamageBreakdown?: Record<string, number>;
-  zombieWaveActive?: boolean;
+  spGained: number;
+  killerType?: string;
+  collectiblesDiscovered: string[];
+  aborted: boolean;
+  familyFound: boolean;
+  familyExtracted: boolean;
+  isExtraction: boolean;
+  incomingDamageBreakdown: Record<string, Record<string, number>>;
+  outgoingDamageBreakdown: Record<string, number>;
+
+  // VINTERDÖD FIX: Standardized wave naming
+  waveActive?: boolean;
   zombiesKilled?: number;
-  zombiesKillTarget?: number;
+  targetKills?: number;
   hordeTarget?: number;
 }
 
@@ -57,10 +61,17 @@ export interface SectorState {
   isInvincible?: boolean;
   envOverride?: EnvironmentOverride;
   ctx?: any;
-  zombieWaveActive?: boolean;
+
+  // VINTERDÖD FIX: Standardized wave naming
+  waveActive?: boolean;
   zombiesKilled?: number;
-  zombiesKillTarget?: number;
+  targetKills?: number;
   hordeTarget?: number;
+
+  // VINTERDÖD FIX: The Generic Bridge API
+  pendingTrigger?: string | null;
+  keepCamera?: boolean;
+
   [key: string]: any;
 }
 
@@ -114,7 +125,7 @@ export interface GameCanvasProps {
   onCheckpointReached: () => void;
   teleportTarget: { x: number, z: number, timestamp: number } | null;
   onCollectibleDiscovered: (id: string) => void;
-  onClueDiscovered: (clue: any) => void; // Using any for now to avoid circular or too many imports
+  onClueDiscovered: (clue: any) => void;
   onPOIdiscovered: (poi: any) => void;
   onEnemyDiscovered?: (type: string) => void;
   onBossDiscovered?: (id: string) => void;

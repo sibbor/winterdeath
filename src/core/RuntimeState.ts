@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SectorTrigger } from '../systems/TriggerTypes';
-import { SectorState } from '../game/session/SessionTypes';
+import { SectorState, SectorStats } from '../game/session/SessionTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
 import { StatusEffectType, PlayerDeathState, ActiveStatusEffect } from '../entities/player/CombatTypes';
 import { WeaponType } from '../content/weapons';
@@ -53,19 +53,17 @@ export interface RuntimeState {
     chests: any[];
     bloodDecals: any[];
 
-    lastHudUpdate: number;
-    startTime: number;
-    lastShotTime: number;
-    shotsFired: number;
-    shotsHit: number;
-    throwablesThrown: number;
-    damageDealt: number;
-    damageTaken: number;
-    bossDamageDealt: number;
-    bossDamageTaken: number;
-    incomingDamageBreakdown: Record<string, Record<string, number>>; // Source -> Attack -> Amount
-    outgoingDamageBreakdown: Record<string, number>; // Weapon -> Amount
-    killsByType: Record<string, number>;
+    // --- TELEMETRY & PROGRESSION (Zero-GC) ---
+    sessionStats: SectorStats;
+    
+    // O(1) Discovery Lookups (Built at start of session)
+    discoverySets: {
+        clues: Set<string>;
+        pois: Set<string>;
+        collectibles: Set<string>;
+        seenEnemies: Set<string>;
+    };
+
     applyDamage: (enemy: any, amount: number, type: string, isHighImpact?: boolean) => boolean;
 
     // --- COMBAT & STATUS (Zero-GC) ---
@@ -83,17 +81,11 @@ export interface RuntimeState {
     statusEffects: Partial<Record<StatusEffectType, ActiveStatusEffect>>;
     playerDeathState: PlayerDeathState;
 
-    // --- PROGRESSION ---
-    seenEnemies: string[];
-    seenBosses: string[];
-    discoveredPOIs: string[];
-    cluesFound: string[];
     bossesDefeated: number[];
     familyFound: boolean;
+    familyAlreadyRescued: boolean;
     familyExtracted: boolean;
-    chestsOpened: number;
-    bigChestsOpened: number;
-    killsInRun: number;
+    bossPermanentlyDefeated: boolean;
     isInteractionOpen: boolean;
     bossSpawned: boolean;
     lastDamageTime: number;
@@ -143,7 +135,7 @@ export interface RuntimeState {
     triangles: number;
 
     // --- INTERACTION ---
-    interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
+    interactionType: 'chest' | 'vehicle' | 'collectible' | 'sector_specific' | null;
     interactionLabel: string | null;
     // Flag to avoid null checks
     hasInteractionTarget: boolean;

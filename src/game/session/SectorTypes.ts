@@ -4,6 +4,8 @@ import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorEnvironment, EnvironmentalZone as AtmosphereZone } from '../../core/engine/EngineTypes';
+import { TriggerAction } from '../../systems/TriggerTypes';
+
 export type { AtmosphereZone };
 
 export interface SpawnPoint {
@@ -52,9 +54,12 @@ export interface SectorContext {
     // --- NEW CAMERA CALLBACKS ---
     setCameraAngle?: (angle: number) => void;
     setCameraHeight?: (heightMod: number) => void;
-    setCameraOverride?: (active: boolean, targetPos?: THREE.Vector3, lookAtPos?: THREE.Vector3, durationMs?: number) => void;
+    setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     shakeCamera?: (amount: number, type?: 'general' | 'hurt') => void;
-    makeNoise?: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+    makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
+
+    // VINTERDÖD FIX: Required action bridge
+    onAction: (action: TriggerAction | string | any[]) => void;
 }
 
 export interface SectorDef {
@@ -102,10 +107,12 @@ export interface SectorDef {
         gameState: any,
         sectorState: SectorState,
         events: {
+            onAction: (action: any) => void;
             spawnZombie: (type?: EnemyType | string, pos?: THREE.Vector3) => void;
             spawnHorde: (count: number, type?: EnemyType | string, pos?: THREE.Vector3) => void;
             setNotification: (n: any) => void;
             setInteraction: (interaction: { id: string, text: string, action: () => void, position?: THREE.Vector3 } | null) => void;
+            setOverlay: (type: string | null) => void; // VINTERDÖD FIX: Added missing UI overlay command
             playSound: (id: string) => void;
             playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => void;
             cameraShake: (amount: number) => void;
@@ -114,16 +121,16 @@ export interface SectorDef {
             spawnPart: (x: number, y: number, z: number, type: string, count: number) => void;
             startCinematic?: (target: THREE.Object3D, id: number, params?: any) => void;
             // Environment Controls
-            setWind: (direction: number, strength: number) => void;
-            setWindRandomized: (active: boolean) => void;
-            resetWind: () => void;
-            setWeather: (type: WeatherType, count?: number) => void;
-            setLight: (params: { skyLightColor?: THREE.Color; skyLightIntensity?: number; ambientIntensity?: number; skyLightPosition?: { x: number, y: number, z: number }; skyLightVisible?: boolean }) => void;
-            setBackgroundColor: (color: number) => void;
-            setGroundColor: (color: number) => void;
-            setFOV: (fov: number) => void;
-            setFog: (density: number, height?: number, color?: THREE.Color) => void;
-            setWater: (level?: number, waveHeight?: number) => void;
+            setWind?: (direction: number, strength: number) => void;
+            setWindRandomized?: (active: boolean) => void;
+            resetWind?: () => void;
+            setWeather?: (type: WeatherType, count?: number) => void;
+            setLight?: (params: { skyLightColor?: THREE.Color; skyLightIntensity?: number; ambientIntensity?: number; skyLightPosition?: { x: number, y: number, z: number }; skyLightVisible?: boolean }) => void;
+            setBackgroundColor?: (color: number) => void;
+            setGroundColor?: (color: number) => void;
+            setFOV?: (fov: number) => void;
+            setFog?: (density: number, height?: number, color?: THREE.Color) => void;
+            setWater?: (level?: number, waveHeight?: number) => void;
             setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
             makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
         }

@@ -227,4 +227,6 @@ export interface Enemy {
     // --- DAMAGE TRACKING (Zero-GC) ---
     _accumulatedDamage: number;    // Tracks damage between floating text ticks
     _lastDamageTextTime: number;   // Timestamp of the last floating text spawn
+
+    discovered: boolean;           // Whether the enemy has been discovered by the player
 }

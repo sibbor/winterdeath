@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
-import { GameCanvasProps, DeathPhase } from '../../game/session/SessionTypes';;
+import { GameCanvasProps, DeathPhase } from '../../game/session/SessionTypes';
 import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
@@ -15,7 +15,7 @@ export interface UIState {
     bossIntroActive: boolean;
     bossName: string;
     foundMemberName: string;
-    interactionType: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | null;
+    interactionType: 'collectible' | 'chest' | 'vehicle' | 'sector_specific' | null;
     activeModal: 'armory' | 'spawner' | 'environment' | 'skills' | null;
     interactionScreenPos: { x: number, y: number } | null;
     forceHideHUD: boolean;
@@ -60,6 +60,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     const bossIntroTimerRef = useRef<NodeJS.Timeout | null>(null);
     const gameContextRef = useRef<any>(null);
     const setupIdRef = useRef(0);
+    const discoveryQueueRef = useRef<any[]>([]);
 
     // Geometry / Tracking Refs
     const prevPosRef = useRef<THREE.Vector3>(new THREE.Vector3());
@@ -120,10 +121,9 @@ export const useGameSessionState = (props: GameCanvasProps) => {
         zombieWaveActive: false
     });
 
-    // We can use a partial update function tailored for the loop to just push changes
+    // Zero-GC partial state update (prevents re-renders if nothing actually changed)
     const updateUiState = (partial: Partial<UIState>) => {
         setUiState(prev => {
-            // Only update if there's an actual change (minor optimization)
             let hasChanged = false;
             for (const key in partial) {
                 if ((prev as any)[key] !== (partial as any)[key]) {
@@ -153,7 +153,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
             stateRef, activeModalRef, isBuildingSectorRef, deathPhaseRef, interactionTypeRef,
             lastInteractionPosRef, activeBubbles, hasEndedSector, collectedCluesRef, distanceTraveledRef,
             lastTeleportRef, lastDrawCallsRef, hasPlayedIntroRef, lastHeartbeatRef, bossIntroTimerRef,
-            gameContextRef, setupIdRef, prevPosRef, hasSetPrevPosRef, playerGroupRef, playerMeshRef, bubbleRef, cinematicRef,
+            gameContextRef, setupIdRef, discoveryQueueRef, prevPosRef, hasSetPrevPosRef, playerGroupRef, playerMeshRef, bubbleRef, cinematicRef,
             skyLightRef, skyLightOffsetRef, prevInputRef, cameraOverrideRef, bossIntroRef, familyMemberRef, activeFamilyMembers,
             flashlightRef, isMounted
         },

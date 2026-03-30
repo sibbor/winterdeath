@@ -313,8 +313,8 @@ export const Sector2: SectorDef = {
         if (doorFrame) {
             SectorBuilder.addInteractable(ctx, doorFrame, {
                 id: 'cave_door',
-                label: 'ui.interact_knock_on_port',
                 type: 'sector_specific',
+                label: 'ui.interact_knock_on_port',
                 radius: 12.0
             });
         }
@@ -359,9 +359,7 @@ export const Sector2: SectorDef = {
                 isThinking: (gameState.thinkingUntil > now)
             };
 
-            // Animate the family member body directly (FamilySystem class handles global follow logic)
-            const body = member.userData.cachedBody ||
-                member.children.find((c: any) => c.userData.isBody);
+            const body = member.userData.cachedBody || member.children.find((c: any) => c.userData.isBody);
             member.userData.cachedBody = body;
             if (body) {
                 PlayerAnimator.update(body, {
@@ -376,7 +374,7 @@ export const Sector2: SectorDef = {
             }
         }
 
-        // --- SECTOR-SPECIFIC NARRATIVE SYSTEM (Numeric State Machine) ---
+        // --- SECTOR-SPECIFIC NARRATIVE SYSTEM ---
         if (!sectorState.jordanEventState) sectorState.jordanEventState = 0;
         const jcState = sectorState.jordanEventState;
         const jcTimer = sectorState.jordanEventTimer || 0;
@@ -397,7 +395,32 @@ export const Sector2: SectorDef = {
             const voidRoof = scene.getObjectByName("Sector2_VoidRoof");
             if (voidRoof) voidRoof.visible = true;
 
-            // 2. STATE MACHINE TRANSITIONS
+            // 2. DIALOGUE TRIGGERS (Bridged via GameSession onAction)
+            if (sectorState.pendingTrigger === 'SPAWN_JORDAN') {
+                sectorState.pendingTrigger = null; // Konsumera direkt (Zero-GC)
+                sectorState.jordanEventState = 3; // OPENING_DOORS
+                sectorState.jordanEventTimer = now;
+                soundManager.playMetalDoorOpen();
+
+                window.dispatchEvent(new CustomEvent('hide_hud'));
+
+                if (events.setCameraOverride) {
+                    events.setCameraOverride({
+                        active: true,
+                        targetPos: fixedCamTarget,
+                        lookAtPos: fixedCamLookAt,
+                        endTime: now + 60000
+                    });
+                }
+            }
+
+            if (sectorState.pendingTrigger === 'CLOSE_DOORS') {
+                sectorState.pendingTrigger = null; // Konsumera direkt
+                sectorState.jordanEventState = 6; // DOORS_CLOSING
+                sectorState.jordanEventTimer = now;
+            }
+
+            // 3. STATE MACHINE TRANSITIONS
             if (jcState === 1) { // KNOCKING -> START CINEMATIC
                 if (elapsed > 1500) {
                     if (doorFrame && (events as any).startCinematic) {
@@ -407,34 +430,7 @@ export const Sector2: SectorDef = {
                     }
                 }
             }
-
-            // 3. EVENT LISTENERS (Bridge between Cinematic scripts and Sector State)
-            if (!sectorState.eventsInitialized) {
-                window.addEventListener('spawn_jordan', () => {
-                    sectorState.jordanEventState = 3; // OPENING_DOORS
-                    sectorState.jordanEventTimer = performance.now();
-                    soundManager.playMetalDoorOpen();
-                    window.dispatchEvent(new CustomEvent('hide_hud'));
-                    if (events.setCameraOverride) {
-                        events.setCameraOverride({
-                            active: true,
-                            targetPos: fixedCamTarget,
-                            lookAtPos: fixedCamLookAt,
-                            endTime: performance.now() + 60000
-                        });
-                    }
-                }, { once: true });
-
-                window.addEventListener('s2_conclusion', () => {
-                    sectorState.jordanEventState = 6; // DOORS_CLOSING
-                    sectorState.jordanEventTimer = performance.now();
-                });
-
-                sectorState.eventsInitialized = true;
-            }
-
-            // 4. BEHAVIOR BY STATE
-            if (jcState === 3) { // OPENING_DOORS
+            else if (jcState === 3) { // OPENING_DOORS
                 const openDist = Math.max(0, Math.min(10, elapsed * 0.005));
                 if (doorL) { doorL.position.x = -5 - openDist; doorL.matrixAutoUpdate = true; }
                 if (doorR) { doorR.position.x = 5 + openDist; doorR.matrixAutoUpdate = true; }
@@ -495,20 +491,15 @@ export const Sector2: SectorDef = {
                     if (events.setCameraOverride) events.setCameraOverride(null);
                     window.dispatchEvent(new CustomEvent('show_hud'));
 
-                    // Mark Jordan as rescued so the FamilySystem picks him up
-                    window.dispatchEvent(new CustomEvent('family-member-found', {
-                        detail: { name: 'Jordan' }
-                    }));
-
-                    // Spawn the boss correctly
-                    window.dispatchEvent(new CustomEvent('boss-spawn-trigger', {
-                        detail: { type: 'BIG_ZOMBIE', pos: LOCATIONS.SPAWN.BOSS }
-                    }));
-
-                    // Hand back control to family follow system
-                    window.dispatchEvent(new CustomEvent('family-follow', {
-                        detail: { active: true }
-                    }));
+                    // --- VINTERDÖD ACTION API ---
+                    // NU, när dörren är stängd, skickar vi the globala händelserna!
+                    if (events.onAction) {
+                        events.onAction([
+                            { type: 'FAMILY_MEMBER_FOUND', payload: { name: 'Jordan', id: 1 } },
+                            { type: 'FAMILY_MEMBER_FOLLOW' },
+                            { type: 'SPAWN_BOSS', payload: { pos: LOCATIONS.SPAWN.BOSS } }
+                        ]);
+                    }
                 }
             }
         }

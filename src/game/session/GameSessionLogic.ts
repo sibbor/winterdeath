@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../../core/engine/WinterEngine';
-import { GameCanvasProps } from '../../game/session/SessionTypes';
+import { GameCanvasProps, SectorStats } from '../../game/session/SessionTypes';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { SectorTrigger } from '../../systems/TriggerTypes';
@@ -8,7 +8,7 @@ import { WeaponType } from '../../content/weapons';
 import { RuntimeState } from '../../core/RuntimeState';
 import { System } from '../../systems/System';
 import { PlayerDeathState } from '../../entities/player/CombatTypes';
-import { WEAPONS } from '../../content/constants';
+import { WEAPONS, ZOMBIE_TYPES, BOSSES } from '../../content/constants';
 import { Enemy } from '../../entities/enemies/EnemyManager';
 import { ScrapItem } from '../../systems/WorldLootSystem';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
@@ -33,6 +33,81 @@ export class GameSessionLogic {
         if (!props.stats) {
             console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
         }
+
+        // --- V8 HIDDEN CLASS OPTIMIZATION: Pre-allocate all combat keys ---
+        const killsByType: Record<string, number> = {};
+        const outgoingDamageBreakdown: Record<string, number> = {};
+        const incomingDamageBreakdown: Record<string, Record<string, number>> = {};
+
+        // Pre-allocate Weapons
+        for (const key in WEAPONS) {
+            outgoingDamageBreakdown[key] = 0;
+        }
+        // Virtual Weapons (Tackles/Vehicles)
+        outgoingDamageBreakdown[WeaponType.RUSH] = 0;
+        outgoingDamageBreakdown[WeaponType.VEHICLE] = 0;
+
+        // Pre-allocate Enemies
+        for (const key in ZOMBIE_TYPES) {
+            killsByType[key] = 0;
+            incomingDamageBreakdown[key] = { HIT: 0, BITE: 0, JUMP: 0, SMASH: 0, EXPLODE: 0 };
+        }
+        killsByType['Boss'] = 0; // Legacy generic boss tracker
+        killsByType[WeaponType.RUSH] = 0;
+        killsByType[WeaponType.VEHICLE] = 0;
+        incomingDamageBreakdown['Environment'] = { Burning: 0, Drowning: 0, Falling: 0 };
+
+        // Pre-allocate Bosses
+        for (const id in BOSSES) {
+            const boss = BOSSES[id];
+            killsByType[boss.id] = 0;
+            incomingDamageBreakdown[boss.id] = {};
+            if (boss.attacks) {
+                for (let i = 0; i < boss.attacks.length; i++) {
+                    incomingDamageBreakdown[boss.id][boss.attacks[i].type] = 0;
+                }
+            }
+        }
+
+        const sessionStats: SectorStats = {
+            kills: 0,
+            killsByType,
+            damageDealt: 0,
+            damageTaken: 0,
+            timePlayed: 0,
+            timeElapsed: 0,
+            accuracy: 100,
+            itemsCollected: 0,
+            scrapLooted: 0,
+            shotsFired: 0,
+            shotsHit: 0,
+            throwablesThrown: 0,
+            distanceTraveled: 0,
+            chestsOpened: 0,
+            bigChestsOpened: 0,
+            cluesFound: [],
+            discoveredPOIs: [],
+            seenEnemies: [],
+            seenBosses: [],
+            xpGained: 0,
+            spGained: 0,
+            collectiblesDiscovered: [],
+            aborted: false,
+            familyFound: !!props.familyAlreadyRescued,
+            familyExtracted: false,
+            isExtraction: false,
+            incomingDamageBreakdown,
+            outgoingDamageBreakdown
+        };
+
+        // --- O(1) DISCOVERY OPTIMIZATION: Build sets from permanent stats ---
+        const discoverySets = {
+            clues: new Set<string>(props.stats.cluesFound || []),
+            pois: new Set<string>(props.stats.discoveredPOIs || []),
+            collectibles: new Set<string>(props.stats.collectiblesDiscovered || []),
+            seenEnemies: new Set<string>(props.stats.seenEnemies || [])
+        };
+
         return {
             isDead: false, score: 0, collectedScrap: 0,
             hp: props.stats.hp, maxHp: props.stats.maxHp,
@@ -75,21 +150,16 @@ export class GameSessionLogic {
             chests: [] as any[],
             bloodDecals: [] as any[],
 
-            lastHudUpdate: 0, startTime: now, lastShotTime: 0,
-            shotsFired: 0, shotsHit: 0, throwablesThrown: 0,
-            damageDealt: 0, damageTaken: 0,
-            bossDamageDealt: 0, bossDamageTaken: 0,
-            incomingDamageBreakdown: {} as Record<string, Record<string, number>>,
-            outgoingDamageBreakdown: {} as Record<string, number>,
-            killsByType: {} as Record<string, number>,
-            applyDamage: () => false,
-            seenEnemies: props.stats.seenEnemies || [],
-            seenBosses: props.stats.seenBosses || [],
-            discoveredPOIs: props.stats.discoveredPOIs || [],
-            cluesFound: props.stats.cluesFound || [],
+            sessionStats,
+            discoverySets,
+            discovery: null,
+
             bossesDefeated: [],
-            familyFound: !!props.familyAlreadyRescued, familyExtracted: false,
-            chestsOpened: 0, bigChestsOpened: 0, killsInRun: 0, isInteractionOpen: false, bossSpawned: false,
+            familyFound: !!props.familyAlreadyRescued, 
+            familyAlreadyRescued: !!props.familyAlreadyRescued,
+            familyExtracted: false,
+            bossPermanentlyDefeated: !!props.bossPermanentlyDefeated,
+            isInteractionOpen: false, bossSpawned: false,
             lastDamageTime: 0, lastStaminaUseTime: 0,
             noiseLevel: 0, speakBounce: 0,
             cameraShake: 0, hurtShake: 0,
@@ -177,7 +247,8 @@ export class GameSessionLogic {
             activeDebuffs: [],
             statusEffects: {} as any,
             callbacks: {},
-            playerDeathState: PlayerDeathState.ALIVE
+            playerDeathState: PlayerDeathState.ALIVE,
+            applyDamage: props.currentSectorData?.applyDamage || (() => false)
         };
     }
 
@@ -188,6 +259,16 @@ export class GameSessionLogic {
 
     init(state: RuntimeState) {
         this.state = state;
+
+        // --- VINTERDÖD FIX: Centralized Telemetry Wrapper ---
+        // Ensuring all systems (bullets, explosions, etc.) that use state.applyDamage 
+        // are automatically tracked by the DamageTrackerSystem.
+        const originalApplyDamage = this.state.applyDamage || (() => false);
+        this.state.applyDamage = (enemy: any, amount: number, type: string, isHighImpact?: boolean) => {
+            const dts = this.getSystem('damage_tracker_system') as any;
+            if (dts) dts.recordOutgoingDamage(this, amount, type, enemy.isBoss);
+            return originalApplyDamage(enemy, amount, type, isHighImpact);
+        };
     }
 
     update(dt: number, mapId: number = 0) {
@@ -246,10 +327,7 @@ export class GameSessionLogic {
             this.state.scrapItems.length = 0;
             this.state.chests.length = 0;
             this.state.bloodDecals.length = 0;
-            this.state.seenEnemies.length = 0;
-            this.state.seenBosses.length = 0;
-            this.state.discoveredPOIs.length = 0;
-            this.state.cluesFound.length = 0;
+
             this.state.bossesDefeated.length = 0;
             this.state.triggers.length = 0;
             this.state.obstacles.length = 0;
@@ -259,14 +337,17 @@ export class GameSessionLogic {
             this.state.activePassives.length = 0;
             this.state.activeBuffs.length = 0;
             this.state.activeDebuffs.length = 0;
-            this.state.incomingDamageBreakdown = {};
-            this.state.outgoingDamageBreakdown = {};
-            this.state.killsByType = {};
-            this.state.statusEffects = {};
+            
+            // Clean up sessionStats breakdowns (Zero-GC: keep object shape but nullify keys if needed, 
+            // though usually we just let the whole sessionStats be replaced on next sector)
+            // For now, just ensure the root references are cleared.
+            (this.state as any).sessionStats = null;
+            (this.state as any).discoverySets = null;
             this.state.activeVehicle = null;
             this.state.activeVehicleType = null;
             this.state.vehicleSpeed = 0;
             this.state.vehicleEngineState = 'OFF';
+            this.state.discovery = null;
 
             // System's collision grid
             if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {

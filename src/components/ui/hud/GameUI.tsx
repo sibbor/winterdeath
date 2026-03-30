@@ -6,7 +6,7 @@ import { HudStore } from '../../../store/HudStore';
 
 interface GameUIProps {
     onCloseClue: () => void;
-    interactionType?: 'chest' | 'vehicle' | 'plant_explosive' | 'collectible' | 'knock_on_port' | 'sector_specific' | null;
+    interactionType?: 'collectible' | 'chest' | 'vehicle' | 'sector_specific' | null;
     interactionLabel?: string;
     interactionScreenPos?: { x: number, y: number } | null; // Kept for backwards compatibility
     isMobileDevice?: boolean;

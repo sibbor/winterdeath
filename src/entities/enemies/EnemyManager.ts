@@ -108,11 +108,9 @@ function setBaseColor(root: any, colorObj: THREE.Color) {
 const _aiContext: any = {
     spawnPart: null,
     spawnDecal: null,
-    spawnBubble: null,
     applyDamage: null,
     onEffectTick: null,
     playSound: (id: string) => soundManager.playEffect(id),
-
     onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
         if (_aiContext._realOnPlayerHit) {
             _aiContext._realOnPlayerHit(damage, attacker, type, isDoT, effect, dur, intense, attackName);
@@ -191,7 +189,7 @@ export const EnemyManager = {
         e.lastDamageType = 'standard';
         e._accumulatedDamage = 0;
         e._lastDamageTextTime = 0;
-
+        e.discovered = false;
         e.lastSeenTime = 0;
         e.awareness = 0;
         if (e.lastKnownPosition) e.lastKnownPosition.copy(e.mesh.position);
@@ -459,15 +457,16 @@ export const EnemyManager = {
                     enemy.state = AIState.IDLE;
                     enemy.stunTimer = 1.5;
 
-                    const damage = 5;
-                    enemy.hp -= damage;
-                    enemy.lastDamageType = 'melee';
-
-                    if (state.callbacks?.trackStats) {
-                        state.callbacks.trackStats('damage', damage, !!enemy.isBoss);
+                    const shoveDamage = 5;
+                    const applyDamage = (state as any).applyDamage;
+                    if (applyDamage) {
+                        applyDamage(enemy, shoveDamage, WeaponType.RUSH);
+                    } else {
+                        enemy.hp -= shoveDamage;
                     }
+                    enemy.lastDamageType = DamageType.PHYSICAL;
                     if (state.callbacks?.showDamageText) {
-                        state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, damage.toString(), "#ffffff");
+                        state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, shoveDamage.toString(), "#ffffff");
                     }
 
                     _v1.subVectors(enemy.mesh.position, playerGroup.position);
@@ -537,6 +536,21 @@ export const EnemyManager = {
         enemy.lastTackleTime = now;
         enemy.stunTimer = 2.0;
 
+        // --- DASHING TACKLE DAMAGE ---
+        // If the player is dashing and the enemy has not already been hit by a vehicle
+        if (isDashing && enemy.lastDamageType !== DamageType.VEHICLE_RAM && enemy.lastDamageType !== DamageType.VEHICLE_SPLATTER) {
+            const tackleDamage = 10;
+            const applyDamage = (state as any).applyDamage;
+            if (applyDamage) {
+                applyDamage(enemy, tackleDamage, WeaponType.RUSH);
+            } else {
+                enemy.hp -= tackleDamage;
+            }
+            if (state.callbacks?.showDamageText) {
+                state.callbacks.showDamageText(enemy.mesh.position.x, 2.5, enemy.mesh.position.z, tackleDamage.toString(), "#ffffff");
+            }
+        }
+
         if (!enemy.isBoss) {
             enemy.mesh.userData.isRagdolling = true;
             if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
@@ -571,8 +585,12 @@ export const EnemyManager = {
 
         const scene = session.engine.scene;
 
+        const tracker = (session as any).getSystem('damage_tracker_system') as any;
+        if (tracker) tracker.recordOutgoingDamage(session, baseDamage, WeaponType.VEHICLE, e.isBoss);
+
         if (e.hp <= 0) {
             e.dead = true;
+            if (tracker) tracker.recordKill(session, WeaponType.VEHICLE, e.isBoss);
 
             if (speedKmh >= 80) {
                 e.deathState = EnemyDeathState.GIBBED;
@@ -626,17 +644,15 @@ export const EnemyManager = {
         }
     },
 
-    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, spawnBubble: any, applyDamage?: any, water?: WaterSystem) => {
+    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, applyDamage?: any, water?: WaterSystem) => {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
         _aiContext._realOnPlayerHit = onPlayerHit;
         _aiContext.spawnPart = spawnPart;
         _aiContext.spawnDecal = spawnDecal;
-        _aiContext.spawnBubble = spawnBubble;
         _aiContext.applyDamage = applyDamage;
 
-        const cam = (playerPos as any)._engine?.camera?.threeCamera;
         const engine = (window as any).WinterEngineInstance;
         const camera = engine?.camera;
         const cameraPos = camera?.threeCamera?.position;
@@ -817,8 +833,11 @@ export const EnemyManager = {
                 }
 
                 const kType = e.type || 'Unknown';
-                state.killsByType[kType] = (state.killsByType[kType] || 0) + 1;
-                state.killsInRun++;
+                const session = callbacks.getSession ? callbacks.getSession() : null;
+                if (session) {
+                    const tracker = session.getSystem('damage_tracker_system') as any;
+                    if (tracker) tracker.recordKill(session, kType, e.isBoss);
+                }
                 callbacks.gainXp(e.score || 10);
 
                 if (e.isBoss && e.bossId !== undefined && e.bossId !== -1) {
