@@ -59,10 +59,12 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
             tempGraphics.textureQuality !== settings.textureQuality ||
             tempGraphics.volumetricFog !== settings.volumetricFog;
 
+        // Save settings instantly
+        onUpdateGraphics(tempGraphics);
+
         if (needsReload) {
             setShowReloadConfirm(true);
         } else {
-            onUpdateGraphics(tempGraphics);
             onClose();
         }
     };
@@ -323,26 +325,26 @@ const ScreenSettings: React.FC<ScreenSettingsProps> = ({ onClose, settings, onUp
             {/* RELOAD CONFIRMATION MODAL */}
             {showReloadConfirm && (
                 <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md font-mono">
-                    <div className="bg-zinc-950 border-2 border-orange-500 p-8 md:p-12 max-w-xl w-full mx-4 shadow-[0_0_50px_rgba(249,115,22,0.3)] flex flex-col gap-6 scale-animation origin-center">
-                        <h2 className="text-3xl md:text-5xl font-black uppercase text-orange-500 tracking-tighter leading-none italic">
-                            RELOAD REQUIRED
+                    <div className="bg-zinc-950 border-2 border-blue-600 p-8 md:p-12 max-w-xl w-full mx-4 shadow-[0_0_50px_rgba(37,99,235,0.3)] flex flex-col gap-6 scale-animation origin-center">
+                        <h2 className="text-3xl md:text-5xl font-black uppercase text-blue-600 tracking-tighter leading-none italic">
+                            {t('ui.reload_required')}
                         </h2>
-                        <p className="text-gray-300 text-sm md:text-lg font-bold uppercase tracking-widest border-l-4 border-orange-500 pl-4 py-2">
-                            Some settings require a game reload to take effect. Reload now?
+                        <p className="text-gray-300 text-sm md:text-lg font-bold uppercase tracking-widest py-2">
+                            {t('ui.reload_desc')}
                         </p>
 
                         <div className="flex gap-4 mt-4">
                             <button
-                                onClick={() => { soundManager.playUiClick(); setShowReloadConfirm(false); }}
+                                onClick={() => { soundManager.playUiClick(); confirmReload(); }}
                                 className="px-8 py-3 bg-zinc-800 border-2 border-zinc-700 text-zinc-400 font-black uppercase tracking-widest hover:bg-zinc-700 transition-all"
                             >
-                                No
+                                {t('ui.reload_now')}
                             </button>
                             <button
-                                onClick={() => { confirmReload(); }}
+                                onClick={() => { soundManager.playUiClick(); setShowReloadConfirm(false); onClose(); }}
                                 className="px-8 py-3 bg-zinc-100 border-2 border-zinc-100 text-black font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
                             >
-                                Yes
+                                {t('ui.reload_later')}
                             </button>
                         </div>
                     </div>
