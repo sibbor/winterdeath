@@ -234,7 +234,7 @@ const KillsPanel = React.memo(({ isMobileDevice, isBossIntro, handlePauseInterna
 const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro }: any) => {
     const scrap = useHudStore(s => s.scrap);
     const spEarned = useHudStore(s => s.spEarned);
-    
+
     const [scrapBling, setScrapBling] = useState(false);
     const [spBling, setSpBling] = useState(false);
     const prevScrap = useRef(scrap);
@@ -261,15 +261,15 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro }: any) => {
     }, [spEarned]);
 
     return (
-        <div className={`flex flex-col gap-2 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'} items-end`}>
+        <div className={`flex flex-col gap-2 transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {/* SCRAP BOX */}
-            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/60 border-white/10'} ${scrapBling ? 'animate-bling-yellow' : ''} w-full flex flex-col items-end`}>
+            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${scrap > 0 ? 'bg-yellow-900/20 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : 'bg-black/80 border-white/10'} ${scrapBling ? 'animate-bling-yellow' : ''} w-full flex flex-col items-center`}>
                 <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold ${scrap > 0 ? 'text-yellow-500' : 'text-white/20'}`}>{t('ui.scrap')}</span>
                 <span className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono ${scrap > 0 ? 'text-yellow-400' : 'text-white/40'}`}>{scrap}</span>
             </div>
 
             {/* SP BOX */}
-            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${spEarned > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/60 border-white/10'} ${spBling ? 'animate-bling' : ''} w-full flex flex-col items-end`}>
+            <div className={`${isMobileDevice ? 'px-2 py-1' : 'px-4 py-2'} border backdrop-blur-sm transition-all ${spEarned > 0 ? 'bg-purple-900/20 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-black/80 border-white/10'} ${spBling ? 'animate-bling' : ''} w-full flex flex-col items-center`}>
                 <span className={`${isMobileDevice ? 'text-[7px]' : 'text-[10px]'} block uppercase font-bold ${spEarned > 0 ? 'text-purple-500' : 'text-white/20'}`}>{t('ui.sp')}</span>
                 <span className={`${isMobileDevice ? 'text-lg' : 'text-2xl'} font-bold font-mono ${spEarned > 0 ? 'text-purple-400' : 'text-white/40'}`}>{spEarned}</span>
             </div>
@@ -323,7 +323,7 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
     const wep = WEAPONS[activeWeapon];
 
     return (
-        <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-12'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`absolute ${isMobileDevice ? 'bottom-4' : 'bottom-4'} left-1/2 -translate-x-1/2 flex flex-col items-center transition-opacity duration-500 ${isBossIntro ? 'opacity-0' : 'opacity-100'}`}>
             {!isDriving && wep && wep.category !== 'THROWABLE' && activeWeapon !== WeaponType.RADIO && (
                 <div className={`${isMobileDevice ? 'mb-2' : 'mb-4'} text-center animate-fadeIn flex items-baseline`}>
                     <span ref={ammoTextRef} className={`${isMobileDevice ? 'text-2xl' : 'text-4xl'} font-bold text-white tracking-tighter font-mono`}>
@@ -543,6 +543,11 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
             }} />
 
             <div className={`${HUD_WRAPPER} ${!hudVisible || isDead || isDisoriented ? 'opacity-0 -translate-y-4 blur-[5px]' : 'opacity-100 translate-y-0 blur-0 animate-hudFadeIn'}`}>
+
+                {/* --- GRADIENTS OVERLAY (TOP & BOTTOM) --- */}
+                <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/80 to-transparent pointer-events-none z-0" />
+                <div className={`absolute bottom-0 left-0 right-0 ${isMobileDevice ? 'h-32' : 'h-48'} bg-gradient-to-t from-black/90 to-transparent pointer-events-none z-0`} />
+                {/* ----------------------------------------------- */}
 
                 <div className={`absolute ${isMobileDevice ? 'top-4 left-4 right-4' : 'top-8 left-8 right-12'} flex justify-between items-start`}>
 
