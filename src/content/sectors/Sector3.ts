@@ -2,393 +2,236 @@ import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
-import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
-import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
-import { CAMERA_HEIGHT } from '../../content/constants';
+import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
 const LOCATIONS = {
     SPAWN: {
         PLAYER: { x: 0, z: 0 },
-        FAMILY: { x: 215, z: -25 },
-        BOSS: { x: 220, z: -10 }
+        FAMILY: { x: -40, z: -150, y: 0 },
+        BOSS: { x: -40, z: -150 }
     },
     CINEMATIC: {
-        OFFSET: { x: 15, y: 15, z: -10 },
-        LOOK_AT: { x: 0, y: 2, z: 0 }
+        OFFSET: { x: 15, y: 12, z: 15 },
+        LOOK_AT: { x: 0, y: 1.5, z: 0 }
     },
     COLLECTIBLES: {
-        C1: { x: 275, z: -180 },
-        C2: { x: 215, z: -25 }
+        C1: { x: 40, z: -80 },
+        C2: { x: -20, z: -60 }
     },
     TRIGGERS: {
-        FOREST_AMBIENT: { x: 20, z: -18 },
-        POI_MAST: { x: 215, z: -25 },
-        FOUND_ESMERALDA: { x: 215, z: -25 }
+        NOISE: { x: 0, z: -50 },
+        SHED_SIGHT: { x: -20, z: -120 },
+        FOUND_NATHALIE: { x: -40, z: -150 },
+
+        // VINTERDÖD: Added the two on-the-move dialogue triggers
+        DIALOGUE_1: { x: 0, z: -20 }, // 20m from spawn
+        DIALOGUE_2: { x: 0, z: -50 }  // 50m from spawn
     },
     POIS: {
-        FARM: { x: 150, z: -120 },
-        FARMHOUSE: { x: 275, z: -175 },
-        BARN: { x: 305, z: -150 },
-        MAST: { x: 215, z: -25 },
-    },
-    PATHS: {
-        FOREST_TRAIL: [
-            new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(40, 0, -30),
-            new THREE.Vector3(80, 0, -10),
-            new THREE.Vector3(120, 0, -50),
-            new THREE.Vector3(125, 0, -79)
-        ],
-        HAGLAREDSVAGEN: [
-            new THREE.Vector3(64, 0, -83),
-            new THREE.Vector3(140, 0, -83),
-            new THREE.Vector3(180, 0, -120),
-            new THREE.Vector3(250, 0, -150),
-            new THREE.Vector3(320, 0, -120),
-            new THREE.Vector3(400, 0, -80)
-        ],
-        ROAD_TO_MAST: [
-            new THREE.Vector3(300, 0, -130),
-            new THREE.Vector3(289, 0, -92),
-            new THREE.Vector3(250, 0, -85),
-            new THREE.Vector3(215, 0, -25)
-        ],
-        FARM_PATH: [
-            new THREE.Vector3(159, 0, -142),
-            new THREE.Vector3(176, 0, -166),
-            new THREE.Vector3(212, 0, -190),
-            new THREE.Vector3(255, 0, -183),
-        ]
+        SHED: { x: -40, z: -150 }
     }
 } as const;
 
-// Mast light
-let mastLightHubRef: THREE.Object3D | null = null;
-
 export const Sector3: SectorDef = {
-    id: 2,
+    id: 3,
     name: "sectors.sector_3_name",
     environment: {
-        bgColor: 0x051015,
+        bgColor: 0x110500,
         fog: {
             density: 200,
             color: 0x020208,
             height: 10
         },
-        ambientIntensity: 0.3,
+        ambientIntensity: 0.6,
         ambientColor: 0x404050,
-        groundColor: 0x112211,
-        fov: 50,
-        skyLight: { visible: true, color: 0x88ffaa, intensity: 5.0, position: { x: 50, y: 35, z: 50 } },
+        groundColor: 0x2a1a11,
+        fov: 40,
+        skyLight: { visible: true, color: 0xffaa00, intensity: 3.0 },
         cameraOffsetZ: 40,
         cameraHeight: CAMERA_HEIGHT,
         weather: {
-            type: 'rain',
-            particles: 3000
+            type: 'ember',
+            particles: 2000
         },
         wind: {
-            strengthMin: 0.5,
+            strengthMin: 0.05,
             strengthMax: 1.0,
             direction: { x: 1, z: 1 },
             angleVariance: Math.PI / 4
         }
     },
-
-    // Set to SNOW as requested for clear visual debugging
-    groundType: 'SNOW',
-    ambientLoop: 'ambient_forest_loop',
-
+    // Automatic Content
+    groundType: 'DIRT',
+    ambientLoop: 'ambient_scrapyard_loop',
+    // --- SPAWN POINTS ---
     playerSpawn: LOCATIONS.SPAWN.PLAYER,
     familySpawn: LOCATIONS.SPAWN.FAMILY,
     bossSpawn: LOCATIONS.SPAWN.BOSS,
 
+    // Auto-Spawn Collectibles
     collectibles: [
-        { id: 's3_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
-        { id: 's3_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
+        { id: 's4_collectible_1', x: LOCATIONS.COLLECTIBLES.C1.x, z: LOCATIONS.COLLECTIBLES.C1.z },
+        { id: 's4_collectible_2', x: LOCATIONS.COLLECTIBLES.C2.x, z: LOCATIONS.COLLECTIBLES.C2.z }
     ],
 
     cinematic: {
         offset: LOCATIONS.CINEMATIC.OFFSET,
         lookAtOffset: LOCATIONS.CINEMATIC.LOOK_AT,
-        rotationSpeed: 0.02
+        rotationSpeed: 0.05
     },
 
     setupProps: async (ctx: SectorContext) => {
-        const { scene } = ctx;
+        const { scene, obstacles } = ctx;
         (ctx as any).sectorState.ctx = ctx;
 
-        // --- 1. PATHS AND SPLINES ---
-        const trailCurve = PathGenerator.createDirtPath(ctx, [...LOCATIONS.PATHS.FOREST_TRAIL], 3);
-        const hagCurve = PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.HAGLAREDSVAGEN], 6);
-        PathGenerator.createGravelRoad(ctx, [...LOCATIONS.PATHS.ROAD_TO_MAST], 6);
-
-        // Farm path bending SOUTH
-        const farmCurve = PathGenerator.createDirtPath(ctx, [...LOCATIONS.PATHS.FARM_PATH], 3);
-
-        const gravelGeo = new THREE.CylinderGeometry(25, 25, 0.1, 16);
-        const gravelMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 1.0 });
-
-        const farmGravel = new THREE.Mesh(gravelGeo, gravelMat);
-        farmGravel.position.set(LOCATIONS.POIS.FARM.x, 0.02, LOCATIONS.POIS.FARM.z);
-        farmGravel.receiveShadow = true;
-        scene.add(farmGravel);
-
-        const fhGravel = new THREE.Mesh(gravelGeo, gravelMat);
-        fhGravel.position.set(LOCATIONS.POIS.FARMHOUSE.x, 0.02, LOCATIONS.POIS.FARMHOUSE.z);
-        fhGravel.receiveShadow = true;
-        scene.add(fhGravel);
-
+        // Reward Chest at boss spawn
         SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
-        // --- 2. BUILDINGS & PROPS ---
-        const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
-        SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
-
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, EnemyType.RUNNER, Math.random() * Math.PI);
-        SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 10, LOCATIONS.POIS.FARM.z - 5, EnemyType.TANK, Math.random() * Math.PI);
-
-        SectorBuilder.spawnDriveableVehicle(ctx, LOCATIONS.POIS.FARM.x - 10, LOCATIONS.POIS.FARM.z + 5, (3 * Math.PI) / 4, 'tractor');
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z - 5, Math.random() * Math.PI, 1.2);
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 8, LOCATIONS.POIS.FARM.z - 2, Math.random() * Math.PI, 1.1);
-        SectorBuilder.spawnHaybale(ctx, LOCATIONS.POIS.FARM.x + 4, LOCATIONS.POIS.FARM.z - 8, Math.random() * Math.PI, 1.0);
-
-        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 15, LOCATIONS.POIS.FARM.z + 10, Math.PI / 4, 1.2);
-        SectorBuilder.spawnTimberPile(ctx, LOCATIONS.POIS.FARM.x - 12, LOCATIONS.POIS.FARM.z + 14, Math.PI / 3, 1.0);
-
-        SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
-        SectorBuilder.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
-
-        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
-
-        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
-
-        // Abandoned House 1: North of Farmhouse (Birch Forest)
-        const house1Coords = { x: 285, z: -250 };
-        SectorBuilder.spawnBuilding(ctx, house1Coords.x, house1Coords.z, 12, 5, 12, Math.PI / 4, 0x445544, false);
-        SectorBuilder.spawnDeadBody(ctx, house1Coords.x + 5, house1Coords.z + 5, 'HUMAN', Math.random() * Math.PI);
-
-        // Abandoned House 2: South near boundary (Dead Forest)
-        const house2Coords = { x: 300, z: 80 };
-        SectorBuilder.spawnBuilding(ctx, house2Coords.x, house2Coords.z, 15, 6, 15, -Math.PI / 3, 0x333333, false);
-        SectorBuilder.spawnDeadBody(ctx, house2Coords.x - 5, house2Coords.z - 5, 'HUMAN', Math.random() * Math.PI);
-
-        // --- 3. SPLINE-BASED PROCEDURAL VEGETATION ---
-        const trailPts = trailCurve.getSpacedPoints(80);
-        const hagPts = hagCurve.getSpacedPoints(120);
-        const farmPathPts = farmCurve.getSpacedPoints(60);
-
-        const forestOffset = 7;
-        const forestDepth = 35;
-
-        // 4.3 Spruce (Forest Trail)
-        // Strict filters: x < 115 stops before crossroads. z > -75 prevents bleeding onto Haglaredsvägen (z:-83).
-        const filterTrailNorth = (points: THREE.Vector3[]) => points.filter(p => p.x < 115 && p.z > -75);
-        const filterTrailSouth = (points: THREE.Vector3[]) => points.filter(p => p.x < 115);
-
-        const sprucePolyNorth = [
-            ...filterTrailNorth(PathGenerator.getOffsetPoints(trailPts, -forestOffset)),
-            ...filterTrailNorth(PathGenerator.getOffsetPoints(trailPts, -(forestOffset + forestDepth))).reverse()
-        ];
-        const sprucePolySouth = [
-            ...filterTrailSouth(PathGenerator.getOffsetPoints(trailPts, forestOffset)),
-            ...filterTrailSouth(PathGenerator.getOffsetPoints(trailPts, forestOffset + forestDepth)).reverse()
-        ];
-        sprucePolyNorth.forEach(p => p.y = 0);
-        sprucePolySouth.forEach(p => p.y = 0);
-
-        await SectorBuilder.createForest(ctx, sprucePolyNorth, 12, ['spruce', 'pine']);
-        await SectorBuilder.createForest(ctx, sprucePolySouth, 12, ['spruce', 'pine']);
-
-        // 4.6 Wheat Fields (Strictly SOUTH of Haglaredsvägen using offset spline)
-        const wheatOffset = 7;
-        const wheatDepth = 35;
-
-        const filterWheat1 = (points: THREE.Vector3[]) => points.filter(p => p.x > 90 && p.x < 150);
-        const wheatPoly1 = [
-            ...filterWheat1(PathGenerator.getOffsetPoints(hagPts, wheatOffset)),
-            ...filterWheat1(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
-        ];
-        wheatPoly1.forEach(p => p.y = 0);
-        await SectorBuilder.fillWheatField(ctx, wheatPoly1, 0.4);
-        SectorBuilder.createScarecrow(ctx, 125, -95);
-
-        const filterWheat2 = (points: THREE.Vector3[]) => points.filter(p => p.x > 170 && p.x < 240);
-        const wheatPoly2 = [
-            ...filterWheat2(PathGenerator.getOffsetPoints(hagPts, wheatOffset)),
-            ...filterWheat2(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
-        ];
-        wheatPoly2.forEach(p => p.y = 0);
-        await SectorBuilder.fillWheatField(ctx, wheatPoly2, 0.4);
-        SectorBuilder.createScarecrow(ctx, 205, -135);
-
-        // 4.7 Flowers (Nested dynamically between Farm Path and Haglaredsvägen)
-        const filterFlowersFarm = (points: THREE.Vector3[]) => points.filter(p => p.x > 160 && p.x < 250);
-        const filterFlowersHag = (points: THREE.Vector3[]) => points.filter(p => p.x > 160 && p.x < 250);
-
-        const flowerPoly = [
-            ...filterFlowersFarm(PathGenerator.getOffsetPoints(farmPathPts, 4)),       // Outer south boundary of farm path
-            ...filterFlowersHag(PathGenerator.getOffsetPoints(hagPts, -4)).reverse()   // Inner north boundary of Haglaredsvägen
-        ];
-        flowerPoly.forEach(p => p.y = 0);
-        await SectorBuilder.fillAreaWithFlowers(ctx, flowerPoly, 0.9, 'flower');
-
-        // 4.8 Sunflowers (Strictly SOUTH of Haglaredsvägen, East of Mast Road)
-        const sunflowerPoly1 = [
-            new THREE.Vector3(310, 0, -110),
-            new THREE.Vector3(360, 0, -110),
-            new THREE.Vector3(360, 0, -80),
-            new THREE.Vector3(310, 0, -80)
-        ];
-        await SectorBuilder.fillAreaWithFlowers(ctx, sunflowerPoly1, 0.4, 'sunflower');
-
-        const sunflowerPoly2 = [
-            new THREE.Vector3(310, 0, -70),
-            new THREE.Vector3(360, 0, -70),
-            new THREE.Vector3(360, 0, -40),
-            new THREE.Vector3(310, 0, -40)
-        ];
-        await SectorBuilder.fillAreaWithFlowers(ctx, sunflowerPoly2, 0.4, 'sunflower');
-
-        // 4.4 Birch Forest (Wrapping North and East of House 1)
-        const birchPolyL = [
-            new THREE.Vector3(260, 0, -280),
-            new THREE.Vector3(330, 0, -280),
-            new THREE.Vector3(330, 0, -220),
-            new THREE.Vector3(300, 0, -220),
-            new THREE.Vector3(300, 0, -240),
-            new THREE.Vector3(260, 0, -240)
-        ];
-        await SectorBuilder.createForest(ctx, birchPolyL, 15, ['birch']);
-
-        // 4.5 Dead Trees (Wrapping House 2)
-        const deadForestPoly = [
-            new THREE.Vector3(270, 0, 60),
-            new THREE.Vector3(340, 0, 60),
-            new THREE.Vector3(340, 0, 110),
-            new THREE.Vector3(270, 0, 110)
-        ];
-        await SectorBuilder.createForest(ctx, deadForestPoly, 18, ['dead_tree']);
-
-        // --- 4. LAKE & GRASS ---
-        const lakeCoords = { x: 255, z: -117 };
-        const lake = SectorBuilder.addLake(ctx, lakeCoords.x, lakeCoords.z, 25, 7.0);
-
-        const stone = NaturePropGenerator.createRock(25, 25, 15);
-        stone.position.set(lakeCoords.x - 20, -2, lakeCoords.z + 10);
-        scene.add(stone);
-
-        SectorBuilder.addObstacle(ctx, {
-            mesh: stone,
-            position: stone.position,
-            collider: { type: 'sphere', radius: 12.5 }
-        });
-
-        if (lake) lake.registerSplashSource(stone);
-
-        const boatGroup = SectorBuilder.spawnFloatableVehicle(ctx, lakeCoords.x - 12.5, lakeCoords.z, Math.random() * Math.PI);
-        if (lake && boatGroup) {
-            lake.registerFloatingProp(boatGroup);
-            lake.registerSplashSource(boatGroup);
+        // Stacks of Cars (Maze) - Sektor 4 Bilskroten
+        for (let i = 0; i < 60; i++) {
+            const x = (Math.random() - 0.5) * 160;
+            const z = -20 - Math.random() * 140;
+            if (Math.abs(x) < 10 && z > -100) continue;
+            const carStackHeight = 1 + Math.floor(Math.random() * 3);
+            const rotY = Math.random() * Math.PI * 2;
+            await SectorBuilder.spawnVehicleStack(ctx, x, z, rotY, carStackHeight);
         }
 
-        // Sparse Grass (Stretching from South/East of Lake down to the Mast)
-        const sparseGrassPoly = [
-            new THREE.Vector3(90, 0, 50),
-            new THREE.Vector3(180, 0, 40),
-            new THREE.Vector3(220, 0, 5),   // Approaching mast
-            new THREE.Vector3(180, 0, -10),
-            new THREE.Vector3(120, 0, 10)
+        // Perimeter Trees
+        for (let i = 0; i < 80; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = 100 + Math.random() * 60;
+            const x = Math.cos(angle) * r;
+            const z = -80 + Math.sin(angle) * r;
+            await SectorBuilder.spawnTree(ctx, 'spruce', x, z, 1.0 + Math.random() * 0.5);
+        }
+
+        // The Dealership Building
+        const shedGroup = new THREE.Group();
+        shedGroup.position.set(-40, 0, -150);
+        const shed = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 20), MATERIALS.metalPanel);
+        shed.position.y = 4;
+        shedGroup.add(shed);
+        scene.add(shedGroup);
+        SectorBuilder.addObstacle(ctx, {
+            mesh: shedGroup,
+            collider: { type: 'sphere', radius: 12 }
+        });
+
+        // ===== INDUSTRIAL DECAY =====
+
+        // Sparse weeds breaking through concrete
+        const industrialWeeds = [
+            new THREE.Vector3(-20, 0, -20),
+            new THREE.Vector3(20, 0, -20),
+            new THREE.Vector3(20, 0, 20),
+            new THREE.Vector3(-20, 0, 20)
         ];
-        await VegetationGenerator.fillAreaWithGrass(ctx, sparseGrassPoly, 0.4);
+        await VegetationGenerator.fillAreaWithGrass(ctx, industrialWeeds, 0.4);
 
-        // --- 5. MOUNTAIN BOUNDARY ---
-        SectorBuilder.createMountain(ctx, [
-            new THREE.Vector3(124, 0, 16),
-            new THREE.Vector3(139, 0, -22),
-            new THREE.Vector3(150, 0, -53),
-            new THREE.Vector3(233, 0, -106)
-        ], 10, 7);
-
-        // --- 6. THE MAST ---
-        const mastPos = LOCATIONS.POIS.MAST;
-
-        const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-        asphalt.rotation.x = -Math.PI / 2;
-        asphalt.position.set(mastPos.x, 0.05, mastPos.z);
-        asphalt.receiveShadow = true;
-        scene.add(asphalt);
-
-        SectorBuilder.createFence(ctx, [
-            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30),
-            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z - 30),
-            new THREE.Vector3(mastPos.x - 5, 0, mastPos.z - 30)
-        ], 'black', 2.5);
-
-        SectorBuilder.createFence(ctx, [
-            new THREE.Vector3(mastPos.x + 5, 0, mastPos.z - 30),
-            new THREE.Vector3(mastPos.x + 30, 0, mastPos.z - 30),
-            new THREE.Vector3(mastPos.x + 30, 0, mastPos.z + 30),
-            new THREE.Vector3(mastPos.x - 30, 0, mastPos.z + 30)
-        ], 'black', 2.5);
-
-        SectorBuilder.spawnBuilding(ctx, mastPos.x, mastPos.z, 15, 5, 12, Math.PI / 2, 0x555555, false);
-
-        // The Mast
-        const mastGroup = new THREE.Group();
-        mastGroup.position.set(mastPos.x, 5, mastPos.z);
-
-        const mast = SectorBuilder.spawnMast(ctx, mastPos.x, mastPos.z);
-        mastLightHubRef = mast.getObjectByName("mastWarningLights") || null;
+        // Dead/dying trees (only standing, industrial feel)
+        for (let i = 0; i < 15; i++) {
+            const deadTree = VegetationGenerator.createDeadTree('standing', 0.6 + Math.random() * 0.4);
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 30 + Math.random() * 40;
+            deadTree.position.set(
+                Math.cos(angle) * dist,
+                0,
+                Math.sin(angle) * dist
+            );
+            ctx.scene.add(deadTree);
+        }
+        // ===== END INDUSTRIAL DECAY =====
     },
 
     setupContent: async (ctx: SectorContext) => {
         if (ctx.isWarmup) return; // Triggers produce no GPU state — skip during preloader ghost-render
-        // Triggers:
+        // Triggers
         SectorBuilder.addTriggers(ctx, [
+            // Dialogue Part 1 (Gravel Path)
             {
-                id: 'found_esmeralda',
-                position: LOCATIONS.TRIGGERS.FOUND_ESMERALDA,
-                familyId: 2,
-                radius: 8,
+                id: 's4_dialogue_1',
+                position: LOCATIONS.TRIGGERS.DIALOGUE_1,
+                radius: 15,
                 type: 'EVENT',
                 content: '',
                 triggered: false,
-                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 2 } }]
+                // VINTERDÖD FIX: Points to index 3 (Sector 4), starts at line 0 automatically.
+                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3 } }]
             },
-            { id: 's3_forest_noise', position: LOCATIONS.TRIGGERS.FOREST_AMBIENT, radius: 8, type: 'SPEAK', content: "clues.2.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_poi_mast', position: LOCATIONS.TRIGGERS.POI_MAST, radius: 50, type: 'POI', content: "pois.2.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_poi_farm', position: LOCATIONS.POIS.FARM, radius: 20, type: 'POI', content: "pois.2.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_tractor', position: { x: LOCATIONS.POIS.FARM.x + 10, z: LOCATIONS.POIS.FARM.z + 10 }, radius: 8, type: 'SPEAK', content: "clues.2.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 50 } }] },
-            { id: 's3_poi_farmhouse', position: LOCATIONS.POIS.FARMHOUSE, radius: 20, type: 'POI', content: "pois.2.2.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
-            { id: 's3_poi_barn', position: LOCATIONS.POIS.BARN, radius: 20, type: 'POI', content: "pois.2.3.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
+
+            // Dialogue Part 2 (RV40)
+            {
+                id: 's4_dialogue_2',
+                position: LOCATIONS.TRIGGERS.DIALOGUE_2,
+                radius: 15,
+                type: 'EVENT',
+                content: '',
+                triggered: false,
+                // VINTERDÖD FIX: Points to Sector 4 script, but we must start at line 6 (index 6 in the array)
+                // We pass 'lineIndex' to the payload so the cinematic system knows where to begin.
+                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3, lineIndex: 6 } }]
+            },
+
+            // Dialogue Part 3 (Final Boss/Nathalie)
+            {
+                id: 'found_nathalie',
+                position: LOCATIONS.TRIGGERS.FOUND_NATHALIE,
+                familyId: 3,
+                radius: 12,
+                type: 'EVENT',
+                content: '',
+                triggered: false,
+                // Starts the final dialogue at line 14. 
+                // The dialog script will then fire ['FAMILY_MEMBER_FOUND', 'SPAWN_BOSS']
+                actions: [{ type: 'START_CINEMATIC', payload: { scriptId: 3, lineIndex: 14 } }]
+            },
+
+            { id: 's4_creepy_noise', position: LOCATIONS.TRIGGERS.NOISE, radius: 20, type: 'THOUGHT', content: "clues.3.0.reaction", triggered: false, actions: [{ type: 'PLAY_SOUND', payload: { id: 'ambient_metal' } }, { type: 'GIVE_REWARD', payload: { xp: 50 } }] },
+            { id: 's4_poi_shed', position: LOCATIONS.TRIGGERS.SHED_SIGHT, radius: 25, type: 'POI', content: "pois.3.0.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] },
+            { id: 's4_poi_scrapyard', position: { x: 0, z: -100 }, radius: 100, type: 'POI', content: "pois.3.1.reaction", triggered: false, actions: [{ type: 'GIVE_REWARD', payload: { xp: 500 } }] }
         ]);
     },
 
     setupZombies: async (ctx: SectorContext) => {
-        if (ctx.isWarmup || !ctx.spawnHorde) return; // No enemy spawning during preloader ghost-render
-
-        const hordeSpots = [
-            new THREE.Vector3(40, 0, -30),
-            new THREE.Vector3(150, 0, -120),
-            new THREE.Vector3(180, 0, -130),
-            new THREE.Vector3(-250, 0, -50),
-            new THREE.Vector3(300, 0, -100)
-        ];
-
-        for (let i = 0; i < hordeSpots.length; i++) {
-            const count = 5 + Math.floor(ctx.rng() * 5);
-            ctx.spawnHorde(count, undefined, hordeSpots[i]);
+        if (ctx.isWarmup) return; // No enemy spawning during preloader ghost-render
+        // --- ZOMBIE SPAWNING ---
+        for (let i = 0; i < 5; i++) {
+            ctx.spawnZombie(EnemyType.WALKER);
         }
+
+        spawnSectorHordes(ctx);
     },
 
     onUpdate: (delta, now, playerPos, gameState, sectorState, events) => {
-        if (mastLightHubRef) {
-            mastLightHubRef.rotation.y += delta * 2.0;
+        // Scrapyard ambushes
+        if (Math.random() < 0.015 && gameState.enemies.length < 12) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 25 + Math.random() * 20;
+            const px = playerPos.x + Math.cos(angle) * dist;
+            const pz = playerPos.z + Math.sin(angle) * dist;
+
+            events.spawnZombie(EnemyType.RUNNER, new THREE.Vector3(px, 0, pz));
         }
     }
 };
+
+function spawnSectorHordes(ctx: SectorContext) {
+    if (!ctx.spawnHorde) return;
+
+    // Defined Horde Locations (Scrapyard)
+    const hordeSpots = [
+        new THREE.Vector3(0, 0, -50),   // Near Start
+        new THREE.Vector3(-20, 0, -130), // Shed Front
+        new THREE.Vector3(30, 0, -200),  // Deep Scrapyard
+        new THREE.Vector3(80, 0, -80),   // Right Flank
+        new THREE.Vector3(-80, 0, -80)   // Left Flank
+    ];
+
+    for (let i = 0; i < hordeSpots.length; i++) {
+        const count = 6 + Math.floor(ctx.rng() * 4);
+        ctx.spawnHorde(count, undefined, hordeSpots[i]);
+    }
+}

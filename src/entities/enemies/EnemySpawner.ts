@@ -189,6 +189,9 @@ export const EnemySpawner = {
             isAirborne: false, fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
+
+            // Discovered
+            discovered: false
         };
 
         const s = enemy.originalScale;
@@ -302,6 +305,9 @@ export const EnemySpawner = {
             isAirborne: false, fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
+
+            // Discovered
+            discovered: false
         };
 
         boss.userData.entity = enemy;

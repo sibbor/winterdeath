@@ -7,7 +7,6 @@ import { GameSettings } from '../core/engine/EngineTypes';
 export { ZOMBIE_TYPES } from './enemies/zombies';
 export { BOSSES } from './enemies/bosses';
 export { WEAPONS } from './weapons';
-export { SECTOR_THEMES } from './sectors/sector_themes';
 
 // 20% HP
 export const HEALTH_CRITICAL_THRESHOLD = 0.2;

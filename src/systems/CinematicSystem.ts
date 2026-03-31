@@ -6,6 +6,7 @@ import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { soundManager } from '../utils/audio/SoundManager';
 import { STORY_SCRIPTS } from '../content/dialogues';
 
+// Zero-GC Vektorer för kameramatte
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -50,11 +51,20 @@ export class CinematicSystem implements System {
         this.callbacks = opts.callbacks;
     }
 
-    public startCinematic(target: THREE.Object3D, scriptId: number, params: any = {}) {
-        const script = STORY_SCRIPTS[scriptId];
+    // VINTERDÖD FIX: Tar nu emot både sectorId och dialogueId för att matcha den nästlade arrayen
+    public startCinematic(target: THREE.Object3D, sectorId: number, dialogueId: number, params: any = {}) {
+        const sectorScripts = STORY_SCRIPTS[sectorId];
+
+        if (!sectorScripts) {
+            console.error(`[CinematicSystem] Kritiskt fel: Hittar inget manus för Sektor ${sectorId}!`);
+            this.callbacks.setCinematicActive(false);
+            return;
+        }
+
+        const script = sectorScripts[dialogueId];
 
         if (!script || script.length === 0) {
-            console.error(`[CinematicSystem] Kritiskt fel: Script ID ${scriptId} saknas!`);
+            console.error(`[CinematicSystem] Kritiskt fel: Dialog ${dialogueId} saknas i Sektor ${sectorId}!`);
             this.callbacks.setCinematicActive(false);
             return;
         }
@@ -67,7 +77,8 @@ export class CinematicSystem implements System {
         cinematic.isClosing = false;
         cinematic.target = target;
         cinematic.script = script;
-        cinematic.scriptId = scriptId;
+        cinematic.sectorId = sectorId;
+        cinematic.dialogueId = dialogueId;
         cinematic.lineIndex = -1;
 
         const currentNow = performance.now();
@@ -126,8 +137,7 @@ export class CinematicSystem implements System {
         cinematic.lineStartTime = currentNow;
         cinematic.fadingOut = false;
 
-        // VINTERDÖD FIX: Fast tidslängd. Längden på översättningsnyckeln ("dialogue.0_1") 
-        // fungerar inte för matte. Vi utgår från 2.5 sekunder skrivtid som default.
+        // VINTERDÖD FIX: Fast tidslängd. Längden på översättningsnyckeln fungerar inte för matte.
         cinematic.typingDuration = line.typingDuration || 2500;
         cinematic.lineDuration = line.duration || Math.max(4000, cinematic.typingDuration + 1500);
 
@@ -135,8 +145,9 @@ export class CinematicSystem implements System {
         if (line.tail) this.callbacks.setTailPosition(line.tail);
     }
 
-    public getScript(scriptId: number) {
-        return STORY_SCRIPTS[scriptId];
+    public getScript(sectorId: number, dialogueId: number) {
+        if (!STORY_SCRIPTS[sectorId]) return null;
+        return STORY_SCRIPTS[sectorId][dialogueId] || null;
     }
 
     public stop() {
@@ -157,9 +168,7 @@ export class CinematicSystem implements System {
     }
 
     public endCinematic() {
-        // VINTERDÖD FIX: Vi tar BORT anropet till this.stop() härifrån!
-        // Nu hinner GameSession.tsx i lugn och ro läsa av manuset, se att vi är på 
-        // sista raden och avfyra SPAWN_BOSS, innan den själv rensar systemet.
+        // VINTERDÖD FIX: Ingen this.stop() här. GameSession hanterar nedstängningen!
         this.callbacks.endCinematic();
     }
 
@@ -237,24 +246,25 @@ export class CinematicSystem implements System {
         const isPlayerSpeaking = currentSpeakerName.toLowerCase() === 'robert' || currentSpeakerName.toLowerCase() === 'player';
 
         // --- VINTERDÖD FIX: Audio Sync ---
-        // Spela upp skrivmaskinsljudet exakt var 150:e millisekund medan texten typas.
         const timeSinceLastVoice = now - (cinematic.lastVoiceTime || 0);
         if (timeInLine < cinematic.typingDuration && timeSinceLastVoice > 150) {
             cinematic.lastVoiceTime = now;
             soundManager.playVoice(currentSpeakerName);
         }
 
-        // Animator Sync (Nu med CinematicDt)
+        // --- VINTERDÖD FIX: Zero-GC Animator Sync ---
         for (let i = -1; i < familyMembers.length; i++) {
-            const fm = i === -1 ? { mesh: this.playerMeshRef.current, name: 'Robert' } : familyMembers[i];
-            const mesh = fm.mesh;
+            const mesh = i === -1 ? this.playerMeshRef.current : familyMembers[i]?.mesh;
+            const name = i === -1 ? 'Robert' : familyMembers[i]?.name;
+
             if (!mesh) continue;
 
-            const isCurrentSpeaker = (fm.name === currentSpeakerName) || (i === -1 && isPlayerSpeaking);
+            const isCurrentSpeaker = (name === currentSpeakerName) || (i === -1 && isPlayerSpeaking);
             const isSpeaking = isCurrentSpeaker && timeInLine < cinematic.typingDuration;
             const isThinking = isCurrentSpeaker && activeScriptLine?.type === 'thought';
 
             const body = mesh.userData.isBody ? mesh : mesh.children.find((c: any) => c.userData?.isBody);
+
             if (body) {
                 PlayerAnimator.update(body as THREE.Mesh, {
                     isMoving: false, isRushing: false, isRolling: false,

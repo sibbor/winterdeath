@@ -5,20 +5,18 @@ import { SectorDef } from '../game/session/SectorTypes';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { EnemyType, NoiseType } from '../entities/enemies/EnemyTypes';
 import { LIGHT_SYSTEM } from '../content/constants';
+import { Sector0 } from '../content/sectors/Sector0';
 import { Sector1 } from '../content/sectors/Sector1';
 import { Sector2 } from '../content/sectors/Sector2';
 import { Sector3 } from '../content/sectors/Sector3';
 import { Sector4 } from '../content/sectors/Sector4';
-import { Sector5 } from '../content/sectors/Sector5';
-import { Sector6 } from '../content/sectors/Sector6';
 
 const SECTORS: Record<number, SectorDef> = {
-    0: Sector1,
-    1: Sector2,
-    2: Sector3,
-    3: Sector4,
-    4: Sector5,
-    5: Sector6
+    0: Sector0,
+    1: Sector1,
+    2: Sector2,
+    3: Sector3,
+    4: Sector4
 };
 
 export class SectorSystem implements System {

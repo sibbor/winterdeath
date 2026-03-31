@@ -401,7 +401,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (refs.playerMeshRef.current) {
                 _animStateScratch.isMoving = false;
                 _animStateScratch.isRushing = false;
-                // VINTERDÖD FIX: Använd realDt för animationer under Boss Intro
+                _animStateScratch.isRolling = false;
+                // Use realDt for animations during Boss Intro
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, realDt);
             }
             refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
@@ -411,6 +412,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         // 4. Throttled logic (Health warnings, burning effects)
         if (frame % 5 === 0) {
+            // Heart beat sound
             if (state.hp < state.maxHp * HEALTH_CRITICAL_THRESHOLD && !state.isDead) {
                 if (now - ((state as any).lastHeartbeat || 0) > 800) {
                     (state as any).lastHeartbeat = now;
@@ -571,7 +573,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
-                // VINTERDÖD FIX: Player animation uses realDt during cinematics to breathe/talk!
+                // Player animation uses realDt during cinematics to breathe/talk:
                 PlayerAnimator.update(refs.playerMeshRef.current, _animStateScratch, now, engine.isSoftPaused ? realDt : delta);
                 monitor.end('player_animation');
             }
@@ -765,6 +767,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
         _triggerOptionsScratch.playSound = (id: string) => {
+            console.log("[GameSessionLoop] playSound: ", id);
             if (id === 'voice') soundManager.playVoice(PLAYER_CHARACTER.name);
             else soundManager.playUiHover();
         };
@@ -776,7 +779,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             }
             return false;
         };
-
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
 

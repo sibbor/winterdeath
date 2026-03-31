@@ -97,6 +97,10 @@ export const en = {
         show_fps: "SHOW FPS",
         begin: "BEGIN",
         save_settings: "SAVE SETTINGS",
+        reload_required: "Reload required",
+        reload_desc: "Some settings require WINTERDEATH to reload before they take effect. Reload game?",
+        reload_now: "Now",
+        reload_later: "Later",
         discovery_popups: "DISCOVERY POPUPS",
         discovery_popups_sub: "Show real-time notifications for progress",
         cancel: "CANCEL",
@@ -370,20 +374,26 @@ export const en = {
     ],
     sectors: {
         camp_name: "The Camp",
-        sector_1_name: "The Village",
-        sector_2_name: "The Mountain Vault",
-        sector_3_name: "The Mast",
-        sector_4_name: "The Scrapyard",
-        sector_5_name: "Epilogue",
-        sector_6_name: "The Playground",
+        sector_0_name: "The Village",
+        sector_1_name: "The Mountain Vault",
+        sector_2_name: "The Mast",
+        sector_3_name: "The Scrapyard",
+        sector_4_name: "The Playground",
     },
     story: {
-        sector_1_briefing: "Robert, you arrived at the villa in The Village only to find chaos. Your car is burning in the driveway, the front door smashed open. Inside, there are signs of struggle and blood.\n\nA note found in your son's room reads: \"We went to D...\", the rest is illegible. You missed them.\n\nTracks lead from the house into the dark urban sprawl. You must follow the trail. Find your family.",
-        sector_2_briefing: "Your eldest son is safe. He told you that the family fled towards the old military defense bunker in the forest (Bergrummet). However, the survivors inside were hostile.\n\nThey refused entry to the others due to lack of space, but they took your youngest son inside.\n\nYou must infiltrate the caves, deal with the hostiles, and rescue him.",
-        sector_3_briefing: "The survivors in the bunker forced your wife and daughter away. Your son said they headed North through the dense pine forest, towards the Häglared Radio Mast.\n\nIt's a long trek through heavy vegetation and the infected are everywhere. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
-        sector_4_briefing: "Your daughter is safe. She revealed the heartbreaking truth: a massive Titan zombie attacked them in the woods. Your wife sacrificed herself, screaming to lure it away so your daughter could escape.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
-        sector_5_briefing: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the zombies, but we made a promise. Return to The Village one last time. Save them.",
-        sector_6_briefing: "Test new functions and play with values, weapons and enemies",
+        sector_0_briefing: "Robert, you arrived at the villa in The Village only to find chaos. Your car is burning in the driveway, the front door smashed open. Inside, there are signs of struggle and blood.\n\nA note found in your son's room reads: \"We went to D...\", the rest is illegible. You missed them.\n\nTracks lead from the house into the dark urban sprawl. You must follow the trail. Find your family.",
+        sector_1_briefing: "Your eldest son is safe. He told you that the family fled towards the old military defense bunker in the forest (Bergrummet). However, the survivors inside were hostile.\n\nThey refused entry to the others due to lack of space, but they took your youngest son inside.\n\nYou must infiltrate the caves, deal with the hostiles, and rescue him.",
+        sector_2_briefing: "The survivors in the bunker forced your wife and daughter away. Your son said they headed North through the dense pine forest, towards the Häglared Radio Mast.\n\nIt's a long trek through heavy vegetation and the infected are everywhere. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
+        sector_3_briefing: "Your daughter is safe. She revealed the heartbreaking truth: a massive Titan zombie attacked them in the woods. Your wife sacrificed herself, screaming to lure it away so your daughter could escape.\n\nShe ran towards the industrial district, specifically the old Car Dealership (Bilfirman). She might still be alive. You have to believe she is. Bring your wife home, Robert.",
+        sector_4_briefing: "Test new functions and play with values, weapons and enemies",
+        epilogue: [
+            {
+                overlay: "EPILOGUE",
+                narrative: "The family is reunited. You have done the impossible. But as you sat around the fire, your son reminded you of one last thing.\n\nThe family pets. They were left locked in the house when the chaos started. The area is crawling with the zombies, but we made a promise. Return to The Village one last time. Save them.",
+                image: "",
+                audio: ""
+            },
+        ],
         prologue: [
             {
                 overlay: "GÅNGHESTER. 48 HOURS SINCE VMA.",
@@ -627,7 +637,7 @@ export const en = {
         }
     },
     dialogue: {
-        // Dialogue: Sector 1
+        // Dialogue: Sector 0
         "0_0": "LOKE!!",
         "0_1": "DAD?! You are here! We tried to reach you. We were attacked! By ZOMBIES! There was blood everywhere...",
         "0_2": "/Easy, buddy./ Look at me. Are you hurt? Are you okay?",
@@ -642,7 +652,7 @@ export const en = {
         "0_11": "Come on, let's go to the camp I built so we can prepare to find the others!",
         "0_12": "WOW! A camp? Is there food? Heat? WEAPONS?!",
 
-        // Dialogue: Sector 2 (part 1)
+        // Dialogue: Sector 1 (part 1)
         "1_0": "(Knocks heavily on the steel ports)",
         "1_1": "Stop right there! It's full! GO TO HELL!",
         "1_2": "(Pops out a gun barrel out from a small hatch in the port, aiming at Robert)",
@@ -661,7 +671,7 @@ export const en = {
         "1_15": "OPEN THE PORT.",
         "1_16": "(Opens the heavy metal ports leading in to the shelter)",
 
-        // Dialogue: Sector 2 (part 2) 
+        // Dialogue: Sector 1 (part 2) 
         "1_17": "DAD! LOKE!",
         "1_18": "Oh, JORDAN!",
         "1_19": "Our brave lil' boy.",
@@ -670,7 +680,7 @@ export const en = {
         "1_22": "Ehhh... Good luck!",
         "1_23": "(Slams the ports shut with a deafening boom)",
 
-        // Dialogue: Sector 3
+        // Dialogue: Sector 2
         "2_0": "HELLO? Is anyone here?",
         "2_1": "DAD! I never thought... I couldn't see you in the dark...",
         "2_2": "Oh, ESMERALDA! Open the door, I have Loke and Jordan with me!",
@@ -686,7 +696,7 @@ export const en = {
         "2_12": "SHIT! That was Nathalie. We need to find better reception!",
         "2_13": "Follow me kids.",
 
-        // Dialogue: Sector 4
+        // Dialogue: Sector 3
         "3_0": "(Whispering in radio) /Must whisper.../ *static* /scrapyard.../ *static* /monsters.../",
         "3_1": "(Speaks into radio) Copied! COME IN.",
         "3_2": "(Panic rising) Hurry kids! We have to save Nathalie!",

@@ -51,14 +51,14 @@ export interface SectorContext {
     yield: () => Promise<void>;
     isWarmup?: boolean; // When true: skip triggers, enemies, and story logic (preloader ghost-render mode)
 
-    // --- NEW CAMERA CALLBACKS ---
+    // --- CAMERA CALLBACKS ---
     setCameraAngle?: (angle: number) => void;
     setCameraHeight?: (heightMod: number) => void;
     setCameraOverride?: (params: { active: boolean, targetPos: THREE.Vector3, lookAtPos: THREE.Vector3, endTime: number } | null) => void;
     shakeCamera?: (amount: number, type?: 'general' | 'hurt') => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius?: number) => void;
 
-    // VINTERDÖD FIX: Required action bridge
+    // Required action bridge for triggers
     onAction: (action: TriggerAction | string | any[]) => void;
 }
 

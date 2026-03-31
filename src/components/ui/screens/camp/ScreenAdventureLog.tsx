@@ -8,7 +8,8 @@ import { useOrientation } from '../../../../hooks/useOrientation';
 import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
-import { SECTOR_THEMES, ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
+import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
+import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenAdventureLogProps {

@@ -973,13 +973,16 @@ export const CampWorld = {
         const activeMembers: any[] = [playerCharacter];
 
         if (debugMode) {
-            for (let i = 0; i < familyMembersData.length; i++) activeMembers.push(familyMembersData[i]);
+            for (let i = 0; i < familyMembersData.length; i++) {
+                activeMembers.push(familyMembersData[i]);
+            }
         } else {
             const indices = rescuedIndices || [];
             for (let i = 0; i < indices.length; i++) {
                 const sectorId = indices[i];
-                if (sectorId < 4) activeMembers.push(familyMembersData[sectorId]);
-                else if (sectorId === 4) { activeMembers.push(familyMembersData[4]); activeMembers.push(familyMembersData[5]); }
+                if (familyMembersData[sectorId]) {
+                    activeMembers.push(familyMembersData[sectorId]);
+                }
             }
         }
 

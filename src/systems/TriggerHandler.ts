@@ -25,11 +25,11 @@ export const TriggerHandler = {
             spawnBubble: (text: string, duration?: number) => void;
             removeVisual: (id: string) => void;
             onTrigger: (type: string, duration: number) => void;
-            onAction: (action: TriggerAction | string) => void; // Stöder nu även strängar!
+            onAction: (action: TriggerAction | string) => void;
             t: (key: string) => string;
             resolveDynamicPos?: (familyId?: number, ownerId?: string) => THREE.Vector3 | null;
             onDiscovery?: (type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => void;
-            playSound?: (id: string) => void; // VINTERDÖD: Audio bridge
+            playSound?: (id: string) => void;
         }
     ) => {
         // OPTIMIZATION: Only fetch triggers within 40 units to save CPU cycles
@@ -94,7 +94,9 @@ export const TriggerHandler = {
 
             // 3. STATE MANAGEMENT & EXECUTION
             if (isInside) {
+                console.log("[TriggerHandler] checkTriggers: isInside true for trigger: ", trig);
                 if (!trig.triggered) {
+                    console.log("[TriggerHandler] not triggered - trigger it!", trig);
                     // --- ON ENTER ---
                     trig.triggered = true;
                     trig.lastTriggerTime = now;
@@ -120,7 +122,6 @@ export const TriggerHandler = {
                         const duration = 2000 + translatedText.length * 50;
                         callbacks.spawnBubble(translatedText, duration);
 
-                        // VINTERDÖD FIX: Removed direct SoundManager/Constant imports
                         if (trig.type === 'SPEAK') {
                             if (callbacks.playSound) callbacks.playSound('voice');
                             callbacks.onTrigger('SPEAK', duration);

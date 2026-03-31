@@ -4,83 +4,71 @@ export interface CollectibleDefinition {
     sector: number;
     index: number;
     modelType: 'phone' | 'pacifier' | 'axe' | 'scarf' | 'jacket' | 'badge' | 'diary' | 'ring' | 'teddy';
-    reward: {
-        sp: number;
-    };
 }
 
 export const COLLECTIBLES: Record<string, CollectibleDefinition> = {
-    // Sector 1
+    // Sector 0
     's1_collectible_1': {
         id: 's1_collectible_1',
-        sector: 1,
+        sector: 0,
         index: 0,
-        modelType: 'phone',
-        reward: { sp: 1 }
+        modelType: 'phone'
     },
     's1_collectible_2': {
         id: 's1_collectible_2',
-        sector: 1,
+        sector: 0,
         index: 1,
-        modelType: 'axe',
-        reward: { sp: 1 }
+        modelType: 'axe'
     },
 
-    // Sector 2
+    // Sector 1
     's2_collectible_1': {
         id: 's2_collectible_1',
-        sector: 2,
+        sector: 1,
         index: 0,
-        modelType: 'pacifier',
-        reward: { sp: 1 }
+        modelType: 'pacifier'
     },
     's2_collectible_2': {
         id: 's2_collectible_2',
-        sector: 2,
+        sector: 1,
         index: 1,
-        modelType: 'teddy',
-        reward: { sp: 1 }
+        modelType: 'teddy'
     },
 
-    // Sector 3
+    // Sector 2
     's3_collectible_1': {
         id: 's3_collectible_1',
-        sector: 3,
+        sector: 2,
         index: 0,
-        modelType: 'diary',
-        reward: { sp: 1 }
+        modelType: 'diary'
     },
     's3_collectible_2': {
         id: 's3_collectible_2',
-        sector: 3,
+        sector: 2,
         index: 1,
-        modelType: 'jacket',
-        reward: { sp: 1 }
+        modelType: 'jacket'
     },
 
-    // Sector 4
+    // Sector 3
     's4_collectible_1': {
         id: 's4_collectible_1',
-        sector: 4,
+        sector: 3,
         index: 0,
-        modelType: 'ring',
-        reward: { sp: 1 }
+        modelType: 'ring'
     },
     's4_collectible_2': {
         id: 's4_collectible_2',
-        sector: 4,
+        sector: 3,
         index: 1,
-        modelType: 'badge',
-        reward: { sp: 1 }
+        modelType: 'badge'
     },
 
-    // Sector 6 (Playground Test)
+    // Sector 4 (Playground Test)
     'dummy_badge_test': {
         id: 'dummy_badge_test',
-        sector: 6,
+        sector: 4,
         index: 0,
-        modelType: 'badge',
-        reward: { sp: 0 }
+        modelType: 'badge'
     }
 };
 

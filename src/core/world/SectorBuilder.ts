@@ -82,7 +82,7 @@ export const SectorBuilder = {
         if (params?.label) object.userData.interactionLabel = params.label;
         if (params?.type) object.userData.interactionType = params.type;
 
-        // VINTERDÖD: Data-Driven Interaction Shapes
+        // Data-Driven Interaction Shapes
         if (params?.collider) {
             object.userData.interactionShape = params.collider.type;
             if (params.collider.type === 'box' && params.collider.size) {
@@ -536,7 +536,7 @@ export const SectorBuilder = {
             position: building.position,
             quaternion: building.quaternion,
             collider: {
-                type: 'box' as const,
+                type: 'box',
                 size: (building.userData.size as THREE.Vector3).clone(),
             }
         });

@@ -53,6 +53,7 @@ export class AshRenderer {
 
         this.scene.add(this.mesh);
 
+        // TODO: DON'T USE MAGIC NUMBER 500 HERE:
         // Pre-allocate animation pool (no runtime GC)
         for (let i = 0; i < 500; i++) {
             this.animatingPool.push({

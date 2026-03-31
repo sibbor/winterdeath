@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { t } from '../../../../utils/i18n';
+import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 
 interface ScreenLoadingProps {
     sectorIndex: number;
@@ -17,18 +18,18 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
 
     // Stable state to prevent text flickering during fade-out
     const [displayInfo, setDisplayInfo] = useState({
-        sectorKey: isCamp ? 'camp' : 'sector_1',
+        sectorKey: isCamp ? 'camp' : 'sector_0',
         isCamp: !!isCamp,
         isInitialBoot: !!isInitialBoot,
         isPrologue: !!isPrologue // Lås fast Prolog-läget under urfasningen
     });
 
-    const sectorKeys = ['sector_1', 'sector_2', 'sector_3', 'sector_4', 'sector_5', 'sector_6'];
-
     useEffect(() => {
         if (!isDone) {
+            const currentTheme = SECTOR_THEMES[sectorIndex];
+
             setDisplayInfo({
-                sectorKey: isCamp ? 'camp' : (sectorKeys[sectorIndex] || 'sector_1'),
+                sectorKey: isCamp ? 'camp' : (currentTheme || `sector_${sectorIndex}`),
                 isCamp: !!isCamp,
                 isInitialBoot: !!isInitialBoot,
                 isPrologue: !!isPrologue

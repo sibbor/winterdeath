@@ -36,7 +36,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
 
     const totalKills = (Object.values(stats.killsByType || {}) as number[]).reduce((a, b) => a + b, 0);
 
-    const rawBossId = BOSSES[currentSector]?.name || "GÅRDSHERREN";
+    const rawBossId = BOSSES[currentSector]?.name;
     const bossName = t(rawBossId);
 
     // Check both for fallback string "Boss" AND the boss's actual data ID
@@ -67,7 +67,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
     // Validation Flags
     const showRespawn = !!deathDetails || !!stats.aborted;
     const isFinished = !showRespawn;
-    const isLastSector = currentSector >= 4; // Sector 5 is the final sector
+    const isLastSector = currentSector >= 3; // Sector3.ts is the final sector
 
     let confirmLabel: string | undefined;
     let confirmAction: (() => void) | undefined;
@@ -157,7 +157,7 @@ const ScreenSectorReport: React.FC<ScreenSectorReportProps> = ({ stats, deathDet
                         <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-4">
                             <StatBlock
                                 label={t('ui.log_collectibles')}
-                                value={`${stats.collectiblesDiscovered?.length || 0} / ${getCollectiblesBySector(currentSector + 1).length}`}
+                                value={`${stats.collectiblesDiscovered?.length || 0} / ${getCollectiblesBySector(currentSector).length}`}
                                 color="text-yellow-400"
                             />
                             <StatBlock label={t('ui.clues_found')} value={stats.cluesFound?.length || 0} color="text-yellow-400" />

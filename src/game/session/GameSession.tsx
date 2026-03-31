@@ -225,7 +225,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                 }));
 
                 if (targetName) {
-                    spawnBubble(targetName + " saved!", 3000);
+                    spawnBubble(targetName + " " + t('ui.saved'), 3000);
                     soundManager.playVictory();
                 }
                 break;
@@ -333,7 +333,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                     state.sectorState.zombiesKilled = 0;
                     state.sectorState.targetKills = payload.count;
                     state.sectorState.waveActive = true;
-                    spawnBubble(t('ui.wave_start'), 4000);
+                    spawnBubble(t('ui.wave_start'), 3000);
                 }
                 break;
 

@@ -13,7 +13,8 @@ import { FXSystem } from '../../systems/FXSystem';
 import { DamageNumberSystem } from '../../systems/DamageNumberSystem';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
 import { AssetLoader } from '../../utils/assets/AssetLoader';
-import { SECTOR_THEMES, FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, DEFAULT_SPEED } from '../../content/constants';
+import { FAMILY_MEMBERS, CAMERA_HEIGHT, LIGHT_SYSTEM, BOSSES, DEFAULT_SPEED } from '../../content/constants';
+import { SECTOR_THEMES } from '../../content/sectors/sector_themes';
 import { ModelFactory, createProceduralTextures } from '../../utils/assets';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { PlayerDeathState } from '../../entities/player/CombatTypes';
@@ -484,6 +485,7 @@ export class GameSessionSetup {
             for (let i = 0; i < rescuedIndices.length; i++) {
                 const idx = rescuedIndices[i];
                 const theme = SECTOR_THEMES[idx];
+
                 if (theme && theme.familyMemberId !== undefined) {
                     const fmData = FAMILY_MEMBERS[theme.familyMemberId];
                     if (fmData) {

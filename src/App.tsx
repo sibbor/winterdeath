@@ -87,9 +87,9 @@ const App: React.FC = () => {
 
     // --- ZERO-GC: LATEST STATE REF ---
     const latestStateRef = useRef({ gameState, isMobileDevice, activeOverlay });
-    useEffect(() => {
-        latestStateRef.current = { gameState, isMobileDevice, activeOverlay };
-    });
+    latestStateRef.current.gameState = gameState;
+    latestStateRef.current.isMobileDevice = isMobileDevice;
+    latestStateRef.current.activeOverlay = activeOverlay;
 
     useEffect(() => {
         saveGameState(gameState);
@@ -483,11 +483,10 @@ const App: React.FC = () => {
         if (!sectorStats) return;
         setGameState(prev => {
             let newUniqueAchievements = 0;
-            const bossRawId = (BOSSES as any)[prev.currentSector]?.name || "GÅRDSHERREN";
+            const bossRawId = (BOSSES as any)[prev.currentSector]?.name;
             const bossKilled = sectorStats.killsByType && (
                 (sectorStats.killsByType['Boss'] || 0) > 0 ||
-                (sectorStats.killsByType[bossRawId] || 0) > 0 ||
-                (sectorStats.killsByType['GÅRDSHERREN'] || 0) > 0
+                (sectorStats.killsByType[bossRawId] || 0) > 0
             );
 
             const newBosses = [...prev.deadBossIndices];
@@ -529,8 +528,8 @@ const App: React.FC = () => {
 
             setGameState(prev => {
                 const isCleared = prev.deadBossIndices.includes(prev.currentSector);
-                const nextSector = (isCleared && prev.currentSector < 4) ? prev.currentSector + 1 : prev.currentSector;
-                const isFinished = isCleared && prev.currentSector === 4;
+                const nextSector = (isCleared && prev.currentSector < 3) ? prev.currentSector + 1 : prev.currentSector;
+                const isFinished = isCleared && prev.currentSector === 3;
 
                 const finalStats = isFinished ? { ...prev.stats, gameIsFinished: true } : prev.stats;
                 return { ...prev, stats: finalStats, screen: GameScreen.CAMP, currentSector: nextSector, weather: 'snow' };
@@ -727,13 +726,12 @@ const App: React.FC = () => {
 
                     {/* VINTERDÖD FIX: GameSession is wrapped in a hidden div if it's not the active screen but needs to live */}
                     <div
-                        className="absolute inset-0"
-                        style={{
-                            display: gameState.screen === GameScreen.SECTOR ||
-                                gameState.screen === GameScreen.PROLOGUE ||
-                                gameState.screen === GameScreen.BOSS_KILLED ||
-                                gameState.screen === GameScreen.DEATH ? 'block' : 'none'
-                        }}                    >
+                        className={`absolute inset-0 ${gameState.screen === GameScreen.SECTOR ||
+                            gameState.screen === GameScreen.PROLOGUE ||
+                            gameState.screen === GameScreen.BOSS_KILLED ||
+                            gameState.screen === GameScreen.DEATH ? 'block' : 'hidden'
+                            }`}
+                    >
                         {shouldKeepSessionAlive && (
                             <>
                                 <GameSession

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { t } from '../../../../utils/i18n';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { EnvironmentOverride, WeatherType } from '../../../../core/engine/EngineTypes';;
-import { Sector6 } from '../../../../content/sectors/Sector6';
+import { Sector4 } from '../../../../content/sectors/Sector4';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 
 interface ScreenPlaygroundEnvironmentStationProps {
@@ -59,7 +59,7 @@ export const ScreenPlaygroundEnvironmentStation: React.FC<ScreenPlaygroundEnviro
     };
 
     const handleReset = () => {
-        const def = Sector6.environment;
+        const def = Sector4.environment;
         setBgColor('#' + def.bgColor.toString(16).padStart(6, '0'));
         setFogColor(def.fog?.color ? '#' + def.fog.color.toString(16).padStart(6, '0') : '#' + def.bgColor.toString(16).padStart(6, '0'));
         setFogDensity(def.fog?.density ?? 0.01);

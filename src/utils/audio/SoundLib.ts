@@ -508,7 +508,7 @@ const Generators = {
             const click = (Math.random() * 2 - 1) * 0.15 * Math.exp(-80 * t);
             // 4. Resonance
             const ring = Math.sin(2 * Math.PI * 1800 * t) * 0.05 * Math.exp(-40 * t);
-            
+
             data[i] = (thud + creak + click + ring) * 0.8;
         }
         return buffer;
@@ -1191,7 +1191,7 @@ function _genForestLoop(ctx: AudioContext): AudioBuffer {
     return buf;
 }
 
-/** Sector 4 — scrapyard: industrial hum + distant metal clanks (8s). */
+/** Sector 3 — Scrapyard: industrial hum + distant metal clanks (8s). */
 function _genScrapyardLoop(ctx: AudioContext): AudioBuffer {
     const sr = ctx.sampleRate;
     const dur = 8.0;
@@ -1222,7 +1222,7 @@ function _genScrapyardLoop(ctx: AudioContext): AudioBuffer {
     return buf;
 }
 
-/** Sector 5 — finale: tense low drone + distant rumble (8s). */
+/** Epilogue: tense low drone + distant rumble (8s). */
 function _genFinaleLoop(ctx: AudioContext): AudioBuffer {
     const sr = ctx.sampleRate;
     const dur = 8.0;

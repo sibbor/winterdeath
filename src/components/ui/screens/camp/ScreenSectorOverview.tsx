@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { t } from '../../../../utils/i18n';
-import { SECTOR_THEMES, BOSSES, FAMILY_MEMBERS } from '../../../../content/constants';
+import { BOSSES, FAMILY_MEMBERS } from '../../../../content/constants';
+import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 import { getCollectiblesBySector } from '../../../../content/collectibles';
 import { CLUES } from '../../../../content/clues';
 import { POIS } from '../../../../content/pois';
@@ -28,7 +29,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     const textRef = useRef<HTMLSpanElement>(null);
 
     const sectorTheme = SECTOR_THEMES[selectedSectorIndex];
-    const boss = BOSSES[selectedSectorIndex] || BOSSES[0];
+    const boss = BOSSES[selectedSectorIndex];
     const isRescued = rescuedFamilyIndices.includes(selectedSectorIndex);
     const isCleared = deadBossIndices.includes(selectedSectorIndex);
 
@@ -60,17 +61,15 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
     // -- Stats Calculation --
     const { collectibles, clues, pois } = useMemo(() => {
-        const sectorNum = selectedSectorIndex + 1;
-
         // Accurate Collectible Count
-        const sectorCollectibles = getCollectiblesBySector(sectorNum);
+        const sectorCollectibles = getCollectiblesBySector(selectedSectorIndex);
         const foundCollectiblesCount = (stats.collectiblesDiscovered || []).filter(id =>
             sectorCollectibles.some(c => c.id === id)
         ).length;
 
         // Accurate Clue Count (using CLUES constant)
         const sectorClueIds = Object.values(CLUES)
-            .filter(c => c.sector === sectorNum)
+            .filter(c => c.sector === selectedSectorIndex)
             .map(c => c.id);
         const foundCluesCount = (stats.cluesFound || []).filter(clueObj => {
             const id = typeof clueObj === 'string' ? clueObj : (clueObj as any).id;
@@ -79,7 +78,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
         // Accurate POI Count (using POIS constant)
         const sectorPoiIds = Object.values(POIS)
-            .filter(p => p.sector === sectorNum)
+            .filter(p => p.sector === selectedSectorIndex)
             .map(p => p.id);
         const foundPoisCount = (stats.discoveredPOIs || []).filter(id => sectorPoiIds.includes(id)).length;
 
@@ -92,7 +91,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
 
 
     const handleSelect = (index: number) => {
-        if ((!debugMode && (index > 0 && !deadBossIndices.includes(index - 1)))) return; // Locked
+        if ((!debugMode && (index >= 0 && !deadBossIndices.includes(index)))) return;
         soundManager.playUiClick();
         setSelectedSectorIndex(index);
         onSelectSector(index);
@@ -201,21 +200,21 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:flex-row gap-2 md:gap-4 items-start">
-                            {/* Boss Status Check */}
-                            <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
-                                {t('ui.boss_status')}: {t(bossStatusKey)}
-                            </div>
+                        {/* Boss & Family Status Check */}
+                        {selectedSectorIndex < 4 && (
+                            <div className="grid grid-cols-2 md:flex-row gap-2 md:gap-4 items-start">
 
-                            {/* Family Status Check */}
-                            {selectedSectorIndex < 4 && (
+                                <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
+                                    {t('ui.boss_status')}: {t(bossStatusKey)}
+                                </div>
+
                                 <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
                                     {t('ui.family_member')}: {isRescued
                                         ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name)
                                         : t(familyStatusKey)}
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Briefing Text */}

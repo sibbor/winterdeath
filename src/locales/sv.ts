@@ -92,6 +92,10 @@ export const sv = {
         debug_mode: "DEBUG-LÄGE",
         show_fps: "VISA FPS",
         save_settings: "SPARA INSTÄLLNINGAR",
+        reload_required: "Omstart krävs",
+        reload_desc: "Vissa inställningar kräver att VINTERDÖD startas om innan de får effekt. Starta om spelet?",
+        reload_now: "Nu",
+        reload_later: "Senare",
         discovery_popups: "UPPTÄCKTS-POPUP",
         discovery_popups_sub: "Visa notiser för framsteg i realtid",
         cancel: "AVBRYT",
@@ -363,21 +367,26 @@ export const sv = {
     ],
     sectors: {
         camp_name: "Lägret",
-        sector_1_name: "Byn",
-        sector_2_name: "Bergrummet",
-        sector_3_name: "Häglaredsmasten",
-        sector_4_name: "Skroten",
-        sector_5_name: "Hem",
-        sector_6_name: "Lekplatsen",
+        sector_0_name: "Byn",
+        sector_1_name: "Bergrummet",
+        sector_2_name: "Häglaredsmasten",
+        sector_3_name: "Skroten",
+        sector_4_name: "Lekplatsen",
     },
     story: {
-        sector_1_briefing: "Robert, du anländer till villan i Byn bara för att mötas av kaos. Familjens bil brinner på uppfarten, framdörren är uppbruten. Inuti syns tecken på strid och blod.\n\nEn lapp i din sons rum lyder: \"Vi åkte till D...\", resten är oläsligt. Du missade dem precis.\n\nSpåren leder från huset ut i den mörka stadsmiljön. Du måste följa spåren. Hitta din familj.",
-        sector_2_briefing: "Din äldsta son är i säkerhet. Han berättade att familjen flydde mot det gamla militära skyddsrummet i skogen (Bergrummet). Men överlevarna där inne var fientliga.\n\nDe vägrade släppa in de andra på grund av platsbrist, men de tog in din yngsta son.\n\nDu måste infiltrera grottorna, hantera de fientliga och rädda honom.",
-        sector_3_briefing: "Överlevarna i bunkern tvingade iväg din fru och dotter. Din son sa att de begav sig norrut genom den täta tallskogen, mot Häglaredsmasten.\n\nDet är en lång vandring genom tät vegetation och de infekterade finns överallt. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
-        sector_4_briefing: "Din dotter är i säkerhet. Hon avslöjade den hjärtskärande sanningen: en massiv Titan-zombie attackerade dem i skogen. Din fru offrade sig själv och skrek för att locka bort den så att din dotter kunde fly.\n\nHon sprang mot industriområdet, närmare bestämt den gamla bilfirman. Hon kan fortfarande vara vid liv. Du måste tro på det. Hämta hem din fru, Robert.",
-        sector_5_briefing: "Familjen är återförenad. Du har gjort det omöjliga. Men när ni satt runda elden kom din son ihåg en sista sak.\n\nFamiljens husdjur. De lämnades låsta i huset när kaoset började. Området kryllar av odöda, men vi gav ett löfte. Återvänd till Byn en sista gång. Rädda dem.",
-        sector_6_briefing: "Testa nya funktioner och lek med värden, vapen och fiender",
-
+        sector_0_briefing: "Robert, du anländer till villan i Byn bara för att mötas av kaos. Familjens bil brinner på uppfarten, framdörren är uppbruten. Inuti syns tecken på strid och blod.\n\nEn lapp i din sons rum lyder: \"Vi åkte till D...\", resten är oläsligt. Du missade dem precis.\n\nSpåren leder från huset ut i den mörka stadsmiljön. Du måste följa spåren. Hitta din familj.",
+        sector_1_briefing: "Din äldsta son är i säkerhet. Han berättade att familjen flydde mot det gamla militära skyddsrummet i skogen (Bergrummet). Men överlevarna där inne var fientliga.\n\nDe vägrade släppa in de andra på grund av platsbrist, men de tog in din yngsta son.\n\nDu måste infiltrera grottorna, hantera de fientliga och rädda honom.",
+        sector_2_briefing: "Överlevarna i bunkern tvingade iväg din fru och dotter. Din son sa att de begav sig norrut genom den täta tallskogen, mot Häglaredsmasten.\n\nDet är en lång vandring genom tät vegetation och de infekterade finns överallt. Din dotter försökte nå kommunikationsutrustningen. Hitta henne innan signalen dör.",
+        sector_3_briefing: "Din dotter är i säkerhet. Hon avslöjade den hjärtskärande sanningen: en massiv Titan-zombie attackerade dem i skogen. Din fru offrade sig själv och skrek för att locka bort den så att din dotter kunde fly.\n\nHon sprang mot industriområdet, närmare bestämt den gamla bilfirman. Hon kan fortfarande vara vid liv. Du måste tro på det. Hämta hem din fru, Robert.",
+        sector_4_briefing: "Testa nya funktioner och lek med värden, vapen och fiender",
+        epilogue: [
+            {
+                overlay: "EPILOG",
+                narrative: "Familjen är återförenad. Du har gjort det omöjliga. Men när ni satt runda elden kom din son ihåg en sista sak.\n\nFamiljens husdjur. De lämnades låsta i huset när kaoset började. Området kryllar av odöda, men vi gav ett löfte. Återvänd till Byn en sista gång. Rädda dem.",
+                image: "",
+                audio: ""
+            },
+        ],
         prologue: [
             {
                 overlay: "GÅNGHESTER. 48 TIMMAR SEDAN VMA.",
