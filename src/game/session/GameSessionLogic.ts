@@ -27,13 +27,7 @@ export class GameSessionLogic {
     public playerPos: THREE.Vector3 | null = null;
     public detectionSystem!: EnemyDetectionSystem;
 
-    static createInitialState(props: GameCanvasProps): RuntimeState {
-        const now = performance.now();
-
-        if (!props.stats) {
-            console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
-        }
-
+    static createDefaultSessionStats(props: GameCanvasProps): SectorStats {
         // --- V8 HIDDEN CLASS OPTIMIZATION: Pre-allocate all combat keys ---
         const killsByType: Record<string, number> = {};
         const outgoingDamageBreakdown: Record<string, number> = {};
@@ -69,7 +63,7 @@ export class GameSessionLogic {
             }
         }
 
-        const sessionStats: SectorStats = {
+        return {
             kills: 0,
             killsByType,
             damageDealt: 0,
@@ -99,6 +93,16 @@ export class GameSessionLogic {
             incomingDamageBreakdown,
             outgoingDamageBreakdown
         };
+    }
+
+    static createInitialState(props: GameCanvasProps): RuntimeState {
+        const now = performance.now();
+
+        if (!props.stats) {
+            console.error("[GameSessionLogic] CRITICAL: props.stats is undefined!");
+        }
+
+        const sessionStats = this.createDefaultSessionStats(props);
 
         // --- O(1) DISCOVERY OPTIMIZATION: Build sets from permanent stats ---
         const discoverySets = {

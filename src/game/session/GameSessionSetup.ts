@@ -97,6 +97,13 @@ export class GameSessionSetup {
 
         refs.isBuildingSectorRef.current = true;
         refs.deathPhaseRef.current = 'NONE';
+
+        // VINTERDÖD FIX: Robust telemetry recovery
+        if (!state.sessionStats) {
+            console.warn('[GameSessionSetup] state.sessionStats was null. Re-initializing.');
+            state.sessionStats = GameSessionLogic.createDefaultSessionStats(props);
+        }
+
         state.sessionStats.timePlayed = 0; // Reset session timer
         let sectorLoaded = false;
 
