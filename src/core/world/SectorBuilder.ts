@@ -297,7 +297,8 @@ export const SectorBuilder = {
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             collider: {
                 type: 'box',
-                size: boxSize.clone()
+                size: boxSize.clone(),
+                margin: 2.0
             }
         });
 
@@ -597,7 +598,7 @@ export const SectorBuilder = {
         vehicleRoot.position.set(x, spawnY, z);
         vehicleRoot.rotation.y = rotation;
 
-        if (vehicleType === 'boat') vehicleRoot.userData.floatOffset = 0.5;
+        if (vehicleType === 'boat') vehicleRoot.userData.floatOffset = 1.5;
 
         vehicleRoot.userData.vehicleDef = def;
         vehicleRoot.userData.velocity = new THREE.Vector3();
@@ -614,7 +615,6 @@ export const SectorBuilder = {
             collider: {
                 type: 'box' as const,
                 size: boxSize.clone(),
-                //center: new THREE.Vector3(0, def.size.y / 2, 0)
             },
             type: `Vehicle_${vehicleType}`
         };
@@ -630,7 +630,8 @@ export const SectorBuilder = {
             label: 'ui.enter_vehicle',
             collider: {
                 type: 'box',
-                size: boxSize.clone()
+                size: boxSize.clone(),
+                margin: 2.0
             }
         });
 
@@ -1178,7 +1179,6 @@ export const SectorBuilder = {
 
         const boxSize = new THREE.Vector3(1.2 * scale, 2.0 * scale, 1.2 * scale);
 
-        // VINTERDÖD FIX: Terminals use Box Interaction
         SectorBuilder.addInteractable(ctx, terminal, {
             id: type,
             type: 'sector_specific',
@@ -1186,7 +1186,7 @@ export const SectorBuilder = {
             collider: {
                 type: 'box',
                 size: boxSize,
-                margin: 1.5
+                margin: 2.0
             }
         });
 
