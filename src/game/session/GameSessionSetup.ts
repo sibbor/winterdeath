@@ -33,6 +33,7 @@ import { HudStore } from '../../store/HudStore';
 import { DamageTrackerSystem } from '../../systems/DamageTrackerSystem';
 import { EnemyDetectionSystem } from '../../systems/EnemyDetectionSystem';
 import { RuntimeState } from '../../core/RuntimeState';
+import { GEOMETRY, MATERIALS } from '../../utils/assets';
 
 const seededRandom = (seed: number) => {
     let s = seed % 2147483647;
@@ -638,13 +639,16 @@ export class GameSessionSetup {
         markerGroup.position.y = 0.2;
 
         const darkColor = new THREE.Color(fmData.color).multiplyScalar(0.2);
-        const fill = new THREE.Mesh(new THREE.CircleGeometry(5.0, 32), new THREE.MeshBasicMaterial({ color: darkColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+        const fillMat = MATERIALS.familyRingFill.clone();
+        fillMat.color.set(darkColor);
+        const fill = new THREE.Mesh(GEOMETRY.familyRingFill, fillMat);
+        markerGroup.add(fill);
 
-        fill.rotation.x = -Math.PI / 2; markerGroup.add(fill);
-        const border = new THREE.Mesh(new THREE.RingGeometry(4.8, 5.0, 32), new THREE.MeshBasicMaterial({ color: fmData.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
-        border.rotation.x = -Math.PI / 2; markerGroup.add(border);
+        const borderMat = MATERIALS.familyRingBorder.clone();
+        borderMat.color.set(fmData.color);
+        const border = new THREE.Mesh(GEOMETRY.familyRingBorder, borderMat);
+        markerGroup.add(border);
         mesh.add(markerGroup);
-
         scene.add(mesh);
     }
 
@@ -654,12 +658,6 @@ export class GameSessionSetup {
      */
     static respawnPlayer(engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
         const scene = engine.scene;
-
-        // --- VINTERDÖD FIX: PURGE STALE GRID STATE ---
-        // This prevents "ghost" interactions from previous lives blocking new ones.
-        if (state.collisionGrid) {
-            state.collisionGrid.clear();
-        }
 
         // 1. Reset player state
         state.isDead = false;

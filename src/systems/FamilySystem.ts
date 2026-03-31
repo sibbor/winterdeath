@@ -163,7 +163,6 @@ export class FamilySystem implements System {
                 if (!isFollowing) {
                     const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
                     ring.scale.set(pulse, pulse, pulse);
-                    ring.rotation.y = now * 0.0005;
                     ring.updateMatrix();
                 }
             }

@@ -188,6 +188,8 @@ export const GEOMETRY = {
     zombie: createZombieBodyGeo(),
     petBody: createPetBodyGeo(),
     petTail: createPetTailGeo(),
+    familyRingFill: new THREE.CircleGeometry(5.0, 32),
+    familyRingBorder: new THREE.RingGeometry(4.8, 5.0, 32),
 
     // Chests
     chestBody: new THREE.BoxGeometry(1.5, 1.0, 1.0),

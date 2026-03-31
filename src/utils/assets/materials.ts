@@ -199,10 +199,10 @@ export const MATERIALS = {
     logEnd: new THREE.MeshStandardMaterial({ color: 0xbc8f8f, roughness: 0.8, bumpMap: DIFFUSE.stone, bumpScale: 0.1 }),
 
     // ---- WEAPONS & COMBAT ----
-    bullet: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
+    bullet: new THREE.MeshBasicMaterial({ color: 0x000000 }),
     grenade: new THREE.MeshStandardMaterial({ color: 0x3f663f, roughness: 0.6 }),
-    molotov: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
-    flashbang: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.3, emissive: 0xffffff, emissiveIntensity: 0.2 }),
+    molotov: new THREE.MeshStandardMaterial({ color: 0x331100, roughness: 0.3, emissive: 0x331100, emissiveIntensity: 0.2 }),
+    flashbang: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: 0xffffff, emissiveIntensity: 0.2 }),
     scrap: new THREE.MeshStandardMaterial({
         color: 0xffaa00,
         emissive: 0xffaa00,
@@ -210,6 +210,12 @@ export const MATERIALS = {
         metalness: 0.8,
         roughness: 0.2
     }),
+
+    // ---- FAMILY ----
+    familyRingFill: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }),
+    familyRingBorder: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+
+    // ---- ZOMBIES ----
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
 
     // Chests
