@@ -32,12 +32,12 @@ export interface GameContext {
     addFireZone: (z: FireZone) => void;
     applyDamage: (enemy: Enemy, amount: number, type: string | WeaponType | DamageType, isHighImpact?: boolean) => boolean;
 
-    now: number;
+    simTime: number;
     playerPos: THREE.Vector3;
     onPlayerHit: (damage: number, attacker: any, type: string | DamageType, isDoT?: boolean, effect?: any, duration?: number, intensity?: number, attackName?: string) => void;
     makeNoise: (pos: THREE.Vector3, type: NoiseType, radius: number) => void;
-    weaponHandler?: any;
-    session?: any;
+    weaponHandler: any;
+    session: any;
 }
 
 export interface Projectile {
@@ -77,6 +77,43 @@ const _v6 = new THREE.Vector3();
 // Dedicated scratchpads for Arc-Cannon continuous fire
 const _arcCannonHitList: Enemy[] = [];
 const _arcCannonHitIds = new Set<string>();
+
+// ZERO-GC SORTING (DOD)
+const _enemyDistBuffer = new Float32Array(512);
+
+/**
+ * Optimized Zero-GC Insertion Sort for nearby enemies.
+ * Calculates distance once per enemy and sorts in-place.
+ * Best for small n (n < 64), which fits our SpatialGrid cell size.
+ */
+function manualSortNearbyEnemies(projectilePos: THREE.Vector3, enemies: Enemy[]) {
+    const len = enemies.length;
+    if (len <= 1) return;
+
+    // 1. Cache distances to the projectile once (Zero-GC)
+    for (let i = 0; i < len; i++) {
+        const ePos = enemies[i].mesh.position;
+        const dx = ePos.x - projectilePos.x;
+        const dy = ePos.y - projectilePos.y;
+        const dz = ePos.z - projectilePos.z;
+        _enemyDistBuffer[i] = dx * dx + dy * dy + dz * dz;
+    }
+
+    // 2. Insertion Sort (Stable, O(n^2) but n is extremely small here)
+    for (let i = 1; i < len; i++) {
+        const enemy = enemies[i];
+        const dist = _enemyDistBuffer[i];
+        let j = i - 1;
+
+        while (j >= 0 && _enemyDistBuffer[j] > dist) {
+            enemies[j + 1] = enemies[j];
+            _enemyDistBuffer[j + 1] = _enemyDistBuffer[j];
+            j--;
+        }
+        enemies[j + 1] = enemy;
+        _enemyDistBuffer[j + 1] = dist;
+    }
+}
 
 // Audio Throttling for Arc-Cannon & Flamethrower
 let _lastArcCannonSoundTime = 0;
@@ -365,11 +402,11 @@ export const ProjectileSystem = {
         projectiles.push(p);
     },
 
-    handleContinuousFire: (weapon: WeaponType, origin: THREE.Vector3, direction: THREE.Vector3, delta: number, ctx: GameContext, damageOverride?: number) => {
+    handleContinuousFire: (weapon: WeaponType, origin: THREE.Vector3, direction: THREE.Vector3, simDelta: number, ctx: GameContext, damageOverride?: number) => {
         const data = WEAPONS[weapon];
         if (!data) return;
 
-        const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * delta);
+        const damage = damageOverride !== undefined ? damageOverride : (data.damage || 0) * (60 * simDelta);
 
         switch (weapon) {
             case WeaponType.FLAMETHROWER: {
@@ -389,7 +426,8 @@ export const ProjectileSystem = {
                 // Fire won't get through obstacles:
                 let maxReach = range;
                 const obstacles = ctx.collisionGrid.getNearbyObstacles(origin, range);
-                for (let i = 0; i < obstacles.length; i++) {
+                const obsLen = obstacles.length;
+                for (let i = 0; i < obsLen; i++) {
                     const obs = obstacles[i];
                     _v1.subVectors(obs.position, origin);
                     const d = _v1.length();
@@ -405,7 +443,8 @@ export const ProjectileSystem = {
                 }
 
                 const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
-                for (let _fi = 0; _fi < enemies.length; _fi++) {
+                const eneLen = enemies.length;
+                for (let _fi = 0; _fi < eneLen; _fi++) {
                     const e = enemies[_fi];
                     if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
@@ -435,18 +474,18 @@ export const ProjectileSystem = {
                         e.burnTimer = 0.5;
                         e.afterburnTimer = 5.0;
 
-                        const chance = (delta * 1000) / (data.fireRate || 35);
+                        const chance = (simDelta * 1000) / (data.fireRate || 35);
                         if (Math.random() < chance) {
-                            const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * delta)) : data.damage;
+                            const finalDmg = damageOverride !== undefined ? (damageOverride / (60 * simDelta)) : data.damage;
                             ctx.applyDamage(e, finalDmg, WeaponType.FLAMETHROWER);
                         }
                     }
                 }
 
                 // Audio Throttling för Flamethrower
-                if (ctx.now - _lastFlameSoundTime > 200) {
+                if (ctx.simTime - _lastFlameSoundTime > 200) {
                     soundManager.playFlamethrowerStart();
-                    _lastFlameSoundTime = ctx.now;
+                    _lastFlameSoundTime = ctx.simTime;
                 }
 
                 break;
@@ -456,12 +495,13 @@ export const ProjectileSystem = {
                 const range = data.range;
                 const rangeSq = range * range;
                 const enemies = ctx.collisionGrid.getNearbyEnemies(origin, range);
+                const eneLen = enemies.length;
 
                 let target = null;
                 let minDist = Infinity;
                 const aimThreshold = 0.90;
 
-                for (let _fi = 0; _fi < enemies.length; _fi++) {
+                for (let _fi = 0; _fi < eneLen; _fi++) {
                     const e = enemies[_fi];
                     if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
@@ -495,8 +535,9 @@ export const ProjectileSystem = {
                         const potential = ctx.collisionGrid.getNearbyEnemies(curr.mesh.position, chainRange);
                         let next = null;
                         let nextDist = Infinity;
+                        const potLen = potential.length;
 
-                        for (let _pi = 0; _pi < potential.length; _pi++) {
+                        for (let _pi = 0; _pi < potLen; _pi++) {
                             const p = potential[_pi];
                             if (p.deathState !== EnemyDeathState.ALIVE || _arcCannonHitIds.has(p.id)) continue;
                             const d = p.mesh.position.distanceToSquared(curr.mesh.position);
@@ -528,7 +569,8 @@ export const ProjectileSystem = {
 
                     _v3.copy(_v1);
 
-                    for (let i = 1; i < _arcCannonHitList.length; i++) {
+                    const hitLen = _arcCannonHitList.length;
+                    for (let i = 1; i < hitLen; i++) {
                         const e = _arcCannonHitList[i];
                         _v1.copy(e.mesh.position).y += 1.0;
 
@@ -539,18 +581,18 @@ export const ProjectileSystem = {
                         _v3.copy(_v1);
                     }
 
-                    if (ctx.now - _lastArcCannonSoundTime > 150) {
+                    if (ctx.simTime - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
-                        _lastArcCannonSoundTime = ctx.now;
+                        _lastArcCannonSoundTime = ctx.simTime;
                     }
 
                 } else {
                     _v1.copy(origin).addScaledVector(direction, range);
                     WeaponFX.createLightning(origin, _v1, true);
 
-                    if (ctx.now - _lastArcCannonSoundTime > 150) {
+                    if (ctx.simTime - _lastArcCannonSoundTime > 150) {
                         soundManager.playArcCannonZap();
-                        _lastArcCannonSoundTime = ctx.now;
+                        _lastArcCannonSoundTime = ctx.simTime;
                     }
                 }
                 break;
@@ -558,43 +600,45 @@ export const ProjectileSystem = {
         }
     },
 
-    update: (delta: number, now: number, ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[]) => {
-        ctx.now = now;
+    update: (simDelta: number, simTime: number, ctx: GameContext, projectiles: Projectile[], fireZones: FireZone[]) => {
+        ctx.simTime = simTime;
 
         if (!ctx.addFireZone) {
             ctx.addFireZone = (z: FireZone) => fireZones.push(z);
         }
 
         // VINTERDÖD FIX: Hämta vattnet en gång per frame!
-        const waterSystem = WinterEngine.getInstance()?.water;
+        const engine = WinterEngine.getInstance();
+        const waterSystem = engine.water;
 
         for (let i = projectiles.length - 1; i >= 0; i--) {
             const p = projectiles[i];
 
             if (p.type === 'bullet') {
-                updateBullet(p, i, delta, ctx, projectiles);
+                updateBullet(p, i, simDelta, ctx, projectiles);
             } else {
-                updateThrowable(p, i, delta, ctx, now, projectiles, waterSystem);
+                updateThrowable(p, i, simDelta, ctx, simTime, projectiles, waterSystem);
             }
         }
 
         if (fireZones.length > 0) {
             let playerHitThisFrame = false;
-            const frameCounter = (now * 0.06) | 0;
+            const frameCounter = (simTime * 0.06) | 0;
 
             for (let i = fireZones.length - 1; i >= 0; i--) {
                 const fz = fireZones[i];
-                fz.life -= delta;
+                fz.life -= simDelta;
 
                 if ((frameCounter + i) % 2 === 0) {
-                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
+                    WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, simDelta * 2, ctx);
                 }
 
-                if (now - fz._lastDamageTime > 500) {
-                    fz._lastDamageTime = now;
+                if (simTime - (fz._lastDamageTime || 0) > 500) {
+                    fz._lastDamageTime = simTime;
                     const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
                     const rSq = fz.radiusSq;
-                    for (let _ni = 0; _ni < nearby.length; _ni++) {
+                    const nearLen = nearby.length;
+                    for (let _ni = 0; _ni < nearLen; _ni++) {
                         const e = nearby[_ni];
                         if (e.deathState !== EnemyDeathState.ALIVE) continue;
 
@@ -606,10 +650,8 @@ export const ProjectileSystem = {
                     }
 
                     if (!playerHitThisFrame && ctx.playerPos.distanceToSquared(fz.mesh.position) < rSq) {
-                        if (ctx.onPlayerHit) {
-                            ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, DamageType.BURN);
-                            playerHitThisFrame = true;
-                        }
+                        ctx.onPlayerHit(3, null, DamageType.BURN, true, StatusEffectType.BURNING, 3000, 5, DamageType.BURN);
+                        playerHitThisFrame = true;
                     }
                 }
 
@@ -639,11 +681,11 @@ export const ProjectileSystem = {
 };
 
 // --- INTERNAL HELPERS ---
-function updateBullet(projectile: Projectile, index: number, delta: number, ctx: GameContext, projectiles: Projectile[]) {
+function updateBullet(projectile: Projectile, index: number, simDelta: number, ctx: GameContext, projectiles: Projectile[]) {
     _v3.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-    projectile.mesh.position.addScaledVector(projectile.vel, delta);
+    projectile.mesh.position.addScaledVector(projectile.vel, simDelta);
     _v4.set(projectile.mesh.position.x, 0, projectile.mesh.position.z);
-    projectile.life -= delta;
+    projectile.life -= simDelta;
 
     let destroyBullet = false;
 
@@ -651,11 +693,12 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
     const lineLenSq = _v2.lengthSq();
 
     _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
-    const bulletTravelDist = projectile.speed * delta;
+    const bulletTravelDist = projectile.speed * simDelta;
     const obsSearchRad = 2.0 + bulletTravelDist * 0.5;
     const nearbyObs = ctx.collisionGrid.getNearbyObstacles(_v1, obsSearchRad);
+    const obsLen = nearbyObs.length;
 
-    for (let i = 0; i < nearbyObs.length; i++) {
+    for (let i = 0; i < obsLen; i++) {
         const obs = nearbyObs[i];
 
         if (Math.abs(obs.position.x - ctx.playerPos.x) < 0.5 && Math.abs(obs.position.z - ctx.playerPos.z) < 0.5) {
@@ -671,22 +714,24 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
         if (_v6.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
-            soundManager.playImpact(obs.mesh?.userData?.material || 'concrete');
+            // VINTERDÖD HIGH-PERFORMANCE: Use pre-resolved material (Flat loop, No branching)
+            soundManager.playImpact(obs.materialId);
             ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS.BULLET_HIT);
             break;
         }
     }
 
     if (!destroyBullet) {
-        _v1.addVectors(_v3, _v4).multiplyScalar(0.5);
+        _v1.set(0, 0, 0).addVectors(_v3, _v4).multiplyScalar(0.5);
         const enemySearchRad = 5.0 + bulletTravelDist * 0.5;
         const nearbyEnemies = ctx.collisionGrid.getNearbyEnemies(_v1, enemySearchRad);
+        const eneLen = nearbyEnemies.length;
 
-        if (nearbyEnemies.length > 1) {
-            nearbyEnemies.sort((a, b) => _v3.distanceToSquared(a.mesh.position) - _v3.distanceToSquared(b.mesh.position));
+        if (eneLen > 1) {
+            manualSortNearbyEnemies(_v3, nearbyEnemies);
         }
 
-        for (let i = 0; i < nearbyEnemies.length; i++) {
+        for (let i = 0; i < eneLen; i++) {
             const enemy = nearbyEnemies[i];
             if (enemy.deathState !== EnemyDeathState.ALIVE || projectile.hitEntities.has(enemy.id)) continue;
 
@@ -703,7 +748,9 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 let isHighImpact = false;
 
                 if (projectile.highImpactDistSq > 0) {
-                    const distFromOriginSq = (_v6.x - projectile.origin.x) ** 2 + (_v6.z - projectile.origin.z) ** 2;
+                    const dx = _v6.x - projectile.origin.x;
+                    const dz = _v6.z - projectile.origin.z;
+                    const distFromOriginSq = dx * dx + dz * dz;
                     if (distFromOriginSq < projectile.highImpactDistSq) isHighImpact = true;
                 } else if (projectile.highImpactDamageFactor > 0) {
                     if (projectile.damage >= projectile.baseDamage * projectile.highImpactDamageFactor) isHighImpact = true;
@@ -712,10 +759,8 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 projectile.hitEntities.add(enemy.id);
                 enemy.slowTimer = 0.5;
 
-                if (ctx.session) {
-                    const tracker = ctx.session.getSystem('damage_tracker_system') as any;
-                    if (tracker) tracker.recordHit(ctx.session, projectile.weapon);
-                }
+                const tracker = ctx.session.getSystem('damage_tracker_system');
+                if (tracker) tracker.recordHit(ctx.session, projectile.weapon);
 
                 const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
 
@@ -750,17 +795,18 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
         ctx.scene.remove(projectile.mesh);
         projectile.active = false;
 
-        projectiles[index] = projectiles[projectiles.length - 1];
+        const pLen = projectiles.length;
+        projectiles[index] = projectiles[pLen - 1];
         projectiles.pop();
     }
 }
 
-function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameContext, now: number, projectiles: Projectile[], waterSystem: any) {
-    p.vel.y -= 30 * delta;
-    p.mesh.position.addScaledVector(p.vel, delta);
-    p.mesh.rotation.x += 8 * delta;
+function updateThrowable(p: Projectile, index: number, simDelta: number, ctx: GameContext, simTime: number, projectiles: Projectile[], waterSystem: any) {
+    p.vel.y -= 30 * simDelta;
+    p.mesh.position.addScaledVector(p.vel, simDelta);
+    p.mesh.rotation.x += 8 * simDelta;
     if (p.marker) {
-        (p.marker.material as any).opacity = 0.4 + Math.abs(Math.sin(now * 0.01)) * 0.6;
+        (p.marker.material as any).opacity = 0.4 + Math.abs(Math.sin(simTime * 0.01)) * 0.6;
     }
 
     let destroyed = false;
@@ -797,9 +843,10 @@ function updateThrowable(p: Projectile, index: number, delta: number, ctx: GameC
 
         p.active = false;
 
-        projectiles[index] = projectiles[projectiles.length - 1];
+        const pLen = projectiles.length;
+        projectiles[index] = projectiles[pLen - 1];
         projectiles.pop();
     } else {
-        p.life -= delta;
+        p.life -= simDelta;
     }
 }

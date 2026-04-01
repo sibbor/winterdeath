@@ -285,8 +285,10 @@ export class GameSessionLogic {
             cinematicLine: { active: false, speaker: '', text: '' },
 
             // --- TIME ---
-            accumulatedTime: 0,
-
+            simTime: 0,
+            renderTime: 0,
+            lastSimDelta: 0.016,
+            lastRenderDelta: 0.016,
         };
     }
 
@@ -305,6 +307,12 @@ export class GameSessionLogic {
         this.state.applyDamage = (enemy: any, amount: number, type: string, isHighImpact?: boolean) => {
             const dts = this.getSystem('damage_tracker_system') as any;
             if (dts) dts.recordOutgoingDamage(this, amount, type, enemy.isBoss);
+
+            // --- VINTERDÖD FIX: Dual-Clock Visual Jitter ---
+            // Set the visual hit timestamp so EnemyAnimator knows to shake the mesh 
+            // even if the simulation clock (now) is paused or slowed.
+            if (enemy) enemy.hitrenderTime = this.state.renderTime;
+
             return originalApplyDamage(enemy, amount, type, isHighImpact);
         };
     }

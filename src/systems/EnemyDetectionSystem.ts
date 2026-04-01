@@ -15,6 +15,7 @@ export class EnemyDetectionSystem implements System {
     id = 'EnemyDetectionSystem';
     private noiseEvents: NoiseEvent[] = [];
     private raycaster = new THREE.Raycaster();
+    private context: any = null;
 
     // Pre-allocated vectors for Zero-GC
     private _vStart = new THREE.Vector3();
@@ -29,6 +30,7 @@ export class EnemyDetectionSystem implements System {
     public detach() { }
 
     public init(context: any) {
+        this.context = context;
         context.detectionSystem = this;
     }
 
@@ -42,7 +44,7 @@ export class EnemyDetectionSystem implements System {
             radius = NOISE_RADIUS[type] || 30;
         }
 
-        const now = performance.now();
+        const simTime = this.context.state.simTime;
 
         // --- CENTRALIZED THROTTLING (SPATIAL MERGING) ---
         // Iterate active noises to see if we can merge this new noise with an existing one.
@@ -56,7 +58,7 @@ export class EnemyDetectionSystem implements System {
                 if (distSq < 25.0) {
                     // Update the existing noise instead of creating a new one
                     evt.pos.copy(pos);
-                    evt.timestamp = now;
+                    evt.timestamp = simTime;
                     // We return early. ZERO garbage collection, ZERO array growth!
                     return;
                 }
@@ -67,7 +69,7 @@ export class EnemyDetectionSystem implements System {
             pos: pos.clone(),
             type,
             radius,
-            timestamp: now
+            timestamp: simTime
         });
     }
 
@@ -129,8 +131,8 @@ export class EnemyDetectionSystem implements System {
         return true;
     }
 
-    update(context: any, delta: number, now: number) {
-        const state = context?.state;
+    update(context: any, simDelta: number, simTime: number) {
+        const state = context.state;
         if (!state || !context.playerPos) return;
 
         const enemies: Enemy[] = state.enemies || [];
@@ -142,14 +144,14 @@ export class EnemyDetectionSystem implements System {
         // 1. Cleanup stale noise events FIRST using Swap-and-Go to save inner loop cycles
         for (let i = this.noiseEvents.length - 1; i >= 0; i--) {
             const evt = this.noiseEvents[i];
-            if (now - evt.timestamp > 200) { // Increased to 200ms for stability
+            if (simTime - evt.timestamp > 200) { // Increased to 200ms for stability
                 this.noiseEvents[i] = this.noiseEvents[this.noiseEvents.length - 1];
                 this.noiseEvents.pop();
             }
         }
 
         // Calculate a repeating staggered index 0, 1, or 2 based on current time
-        const frameIndex = Math.floor(now / 16.666) % 3;
+        const frameIndex = Math.floor(simTime / 16.666) % 3;
 
         for (let i = 0; i < enemies.length; i++) {
             const e = enemies[i];
@@ -164,10 +166,10 @@ export class EnemyDetectionSystem implements System {
                     e.lastKnownPosition.copy(playerPos);
                     e.searchTimer = 0;
                     e.awareness = 1.0;
-                    e.lastSeenTime = now;
+                    e.lastSeenTime = simTime;
                 } else {
                     if (e.awareness > 0) {
-                        e.awareness = Math.max(0, e.awareness - delta * 0.2);
+                        e.awareness = Math.max(0, e.awareness - simDelta * 0.2);
                     }
                 }
             }

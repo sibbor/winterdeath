@@ -52,7 +52,8 @@ export class FamilyAnimationSystem implements System {
 
             PlayerAnimator.update(fm.mesh as any, {
                 isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0, staminaRatio: 1.0,
-                isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed
+                isSpeaking, isThinking: false, isIdleLong: now > 5000, seed: fm.seed,
+                renderTime: now
             }, now, dt);
 
             const isHov = hoveredId === (fm.mesh.userData.id);

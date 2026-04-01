@@ -147,7 +147,7 @@ export const WeaponHandler = {
     },
 
     // Handle weapon-related inputs (Scroll to switch, R to reload)
-    handleInput: (input: any, state: any, loadout: any, now: number, disableInput: boolean) => {
+    handleInput: (input: any, state: any, loadout: any, simTime: number, disableInput: boolean) => {
         // VINTERDÖD FIX: Block input during cinematics
         if (disableInput || state.vehicle.active || state.cinematicActive) return;
 
@@ -193,12 +193,12 @@ export const WeaponHandler = {
         if (input.r && !state.isReloading && !isThrowable && !isRadio && (state.weaponAmmo[state.activeWeapon] || 0) < (wep.magSize || 0)) {
             state.isReloading = true;
             const actualReloadTime = (wep.reloadTime || 0) * (state.multipliers.reloadTime || 1.0);
-            state.reloadEndTime = now + actualReloadTime;
+            state.reloadEndTime = simTime + actualReloadTime;
             soundManager.playMagOut();
             haptic.reload();
         }
 
-        if (state.isReloading && now > state.reloadEndTime) {
+        if (state.isReloading && simTime > state.reloadEndTime) {
             state.isReloading = false;
 
             // VINTERDÖD FIX: Throwables use reloadTime as a cooldown, NOT an ammo refill.
@@ -218,7 +218,7 @@ export const WeaponHandler = {
     },
 
     // --- CORE FIRING LOGIC ---
-    handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
+    handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, simDelta: number, simTime: number, renderTime: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
         if (state.vehicle.active || state.cinematicActive) return;
         if (state.isRolling || state.isReloading) return;
 
@@ -246,9 +246,9 @@ export const WeaponHandler = {
                 if (hasAmmo) {
                     if (!isUnlimited) {
                         const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
-                        if (now > state.lastShotTime + actualFireRate) {
+                        if (simTime > state.lastShotTime + actualFireRate) {
                             state.weaponAmmo[state.activeWeapon]--;
-                            state.lastShotTime = now;
+                            state.lastShotTime = simTime;
 
                             const tracker = session.getSystem('damage_tracker_system') as any;
                             if (tracker) tracker.recordShot(session, state.activeWeapon);
@@ -270,25 +270,25 @@ export const WeaponHandler = {
                     _continuousCtx.trackStats = cb?.trackStats;
                     _continuousCtx.addScore = cb?.gainXp;
                     _continuousCtx.addFireZone = cb?.addFireZone;
-                    _continuousCtx.now = now;
+                    _continuousCtx.now = simTime;
                     _continuousCtx.noiseEvents = state.noiseEvents;
-                    _continuousCtx.makeNoise = cb?.makeNoise;
+                    _continuousCtx.makeNoise = cb.makeNoise;
 
-                    _continuousCtx.applyDamage = (state as any).applyDamage;
+                    _continuousCtx.applyDamage = state.applyDamage;
 
                     ProjectileSystem.handleContinuousFire(
-                        state.activeWeapon, _v2, _v3, delta, _continuousCtx,
+                        state.activeWeapon, _v2, _v3, simDelta, _continuousCtx,
                         WeaponHandler.getScaledDamage(state.activeWeapon,
-                            state.weaponLevels[state.activeWeapon]) * (60 * delta)
+                            state.weaponLevels[state.activeWeapon]) * (60 * simDelta)
                     );
                 } else {
                     if (state.activeWeapon === WeaponType.FLAMETHROWER && (state as any).lastFireState) {
                         soundManager.playFlamethrowerEnd();
                     }
 
-                    if (input.fire && now > state.lastShotTime + 500) {
+                    if (input.fire && simTime > state.lastShotTime + 500) {
                         soundManager.playEmptyClick();
-                        state.lastShotTime = now;
+                        state.lastShotTime = simTime;
                     }
                 }
             } else {
@@ -310,8 +310,8 @@ export const WeaponHandler = {
                 const hasAmmo = state.weaponAmmo[state.activeWeapon] > 0 || isUnlimited;
                 const actualFireRate = (wep.fireRate || 0) / (state.multipliers.fireRate || 1.0);
 
-                if (now > state.lastShotTime + actualFireRate && hasAmmo) {
-                    state.lastShotTime = now;
+                if (simTime > state.lastShotTime + actualFireRate && hasAmmo) {
+                    state.lastShotTime = simTime;
                     if (!isUnlimited) state.weaponAmmo[state.activeWeapon]--;
 
                     const tracker = session.getSystem('damage_tracker_system') as any;
@@ -346,14 +346,14 @@ export const WeaponHandler = {
 
                         ProjectileSystem.launchBullet(scene, state.projectiles, _v2, _v3, wep.name, damagePerPellet);
                     }
-                } else if (input.fire && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && now > state.lastShotTime + (wep.fireRate || 0)) {
-                    state.lastShotTime = now;
-                    if (state.sectorState?.noReload) {
+                } else if (input.fire && (state.weaponAmmo[state.activeWeapon] || 0) <= 0 && simTime > state.lastShotTime + (wep.fireRate || 0)) {
+                    state.lastShotTime = simTime;
+                    if (state.sectorState.noReload) {
                         state.weaponAmmo[state.activeWeapon] = wep.magSize || 0;
                     } else {
                         soundManager.playEmptyClick();
                         state.isReloading = true;
-                        state.reloadEndTime = now + (wep.reloadTime || 0);
+                        state.reloadEndTime = simTime + (wep.reloadTime || 0);
                         soundManager.playMagOut();
                     }
                 }
@@ -363,16 +363,16 @@ export const WeaponHandler = {
 
         // --- 3. THROWABLE CHARGING (Grenades / Molotovs) ---
         if (wep.behavior === WeaponBehavior.THROWABLE) {
-            const canCharge = (state.weaponAmmo[state.activeWeapon] > 0) && now > (state.lastShotTime || 0) + 500;
+            const canCharge = (state.weaponAmmo[state.activeWeapon] > 0) && simTime > (state.lastShotTime || 0) + 500;
 
             if (input.fire && canCharge) {
-                if (state.throwChargeStart === 0) state.throwChargeStart = now;
+                if (state.throwChargeStart === 0) state.throwChargeStart = simTime;
 
                 const chargeTime = 1250;
                 const holdTime = 500; // [VINTERDÖD FIX] Hold at max for 500ms before reset
                 const totalCycle = chargeTime + holdTime;
 
-                const elapsed = now - state.throwChargeStart;
+                const elapsed = simTime - state.throwChargeStart;
                 const cycleElapsed = elapsed % totalCycle;
                 const ratio = cycleElapsed < chargeTime ? (cycleElapsed / chargeTime) : 1.0;
 
@@ -394,7 +394,7 @@ export const WeaponHandler = {
                     aimCrossMesh.position.y = 0.2;
 
                     if (ratio >= 1.0) {
-                        aimCrossMesh.scale.setScalar(1.5 + Math.sin(now * 0.01) * 0.1);
+                        aimCrossMesh.scale.setScalar(1.5 + Math.sin(renderTime * 0.01) * 0.1);
                     } else {
                         aimCrossMesh.scale.setScalar(1 + ratio * 0.5);
                     }
@@ -447,10 +447,10 @@ export const WeaponHandler = {
             } else if (state.throwChargeStart > 0) {
                 // Calculate release ratio with same cycling logic
                 const totalCycle = 1250 + 500;
-                const cycleElapsed = (now - state.throwChargeStart) % totalCycle;
+                const cycleElapsed = (simTime - state.throwChargeStart) % totalCycle;
                 const ratio = cycleElapsed < 1250 ? (cycleElapsed / 1250) : 1.0;
 
-                _executeThrow(session, scene, playerGroup, state, loadout, now, wep, ratio, aimCrossMesh, trajectoryLineMesh);
+                _executeThrow(session, scene, playerGroup, state, loadout, simTime, wep, ratio, aimCrossMesh, trajectoryLineMesh);
             } else {
                 if (aimCrossMesh) aimCrossMesh.visible = false;
                 if (trajectoryLineMesh) trajectoryLineMesh.visible = false;

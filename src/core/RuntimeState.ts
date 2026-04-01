@@ -218,7 +218,7 @@ export interface RuntimeState {
 
     flashlightOn: boolean;
     hasCurrentInteraction: boolean;
-    currentInteractionPayload: any
+    currentInteractionPayload: any;
     // --- DISCOVERY & CINEMATICS ---
     discovery: PreallocatedDiscoveryState;
 
@@ -229,5 +229,8 @@ export interface RuntimeState {
     stats: PlayerStats;
 
     // --- TIME & SIMULATION ---
-    accumulatedTime: number; // Sum of gameplay delta, used for cooldowns and effects
+    simTime: number;
+    renderTime: number;      // Sum of real-world delta, used for breathing/wind/bobbing
+    lastSimDelta: number;    // Clamped/frozen delta used for this frame's simulation
+    lastRenderDelta: number;   // Raw/unclamped delta used for this frame's visuals
 }

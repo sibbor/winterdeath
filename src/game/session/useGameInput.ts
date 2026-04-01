@@ -75,7 +75,7 @@ export const useGameInput = (
             }
 
             if (state.isDead) return;
-            state.lastActionTime = performance.now();
+            state.lastActionTime = state.simTime;
         };
 
         const handleKeyUp = (e: KeyboardEvent) => {
@@ -94,10 +94,10 @@ export const useGameInput = (
                 if (!state.isRushing && !state.isRolling && state.spaceDepressed) {
                     if (state.stamina >= 5) {
                         state.stamina -= 5;
-                        state.lastStaminaUseTime = performance.now();
+                        state.lastStaminaUseTime = state.simTime;
                         state.isRolling = true;
-                        state.rollStartTime = performance.now();
-                        state.invulnerableUntil = performance.now() + 400;
+                        state.rollStartTime = state.simTime;
+                        state.invulnerableUntil = state.simTime + 400;
 
                         let dx = 0; let dz = 0;
                         if (inp.w) dz -= 1;

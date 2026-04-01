@@ -29,8 +29,6 @@ export class FogSystem implements System {
     private targetColor: THREE.Color = new THREE.Color(0.7, 0.75, 0.8);
     private targetHeight: number = DEFAULT_FOG_HEIGHT; // Default height ceiling
 
-    private globalTime: number = 0; // Added for update signature standardization
-
     constructor(scene: THREE.Scene, wind: WindSystem, camera: THREE.Camera) {
         this.scene = scene;
         this.wind = wind;
@@ -121,7 +119,6 @@ export class FogSystem implements System {
      * Updates fog planes based on wind and handles zero-math billboarding.
      */
     public update(ctx: any, dt: number, now: number): void {
-        this.globalTime += dt;
 
         // Auto-handle volumetric fog setting
         const engine = (window as any).WinterEngineInstance; // Safe singleton access
@@ -171,7 +168,7 @@ export class FogSystem implements System {
         const tilt = Math.abs(-camWorld[9]);
         if (this.fogMaterial) {
             this.fogMaterial.uniforms.uCameraTilt.value = tilt;
-            this.fogMaterial.uniforms.uTime.value = this.globalTime;
+            this.fogMaterial.uniforms.uTime.value = now * 0.001; // Synchronize with renderTime
         }
 
         for (let i = 0; i < count; i++) {

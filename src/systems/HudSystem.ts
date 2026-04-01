@@ -119,7 +119,9 @@ const _fastUpdateDetail = {
     currentXp: 0,
     nextLevelXp: 0,
     reloadProgress: 0,
-    bossHpP: -1 // -1 means no boss/wave active
+    bossHpP: -1, // -1 means no boss/wave active
+    vehicleSpeed: 0,
+    throttleState: 0
 };
 
 export const HudSystem = {
@@ -138,8 +140,9 @@ export const HudSystem = {
         const enemies = state.enemies;
         let activeBossObj = null;
         for (let i = 0; i < enemies.length; i++) {
-            if (enemies[i].isBoss) {
-                activeBossObj = enemies[i];
+            const enemy = enemies[i];
+            if (enemy.isBoss) {
+                activeBossObj = enemy;
                 break;
             }
         }
@@ -150,7 +153,7 @@ export const HudSystem = {
             // Wave progress
             const kills = state.sectorState.zombiesKilled || 0;
             const target = state.sectorState.zombiesKillTarget || state.sectorState.hordeTarget;
-            bossHpP = kills / target;
+            bossHpP = (target > 0) ? kills / target : 0;
         }
 
         _fastUpdateDetail.hp = state.hp;
@@ -162,6 +165,8 @@ export const HudSystem = {
         _fastUpdateDetail.nextLevelXp = state.nextLevelXp;
         _fastUpdateDetail.reloadProgress = reloadProgress;
         _fastUpdateDetail.bossHpP = bossHpP;
+        _fastUpdateDetail.vehicleSpeed = state.vehicle.active ? state.vehicle.speed : 0;
+        _fastUpdateDetail.throttleState = state.vehicleThrottle || 0;
 
         window.dispatchEvent(new CustomEvent('hud-fast-update', { detail: _fastUpdateDetail }));
     },

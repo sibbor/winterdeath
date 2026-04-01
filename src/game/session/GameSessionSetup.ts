@@ -710,7 +710,7 @@ export class GameSessionSetup {
         state.activePassives.length = 0;
 
         // VINTERDÖD FIX: Reset simulation timers to prevent lockout
-        state.accumulatedTime = 0;
+        state.simTime = 0;
         state.lastShotTime = 0;
         state.reloadEndTime = 0;
         state.throwChargeStart = 0;
@@ -839,7 +839,7 @@ export class GameSessionSetup {
         state.stamina = state.maxStamina;
 
         // VINTERDÖD FIX: Reset simulation timers to prevent lockout
-        state.accumulatedTime = 0;
+        state.simTime = 0;
         state.lastShotTime = 0;
         state.reloadEndTime = 0;
         state.throwChargeStart = 0;

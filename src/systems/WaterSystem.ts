@@ -78,8 +78,8 @@ export class WaterSurface {
         this.mesh.userData.material = 'WATER';
     }
 
-    update(globalTime: number): void {
-        this.time = globalTime;
+    update(now: number): void {
+        this.time = now * 0.001;
         this.material.uniforms.uTime.value = this.time;
     }
 
@@ -125,7 +125,6 @@ export class WaterSystem implements System {
     private rippleData: THREE.Vector4[] = [];
     private objectPositions: THREE.Vector4[] = [];
     private rippleIndex: number = 0;
-    private globalTime: number = 0;
     private playerGroup: THREE.Group | null = null;
     private lastPlayerPos = new THREE.Vector3();
     private lightPosition = new THREE.Vector3(100, 500, 100);
@@ -398,7 +397,6 @@ export class WaterSystem implements System {
     }
 
     public update(ctx: any, dt: number, now: number): void {
-        this.globalTime += dt;
 
         // Auto-sync with Engine Wind
         const engine = (window as any).WinterEngineInstance;
@@ -420,7 +418,7 @@ export class WaterSystem implements System {
         // Animate aquatic shaders
         for (let i = 0; i < this.boundUniforms.length; i++) {
             const b = this.boundUniforms[i];
-            b.uTime.value = this.globalTime;
+            b.uTime.value = now * 0.001; // Synchronize with renderTime
             if (b.uWaterDirection) b.uWaterDirection.value.copy(this.waterDirection);
             if (b.uWaveStrength) b.uWaveStrength.value = 0.4 + (this.waterStrength * 0.1);
         }
@@ -467,7 +465,7 @@ export class WaterSystem implements System {
 
         // --- 2. Update Surfaces ---
         for (let i = 0; i < this.surfaces.length; i++) {
-            this.surfaces[i].update(this.globalTime);
+            this.surfaces[i].update(now);
             this.surfaces[i].material.uniforms.uObjectPositions.value = this.objectPositions;
             if (this.surfaces[i].material.uniforms.uClarity) {
                 this.surfaces[i].material.uniforms.uClarity.value = this.clarity;
@@ -483,13 +481,13 @@ export class WaterSystem implements System {
         // --- 3. Body Physics & Splashes ---
         for (let i = 0; i < bLen; i++) {
             const body = this.waterBodies[i];
-            this.updateBodyPhysics(body, dt);
-            this.updateSplashSources(body, dt);
+            this.updateBodyPhysics(body, dt, now);
+            this.updateSplashSources(body, dt, now);
         }
 
-        if (this.playerGroup) this.updatePlayerLogic(dt);
+        if (this.playerGroup) this.updatePlayerLogic(dt, now);
 
-        this.updateInstancedLilies(dt);
+        this.updateInstancedLilies(dt, now);
 
         // Ripples and splashes for moving objects
         for (let i = 0; i < bLen; i++) {
@@ -502,9 +500,9 @@ export class WaterSystem implements System {
 
                 if (speedSq > 0.1 && !isPassive) {
                     // Throttling: Kör bara plask/ljud om tiden passerat vår cooldown
-                    if (!p.userData.nextSplash || this.globalTime > p.userData.nextSplash) {
+                    if (!p.userData.nextSplash || now > p.userData.nextSplash) {
 
-                        this.spawnRipple(p.position.x, p.position.z, 0.7);
+                        this.spawnRipple(p.position.x, p.position.z, now, 0.7);
 
                         // Generate splash particles if moving very fast (e.g. boat driving)
                         if (speedSq > 10.0 && this.spawnPartCb && Math.random() < 0.6) {
@@ -512,20 +510,20 @@ export class WaterSystem implements System {
                         }
 
                         // Sätt nästa tillåtna plask till om 150-250 millisekunder
-                        p.userData.nextSplash = this.globalTime + 0.15 + (Math.random() * 0.1);
+                        p.userData.nextSplash = now + 150 + (Math.random() * 100);
                     }
                 }
             }
         }
     }
 
-    private updateBodyPhysics(body: WaterBody, dt: number): void {
+    private updateBodyPhysics(body: WaterBody, dt: number, now: number): void {
         const props = body.floatingProps;
         const len = props.length;
         for (let i = 0; i < len; i++) {
             const prop = props[i];
             const vel = prop.userData.velocity as THREE.Vector3;
-            this.checkBuoyancy(prop.position.x, prop.position.y, prop.position.z);
+            this.checkBuoyancy(prop.position.x, prop.position.y, prop.position.z, now);
             vel.y -= 19.8 * dt;
 
             if (_buoyancyResult.inWater) {
@@ -582,13 +580,13 @@ export class WaterSystem implements System {
         }
     }
 
-    private updateSplashSources(body: WaterBody, dt: number): void {
+    private updateSplashSources(body: WaterBody, dt: number, now: number): void {
         // Ambient ripples completely silenced for calm lake surface
     }
 
-    private updatePlayerLogic(dt: number): void {
+    private updatePlayerLogic(dt: number, now: number): void {
         const pos = this.playerGroup!.position;
-        this.checkBuoyancy(pos.x, pos.y, pos.z);
+        this.checkBuoyancy(pos.x, pos.y, pos.z, now);
         if (_buoyancyResult.inWater) {
             const distSq = pos.distanceToSquared(this.lastPlayerPos);
             const isMoving = distSq > 0.001;
@@ -597,7 +595,7 @@ export class WaterSystem implements System {
                 // Distance-based: spawn a ripple every ~0.7 units of movement.
                 // FPS-independent — the ripple always anchors to the current position.
                 if (distSq > 0.5) {
-                    this.spawnRipple(pos.x, pos.z, 0.7);
+                    this.spawnRipple(pos.x, pos.z, now, 0.7);
                     // lastPlayerPos is copied at the end of this function,
                     // so the next check resets from the current position.
                 }
@@ -605,7 +603,7 @@ export class WaterSystem implements System {
                 // Gentle rhythmic idle pulse — time-based is fine when not moving
                 this.stepTimer += dt;
                 if (this.stepTimer > 0.4) {
-                    this.spawnRipple(pos.x, pos.z, 0.5);
+                    this.spawnRipple(pos.x, pos.z, now, 0.5);
                     this.stepTimer = 0;
                 }
             }
@@ -613,12 +611,12 @@ export class WaterSystem implements System {
         this.lastPlayerPos.copy(pos);
     }
 
-    public spawnRipple(x: number, z: number, strength: number = 1.0): void {
-        this.rippleData[this.rippleIndex].set(x, z, this.globalTime, strength);
+    public spawnRipple(x: number, z: number, now: number, strength: number = 1.0): void {
+        this.rippleData[this.rippleIndex].set(x, z, now, strength);
         this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
     }
 
-    private updateInstancedLilies(dt: number): void {
+    private updateInstancedLilies(dt: number, now: number): void {
         if (!this.lilyPads || this.lilyData.length === 0) return;
 
         let needsUpdate = false;
@@ -627,7 +625,7 @@ export class WaterSystem implements System {
         for (let i = 0; i < len; i++) {
             const data = this.lilyData[i];
 
-            this.checkBuoyancy(data.position.x, data.position.y, data.position.z);
+            this.checkBuoyancy(data.position.x, data.position.y, data.position.z, now);
             data.velocity -= 19.8 * dt;
 
             if (_buoyancyResult.inWater) {
@@ -680,13 +678,13 @@ export class WaterSystem implements System {
         }
     }
 
-    public spawnExplosionRipple(x: number, z: number, strength: number = 1.0): void {
-        this.spawnRipple(x, z, strength);
-        this.rippleData[this.rippleIndex].set(x, z, this.globalTime * 2.0, strength / 2.0);
+    public spawnExplosionRipple(x: number, z: number, now: number, strength: number = 1.0): void {
+        this.spawnRipple(x, z, now, strength);
+        this.rippleData[this.rippleIndex].set(x, z, now * 2.0, strength / 2.0);
         this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
     }
 
-    public checkBuoyancy(x: number, y: number, z: number): void {
+    public checkBuoyancy(x: number, y: number, z: number, now: number): void {
         _buoyancyResult.inWater = false;
         _buoyancyResult.depth = 0;
         _buoyancyResult.maxDepth = 0;
@@ -731,8 +729,8 @@ export class WaterSystem implements System {
                 const waveScale = 0.45;
                 const phaseXZ = x * this.waterDirection.x + z * this.waterDirection.y;
 
-                const sin1 = Math.sin(phaseXZ * waveScale - this.globalTime * 1.5) * 0.5 + 0.5;
-                const sin2 = Math.sin(phaseXZ * (waveScale * 1.6) + z * 0.2 - this.globalTime * 2.0) * 0.5 + 0.5;
+                const sin1 = Math.sin(phaseXZ * waveScale - now * 0.0015) * 0.5 + 0.5;
+                const sin2 = Math.sin(phaseXZ * (waveScale * 1.6) + z * 0.2 - now * 0.002) * 0.5 + 0.5;
 
                 const w1 = (sin1 * sin1 * sin1) * 0.45;
                 const w2 = (sin2 * sin2) * 0.22;

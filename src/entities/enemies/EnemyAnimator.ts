@@ -11,7 +11,7 @@ export const EnemyAnimator = {
      * Uses pure mathematics (sin/cos/lerp) to deform and rotate the mesh.
      * 100% Zero-GC (No object allocations).
      */
-    updateAttackAnim: (e: Enemy, now: number, delta: number) => {
+    updateAttackAnim: (e: Enemy, simTime: number, renderTime: number, simDelta: number) => {
         const mesh = e.mesh;
         if (!mesh) return;
 
@@ -92,7 +92,7 @@ export const EnemyAnimator = {
                         case EnemyAttackType.ELECTRIC_BEAM:
                         case EnemyAttackType.MAGNETIC_CHAIN:
                             targetPosY = baseY + 1.0 * progress;
-                            targetPosY += Math.sin(now * 0.01) * 0.2 * progress;
+                            targetPosY += Math.sin(renderTime * 0.01) * 0.2 * progress;
                             targetScaleY = baseScale * (1.0 + 0.2 * progress);
                             break;
                     }
@@ -112,7 +112,7 @@ export const EnemyAnimator = {
                             e.indicatorRing.scale.setScalar(att.radius / safeScaleX);
 
                             const flashSpeed = progress * 30;
-                            const pulse = 0.5 + 0.5 * Math.sin(now * 0.01 * flashSpeed);
+                            const pulse = 0.5 + 0.5 * Math.sin(renderTime * 0.01 * flashSpeed);
                             if (e.indicatorRing.material) {
                                 const mat = e.indicatorRing.material as any;
                                 mat.opacity = 0.3 + progress * 0.6;
@@ -167,7 +167,7 @@ export const EnemyAnimator = {
                         case EnemyAttackType.SCREECH:
                             targetRotX = -0.3;
                             targetRotZ = (Math.random() - 0.5) * 0.2;
-                            targetScaleX = baseScale * widthScale * (1.0 + 0.1 * Math.sin(now * 0.05));
+                            targetScaleX = baseScale * widthScale * (1.0 + 0.1 * Math.sin(renderTime * 0.05));
                             break;
 
                         case EnemyAttackType.EXPLODE:
@@ -180,8 +180,8 @@ export const EnemyAnimator = {
 
                         case EnemyAttackType.ELECTRIC_BEAM:
                         case EnemyAttackType.MAGNETIC_CHAIN:
-                            targetPosY = baseY + 1.0 + Math.sin(now * 0.03) * 0.3;
-                            const pulse = 1.0 + Math.sin(now * 0.08) * 0.1;
+                            targetPosY = baseY + 1.0 + Math.sin(renderTime * 0.03) * 0.3;
+                            const pulse = 1.0 + Math.sin(renderTime * 0.08) * 0.1;
                             targetScaleX = baseScale * widthScale * pulse;
                             targetScaleY = baseScale * pulse;
                             targetScaleZ = baseScale * widthScale * pulse;
@@ -204,8 +204,8 @@ export const EnemyAnimator = {
         let currentRotX = mesh.userData.animRotX || 0;
         let currentRotZ = mesh.userData.animRotZ || 0;
 
-        currentRotX += (targetRotX - currentRotX) * 15 * delta;
-        currentRotZ += (targetRotZ - currentRotZ) * 15 * delta;
+        currentRotX += (targetRotX - currentRotX) * 15 * simDelta;
+        currentRotZ += (targetRotZ - currentRotZ) * 15 * simDelta;
 
         mesh.userData.animRotX = currentRotX;
         mesh.userData.animRotZ = currentRotZ;
@@ -215,9 +215,9 @@ export const EnemyAnimator = {
         mesh.rotation.z = currentRotZ;
 
         // 2. Scale Healing
-        mesh.scale.x += (targetScaleX - mesh.scale.x) * 15 * delta;
-        mesh.scale.y += (targetScaleY - mesh.scale.y) * 15 * delta;
-        mesh.scale.z += (targetScaleZ - mesh.scale.z) * 15 * delta;
+        mesh.scale.x += (targetScaleX - mesh.scale.x) * 15 * simDelta;
+        mesh.scale.y += (targetScaleY - mesh.scale.y) * 15 * simDelta;
+        mesh.scale.z += (targetScaleZ - mesh.scale.z) * 15 * simDelta;
 
         // 3. Position Y (Only override physics during jump/smash attacks)
         if (isAttacking) {
@@ -225,11 +225,11 @@ export const EnemyAnimator = {
             if (e.state === AIState.ATTACK_CHARGE || (att && (att.type === EnemyAttackType.JUMP || att.type === EnemyAttackType.SMASH || att.type === EnemyAttackType.MAGNETIC_CHAIN || att.type === EnemyAttackType.ELECTRIC_BEAM))) {
                 mesh.position.y = targetPosY;
             } else {
-                mesh.position.y += (targetPosY - mesh.position.y) * 10 * delta;
+                mesh.position.y += (targetPosY - mesh.position.y) * 10 * simDelta;
             }
         }
         // 4. Add some random jitter to the enemy's rotation when it is hit
-        if (e.mesh.userData.isFlashing && (now - e.hitTime) < 200) {
+        if (e.mesh.userData.isFlashing && (renderTime - (e.hitRenderTime || 0)) < 200) {
             const jitter = 0.15;
             mesh.rotation.x += (Math.random() - 0.5) * jitter;
             mesh.rotation.z += (Math.random() - 0.5) * jitter;

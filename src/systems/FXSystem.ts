@@ -551,18 +551,23 @@ export const FXSystem = {
     },
 
     // --- MAIN UPDATE LOOP ---
-    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], delta: number, frame: number, now: number, callbacks: any) => {
-        const safeDelta = Math.min(delta, 0.1);
+    update: (scene: THREE.Scene, particlesList: ParticleState[], decalList: THREE.Mesh[], renderDelta: number, frame: number, renderTime: number, callbacks: any) => {
+        const safeDelta = renderDelta > 0.1 ? 0.1 : renderDelta;
 
         // ==========================================
         // 1. UPDATE EXISTING PARTICLES (Physics & Death)
         // Frees up pool indices BEFORE we try to spawn new ones!
         // ==========================================
         const decay = safeDelta * 44;
-        const airFriction = Math.max(0.0, 1.0 - (5.0 * safeDelta));
-        const shrinkRate = Math.max(0.0, 1.0 - (10.0 * safeDelta));
-        const fireShrinkRate = Math.max(0.0, 1.0 - (1.5 * safeDelta));
-        const flameThrowerDrag = Math.max(0.0, 1.0 - (5.0 * safeDelta));
+        const airFriction = 1.0 - (5.0 * safeDelta);
+        const shrinkRate = 1.0 - (10.0 * safeDelta);
+        const fireShrinkRate = 1.0 - (1.5 * safeDelta);
+        const flameThrowerDrag = 1.0 - (5.0 * safeDelta);
+
+        const safeAirFriction = airFriction < 0 ? 0 : airFriction;
+        const safeShrinkRate = shrinkRate < 0 ? 0 : shrinkRate;
+        const safeFireShrinkRate = fireShrinkRate < 0 ? 0 : fireShrinkRate;
+        const safeFlameDrag = flameThrowerDrag < 0 ? 0 : flameThrowerDrag;
 
         for (let i = particlesList.length - 1; i >= 0; i--) {
             const p = particlesList[i];
@@ -575,9 +580,10 @@ export const FXSystem = {
 
             if (!p.landed) {
                 // Inlined position update
-                p.mesh.position.x += p.vel.x * safeDelta;
-                p.mesh.position.y += p.vel.y * safeDelta;
-                p.mesh.position.z += p.vel.z * safeDelta;
+                const pPos = p.mesh.position;
+                pPos.x += p.vel.x * safeDelta;
+                pPos.y += p.vel.y * safeDelta;
+                pPos.z += p.vel.z * safeDelta;
 
                 if (p.isPhysics) {
                     p.vel.y -= 25 * safeDelta;
@@ -586,76 +592,82 @@ export const FXSystem = {
                         p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
                         p.mesh.rotation.z += p.rotVel.z * 10 * safeDelta;
                     }
-                    if (p.mesh.position.y <= (p.type === 'splash' ? -5.0 : 0.05)) {
+                    if (pPos.y <= (p.type === 'splash' ? -5.0 : 0.05)) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
                         if (!p.inUse) continue;
                     }
                 } else {
                     // Inlined velocity friction
-                    p.vel.x *= airFriction;
-                    p.vel.y *= airFriction;
-                    p.vel.z *= airFriction;
+                    p.vel.x *= safeAirFriction;
+                    p.vel.y *= safeAirFriction;
+                    p.vel.z *= safeAirFriction;
 
-                    if (p.type === 'shockwave') {
+                    const pScale = p.mesh.scale;
+                    const pType = p.type;
+
+                    if (pType === 'shockwave') {
                         const grow = 30 * safeDelta;
-                        p.mesh.scale.x += grow;
-                        p.mesh.scale.y += grow;
-                        p.mesh.scale.z += grow;
-                    } else if (p.type === 'flash') {
+                        pScale.x += grow;
+                        pScale.y += grow;
+                        pScale.z += grow;
+                    } else if (pType === 'flash') {
                         const grow = 15 * safeDelta;
-                        p.mesh.scale.x += grow;
-                        p.mesh.scale.y += grow;
-                        p.mesh.scale.z += grow;
-                    } else if (p.type === 'electric_flash') {
-                        p.mesh.scale.x *= 0.6;
-                        p.mesh.scale.y *= 0.6;
-                    } else if (p.type === 'flamethrower_fire') {
+                        pScale.x += grow;
+                        pScale.y += grow;
+                        pScale.z += grow;
+                    } else if (pType === 'electric_flash') {
+                        pScale.x *= 0.6;
+                        pScale.y *= 0.6;
+                    } else if (pType === 'flamethrower_fire') {
                         const grow = 5.0 * safeDelta;
-                        p.mesh.scale.x += grow;
-                        p.mesh.scale.y += grow;
-                        p.mesh.scale.z += grow;
+                        pScale.x += grow;
+                        pScale.y += grow;
+                        pScale.z += grow;
 
-                        p.vel.x *= flameThrowerDrag;
-                        p.vel.y *= flameThrowerDrag;
-                        p.vel.z *= flameThrowerDrag;
-                    } else if (p.type === 'fire' || p.type === 'enemy_effect_flame' || p.type === 'large_fire') {
-                        p.mesh.scale.x *= fireShrinkRate;
-                        p.mesh.scale.y *= fireShrinkRate;
-                        p.mesh.scale.z *= fireShrinkRate;
-                    } else if (p.type === 'screech_wave') {
+                        p.vel.x *= safeFlameDrag;
+                        p.vel.y *= safeFlameDrag;
+                        p.vel.z *= safeFlameDrag;
+                    } else if (pType === 'fire' || pType === 'enemy_effect_flame' || pType === 'large_fire') {
+                        pScale.x *= safeFireShrinkRate;
+                        pScale.y *= safeFireShrinkRate;
+                        pScale.z *= safeFireShrinkRate;
+                    } else if (pType === 'screech_wave') {
                         const grow = 60 * safeDelta;
-                        p.mesh.scale.x += grow;
-                        p.mesh.scale.y += grow;
-                        p.mesh.scale.z += grow;
-                    } else if (p.type === 'electric_beam') {
-                        p.mesh.scale.z += 20 * safeDelta;
-                        p.mesh.scale.x *= 0.9;
-                        p.mesh.scale.y *= 0.9;
+                        pScale.x += grow;
+                        pScale.y += grow;
+                        pScale.z += grow;
+                    } else if (pType === 'electric_beam') {
+                        pScale.z += 20 * safeDelta;
+                        pScale.x *= 0.9;
+                        pScale.y *= 0.9;
                     } else {
-                        p.mesh.scale.x *= shrinkRate;
-                        p.mesh.scale.y *= shrinkRate;
-                        p.mesh.scale.z *= shrinkRate;
+                        pScale.x *= safeShrinkRate;
+                        pScale.y *= safeShrinkRate;
+                        pScale.z *= safeShrinkRate;
                     }
                 }
             }
 
             if (!p.isInstanced) {
                 const mat = p.mesh.material as FXMaterial;
-                if (mat.transparent) mat.opacity = Math.max(0, p.life / p.maxLife);
+                if (mat.transparent) {
+                    const op = p.life / p.maxLife;
+                    mat.opacity = op < 0 ? 0 : op;
+                }
             } else {
-                const imesh = FXSystem._getInstancedMesh(scene, p.type);
-                const idx = FXSystem._instancedCounts[p.type];
+                const pType = p.type;
+                const imesh = FXSystem._instancedMeshes[pType];
+                const idx = FXSystem._instancedCounts[pType];
                 if (imesh && idx < MAX_INSTANCES_PER_MESH) {
                     p.mesh.updateMatrix();
                     imesh.setMatrixAt(idx, p.mesh.matrix);
-                    if (p.color !== undefined) {
-                        imesh.setColorAt(idx, _tempColor.setHex(p.color));
+                    const pColor = p.color;
+                    if (pColor !== undefined) {
+                        imesh.setColorAt(idx, _tempColor.setHex(pColor));
                     }
-                    FXSystem._instancedCounts[p.type]++;
-                } else if (imesh && idx === MAX_INSTANCES_PER_MESH) {
-                    FXSystem._instancedCounts[p.type]++;
+                    FXSystem._instancedCounts[pType]++;
                 } else if (imesh) {
-                    FXSystem._instancedCounts[p.type]++;
+                    FXSystem._instancedCounts[pType]++;
                 }
             }
         }
@@ -664,51 +676,59 @@ export const FXSystem = {
         // 2. PROCESS QUEUES (Spawn new particles)
         // Now has maximum pool slots available
         // ==========================================
-        for (let i = FXSystem._essentialQueueHead; i < FXSystem.essentialQueue.length; i++) {
-            const req = FXSystem.essentialQueue[i];
-            if (!req.scene) req.scene = scene;
-            if (!req.particlesList) req.particlesList = particlesList;
+        const eQueue = FXSystem.essentialQueue;
+        const eLen = eQueue.length;
+        for (let i = FXSystem._essentialQueueHead; i < eLen; i++) {
+            const req = eQueue[i];
+            req.scene = scene;
+            req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
             REQUEST_POOL.push(req);
         }
-        FXSystem.essentialQueue.length = 0;
+        eQueue.length = 0;
         FXSystem._essentialQueueHead = 0;
 
-        const pEnd = Math.min(FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME, FXSystem.ambientQueue.length);
+        const aQueue = FXSystem.ambientQueue;
+        const aLen = aQueue.length;
+        const pEnd = FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME < aLen ? FXSystem._ambientQueueHead + MAX_AMBIENT_SPAWNS_PER_FRAME : aLen;
         for (let i = FXSystem._ambientQueueHead; i < pEnd; i++) {
-            const req = FXSystem.ambientQueue[i];
-            if (!req.scene) req.scene = scene;
-            if (!req.particlesList) req.particlesList = particlesList;
+            const req = aQueue[i];
+            req.scene = scene;
+            req.particlesList = particlesList;
             FXSystem._spawnPartImmediate(req);
             REQUEST_POOL.push(req);
         }
         FXSystem._ambientQueueHead = pEnd;
-        if (FXSystem._ambientQueueHead >= FXSystem.ambientQueue.length) {
-            FXSystem.ambientQueue.length = 0;
+        if (FXSystem._ambientQueueHead >= aLen) {
+            aQueue.length = 0;
             FXSystem._ambientQueueHead = 0;
         }
 
-        const dEnd = Math.min(FXSystem._decalQueueHead + 10, FXSystem.decalQueue.length);
+        const dQueue = FXSystem.decalQueue;
+        const dLen = dQueue.length;
+        const dEnd = FXSystem._decalQueueHead + 10 < dLen ? FXSystem._decalQueueHead + 10 : dLen;
         for (let i = FXSystem._decalQueueHead; i < dEnd; i++) {
-            const req = FXSystem.decalQueue[i];
+            const req = dQueue[i];
             FXSystem._spawnDecalImmediate(req);
             DECAL_REQUEST_POOL.push(req);
         }
         FXSystem._decalQueueHead = dEnd;
-        if (FXSystem._decalQueueHead >= FXSystem.decalQueue.length) {
-            FXSystem.decalQueue.length = 0;
+        if (FXSystem._decalQueueHead >= dLen) {
+            dQueue.length = 0;
             FXSystem._decalQueueHead = 0;
         }
 
         for (let i = 0; i < decalList.length; i++) {
             const m = decalList[i];
-            if (m.userData.targetScale && m.scale.x < m.userData.targetScale) {
-                const growthStep = m.userData.targetScale * 3.0 * safeDelta;
-                const newScale = Math.min(m.userData.targetScale, m.scale.x + growthStep);
+            const targetScale = m.userData.targetScale;
+            if (targetScale && m.scale.x < targetScale) {
+                const growthStep = targetScale * 3.0 * safeDelta;
+                const newScale = m.scale.x + growthStep;
+                const finalScale = newScale > targetScale ? targetScale : newScale;
                 // Inlined scale update
-                m.scale.x = newScale;
-                m.scale.y = newScale;
-                m.scale.z = newScale;
+                m.scale.x = finalScale;
+                m.scale.y = finalScale;
+                m.scale.z = finalScale;
             }
         }
 
@@ -716,12 +736,15 @@ export const FXSystem = {
         // 3. FINALIZE INSTANCED BATCHES (Write to GPU)
         // Combines both old updated AND newly spawned particles
         // ==========================================
-        for (let k = 0; k < FXSystem._instancedMeshKeys.length; k++) {
-            const type = FXSystem._instancedMeshKeys[k];
+        const iKeys = FXSystem._instancedMeshKeys;
+        const iLen = iKeys.length;
+        for (let k = 0; k < iLen; k++) {
+            const type = iKeys[k];
             const imesh = FXSystem._instancedMeshes[type];
             imesh.count = FXSystem._instancedCounts[type];
             imesh.instanceMatrix.needsUpdate = true;
-            if (imesh.instanceColor) imesh.instanceColor.needsUpdate = true;
+            const iAttributes = imesh.instanceColor;
+            if (iAttributes) iAttributes.needsUpdate = true;
             if (imesh.count > 0) imesh.computeBoundingSphere();
             FXSystem._instancedCounts[type] = 0;
         }

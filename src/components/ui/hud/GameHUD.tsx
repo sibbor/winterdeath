@@ -278,8 +278,8 @@ const CurrencyPanel = React.memo(({ isMobileDevice, isBossIntro }: any) => {
 });
 
 const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
-    // VIKTIGT: Vi lyssnar BARA på statiska/långsamma värden (active, name, maxHp). 
-    // Vi lyssnar ALDRIG på nuvarande HP här. Det sköts av DOM-refen.
+    // IMPORTANT: We only listen to static/slow values (active, name, maxHp). 
+    // We NEVER listen to current HP here. That is handled by the DOM ref.
     const bossActive = useHudStore(s => s.boss?.active || false);
     const bossName = useHudStore(s => s.boss?.name || '');
     const bossDefeated = useHudStore(s => s.bossDefeated);
@@ -310,16 +310,13 @@ const BossWavePanel = React.memo(({ isMobileDevice, bossHpBarRef }: any) => {
     );
 });
 
-const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef }: any) => {
+const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots, handleSelectWeaponInternal, ammoTextRef, reloadBarRef, speedTextRef, gasPedalRef, brakePedalRef }: any) => {
     const isDriving = useHudStore(s => s.isDriving);
-    const vehicleSpeed = useHudStore(s => s.vehicleSpeed);
-    const throttleState = useHudStore(s => s.throttleState);
     const activeWeapon = useHudStore(s => s.activeWeapon);
     const throwableAmmo = useHudStore(s => s.throwableAmmo);
     const familyFound = useHudStore(s => s.familyFound);
     const unlimitedAmmo = useHudStore(s => s.sectorStats?.unlimitedAmmo || false);
 
-    const speedKmH = Math.round(vehicleSpeed);
     const wep = WEAPONS[activeWeapon];
 
     return (
@@ -336,16 +333,16 @@ const BottomActionPanel = React.memo(({ isMobileDevice, isBossIntro, weaponSlots
             {isDriving ? (
                 <div className={`flex flex-col items-center ${isMobileDevice ? 'pt-2' : 'pt-8'}`}>
                     <div className={`${BAR_WRAPPER} hud-gritty-base hud-gritty-texture ${isMobileDevice ? 'px-8 py-2' : 'px-12 py-4'} shadow-2xl`}>
-                        <span className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white tracking-tighter block hud-text-glow text-center`}>
-                            {speedKmH}
+                        <span ref={speedTextRef} className={`${isMobileDevice ? 'text-4xl' : 'text-6xl'} font-semibold text-white tracking-tighter block hud-text-glow text-center`}>
+                            0
                         </span>
                         <span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] block text-center mt-1">{t('ui.speed_unit')}</span>
                     </div>
                     <div className="flex gap-4 mt-4">
-                        <div className={`px-6 py-2 border transition-all ${throttleState > 0 ? 'bg-[#06b6d4]/20 border-[#06b6d4] text-cyan-200' : 'bg-black/80 border-white/10 text-white/20'}`}>
+                        <div ref={gasPedalRef} className="px-6 py-2 border transition-all bg-black/80 border-white/10 text-white/20">
                             <span className="text-xs font-black uppercase tracking-widest">{t('ui.gas')}</span>
                         </div>
-                        <div className={`px-6 py-2 border transition-all ${throttleState < 0 ? 'bg-[#ff3333]/20 border-[#ff3333] text-red-200' : 'bg-black/80 border-white/10 text-white/20'}`}>
+                        <div ref={brakePedalRef} className="px-6 py-2 border transition-all bg-black/80 border-white/10 text-white/20">
                             <span className="text-xs font-black uppercase tracking-widest">{t('ui.brake')}</span>
                         </div>
                     </div>
@@ -431,6 +428,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     const hudContainerRef = useRef<HTMLDivElement>(null);
     const xpGainContainerRef = useRef<HTMLDivElement>(null);
     const xpGainTextRef = useRef<HTMLSpanElement>(null);
+    const speedTextRef = useRef<HTMLSpanElement>(null);
+    const gasPedalRef = useRef<HTMLDivElement>(null);
+    const brakePedalRef = useRef<HTMLDivElement>(null);
     const bossHpBarRef = useRef<HTMLDivElement>(null);
 
     // --- FAST HUD UPDATE LISTENER ---
@@ -461,7 +461,10 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // 4. Ammo Updates
             if (ammoTextRef.current) {
-                ammoTextRef.current.innerText = data.ammo.toString();
+                const val = data.ammo.toString();
+                if (ammoTextRef.current.innerText !== val) {
+                    ammoTextRef.current.innerText = val;
+                }
             }
 
             // 5. Reload Updates
@@ -478,16 +481,30 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
 
             // 6. Boss HP Update
             if (bossHpBarRef.current && data.bossHpP !== undefined) {
-                // bossHpP is between 0 and 1, calculated in HudSystem
                 if (data.bossHpP >= 0) {
                     bossHpBarRef.current.style.transform = `scaleX(${Math.max(0, Math.min(1, data.bossHpP))})`;
                 }
             }
 
-            // 7. Optional: Damage Shaking (if implemented in detail)
-            // if (data.isShaking && hudContainerRef.current) {
-            //      hudContainerRef.current.classList.add('hud-shake');
-            // }
+            // 7. Vehicle Speed & Throttle
+            if (speedTextRef.current) {
+                const speed = Math.round(data.vehicleSpeed).toString();
+                if (speedTextRef.current.innerText !== speed) {
+                    speedTextRef.current.innerText = speed;
+                }
+            }
+            if (gasPedalRef.current) {
+                const isGas = data.throttleState > 0;
+                gasPedalRef.current.style.backgroundColor = isGas ? 'rgba(6, 182, 212, 0.2)' : 'rgba(0, 0, 0, 0.8)';
+                gasPedalRef.current.style.borderColor = isGas ? '#06b6d4' : 'rgba(255, 255, 255, 0.1)';
+                gasPedalRef.current.style.color = isGas ? '#a5f3fc' : 'rgba(255, 255, 255, 0.2)';
+            }
+            if (brakePedalRef.current) {
+                const isBrake = data.throttleState < 0;
+                brakePedalRef.current.style.backgroundColor = isBrake ? 'rgba(255, 51, 51, 0.2)' : 'rgba(0, 0, 0, 0.8)';
+                brakePedalRef.current.style.borderColor = isBrake ? '#ff3333' : 'rgba(255, 255, 255, 0.1)';
+                brakePedalRef.current.style.color = isBrake ? '#fecaca' : 'rgba(255, 255, 255, 0.2)';
+            }
         };
 
         window.addEventListener('hud-fast-update', handleFastUpdate);
@@ -589,6 +606,9 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                     handleSelectWeaponInternal={handleSelectWeaponInternal}
                     ammoTextRef={ammoTextRef}
                     reloadBarRef={reloadBarRef}
+                    speedTextRef={speedTextRef}
+                    gasPedalRef={gasPedalRef}
+                    brakePedalRef={brakePedalRef}
                 />
 
                 {/* XP GAIN DISPLAY (DOM placeholder) */}

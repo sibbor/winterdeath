@@ -78,7 +78,8 @@ export class PlayerCombatSystem implements System {
         this.laserSight = this.playerGroup.children.find(c => c.userData.isLaserSight) as THREE.Mesh || null;
     }
 
-    update(session: GameSessionLogic, dt: number, now: number) {
+    update(session: GameSessionLogic, simDelta: number, simTime: number) {
+        if (!this.initialized) return;
         const state = session.state;
         const input = session.engine.input.state;
 
@@ -120,7 +121,7 @@ export class PlayerCombatSystem implements System {
         this._p4 = !!input['4'];
         this._p5 = !!input['5'];
 
-        WeaponHandler.handleInput(input, state, state.loadout, now, false); // Skickar in false eftersom vi redan checkat isLocked ovan
+        WeaponHandler.handleInput(input, state, state.loadout, simTime, false); // Skickar in false eftersom vi redan checkat isLocked ovan
 
         WeaponHandler.handleFiring(
             session,
@@ -128,14 +129,15 @@ export class PlayerCombatSystem implements System {
             this.playerGroup,
             input,
             state,
-            dt,
-            now,
+            simDelta,
+            simTime,
+            state.renderTime,
             state.loadout,
             this.aimCross,
             this.trajectoryLine,
         );
 
-        this.laserSight.visible = !state.vehicle.active;
+        if (this.laserSight) this.laserSight.visible = !state.vehicle.active;
     }
 
     clear() {

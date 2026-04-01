@@ -316,9 +316,15 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             engine.isSoftPaused = false;
         }
 
-        // --- VINTERDÖD FIX: Simulation Clock (Milliseconds) ---
-        state.accumulatedTime += delta * 1000;
-        const simTime = state.accumulatedTime;
+        // --- VINTERDÖD FIX: Simulation & Visual Clocks (Milliseconds) ---
+        // Synchronize engine-owned master clocks with the local session state
+        state.lastSimDelta = delta;
+        state.lastRenderDelta = realDt;
+        state.renderTime = engine.renderTime;
+        state.simTime = engine.simTime;
+
+        const simTime = engine.simTime;
+        const renderTime = engine.renderTime;
 
         const now = performance.now();
 
@@ -569,6 +575,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 _animStateScratch.isSwimming = state.isSwimming;
                 _animStateScratch.isDead = state.isDead;
                 _animStateScratch.deathStartTime = state.deathStartTime;
+                _animStateScratch.renderTime = state.renderTime;
                 _animStateScratch.seed = 0;
 
                 monitor.begin('player_animation');
@@ -753,6 +760,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         EnemyManager.update(
             delta,
             simTime,
+            renderTime,
             playerGroup.position,
             state.enemies,
             state.collisionGrid,

@@ -20,15 +20,31 @@ const _blackColor = new THREE.Color(0x000000); // Used for safe color lerping wi
 const _traverseStack: THREE.Object3D[] = []; // Shared stack to avoid closures during traversal
 
 const _deathAnimState = {
-    isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
-    staminaRatio: 0, isSpeaking: false, isThinking: false, isIdleLong: false,
-    seed: 0, isDead: true, deathStartTime: 0
+    isMoving: false,
+    isRushing: false,
+    isRolling: false,
+    rollStartTime: 0,
+    staminaRatio: 0,
+    isSpeaking: false,
+    isThinking: false,
+    isIdleLong: false,
+    seed: 0,
+    isDead: true,
+    deathStartTime: 0,
+    renderTime: 0
 };
 
 const _griefAnimState = {
-    isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
-    staminaRatio: 1.0, isSpeaking: false, isThinking: true, isIdleLong: false,
-    seed: 0
+    isMoving: false,
+    isRushing: false,
+    isRolling: false,
+    rollStartTime: 0,
+    staminaRatio: 1.0,
+    isSpeaking: false,
+    isThinking: true,
+    isIdleLong: false,
+    seed: 0,
+    renderTime: 0
 };
 
 export class DeathSystem implements System {
@@ -237,6 +253,7 @@ export class DeathSystem implements System {
             }
         } else if (playerMesh) {
             _deathAnimState.deathStartTime = state.deathStartTime;
+            _deathAnimState.renderTime = state.renderTime;
             PlayerAnimator.update(playerMesh as any, _deathAnimState, now, delta);
         }
 
@@ -290,6 +307,7 @@ export class DeathSystem implements System {
             if (body) {
                 _griefAnimState.seed = fm.seed || 0;
                 _griefAnimState.isMoving = isWalking;
+                _griefAnimState.renderTime = state.renderTime;
                 PlayerAnimator.update(body, _griefAnimState, now, delta);
             }
         }

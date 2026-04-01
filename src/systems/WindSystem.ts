@@ -79,7 +79,7 @@ export class WindSystem implements System {
     this.setRandomWind(minStrength, maxStrength, baseAngle, angleVariance);
   }
 
-  update(ctx: any, deltaTime: number = 0.016, now: number = performance.now()): THREE.Vector2 {
+  update(ctx: any, renderDelta: number = 0.016, renderTime: number = 0): THREE.Vector2 {
     if (this.boundUniforms.length === 0) {
       this.bindMaterial(MATERIALS.hedge);
       this.bindMaterial(MATERIALS.grass);
@@ -94,7 +94,7 @@ export class WindSystem implements System {
       this.bindMaterial(MATERIALS.treeSilhouette);
     }
 
-    if (!this.overrideActive && now > this.nextChange) {
+    if (!this.overrideActive && renderTime > this.nextChange) {
       if (Math.random() > 0.4) {
         const angleOffset = (Math.random() * 2.0 - 1.0) * this.angleVariance;
         const angle = this.baseAngle + angleOffset;
@@ -104,15 +104,15 @@ export class WindSystem implements System {
       } else {
         this.target.set(0, 0);
       }
-      this.nextChange = now + 3000 + Math.random() * 5000;
+      this.nextChange = renderTime + 3000 + Math.random() * 5000;
     }
 
-    const lerpFactor = 1.0 - Math.exp(-0.6 * deltaTime);
+    const lerpFactor = 1.0 - Math.exp(-0.6 * renderDelta);
     this.current.lerp(this.target, lerpFactor); this.direction.set(this.current.x, 0, this.current.y);
     this.strength = this.current.length();
 
     // Brutal iterations-loop för just DETTA WindSystem
-    const timeSec = now * 0.001;
+    const timeSec = renderTime * 0.001; // renderTime is already small and synchronized
     const windX = this.current.x;
     const windY = this.current.y;
 

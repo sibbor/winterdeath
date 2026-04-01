@@ -81,7 +81,7 @@ export class WorldLootSystem implements System {
         for (let i = 0; i < batchSize; i++) {
             const req = this.spawnQueue.pop();
             if (req) {
-                this.spawnSingle(req.x, req.z);
+                this.spawnSingle(req.x, req.z, now);
                 this.requestPool.push(req);
             }
         }
@@ -201,7 +201,7 @@ export class WorldLootSystem implements System {
         }
     }
 
-    private spawnSingle(x: number, z: number) {
+    private spawnSingle(x: number, z: number, now: number) {
         if (this.freeIndices.length === 0) return;
         const idx = this.freeIndices.pop()!;
         const item = this.pool[idx];
@@ -212,7 +212,7 @@ export class WorldLootSystem implements System {
         item.needsUpdate = true;
         item.grounded = false;
         item.magnetized = false;
-        item.spawnTime = performance.now();
+        item.spawnTime = now;
         item.value = 5 + Math.floor(Math.random() * 10);
         item.position.set(x, 1.5, z);
         item.scale.set(1.0, 1.0, 1.0);

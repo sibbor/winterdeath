@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PerformanceMonitor } from '../../../systems/PerformanceMonitor';
 import { WinterEngine } from '../../../core/engine/WinterEngine';
+import { HudStore } from '../../../store/HudStore';
 
 interface DebugDisplayProps {
     debugMode: boolean;
@@ -11,16 +12,77 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
     const [systemsExpanded, setSystemsExpanded] = useState(true);
     const [showLogs, setShowLogs] = useState(false);
 
-    // VINTERDÖD OPTIMIZATION: Endast en "tick" för att trigga re-render.
-    // Inga tunga objekt allokeras i minnet var 250:e ms.
-    const [, setTick] = useState(0);
+    // --- HIGH-FREQUENCY REFS ---
+    const fpsRef = useRef<HTMLSpanElement>(null);
+    const playerXRef = useRef<HTMLSpanElement>(null);
+    const playerZRef = useRef<HTMLSpanElement>(null);
+    const camXRef = useRef<HTMLSpanElement>(null);
+    const camYRef = useRef<HTMLSpanElement>(null);
+    const camZRef = useRef<HTMLSpanElement>(null);
+    
+    // Renderer Stats Refs
+    const drawCallsRef = useRef<HTMLSpanElement>(null);
+    const trisRef = useRef<HTMLSpanElement>(null);
+    const shadersRef = useRef<HTMLSpanElement>(null);
+    const recompRef = useRef<HTMLSpanElement>(null);
+    const texRef = useRef<HTMLSpanElement>(null);
+    const geoRef = useRef<HTMLSpanElement>(null);
+    
+    // World/Mem Refs
+    const enemiesRef = useRef<HTMLSpanElement>(null);
+    const objectsRef = useRef<HTMLSpanElement>(null);
+    const heapRef = useRef<HTMLSpanElement>(null);
+    const heapLimitRef = useRef<HTMLSpanElement>(null);
+    const gcAlertRef = useRef<HTMLSpanElement>(null);
 
     useEffect(() => {
         if (!debugMode) return;
-        const interval = setInterval(() => {
-            setTick(t => t + 1); // Tvinga React att läsa färsk data direkt från cachen
-        }, 250);
-        return () => clearInterval(interval);
+        
+        const monitor = PerformanceMonitor.getInstance();
+        let lastUpdate = 0;
+
+        return HudStore.subscribe(() => {
+            const now = performance.now();
+            
+            // 1. High-frequency updates (every frame for smoothness where possible, or just link to loop)
+            if (fpsRef.current) fpsRef.current.innerText = Math.round(monitor.getFps()).toString();
+            
+            // 2. Throttled updates (4 times per second to prevent visual noise)
+            if (now - lastUpdate < 250) return;
+            lastUpdate = now;
+
+            const world = monitor.getFormattedGameState();
+            const render = monitor.getFormattedRendererStats();
+            const gc = monitor.getFormattedGcInfo();
+
+            if (playerXRef.current) playerXRef.current.innerText = world.playerX.toString();
+            if (playerZRef.current) playerZRef.current.innerText = world.playerZ.toString();
+            if (camXRef.current) camXRef.current.innerText = world.camX.toString();
+            if (camYRef.current) camYRef.current.innerText = world.camY.toString();
+            if (camZRef.current) camZRef.current.innerText = world.camZ.toString();
+
+            if (drawCallsRef.current) drawCallsRef.current.innerText = render.drawCalls.toString();
+            if (trisRef.current) trisRef.current.innerText = render.triangles.toString();
+            if (shadersRef.current) shadersRef.current.innerText = render.shaderPrograms.toString();
+            if (recompRef.current) {
+                recompRef.current.innerText = render.shaderRecompiles.toString();
+                recompRef.current.className = render.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white';
+            }
+            if (texRef.current) texRef.current.innerText = render.textures.toString();
+            if (geoRef.current) geoRef.current.innerText = render.geometries.toString();
+
+            if (enemiesRef.current) enemiesRef.current.innerText = world.enemies.toString();
+            if (objectsRef.current) objectsRef.current.innerText = world.objects.toString();
+            
+            if (heapRef.current) heapRef.current.innerText = gc.heapUsedMB.toString();
+            if (heapLimitRef.current) heapLimitRef.current.innerText = `/ ${gc.heapLimitMB}MB`;
+
+            if (gcAlertRef.current) {
+                const recentGC = gc.timeSinceDetection < 2000;
+                gcAlertRef.current.innerText = recentGC ? `⚠️ ~${gc.droppedMB}MB freed` : '—';
+                gcAlertRef.current.className = recentGC ? 'text-yellow-400 font-bold' : 'text-white/20';
+            }
+        });
     }, [debugMode]);
 
     const toggleMinimized = (e: React.MouseEvent) => {
@@ -44,7 +106,7 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                 onClick={toggleMinimized}
                 className="fixed top-0 right-0 z-[9998] bg-black/40 text-white/50 px-2 py-0.5 font-mono text-[12px] select-none backdrop-blur-[2px] border border-white/5 rounded-sm cursor-pointer pointer-events-auto">
                 <div className="font-mono font-bold text-white text-[12px]">
-                    {fps} FPS
+                    <span ref={fpsRef}>0</span> FPS
                 </div>
             </div>
         );
@@ -65,20 +127,20 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                 <div className="p-3 shrink-0 space-y-2">
                     <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
                         <span className="font-bold text-white uppercase tracking-wider">Debug Monitor</span>
-                        <span className="bg-green-500 text-black px-1 rounded font-bold">{fps} FPS</span>
+                        <span className="bg-green-500 text-black px-1 rounded font-bold"><span ref={fpsRef}>0</span> FPS</span>
                     </div>
 
                     <>
                         <div className="flex items-center justify-between">
                             <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Player</div>
                             <span className="text-white tabular-nums">
-                                X: {world.playerX}, Z: {world.playerZ}
+                                X: <span ref={playerXRef}>0</span>, Z: <span ref={playerZRef}>0</span>
                             </span>
                         </div>
                         <div className="flex items-center justify-between">
                             <div className="text-white/40 uppercase text-[10px] shrink-0 mr-2">Camera</div>
                             <span className="text-white tabular-nums text-[10px]">
-                                {world.camX}, {world.camY}, {world.camZ}
+                                <span ref={camXRef}>0</span>, <span ref={camYRef}>0</span>, <span ref={camZRef}>0</span>
                             </span>
                         </div>
                     </>
@@ -86,30 +148,28 @@ const DebugDisplay: React.FC<DebugDisplayProps> = React.memo(({ debugMode }) => 
                     <div>
                         <div className="text-white/40 uppercase text-[10px] mb-0.5">Renderer</div>
                         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                            <div>Calls: <span className="text-white">{render.drawCalls}</span></div>
-                            <div>Tris: <span className="text-white">{render.triangles}</span></div>
-                            <div>Shaders: <span className="text-white">{render.shaderPrograms}</span></div>
-                            <div>Recomp: <span className={render.shaderRecompiles > 0 ? 'text-yellow-400 font-bold' : 'text-white'}>{render.shaderRecompiles}</span></div>
-                            <div>Tex: <span className="text-white">{render.textures}</span></div>
-                            <div>Geo: <span className="text-white">{render.geometries}</span></div>
+                            <div>Calls: <span ref={drawCallsRef} className="text-white">0</span></div>
+                            <div>Tris: <span ref={trisRef} className="text-white">0</span></div>
+                            <div>Shaders: <span ref={shadersRef} className="text-white">0</span></div>
+                            <div>Recomp: <span ref={recompRef} className="text-white">0</span></div>
+                            <div>Tex: <span ref={texRef} className="text-white">0</span></div>
+                            <div>Geo: <span ref={geoRef} className="text-white">0</span></div>
                         </div>
                     </div>
 
                     <div className="mt-1 flex items-center justify-between">
                         <span className="text-white/40">GC</span>
-                        <span className={gc.timeSinceDetection < 2000 ? 'text-yellow-400 font-bold' : 'text-white/20'}>
-                            {gc.timeSinceDetection < 2000 ? `⚠️ ~${gc.droppedMB}MB freed` : '—'}
-                        </span>
+                        <span ref={gcAlertRef} className="text-white/20">—</span>
                     </div>
 
                     {parseFloat(String(gc.heapUsedMB)) > 0 && (
                         <div>
                             <div className="text-white/40 uppercase text-[10px] mb-0.5">World / Memory</div>
                             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                                <div>Enemies: <span className="text-white">{world.enemies}</span></div>
-                                <div>Obj: <span className="text-white">{world.objects}</span></div>
-                                <div>Heap: <span className="text-white">{gc.heapUsedMB}MB</span></div>
-                                <div className="text-white/40">/ {gc.heapLimitMB}MB</div>
+                                <div>Enemies: <span ref={enemiesRef} className="text-white">0</span></div>
+                                <div>Obj: <span ref={objectsRef} className="text-white">0</span></div>
+                                <div>Heap: <span ref={heapRef} className="text-white">0</span>MB</div>
+                                <div ref={heapLimitRef} className="text-white/40">/ 0MB</div>
                             </div>
                         </div>
                     )}

@@ -12,7 +12,7 @@ interface TouchControllerProps {
 const STICK_RADIUS = 60;
 const MAX_DIST = 50;
 
-const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, onOpenMap }) => {
+const TouchController: React.FC<TouchControllerProps> = React.memo(({ inputState, onPause, onOpenMap }) => {
     const { isLandscapeMode } = useOrientation();
     const hudVisible = useHudStore(s => s.hudVisible);
 
@@ -34,7 +34,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
 
     const handleAction = useCallback((action: 'r' | 'space' | 'e' | 'f', pressed: boolean) => {
         const keyMap = { r: 'r', space: ' ', e: 'e', f: 'f' };
-        const key = keyMap[action];
+        const key = (keyMap as any)[action];
 
         if (action === 'r') inputState.r = pressed;
         if (action === 'space') inputState.space = pressed;
@@ -162,9 +162,6 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
 
     return (
         <div className={`absolute inset-0 pointer-events-none z-[40] overflow-hidden select-none touch-none transition-opacity duration-1000 ${hudVisible ? 'opacity-100' : 'opacity-0'}`}>
-            {/* Full-screen joystick capture layer — sits BELOW GameHUD (z-50).
-                pointer-events-auto only for touch, so joystick gestures anywhere work.
-                GameHUD renders at z-[60]+ as a sibling in App.tsx and sits above this. */}
             <div
                 className="absolute inset-0 pointer-events-auto"
                 style={{ touchAction: 'none' }}
@@ -173,7 +170,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 onTouchEnd={handleTouchEnd}
                 onTouchCancel={handleTouchEnd}
             >
-            {/* VÄNSTER JOYSTICK (Renderas alltid men döljs via CSS) */}
+            {/* VÄNSTER JOYSTICK */}
             <div
                 ref={leftStickContainerRef}
                 className="absolute rounded-full border-2 border-white/20 bg-white/5 pointer-events-none will-change-transform"
@@ -199,7 +196,7 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                 />
             </div>
 
-            {/* Action Buttons - Statiska, triggar inga re-renders förutom vid tryck */}
+            {/* Action Buttons */}
             <div className={`absolute pointer-events-auto flex z-40 pr-safe pb-safe ${isLandscapeMode ? 'bottom-2 right-4 flex-col gap-2' : 'bottom-24 right-4 flex-col gap-2'}`}>
                 <div className="flex justify-end">
                     <button data-action="f" className="w-12 h-12 md:w-16 md:h-16 rounded-full border border-white/20 bg-black/40 backdrop-blur-sm flex items-center justify-center p-2 opacity-60 active:opacity-100 transition-opacity" onTouchStart={handleActionTouchStart} onTouchEnd={handleActionTouchEnd}>
@@ -215,9 +212,9 @@ const TouchController: React.FC<TouchControllerProps> = ({ inputState, onPause, 
                     </button>
                 </div>
             </div>
-            </div>  {/* joystick capture layer */}
+            </div>
         </div>
     );
-};
+});
 
 export default TouchController;

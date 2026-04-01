@@ -76,7 +76,14 @@ export class SpatialGrid {
 
     addObstacle(obstacle: Obstacle) {
         const pos = obstacle.position;
-        const radius = obstacle.radius || 2.0;
+        
+        // VINTERDÖD HIGH-PERFORMANCE: Pre-resolve properties for the 60FPS loops
+        if (!obstacle.radius) obstacle.radius = 2.0;
+        if (!obstacle.materialId) {
+            obstacle.materialId = (obstacle.mesh?.userData?.material as any) || 'concrete';
+        }
+
+        const radius = obstacle.radius;
 
         this.computeHashesInRange(pos.x, pos.z, radius);
         for (let i = 0; i < this._hashCount; i++) {

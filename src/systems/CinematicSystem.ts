@@ -17,7 +17,8 @@ const _animState = {
     rollStartTime: 0, staminaRatio: 1.0,
     isSpeaking: false, isThinking: false, isIdleLong: false,
     isSwimming: false, isWading: false,
-    seed: 0
+    seed: 0,
+    renderTime: 0
 };
 
 export class CinematicSystem implements System {
@@ -93,7 +94,7 @@ export class CinematicSystem implements System {
         cinematic.dialogueId = dialogueId;
         cinematic.lineIndex = -1;
 
-        const currentNow = performance.now();
+        const currentNow = this.state.renderTime;
         cinematic.startTime = currentNow;
         cinematic.lastFrameTime = currentNow;
         cinematic.lastVoiceTime = 0;
@@ -114,7 +115,7 @@ export class CinematicSystem implements System {
 
     public playLine(index: number) {
         const cinematic = this.cinematicRef.current;
-        const currentNow = performance.now();
+        const currentNow = this.state.renderTime;
 
         // 1. SKYDD: Stoppar loopen om vi når slutet
         if (index >= cinematic.script.length) {
@@ -173,7 +174,7 @@ export class CinematicSystem implements System {
 
         cinematic.active = false;
         cinematic.isClosing = true;
-        cinematic.closeStartTime = performance.now();
+        cinematic.closeStartTime = this.state.renderTime;
 
         this.camera.setCinematic(false);
 
@@ -196,14 +197,14 @@ export class CinematicSystem implements System {
         this.callbacks.endCinematic();
     }
 
-    public update(context: any, dt: number, engineNow: number) {
+    public update(context: any, renderDelta: number, renderTime: number) {
         const cinematic = this.cinematicRef.current;
         if (!cinematic.active && !cinematic.isClosing) return;
 
-        const now = performance.now();
+        const now = renderTime;
         const totalElapsed = now - cinematic.startTime;
 
-        const cinematicDt = cinematic.lastFrameTime ? (now - cinematic.lastFrameTime) / 1000 : 0.016;
+        // Use the standardized renderDelta for camera and animation smoothing
         cinematic.lastFrameTime = now;
 
         const playerPos = _v2;
@@ -294,8 +295,9 @@ export class CinematicSystem implements System {
                 _animState.isSpeaking = isSpeaking;
                 _animState.isThinking = isThinking;
                 _animState.seed = mesh.userData.seed || 0;
+                _animState.renderTime = now;
 
-                PlayerAnimator.update(body as THREE.Mesh, _animState, now, cinematicDt);
+                PlayerAnimator.update(body as THREE.Mesh, _animState, now, renderDelta);
             }
         }
 

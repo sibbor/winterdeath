@@ -165,6 +165,7 @@ export interface Enemy {
     bossId: number;          // Link to the BOSSES content data (-1 if not a boss)
     dead: boolean;           // Logic-level removal flag
     hitTime: number;         // Timestamp of the most recent damage event
+    hitRenderTime: number;   // Visual timestamp of the most recent damage event
     lastStepTime: number;    // Timestamp of the last footstep sound
     lastTackleTime: number;  // Timestamp of the last physical collision with the player
     lastVehicleHit: number;  // Timestamp of the last vehicle collision

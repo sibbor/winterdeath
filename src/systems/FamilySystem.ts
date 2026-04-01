@@ -25,7 +25,8 @@ const _animState = {
     isSwimming: false,
     isDead: false,
     deathStartTime: 0,
-    seed: 0
+    seed: 0,
+    renderTime: 0
 };
 
 export class FamilySystem implements System {
@@ -138,6 +139,7 @@ export class FamilySystem implements System {
                     _animState.isSwimming = false;
                     _animState.isWading = false;
                     _animState.isIdleLong = false;
+                    _animState.renderTime = state.renderTime;
                     PlayerAnimator.update(body, _animState, now, delta);
                 }
 
@@ -302,6 +304,7 @@ export class FamilySystem implements System {
                     _animState.isWading = false;
                 }
 
+                _animState.renderTime = state.renderTime;
                 PlayerAnimator.update(body, _animState, now, delta);
             }
         }

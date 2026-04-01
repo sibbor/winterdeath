@@ -37,7 +37,7 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
     const briefingData = useMemo(() => {
         const sectorName = t(sectorTheme.name);
         const sectorBriefing = t(sectorTheme.briefing);
-        const bossName = t(boss.name);
+        const bossName = boss ? t(boss.name) : '';
 
         return { map: sectorName, boss: bossName, briefing: sectorBriefing };
     }, [selectedSectorIndex, sectorTheme, boss]);
@@ -191,28 +191,39 @@ const ScreenSectorOverview: React.FC<ScreenSectorOverviewProps> = ({ currentSect
                                 {t(sectorTheme.name)}
                             </h2>
                             {/* Stats Row */}
-                            <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
-                                <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total}</span></span>
-                                <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
-                                <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total}</span></span>
-                                <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
-                                <span>{t('ui.log_poi')}: <span className="text-white">{pois.found}/{pois.total}</span></span>
-                            </div>
+                            {(collectibles.total > 0 || clues.total > 0 || pois.total > 0) && (
+                                <div className={`flex flex-wrap gap-2 md:gap-4 ${isMobileDevice ? 'text-xs' : 'text-lg'} font-bold font-mono text-gray-400 mt-1`}>
+                                    {collectibles.total > 0 && <span>{t('ui.log_collectibles')}: <span className="text-white">{collectibles.found}/{collectibles.total}</span></span>}
+                                    {clues.total > 0 && (
+                                        <>
+                                            <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
+                                            <span>{t('ui.log_clues')}: <span className="text-white">{clues.found}/{clues.total}</span></span>
+                                        </>
+                                    )}
+                                    {pois.total > 0 && (
+                                        <>
+                                            <span className={`${isMobileDevice ? 'hidden' : 'text-gray-600'}`}>|</span>
+                                            <span>{t('ui.log_poi')}: <span className="text-white">{pois.found}/{pois.total}</span></span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Boss & Family Status Check */}
-                        {selectedSectorIndex < 4 && (
+                        {boss && (
                             <div className="grid grid-cols-2 md:flex-row gap-2 md:gap-4 items-start">
-
                                 <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${bossStatusColor}`}>
                                     {t('ui.boss_status')}: {t(bossStatusKey)}
                                 </div>
 
-                                <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
-                                    {t('ui.family_member')}: {isRescued
-                                        ? t(FAMILY_MEMBERS[selectedSectorIndex]?.name)
-                                        : t(familyStatusKey)}
-                                </div>
+                                {sectorTheme.familyMemberId !== undefined && (
+                                    <div className={`${isMobileDevice ? 'px-2 py-1 text-[10px]' : 'px-4 py-2 text-sm'} font-bold uppercase border tracking-wider text-center md:min-w-[180px] whitespace-nowrap ${familyStatusColor}`}>
+                                        {t('ui.family_member')}: {isRescued
+                                            ? t(FAMILY_MEMBERS[sectorTheme.familyMemberId]?.name)
+                                            : t(familyStatusKey)}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

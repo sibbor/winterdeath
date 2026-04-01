@@ -42,7 +42,7 @@ export class PlayerStatsSystem implements System {
         if (state.hp > 0 && state.hp < state.maxHp * 0.25) {
             if (now - state.lastAdrenalinePatchTime > (perk.cooldown || 60000)) {
                 state.lastAdrenalinePatchTime = now;
-                
+
                 // Add the absolute buff
                 state.statusEffects[perk.id] = {
                     duration: perk.duration || 3000,
@@ -53,7 +53,7 @@ export class PlayerStatsSystem implements System {
                 };
 
                 soundManager.playEffect('adrenaline_boost');
-                
+
                 // Discovery
                 if (!state.discoveredPerks.includes(perk.id)) {
                     state.discoveredPerks.push(perk.id);
@@ -79,7 +79,7 @@ export class PlayerStatsSystem implements System {
             if (!member.following) continue;
 
             const name = member.name.toLowerCase();
-            
+
             if (name === 'loke') {
                 this.cachedFamilyMultipliers.reloadTime *= (PERKS[StatusEffectType.LOKE_RELOAD]?.intensity || 0.8);
                 this.cachedPassives[pIdx++] = StatusEffectType.LOKE_RELOAD;
@@ -128,7 +128,7 @@ export class PlayerStatsSystem implements System {
             if (!effect || effect.duration <= 0) continue;
 
             effect.duration -= dt * 1000;
-            
+
             const perk = PERKS[type];
             if (perk) {
                 if (perk.category === PerkCategory.BUFF) {
@@ -170,7 +170,7 @@ export class PlayerStatsSystem implements System {
                 if (dmg > 0) {
                     const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN :
                         (type === StatusEffectType.BLEEDING ? DamageType.BLEED :
-                        (type === StatusEffectType.ELECTRIFIED ? DamageType.ELECTRIC : DamageType.PHYSICAL));
+                            (type === StatusEffectType.ELECTRIFIED ? DamageType.ELECTRIC : DamageType.PHYSICAL));
 
                     // Track source if available
                     const attacker = effect.sourceType ? { type: effect.sourceType, isBoss: effect.sourceType === 'Boss' } : null;
@@ -212,14 +212,14 @@ export class PlayerStatsSystem implements System {
         specificAttackType?: string // e.g. "BITTEN" or "HIT"
     ) {
         const state = session.state;
-        const now = performance.now();
+        const now = state.simTime;
 
         if (state.isDead || state.sectorState?.isInvincible) return;
 
         // --- NEW: TACTICAL IMMUNITY BUFFS ---
         const reflexShield = state.statusEffects[StatusEffectType.REFLEX_SHIELD];
         const adrenalinePatch = state.statusEffects[StatusEffectType.ADRENALINE_PATCH];
-        
+
         if ((reflexShield && reflexShield.duration > 0) || (adrenalinePatch && adrenalinePatch.duration > 0)) {
             // Visual feedback for negated hit? 
             // (Standard invulnerableCheck below handles I-frames, but this is absolute)

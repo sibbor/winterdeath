@@ -74,6 +74,7 @@ export class EnemySystem implements System {
             EnemyManager.update(
                 dt,
                 now,
+                state.renderTime,
                 session.playerPos || this.playerGroup.position,
                 state.enemies,
                 state.collisionGrid,

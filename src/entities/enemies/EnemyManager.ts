@@ -11,6 +11,7 @@ import { CorpseRenderer } from '../../core/renderers/CorpseRenderer';
 import { AshRenderer } from '../../core/renderers/AshRenderer';
 import { FXSystem } from '../../systems/FXSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
+import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WeaponType } from '../../content/weapons';
 import { NoiseType } from './EnemyTypes';
 
@@ -187,6 +188,7 @@ export const EnemyManager = {
         e.deathVel.set(0, 0, 0);
         e.deathTimer = 0;
         e.bloodSpawned = false;
+        e.hitRenderTime = 0;
         e.lastDamageType = 'standard';
         e._accumulatedDamage = 0;
         e._lastDamageTextTime = 0;
@@ -220,12 +222,13 @@ export const EnemyManager = {
         e.mesh.userData.electrocuted = false;
         e.mesh.userData.ashSpawned = false;
         e.mesh.userData.ashPermanent = false;
-        e.mesh.userData.baseY = undefined;
         e.mesh.userData.isFlashing = false;
+        e.mesh.userData.isRagdolling = false;
         e.ashPile = undefined;
 
-        if (!e.mesh.userData.spinVel) e.mesh.userData.spinVel = new THREE.Vector3();
-        e.mesh.userData.spinVel.set(0, 0, 0);
+        // --- ZERO-GC: Direct access to pre-allocated vectors ---
+        (e.mesh.userData.spinVel as THREE.Vector3).set(0, 0, 0);
+        (e.mesh.userData.hitDir as THREE.Vector3).set(0, 0, 0);
 
         if (e.indicatorRing) {
             e.indicatorRing.visible = false;
@@ -314,8 +317,8 @@ export const EnemyManager = {
         }
     },
 
-    processDeathAnimation: (e: Enemy, delta: number, now: number, callbacks: any) => {
-        const age = now - e.deathTimer;
+    processDeathAnimation: (e: Enemy, simDelta: number, simTime: number, renderTime: number, callbacks: any) => {
+        const age = simTime - e.deathTimer;
 
         switch (e.deathState) {
             case EnemyDeathState.EXPLODED:
@@ -339,7 +342,7 @@ export const EnemyManager = {
                 if (!e.mesh.userData.ashSpawned) {
                     e.mesh.userData.ashSpawned = true;
                     if (ashRenderer) {
-                        ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale, e.widthScale, e.color, now, 1500);
+                        ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale, e.widthScale, e.color, simTime, 1500);
                     }
                 }
 
@@ -385,7 +388,7 @@ export const EnemyManager = {
                     e.mesh.rotation.z = THREE.MathUtils.lerp(0, e.mesh.userData.targetRotZ, fallProgress);
                     e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.userData.deathPosY, 0.2, fallProgress);
 
-                    const pulse = Math.sin(now * 0.05) * 0.5 + 0.5;
+                    const pulse = Math.sin(renderTime * 0.05) * 0.5 + 0.5;
                     _color.copy(_cyan).lerp(_white, Math.random() * 0.3);
                     applyElectrifiedGlow(e.mesh, _color, 1.0 + pulse * 4.0);
 
@@ -417,8 +420,8 @@ export const EnemyManager = {
             case EnemyDeathState.GENERIC:
             case EnemyDeathState.FALL:
             default:
-                e.deathVel.y -= 35 * delta;
-                e.mesh.position.addScaledVector(e.deathVel, delta);
+                e.deathVel.y -= 35 * simDelta;
+                e.mesh.position.addScaledVector(e.deathVel, simDelta);
                 if (e.mesh.position.y <= 0.2) {
                     e.mesh.position.y = 0.2;
                     e.deathVel.set(0, 0, 0);
@@ -428,7 +431,7 @@ export const EnemyManager = {
                 e.mesh.rotation.x += (targetRot - e.mesh.rotation.x) * 0.12;
 
                 if (e.mesh.userData.spinDir) {
-                    e.mesh.rotation.y += e.mesh.userData.spinDir * delta;
+                    e.mesh.rotation.y += e.mesh.userData.spinDir * simDelta;
                     e.mesh.userData.spinDir *= 0.9;
                 }
 
@@ -441,7 +444,7 @@ export const EnemyManager = {
         }
     },
 
-    applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, now: number) => {
+    applyShove: (playerGroup: THREE.Group, radiusSq: number, state: any, scene: THREE.Scene, simTime: number) => {
         if (!state.collisionGrid) return;
 
         let shovedAnyone = false;
@@ -485,7 +488,6 @@ export const EnemyManager = {
 
                     if (!enemy.isBoss) {
                         enemy.mesh.userData.isRagdolling = true;
-                        if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
                         const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
                         sVel.set(
                             (Math.random() - 0.5) * 15,
@@ -504,15 +506,15 @@ export const EnemyManager = {
         }
     },
 
-    applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
-        const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (now - enemy.lastTackleTime > 300);
+    applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, simTime: number) => {
+        const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (simTime - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
         if (!isDashing) {
             const push = (enemy.isBoss ? 1.0 : 4.0) / (enemy.originalScale * enemy.originalScale);
             _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize().multiplyScalar(push);
             enemy.knockbackVel.add(_v2);
-            enemy.lastTackleTime = now;
+            enemy.lastTackleTime = simTime;
             return;
         }
 
@@ -537,7 +539,7 @@ export const EnemyManager = {
 
         enemy.knockbackVel.set(_v2.x * force, lift, _v2.z * force);
         enemy.state = AIState.IDLE;
-        enemy.lastTackleTime = now;
+        enemy.lastTackleTime = simTime;
         enemy.stunTimer = 2.0;
 
         // --- DASHING TACKLE DAMAGE ---
@@ -557,7 +559,6 @@ export const EnemyManager = {
 
         if (!enemy.isBoss) {
             enemy.mesh.userData.isRagdolling = true;
-            if (!enemy.mesh.userData.spinVel) enemy.mesh.userData.spinVel = new THREE.Vector3();
             const sVel = enemy.mesh.userData.spinVel as THREE.Vector3;
             sVel.set(
                 (Math.random() - 0.5) * 25,
@@ -576,7 +577,7 @@ export const EnemyManager = {
         vehicleDef: any,
         state: any,
         session: any,
-        now: number
+        simTime: number
     ): boolean => {
         const speedKmh = speedMS * 3.6;
         const mass = e.originalScale * e.widthScale;
@@ -585,7 +586,8 @@ export const EnemyManager = {
         const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;
 
         e.hp -= baseDamage;
-        e.hitTime = now;
+        e.hitTime = simTime;
+        e.hitRenderTime = (session.state as any).renderTime || 0;
 
         const scene = session.engine.scene;
 
@@ -641,14 +643,14 @@ export const EnemyManager = {
             _v3.copy(knockDir).multiplyScalar(speedMS);
             _v4.copy(e.mesh.position).addScaledVector(knockDir, -1.0);
 
-            EnemyManager.applyKnockback(e, _v4, _v3, true, state, scene, now);
+            EnemyManager.applyKnockback(e, _v4, _v3, true, state, scene, simTime);
 
             e.slowTimer = 0.5;
             return false;
         }
     },
 
-    update: (delta: number, now: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, applyDamage?: any, water?: WaterSystem) => {
+    update: (simDelta: number, simTime: number, renderTime: number, playerPos: THREE.Vector3, enemies: Enemy[], collisionGrid: SpatialGrid, isDead: boolean, onPlayerHit: any, spawnPart: any, spawnDecal: any, applyDamage: any, water: WaterSystem | null) => {
         collisionGrid.updateEnemyGrid(enemies);
         _syncList.length = 0;
 
@@ -657,23 +659,23 @@ export const EnemyManager = {
         _aiContext.spawnDecal = spawnDecal;
         _aiContext.applyDamage = applyDamage;
 
-        const engine = (window as any).WinterEngineInstance;
-        const camera = engine?.camera;
-        const cameraPos = camera?.threeCamera?.position;
+        const engine = WinterEngine.getInstance();
+        const camera = engine.camera;
+        const cameraPos = camera.threeCamera.position;
 
         // --- 1. CRITICAL FIX: Dedicated camera vector to avoid pointer corruption ---
-        const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera?.threeCamera?.quaternion || _dummyQuat);
+        const cameraDir = _camDir.set(0, 0, -1).applyQuaternion(camera.threeCamera.quaternion);
 
         const len = enemies.length;
         for (let i = 0; i < len; i++) {
             const e = enemies[i];
 
             if (e.deathState === EnemyDeathState.ALIVE) {
-                EnemyAI.updateEnemy(e, now, delta, playerPos, collisionGrid, isDead, _aiContext, water);
+                EnemyAI.updateEnemy(e, simTime, renderTime, simDelta, playerPos, collisionGrid, isDead, _aiContext, water);
             }
 
             if (e.deathState !== EnemyDeathState.ALIVE && e.deathState !== EnemyDeathState.DEAD) {
-                EnemyManager.processDeathAnimation(e, delta, now, _aiContext);
+                EnemyManager.processDeathAnimation(e, simDelta, simTime, renderTime, _aiContext);
             }
 
             const deathState = e.deathState;
@@ -712,7 +714,7 @@ export const EnemyManager = {
 
             if (deathState === EnemyDeathState.ALIVE) {
                 if (e.isBoss && e.mesh && e.color !== undefined) {
-                    const timeSinceHit = now - e.hitTime;
+                    const timeSinceHit = simTime - e.hitTime;
                     if (timeSinceHit < 100) {
                         if (!e.mesh.userData.isFlashing) {
                             e.mesh.userData.isFlashing = true;
@@ -753,7 +755,7 @@ export const EnemyManager = {
                         }
                     }
                 } else if (!e.isBoss && e.color !== undefined) {
-                    const timeSinceHit = now - e.hitTime;
+                    const timeSinceHit = simTime - e.hitTime;
                     if (timeSinceHit < 100) {
                         if (!e.mesh.userData.isFlashing) {
                             e.mesh.userData.isFlashing = true;
@@ -768,25 +770,25 @@ export const EnemyManager = {
                     } else {
                         if (e.mesh.userData.isFlashing) {
                             e.mesh.userData.isFlashing = false;
-                            e.color = e.mesh.userData.originalColor || 0xffffff;
+                            e.color = e.mesh.userData.originalColor as number;
                         }
                     }
                 }
             }
         }
 
-        if (zombieRenderer) zombieRenderer.sync(_syncList, now);
-        if (ashRenderer) ashRenderer.update(Math.max(now, 1));
+        if (zombieRenderer) zombieRenderer.sync(_syncList, simTime);
+        if (ashRenderer) ashRenderer.update(Math.max(simTime, 1));
     },
 
-    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], now: number, state: any, callbacks: any, delta: number = 1 / 60) => {
+    cleanupDeadEnemies: (scene: THREE.Scene, enemies: Enemy[], simTime: number, state: any, callbacks: any, simDelta: number = 1 / 60) => {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
 
             if (e.deathState === EnemyDeathState.ALIVE) continue;
 
             if (!e.deathTimer) {
-                e.deathTimer = now;
+                e.deathTimer = simTime;
                 e.mesh.userData.deathPx = e.mesh.position.x;
                 e.mesh.userData.deathPy = e.mesh.position.y;
                 e.mesh.userData.deathPz = e.mesh.position.z;

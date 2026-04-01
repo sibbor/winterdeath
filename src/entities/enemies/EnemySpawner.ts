@@ -146,6 +146,7 @@ export const EnemySpawner = {
             bossId: -1,
             dead: false,
             hitTime: 0,
+            hitRenderTime: 0,
             lastStepTime: 0,
             lastTackleTime: 0,
             lastVehicleHit: 0,
@@ -203,6 +204,18 @@ export const EnemySpawner = {
         const w = enemy.widthScale;
         g.scale.set(s * w, s, s * w);
         g.userData.entity = enemy;
+
+        // --- ZERO-GC PRE-ALLOCATION (VINTERDÖD) ---
+        // Lock these properties into the userData object immediately to avoid lazy allocs in EnemyManager
+        g.userData.spinVel = new THREE.Vector3();
+        g.userData.hitDir = new THREE.Vector3();
+        g.userData.isFlashing = false;
+        g.userData.exploded = false;
+        g.userData.gibbed = false;
+        g.userData.electrocuted = false;
+        g.userData.ashSpawned = false;
+        g.userData.ashPermanent = false;
+        g.userData.isRagdolling = false;
 
         const ring = new THREE.Mesh(
             GEOMETRY.blastRadius,
@@ -272,6 +285,7 @@ export const EnemySpawner = {
             bossId: bossData.id,
             dead: false,
             hitTime: 0,
+            hitRenderTime: 0,
             lastStepTime: 0,
             lastTackleTime: 0,
             lastVehicleHit: 0,

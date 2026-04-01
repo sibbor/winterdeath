@@ -115,6 +115,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
     }, [isIdle]);
 
     const setupCounterRef = useRef(0);
+    const campStateRef = useRef<any>(null);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -128,6 +129,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         // --- ENGINE & RENDERER ---
         engine.updateSettings(graphics);
+        engine.clearUpdateContext(); // HARSH RESET: Prevent state leakage during mount
         engine.mount(container);
         engineRef.current = engine;
 
@@ -136,6 +138,29 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
 
         // Reset & Setup Scene via CampWorld
         const setup = async () => {
+            if (currentSetupId !== setupCounterRef.current) return;
+            
+            // ARCHITECTURAL UNIFICATION: Provide a minimal RuntimeState for the Camp
+            // This allows the Engine to use the same Dual-Clock logic everywhere.
+            const campState: any = {
+                simTime: 0,
+                renderTime: 0,
+                lastSimDelta: 0.016,
+                lastRenderDelta: 0.016,
+                playerPos: camera.threeCamera.position, // Center of interaction
+                dynamicLights: [],
+                isRolling: false,
+                isDead: false,
+                isRushing: false,
+                staminaRatio: 1.0,
+                hp: 100,
+                maxHp: 100
+            };
+            campStateRef.current = campState;
+            engine.onUpdateContext = _campCtx; // IMMEDIATE INJECTION: Don't wait for the first update tick
+            _campCtx.state = campState;
+
+            engine.resetTime();
             const { interactables, outlines, envState } = await CampWorld.build(scene, textures, weather);
 
             // Race condition check: If another setup started, abort this one
@@ -292,7 +317,15 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             const outlineKeys = sceneOutlineKeysRef.current;
 
             // Zero-GC for Camp context
+            const campState = campStateRef.current;
+            if (campState) {
+                campState.lastSimDelta = dt;
+                campState.lastRenderDelta = dt;
+                campState.playerPos = camera.threeCamera.position;
+            }
+
             _campCtx.scene = scene;
+            _campCtx.state = campState;
             _campCtx.camera = camera.threeCamera;
             _campCtx.container = container;
             _campCtx.envState = envStateRef.current;
@@ -421,6 +454,7 @@ const Camp: React.FC<CampProps> = ({ stats, currentLoadout, onSaveStats, current
             window.removeEventListener('click', onCL);
             window.removeEventListener('touchstart', onTS);
             window.removeEventListener('resize', onResize);
+            if (engineRef.current) engineRef.current.clearUpdateContext();
         };
     }, [isRunning, stats, currentLoadout, currentSector]);
 

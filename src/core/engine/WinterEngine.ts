@@ -60,9 +60,25 @@ export class WinterEngine {
     private isRunning: boolean = false;
     private container: HTMLElement | null = null;
 
+    /** Engine's global visual clock (Milliseconds). Always ticks regardless of pause state. */
+    public renderTime: number = 0;
+    /** Engine's simulation clock (Milliseconds). Freezes during soft pause or cinematics. */
+    public simTime: number = 0;
+
     // Callbacks
     public onUpdate: ((dt: number) => void) | null = null;
     public onRender: (() => void) | null = null;
+
+    /**
+     * Resets the engine context and timing to prevent 'state leakage' between the Camp
+     * and high-action Gameplay Sessions. Essential for Zero-GC shader synchronization.
+     */
+    public clearUpdateContext() {
+        this.onUpdateContext = null;
+        this.lastTime = performance.now();
+        this.renderTime = 0;
+        this.simTime = 0;
+    }
 
     // VINTERDÖD FIX: Hard Paused stänger av allt (även miljö).
     public isSoftPaused: boolean = false;
@@ -87,11 +103,11 @@ export class WinterEngine {
         'weather',
         'fog',
         'water',
-        'light',
+        'light_system',
         'cinematic',
-        //'damage_number_system',
-        //'player_combat',
-        //'player_movement'
+        'camp_effects',
+        'family_anim',
+        'camp_chatter'
     ]);
 
     // --- CACHED SCENE REFERENCES ---
@@ -440,33 +456,31 @@ export class WinterEngine {
 
         const now = performance.now();
         const frameStart = now;
-        let dt = (now - this.lastTime) / 1000;
-        if (dt > 0.05) dt = 0.05;
+        const delta = Math.min(0.05, (now - this.lastTime) / 1000);
         this.lastTime = now;
+
+        // Unified Clock Ticking (Milliseconds)
+        this.renderTime += delta * 1000;
+        this.simTime += (this.isSoftPaused ? 0 : delta * 1000);
 
         const monitor = PerformanceMonitor.getInstance();
         monitor.startFrame();
 
         // 1. Logic Update (Physics, Movement, Systems)
-        // Vi skickar in original-dt till onUpdate, GameSessionLoop kommer själv frysta sin delta vid behov
+        // We provide the standardized delta (seconds) and global clocks (milliseconds).
         monitor.begin('logic');
-        if (this.onUpdate) this.onUpdate(dt);
+        if (this.onUpdate) this.onUpdate(delta);
         monitor.end('logic');
 
         // 2. High-Performance System Logic (Unified Registry)
-        if (!this.isSimulationPaused) {
-            // VINTERDÖD FIX: Om kontexten har en egen simuleringsklocka (delta-ackumulering), 
-            // använd den istället för realtids-klockan för alla motorsystem.
-            let systemTime = now;
-            if (this.onUpdateContext?.state?.accumulatedTime !== undefined) {
-                systemTime = this.onUpdateContext.state.accumulatedTime;
-            }
-            this.updateSystems(this.onUpdateContext, dt, systemTime);
+        if (!this.isSimulationPaused && (this.onUpdateContext || this._systemArray.length > 0)) {
+            const context = this.onUpdateContext || { scene: this.scene, state: {} };
+            this.updateSystems(context, delta);
         }
 
         // 3. Camera Update
         monitor.begin('camera');
-        this.camera.update(dt, now);
+        this.camera.update(delta, this.renderTime);
         monitor.end('camera');
 
         // 4. Render Pass
@@ -486,6 +500,13 @@ export class WinterEngine {
 
         const totalTime = performance.now() - frameStart;
         monitor.printIfHeavy('Game Engine Performance', totalTime, 50);
+    };
+
+    /**
+     * Resets the update loop timing to prevent large dt spikes after window refocus.
+     */
+    public resetTime = () => {
+        this.lastTime = performance.now();
     };
 
     public getSettings(): GameSettings {
@@ -521,26 +542,30 @@ export class WinterEngine {
         return this._systemArray;
     }
 
-    public updateSystems(context: any, dt: number, now: number): void {
-        if (!context) return;
+    /**
+     * Unified system update loop (Zero-GC)
+     * Provision standardized timing: env systems get renderTime; simulation systems get simTime.
+     */
+    private updateSystems(context: any, delta: number): void {
         const monitor = PerformanceMonitor.getInstance();
         const systems = this._systemArray;
         const len = systems.length;
 
         for (let i = 0; i < len; i++) {
             const sys = systems[i];
-
             if (sys.enabled === false) continue;
 
-            // VINTERDÖD FIX: Om Soft Paused (Cinematic), hoppa över 
-            // fiender och strid, MEN tillåt miljösystem (wind, weather)
-            if (this.isSoftPaused && !this._envSystemIds.has(sys.id)) {
-                continue;
-            }
-
             const id = sys.id;
+            const isEnv = this._envSystemIds.has(id);
+
+            // Cinematic Skip Rule: Skip heavy emitters/AI while keeping atmosphere alive.
+            if (this.isSoftPaused && !isEnv) continue;
+
+            // Use engine-owned clocks for perfect sync.
+            const effectiveNow = (isEnv || this.isSoftPaused) ? this.renderTime : this.simTime;
+
             monitor.begin(id);
-            sys.update(context, dt, now);
+            sys.update(context, delta, effectiveNow);
             monitor.end(id);
         }
     }

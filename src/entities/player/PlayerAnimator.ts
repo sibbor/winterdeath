@@ -17,6 +17,7 @@ export interface AnimState {
     isStrafing?: boolean;
     isBacking?: boolean;
     strafeDirection?: number;
+    renderTime: number;
     seed: number;
 }
 
@@ -74,18 +75,18 @@ export const PlayerAnimator = {
         // Swimming Animation: Heavy lean, deep bobbing
         else if (animState.isSwimming) {
             const swimSpeed = 0.008;
-            bob = Math.sin(now * swimSpeed);
+            bob = Math.sin(animState.renderTime * swimSpeed);
             rotationX = 1.45; // Flatter "swimming" pose
             positionY = -0.7 + bob * 0.15; // Bobbing in water
             scaleY = 1.0 + bob * 0.05;
-            rotationZ = Math.sin(now * swimSpeed * 0.5) * 0.1;
+            rotationZ = Math.sin(animState.renderTime * swimSpeed * 0.5) * 0.1;
         }
 
         // Moving animation
         else if (animState.isMoving) {
             moveSpeed = animState.isRushing ? 0.020 : 0.012;
             wadingFactor = animState.isWading ? 0.6 : 1.0;
-            bob = Math.sin(now * moveSpeed * wadingFactor);
+            bob = Math.sin(animState.renderTime * moveSpeed * wadingFactor);
             const rushFactor = animState.isRushing ? 2.0 : 1.0;
 
             if (animState.isBacking) {
@@ -120,38 +121,38 @@ export const PlayerAnimator = {
         // Stationary behaviors (Breathing, Speaking, Thinking)
         else {
             // Breathing intensity and added subtle bobbing
-            const breathe = Math.sin(now * breatheSpeed + animState.seed);
-            const idleSine = Math.sin(now * 0.002 + animState.seed * 0.5);
+            const breathe = Math.sin(animState.renderTime * breatheSpeed + animState.seed);
+            const idleSine = Math.sin(animState.renderTime * 0.002 + animState.seed * 0.5);
 
             scaleY = 1.0 + (breathe * breatheAmp * 1.5);
             scaleXZ = 1.0 - (breathe * (breatheAmp * 0.75));
 
             // Subtle weight shift/sway
-            rotationZ = Math.sin(now * 0.001 + animState.seed) * 0.03;
+            rotationZ = Math.sin(animState.renderTime * 0.001 + animState.seed) * 0.03;
 
             // Speaking
             if (animState.isSpeaking) {
-                const talkWobble = Math.sin(now * 0.03) * 0.1;
+                const talkWobble = Math.sin(animState.renderTime * 0.03) * 0.1;
                 scaleY += talkWobble + 0.1;
                 scaleXZ -= talkWobble * 0.5;
             }
             // Thinking
             else if (animState.isThinking) {
-                const nod = Math.sin(now * 0.008);
+                const nod = Math.sin(animState.renderTime * 0.008);
                 rotationX = 0.3 + (nod * 0.1); // Pensive lean
-                rotationZ += Math.sin(now * 0.003) * 0.1;
+                rotationZ += Math.sin(animState.renderTime * 0.003) * 0.1;
             }
             // Long Idle Fidgeting (Shivering/Looking around)
             else if (animState.isIdleLong) {
-                const t = now * 0.001;
+                const t = animState.renderTime * 0.001;
                 const shiverTrigger = Math.sin(t * 0.15 + animState.seed);
                 if (shiverTrigger > 0.8) {
-                    rotationZ += Math.sin(now * 0.05) * 0.05;
+                    rotationZ += Math.sin(animState.renderTime * 0.05) * 0.05;
                 }
                 const shiftTrigger = Math.sin(t * 0.6 + animState.seed * 3);
                 if (shiftTrigger > 0.95) {
-                    positionY = Math.sin(now * 0.01) * 0.08;
-                    rotationX += Math.sin(now * 0.005) * 0.05;
+                    positionY = Math.sin(animState.renderTime * 0.01) * 0.08;
+                    rotationX += Math.sin(animState.renderTime * 0.005) * 0.05;
                 }
             }
             // Gentle idle bob
@@ -197,7 +198,7 @@ export const PlayerAnimator = {
 
             // We reuse the `bob` and speed variables calculated in step 2!
             const moveFreq = moveSpeed * wadingFactor;
-            const sway = Math.cos(now * moveFreq);
+            const sway = Math.cos(animState.renderTime * moveFreq);
             const lastSway = mesh.userData.lastSway || 0;
             const threshold = 0.8;
 

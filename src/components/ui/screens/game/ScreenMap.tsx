@@ -1,9 +1,10 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { MapItem, MapItemType } from '../../hud/HudTypes';
 import { t } from '../../../../utils/i18n';
 import { soundManager } from '../../../../utils/audio/SoundManager';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import { useHudStore } from '../../../../hooks/useHudStore';
+import { HudStore } from '../../../../store/HudStore';
 
 interface ScreenMapProps {
     onClose: () => void;
@@ -193,59 +194,93 @@ const MapCanvas = React.memo(({ mapItems, bounds, groupedEntities, setTooltipDat
 
 // ZERO-GC: Live Map Entities perfectly decoupled from the heavy SVG re-renders
 const LiveMapEntities = React.memo(({ bounds }: { bounds: any }) => {
-    const px = useHudStore(s => s.playerPos.x);
-    const pz = useHudStore(s => s.playerPos.z);
-    const fx = useHudStore(s => s.familyPos?.x);
-    const fz = useHudStore(s => s.familyPos?.z);
-    const bx = useHudStore(s => s.bossPos?.x);
-    const bz = useHudStore(s => s.bossPos?.z);
-    const hasFamily = useHudStore(s => !!s.familyPos);
-    const hasBoss = useHudStore(s => !!s.bossPos);
+    const playerRef = useRef<HTMLDivElement>(null);
+    const familyRef = useRef<HTMLDivElement>(null);
+    const bossRef = useRef<HTMLDivElement>(null);
 
-    const posP = getMapPercent(px, pz, bounds);
+    useEffect(() => {
+        return HudStore.subscribe((state) => {
+            // Update Player
+            if (playerRef.current) {
+                const posP = getMapPercent(state.playerPos.x, state.playerPos.z, bounds);
+                playerRef.current.style.left = `${posP.x}%`;
+                playerRef.current.style.top = `${posP.y}%`;
+            }
+
+            // Update Boss
+            if (bossRef.current) {
+                if (state.boss.active && !state.bossDefeated && state.bossPos) {
+                    const posB = getMapPercent(state.bossPos.x, state.bossPos.z, bounds);
+                    bossRef.current.style.display = 'block';
+                    bossRef.current.style.left = `${posB.x}%`;
+                    bossRef.current.style.top = `${posB.y}%`;
+                } else {
+                    bossRef.current.style.display = 'none';
+                }
+            }
+
+            // Update Family
+            if (familyRef.current) {
+                if (state.activeWeapon === 'Radio' && state.familyPos) {
+                    const posF = getMapPercent(state.familyPos.x, state.familyPos.z, bounds);
+                    familyRef.current.style.display = 'block';
+                    familyRef.current.style.left = `${posF.x}%`;
+                    familyRef.current.style.top = `${posF.y}%`;
+                } else {
+                    familyRef.current.style.display = 'none';
+                }
+            }
+        });
+    }, [bounds]);
 
     return (
         <>
             <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none"
-                style={{ left: `${posP.x}%`, top: `${posP.y}%` }}
+                ref={playerRef}
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none will-change-[left,top]"
+                style={{ left: '50%', top: '50%' }}
             >
                 <div className="w-3 h-3 bg-blue-500 rotate-45 border border-white shadow-[0_0_10px_white] scale-125" />
             </div>
 
-            {hasBoss && bx !== undefined && bz !== undefined && (() => {
-                const posB = getMapPercent(bx, bz, bounds);
-                return (
-                    <div
-                        className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
-                        style={{ left: `${posB.x}%`, top: `${posB.y}%` }}
-                    >
-                        <span className="text-2xl">💀</span>
-                    </div>
-                );
-            })()}
+            <div
+                ref={bossRef}
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top]"
+                style={{ display: 'none' }}
+            >
+                <span className="text-2xl">💀</span>
+            </div>
 
-            {hasFamily && fx !== undefined && fz !== undefined && (() => {
-                const posF = getMapPercent(fx, fz, bounds);
-                return (
-                    <div
-                        className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none"
-                        style={{ left: `${posF.x}%`, top: `${posF.y}%` }}
-                    >
-                        <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
-                    </div>
-                );
-            })()}
+            <div
+                ref={familyRef}
+                className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none will-change-[left,top]"
+                style={{ display: 'none' }}
+            >
+                <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+            </div>
         </>
     );
 });
 
 const LivePlayerCoordinates = React.memo(() => {
-    const px = useHudStore(s => s.playerPos.x);
-    const pz = useHudStore(s => s.playerPos.z);
+    const textRef = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        return HudStore.subscribe((state) => {
+            if (textRef.current) {
+                const px = Math.round(state.playerPos.x);
+                const pz = Math.round(state.playerPos.z);
+                const val = `${px}, ${pz}`;
+                if (textRef.current.innerText !== val) {
+                    textRef.current.innerText = val;
+                }
+            }
+        });
+    }, []);
+
     return (
-        <span className="text-sm font-mono text-white font-bold">
-            {`${Math.round(px)}, ${Math.round(pz)}`}
+        <span ref={textRef} className="text-sm font-mono text-white font-bold">
+            0, 0
         </span>
     );
 });

@@ -33,8 +33,6 @@ export interface GameSessionHandle {
 }
 
 // Zero-GC fallback constants
-const EMPTY_ARRAY: any[] = [];
-const EMPTY_OBJECT: any = {};
 const _spawnPosScratch = new THREE.Vector3();
 
 const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props, ref) => {
