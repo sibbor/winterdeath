@@ -42,10 +42,6 @@ export class PlayerMovementSystem implements System {
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
-        const engineRenderer = session.engine.renderer as any;
-        const currentSectorData = engineRenderer._sectorData ?? (session as any).currentSectorData;
-        const env = currentSectorData.environment;
-
         // --- APPLY DYNAMIC MULTIPLIERS ---
         const speedMult = state.multipliers.speed;
         const baseSpeed = state.speed;
