@@ -143,12 +143,14 @@ const App: React.FC = () => {
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     setShowLoadingOverlay(false);
-                    // Sync HUD visibility with loading screen fade-out
+                }, 100);
+
+                setTimeout(() => {
                     const current = HudStore.getState();
                     if (latestStateRef.current.gameState.screen !== GameScreen.PROLOGUE) {
                         HudStore.update({ ...current, hudVisible: true });
                     }
-                }, 500);
+                }, 2000);
             });
         }
     }, []);
