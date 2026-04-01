@@ -15,27 +15,26 @@ interface ScreenLoadingProps {
 const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isInitialBoot, isPrologue, isMobileDevice, isDone }) => {
     const tips = useMemo(() => t('tips') as string[], []);
     const [randomTip, setRandomTip] = useState('');
+    const currentTheme = SECTOR_THEMES[sectorIndex];
 
     // Stable state to prevent text flickering during fade-out
     const [displayInfo, setDisplayInfo] = useState({
-        sectorKey: isCamp ? 'camp' : 'sector_0',
+        sectorKey: isCamp ? 'sectors.camp_name' : (currentTheme?.name || `sectors.sector_${sectorIndex}_name`),
         isCamp: !!isCamp,
         isInitialBoot: !!isInitialBoot,
-        isPrologue: !!isPrologue // Lås fast Prolog-läget under urfasningen
+        isPrologue: !!isPrologue
     });
 
     useEffect(() => {
         if (!isDone) {
-            const currentTheme = SECTOR_THEMES[sectorIndex];
-
             setDisplayInfo({
-                sectorKey: isCamp ? 'camp' : (currentTheme || `sector_${sectorIndex}`),
+                sectorKey: isCamp ? 'sectors.camp_name' : (currentTheme?.name || `sectors.sector_${sectorIndex}_name`),
                 isCamp: !!isCamp,
                 isInitialBoot: !!isInitialBoot,
                 isPrologue: !!isPrologue
             });
         }
-    }, [sectorIndex, isCamp, isInitialBoot, isPrologue, isDone]);
+    }, [sectorIndex, isCamp, isInitialBoot, isPrologue, isDone, currentTheme]);
 
     useEffect(() => {
         if (tips && Array.isArray(tips) && tips.length > 0) {
@@ -55,9 +54,6 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
         }
     }, [isDone]);
 
-    const finalOpacity = isActuallyDone ? 'opacity-0' : 'opacity-100';
-
-    // VINTERDÖD FIX: Vi är i "startläge" om vi antingen bootar ELLER är i Prologen.
     const isStarting = displayInfo.isInitialBoot || displayInfo.isPrologue;
 
     return (
@@ -83,7 +79,7 @@ const ScreenLoading: React.FC<ScreenLoadingProps> = ({ sectorIndex, isCamp, isIn
                                 <span className="block leading-none text-red-600">{t('ui.game_title_2')}</span>
                             </div>
                         ) : (
-                            t(`sectors.${displayInfo.sectorKey}_name`)
+                            t(displayInfo.sectorKey)
                         )}
                     </h2>
                     <div className="h-1 w-32 bg-red-600 rounded-full mt-2" />
