@@ -114,7 +114,7 @@ export const WeaponHandler = {
     // Handle switching weapons via 1-4 keys
     handleSlotSwitch: (state: any, loadout: any, key: string) => {
         // VINTERDÖD FIX: Block input during cinematics
-        if (state.activeVehicle || state.cinematicActive) return;
+        if (state.vehicle.active || state.cinematicActive) return;
         let next: WeaponType | null = null;
         if (key === '1') next = loadout.primary;
         else if (key === '2') next = loadout.secondary;
@@ -149,7 +149,7 @@ export const WeaponHandler = {
     // Handle weapon-related inputs (Scroll to switch, R to reload)
     handleInput: (input: any, state: any, loadout: any, now: number, disableInput: boolean) => {
         // VINTERDÖD FIX: Block input during cinematics
-        if (disableInput || state.activeVehicle || state.cinematicActive) return;
+        if (disableInput || state.vehicle.active || state.cinematicActive) return;
 
         // 1. Optimized Scroll Switching (Zero-GC)
         if (input.scrollDown || input.scrollUp) {
@@ -219,8 +219,7 @@ export const WeaponHandler = {
 
     // --- CORE FIRING LOGIC ---
     handleFiring: (session: any, scene: THREE.Scene, playerGroup: THREE.Group, input: any, state: any, delta: number, now: number, loadout: any, aimCrossMesh: THREE.Group | null, trajectoryLineMesh?: THREE.Mesh | null) => {
-        // VINTERDÖD FIX: Block input during cinematics
-        if (state.activeVehicle || state.cinematicActive) return;
+        if (state.vehicle.active || state.cinematicActive) return;
         if (state.isRolling || state.isReloading) return;
 
         let wep = WEAPONS[state.activeWeapon];

@@ -188,10 +188,10 @@ export class SectorSystem implements System {
         const events = this.cachedEvents;
 
         // 3. Process Interaction Requests
-        if (state.interactionRequest && state.interactionRequest.active && state.interactionRequest.type === 'sector_specific') {
+        if (state.interactionRequest.active && state.interactionRequest.type === 'sector_specific') {
             const req = state.interactionRequest;
             this.currentSector.onInteract(req.id, req.object, state, events);
-            state.interactionRequest.active = false;
+            req.active = false;
         }
 
         // 4. Centralized Atmosphere Update

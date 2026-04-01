@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import InteractionPrompt from './InteractionPrompt';
 import ChatBubblesUI from './ChatBubblesUI';
 import { useHudStore } from '../../../hooks/useHudStore';
@@ -22,17 +22,16 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
 }) => {
     // ============================================================================
     // ZERO-GC PRIMITIVE SELECTORS
-    // We ONLY subscribe to state changes that dictate VISIBILITY or TEXT.
-    // We completely remove X/Y coordinates from React's awareness to prevent 
-    // the component from re-rendering at 60 FPS during camera movement.
+    // Vi hämtar ENDAST primitiver. React kommer nu stanna helt i vila
+    // under kamerarörelser, och bara rendera om när prompten faktiskt slås av/på!
     // ============================================================================
-
-    const storeType = useHudStore(s => s.interactionPrompt?.type || null);
-    const storeLabel = useHudStore(s => s.interactionPrompt?.label || null);
+    const isActive = useHudStore(s => s.interactionPrompt.active);
+    const storeType = useHudStore(s => s.interactionPrompt.type);
+    const storeLabel = useHudStore(s => s.interactionPrompt.label);
 
     // Fallback to props if interaction is not driven by HudStore yet in edge cases
-    const currentType = storeType || interactionType;
-    const currentLabel = storeLabel || interactionLabel;
+    const currentType = isActive ? storeType : (interactionType || null);
+    const currentLabel = isActive ? storeLabel : interactionLabel;
 
     // ============================================================================
     // HIGH-FREQUENCY DOM MUTATOR (GPU Accelerated Positioning)
@@ -48,13 +47,11 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
         const unsubscribe = HudStore.subscribe((state) => {
             if (!wrapperRef.current) return;
 
-            const pos = state.interactionPrompt?.pos;
+            // Zero-GC Coordinate Fetching
+            const targetX = state.interactionPrompt.x;
+            const targetY = state.interactionPrompt.y;
 
-            // Fallback to prop positions if the store doesn't have them
-            const targetX = pos?.x ?? interactionScreenPos?.x ?? 0;
-            const targetY = pos?.y ?? interactionScreenPos?.y ?? 0;
-
-            // Zero-GC Delta check: Only touch the DOM and allocate strings if it actually moved
+            // Zero-GC Delta check: Only touch the DOM if it actually moved
             if (targetX !== lastX || targetY !== lastY) {
                 // translate3d forces hardware acceleration on the GPU
                 wrapperRef.current.style.transform = `translate3d(${targetX}px, ${targetY}px, 0)`;
@@ -64,7 +61,9 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
         });
 
         return unsubscribe;
-    }, [currentType, interactionScreenPos]);
+        // Notera: Tog bort interactionScreenPos från deps eftersom store hanterar detta nu,
+        // vilket förhindrar ytterligare onödiga re-renders.
+    }, [currentType]);
 
     return (
         <>

@@ -68,7 +68,7 @@ export const useGameInput = (
 
                 const flashlight = refs.flashlightRef.current as THREE.SpotLight;
                 if (flashlight) {
-                    const intensity = state.activeVehicle ? FLASHLIGHT.intensity * 2 : FLASHLIGHT.intensity;
+                    const intensity = state.vehicle.active ? FLASHLIGHT.intensity * 2 : FLASHLIGHT.intensity;
                     flashlight.intensity = state.flashlightOn ? intensity : 0;
                 }
                 soundManager.playUiClick();
@@ -107,8 +107,11 @@ export const useGameInput = (
 
                         if (dx !== 0 || dz !== 0) {
                             state.rollDir.set(dx, 0, dz).normalize();
+                            if (engine.camera.angle !== 0) {
+                                state.rollDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), engine.camera.angle);
+                            }
                         } else if (refs.playerGroupRef.current) {
-                            state.rollDir.copy(new THREE.Vector3(0, 0, 1).applyQuaternion(refs.playerGroupRef.current.quaternion).normalize());
+                            state.rollDir.set(0, 0, 1).applyQuaternion(refs.playerGroupRef.current.quaternion).normalize();
                         }
 
                         soundManager.playDash();

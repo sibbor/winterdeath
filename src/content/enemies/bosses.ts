@@ -19,8 +19,8 @@ Special attacks with status effects for the player:
 - radius = AoE attack radius set in meters (not set or numeric value if active)
 - chargeTime = time in ms it takes for the boss to activate the ability
 - effect = status the player gets (StatusEffectType) if hit by the attack
-- effectDuration = time in ms the status effect lasts on the playerAttackDefinition
-- effectDamage = damage the player takes for every second the status effect is active
+
+Status effects are defined in the PERKS database.
 */
 
 export const BOSSES: Record<number, { id: number; name: string; hp: number; maxHp: number; speed: number; color: number; scale: number; widthScale?: number; deathStory: string; attacks?: AttackDefinition[] }> = {
@@ -44,8 +44,6 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
                 chargeTime: 250,
                 cooldown: 10000,
                 effect: StatusEffectType.FREEZING,
-                effectDuration: 1000,
-                effectDamage: 10
             },
         ]
     },
@@ -68,7 +66,6 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
                 activeTime: 3000,
                 cooldown: 15000,
                 effect: StatusEffectType.DISORIENTED,
-                effectDuration: 2000,
             },
         ]
     },
@@ -91,8 +88,6 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
                 activeTime: 3000,
                 cooldown: 15000,
                 effect: StatusEffectType.ELECTRIFIED,
-                effectDuration: 1000,
-                effectDamage: 10
             }
         ]
     },
@@ -114,7 +109,6 @@ export const BOSSES: Record<number, { id: number; name: string; hp: number; maxH
                 activeTime: 2500,
                 cooldown: 15000,
                 effect: StatusEffectType.SLOWED,
-                effectDuration: 2500
             }
         ]
     }

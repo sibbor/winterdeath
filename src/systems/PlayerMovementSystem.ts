@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
-import { StatusEffectType, DamageType } from '../entities/player/CombatTypes';
+import { StatusEffectType, DamageType, PerkCategory } from '../entities/player/CombatTypes';
+import { PERKS } from '../content/perks';
 import { applyCollisionResolution } from '../core/world/CollisionResolution';
 import { soundManager } from '../utils/audio/SoundManager';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
 import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
+import { GEOMETRY, MATERIALS } from '../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -25,7 +27,6 @@ export class PlayerMovementSystem implements System {
     constructor(private playerGroup: THREE.Group) { }
 
     update(session: GameSessionLogic, delta: number, now: number) {
-        if (!session.state) return;
         const state = session.state;
 
         // --- CINEMATIC LOCK (Zero-Velocity) ---
@@ -41,15 +42,16 @@ export class PlayerMovementSystem implements System {
         const input = session.engine.input.state;
         const disableInput = session.inputDisabled || false;
 
-        const currentSectorData = (session.engine.renderer as any)._sectorData || (session as any).currentSectorData;
-        const env = currentSectorData?.environment;
+        const engineRenderer = session.engine.renderer as any;
+        const currentSectorData = engineRenderer._sectorData ?? (session as any).currentSectorData;
+        const env = currentSectorData.environment;
 
         // --- APPLY DYNAMIC MULTIPLIERS ---
         const speedMult = state.multipliers.speed;
         const baseSpeed = state.speed;
         const currentSpeed = (baseSpeed * speedMult) / 3.6;
 
-        if (state.activeVehicle) {
+        if (state.vehicle.active) {
             state.isMoving = false;
             return;
         }
@@ -80,19 +82,37 @@ export class PlayerMovementSystem implements System {
         this.updateInvincibleGlow(state, now);
     }
 
+    private checkReflexShield(session: GameSessionLogic, now: number) {
+        const state = session.state;
+        const perk = PERKS[StatusEffectType.REFLEX_SHIELD];
+        if (!perk) return;
+
+        // Trigger if off cooldown
+        if (now - state.lastReflexShieldTime > perk.cooldown) {
+            state.lastReflexShieldTime = now;
+
+            // Add the buff for 500ms
+            state.statusEffects[perk.id] = {
+                duration: perk.duration,
+                maxDuration: perk.duration,
+                intensity: 1,
+                damage: 0,
+                lastTick: now
+            };
+
+            // Discovery
+            if (!state.discoveredPerks.includes(perk.id)) {
+                state.discoveredPerks.push(perk.id);
+                session.triggerDiscovery('perk', perk.id, perk.displayName, perk.description);
+            }
+        }
+    }
+
     private _shieldMesh: THREE.Mesh | null = null;
     private updateInvincibleGlow(state: any, now: number) {
-        if (state.sectorState?.isInvincible) {
+        if (state.sectorState.isInvincible) {
             if (!this._shieldMesh) {
-                const geo = new THREE.SphereGeometry(1.2, 32, 32);
-                const mat = new THREE.MeshBasicMaterial({
-                    color: 0x00ffff,
-                    transparent: true,
-                    opacity: 0.15,
-                    blending: THREE.AdditiveBlending,
-                    side: THREE.DoubleSide
-                });
-                this._shieldMesh = new THREE.Mesh(geo, mat);
+                this._shieldMesh = new THREE.Mesh(GEOMETRY.reflexShield, MATERIALS.reflexShield);
                 this._shieldMesh.position.y = 1.0;
                 this.playerGroup.add(this._shieldMesh);
             }
@@ -151,7 +171,7 @@ export class PlayerMovementSystem implements System {
 
         if (session.engine.water) {
             session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
-            inWater = _buoyancyResult.inWater && !state.activeVehicle;
+            inWater = _buoyancyResult.inWater && !state.vehicle.active;
 
             if (inWater) {
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
@@ -189,14 +209,14 @@ export class PlayerMovementSystem implements System {
 
         // --- 4. STAMINA & REGENERATION ---
         const waterStaminaDrain = isSwimming ? 7 : (isWading ? 3 : 0);
-        if (waterStaminaDrain > 0 && !state.activeVehicle) {
+        if (waterStaminaDrain > 0 && !state.vehicle.active) {
             state.lastStaminaUseTime = now;
             state.stamina = Math.max(0, state.stamina - waterStaminaDrain * delta);
             if (isSwimming && state.stamina <= 0) {
                 speed *= 0.5; // Exhaustion penalty while swimming
 
                 // Drowning Damage
-                if (now - (state.lastDrownTick || 0) > 1000) {
+                if (now - state.lastDrownTick > 1000) {
                     state.lastDrownTick = now;
                     if (state.callbacks && state.callbacks.onPlayerHit) {
                         state.callbacks.onPlayerHit(15, null, DamageType.DROWNING, true, StatusEffectType.DROWNING, 2000, 15, DamageType.DROWNING);
@@ -206,6 +226,7 @@ export class PlayerMovementSystem implements System {
         }
 
         if (state.isRushing) {
+            this.checkReflexShield(session, now);
             state.lastStaminaUseTime = now;
             if (state.stamina > 0) {
                 state.stamina -= 5 * delta;
@@ -233,6 +254,7 @@ export class PlayerMovementSystem implements System {
 
             if (!state.rollSmokeSpawned && !inWater) {
                 state.rollSmokeSpawned = true;
+                this.checkReflexShield(session, now);
                 soundManager.playFootstep('step');
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_ROLLING, NOISE_RADIUS.PLAYER_ROLLING);
                 FXSystem.spawnPart(
@@ -250,6 +272,7 @@ export class PlayerMovementSystem implements System {
             } else {
                 state.isRolling = false;
                 state.rollSmokeSpawned = false;
+                state.rollDir.set(0, 0, 0); // Clear to avoid ghosting
             }
         } else if (!disableInput) {
             _v6.set(0, 0, 0);
@@ -261,7 +284,8 @@ export class PlayerMovementSystem implements System {
                 _v6.z += input.joystickMove.y;
             }
 
-            const isDisoriented = !!state.statusEffects?.[StatusEffectType.DISORIENTED]?.duration && state.statusEffects[StatusEffectType.DISORIENTED].duration > 0;
+            const disoriented = state.statusEffects[StatusEffectType.DISORIENTED];
+            const isDisoriented = disoriented && disoriented.duration > 0;
             if (isDisoriented) {
                 const noise = Math.sin(now * 0.01) * 0.5;
                 _v6.x += noise;
@@ -296,7 +320,7 @@ export class PlayerMovementSystem implements System {
                 this.performMove(playerGroup, _v1, state, session, now, delta);
 
                 const stepInterval = state.isSwimming ? 350 : (state.isRushing ? 250 : 400);
-                if (now > (state.lastStepTime || 0) + stepInterval) {
+                if (now - state.lastStepTime > stepInterval) {
                     state.lastStepTime = now;
 
                     let noiseType = NoiseType.PLAYER_WALK;

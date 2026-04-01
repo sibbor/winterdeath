@@ -313,7 +313,8 @@ export const Sector4: SectorDef = {
     onInteract: (id: string, object: THREE.Object3D, state: any, events: any) => {
         // VEHICLES
         if (object.userData.vehicleDef) {
-            state.activeVehicle = object;
+            state.vehicle.active = true;
+            state.vehicle.mesh = object;
             return;
         }
 

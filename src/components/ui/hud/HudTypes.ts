@@ -61,12 +61,17 @@ export interface DebugInfoData {
 }
 
 export interface InteractionPromptData {
-  type: string | null;
-  label: string | null;
-  pos: { x: number; y: number };
+  active: boolean;
+  type: string;
+  label: string;
+  targetId: string;
+  x: number;
+  y: number;
 }
 
+
 export interface DialogueLineData {
+  active: boolean;
   text: string;
   speaker: string;
 }
@@ -74,6 +79,7 @@ export interface DialogueLineData {
 export type DiscoveryType = 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss';
 
 export interface DiscoveryEvent {
+  active: boolean;
   id: string;
   type: DiscoveryType;
   title: string;
@@ -95,7 +101,7 @@ export interface HudState {
   isReloading: boolean;
 
   // Complex state slices
-  boss: HudBossInfo | null;
+  boss: HudBossInfo;
   bossSpawned: boolean;
   bossDefeated: boolean;
   familyFound: boolean;
@@ -143,10 +149,10 @@ export interface HudState {
   systems: any[]; // Consider typing if you pass specific System data to UI
 
   // Cinematics & Interactions
-  currentLine: DialogueLineData | null;
+  currentLine: DialogueLineData;
   cinematicActive: boolean;
-  interactionPrompt: InteractionPromptData | null;
+  interactionPrompt: InteractionPromptData;
   hudVisible: boolean;
-  sectorName: string | null;
-  discovery: DiscoveryEvent | null;
+  sectorName: string;
+  discovery: DiscoveryEvent;
 }

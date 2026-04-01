@@ -257,6 +257,13 @@ export const MATERIALS = {
     enemy_effect_flame: new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8, depthWrite: false }),
     enemy_effect_spark: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
     enemy_effect_stun: new THREE.MeshBasicMaterial({ color: 0xc7c7c7 }),
+    reflexShield: new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide
+    }),
 
     // ---- DECALS ----
     bloodDecal: new THREE.MeshBasicMaterial({

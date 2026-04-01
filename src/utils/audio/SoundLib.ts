@@ -1099,6 +1099,104 @@ export const VoiceSounds = {
     },
     playDeathScream: (core: SoundCore, name: string) => {
         UiSounds.playTone(core, 100, 'sawtooth', 1.0, 0.4);
+    },
+    /**
+     * Procedurally generates a unique "crying" or "mourning" sound for a family member.
+     * @param member The family member data (id, name, gender, scale, etc.)
+     */
+    playCrying: (core: SoundCore, member: any) => {
+        const ctx = core.ctx;
+        const now = ctx.currentTime;
+        const name = (member.name || '').toLowerCase();
+        const isAnimal = member.race === 'animal' || name.includes('sotis') || name.includes('panter');
+        const gender = member.gender || 'male';
+        const ageScale = member.scale || 1.0;
+
+        if (isAnimal) {
+            // --- CAT MOURNFUL MEOW ---
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const baseFreq = name.includes('sotis') ? 800 : 650; // Sotis is slightly higher
+
+            osc.type = 'triangle';
+            // "Mrow-ow-ow" frequency sweep
+            osc.frequency.setValueAtTime(baseFreq * 0.8, now);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.7, now + 0.6);
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+            osc.connect(gain);
+            gain.connect(core.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.9);
+        } else {
+            // --- HUMAN SOBBING/WHIMPERING ---
+            // Determine base pitch based on name/gender/scale
+            let baseFreq = 220;
+            if (name.includes('nathalie')) baseFreq = 380;
+            else if (name.includes('esmeralda')) baseFreq = 450;
+            else if (name.includes('loke')) baseFreq = 420;
+            else if (name.includes('jordan')) baseFreq = 500;
+            else if (gender === 'female') baseFreq = 350;
+
+            // Pitch shift based on model scale (smaller = higher voice)
+            baseFreq *= (1.0 / ageScale);
+
+            // Create a "sobbing" vibrato effect using an LFO for amplitude & frequency
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            const lfo = ctx.createOscillator();
+            const lfoGain = ctx.createGain();
+
+            osc.type = gender === 'female' ? 'sine' : 'triangle';
+            osc.frequency.setValueAtTime(baseFreq, now);
+
+            // Sobbing vibrato (6Hz to 12Hz)
+            lfo.type = 'sine';
+            lfo.frequency.setValueAtTime(8 + Math.random() * 4, now);
+            lfoGain.gain.setValueAtTime(baseFreq * 0.05, now);
+
+            lfo.connect(lfoGain);
+            lfoGain.connect(osc.frequency);
+
+            // Breath noise component
+            const noise = ctx.createBufferSource();
+            const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 1.0, ctx.sampleRate);
+            const noiseData = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
+            noise.buffer = noiseBuffer;
+
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'bandpass';
+            noiseFilter.frequency.value = baseFreq * 2;
+            noiseFilter.Q.value = 1.0;
+
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.05, now);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(core.masterGain);
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.15, now + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+            osc.connect(gain);
+            gain.connect(core.masterGain);
+
+            lfo.start(now);
+            osc.start(now);
+            noise.start(now);
+
+            lfo.stop(now + 1.2);
+            osc.stop(now + 1.2);
+            noise.stop(now + 1.2);
+        }
     }
 };
 

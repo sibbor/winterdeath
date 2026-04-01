@@ -10,6 +10,7 @@ import { soundManager } from '../../utils/audio/SoundManager';
 import { WaterSystem, _buoyancyResult } from '../../systems/WaterSystem';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
 import { EnemyAnimator } from './EnemyAnimator';
+import { NoiseType } from './EnemyTypes';
 
 const _waterCheckResult = { flatDepth: 0 };
 
@@ -36,6 +37,7 @@ function logStateChange(now: number, e: Enemy, newState: AIState, reason?: strin
 }
 
 export const EnemyAI = {
+
     updateEnemy: (
         e: Enemy,
         now: number,
@@ -76,8 +78,8 @@ export const EnemyAI = {
             e.deathState === EnemyDeathState.ALIVE &&
             !e.isBurning &&
             !e.isDrowning &&
-            (!e.knockbackVel || (Math.abs(e.knockbackVel.x) < 0.1 && Math.abs(e.knockbackVel.z) < 0.1)) &&
-            (!e.stunTimer || e.stunTimer <= 0)
+            (Math.abs(e.knockbackVel.x) < 0.1 && Math.abs(e.knockbackVel.z) < 0.1) &&
+            e.stunTimer <= 0
         ) {
             if (e.state === AIState.CHASE || e.state === AIState.SEARCH) {
                 e.state = AIState.IDLE;
@@ -99,8 +101,8 @@ export const EnemyAI = {
 
             e.deathTimer = now;
 
-            const baseScale = e.originalScale || 1.0;
-            const widthScale = e.widthScale || 1.0;
+            const baseScale = e.originalScale;
+            const widthScale = e.widthScale;
             e.mesh.scale.set(baseScale * widthScale, baseScale, baseScale * widthScale);
 
             const isHighImpact = e.lastHitWasHighImpact;
@@ -129,27 +131,27 @@ export const EnemyAI = {
             }
             else if (weapon) {
                 e.deathState = EnemyDeathState.SHOT;
-                if (e.deathVel) {
-                    _v1.subVectors(e.mesh.position, playerPos).normalize();
-                    _v2.copy(_v1).negate();
-                    const forwardMomentum = e.velocity.dot(_v2);
-                    e.fallForward = forwardMomentum > 1.5;
+                _v1.subVectors(e.mesh.position, playerPos).normalize();
+                _v2.copy(_v1).negate();
 
-                    e.deathVel.copy(e.velocity).multiplyScalar(0.1);
-                    const impactForce = weapon.damage * 0.15;
-                    e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
-                }
+                const forwardMomentum = e.velocity.dot(_v2);
+                e.fallForward = forwardMomentum > 1.5;
+                e.deathVel.copy(e.velocity).multiplyScalar(0.1);
+
+                const impactForce = weapon.damage * 0.15;
+                e.deathVel.addScaledVector(_v1, impactForce).setY(weapon.damage > 20 ? 3.5 : 2.0);
+
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 5.0;
             }
             else {
                 e.deathState = EnemyDeathState.GENERIC;
-                if (e.deathVel) {
-                    _v1.subVectors(e.mesh.position, playerPos).normalize();
-                    _v2.copy(_v1).negate();
-                    const forwardMomentum = e.velocity.dot(_v2);
-                    e.fallForward = forwardMomentum > 1.5;
-                    e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
-                }
+                _v1.subVectors(e.mesh.position, playerPos).normalize();
+                _v2.copy(_v1).negate();
+
+                const forwardMomentum = e.velocity.dot(_v2);
+                e.fallForward = forwardMomentum > 1.5;
+                e.deathVel.copy(_v1).multiplyScalar(8.0).setY(3.0);
+
                 e.mesh.userData.spinDir = (Math.random() - 0.5) * 6.0;
             }
             return;
@@ -158,9 +160,9 @@ export const EnemyAI = {
         if (e.deathState !== EnemyDeathState.ALIVE) return;
 
         // --- 2. POOLING SCALE RECOVERY ---
-        const targetScaleY = e.originalScale || 1.0;
+        const targetScaleY = e.originalScale;
         if (Math.abs(e.mesh.scale.y - targetScaleY) > 0.05) {
-            const w = e.widthScale || 1.0;
+            const w = e.widthScale;
             e.mesh.scale.set(targetScaleY * w, targetScaleY, targetScaleY * w);
             e.mesh.visible = true;
         }
@@ -173,12 +175,12 @@ export const EnemyAI = {
 
         // --- 4. MASS-BASED KNOCKBACK PHYSICS ---
         // Use lengthSq() to catch movement on all axes (including Y straight up)
-        if (e.knockbackVel && e.knockbackVel.lengthSq() > 0.001) {
+        if (e.knockbackVel.lengthSq() > 0.001) {
             if (!e.mesh.userData.wasKnockedBack) {
                 e.mesh.userData.wasKnockedBack = true;
             }
 
-            const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+            const mass = e.originalScale * e.widthScale;
             const moveInertia = delta / Math.max(0.5, mass);
 
             e.mesh.position.addScaledVector(e.knockbackVel, moveInertia);
@@ -303,7 +305,7 @@ export const EnemyAI = {
         }
 
         // --- 7. STUNS & RAGDOLLS ---
-        if (e.stunTimer && e.stunTimer > 0) {
+        if (e.stunTimer > 0) {
             if (!e.mesh.userData.wasStunned) e.mesh.userData.wasStunned = true;
             e.stunTimer -= delta;
 
@@ -347,11 +349,11 @@ export const EnemyAI = {
             e.mesh.userData.wasStunned = false;
         }
 
-        if (e.blindTimer && e.blindTimer > 0) { e.blindTimer -= delta; return; }
+        if (e.blindTimer > 0) { e.blindTimer -= delta; return; }
 
         // --- 8. SENSORS & SEPARATION ---
         const isFullyAware = e.awareness >= 0.9;
-        const seesPlayer = isFullyAware && e.lastKnownPosition && e.lastKnownPosition.distanceToSquared(playerPos) < 2.0;
+        const seesPlayer = isFullyAware && e.lastKnownPosition.distanceToSquared(playerPos) < 2.0;
 
         _v6.set(0, 0, 0);
 
@@ -391,13 +393,14 @@ export const EnemyAI = {
                     logStateChange(now, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
-                } else if (e.awareness > 0 && e.lastKnownPosition) {
+                } else if (e.awareness > 0) {
                     logStateChange(now, e, AIState.SEARCH, 'AWARE');
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
                 } else if (e.idleTimer <= 0) {
                     logStateChange(now, e, AIState.WANDER);
                     e.state = AIState.WANDER;
+
                     const angle = Math.random() * TWO_PI;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
                     e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 5);
@@ -418,7 +421,7 @@ export const EnemyAI = {
                     logStateChange(now, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
-                } else if (e.awareness > 0 && e.lastKnownPosition) {
+                } else if (e.awareness > 0) {
                     logStateChange(now, e, AIState.SEARCH, 'AWARE');
                     e.state = AIState.SEARCH;
                     e.searchTimer = 5.0;
@@ -436,14 +439,14 @@ export const EnemyAI = {
                     logStateChange(now, e, AIState.CHASE, 'VISUAL');
                     e.state = AIState.CHASE;
                     updateLastSeen(e, playerPos, now);
-                } else if (e.awareness === 1.0 && e.lastKnownPosition) {
+                } else if (e.awareness === 1.0) {
                     updateLastSeen(e, e.lastKnownPosition, now);
-                    e.searchTimer = e.lastHeardNoiseType ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
+                    e.searchTimer = e.lastHeardNoiseType !== NoiseType.NONE ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
                 } else if (e.searchTimer <= 0) {
                     logStateChange(now, e, AIState.IDLE);
                     e.state = AIState.IDLE;
                     e.idleTimer = 1.0 + Math.random() * 2.0;
-                } else if (e.lastKnownPosition && e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
+                } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
                     if (!isTier4) {
                         moveEntity(e, e.lastKnownPosition, delta, e.speed * 0.8, collisionGrid, _v6, now, false, isTier1, isTier2, frameOffset);
                     }
@@ -455,14 +458,14 @@ export const EnemyAI = {
             case AIState.CHASE:
                 if (seesPlayer) {
                     updateLastSeen(e, playerPos, now);
-                } else if (e.awareness === 1.0 && e.lastKnownPosition) {
+                } else if (e.awareness === 1.0) {
                     updateLastSeen(e, e.lastKnownPosition, now);
                 }
 
-                if ((!seesPlayer && now - (e.lastSeenTime || 0) > 5000) || distSq > 2500) {
+                if ((!seesPlayer && now - e.lastSeenTime > 5000) || distSq > 2500) {
                     logStateChange(now, e, AIState.SEARCH);
                     e.state = AIState.SEARCH;
-                    const baseTime = e.lastHeardNoiseType ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
+                    const baseTime = e.lastHeardNoiseType !== NoiseType.NONE ? (SEARCH_TIMERS[e.lastHeardNoiseType] || 5.0) : 5.0;
                     e.searchTimer = baseTime;
                 }
                 else {
@@ -473,7 +476,7 @@ export const EnemyAI = {
                         return;
                     }
 
-                    const target = (seesPlayer) ? playerPos : e.lastKnownPosition!;
+                    const target = (seesPlayer) ? playerPos : e.lastKnownPosition;
                     const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
 
                     if (!isTier4) {
@@ -481,12 +484,12 @@ export const EnemyAI = {
                     }
 
                     const chaseStepInterval = e.type === EnemyType.RUNNER ? 250 : 400;
-                    if (now > (e.lastStepTime || 0) + chaseStepInterval) {
+                    if (now > e.lastStepTime + chaseStepInterval) {
                         e.lastStepTime = now;
                     }
 
                     // --- MULTI-ATTACK SYSTEM ---
-                    if (e.attacks && e.attacks.length > 0) {
+                    if (e.attacks.length > 0) {
                         let bestAttackIndex = -1;
                         for (let i = 0; i < e.attacks.length; i++) {
                             const att = e.attacks[i];
@@ -524,9 +527,9 @@ export const EnemyAI = {
                 break;
 
             case AIState.ATTACK_CHARGE:
-                if (e.attackTimer !== undefined) {
+                if (e.attackTimer !== -1) {
                     e.attackTimer -= delta;
-                    const att = e.attacks![e.currentAttackIndex!];
+                    const att = e.attacks[e.currentAttackIndex!];
 
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
@@ -541,9 +544,9 @@ export const EnemyAI = {
                 break;
 
             case AIState.ATTACKING:
-                if (e.attackTimer !== undefined) {
+                if (e.attackTimer !== -1) {
                     e.attackTimer -= delta;
-                    const att = e.attacks?.[e.currentAttackIndex!];
+                    const att = e.attacks[e.currentAttackIndex!];
 
                     _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
                     e.mesh.lookAt(_v5);
@@ -564,13 +567,11 @@ export const EnemyAI = {
         EnemyAnimator.updateAttackAnim(e, now, delta);
 
         // --- 11. COOLDOWNS ---
-        if (e.attacks) {
-            for (let i = 0; i < e.attacks.length; i++) {
-                const atkType = e.attacks[i].type;
-                const cd = e.attackCooldowns[atkType];
-                if (cd !== undefined && cd > 0) {
-                    e.attackCooldowns[atkType] = Math.max(0, cd - delta * 1000);
-                }
+        for (let i = 0; i < e.attacks.length; i++) {
+            const atkType = e.attacks[i].type;
+            const cd = e.attackCooldowns[atkType];
+            if (cd !== undefined && cd > 0) {
+                e.attackCooldowns[atkType] = Math.max(0, cd - delta * 1000);
             }
         }
 
@@ -608,8 +609,8 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
         e.mesh.position.z + _v3.z
     );
 
-    const baseScale = e.originalScale || 1.0;
-    const hitRadius = 0.5 * baseScale * (e.widthScale || 1.0);
+    const baseScale = e.originalScale;
+    const hitRadius = 0.5 * baseScale * e.widthScale;
 
     // LoD: Throttled obstacle collision checks
     let shouldCheckObstacles = isTier1;
@@ -635,9 +636,8 @@ function moveEntity(e: Enemy, target: THREE.Vector3, delta: number, speed: numbe
     e.mesh.lookAt(_v5);
 }
 
-function updateLastSeen(e: Enemy, pos: THREE.Vector3, now: number) {
-    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3(); // Handled during spawning, safe fallback
-    e.lastKnownPosition.copy(pos);
+function updateLastSeen(e: Enemy, playerPosition: THREE.Vector3, now: number) {
+    e.lastKnownPosition.copy(playerPosition);
     e.lastSeenTime = now;
 }
 

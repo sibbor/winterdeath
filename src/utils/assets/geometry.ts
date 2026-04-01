@@ -220,6 +220,7 @@ export const GEOMETRY = {
     shard: new THREE.TetrahedronGeometry(0.1, 0),
     shockwave: new THREE.RingGeometry(0.5, 1.5, 32),
     flame: new THREE.TetrahedronGeometry(0.5, 1),
+    reflexShield: new THREE.SphereGeometry(1.2, 32, 32),
     showInPreloader: true, // Marker for preloader
     bloodSplat: createBloodSplatGeo(),
     impactSplat: createImpactSplatGeo(),

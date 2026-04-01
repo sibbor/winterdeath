@@ -22,28 +22,25 @@ export const VehicleManager = {
         const input = session.engine.input.state;
 
         // 1. Enter / Exit Logic
-        const vehicle = state.activeVehicle;
-        if (vehicle) {
-            const def = vehicle.userData?.vehicleDef;
-            if (def && input && state.vehicleEngineState === 'OFF') {
-                if (!vehicle.userData.velocity) {
-                    vehicle.userData.velocity = new THREE.Vector3();
-                    vehicle.userData.angularVelocity = new THREE.Vector3();
-                    vehicle.userData.suspY = 0;
-                    vehicle.userData.suspVelY = 0;
-                }
+        const isRunning = state.vehicle.active && state.vehicle.engineState !== 'OFF';
+        const vehicle = state.vehicle.mesh;
+
+        if (state.vehicle.active && vehicle) {
+            const def = vehicle.userData.vehicleDef;
+
+            if (state.vehicle.engineState === 'OFF') {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
                 const angVel = vehicle.userData.angularVelocity as THREE.Vector3;
                 VehicleManager.enterVehicle(playerGroup, vehicle, state, def, vel, angVel);
             }
 
-            if (def && input && input.e && !state.eDepressed && state.vehicleEngineState !== 'OFF') {
+            if (input.e && !state.eDepressed && state.vehicle.engineState !== 'OFF') {
                 VehicleManager.exitVehicle(playerGroup, vehicle, state, def);
             }
 
             // 2. Collision Logic (OPTIMIZED)
             // Vi kollar BARA fysik/kollisioner på det fordon som spelaren faktiskt kör just nu!
-            if (def && vehicle.userData.velocity && state.vehicleEngineState !== 'OFF') {
+            if (state.vehicle.engineState !== 'OFF') {
                 const vel = vehicle.userData.velocity as THREE.Vector3;
                 VehicleManager.handleEnemyCollisions(vehicle, vel, def, session, now);
                 VehicleManager.handleObstacleCollisions(vehicle, vel, def, session);
@@ -53,7 +50,7 @@ export const VehicleManager = {
                 const noiseType = speedSq > 5 ? NoiseType.VEHICLE_DRIVE : NoiseType.VEHICLE_IDLE;
                 const noiseRadius = NOISE_RADIUS[noiseType];
 
-                if (!vehicle.userData._lastNoiseTime || now - vehicle.userData._lastNoiseTime > 500) {
+                if (now - vehicle.userData._lastNoiseTime > 500) {
                     session.makeNoise(vehicle.position, noiseType, noiseRadius);
                     vehicle.userData._lastNoiseTime = now;
                 }
@@ -69,8 +66,9 @@ export const VehicleManager = {
         vel: THREE.Vector3,
         angVel: THREE.Vector3
     ) => {
-        state.vehicleEngineState = 'RUNNING';
-        state.activeVehicleType = def.type;
+        state.vehicle.engineState = 'RUNNING';
+        state.vehicle.type = def.type;
+        state.vehicle.active = true;
         const category = def.category === 'BOAT' ? 'BOAT' : 'CAR';
         soundManager.playVehicleEnter(category);
         soundManager.playVehicleEngine(category);
@@ -104,7 +102,7 @@ export const VehicleManager = {
             let frontZ = 0;
             let lightY = 0;
 
-            if (lights && lights.headlights && lights.headlights.meshes && lights.headlights.meshes.length > 0) {
+            if (lights && lights.headlights && lights.headlights.meshes.length > 0) {
                 frontZ = lights.headlights.meshes[0].position.z;
                 lightY = lights.headlights.meshes[0].position.y;
             } else {
@@ -145,10 +143,11 @@ export const VehicleManager = {
         def: VehicleDef
     ) => {
         state.eDepressed = true;
-        state.activeVehicle = null;
-        state.activeVehicleType = null;
-        state.vehicleSpeed = 0;
-        state.vehicleEngineState = 'OFF';
+        state.vehicle.active = false;
+        state.vehicle.mesh = null;
+        state.vehicle.type = '';
+        state.vehicle.speed = 0;
+        state.vehicle.engineState = 'OFF';
 
         soundManager.stopVehicleEngine();
         soundManager.playVehicleSkid(0);
@@ -232,11 +231,11 @@ export const VehicleManager = {
             _toEnemy.subVectors(e.mesh.position, vehicle.position);
             _toEnemy.y = 0;
             const distSq = _toEnemy.lengthSq();
-            const collisionRad = (hitRadius * 0.7) + (e.widthScale || 1.0) * (e.originalScale || 1.0);
+            const collisionRad = (hitRadius * 0.7) + e.widthScale * e.originalScale;
 
             if (distSq > collisionRad * collisionRad) continue;
 
-            const lastHit = e.lastVehicleHit || 0;
+            const lastHit = e.lastVehicleHit;
             if (now - lastHit < HIT_COOLDOWN_MS) continue;
             e.lastVehicleHit = now;
 

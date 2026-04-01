@@ -33,6 +33,7 @@ export interface PlayerStats {
   prologueSeen?: boolean;
   rescuedFamilyIds: number[];
   familyFoundCount: number;
+  discoveredPerks: string[];
   mostUsedWeapon: string;
   deathsByEnemyType: Record<string, number>;
   incomingDamageBreakdown: Record<string, Record<string, number>>;

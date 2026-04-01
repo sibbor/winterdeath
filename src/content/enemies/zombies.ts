@@ -20,8 +20,8 @@ Special attacks with status effects for the player:
 - radius = AoE attack radius set in meters (not set or numeric value if active)
 - chargeTime = time in ms it takes for the boss to activate the ability
 - effect = status the player gets (StatusEffectType) if hit by the attack
-- effectDuration = time in ms the status effect lasts on the playerAttackDefinition
-- effectDamage = damage the player takes for every second the status effect is active
+
+Status effects are defined in the PERKS database.
 */
 
 export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
@@ -44,8 +44,6 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 range: 3,
                 cooldown: 10000,
                 effect: StatusEffectType.BLEEDING,
-                effectDuration: 3000,
-                effectDamage: 5
             }
         ]
     },
@@ -68,7 +66,6 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 range: 5,
                 cooldown: 5000,
                 effect: StatusEffectType.SLOWED,
-                effectDuration: 2000,
             }
         ]
     },
@@ -91,7 +88,6 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 chargeTime: 750,
                 cooldown: 10000,
                 effect: StatusEffectType.DISORIENTED,
-                effectDuration: 2000,
             }
         ]
     },
@@ -111,7 +107,6 @@ export const ZOMBIE_TYPES: Record<EnemyType | string, ZombieTypeData> = {
                 chargeTime: 2000,
                 cooldown: 0,
                 effect: StatusEffectType.DISORIENTED,
-                effectDuration: 2000,
             }
         ]
     }

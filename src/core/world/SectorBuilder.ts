@@ -605,6 +605,8 @@ export const SectorBuilder = {
         vehicleRoot.userData.angularVelocity = new THREE.Vector3();
         vehicleRoot.userData.suspY = 0;
         vehicleRoot.userData.suspVelY = 0;
+        vehicleRoot.userData.prevFwdSpeed = 0;
+        vehicleRoot.userData._lastNoiseTime = 0;
 
         const boxSize = new THREE.Vector3(def.size.x, def.size.y, def.size.z);
 

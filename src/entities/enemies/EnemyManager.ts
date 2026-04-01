@@ -12,6 +12,7 @@ import { AshRenderer } from '../../core/renderers/AshRenderer';
 import { FXSystem } from '../../systems/FXSystem';
 import { WaterSystem } from '../../systems/WaterSystem';
 import { WeaponType } from '../../content/weapons';
+import { NoiseType } from './EnemyTypes';
 
 export type { Enemy };
 
@@ -192,10 +193,13 @@ export const EnemyManager = {
         e.discovered = false;
         e.lastSeenTime = 0;
         e.awareness = 0;
-        if (e.lastKnownPosition) e.lastKnownPosition.copy(e.mesh.position);
+        e.lastHeardNoiseType = NoiseType.NONE;
+        e.lastKnownPosition.copy(e.mesh.position);
+        e.lastTrailPos.copy(e.mesh.position);
+        e.hasLastTrailPos = false
 
-        const s = e.originalScale || 1.0;
-        const w = e.widthScale || 1.0;
+        const s = e.originalScale;
+        const w = e.widthScale;
         e.mesh.scale.set(s * w, s, s * w);
 
         _color.setHex(e.color || 0xffffff);
@@ -261,8 +265,8 @@ export const EnemyManager = {
             corpseRenderer.addCorpse(
                 enemy.mesh.position,
                 enemy.mesh.quaternion,
-                enemy.originalScale || 1.0,
-                enemy.widthScale || 1.0,
+                enemy.originalScale,
+                enemy.widthScale,
                 forcedColor !== undefined ? forcedColor : enemy.color
             );
         }
@@ -272,13 +276,13 @@ export const EnemyManager = {
         if (enemy.mesh.userData.exploded) return;
         enemy.mesh.userData.exploded = true;
 
-        const enemyScale = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+        const enemyScale = enemy.originalScale * enemy.widthScale;
         const pos = enemy.mesh.position;
 
         if (enemy.mesh.parent) enemy.mesh.parent.remove(enemy.mesh);
 
         let burstScale = 1.0;
-        const dmgType = enemy.lastDamageType || '';
+        const dmgType = enemy.lastDamageType;
         if (dmgType === WeaponType.GRENADE) burstScale = 3.0;
         else if (dmgType === WeaponType.SHOTGUN || dmgType === WeaponType.REVOLVER) burstScale = 2.0;
 
@@ -287,7 +291,7 @@ export const EnemyManager = {
 
         const bloodCount = enemy.isBoss ? 12 : 5;
         const goreCount = enemy.isBoss ? 12 : 5;
-        const enemyTopY = pos.y + (enemy.originalScale || 1.0) * 1.8;
+        const enemyTopY = pos.y + enemy.originalScale * 1.8;
 
         callbacks.spawnPart(pos.x, 1, pos.z, 'blood', bloodCount);
         callbacks.spawnPart(pos.x, enemyTopY, pos.z, 'blood_splat', 3, undefined, undefined, undefined, 4.0);
@@ -295,13 +299,13 @@ export const EnemyManager = {
         _v1.set(0, 0, 0);
         if (velocity) {
             _v1.copy(velocity);
-        } else if (enemy.deathVel && (enemy.deathVel.x !== 0 || enemy.deathVel.z !== 0)) {
+        } else if (enemy.deathVel.x !== 0 || enemy.deathVel.z !== 0) {
             _v1.copy(enemy.deathVel);
         } else {
             _v1.copy(enemy.velocity).multiplyScalar(0.5).add(_up);
         }
 
-        const massScale = (enemy.originalScale || 1.0) * (enemy.originalScale || 1.0);
+        const massScale = enemy.originalScale * enemy.originalScale;
         const goreScale = enemy.isBoss ? Math.min(massScale * 1.5, 4.5) : massScale * 2.2;
 
         for (let i = 0; i < goreCount; i++) {
@@ -311,7 +315,7 @@ export const EnemyManager = {
     },
 
     processDeathAnimation: (e: Enemy, delta: number, now: number, callbacks: any) => {
-        const age = now - (e.deathTimer || now);
+        const age = now - e.deathTimer;
 
         switch (e.deathState) {
             case EnemyDeathState.EXPLODED:
@@ -335,17 +339,17 @@ export const EnemyManager = {
                 if (!e.mesh.userData.ashSpawned) {
                     e.mesh.userData.ashSpawned = true;
                     if (ashRenderer) {
-                        ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale || 1.0, e.widthScale || 1.0, e.color || 0xffffff, now, 1500);
+                        ashRenderer.addAsh(e.mesh.position, e.mesh.rotation, e.originalScale, e.widthScale, e.color, now, 1500);
                     }
                 }
 
-                const s = e.originalScale || 1.0;
-                const w = e.widthScale || 1.0;
+                const s = e.originalScale;
+                const w = e.widthScale;
                 const shrink = 1.0 - progress;
 
                 e.mesh.scale.set(s * w * shrink, s * shrink, s * w * shrink);
 
-                _color.setHex(e.color || 0xffffff).lerp(_white, progress);
+                _color.setHex(e.color).lerp(_white, progress);
                 setBaseColor(e.mesh, _color);
 
                 if (progress >= 1.0) {
@@ -501,7 +505,7 @@ export const EnemyManager = {
     },
 
     applyKnockback: (enemy: Enemy, impactPos: THREE.Vector3, moveVec: THREE.Vector3, isDashing: boolean, state: any, scene: THREE.Scene, now: number) => {
-        const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (!enemy.lastTackleTime || now - enemy.lastTackleTime > 300);
+        const canTackle = enemy.deathState === EnemyDeathState.ALIVE && (now - enemy.lastTackleTime > 300);
         if (!canTackle) return;
 
         if (!isDashing) {
@@ -517,7 +521,7 @@ export const EnemyManager = {
             enemy.attackTimer = 0;
         }
 
-        const mass = (enemy.originalScale * enemy.originalScale * (enemy.widthScale || 1.0));
+        const mass = (enemy.originalScale * enemy.originalScale * enemy.widthScale);
         const pushMultiplier = (enemy.isBoss ? 0.1 : 1.0) / Math.max(0.5, mass);
 
         _v2.subVectors(enemy.mesh.position, impactPos).setY(0).normalize();
@@ -575,7 +579,7 @@ export const EnemyManager = {
         now: number
     ): boolean => {
         const speedKmh = speedMS * 3.6;
-        const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+        const mass = e.originalScale * e.widthScale;
         const massRatio = (vehicleDef.mass * 0.001) / (mass || 1.0);
 
         const baseDamage = speedKmh * massRatio * vehicleDef.collisionDamageMultiplier * 2.0;

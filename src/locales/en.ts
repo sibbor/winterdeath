@@ -209,6 +209,7 @@ export const en = {
         log_collectibles: "COLLECTIBLES",
         log_clues: "CLUES",
         log_poi: "POIS",
+        log_perks: "PERKS",
         unknown_threat: "Unknown Threat",
         drowning: "Drowning",
         burning: "Burning",
@@ -337,7 +338,21 @@ export const en = {
         adrenaline: "ADRENALINE",
         adrenaline_desc: "Increase maximum stamina.",
         reflex: "REFLEXES",
-        reflex_desc: "Increases movement speed."
+        reflex_desc: "Increases movement speed.",
+        loke_passive: "Fast Hands: 20% faster reload speed.",
+        jordan_passive: "Eagle Eye: 15% increased weapon range.",
+        esmeralda_passive: "Trigger Happy: 20% increased rate of fire.",
+        nathalie_passive: "Stoic: 10% damage resistance."
+    },
+    perks: {
+        REFLEX_SHIELD: {
+            title: "Reflex Shield",
+            description: "500ms invulnerability when dodging or rushing. 10s cooldown."
+        },
+        ADRENALINE_PATCH: {
+            title: "Adrenaline Patch",
+            description: "3s invulnerability when health drops below 25%. 60s cooldown."
+        }
     },
     weapons: {
         smg: "SMG",

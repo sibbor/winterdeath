@@ -5,11 +5,20 @@ import { CameraSystem } from './CameraSystem';
 import { PlayerAnimator } from '../entities/player/PlayerAnimator';
 import { soundManager } from '../utils/audio/SoundManager';
 import { STORY_SCRIPTS } from '../content/dialogues';
+import { RuntimeState } from '../core/RuntimeState';
 
 // Zero-GC Vektorer för kameramatte
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+
+const _animState = {
+    isMoving: false, isRushing: false, isRolling: false,
+    rollStartTime: 0, staminaRatio: 1.0,
+    isSpeaking: false, isThinking: false, isIdleLong: false,
+    isSwimming: false, isWading: false,
+    seed: 0
+};
 
 export class CinematicSystem implements System {
     id = 'cinematic';
@@ -27,6 +36,7 @@ export class CinematicSystem implements System {
         setTailPosition: (pos: 'bottom' | 'top' | 'left' | 'right') => void;
         onAction: (action: any) => void;
     };
+    private state: RuntimeState;
 
     constructor(opts: {
         cinematicRef: React.MutableRefObject<any>;
@@ -42,6 +52,7 @@ export class CinematicSystem implements System {
             setTailPosition: (pos: 'bottom' | 'top' | 'left' | 'right') => void;
             onAction: (action: any) => void;
         };
+        state: RuntimeState;
     }) {
         this.cinematicRef = opts.cinematicRef;
         this.camera = opts.camera;
@@ -49,6 +60,7 @@ export class CinematicSystem implements System {
         this.bubbleRef = opts.bubbleRef;
         this.activeFamilyMembers = opts.activeFamilyMembers;
         this.callbacks = opts.callbacks;
+        this.state = opts.state;
     }
 
     // VINTERDÖD FIX: Tar nu emot både sectorId och dialogueId för att matcha den nästlade arrayen
@@ -141,7 +153,12 @@ export class CinematicSystem implements System {
         cinematic.typingDuration = line.typingDuration || 2500;
         cinematic.lineDuration = line.duration || Math.max(4000, cinematic.typingDuration + 1500);
 
+        this.state.cinematicLine.active = true;
+        this.state.cinematicLine.speaker = line.speaker || '';
+        this.state.cinematicLine.text = line.text || '';
+
         this.callbacks.setCurrentLine(line);
+
         if (line.tail) this.callbacks.setTailPosition(line.tail);
     }
 
@@ -159,12 +176,19 @@ export class CinematicSystem implements System {
         cinematic.closeStartTime = performance.now();
 
         this.camera.setCinematic(false);
+
+        this.state.cinematicLine.active = false;
+        this.state.cinematicLine.speaker = '';
+        this.state.cinematicLine.text = '';
+
         this.callbacks.setCurrentLine(null);
         this.callbacks.setCinematicActive(false);
 
-        cinematic.target = null;
-        cinematic.script = [];
+        //cinematic.target = null;
         cinematic.lineIndex = -1;
+        if (cinematic.script) {
+            cinematic.script.length = 0;
+        }
     }
 
     public endCinematic() {
@@ -188,7 +212,7 @@ export class CinematicSystem implements System {
         }
 
         // --- CAMERA ORBIT MATH ---
-        if (cinematic.target) {
+        if (cinematic.hasTarget && cinematic.target) {
             const targetPos = _v3;
             cinematic.target.getWorldPosition(targetPos);
 
@@ -229,11 +253,12 @@ export class CinematicSystem implements System {
             _v1.y += 1.5;
             const currentLookAt = this.camera.lookAtTarget || _v1;
 
-            this.camera.lookAt(new THREE.Vector3(
+            _v2.set(
                 THREE.MathUtils.lerp(currentLookAt.x, _v1.x, t),
                 THREE.MathUtils.lerp(currentLookAt.y, _v1.y, t),
                 THREE.MathUtils.lerp(currentLookAt.z, _v1.z, t)
-            ));
+            );
+            this.camera.lookAt(_v2);
         }
 
         if (cinematic.isClosing) return;
@@ -266,13 +291,11 @@ export class CinematicSystem implements System {
             const body = mesh.userData.isBody ? mesh : mesh.children.find((c: any) => c.userData?.isBody);
 
             if (body) {
-                PlayerAnimator.update(body as THREE.Mesh, {
-                    isMoving: false, isRushing: false, isRolling: false,
-                    rollStartTime: 0, staminaRatio: 1.0,
-                    isSpeaking, isThinking, isIdleLong: false,
-                    isSwimming: false, isWading: false,
-                    seed: mesh.userData.seed || 0
-                }, now, cinematicDt);
+                _animState.isSpeaking = isSpeaking;
+                _animState.isThinking = isThinking;
+                _animState.seed = mesh.userData.seed || 0;
+
+                PlayerAnimator.update(body as THREE.Mesh, _animState, now, cinematicDt);
             }
         }
 

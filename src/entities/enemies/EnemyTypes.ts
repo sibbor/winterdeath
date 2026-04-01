@@ -10,6 +10,7 @@ export const ENEMY_DETECTION = {
 };
 
 export enum NoiseType {
+    NONE = 'NONE',
     PLAYER_WALK = 'PLAYER_WALK',
     PLAYER_RUSH = 'PLAYER_RUSH',
     PLAYER_ROLLING = 'PLAYER_DODGE',
@@ -41,6 +42,7 @@ export const NOISE_RADIUS: Record<string, number> = {
 
 // Search timers (seconds) for different noise types
 export const SEARCH_TIMERS: Record<string, number> = {
+    [NoiseType.NONE]: 0,
     [NoiseType.PLAYER_WALK]: 2.0,
     [NoiseType.PLAYER_RUSH]: 2.0,
     [NoiseType.PLAYER_ROLLING]: 2.0,
@@ -60,9 +62,8 @@ export const DEFAULT_ATTACK_RANGE = 1.5;
 export enum AIState {
     IDLE = 'IDLE',
     WANDER = 'WANDER',
-    CHASE = 'CHASE',
     SEARCH = 'SEARCH',
-    STUNNED = 'STUNNED',
+    CHASE = 'CHASE',
     ATTACK_CHARGE = 'ATTACK_CHARGE',
     ATTACKING = 'ATTACKING'
 }
@@ -158,7 +159,7 @@ export interface Enemy {
     lastKnownPosition: THREE.Vector3;  // Memory of where the player was last detected via sound/sight
     hearingThreshold: number;          // Range multiplier for sound detection (0.0 to 1.0+)
     awareness: number;                 // 0.0 to 1.0 representation of alertness
-    lastHeardNoiseType: NoiseType | null; // Type of the most recent noise sensed
+    lastHeardNoiseType: NoiseType;     // Type of the most recent noise sensed
 
     // Interaction & Boss States
     bossId: number;          // Link to the BOSSES content data (-1 if not a boss)

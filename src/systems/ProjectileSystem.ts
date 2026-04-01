@@ -117,7 +117,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
 
                 _v2.subVectors(e.mesh.position, pos);
                 const distSq = _v2.lengthSq();
-                const totalRad = effectiveRadius + (1.0 * e.widthScale * (e.originalScale || 1.0));
+                const totalRad = effectiveRadius + (1.0 * e.widthScale * e.originalScale);
 
                 if (distSq < totalRad * totalRad) {
                     const isKill = ctx.applyDamage(e, damage, WeaponType.GRENADE, true);
@@ -128,7 +128,7 @@ const THROWABLE_BEHAVIORS: Record<string, { onImpact: (ctx: GameContext, pos: TH
                         _v4.copy(_v2).normalize().setY(hitWater ? 1.5 : 0.5).multiplyScalar(force);
                         e.deathVel.copy(_v4);
                     } else {
-                        const mass = (e.originalScale || 1.0) * (e.widthScale || 1.0);
+                        const mass = e.originalScale * e.widthScale;
                         const kbForce = hitWater ? 12 : 25;
                         _v4.copy(_v2).normalize().multiplyScalar(kbForce / mass).setY(hitWater ? 1.0 : 2.0);
                         e.knockbackVel.add(_v4);
@@ -590,7 +590,7 @@ export const ProjectileSystem = {
                     WeaponFX.updateFireZoneVisuals(fz.mesh.position, fz.radius, delta * 2, ctx);
                 }
 
-                if (!fz._lastDamageTime || now - fz._lastDamageTime > 500) {
+                if (now - fz._lastDamageTime > 500) {
                     fz._lastDamageTime = now;
                     const nearby = ctx.collisionGrid.getNearbyEnemies(fz.mesh.position, fz.radius);
                     const rSq = fz.radiusSq;
@@ -691,7 +691,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
             if (enemy.deathState !== EnemyDeathState.ALIVE || projectile.hitEntities.has(enemy.id)) continue;
 
             _v5.set(enemy.mesh.position.x, 0, enemy.mesh.position.z);
-            const hitRad = 1.2 * (enemy.widthScale || 1.0) * (enemy.originalScale || 1.0);
+            const hitRad = 1.2 * enemy.widthScale * enemy.originalScale;
 
             _v6.subVectors(_v5, _v3);
             let t = lineLenSq > 0 ? Math.max(0, Math.min(1, _v6.dot(_v2) / lineLenSq)) : 0;
@@ -719,7 +719,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
 
                 const isKill = ctx.applyDamage(enemy, projectile.damage, projectile.weapon, isHighImpact);
 
-                const mass = (enemy.originalScale || 1.0) * (enemy.widthScale || 1.0);
+                const mass = enemy.originalScale * enemy.widthScale;
                 const force = (projectile.damage / 3) / Math.max(0.3, mass);
 
                 if (isKill && isHighImpact) {
@@ -729,7 +729,7 @@ function updateBullet(projectile: Projectile, index: number, delta: number, ctx:
                 _v5.copy(projectile.vel).setY(0).normalize().multiplyScalar(force);
                 enemy.knockbackVel.add(_v5);
 
-                const headY = enemy.mesh.position.y + (enemy.originalScale || 1.0) * 1.8;
+                const headY = enemy.mesh.position.y + enemy.originalScale * 1.8;
                 ctx.spawnPart(_v6.x, projectile.mesh.position.y, _v6.z, 'blood', 40);
                 ctx.spawnPart(_v6.x, headY, _v6.z, 'blood_splat', 1, undefined, undefined, undefined, 3.0);
                 soundManager.playImpact('flesh');

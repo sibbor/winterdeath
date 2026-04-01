@@ -33,7 +33,7 @@ export const TriggerHandler = {
         }
     ) => {
         // OPTIMIZATION: Only fetch triggers within 40 units to save CPU cycles
-        const triggers = state.collisionGrid ? state.collisionGrid.getNearbyTriggers(playerPos, 40.0) : state.triggers;
+        const triggers = state.collisionGrid.getNearbyTriggers(playerPos, 40.0);
         if (!triggers || triggers.length === 0) return;
 
         if (!callbacks || !callbacks.onAction) return;
@@ -123,13 +123,13 @@ export const TriggerHandler = {
                         callbacks.spawnBubble(translatedText, duration);
 
                         if (trig.type === 'SPEAK') {
-                            if (callbacks.playSound) callbacks.playSound('voice');
+                            callbacks.playSound('voice');
                             callbacks.onTrigger('SPEAK', duration);
                         } else if (trig.type === 'THOUGHT') {
-                            if (callbacks.playSound) callbacks.playSound('ui_hover');
+                            callbacks.playSound('ui_hover');
                             callbacks.onTrigger('THOUGHT', duration);
                         } else {
-                            if (callbacks.playSound) callbacks.playSound('ui_hover');
+                            callbacks.playSound('ui_hover');
                             callbacks.onTrigger(trig.type || 'INFO', duration);
                         }
                     }
@@ -140,7 +140,7 @@ export const TriggerHandler = {
                     if (trig.resetOnExit) {
                         trig.triggered = false;
                     } else if (trig.repeatInterval && trig.repeatInterval > 0) {
-                        if (trig.lastTriggerTime && now - trig.lastTriggerTime > trig.repeatInterval) {
+                        if (now - trig.lastTriggerTime > trig.repeatInterval) {
                             trig.triggered = false;
                         }
                     }

@@ -3,7 +3,8 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { soundManager } from '../utils/audio/SoundManager';
 import { FXSystem } from './FXSystem';
-import { StatusEffectType, PlayerDeathState, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
+import { StatusEffectType, PlayerDeathState, DamageType, EnemyAttackType, PerkCategory } from '../entities/player/CombatTypes';
+import { PERKS } from '../content/perks';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -12,7 +13,7 @@ const _v2 = new THREE.Vector3();
 export class PlayerStatsSystem implements System {
     id = 'player_stats_system';
 
-    private cachedPassives: string[] = [];
+    private cachedPassives: StatusEffectType[] = [];
 
     constructor(
         private playerGroup: THREE.Group,
@@ -27,8 +28,39 @@ export class PlayerStatsSystem implements System {
     update(session: GameSessionLogic, dt: number, now: number) {
         if (session.state.isDead) return;
 
+        this.checkAdrenalinePatch(session, now);
         this.updateBuffsAndDebuffs(session, dt, now);
         this.applyStatusTicks(session, dt, now);
+    }
+
+    private checkAdrenalinePatch(session: GameSessionLogic, now: number) {
+        const state = session.state;
+        const perk = PERKS[StatusEffectType.ADRENALINE_PATCH];
+        if (!perk) return;
+
+        // Trigger at < 25% HP and off cooldown
+        if (state.hp > 0 && state.hp < state.maxHp * 0.25) {
+            if (now - state.lastAdrenalinePatchTime > (perk.cooldown || 60000)) {
+                state.lastAdrenalinePatchTime = now;
+                
+                // Add the absolute buff
+                state.statusEffects[perk.id] = {
+                    duration: perk.duration || 3000,
+                    maxDuration: perk.duration || 3000,
+                    intensity: perk.intensity || 1,
+                    damage: perk.damage || 0,
+                    lastTick: now
+                };
+
+                soundManager.playEffect('adrenaline_boost');
+                
+                // Discovery
+                if (!state.discoveredPerks.includes(perk.id)) {
+                    state.discoveredPerks.push(perk.id);
+                    session.triggerDiscovery('perk', perk.id, perk.displayName, perk.description);
+                }
+            }
+        }
     }
 
     // Cached Base Multipliers
@@ -37,8 +69,6 @@ export class PlayerStatsSystem implements System {
     };
 
     // Updates passive buffs from family members
-    // runs in init() and when a family member is found:
-    // GameSession.handleFamilyMemberFound()
     public updatePassives() {
         this.cachedFamilyMultipliers = { speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0 };
         const family = this.activeFamilyMembers.current;
@@ -49,12 +79,23 @@ export class PlayerStatsSystem implements System {
             if (!member.following) continue;
 
             const name = member.name.toLowerCase();
-            this.cachedPassives[pIdx++] = name;
-
-            if (name === 'loke') this.cachedFamilyMultipliers.reloadTime *= 0.8;
-            if (name === 'jordan') this.cachedFamilyMultipliers.range *= 1.15;
-            if (name === 'esmeralda') this.cachedFamilyMultipliers.fireRate *= 1.2;
-            if (name === 'nathalie') this.cachedFamilyMultipliers.damageResist *= 0.9;
+            
+            if (name === 'loke') {
+                this.cachedFamilyMultipliers.reloadTime *= (PERKS[StatusEffectType.LOKE_RELOAD]?.intensity || 0.8);
+                this.cachedPassives[pIdx++] = StatusEffectType.LOKE_RELOAD;
+            }
+            if (name === 'jordan') {
+                this.cachedFamilyMultipliers.range *= (PERKS[StatusEffectType.JORDAN_RANGE]?.intensity || 1.15);
+                this.cachedPassives[pIdx++] = StatusEffectType.JORDAN_RANGE;
+            }
+            if (name === 'esmeralda') {
+                this.cachedFamilyMultipliers.fireRate *= (PERKS[StatusEffectType.ESMERALDA_FIRE]?.intensity || 1.2);
+                this.cachedPassives[pIdx++] = StatusEffectType.ESMERALDA_FIRE;
+            }
+            if (name === 'nathalie') {
+                this.cachedFamilyMultipliers.damageResist *= (PERKS[StatusEffectType.NATHALIE_RESIST]?.intensity || 0.9);
+                this.cachedPassives[pIdx++] = StatusEffectType.NATHALIE_RESIST;
+            }
         }
 
         this.cachedPassives.length = pIdx;
@@ -87,18 +128,26 @@ export class PlayerStatsSystem implements System {
             if (!effect || effect.duration <= 0) continue;
 
             effect.duration -= dt * 1000;
-            state.activeDebuffs[debuffIdx++] = type;
+            
+            const perk = PERKS[type];
+            if (perk) {
+                if (perk.category === PerkCategory.BUFF) {
+                    state.activeBuffs[debuffIdx++] = type;
+                } else {
+                    state.activeDebuffs[debuffIdx++] = type;
+                }
 
-            switch (type) {
-                case StatusEffectType.DISORIENTED:
-                    state.isDisoriented = true;
-                    session.engine.camera.shake(0.05);
-                    break;
-                case StatusEffectType.BLEEDING:
-                case StatusEffectType.BURNING:
-                case StatusEffectType.ELECTRIFIED:
-                    state.multipliers.speed *= 0.9; // Ovanpå familjens eventuella speed-buff
-                    break;
+                // Apply intensity (e.g. speed multiplier) if defined
+                if (perk.intensity !== undefined) {
+                    state.multipliers.speed *= perk.intensity;
+                }
+            } else {
+                state.activeDebuffs[debuffIdx++] = type;
+            }
+
+            if (type === StatusEffectType.DISORIENTED) {
+                state.isDisoriented = true;
+                session.engine.camera.shake(0.05);
             }
         }
 
@@ -117,10 +166,11 @@ export class PlayerStatsSystem implements System {
             // Tick DoT every 1 second
             if (now - (effect.lastTick || 0) >= 1000) {
                 // Use intensity as damage per second
-                const dmg = effect.intensity || 0;
+                const dmg = effect.damage || 0;
                 if (dmg > 0) {
                     const dmgType = type === StatusEffectType.BURNING ? DamageType.BURN :
-                        (type === StatusEffectType.BLEEDING ? DamageType.BLEED : DamageType.PHYSICAL);
+                        (type === StatusEffectType.BLEEDING ? DamageType.BLEED :
+                        (type === StatusEffectType.ELECTRIFIED ? DamageType.ELECTRIC : DamageType.PHYSICAL));
 
                     // Track source if available
                     const attacker = effect.sourceType ? { type: effect.sourceType, isBoss: effect.sourceType === 'Boss' } : null;
@@ -166,6 +216,16 @@ export class PlayerStatsSystem implements System {
 
         if (state.isDead || state.sectorState?.isInvincible) return;
 
+        // --- NEW: TACTICAL IMMUNITY BUFFS ---
+        const reflexShield = state.statusEffects[StatusEffectType.REFLEX_SHIELD];
+        const adrenalinePatch = state.statusEffects[StatusEffectType.ADRENALINE_PATCH];
+        
+        if ((reflexShield && reflexShield.duration > 0) || (adrenalinePatch && adrenalinePatch.duration > 0)) {
+            // Visual feedback for negated hit? 
+            // (Standard invulnerableCheck below handles I-frames, but this is absolute)
+            return;
+        }
+
         // Apply Damage Resistance Multiplier (Nathalie)
         let actualDmg = damage * state.multipliers.damageResist;
 
@@ -195,16 +255,20 @@ export class PlayerStatsSystem implements System {
         }
 
         // --- NEW: Register Status Effects ---
-        if (effectType && effectDuration && effectDuration > 0) {
-            // console.log(`[DEBUG] Registering effect: ${effectType} for ${effectDuration}ms`);
+        if (effectType) {
+            // console.log(`[DEBUG] Registering effect: ${effectType} für ${effectDuration}ms`);
             if (!state.statusEffects[effectType]) {
-                state.statusEffects[effectType] = { duration: 0, maxDuration: 0, intensity: 0, lastTick: 0 };
+                state.statusEffects[effectType] = { duration: 0, maxDuration: 0, intensity: 1, damage: 0, lastTick: 0 };
             }
 
-            // Set/Overwrite the duration, maxDuration and intensity (damage per second)
-            state.statusEffects[effectType]!.duration = effectDuration;
-            state.statusEffects[effectType]!.maxDuration = effectDuration;
-            state.statusEffects[effectType]!.intensity = effectDamage || 0;
+            const perk = PERKS[effectType];
+
+            // Set/Overwrite the duration, maxDuration and intensity/damage
+            // Prioritize PERKS database if available, otherwise use passed values
+            state.statusEffects[effectType]!.duration = perk?.duration || effectDuration || 0;
+            state.statusEffects[effectType]!.maxDuration = perk?.duration || effectDuration || 0;
+            state.statusEffects[effectType]!.intensity = perk?.intensity !== undefined ? perk.intensity : (effectType === StatusEffectType.STUNNED ? 0 : 1);
+            state.statusEffects[effectType]!.damage = perk?.damage || effectDamage || 0;
 
             // Track source for DoT
             if (attacker) {

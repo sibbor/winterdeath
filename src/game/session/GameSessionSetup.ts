@@ -110,9 +110,18 @@ export class GameSessionSetup {
 
         try {
             const currentSector = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
-            state.sectorName = currentSector.name;
-            state.initialAim = currentSector.initialAim || null;
+            state.sectorName = currentSector.name || '';
+
+            if (currentSector.initialAim) {
+                state.initialAim.active = true;
+                state.initialAim.x = currentSector.initialAim.x;
+                state.initialAim.y = currentSector.initialAim.y;
+            } else {
+                state.initialAim.active = false;
+            }
+
             const rng = seededRandom(props.currentSector + 4242);
+
 
             // 1. Prepare Scene
             this.prepareScene(engine, props.isWarmup, refs, currentSector.environment);
@@ -234,10 +243,11 @@ export class GameSessionSetup {
         }
         refs.playerMeshRef.current = bodyMesh as THREE.Group;
 
-        if (state.initialAim && engine.input?.state) {
+        if (state.initialAim.active && engine.input?.state) {
             engine.input.state.aimVector.x = state.initialAim.x;
             engine.input.state.aimVector.y = state.initialAim.y;
         }
+
 
         const spawn = currentSector.playerSpawn;
         playerGroup.position.set(spawn.x, spawn.y || 0, spawn.z);
@@ -592,10 +602,19 @@ export class GameSessionSetup {
             setNotification: (n: any) => { if (n && n.visible && n.text) callbacks.spawnBubble(`${n.icon ? n.icon + ' ' : ''}${n.text}`, n.duration || 3000); },
             t: callbacks.t, spawnPart: callbacks.spawnPart, startCinematic: callbacks.startCinematic,
             setInteraction: (interaction: any) => {
-                if (interaction) { ui.setInteractionType('plant_explosive'); state.currentInteraction = interaction; }
-                else { ui.setInteractionType(null); state.currentInteraction = null; }
+                if (interaction) {
+                    state.interaction.active = true;
+                    state.interaction.type = 'plant_explosive';
+                    state.hasCurrentInteraction = true;
+                    state.currentInteractionPayload = interaction;
+                } else {
+                    state.interaction.active = false;
+                    state.interaction.type = '';
+                    state.hasCurrentInteraction = false;
+                }
             },
-            playSound: (id: string) => { if (id === 'explosion') soundManager.playExplosion(); else soundManager.playUiConfirm(); },
+
+            playSound: (id: string) => soundManager.playEffect(id),
             playTone: (freq: number, type: OscillatorType, duration: number, vol?: number) => soundManager.playTone(freq, type, duration, vol || 0.1),
             cameraShake: (amount: number) => engine.camera.shake(amount), scene: engine.scene,
             setCameraOverride: (params: any) => { refs.cameraOverrideRef.current = params; engine.camera.setCinematic(!!params); },
@@ -616,8 +635,10 @@ export class GameSessionSetup {
                 setCurrentLine: ui.setCurrentLine, setCinematicActive: ui.setCinematicActive, endCinematic: callbacks.endCinematic,
                 playCinematicLine: callbacks.playCinematicLine, setTailPosition: ui.setBubbleTailPosition,
                 onAction: callbacks.onAction // Hooked up!
-            }
+            },
+            state: state
         }));
+
 
         session.addSystem(new DeathSystem({
             playerGroupRef: refs.playerGroupRef as any, playerMeshRef: refs.playerMeshRef as any, fmMeshRef: refs.familyMemberRef, activeFamilyMembers: refs.activeFamilyMembers,
@@ -676,10 +697,11 @@ export class GameSessionSetup {
         state.stamina = state.maxStamina;
         state.isReloading = false;
         state.isInteractionOpen = false;
-        state.activeVehicle = null;
-        state.activeVehicleType = null;
-        state.vehicleSpeed = 0;
-        state.vehicleEngineState = 'OFF';
+        state.vehicle.active = false;
+        state.vehicle.mesh = null;
+        state.vehicle.speed = 0;
+        state.vehicle.engineState = 'OFF';
+
 
         // Reset buffs/debuffs (Zero-GC: Emptying arrays)
         state.activeBuffs.length = 0;
@@ -715,7 +737,8 @@ export class GameSessionSetup {
 
         state.isInteractionOpen = false;
         state.eDepressed = false;
-        state.interactionRequest.active = false;
+        state.interaction.active = false;
+
 
         // 2. Move player to spawn point
         const currentSectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);

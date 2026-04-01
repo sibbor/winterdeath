@@ -107,6 +107,7 @@ export const INITIAL_STATS: PlayerStats = {
     speed: DEFAULT_SPEED, // kph
     skillPoints: 0,
     rescuedFamilyIds: [],
+    discoveredPerks: [],
     kills: 0,
     scrap: 0,
     sectorsCompleted: 0,

@@ -11,6 +11,8 @@ import CollectiblePreview from '../../core/CollectiblePreview';
 import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
 import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 import { soundManager } from '../../../../utils/audio/SoundManager';
+import { StatusEffectType, PerkCategory } from '../../../../entities/player/CombatTypes';
+import { PERKS } from '../../../../content/perks';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -22,7 +24,7 @@ interface ScreenAdventureLogProps {
     initialItemId?: string | null;
 }
 
-type Tab = 'stats' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
+type Tab = 'stats' | 'perks' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
 
 // --- ZERO-GC STATIC ARRAYS & CONFIGS ---
 const EMPTY_ARRAY: any[] = [];
@@ -33,6 +35,7 @@ const TABS: { id: Tab, label: string }[] = [
     { id: 'poi', label: 'ui.log_poi' },
     { id: 'enemy', label: 'ui.log_enemies' },
     { id: 'boss', label: 'ui.log_bosses' },
+    { id: 'perks', label: 'ui.log_perks' },
 ];
 const SECTORS = [1, 2, 3, 4];
 const THEME_COLOR = '#16a34a'; // green-600
@@ -126,8 +129,14 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 if (onMarkCollectiblesViewed) onMarkCollectiblesViewed(allIds);
                 break;
             }
-            case 'boss': {
-                stats.bossesDefeated = Object.keys(BOSSES).map(id => parseInt(id));
+            case 'clues': {
+                const allClueIds = Object.keys(CLUES);
+                stats.cluesFound = [...new Set([...(stats.cluesFound || []), ...allClueIds])];
+                break;
+            }
+            case 'poi': {
+                const allPoiIds = Object.keys(POIS);
+                stats.discoveredPOIs = [...new Set([...(stats.discoveredPOIs || []), ...allPoiIds])];
                 break;
             }
             case 'enemy': {
@@ -138,14 +147,8 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 });
                 break;
             }
-            case 'clues': {
-                const allClueIds = Object.keys(CLUES);
-                stats.cluesFound = [...new Set([...(stats.cluesFound || []), ...allClueIds])];
-                break;
-            }
-            case 'poi': {
-                const allPoiIds = Object.keys(POIS);
-                stats.discoveredPOIs = [...new Set([...(stats.discoveredPOIs || []), ...allPoiIds])];
+            case 'boss': {
+                stats.bossesDefeated = Object.keys(BOSSES).map(id => parseInt(id));
                 break;
             }
         }
@@ -196,6 +199,9 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar relative">
                     <div className={activeTab === 'stats' ? 'block h-full' : 'hidden'}>
                         <StatsTab stats={stats} isMobileDevice={!effectiveLandscape} />
+                    </div>
+                    <div className={activeTab === 'perks' ? 'block' : 'hidden'}>
+                        <PerksTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} isDebug={isDebugMode} />
                     </div>
                     <div className={activeTab === 'enemy' ? 'block' : 'hidden'}>
                         <EnemyTab stats={stats} color={THEME_COLOR} isMobileDevice={isMobileDevice} effectiveLandscape={effectiveLandscape} />
@@ -682,6 +688,66 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
                     </div>
                 );
             })}
+        </div>
+    );
+});
+
+const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
+    const discoveredList = stats.discoveredPerks || EMPTY_ARRAY;
+    
+    // Categorize perks
+    const perksArray = Object.values(PERKS);
+    const buffs = perksArray.filter(p => p.category === PerkCategory.BUFF);
+    const passives = perksArray.filter(p => p.category === PerkCategory.PASSIVE);
+
+    const renderPerk = (perk: any) => {
+        const isFound = isDebug || discoveredList.includes(perk.id);
+
+        return (
+            <div key={perk.id} id={`log-item-${perk.id}`} className={`group relative flex flex-col border-2 transition-all duration-500 overflow-hidden ${isFound ? 'border-yellow-600/40 bg-zinc-900/40' : 'border-zinc-800 bg-black/20'} ${isMobileDevice ? 'p-4' : 'p-6'}`}>
+                <div className="flex flex-col gap-4">
+                    <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">{isFound ? (perk.category === PerkCategory.BUFF ? '🛡️' : '✨') : '❓'}</span>
+                            <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
+                                {isFound ? t(perk.displayName) : '???'}
+                            </h3>
+                        </div>
+                        {isFound && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest ${perk.category === PerkCategory.BUFF ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                                {perk.category}
+                            </span>
+                        )}
+                    </div>
+                    <div className="space-y-3">
+                        <p className={`text-sm leading-relaxed ${isFound ? 'text-zinc-400' : 'text-zinc-800'}`}>
+                            {isFound ? t(perk.description) : 'Perform specific tactical actions or rescue family members to unlock new perks.'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="space-y-12 pb-12">
+            <div className="space-y-6">
+                <div className="border-b-2 border-zinc-800 pb-2">
+                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.tactical_buffs') || "Tactical Buffs"}</h3>
+                </div>
+                <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                    {buffs.map(renderPerk)}
+                </div>
+            </div>
+
+            <div className="space-y-6">
+                <div className="border-b-2 border-zinc-800 pb-2">
+                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passive_abilities') || "Passive Abilities"}</h3>
+                </div>
+                <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                    {passives.map(renderPerk)}
+                </div>
+            </div>
         </div>
     );
 });

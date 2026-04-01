@@ -202,6 +202,7 @@ export const sv = {
         log_bosses: "BOSSAR",
         log_collectibles: "SAMLAROBJEKT",
         log_clues: "LEDTRÅDAR",
+        log_perks: "FÖRMÅGOR",
         unknown_threat: "Okänt hot",
         drowning: "Drunkning",
         bleeding: "Blödning",
@@ -331,7 +332,21 @@ export const sv = {
         adrenaline: "ADRENALIN",
         adrenaline_desc: "Ökar maximal uthållighet.",
         reflex: "REFLEXER",
-        reflex_desc: "Ökar rörelsehastigheten."
+        reflex_desc: "Ökar rörelsehastigheten.",
+        loke_passive: "Snabba Händer: 20% snabbare omladdning.",
+        jordan_passive: "Örnöga: 15% ökad räckvidd.",
+        esmeralda_passive: "Snabba Fingrar: 20% ökad eldhastighet.",
+        nathalie_passive: "Stoisk: 10% skaderesistans."
+    },
+    perks: {
+        REFLEX_SHIELD: {
+            title: "Reflexsköld",
+            description: "0.5s odödlighet vid rullning eller rusning. 10s cooldown."
+        },
+        ADRENALINE_PATCH: {
+            title: "Adrenalinplåster",
+            description: "3s odödlighet när hälsan sjunker under 25%. 60s cooldown."
+        }
     },
     weapons: {
         smg: "SMG",

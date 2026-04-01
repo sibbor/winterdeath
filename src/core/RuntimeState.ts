@@ -11,6 +11,48 @@ import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ParticleState } from '../systems/FXSystem';
 
+export interface PreallocatedInitialAim {
+    active: boolean;
+    x: number;
+    y: number;
+}
+
+export interface PreallocatedDiscoveryState {
+    active: boolean;
+    id: string;
+    type: string;
+    title: string;
+    details: string;
+    timestamp: number;
+}
+
+export interface PreallocatedCinematicState {
+    active: boolean;
+    speaker: string;
+    text: string;
+}
+
+export interface PreallocatedInteractionRequest {
+    active: boolean;
+    type: string;
+    label: string;
+    targetId: string;
+}
+
+export interface PreallocatedVehicleState {
+    active: boolean;
+    mesh: THREE.Object3D | null;
+    type: string;
+    speed: number;
+    throttle: number;
+    engineState: 'OFF' | 'STARTING' | 'RUNNING';
+    velocity: THREE.Vector3;
+    angularVelocity: THREE.Vector3;
+    suspY: number;
+    suspVelY: number;
+}
+
+
 export interface RuntimeState {
     isDead: boolean;
     score: number;
@@ -45,8 +87,12 @@ export interface RuntimeState {
     wasFiring: boolean;
     throwChargeStart: number;
     lastShotTime: number;
+    lastReflexShieldTime: number;
+    lastAdrenalinePatchTime: number;
+    lastHeartbeat: number;
 
     // --- OBJECT POOLS ---
+    // NOTE: Always clear using .length = 0, never reassign to []
     enemies: Enemy[];
     particles: ParticleState[];
     activeEffects: any[];
@@ -58,7 +104,7 @@ export interface RuntimeState {
 
     // --- TELEMETRY & PROGRESSION (Zero-GC) ---
     sessionStats: SectorStats;
-    
+
     // O(1) Discovery Lookups (Built at start of session)
     discoverySets: {
         clues: Set<string>;
@@ -98,6 +144,7 @@ export interface RuntimeState {
     speakBounce: number;
     cameraShake: number;
     hurtShake: number;
+    discoveredPerks: string[];
 
     // --- SECTOR & WORLD ---
     sectorState: SectorState;
@@ -110,8 +157,8 @@ export interface RuntimeState {
     lastActionTime: number;
     thinkingUntil: number;
     speakingUntil: number;
-    sectorName: string | null;
-    initialAim: { x: number, y: number } | null;
+    sectorName: string;
+    initialAim: PreallocatedInitialAim;
     deathStartTime: number;
     killerType: string;
     killerName: string;
@@ -137,9 +184,22 @@ export interface RuntimeState {
     drawCalls: number;
     triangles: number;
 
-    // --- INTERACTION ---
-    interactionType: 'chest' | 'vehicle' | 'collectible' | 'sector_specific' | null;
-    interactionLabel: string | null;
+    // --- INTERACTION & DISCOVERY ---
+    interaction: {
+        active: boolean;
+        type: string;
+        label: string;
+        targetId: string;
+    };
+
+    // Zero-GC struct för interaktionsförfrågningar
+    interactionRequest: {
+        active: boolean;
+        type: string;
+        id: string;
+        object: any; // Eller THREE.Object3D | null om du vill vara strikt
+    };
+
     // Flag to avoid null checks
     hasInteractionTarget: boolean;
     interactionTargetPos: THREE.Vector3;
@@ -153,33 +213,18 @@ export interface RuntimeState {
     collectiblesDiscovered: string[];
     mapItems: any[];
 
-    activeVehicle: THREE.Object3D | null;
-    activeVehicleType: VehicleType | null;
-    vehicleSpeed: number;
-    vehicleEngineState: 'OFF' | 'STARTING' | 'RUNNING';
+    // --- VEHICLES ---
+    vehicle: PreallocatedVehicleState;
 
     flashlightOn: boolean;
-    currentInteraction: any | null;
-    
+    hasCurrentInteraction: boolean;
+    currentInteractionPayload: any
     // --- DISCOVERY & CINEMATICS ---
-    discovery: {
-        id: string;
-        type: string;
-        title: string;
-        details: string;
-        timestamp: number;
-    } | null;
+    discovery: PreallocatedDiscoveryState;
 
     cinematicActive: boolean;
-    currentLine: any | null;
+    cinematicLine: PreallocatedCinematicState;
 
-    // --- PRE-ALLOCATED REQUEST OBJECT (Zero-GC) ---
-    interactionRequest: {
-        active: boolean;
-        id: string;
-        object: THREE.Object3D | null;
-        type: 'sector_specific' | 'global' | null;
-    };
     callbacks: any;
     stats: PlayerStats;
 

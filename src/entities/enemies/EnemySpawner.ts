@@ -4,6 +4,7 @@ import { ModelFactory, GEOMETRY, MATERIALS } from '../../utils/assets';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { Enemy, AIState, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PerformanceMonitor } from '../../systems/PerformanceMonitor';
+import { NoiseType } from './EnemyTypes';
 
 let _nextPoolId = 0;
 
@@ -139,7 +140,7 @@ export const EnemySpawner = {
             lastKnownPosition: new THREE.Vector3(x, 0, z),
             hearingThreshold: 1.0,
             awareness: 0,
-            lastHeardNoiseType: null,
+            lastHeardNoiseType: NoiseType.NONE,
 
             isBoss: false,
             bossId: -1,
@@ -182,11 +183,15 @@ export const EnemySpawner = {
             lastKnockback: 0,
 
             // Water states
-            isInWater: false, isWading: false, isDrowning: false,
-            drownTimer: 0, drownDmgTimer: 0,
+            isInWater: false,
+            isWading: false,
+            isDrowning: false,
+            drownTimer: 0,
+            drownDmgTimer: 0,
 
             // Airborne / fall damage
-            isAirborne: false, fallStartY: 0,
+            isAirborne: false,
+            fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
 
@@ -262,7 +267,7 @@ export const EnemySpawner = {
             lastKnownPosition: new THREE.Vector3(pos.x, 0, pos.z),
             hearingThreshold: 1.5,
             awareness: 0.2,
-            lastHeardNoiseType: null,
+            lastHeardNoiseType: NoiseType.NONE,
             isBoss: true,
             bossId: bossData.id,
             dead: false,
@@ -298,11 +303,15 @@ export const EnemySpawner = {
             lastKnockback: 0,
 
             // Water states
-            isInWater: false, isWading: false, isDrowning: false,
-            drownTimer: 0, drownDmgTimer: 0,
+            isInWater: false,
+            isWading: false,
+            isDrowning: false,
+            drownTimer: 0,
+            drownDmgTimer: 0,
 
             // Airborne / fall damage
-            isAirborne: false, fallStartY: 0,
+            isAirborne: false,
+            fallStartY: 0,
             _accumulatedDamage: 0,
             _lastDamageTextTime: 0,
 

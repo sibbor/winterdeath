@@ -32,7 +32,6 @@ export class EnemyDetectionSystem implements System {
         context.detectionSystem = this;
     }
 
-
     /**
          * Broadcasts a noise event for enemies to hear. 
          * Uses Spatial Merging to automatically throttle high-frequency events (like automatic gunfire or vehicles) without allocating new memory.
@@ -161,7 +160,7 @@ export class EnemyDetectionSystem implements System {
             if ((i % 3) === frameIndex) {
                 const visible = this.canSeePlayer(e, playerPos, collisionGrid);
                 if (visible) {
-                    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
+                    // VINTERDÖD FIX: Removed null check for pre-allocated vector
                     e.lastKnownPosition.copy(playerPos);
                     e.searchTimer = 0;
                     e.awareness = 1.0;
@@ -185,7 +184,7 @@ export class EnemyDetectionSystem implements System {
                 const effectiveRadius = evt.radius * hearingThreshold;
 
                 if (distSq <= effectiveRadius * effectiveRadius) {
-                    if (!e.lastKnownPosition) e.lastKnownPosition = new THREE.Vector3();
+                    // VINTERDÖD FIX: Removed null check for pre-allocated vector
                     e.lastKnownPosition.copy(evt.pos);
                     e.lastHeardNoiseType = evt.type;
 

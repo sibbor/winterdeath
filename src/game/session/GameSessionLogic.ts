@@ -138,6 +138,7 @@ export class GameSessionLogic {
             isRolling: false,
 
             invulnerableUntil: 0,
+            lastHeartbeat: 0,
             spacePressTime: 0,
             spaceDepressed: false,
             eDepressed: false,
@@ -146,6 +147,8 @@ export class GameSessionLogic {
             wasFiring: false,
             throwChargeStart: 0,
             lastShotTime: 0,
+            lastReflexShieldTime: 0,
+            lastAdrenalinePatchTime: 0,
 
             // --- POOLS ---
             enemies: [] as Enemy[],
@@ -159,7 +162,8 @@ export class GameSessionLogic {
 
             sessionStats,
             discoverySets,
-            discovery: null,
+            discovery: { active: false, id: '', type: '', title: '', details: '', timestamp: 0 },
+
 
             bossesDefeated: [],
             familyFound: !!props.familyAlreadyRescued,
@@ -172,6 +176,7 @@ export class GameSessionLogic {
             lastBiteTime: 0,
             noiseLevel: 0, speakBounce: 0,
             cameraShake: 0, hurtShake: 0,
+            discoveredPerks: props.stats.discoveredPerks || [],
 
             sectorState: {
                 envOverride: props.environmentOverrides ? props.environmentOverrides[props.currentSector] : undefined
@@ -188,8 +193,8 @@ export class GameSessionLogic {
             lastActionTime: 0,
             thinkingUntil: 0,
             speakingUntil: 0,
-            sectorName: null,
-            initialAim: null,
+            sectorName: '',
+            initialAim: { active: false, x: 0, y: 0 },
             deathStartTime: 0,
             killerType: '',
             killerName: '',
@@ -216,29 +221,44 @@ export class GameSessionLogic {
             mapItems: [],
 
             // --- VEHICLES ---
-            activeVehicle: null,
-            activeVehicleType: null,
-            vehicleSpeed: 0,
-            vehicleEngineState: 'OFF',
+            vehicle: {
+                active: false,
+                mesh: null,
+                type: '',
+                speed: 0,
+                throttle: 0,
+                engineState: 'OFF',
+                velocity: new THREE.Vector3(),
+                angularVelocity: new THREE.Vector3(),
+                suspY: 0,
+                suspVelY: 0
+            },
 
             // --- INTERACTION ---
-            interactionType: null,
-            interactionLabel: null,
-            hasInteractionTarget: false,
-            interactionTargetPos: new THREE.Vector3(),
+            interaction: {
+                active: false,
+                type: '',
+                label: '',
+                targetId: ''
+            },
+
+            // VINTERDÖD FIX: Pre-allokera request-structen
             interactionRequest: {
                 active: false,
+                type: '',
                 id: '',
-                object: null,
-                type: null
+                object: null
             },
+            hasInteractionTarget: false,
+            interactionTargetPos: new THREE.Vector3(),
             renderCpuTime: 0,
             drawCalls: 0,
             triangles: 0,
             flashlightOn: false,
             hasNearestCollectible: false,
             nearestCollectibleId: '',
-            currentInteraction: null,
+            hasCurrentInteraction: false,
+            currentInteractionPayload: {},
             stats: props.stats,
 
             // --- COMBAT & STATUS INITIALIZATION ---
@@ -262,10 +282,11 @@ export class GameSessionLogic {
 
             // --- CINEMATIC STATE ---
             cinematicActive: false,
-            currentLine: null,
+            cinematicLine: { active: false, speaker: '', text: '' },
 
             // --- TIME ---
             accumulatedTime: 0,
+
         };
     }
 
@@ -291,6 +312,19 @@ export class GameSessionLogic {
     update(dt: number, mapId: number = 0) {
         this.mapId = mapId;
         if (!this.state) return;
+    }
+
+    /**
+     * Registers a discovery (POI, Clue, Perk, etc.) and triggers the HUD popup.
+     */
+    triggerDiscovery(type: string, id: string, title: string, details: string) {
+        if (!this.state) return;
+        this.state.discovery.active = true;
+        this.state.discovery.type = type;
+        this.state.discovery.id = id;
+        this.state.discovery.title = title;
+        this.state.discovery.details = details;
+        this.state.discovery.timestamp = performance.now();
     }
 
     /**
@@ -360,11 +394,19 @@ export class GameSessionLogic {
             // For now, just ensure the root references are cleared.
             (this.state as any).sessionStats = null;
             (this.state as any).discoverySets = null;
-            this.state.activeVehicle = null;
-            this.state.activeVehicleType = null;
-            this.state.vehicleSpeed = 0;
-            this.state.vehicleEngineState = 'OFF';
-            this.state.discovery = null;
+
+            this.state.vehicle.active = false;
+            this.state.vehicle.mesh = null;
+            this.state.vehicle.speed = 0;
+            this.state.vehicle.engineState = 'OFF';
+            this.state.vehicle.velocity.set(0, 0, 0);
+            this.state.vehicle.angularVelocity.set(0, 0, 0);
+            this.state.vehicle.suspY = 0;
+            this.state.vehicle.suspVelY = 0;
+
+            this.state.discovery.active = false;
+            this.state.initialAim.active = false;
+            this.state.interaction.active = false;
 
             // System's collision grid
             if (this.state.collisionGrid && typeof this.state.collisionGrid.clear === 'function') {
@@ -373,7 +415,8 @@ export class GameSessionLogic {
 
             // --- CINEMATIC CLEANUP ---
             this.state.cinematicActive = false;
-            this.state.currentLine = null;
+            this.state.cinematicLine.active = false;
+
         }
     }
 }

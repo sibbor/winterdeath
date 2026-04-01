@@ -68,32 +68,33 @@ export class VehicleMovementSystem implements System {
         const state = session.state;
         const input = session.engine.input.state;
 
-        const interactables = state.sectorState?.ctx?.interactables;
-        if (interactables) {
-            const len = interactables.length;
-            for (let i = 0; i < len; i++) {
-                const obj = interactables[i];
-                const def = obj.userData?.vehicleDef;
-                if (def) {
-                    const isActive = (state.activeVehicle === obj);
-                    this.handleVehiclePhysics(
-                        obj,
-                        this.playerGroup,
-                        isActive ? input : null,
-                        state,
-                        delta,
-                        session,
-                        now,
-                        def
-                    );
-                }
+        const interactables = state.sectorState.ctx.interactables;
+        const len = interactables.length;
+        for (let i = 0; i < len; i++) {
+            const obj = interactables[i];
+            const def = obj.userData.vehicleDef;
+            if (def) {
+                const isActive = (state.vehicle.active && state.vehicle.mesh === obj);
+
+                this.handleVehiclePhysics(
+                    obj,
+                    this.playerGroup,
+                    isActive ? input : null,
+                    state,
+                    delta,
+                    session,
+                    now,
+                    def
+                );
             }
         }
 
         // Ensure engine sounds/state are reset if no vehicle is currently active
-        if (!state.activeVehicle && state.vehicleEngineState !== 'OFF') {
-            state.vehicleEngineState = 'OFF';
-            state.vehicleSpeed = 0;
+        const hasActiveVehicle = state.vehicle.active;
+        if (!hasActiveVehicle && state.vehicle.engineState !== 'OFF') {
+            state.vehicle.engineState = 'OFF';
+            state.vehicle.speed = 0;
+            state.vehicle.throttle = 0;
             soundManager.stopVehicleEngine();
             soundManager.playVehicleSkid(0);
         }
@@ -113,13 +114,6 @@ export class VehicleMovementSystem implements System {
         const fpsRatio = dt * 60;
 
         const ud = vehicle.userData;
-        if (!ud.velocity) {
-            ud.velocity = new THREE.Vector3();
-            ud.angularVelocity = new THREE.Vector3();
-            ud.suspY = 0;
-            ud.suspVelY = 0;
-        }
-
         const vel = ud.velocity as THREE.Vector3;
         const angVel = ud.angularVelocity as THREE.Vector3;
 
@@ -289,7 +283,7 @@ export class VehicleMovementSystem implements System {
                 chassis.position.y = suspY;
 
                 // 2. Calculate G-forces forward/backward (Pitch)
-                const prevFwdSpeed = ud.prevFwdSpeed || 0;
+                const prevFwdSpeed = ud.prevFwdSpeed;
                 const fwdAccel = (forwardSpeed - prevFwdSpeed) / dt; // Rate of speed change
                 ud.prevFwdSpeed = forwardSpeed;
 
@@ -329,7 +323,7 @@ export class VehicleMovementSystem implements System {
 
         // --- LIGHTING SYSTEM ---
         const lights = ud.lights;
-        const isEngineOn = (input !== null && state.vehicleEngineState !== 'OFF');
+        const isEngineOn = (input !== null && state.vehicle.engineState !== 'OFF');
 
         if (lights) {
             if (lights.headlights) {
@@ -393,12 +387,14 @@ export class VehicleMovementSystem implements System {
             const speedRatio = speed / (maxSpeedMS > 1.0 ? maxSpeedMS : 1.0);
             const normSpeed = speedRatio < 1.0 ? speedRatio : 1.0;
 
-            state.vehicleSpeed = speed * 3.6;
-            state.vehicleThrottle = throttle;
+            state.vehicle.speed = speed * 3.6;
+            state.vehicle.throttle = throttle;
+            state.vehicle.engineState = 'RUNNING';
 
             if (Number.isFinite(normSpeed)) {
                 soundManager.updateVehicleEngine(normSpeed);
             }
+
 
             const isSkidding = absLatSpeed > 4.5 || (speedSq > 25 && (angVel.y > 0.8 || angVel.y < -0.8));
 

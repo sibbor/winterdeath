@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { t } from '../../../utils/i18n';
 import { soundManager } from '../../../utils/audio/SoundManager';
@@ -13,20 +13,33 @@ const TAB_MAP: Record<string, string> = {
   poi: 'poi',
   collectible: 'collectibles',
   enemy: 'enemy',
-  boss: 'boss'
+  boss: 'boss',
+  perk: 'perks'
 };
 
 const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdventureLog }) => {
-  const discovery = useHudStore(s => s.discovery);
+  // ============================================================================
+  // ZERO-GC PRIMITIVE SELECTORS
+  // Förhindrar att komponenten renderas om 60fps vid buffer-swaps.
+  // React kommer nu BARA rendera om när dessa specifika värden faktiskt ändras.
+  // ============================================================================
+  const isActive = useHudStore(s => s.discovery.active);
+  const timestamp = useHudStore(s => s.discovery.timestamp);
+  const id = useHudStore(s => s.discovery.id);
+  const type = useHudStore(s => s.discovery.type);
+  const title = useHudStore(s => s.discovery.title);
+  const details = useHudStore(s => s.discovery.details);
+
   const [visible, setVisible] = useState(false);
-  const [activeDiscovery, setActiveDiscovery] = useState(discovery);
+  const [activeDiscovery, setActiveDiscovery] = useState<any>(null);
 
   useEffect(() => {
-    if (discovery && discovery.timestamp !== activeDiscovery?.timestamp) {
-      setActiveDiscovery(discovery);
+    // Trigga bara när vi har en ny upptäckt baserat på timestamp
+    if (isActive && timestamp !== activeDiscovery?.timestamp) {
+      setActiveDiscovery({ id, type, title, details, timestamp });
       setVisible(true);
     }
-  }, [discovery, activeDiscovery?.timestamp]);
+  }, [isActive, timestamp, id, type, title, details, activeDiscovery?.timestamp]);
 
   // ZERO-GC: Stabil callback som undviker closures på 'visible'
   const handleInteraction = useCallback(() => {
@@ -68,6 +81,7 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
       case 'collectible': return <span className="text-xl">📦</span>;
       case 'enemy': return <span className="text-xl">🧟</span>;
       case 'boss': return <span className="text-xl">💀</span>;
+      case 'perk': return <span className="text-xl">✨</span>;
       default: return null;
     }
   };

@@ -27,10 +27,11 @@ const CinematicBubble = forwardRef<CinematicBubbleHandle, CinematicBubbleProps>(
     // ZERO-GC PRIMITIVE SELECTORS
     // ============================================================================
     const cinematicActive = useHudStore(s => s.cinematicActive);
-    const rawText = useHudStore(s => s.currentLine?.text || '');
-    const speakerName = useHudStore(s => s.currentLine?.speaker || '');
+    const lineActive = useHudStore(s => s.currentLine.active);
+    const rawText = useHudStore(s => s.currentLine.text);
+    const speakerName = useHudStore(s => s.currentLine.speaker);
 
-    const isVisible = cinematicActive && !!rawText;
+    const isVisible = cinematicActive && lineActive && !!rawText
 
     // Translate ONLY once when the raw string changes
     const translatedText = useMemo(() => (rawText ? t(rawText) : ''), [rawText]);

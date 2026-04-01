@@ -17,6 +17,8 @@ const _v2 = new THREE.Vector3();
 const _zeroV = new THREE.Vector3(0, 0, 0);
 const _blackColor = new THREE.Color(0x000000); // Used for safe color lerping without GC
 
+const _traverseStack: THREE.Object3D[] = []; // Shared stack to avoid closures during traversal
+
 const _deathAnimState = {
     isMoving: false, isRushing: false, isRolling: false, rollStartTime: 0,
     staminaRatio: 0, isSpeaking: false, isThinking: false, isIdleLong: false,
@@ -109,7 +111,7 @@ export class DeathSystem implements System {
         }
 
         // --- 2. Physics & Falling ---
-        if (playerGroup && state.deathVel) {
+        if (playerGroup) {
             state.deathVel.y -= 30 * delta;
             pgPos.addScaledVector(state.deathVel, delta);
 
@@ -197,12 +199,23 @@ export class DeathSystem implements System {
                 const shrink = 1.0 - progress;
                 playerMesh.scale.setScalar(shrink);
 
-                // Lerp color to black using the pre-allocated _blackColor
-                playerMesh.traverse((child: any) => {
+                // VINTERDÖD FIX: Zero-GC iterative traversal for material updates
+                _traverseStack.length = 0;
+                _traverseStack.push(playerMesh);
+
+                while (_traverseStack.length > 0) {
+                    const child = _traverseStack.pop() as any;
+
                     if (child.isMesh && child.material && child.material.color) {
                         child.material.color.lerp(_blackColor, progress * 0.1);
                     }
-                });
+
+                    if (child.children) {
+                        for (let i = 0; i < child.children.length; i++) {
+                            _traverseStack.push(child.children[i]);
+                        }
+                    }
+                }
 
                 if (progress >= 1.0) {
                     playerMesh.visible = false;
@@ -216,7 +229,7 @@ export class DeathSystem implements System {
 
             if (!state.playerBloodSpawned) {
                 state.playerBloodSpawned = true;
-                const baseScale = (playerMesh as any)?.userData?.baseScale || 1.0;
+                const baseScale = (playerMesh as any).userData.baseScale;
 
                 this.fxCallbacks.spawnDecal(pgPos.x, pgPos.z, 4.5 * baseScale, MATERIALS.bloodDecal);
                 this.fxCallbacks.spawnPart(pgPos.x, 1.0, pgPos.z, 'blood', 60);
@@ -233,16 +246,50 @@ export class DeathSystem implements System {
             const fm = fmList[i];
             if (!fm.mesh) continue;
             fm.following = false;
-            fm.isMoving = false;
+
+            // --- GATHER AROUND THE BODY (Zero-GC) ---
+            const distSq = fm.mesh.position.distanceToSquared(pgPos);
+            const stopDist = 1.8;
+            const stopDistSq = stopDist * stopDist;
+            let isWalking = false;
+
+            if (distSq > stopDistSq && distSq > 0.001) { // VINTERDÖD FIX: Protect against NaN!
+                // Move towards player
+                _v1.subVectors(pgPos, fm.mesh.position).normalize();
+                fm.mesh.position.addScaledVector(_v1, 3.5 * delta); // Moderate walking speed
+                isWalking = true;
+            }
+
+            fm.isMoving = isWalking;
             fm.mesh.lookAt(pgPos);
 
-            const children = fm.mesh.children;
-            let body: THREE.Mesh | null = null;
-            for (let j = 0; j < children.length; j++) {
-                if (children[j].userData.isBody) { body = children[j] as THREE.Mesh; break; }
+            // --- UNIQUE CRYING SOUNDS ---
+            const lastCry = (fm as any)._lastCryTime;
+            const cryDelay = (fm as any)._cryDelay;
+
+            if (now - lastCry > cryDelay) {
+                (fm as any)._lastCryTime = now;
+                (fm as any)._cryDelay = 4000 + Math.random() * 6000;
+                soundManager.playFamilyCrying(fm);
             }
+
+            // VINTERDÖD FIX: Cached body lookup (O(1) instead of O(N) array scan)
+            let body = fm.mesh.userData.cachedBody;
+
+            if (!body) {
+                const children = fm.mesh.children;
+                for (let j = 0; j < children.length; j++) {
+                    if (children[j].userData.isBody) {
+                        body = children[j] as THREE.Mesh;
+                        fm.mesh.userData.cachedBody = body;
+                        break;
+                    }
+                }
+            }
+
             if (body) {
                 _griefAnimState.seed = fm.seed || 0;
+                _griefAnimState.isMoving = isWalking;
                 PlayerAnimator.update(body, _griefAnimState, now, delta);
             }
         }

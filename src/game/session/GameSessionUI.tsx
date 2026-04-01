@@ -51,19 +51,21 @@ interface GameSessionUIProps {
 
 export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState, gameProps, callbacks }) => {
 
-    const state = refs.stateRef.current || {} as any;
-
-    // Zero-GC Callbacks to prevent re-allocating inline functions on every render
+    // VINTERDÖD FIX: Zero-GC callback that reads from refs instead of reactive state dependencies
+    // This function is only allocated ONCE during the component's lifetime.
     const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        if (uiState.cinematicActive && uiState.currentLine) {
+        // Read directly from the mutable ref to avoid dependency re-renders
+        const state = refs.stateRef.current;
+
+        if (state?.cinematicActive && (uiState.currentLine || state.dialogueLine)) {
             e.stopPropagation();
             callbacks.triggerCinematicNext();
             return;
         }
-        if (gameProps.isRunning && refs.containerRef.current && uiState.deathPhase === 'NONE') {
+        if (gameProps.isRunning && refs.containerRef.current && state && !state.isDead) {
             callbacks.requestPointerLock();
         }
-    }, [uiState.cinematicActive, uiState.currentLine, uiState.deathPhase, gameProps.isRunning, callbacks, refs]);
+    }, [gameProps.isRunning, callbacks, refs, uiState.currentLine]);
 
     const handlePauseTouch = useCallback(() => {
         callbacks.onPauseToggle(true);
@@ -87,10 +89,12 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
                 onClick={!gameProps.isMobileDevice ? handleContainerClick : undefined}
             />
 
-            {/* Mobile Touch Controls */}
-            {gameProps.isMobileDevice && gameProps.isRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && refs.engineRef.current && (
+            {/* Mobile Touch Controls 
+                VINTERDÖD FIX: Removed strict refs.engineRef.current check to prevent React Ref-Render trap. 
+                Assuming engine inputs are initialized safely before isRunning is set to true. */}
+            {gameProps.isMobileDevice && gameProps.isRunning && !gameProps.isPaused && !uiState.cinematicActive && !uiState.bossIntroActive && (
                 <TouchController
-                    inputState={refs.engineRef.current.input.state}
+                    inputState={refs.engineRef.current?.input?.state || {}}
                     onPause={handlePauseTouch}
                     onOpenMap={handleOpenMapTouch}
                 />

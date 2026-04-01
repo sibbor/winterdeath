@@ -4,6 +4,10 @@ import { WeaponType } from '../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../entities/player/CombatTypes';
 
+// Performance Scratchpads (Zero-GC)
+const _v1 = new THREE.Vector3();
+
+
 // ============================================================================
 // ZERO-GC DOUBLE BUFFERING
 // We allocate two identical state trees (A and B) on load.
@@ -50,7 +54,7 @@ const createHudBuffer = () => ({
     isReloading: false,
 
     // Internal mutable structs linked dynamically to avoid allocations
-    boss: null as any,
+    boss: { active: false, name: '', hp: 0, maxHp: 0 },
     _bossInfo: { active: false, name: '', hp: 0, maxHp: 0 },
 
     bossSpawned: false,
@@ -65,17 +69,13 @@ const createHudBuffer = () => ({
 
     playerPos: { x: 0, z: 0 },
 
-    familyPos: null as any,
-    _familyPos: { x: 0, z: 0 },
-
-    bossPos: null as any,
-    _bossPos: { x: 0, z: 0 },
+    familyPos: { x: 0, z: 0 },
+    bossPos: { x: 0, z: 0 },
 
     distanceTraveled: 0,
     kills: 0,
 
-    sectorStats: null as any,
-    _sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0 },
+    sectorStats: { unlimitedAmmo: false, unlimitedThrowables: false, isInvincible: false, hordeTarget: 0, zombiesKilled: 0, zombiesKillTarget: 0 },
 
     isDriving: false,
     vehicleSpeed: 0,
@@ -93,15 +93,16 @@ const createHudBuffer = () => ({
     // --- ZERO-GC FIX: Pre-allocate missing properties to lock V8 Hidden Class ---
     debugMode: false,
     systems: [] as any[],
-    currentLine: null as any,
+    currentLine: { active: false, speaker: '', text: '' },
     cinematicActive: false,
-    interactionPrompt: null as any,
+    interactionPrompt: { active: false, type: '', label: '', targetId: '', x: 0, y: 0 },
     hudVisible: true,
-    sectorName: null as string | null,
-    discovery: null as any,
-    _discovery: { id: '', type: 'clue', title: '', details: '', timestamp: 0 } as any
+
+    sectorName: '',
+    discovery: { active: false, id: '', type: 'clue' as const, title: '', details: '', timestamp: 0 }
 });
 
+// Double-buffering
 const _bufferA = createHudBuffer();
 const _bufferB = createHudBuffer();
 let _useBufferA = true;
@@ -190,20 +191,19 @@ export const HudSystem = {
         }
 
         if (activeBossObj) {
-            _current._bossInfo.active = true;
-            _current._bossInfo.name = (activeBossObj.bossId !== undefined && BOSSES[activeBossObj.bossId]) ? BOSSES[activeBossObj.bossId].name : 'BOSS';
-            _current._bossInfo.hp = activeBossObj.hp;
-            _current._bossInfo.maxHp = activeBossObj.maxHp;
-            _current.boss = _current._bossInfo;
+            _current.boss.active = true;
+            _current.boss.name = (activeBossObj.bossId !== undefined && BOSSES[activeBossObj.bossId]) ? BOSSES[activeBossObj.bossId].name : 'BOSS';
+            _current.boss.hp = activeBossObj.hp;
+            _current.boss.maxHp = activeBossObj.maxHp;
         } else if (state.sectorState && state.sectorState.hordeTarget > 0 && state.sectorState.zombiesKilled < state.sectorState.zombiesKillTarget) {
-            _current._bossInfo.active = true;
-            _current._bossInfo.name = 'ui.zombie_wave';
-            _current._bossInfo.hp = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
-            _current._bossInfo.maxHp = state.sectorState.hordeTarget;
-            _current.boss = _current._bossInfo;
+            _current.boss.active = true;
+            _current.boss.name = 'ui.zombie_wave';
+            _current.boss.hp = Math.max(0, state.sectorState.hordeTarget - state.sectorState.zombiesKilled);
+            _current.boss.maxHp = state.sectorState.hordeTarget;
         } else {
-            _current.boss = null;
+            _current.boss.active = false;
         }
+
 
         let famSignal = 0;
         if (state.activeWeapon === WeaponType.RADIO && familyMemberMesh) {
@@ -214,20 +214,16 @@ export const HudSystem = {
         }
 
         if (familyMemberMesh) {
-            _current._familyPos.x = familyMemberMesh.position.x;
-            _current._familyPos.z = familyMemberMesh.position.z;
-            _current.familyPos = _current._familyPos;
-        } else {
-            _current.familyPos = null;
+            _current.familyPos.x = familyMemberMesh.position.x;
+            _current.familyPos.z = familyMemberMesh.position.z;
         }
 
+
         if (activeBossObj) {
-            _current._bossPos.x = activeBossObj.mesh.position.x;
-            _current._bossPos.z = activeBossObj.mesh.position.z;
-            _current.bossPos = _current._bossPos;
-        } else {
-            _current.bossPos = null;
+            _current.bossPos.x = activeBossObj.mesh.position.x;
+            _current.bossPos.z = activeBossObj.mesh.position.z;
         }
+
 
         const wep = WEAPONS[state.activeWeapon];
         _current.reloadProgress = state.isReloading
@@ -259,14 +255,14 @@ export const HudSystem = {
         _current.playerPos.z = playerPos.z;
 
         _current.isDisoriented = !!statusEffects[StatusEffectType.DISORIENTED] && statusEffects[StatusEffectType.DISORIENTED].duration > 0;
-        
+
         // --- ZERO-GC COPY: Avoid passing mutable state array references directly to React ---
         _current.activePassives.length = 0;
         for (let i = 0; i < (state.activePassives?.length || 0); i++) _current.activePassives.push(state.activePassives[i]);
-        
+
         _current.activeBuffs.length = 0;
         for (let i = 0; i < (state.activeBuffs?.length || 0); i++) _current.activeBuffs.push(state.activeBuffs[i]);
-        
+
         _current.activeDebuffs.length = 0;
         for (let i = 0; i < (state.activeDebuffs?.length || 0); i++) _current.activeDebuffs.push(state.activeDebuffs[i]);
         _current.hp = state.hp;
@@ -292,19 +288,17 @@ export const HudSystem = {
         _current.discovery = state.discovery;
 
         if (state.sectorState) {
-            _current._sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
-            _current._sectorStats.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
-            _current._sectorStats.isInvincible = !!state.sectorState.isInvincible;
-            _current._sectorStats.hordeTarget = state.sectorState.hordeTarget || 0;
-            _current._sectorStats.zombiesKilled = state.sectorState.zombiesKilled || 0;
-            _current._sectorStats.zombiesKillTarget = state.sectorState.zombiesKillTarget || 0;
-            _current.sectorStats = _current._sectorStats;
-        } else {
-            _current.sectorStats = null;
+            _current.sectorStats.unlimitedAmmo = !!state.sectorState.unlimitedAmmo;
+            _current.sectorStats.unlimitedThrowables = !!state.sectorState.unlimitedThrowables;
+            _current.sectorStats.isInvincible = !!state.sectorState.isInvincible;
+            _current.sectorStats.hordeTarget = state.sectorState.hordeTarget || 0;
+            _current.sectorStats.zombiesKilled = state.sectorState.zombiesKilled || 0;
+            _current.sectorStats.zombiesKillTarget = state.sectorState.zombiesKillTarget || 0;
         }
 
-        _current.isDriving = !!state.activeVehicleType;
-        _current.vehicleSpeed = state.vehicleSpeed || 0;
+
+        _current.isDriving = !!state.vehicle.active;
+        _current.vehicleSpeed = state.vehicle.speed || 0;
         _current.throttleState = state.vehicleThrottle || 0;
         _current.spEarned = spGained;
         _current.skillPoints = (props.stats?.skillPoints || 0) + spGained;
@@ -315,25 +309,58 @@ export const HudSystem = {
         _current.mapItems = state.mapItems || [];
         _current.fps = PerformanceMonitor.getInstance().getFps();
         _current.hudVisible = state.hudVisible ?? _current.hudVisible;
-        _current.sectorName = state.sectorName;
-        
+        _current.sectorName = state.sectorName || '';
+
+        // --- SYNC INTERACTION PROMPT (Zero-GC) ---
+        if (state.hasInteractionTarget && state.interactionTargetPos) {
+            _v1.copy(state.interactionTargetPos);
+            _v1.project(camera);
+
+            const screenX = (0.5 + _v1.x * 0.5) * window.innerWidth;
+            const screenY = (0.5 - _v1.y * 0.5) * window.innerHeight;
+
+            _bufferA.interactionPrompt.active = true;
+            _bufferA.interactionPrompt.type = state.interaction.type;
+            _bufferA.interactionPrompt.label = state.interaction.label;
+            _bufferA.interactionPrompt.targetId = state.interaction.targetId;
+            _bufferA.interactionPrompt.x = screenX;
+            _bufferA.interactionPrompt.y = screenY;
+
+            _bufferB.interactionPrompt.active = true;
+            _bufferB.interactionPrompt.type = state.interaction.type;
+            _bufferB.interactionPrompt.label = state.interaction.label;
+            _bufferB.interactionPrompt.targetId = state.interaction.targetId;
+            _bufferB.interactionPrompt.x = screenX;
+            _bufferB.interactionPrompt.y = screenY;
+        } else {
+            _bufferA.interactionPrompt.active = false;
+            _bufferB.interactionPrompt.active = false;
+        }
+
+
         // --- SYNC CINEMATIC STATE (Zero-GC) ---
         // We sync to BOTH buffers to prevent 1-frame flickering during swaps
         _bufferA.cinematicActive = !!state.cinematicActive;
-        _bufferA.currentLine = state.currentLine;
-        _bufferB.cinematicActive = !!state.cinematicActive;
-        _bufferB.currentLine = state.currentLine;
+        _bufferA.currentLine.active = !!state.cinematicActive;
+        _bufferA.currentLine.speaker = state.cinematicLine.speaker || '';
+        _bufferA.currentLine.text = state.cinematicLine.text || '';
 
-        if (state.discovery) {
-            _current._discovery.id = state.discovery.id;
-            _current._discovery.type = state.discovery.type;
-            _current._discovery.title = state.discovery.title;
-            _current._discovery.details = state.discovery.details;
-            _current._discovery.timestamp = state.discovery.timestamp;
-            _current.discovery = _current._discovery;
+        _bufferB.cinematicActive = !!state.cinematicActive;
+        _bufferB.currentLine.active = !!state.cinematicActive;
+        _bufferB.currentLine.speaker = state.cinematicLine.speaker || '';
+        _bufferB.currentLine.text = state.cinematicLine.text || '';
+
+        if (state.discovery.active) {
+            _current.discovery.active = true;
+            _current.discovery.id = state.discovery.id;
+            _current.discovery.type = state.discovery.type as any;
+            _current.discovery.title = state.discovery.title;
+            _current.discovery.details = state.discovery.details;
+            _current.discovery.timestamp = state.discovery.timestamp;
         } else {
-            _current.discovery = null;
+            _current.discovery.active = false;
         }
+
 
         // Debug Info Mapping
         if (input.aimVector) {
@@ -373,7 +400,8 @@ export const HudSystem = {
             _current.debugInfo.performance.memory.heapUsed = Math.round(perfMem.usedJSHeapSize / 1048576);
         }
 
-        _current.debugInfo.modes = state.interactionType || 'Standard';
+        _current.debugInfo.modes = state.interaction.active ? state.interaction.type : 'Standard';
+
         _current.debugInfo.enemies = enemies.length;
         _current.debugInfo.objects = state.obstacles?.length || 0;
 
@@ -383,12 +411,11 @@ export const HudSystem = {
     /** Explicitly clears cinematic and sector data from both buffers to prevent leakage */
     reset: () => {
         _bufferA.cinematicActive = false;
-        _bufferA.currentLine = null;
+        _bufferA.currentLine.active = false;
         _bufferB.cinematicActive = false;
-        _bufferB.currentLine = null;
-        _bufferA.sectorStats = null;
-        _bufferB.sectorStats = null;
-        _bufferA.discovery = null;
-        _bufferB.discovery = null;
+        _bufferB.currentLine.active = false;
+        _bufferA.discovery.active = false;
+        _bufferB.discovery.active = false;
     }
+
 };

@@ -2,6 +2,7 @@ import { SoundCore } from './SoundCore';
 import { SoundBank } from './SoundBank';
 import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './SoundLib';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { PLAYER_CHARACTER } from '../../content/constants';
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.
@@ -99,6 +100,7 @@ export class SoundManager {
 
   // --- VOICE DELEGATES ---
   playVoice(name: string) { VoiceSounds.playVoice(this.core, name); }
+  playFamilyCrying(member: any) { VoiceSounds.playCrying(this.core, member); }
   playDamageGrunt() { VoiceSounds.playDamageGrunt(this.core); }
   playPlayerDeath(name: string) { VoiceSounds.playDeathScream(this.core, name); }
 
@@ -473,80 +475,78 @@ export class SoundManager {
 
   /**
    * Master dispatcher for triggering effects via string ID.
+   * Centralizes all engine-level sound triggers (UI, Voice, Combat, Environment).
    */
   playEffect(id: string) {
-    switch (id) {
+    if (!id) return;
+    const lowerId = id.toLowerCase();
+
+    switch (lowerId) {
+      // --- ENGINE & UI ---
+      case 'voice': this.playVoice(PLAYER_CHARACTER.name); break;
+      case 'voice_dead': this.playPlayerDeath(PLAYER_CHARACTER.name); break;
+      case 'ui_hover': this.playUiHover(); break;
+      case 'ui_confirm': this.playUiConfirm(); break;
+      case 'ui_click': this.playUiClick(); break;
+      case 'ui_chime': this.playCollectibleChime(); break;
+      
+      // --- AMBIENT ---
       case 'ambient_rustle': GamePlaySounds.playAmbientRustle(this.core); break;
       case 'ambient_metal': GamePlaySounds.playAmbientMetal(this.core); break;
+      case 'owl_hoot': this.playOwlHoot(); break;
+      case 'bird_ambience': this.playBirdAmbience(); break;
 
+      // --- MOVEMENT ---
       case 'step': this.playFootstep('step'); break;
       case 'step_snow': this.playFootstep('snow'); break;
       case 'step_metal': this.playFootstep('metal'); break;
       case 'step_wood': this.playFootstep('wood'); break;
       case 'step_water': this.playFootstep('water'); break;
       case 'step_zombie': this.playZombieStep(); break;
+      case 'dash': this.playDash(); break;
+      case 'swimming': this.playSwimming(); break;
 
-      case 'impact_flesh': this.playImpact('flesh'); break;
+      // --- COMBAT & IMPACTS ---
+      case 'impact_flesh':
+      case 'hit':
+          this.playImpact('flesh'); break;
       case 'impact_metal': this.playImpact('metal'); break;
       case 'impact_concrete': this.playImpact('concrete'); break;
       case 'impact_stone': this.playImpact('stone'); break;
       case 'impact_wood': this.playImpact('wood'); break;
+      case 'explosion': this.playExplosion(); break;
+      case 'heartbeat': this.playHeartbeat(); break;
 
-      case 'owl_hoot': this.playOwlHoot(); break;
-      case 'bird_ambience': this.playBirdAmbience(); break;
-
+      // --- ENEMIES ---
+      case 'bite': SoundBank.play(this.core, 'BITE', 0.5, 0.9 + Math.random() * 0.2); break;
       case 'zombie_bite':
       case 'walker_attack': this.playWalkerAttack(); break;
       case 'walker_groan': this.playWalkerGroan(); break;
       case 'walker_death': this.playWalkerDeath(); break;
-      case 'runner_scream': this.playRunnerScream(); break;
+      case 'runner_scream': 
+      case 'screech':
+          this.playRunnerScream(); break;
       case 'runner_attack': this.playRunnerAttack(); break;
       case 'runner_death': this.playRunnerDeath(); break;
-
-      case 'tank_smash':
-      case 'SMASH':
-        this.playTankSmash();
-        break;
-
-      case 'ELECTRIC_BEAM':
-        this.playArcCannonZap(); // Use existing zap for now
-        break;
-
-      case 'SCREECH':
-        this.playRunnerScream(); // Use runner scream for screech
-        break;
-
-      case 'MAGNETIC_CHAIN':
-        this.playArcCannonZap();
-        break;
-
-      case 'HIT':
-        this.playImpact('flesh');
-        break;
-
-      case 'BITE':
-        SoundBank.play(this.core, 'BITE', 0.5, 0.9 + Math.random() * 0.2);
-        break;
-
-      case 'jump_impact':
-        SoundBank.play(this.core, 'jump_impact', 0.6);
-        break;
-
-      case 'heavy_smash':
-        SoundBank.play(this.core, 'heavy_smash', 0.7);
-        break;
-
-      case 'ELECTRIC_BEAM_start':
-      case 'MAGNETIC_CHAIN_start':
-        this.playArcCannonZap();
-        break;
-
       case 'tank_roar': this.playTankRoar(); break;
+      case 'tank_smash':
+      case 'smash':
+      case 'heavy_smash':
+          this.playTankSmash(); break;
       case 'tank_death': this.playTankDeath(); break;
       case 'bomber_beep': this.playBomberBeep(); break;
       case 'bomber_explode': this.playBomberExplode(); break;
 
+      // --- ABILITIES & SPECIAL ---
+      case 'jump_impact': SoundBank.play(this.core, 'jump_impact', 0.6); break;
+      case 'electric_beam':
+      case 'magnetic_chain':
+      case 'electric_beam_start':
+      case 'magnetic_chain_start':
+          this.playArcCannonZap(); break;
+
       default:
+        // Handle Boss-specific IDs dynamically (e.g., boss_attack_0)
         if (id.startsWith('boss_')) {
           const parts = id.split('_');
           const bossId = parseInt(parts[2]);

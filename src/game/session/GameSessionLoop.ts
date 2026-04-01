@@ -13,12 +13,13 @@ import { TriggerHandler } from '../../systems/TriggerHandler';
 import { CAMERA_HEIGHT, HEALTH_CRITICAL_THRESHOLD } from '../../content/constants';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { EnemyManager } from '../../entities/enemies/EnemyManager';
-import { WeaponType, WeaponCategoryColors, WEAPONS } from '../../content/weapons';
+import { WeaponType, WEAPONS } from '../../content/weapons';
 import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { DamageType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { PLAYER_CHARACTER } from '../../content/constants';
+import { VehicleManager } from '../../systems/VehicleManager';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -174,7 +175,6 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             if (_fxCallbacks.onPlayerHit) _fxCallbacks.onPlayerHit(dmg, attacker, type, isDoT, effect, dur, intense, attackName);
         },
         applyDamage: (enemy: any, amount: number, type: DamageType | WeaponType | string, isHighImpact: boolean = false) => {
-            // VINTERDÖD FIX: Safeguard against non-damaging hits skipping death state check
             if (enemy.deathState !== EnemyDeathState.ALIVE || amount <= 0) return false;
 
 
@@ -184,7 +184,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
                 if (!enemy.isBoss && callbacks.onDiscovery) {
                     const sets = state.discoverySets;
-                    if (sets && !sets.seenEnemies.has(enemy.type)) {
+                    if (!sets.seenEnemies.has(enemy.type)) {
                         sets.seenEnemies.add(enemy.type);
                         state.sessionStats.seenEnemies.push(enemy.type);
                         callbacks.onDiscovery('enemy', enemy.type, 'ui.enemy_encountered', `enemies.${enemy.type}.name`);
@@ -215,14 +215,14 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             const isContinuous = weaponData?.behavior === 'CONTINUOUS' || type === DamageType.BURN || type === 'BURN' || type === DamageType.DROWNING;
             const textThrottle = isContinuous ? 250 : 0;
 
-            enemy._accumulatedDamage = (enemy._accumulatedDamage || 0) + amount;
+            enemy._accumulatedDamage += amount;
 
-            if (_gameContext.now - (enemy._lastDamageTextTime || 0) > textThrottle) {
+            if (_gameContext.now - enemy._lastDamageTextTime > textThrottle) {
                 if (_gameContext.showDamageText && enemy._accumulatedDamage >= 1) {
                     const textX = enemy.mesh.position.x;
                     // --- DYNAMIC HEIGHT FIX ---
                     // 1.8 is the approximate visual top, 1.2 is the float offset
-                    const textY = (enemy.originalScale || 1.0) * 1.8 + 1.2;
+                    const textY = enemy.originalScale * 1.8 + 1.2;
                     const textZ = enemy.mesh.position.z;
 
                     _gameContext.showDamageText(
@@ -323,7 +323,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         const now = performance.now();
 
         // Death Trigger Bridge
-        if (state.isDead && (refs.deathPhaseRef.current === 'NONE' || !refs.deathPhaseRef.current)) {
+        if (state.isDead && refs.deathPhaseRef.current === 'NONE') {
             refs.deathPhaseRef.current = 'DEAD';
             callbacks.onDeathStateChange?.(true);
         }
@@ -414,8 +414,8 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         if (frame % 5 === 0) {
             // Heart beat sound
             if (state.hp < state.maxHp * HEALTH_CRITICAL_THRESHOLD && !state.isDead) {
-                if (now - ((state as any).lastHeartbeat || 0) > 800) {
-                    (state as any).lastHeartbeat = now;
+                if (now - state.lastHeartbeat > 800) {
+                    state.lastHeartbeat = now;
                     soundManager.playHeartbeat();
                 }
             }
@@ -489,36 +489,35 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
 
         // 6. Teleport Logic
-        if (!isCinematic && !isBossIntro) {
-            if (propsRef.current.teleportTarget && propsRef.current.teleportTarget.timestamp > refs.lastTeleportRef.current) {
-                const tgt = propsRef.current.teleportTarget;
+        if (propsRef.current.teleportTarget
+            && propsRef.current.teleportTarget.timestamp > refs.lastTeleportRef.current
+            && !isCinematic && !isBossIntro) {
+            const tgt = propsRef.current.teleportTarget;
 
-                if (state.activeVehicle) {
-                    state.activeVehicle = null;
-                    state.activeVehicleType = null;
-                    state.vehicleSpeed = 0;
-                    (state as any).vehicleThrottle = 0;
-                }
-
-                playerGroup.position.set(tgt.x, 0, tgt.z);
-                callbacks.spawnPart(tgt.x, 1, tgt.z, 'flash', 1, undefined, undefined, undefined, 2);
-                soundManager.playTone(800, 'sine', 0.6, 0.1);
-
-                for (let i = 0; i < refs.activeFamilyMembers.current.length; i++) {
-                    const fm = refs.activeFamilyMembers.current[i];
-                    if (fm.mesh && fm.following) {
-                        const offX = (Math.random() - 0.5) * 3;
-                        const offZ = (Math.random() - 0.5) * 3;
-                        fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
-                        callbacks.spawnPart(tgt.x + offX, 1, tgt.z + offZ, 'smoke', 10);
-                    }
-                }
-
-                refs.lastTeleportRef.current = tgt.timestamp;
-                engine.camera.setPosition(tgt.x, 50, tgt.z + (propsRef.current.currentSectorData?.environment.cameraOffsetZ || 0), true);
-                engine.camera.lookAt(playerGroup.position, true);
-                refs.prevPosRef.current.copy(playerGroup.position);
+            if (state.vehicle.active && state.vehicle.mesh) {
+                const vehicleMesh = state.vehicle.mesh;
+                const def = vehicleMesh.userData.vehicleDef;
+                VehicleManager.exitVehicle(playerGroup, vehicleMesh, state, def);
             }
+
+            playerGroup.position.set(tgt.x, 0, tgt.z);
+            callbacks.spawnPart(tgt.x, 1, tgt.z, 'flash', 1, undefined, undefined, undefined, 2);
+            soundManager.playTone(800, 'sine', 0.6, 0.1);
+
+            for (let i = 0; i < refs.activeFamilyMembers.current.length; i++) {
+                const fm = refs.activeFamilyMembers.current[i];
+                if (fm.mesh && fm.following) {
+                    const offX = (Math.random() - 0.5) * 3;
+                    const offZ = (Math.random() - 0.5) * 3;
+                    fm.mesh.position.set(tgt.x + offX, 0, tgt.z + offZ);
+                    callbacks.spawnPart(tgt.x + offX, 1, tgt.z + offZ, 'smoke', 10);
+                }
+            }
+
+            refs.lastTeleportRef.current = tgt.timestamp;
+            engine.camera.setPosition(tgt.x, 50, tgt.z + (propsRef.current.currentSectorData?.environment.cameraOffsetZ || 0), true);
+            engine.camera.lookAt(playerGroup.position, true);
+            refs.prevPosRef.current.copy(playerGroup.position);
         }
 
         // 7. Session updates
@@ -608,6 +607,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     override.endTime = now + 4000;
                     // Göm UI (crosshair, hp, etc) under flygningen för en cinematisk look
                     engine.camera.setCinematic(true);
+
                 }
 
                 if (now > override.endTime) {
@@ -666,12 +666,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         refs.lastDrawCallsRef.current = engine.renderer.info.render.calls;
         lastTime = now;
 
-        // 13. Interaction Logic
-        const currentInter = state.interactionType;
-        const currentLabel = state.interactionLabel;
+        // 13. Interaction Logic (Bypass Rect-only components for 60FPS updates)
+        const currentInter = state.interaction.type;
+        const currentLabel = state.interaction.label;
         const lastType = refs.interactionTypeRef.current;
 
-        if (currentInter && state.hasInteractionTarget && state.interactionTargetPos) {
+        if (state.interaction.active && state.hasInteractionTarget) {
             _vInteraction.copy(state.interactionTargetPos);
             _vInteraction.y += 1.5;
 
@@ -684,7 +684,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 const lastPos = refs.lastInteractionPosRef.current;
 
                 // VINTERDÖD FIX: More solid fast-check before writing object properties
-                const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 2.0;
+                const posChanged = Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 2.0;
                 const typeChanged = currentInter !== lastType;
                 const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
 
@@ -697,38 +697,32 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
                     const hData = HudStore.getState();
 
-                    // ZERO-GC: Mutate the prompt inside the HudStore buffer instead of allocating new objects
-                    if (!hData.interactionPrompt) {
-                        hData.interactionPrompt = {
-                            type: currentInter as any,
-                            label: currentLabel,
-                            pos: { x: screenX, y: screenY }
-                        };
-                    } else {
-                        hData.interactionPrompt.type = currentInter as any;
-                        hData.interactionPrompt.label = currentLabel;
-                        hData.interactionPrompt.pos.x = screenX;
-                        hData.interactionPrompt.pos.y = screenY;
-                    }
+                    // ZERO-GC: Mutate the prompt inside the HudStore buffer (Flat access for V8)
+                    hData.interactionPrompt.active = true;
+                    hData.interactionPrompt.type = currentInter;
+                    hData.interactionPrompt.label = currentLabel;
+                    hData.interactionPrompt.targetId = state.interaction.targetId;
+                    hData.interactionPrompt.x = screenX;
+                    hData.interactionPrompt.y = screenY;
 
                     HudStore.update(hData);
                 }
             } else {
-                if (refs.interactionTypeRef.current !== null) {
-                    refs.interactionTypeRef.current = null;
+                if (refs.interactionTypeRef.current !== '') {
+                    refs.interactionTypeRef.current = '';
                     const hData = HudStore.getState();
-                    hData.interactionPrompt = null;
+                    hData.interactionPrompt.active = false;
                     HudStore.update(hData);
                 }
             }
         } else {
-            if (refs.interactionTypeRef.current !== null) {
-                refs.interactionTypeRef.current = null;
+            if (refs.interactionTypeRef.current !== '') {
+                refs.interactionTypeRef.current = '';
                 refs.lastInteractionPosRef.current = null;
                 (state as any).lastInteractionLabel = null;
 
                 const hData = HudStore.getState();
-                hData.interactionPrompt = null;
+                hData.interactionPrompt.active = false;
                 HudStore.update(hData);
             }
         }
@@ -754,23 +748,34 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
 
         refs.gameContextRef.current = _gameContext;
 
-        // 15. ProjectileSystem
-        monitor.begin('projectiles');
+        // 15. Enemy System
+        monitor.begin('enemies');
+        EnemyManager.update(
+            delta,
+            simTime,
+            playerGroup.position,
+            state.enemies,
+            state.collisionGrid,
+            state.isDead,
+            _fxCallbacks.onPlayerHit,
+            _fxCallbacks.spawnPart,
+            _fxCallbacks.spawnDecal,
+            _gameContext.applyDamage,
+            engine.water
+        );
+        monitor.end('enemies');
+
         ProjectileSystem.update(delta, simTime, _gameContext, state.projectiles, state.fireZones);
         monitor.end('projectiles');
 
-        // 16. TriggerSystem
+        // 17. TriggerSystem
         monitor.begin('triggers');
         _triggerOptionsScratch.t = activeCallbacks.t || callbacks.t;
         _triggerOptionsScratch.spawnBubble = activeCallbacks.spawnBubble;
         _triggerOptionsScratch.onTrigger = activeCallbacks.onTrigger;
         _triggerOptionsScratch.onAction = activeCallbacks.onAction;
         _triggerOptionsScratch.onDiscovery = activeCallbacks.onDiscovery || callbacks.onDiscovery;
-        _triggerOptionsScratch.playSound = (id: string) => {
-            console.log("[GameSessionLoop] playSound: ", id);
-            if (id === 'voice') soundManager.playVoice(PLAYER_CHARACTER.name);
-            else soundManager.playUiHover();
-        };
+        _triggerOptionsScratch.playSound = (id: string) => soundManager.playEffect(id);
         _triggerOptionsScratch.isFamilyFollowing = (familyId: number) => {
             const members = refs.activeFamilyMembers.current;
             if (!members) return false;
@@ -782,9 +787,9 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         TriggerHandler.checkTriggers(playerGroup.position, state, now, _triggerOptionsScratch as any);
         monitor.end('triggers');
 
-        // 16. Emitters Update
+        // 18. Emitters Update
         monitor.begin('active_effects');
-        if (state.activeEffects) {
+        if (state.activeEffects.length > 0) {
             const isBacklogged = (FXSystem as any).ambientQueue && (FXSystem as any).ambientQueue.length > 1000;
 
             for (let i = 0; i < state.activeEffects.length; i++) {
@@ -825,7 +830,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
         }
         monitor.end('active_effects');
 
-        // 17. Update PerformanceMonitor
+        // 19. Update PerformanceMonitor
         monitor.updateGameState(
             playerGroup.position.x,
             playerGroup.position.z,
@@ -836,7 +841,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
             state.obstacles ? state.obstacles.length : 0
         );
 
-        // 18. High-frequency HUD update (Zero-GC, bypasses React)
+        // 20. High-frequency HUD update (Zero-GC, bypasses React)
         HudSystem.emitFastUpdate(state, engine.input.state, simTime);
     };
 }

@@ -80,7 +80,9 @@ export class FamilySystem implements System {
         }
 
         const maxFollowSpeed = followSpeed * 1.25;
-        const activeVehicle = (state as any).activeVehicle;
+
+        // VINTERDÖD FIX: Läs från structen istället för den gamla any-typen
+        const activeVehicle = state.vehicle.active ? state.vehicle.mesh : null;
         const inVehicle = !!activeVehicle;
 
         for (let i = 0; i < members.length; i++) {
@@ -97,7 +99,8 @@ export class FamilySystem implements System {
                 if (!familyMember.following) continue;
 
                 const def = activeVehicle.userData.vehicleDef;
-                const suspY = activeVehicle.userData.suspY || 0;
+                // VINTERDÖD FIX: Hämta suspension från den centrala vehicle-structen!
+                const suspY = state.vehicle.suspY || 0;
 
                 if (familyMember.ring && familyMember.ring.visible) {
                     familyMember.ring.visible = false;
@@ -138,13 +141,13 @@ export class FamilySystem implements System {
                     PlayerAnimator.update(body, _animState, now, delta);
                 }
 
-                userData.wasInVehicle = true;
+                familyMember.wasInVehicle = true; // VINTERDÖD FIX: Sparad på familyMember för Zero-GC
                 continue;
             }
 
             // --- 0.5 VEHICLE EXIT LOGIC ---
-            if (userData.wasInVehicle) {
-                userData.wasInVehicle = false;
+            if (familyMember.wasInVehicle) {
+                familyMember.wasInVehicle = false;
                 const spreadX = (i % 2 === 0 ? 1 : -1) * (1.5 + (i * 0.4));
                 const spreadZ = (Math.random() - 0.5) * 2.0;
 
@@ -152,15 +155,16 @@ export class FamilySystem implements System {
                 fm.position.x += spreadX;
                 fm.position.z += spreadZ;
                 fm.rotation.set(0, 0, 0);
-                userData.lastMoveTime = now;
+                familyMember.lastMoveTime = now;
             }
 
             // --- 1. Ring Pulse Visual ---
             const ring = familyMember.ring;
             if (ring) {
                 const isFollowing = familyMember.following;
-                ring.visible = !isFollowing;
-                if (!isFollowing) {
+                // VINTERDÖD FIX: Göm ringen även vid död så de inte skräpar ner i "grief"-läget
+                ring.visible = !(isFollowing || state.isDead);
+                if (ring.visible) {
                     const pulse = 1.0 + Math.sin(now * 0.003) * 0.1;
                     ring.scale.set(pulse, pulse, pulse);
                     ring.updateMatrix();
@@ -171,7 +175,7 @@ export class FamilySystem implements System {
             let fmIsMoving = false;
             let fmIsRushing = false;
 
-            if (familyMember.following && !isCinematicActive) {
+            if (familyMember.following && !isCinematicActive && !state.isDead) {
                 const pRot = this.playerGroup.rotation.y;
                 const cos = Math.cos(pRot);
                 const sin = Math.sin(pRot);
@@ -211,13 +215,13 @@ export class FamilySystem implements System {
                         fm.position.addScaledVector(_v3, moveDist);
                         fm.lookAt(this.playerGroup.position);
                     }
-                    userData.lastMoveTime = now;
+                    familyMember.lastMoveTime = now;
                     fmIsRushing = state.isRushing || state.isRolling;
                 }
             }
 
             // Return to origin logic
-            else if (!isCinematicActive && !inVehicle && familyMember.spawnPos) {
+            else if (!isCinematicActive && !inVehicle && !state.isDead && familyMember.spawnPos) {
                 const distSq = fm.position.distanceToSquared(familyMember.spawnPos);
                 if (distSq > 1.0) {
                     fmIsMoving = true;
@@ -229,7 +233,7 @@ export class FamilySystem implements System {
 
                     fm.position.addScaledVector(_v3, moveDist);
                     fm.lookAt(familyMember.spawnPos);
-                    userData.lastMoveTime = now;
+                    familyMember.lastMoveTime = now;
                 }
             }
 
@@ -247,7 +251,7 @@ export class FamilySystem implements System {
             }
 
             if (body) {
-                const lastMove = userData.lastMoveTime ?? 0;
+                const lastMove = familyMember.lastMoveTime ?? 0;
                 const isIdleLong = now - lastMove > 10000;
 
                 _animState.seed = familyMember.seed;
@@ -256,8 +260,10 @@ export class FamilySystem implements System {
                 _animState.isRolling = false;
                 _animState.staminaRatio = state.stamina / Math.max(1, state.maxStamina);
                 _animState.isIdleLong = isIdleLong;
-                _animState.isSpeaking = now < (userData.speakingUntil || 0);
-                _animState.isThinking = now < (userData.thinkingUntil || 0);
+
+                // VINTERDÖD FIX: Tracked on familyMember to avoid userData mutations
+                _animState.isSpeaking = now < (familyMember.speakingUntil || 0);
+                _animState.isThinking = now < (familyMember.thinkingUntil || 0);
 
                 const engine = WinterEngine.getInstance();
                 if (engine?.water) {
@@ -271,14 +277,16 @@ export class FamilySystem implements System {
                         fm.position.y = THREE.MathUtils.lerp(fm.position.y, targetY, 4 * delta);
 
                         if (_animState.isSwimming || _animState.isWading) {
-                            const rx = userData.lastRippleX ?? fm.position.x + 99;
-                            const rz = userData.lastRippleZ ?? fm.position.z + 99;
+                            // VINTERDÖD FIX: V8 Shape Lock - Tracked natively on familyMember array
+                            const rx = familyMember.lastRippleX ?? fm.position.x + 99;
+                            const rz = familyMember.lastRippleZ ?? fm.position.z + 99;
                             const dx = fm.position.x - rx;
                             const dz = fm.position.z - rz;
+
                             if (dx * dx + dz * dz > 0.5) {
                                 engine.water.spawnRipple(fm.position.x, fm.position.z, _animState.isSwimming ? 0.8 : 0.5);
-                                userData.lastRippleX = fm.position.x;
-                                userData.lastRippleZ = fm.position.z;
+                                familyMember.lastRippleX = fm.position.x;
+                                familyMember.lastRippleZ = fm.position.z;
                             }
                         }
                     } else {

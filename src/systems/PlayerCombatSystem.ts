@@ -79,7 +79,6 @@ export class PlayerCombatSystem implements System {
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
-        if (!session.state) return;
         const state = session.state;
         const input = session.engine.input.state;
 
@@ -104,7 +103,7 @@ export class PlayerCombatSystem implements System {
 
         // Återställning när man vaknar upp / cinematic är över
         if (this._wasLocked) {
-            if (this.laserSight) this.laserSight.visible = !state.activeVehicle;
+            if (this.laserSight) this.laserSight.visible = !state.vehicle.active;
             this._wasLocked = false;
         }
 
@@ -136,9 +135,7 @@ export class PlayerCombatSystem implements System {
             this.trajectoryLine,
         );
 
-        if (this.laserSight) {
-            this.laserSight.visible = !state.activeVehicle;
-        }
+        this.laserSight.visible = !state.vehicle.active;
     }
 
     clear() {
