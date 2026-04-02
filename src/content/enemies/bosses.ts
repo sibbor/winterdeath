@@ -1,4 +1,5 @@
-import { AttackDefinition, EnemyAttackType, StatusEffectType } from '../../entities/player/CombatTypes';
+import { AttackDefinition, EnemyAttackType } from '../../entities/player/CombatTypes';
+import { StatusEffectType } from '../perks';
 
 /*
 Boss data:

@@ -196,13 +196,16 @@ export const sv = {
         poi: "INTRESSEPUNKT",
         clue: "Ledtråd",
         boss: "Boss",
-        log_poi: "INTRESSEPUNKTER",
         adventure_log: "ÄVENTYRSLOGG",
+        log_poi: "INTRESSEPUNKTER",
         log_enemies: "FIENDER",
         log_bosses: "BOSSAR",
         log_collectibles: "SAMLAROBJEKT",
         log_clues: "LEDTRÅDAR",
         log_perks: "FÖRMÅGOR",
+        passive_abilities: "PASSIVA FÖRMÅGOR",
+        buffs: "BUFFAR",
+        debuffs: "DEBUFFAR",
         unknown_threat: "Okänt hot",
         drowning: "Drunkning",
         bleeding: "Blödning",
@@ -328,17 +331,32 @@ export const sv = {
     },
     skills: {
         vitality: "VITALITET",
-        vitality_desc: "Ökar maximal hälsa, vilket gör att du tål mer stryk.",
+        vitality_desc: "Ökar maximal hälsa",
         adrenaline: "ADRENALIN",
-        adrenaline_desc: "Ökar maximal uthållighet.",
+        adrenaline_desc: "Ökar maximal uthållighet",
         reflex: "REFLEXER",
-        reflex_desc: "Ökar rörelsehastigheten.",
-        loke_passive: "Snabba Händer: 20% snabbare omladdning.",
-        jordan_passive: "Örnöga: 15% ökad räckvidd.",
-        esmeralda_passive: "Snabba Fingrar: 20% ökad eldhastighet.",
-        nathalie_passive: "Stoisk: 10% skaderesistans."
+        reflex_desc: "Ökar maximal rörelsehastighet",
     },
     perks: {
+        // Passives
+        TRICKSTERS_HASTE: {
+            title: "Trickster's Haste",
+            description: "20% snabbare omladdning"
+        },
+        EAGLES_SIGHT: {
+            title: "Eagle's Sight",
+            description: "15% ökad räckvidd"
+        },
+        LEAD_FEVER: {
+            title: "Lead Fever",
+            description: "20% ökad eldhastighet"
+        },
+        WINTERS_BONE: {
+            title: "Winter's Bone",
+            description: "10% skaderesistans"
+        },
+
+        // Buffs
         REFLEX_SHIELD: {
             title: "Reflexsköld",
             description: "0.5s odödlighet vid rullning eller rusning. 10s cooldown."
@@ -346,6 +364,40 @@ export const sv = {
         ADRENALINE_PATCH: {
             title: "Adrenalinplåster",
             description: "3s odödlighet när hälsan sjunker under 25%. 60s cooldown."
+        },
+
+        // Debuffs
+        BLEEDING: {
+            title: "Blödning",
+            description: "Tar kontinuerlig skada och rör sig 10% långsammare."
+        },
+        BURNING: {
+            title: "Brinner",
+            description: "Intensiv hetta som ger kontinuerlig skada och saktar ner dig något."
+        },
+        STUNNED: {
+            title: "Stunned",
+            description: "Rörelse och handlingar är helt inaktiverade."
+        },
+        DISORIENTED: {
+            title: "Desorienterad",
+            description: "Synen är suddig och rörelsehastigheten är sänkt med 20%."
+        },
+        SLOWED: {
+            title: "Långsam",
+            description: "Rörelsehastigheten är kraftigt sänkt med 40%."
+        },
+        FREEZING: {
+            title: "Fryser",
+            description: "Tar skada och rör sig betydligt långsammare på grund av kylan."
+        },
+        ELECTRIFIED: {
+            title: "Elektrifierad",
+            description: "Tar skada och rör sig betydligt långsammare på grund av elektrisk ström."
+        },
+        DROWNING: {
+            title: "Drunknar",
+            description: "Tar snabb skada under vattenytan."
         }
     },
     weapons: {
@@ -378,7 +430,7 @@ export const sv = {
         "Att uppgradera 'Vitalitet' hjälper dig att överleva längre.",
         "Att uppgradera 'Adrenalin' hjälper dig att springa under längre perioder.",
         "Att uppgradera 'Reflexer' hjälper dig att springa ifrån zombierna.",
-        "Tryck på [F] för att använda ficklampan."
+        "Tryck på [F] för att använda ficklampan.",
     ],
     sectors: {
         camp_name: "Lägret",

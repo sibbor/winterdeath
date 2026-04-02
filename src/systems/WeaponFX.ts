@@ -18,7 +18,7 @@ export const WeaponFX = {
             ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 85);
             const engine = WinterEngine.getInstance();
             if (engine && engine.water) {
-                engine.water.spawnRipple(pos.x, pos.z, 200.0);
+                engine.water.spawnRipple(pos.x, pos.z, ctx.simTime, 200.0);
             }
             return;
         }
@@ -58,7 +58,7 @@ export const WeaponFX = {
             ctx.spawnPart(pos.x, pos.y, pos.z, 'splash', 30);
             const engine = WinterEngine.getInstance();
             if (engine && engine.water) {
-                engine.water.spawnRipple(pos.x, pos.z, 50.0);
+                engine.water.spawnRipple(pos.x, pos.z, ctx.simTime, 50.0);
             }
             return;
         }

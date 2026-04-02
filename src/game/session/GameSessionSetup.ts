@@ -372,6 +372,12 @@ export class GameSessionSetup {
                 const tracker = session.getSystem('damage_tracker_system') as any;
                 if (tracker) tracker.recordSp(session, amount);
             },
+            onPlayerHit: (damage: number, attacker: any, type: string, isDoT?: boolean, effect?: any, dur?: number, intense?: number, attackName?: string) => {
+                const statsSystem = session.getSystem('player_stats_system') as any;
+                if (statsSystem) {
+                    statsSystem.handlePlayerHit(session, damage, attacker, type, isDoT, effect, dur, intense, attackName);
+                }
+            },
             onDiscovery: (type: 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss', id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
                 const sets = state.discoverySets;
@@ -686,7 +692,7 @@ export class GameSessionSetup {
      * Resurrects player with full HP, stamina, ammo etc.
      * Enemies are respawned. Chests already opened remain open.
      */
-    static respawnPlayer(engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
+    static respawnPlayer(session: GameSessionLogic, engine: WinterEngine, state: RuntimeState, refs: any, props: any, setDeathPhase: (phase: string) => void) {
         const scene = engine.scene;
 
         // 1. Reset player state
@@ -723,7 +729,7 @@ export class GameSessionSetup {
 
         const statsSystem = engine.getSystem('player_stats_system') as any;
         if (statsSystem && statsSystem.updatePassives) {
-            statsSystem.updatePassives();
+            statsSystem.updatePassives(session);
         }
 
         HudStore.update({ ...HudStore.getState(), isDead: false, hp: state.maxHp });
@@ -756,6 +762,11 @@ export class GameSessionSetup {
                     if (!fm.rescued && fm.following) {
                         fm.following = false;
                         fm.found = false;
+                    }
+
+                    if (fm.rescued) {
+                        fm.following = true;
+                        fm.found = true;
                     }
 
                     if (fm.rescued || fm.following) {

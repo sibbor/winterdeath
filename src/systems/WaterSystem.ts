@@ -684,7 +684,7 @@ export class WaterSystem implements System {
         this.rippleIndex = (this.rippleIndex + 1) % WATER_SYSTEM.MAX_RIPPLES;
     }
 
-    public checkBuoyancy(x: number, y: number, z: number, now: number): void {
+    public checkBuoyancy(x: number, y: number, z: number, now: number = 0): void {
         _buoyancyResult.inWater = false;
         _buoyancyResult.depth = 0;
         _buoyancyResult.maxDepth = 0;

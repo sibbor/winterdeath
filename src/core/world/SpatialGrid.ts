@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Obstacle } from './CollisionResolution';
 import { Enemy, EnemyDeathState } from '../../entities/enemies/EnemyTypes';
+import { MaterialType } from '../../content/environment';
 
 // Prime number for optimal spatial hash distribution without collisions
 const HASH_SIZE = 4093;
@@ -76,11 +77,11 @@ export class SpatialGrid {
 
     addObstacle(obstacle: Obstacle) {
         const pos = obstacle.position;
-        
+
         // VINTERDÖD HIGH-PERFORMANCE: Pre-resolve properties for the 60FPS loops
         if (!obstacle.radius) obstacle.radius = 2.0;
         if (!obstacle.materialId) {
-            obstacle.materialId = (obstacle.mesh?.userData?.material as any) || 'concrete';
+            obstacle.materialId = obstacle.mesh?.userData?.material || MaterialType.CONCRETE;
         }
 
         const radius = obstacle.radius;

@@ -219,6 +219,8 @@ export interface Enemy {
     isInWater: boolean;    // Inside any water body bounds
     isWading: boolean;     // Shallow water (flatDepth 0.4-1.25) — slowed but alive
     isDrowning: boolean;   // Deep water (flatDepth > 1.25) — panicking and taking damage
+    swimDistance: number;  // Current meters swum in deep water
+    maxSwimDistance: number; // Randomized limit (1.0-5.0m) before drowning triggers
     drownTimer: number;    // Seconds spent in drowning state
     drownDmgTimer: number; // Throttle timer for per-frame damage ticks
 

@@ -57,6 +57,7 @@ export const useGameInput = (
                 return;
             }
 
+
             if (!isInputEnabled) return;
 
             const key = e.key.toLowerCase();
@@ -150,6 +151,11 @@ export const useGameInput = (
 
                 // Ignore if we JUST unpaused (lock takes a frame or two to acquire)
                 if (performance.now() - unpauseTimeRef.current < 500) {
+                    return;
+                }
+
+                // VINTERDÖD FIX: Ignore if CTRL is held (Quick Inspect)
+                if (refs.engineRef.current?.input.state.ctrl) {
                     return;
                 }
 

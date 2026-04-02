@@ -187,6 +187,8 @@ export const EnemySpawner = {
             isInWater: false,
             isWading: false,
             isDrowning: false,
+            swimDistance: 0,
+            maxSwimDistance: 1 + Math.random() * 4,
             drownTimer: 0,
             drownDmgTimer: 0,
 
@@ -320,6 +322,8 @@ export const EnemySpawner = {
             isInWater: false,
             isWading: false,
             isDrowning: false,
+            swimDistance: 0,
+            maxSwimDistance: 1 + Math.random() * 4,
             drownTimer: 0,
             drownDmgTimer: 0,
 

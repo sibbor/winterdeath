@@ -219,10 +219,6 @@ export const PlayerAnimator = {
                 } else {
                     _v1.copy(mesh.position);
                 }
-
-                // Instead of Quaternion to Euler, we just read the local Y rotation of the mesh.
-                // Assuming the mesh is rotated horizontally towards the cursor by the PlayerMovementSystem.
-                FootprintSystem.addFootprint(_v1, mesh.rotation.y, isRight);
             }
 
             mesh.userData.lastSway = sway;

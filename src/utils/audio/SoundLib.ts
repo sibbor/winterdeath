@@ -1,6 +1,7 @@
 import { SoundCore } from './SoundCore';
 import { SoundBank } from './SoundBank';
 import { WeaponType } from '../../content/weapons';
+import { MaterialType, MATERIAL_TYPE, FOOTSTEP_MAP, IMPACT_MAP } from '../../content/environment';
 
 // --- GENERATORS ---
 // These functions create AudioBuffers for specific sound profiles.
@@ -186,25 +187,7 @@ const Generators = {
     },
 
     // CASING
-    // CASING
     casing_standard: (ctx: AudioContext) => createTone(ctx, 'triangle', 1200, 0.05, 0.1),
-
-    glass_shatter: (ctx: AudioContext) => {
-        const duration = 0.6;
-        const length = ctx.sampleRate * duration;
-        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < length; i++) {
-            const t = i / ctx.sampleRate;
-            const env = Math.exp(-8 * t);
-            // High frequency tinkling
-            const tink = Math.sin(2 * Math.PI * (3000 + Math.random() * 2000) * t) * 0.3;
-            // Noise burst for the impact
-            const noise = (Math.random() * 2 - 1) * 0.5;
-            data[i] = (tink + noise) * env * 0.5;
-        }
-        return buffer;
-    },
 
     // ZOMBIES (Shared)
     step_zombie: (ctx: AudioContext) => {
@@ -301,7 +284,7 @@ const Generators = {
     },
 
     // FOOTSTEPS
-    step: (ctx: AudioContext) => {
+    step_generic: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.15;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -369,6 +352,34 @@ const Generators = {
         }
         return buffer;
     },
+    step_dirt: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.2;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Mycket textur/kras från småsten
+            const crunch = (Math.random() * 2 - 1) * 0.15 * Math.exp(-30 * t);
+            // Mjuk, lågfrekvent duns för jorden
+            const thud = Math.sin(2 * Math.PI * 70 * t) * 0.1 * Math.exp(-15 * t);
+            data[i] = crunch + thud;
+        }
+        return buffer;
+    },
+    step_gravel: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // Mycket textur/kras från småsten
+            const crunch = (Math.random() * 2 - 1) * 0.15 * Math.exp(-30 * t);
+            // Mjuk, lågfrekvent duns för jorden
+            const thud = Math.sin(2 * Math.PI * 70 * t) * 0.1 * Math.exp(-15 * t);
+            data[i] = crunch + thud;
+        }
+        return buffer;
+    },
 
     swimming: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.6; // Longer duration for slosh
@@ -387,6 +398,23 @@ const Generators = {
     },
 
     // IMPACTS
+    impact_generic: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.2;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            // En lite hårdare duns (150 Hz) som dör ut snabbt
+            const thud = Math.sin(2 * Math.PI * 150 * t) * 0.25 * Math.exp(-30 * t);
+            // En snabb "smack" av noise vid själva träffen
+            const smack = (Math.random() * 2 - 1) * 0.2 * Math.exp(-60 * t);
+            // En ytterst subtil resonans för att det inte ska låta helt dött
+            const ring = Math.sin(2 * Math.PI * 300 * t) * 0.05 * Math.exp(-20 * t);
+
+            data[i] = thud + smack + ring;
+        }
+        return buffer;
+    },
     impact_flesh: (ctx: AudioContext) => {
         const length = ctx.sampleRate * 0.15;
         const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -448,6 +476,69 @@ const Generators = {
             const knock = Math.sin(2 * Math.PI * 300 * t) * 0.1 * Math.exp(-40 * t);
             const snap = (Math.random() * 2 - 1) * 0.05 * Math.exp(-70 * t);
             data[i] = thud + knock + snap;
+        }
+        return buffer;
+    },
+    impact_glass: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.3;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = Math.exp(-15 * t);
+            const tink = Math.sin(2 * Math.PI * (2500 + Math.random() * 1000) * t) * 0.4;
+            const crash = (Math.random() * 2 - 1) * 0.2;
+            data[i] = (tink + crash) * env * 0.6;
+        }
+        return buffer;
+    },
+    impact_plant: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.2;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = Math.exp(-20 * t);
+            const crunch = (Math.random() * 2 - 1) * 0.3;
+            const snap = Math.sin(2 * Math.PI * 600 * t) * 0.1 * Math.exp(-50 * t);
+            data[i] = (crunch + snap) * env * 0.7;
+        }
+        return buffer;
+    },
+    impact_snow: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const env = Math.exp(-12 * t);
+            const noise = (Math.random() * 2 - 1) * 0.25;
+            const thud = Math.sin(2 * Math.PI * 60 * t) * 0.15;
+            data[i] = (noise + thud) * env * 0.8;
+        }
+        return buffer;
+    },
+    impact_gravel: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const thud = Math.sin(2 * Math.PI * 90 * t) * 0.3 * Math.exp(-25 * t);
+            const dirtScatter = (Math.random() * 2 - 1) * 0.2 * Math.exp(-40 * t);
+            data[i] = thud + dirtScatter;
+        }
+        return buffer;
+    },
+    impact_dirt: (ctx: AudioContext) => {
+        const length = ctx.sampleRate * 0.25;
+        const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < length; i++) {
+            const t = i / ctx.sampleRate;
+            const thud = Math.sin(2 * Math.PI * 90 * t) * 0.3 * Math.exp(-25 * t);
+            const dirtScatter = (Math.random() * 2 - 1) * 0.2 * Math.exp(-40 * t);
+            data[i] = thud + dirtScatter;
         }
         return buffer;
     },
@@ -862,11 +953,9 @@ export function registerSoundGenerators() {
     SoundBank.register('walker_groan', Generators.walker_groan);
     SoundBank.register('walker_attack', Generators.walker_attack);
     SoundBank.register('walker_death', Generators.walker_death);
-
     SoundBank.register('runner_scream', Generators.runner_scream);
     SoundBank.register('runner_attack', Generators.runner_attack);
     SoundBank.register('runner_death', Generators.runner_death);
-
     SoundBank.register('tank_roar', Generators.tank_roar);
     SoundBank.register('tank_smash', Generators.tank_smash);
     SoundBank.register('tank_death', Generators.tank_death);
@@ -880,12 +969,27 @@ export function registerSoundGenerators() {
     SoundBank.register('ambient_metal', Generators.ambient_metal);
 
     // Footsteps
-    SoundBank.register('step', Generators.step);
+    SoundBank.register('step_generic', Generators.step_generic);
     SoundBank.register('step_snow', Generators.step_snow);
     SoundBank.register('step_metal', Generators.step_metal);
     SoundBank.register('step_wood', Generators.step_wood);
     SoundBank.register('step_water', Generators.step_water);
+    SoundBank.register('step_dirt', Generators.step_dirt);
+    SoundBank.register('step_gravel', Generators.step_gravel);
     SoundBank.register('swimming', Generators.swimming);
+
+    // Impacts
+    SoundBank.register('impact_generic', Generators.impact_generic);
+    SoundBank.register('impact_flesh', Generators.impact_flesh);
+    SoundBank.register('impact_metal', Generators.impact_metal);
+    SoundBank.register('impact_concrete', Generators.impact_concrete);
+    SoundBank.register('impact_stone', Generators.impact_stone);
+    SoundBank.register('impact_wood', Generators.impact_wood);
+    SoundBank.register('impact_glass', Generators.impact_glass);
+    SoundBank.register('impact_plant', Generators.impact_plant);
+    SoundBank.register('impact_snow', Generators.impact_snow);
+    SoundBank.register('impact_dirt', Generators.impact_dirt);
+    SoundBank.register('impact_gravel', Generators.impact_gravel);
 
     // Mechanical
     SoundBank.register('mech_mag_out', Generators.mech_mag_out);
@@ -899,14 +1003,6 @@ export function registerSoundGenerators() {
     // Feedback
     SoundBank.register('ui_level_up', Generators.ui_level_up);
     SoundBank.register('heartbeat', Generators.heartbeat);
-
-    // Impacts
-    SoundBank.register('impact_flesh', Generators.impact_flesh);
-    SoundBank.register('impact_metal', Generators.impact_metal);
-    SoundBank.register('impact_concrete', Generators.impact_concrete);
-    SoundBank.register('impact_stone', Generators.impact_stone);
-    SoundBank.register('impact_wood', Generators.impact_wood);
-    SoundBank.register('glass_shatter', Generators.glass_shatter);
 
     // Doors
     SoundBank.register('door_metal_shut', Generators.door_metal_shut);
@@ -979,13 +1075,24 @@ export const GamePlaySounds = {
     },
     playHeartbeat: (core: SoundCore) => SoundBank.play(core, 'heartbeat', 0.8),
 
-    playFootstep: (core: SoundCore, type: 'step' | 'snow' | 'metal' | 'wood' | 'water' = 'step') => {
-        const key = type === 'step' ? 'step' : `step_${type}`;
-        // Random pitch and volume variance for natural feel
-        const pitch = 0.9 + Math.random() * 0.3;
-        const vol = 0.15 + Math.random() * 0.05;
+    playFootstep: (core: SoundCore, material: MATERIAL_TYPE, isRight: boolean) => {
+        const key = FOOTSTEP_MAP[material] || 'step';
+
+        // VINTERDÖD: Natural GAIT logic - subtle pitch variation between feet
+        // Right foot (+0.02), Left foot (-0.02)
+        const gaitPitch = isRight ? 0.02 : -0.02;
+        const pitch = (0.9 + Math.random() * 0.2) + gaitPitch; 
+        const vol = 0.4 + Math.random() * 0.1; 
+
         SoundBank.play(core, key, vol, pitch, false, true);
     },
+
+    playImpact: (core: SoundCore, material: MATERIAL_TYPE) => {
+        const key = IMPACT_MAP[material] || 'impact_concrete';
+        const pitch = 0.9 + Math.random() * 0.2;
+        SoundBank.play(core, key, 0.3, pitch, false, true);
+    },
+
     playSwimming: (core: SoundCore) => {
         // Sloshier, deeper sound for swimming
         const pitch = 0.8 + Math.random() * 0.4;
@@ -993,16 +1100,6 @@ export const GamePlaySounds = {
         SoundBank.play(core, 'swimming', vol, pitch, false, true);
     },
 
-    playImpact: (core: SoundCore, type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') => {
-        const key = `impact_${type}`;
-        const pitch = 0.9 + Math.random() * 0.2;
-        SoundBank.play(core, key, 0.3, pitch, false, true);
-    },
-
-    playGlassShatter: (core: SoundCore) => {
-        const pitch = 0.9 + Math.random() * 0.2;
-        SoundBank.play(core, 'glass_shatter', 0.5, pitch, false, true);
-    }
 };
 
 export const WeaponSounds = {

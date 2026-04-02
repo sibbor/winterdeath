@@ -269,7 +269,7 @@ export class FamilySystem implements System {
 
                 const engine = WinterEngine.getInstance();
                 if (engine?.water) {
-                    engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z);
+                    engine.water.checkBuoyancy(fm.position.x, fm.position.y, fm.position.z, now);
                     _animState.isSwimming = _buoyancyResult.depth > 1.2;
                     _animState.isWading = _buoyancyResult.depth > 0.4 && !_animState.isSwimming;
 
@@ -286,7 +286,7 @@ export class FamilySystem implements System {
                             const dz = fm.position.z - rz;
 
                             if (dx * dx + dz * dz > 0.5) {
-                                engine.water.spawnRipple(fm.position.x, fm.position.z, _animState.isSwimming ? 0.8 : 0.5);
+                                engine.water.spawnRipple(fm.position.x, fm.position.z, _session.state.simTime, _animState.isSwimming ? 0.8 : 0.5);
                                 familyMember.lastRippleX = fm.position.x;
                                 familyMember.lastRippleZ = fm.position.z;
                             }

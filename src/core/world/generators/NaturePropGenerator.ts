@@ -3,6 +3,7 @@ import { MATERIALS } from '../../../utils/assets/materials';
 import { SectorContext } from '../../../game/session/SectorTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
+import { MaterialType } from '../../../content/environment';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -57,7 +58,7 @@ export const NaturePropGenerator = {
             group.add(sub);
         }
 
-        group.userData.material = 'STONE';
+        group.userData.material = MaterialType.STONE;
 
         // Freeze the parent group as well
         group.matrixAutoUpdate = false;
@@ -69,15 +70,13 @@ export const NaturePropGenerator = {
     /**
      * Spawns physics-based rubble using InstancedMesh.
      */
-    /**
-     * Spawns physics-based rubble using InstancedMesh.
-     */
     spawnRubble: (ctx: SectorContext, x: number, z: number, count: number, material?: THREE.Material, directionBias: number = Math.PI) => {
         const mat = material == null ? MATERIALS.steel : material;
 
         const mesh = new THREE.InstancedMesh(SHARED_GEO.box, mat, count);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.userData.materialId = mat;
 
         const positions = new Float32Array(count * 3);
         const velocities = new Float32Array(count * 3);
@@ -166,7 +165,8 @@ export const NaturePropGenerator = {
                 // Need a unique Vector3 allocation here since SpatialGrid keeps the reference
                 SectorBuilder.addObstacle(ctx, {
                     position: new THREE.Vector3(x, s / 2, z),
-                    collider: { type: 'sphere', radius: s }
+                    collider: { type: 'sphere', radius: s },
+                    materialId: MaterialType.STONE
                 });
             } else {
                 _position.set(x, 0.05, z);

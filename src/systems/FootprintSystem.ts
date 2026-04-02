@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../utils/assets/materials';
 import { soundManager } from '../utils/audio/SoundManager';
+import { MaterialType, MATERIAL_TYPE } from '../content/environment';
+import { GameSessionLogic } from '../game/session/GameSessionLogic';
+import { FXSystem } from './FXSystem';
 
 const MAX_FOOTPRINTS = 50;
 const FADE_DURATION = 15000; // 15 seconds fade
@@ -10,10 +13,17 @@ const START_OPACITY = 0.8;
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _sideOffset = new THREE.Vector3();
-const _rayOrigin = new THREE.Vector3();
+const _rayOrigin = new THREE.Vector3(0, 50.0, 0); // [VINTERDÖD] High-terrain support
 const _down = new THREE.Vector3(0, -1, 0);
 const _caster = new THREE.Raycaster();
 const _tempQuat = new THREE.Quaternion(); // [VINTERDÖD] För snabb matrix-komposition
+const _tempColor = new THREE.Color();
+
+// [VINTERDÖD] Zero-GC result object for ground detection
+const _groundResult = {
+    height: 0,
+    material: MaterialType.GENERIC as MATERIAL_TYPE
+};
 
 interface Footprint {
     mesh: THREE.Mesh;
@@ -29,7 +39,6 @@ class FootprintSystemClass {
     private materialBase: THREE.MeshBasicMaterial;
     private index = 0;
     private groundMeshes: THREE.Object3D[] = []; // Cached ground references
-    private lastSurface: 'snow' | 'metal' | 'wood' = 'snow';
 
     constructor() {
         this.geometry = new THREE.PlaneGeometry(0.25, 0.45);
@@ -40,17 +49,16 @@ class FootprintSystemClass {
     init(scene: THREE.Scene) {
         this.scene = scene;
 
-        // [VINTERDÖD] Platt loop istället för .filter() för Zero-GC initiering
+        // [VINTERDÖD] Recursive traverse to find nested ground meshes (e.g. within groups)
         this.groundMeshes.length = 0;
-        const children = scene.children;
-        const len = children.length;
-        for (let i = 0; i < len; i++) {
-            const obj = children[i];
-            // Typ-casta till any för att kringgå TypeScripts gnäll utan att offra runtime-prestanda
-            if ((obj as any).isMesh && obj.name.startsWith('Ground_')) {
-                this.groundMeshes.push(obj);
+        scene.traverse((obj) => {
+            if ((obj as any).isMesh) {
+                const name = obj.name.toLowerCase();
+                if (name.includes('ground') || name.includes('terrain') || name.includes('floor') || name.includes('road')) {
+                    this.groundMeshes.push(obj);
+                }
             }
-        }
+        });
 
         if (this.footprints.length > 0) {
             this.index = 0;
@@ -74,6 +82,7 @@ class FootprintSystemClass {
             mesh.visible = false;
             mesh.renderOrder = 2;
             mesh.matrixAutoUpdate = false; // Manual updates only for performance
+            mesh.frustumCulled = false;   // [VINTERDÖD] Never pop out of view
 
             this.scene.add(mesh);
             this.footprints.push({ mesh, life: 0, active: false });
@@ -81,33 +90,57 @@ class FootprintSystemClass {
     }
 
     /**
-     * Places a new footprint decal in the world.
-     * Uses O(1) pool access and Zero-GC math.
+     * Places a new footprint decal in the world or handles water FX.
+     * Centralized hub for ALL step-based audio/visual feedback.
      */
-    addFootprint(position: THREE.Vector3, rotationY: number, isRight: boolean) {
-        if (!this.enabled || !this.scene || this.groundMeshes.length === 0) return;
+    addFootprint(
+        session: GameSessionLogic,
+        position: THREE.Vector3,
+        rotationY: number,
+        isRight: boolean,
+        isRushing: boolean,
+        inWater: boolean,
+        isSwimming: boolean
+    ) {
+        if (!this.enabled || !this.scene) return;
+
+        // 1. Water Handle (No decals, no raycast)
+        if (inWater) {
+            if (isSwimming) {
+                soundManager.playSwimming();
+                FXSystem.spawnPart(
+                    this.scene,
+                    session.state.particles,
+                    position.x, position.y + 1.0, position.z,
+                    'splash',
+                    10
+                );
+                session.engine.water.spawnRipple(position.x, position.z, session.state.simTime, 4.0);
+            } else {
+                soundManager.playFootstep(MaterialType.WATER, isRight);
+                session.engine.water.spawnRipple(position.x, position.z, session.state.simTime, 1.5);
+            }
+            return;
+        }
+
+        // 2. Land Handle (Raycast + Decal)
+        if (this.groundMeshes.length === 0) return;
+
+        const ground = this.getGroundResult(position);
+        if (ground === null) return;
 
         const footprint = this.footprints[this.index];
         this.index = (this.index + 1) % MAX_FOOTPRINTS;
 
-        // [VINTERDÖD] Blixtsnabb matematisk X/Z offset istället för dyr applyAxisAngle
+        // Blixtsnabb matematisk X/Z offset
         const offsetDist = isRight ? 0.15 : -0.15;
         const cosY = Math.cos(rotationY);
         const sinY = Math.sin(rotationY);
 
-        _sideOffset.set(
-            offsetDist * cosY,
-            0,
-            -offsetDist * sinY
-        );
-
-        // 2. Determine target position
+        _sideOffset.set(offsetDist * cosY, 0, -offsetDist * sinY);
         _v2.copy(position).add(_sideOffset);
 
-        const groundHeight = this.getGroundHeight(_v2);
-        if (groundHeight === null) return;
-
-        // 3. Reset and place the footprint
+        // Reset and place the footprint
         footprint.active = true;
         footprint.life = FADE_DURATION;
         footprint.mesh.visible = true;
@@ -115,47 +148,60 @@ class FootprintSystemClass {
         const mat = footprint.mesh.material as THREE.MeshBasicMaterial;
         mat.opacity = START_OPACITY;
 
-        // [VINTERDÖD] Bypass updateMatrix(). Använd matriskomposition direkt.
+        // Dynamic Tinting (Zero-GC)
+        if (ground.material === MaterialType.SNOW) {
+            _tempColor.set(0xffffff); // Pure white
+        } else if (ground.material === MaterialType.DIRT || ground.material === MaterialType.GRAVEL) {
+            _tempColor.set(0x443322); // Dark brown/muddy
+        } else {
+            _tempColor.set(0x222222); // Generic dark footprint
+        }
+        mat.color.copy(_tempColor);
+
         footprint.mesh.position.copy(_v2);
-        footprint.mesh.position.y = groundHeight + 0.02; // Tiny offset to prevent Z-fighting
+        footprint.mesh.position.y = ground.height + 0.02; // Tiny offset to prevent Z-fighting
 
         _tempQuat.setFromAxisAngle(_v1.set(0, 1, 0), rotationY);
 
         const scaleX = isRight ? -0.6 : 0.6;
-        _v1.set(scaleX, 1, 1); // Återanvänder _v1 för skala
+        _v1.set(scaleX, 1, 1);
 
         footprint.mesh.matrix.compose(footprint.mesh.position, _tempQuat, _v1);
-        footprint.mesh.matrixWorldNeedsUpdate = true; // Flagga för renderaren
+        footprint.mesh.updateMatrixWorld(true); // [VINTERDÖD] Force update for non-auto meshes
 
-        // 4. Sound feedback
-        soundManager.playFootstep(this.lastSurface);
+        // 3. Audio & Particle Feedback
+        soundManager.playFootstep(ground.material, isRight);
+
+        if (isRushing && (ground.material === MaterialType.SNOW || ground.material === MaterialType.DIRT)) {
+            FXSystem.spawnPart(
+                this.scene,
+                session.state.particles,
+                _v2.x, _v2.y, _v2.z,
+                'large_smoke',
+                1
+            );
+        }
     }
 
     /**
      * Highly optimized raycast against a cached subset of scene objects.
+     * Returns a pooled result object to avoid frame-rate allocations.
      */
-    private getGroundHeight(pos: THREE.Vector3): number | null {
+    private getGroundResult(pos: THREE.Vector3): typeof _groundResult | null {
         _rayOrigin.set(pos.x, 10.0, pos.z);
         _caster.set(_rayOrigin, _down);
 
-        // Non-recursive intersect for maximum speed
         const hits = _caster.intersectObjects(this.groundMeshes, false);
 
         if (hits.length > 0) {
             const hit = hits[0];
-            const name = hit.object.name;
+            _groundResult.height = hit.point.y;
 
-            // [VINTERDÖD] Undvik .toUpperCase() (minnesallokering) under raycast.
-            // Antar att formaten är konsekventa eller söker med case-insensitivity.
-            if (name.indexOf('Metal') !== -1 || name.indexOf('METAL') !== -1) {
-                this.lastSurface = 'metal';
-            } else if (name.indexOf('Wood') !== -1 || name.indexOf('WOOD') !== -1 || name.indexOf('Plank') !== -1) {
-                this.lastSurface = 'wood';
-            } else {
-                this.lastSurface = 'snow';
-            }
+            // Read materialId from userData (Standardized in TerrainGenerator)
+            const materialId = hit.object.userData.materialId;
+            _groundResult.material = materialId || MaterialType.GENERIC;
 
-            return hit.point.y;
+            return _groundResult;
         }
 
         return null;

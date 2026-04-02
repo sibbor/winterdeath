@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { SectorTrigger } from '../systems/TriggerTypes';
 import { SectorState, SectorStats } from '../game/session/SessionTypes';
 import { PlayerStats } from '../entities/player/PlayerTypes';
-import { StatusEffectType, PlayerDeathState, ActiveStatusEffect } from '../entities/player/CombatTypes';
+import { PlayerDeathState, ActiveStatusEffect } from '../entities/player/CombatTypes';
+import { StatusEffectType } from '../content/perks';
 import { WeaponType } from '../content/weapons';
-import { VehicleType } from '../content/vehicles';
 import { Obstacle } from './world/CollisionResolution';
 import { Enemy } from '../entities/enemies/EnemyManager';
 import { ScrapItem } from '../systems/WorldLootSystem';
@@ -52,6 +52,25 @@ export interface PreallocatedVehicleState {
     suspVelY: number;
 }
 
+/*
+Upcoming change
+
+export interface RuntimeState {
+    // --- CORE SYSTEMS ---
+    simTime: number;
+    renderTime: number;
+    
+    // --- SUB-STATES (Preallocated & Zero-GC) ---
+    player: PreallocatedPlayerState;     // hp, stamina, rollDir, isDead, isSwimming
+    combat: PreallocatedCombatState;     // activeWeapon, ammo, reloadEndTime, multipliers
+    movement: PreallocatedMovementState; // distanceSinceLastStep, isRushing, isWading
+    enemies: PreallocatedEnemyManager;   // enemies array, bossSpawned, killerType
+    world: PreallocatedWorldState;       // sectorState, obstacles, collisionGrid, triggers
+    discovery: PreallocatedDiscoveryState; // pois, clues, collectibles
+    vehicle: PreallocatedVehicleState;
+    metrics: PreallocatedTelemetryState; // fps, drawCalls, triangles
+}
+*/
 
 export interface RuntimeState {
     isDead: boolean;
@@ -167,6 +186,9 @@ export interface RuntimeState {
     playerBloodSpawned: boolean;
     playerAshSpawned: boolean;
     lastDrownTick: number;
+    lastStepRight: boolean;  // VINTERDÖD: Vilken fot som sattes ner sist
+    distanceSinceLastStep: number;
+    minStepDistance: number;
 
     // --- ZERO-GC VECTORS (Replaced nulls with flags) ---
     deathVel: THREE.Vector3;

@@ -210,6 +210,9 @@ export const en = {
         log_clues: "CLUES",
         log_poi: "POIS",
         log_perks: "PERKS",
+        passive_abilities: "PASSIVES ABILITIES",
+        buffs: "BUFFS",
+        debuffs: "DEBUFFS",
         unknown_threat: "Unknown Threat",
         drowning: "Drowning",
         burning: "Burning",
@@ -334,17 +337,32 @@ export const en = {
     },
     skills: {
         vitality: "VITALITY",
-        vitality_desc: "Increases maximum health.",
+        vitality_desc: "Increases maximum health",
         adrenaline: "ADRENALINE",
-        adrenaline_desc: "Increase maximum stamina.",
+        adrenaline_desc: "Increase maximum stamina",
         reflex: "REFLEXES",
-        reflex_desc: "Increases movement speed.",
-        loke_passive: "Fast Hands: 20% faster reload speed.",
-        jordan_passive: "Eagle Eye: 15% increased weapon range.",
-        esmeralda_passive: "Trigger Happy: 20% increased rate of fire.",
-        nathalie_passive: "Stoic: 10% damage resistance."
+        reflex_description: "Increased maximum movement speed",
     },
     perks: {
+        // Passives
+        TRICKSTERS_HASTE: {
+            title: "Trickster's Haste",
+            description: "20% faster reload speed"
+        },
+        EAGLES_SIGHT: {
+            title: "Eagle's Sight",
+            description: "15% increased weapon range"
+        },
+        LEAD_FEVER: {
+            title: "Lead Fever",
+            description: "20% increased rate of fire"
+        },
+        WINTERS_BONE: {
+            title: "Winter's Bone",
+            description: "10% damage resistance"
+        },
+
+        // Buffs
         REFLEX_SHIELD: {
             title: "Reflex Shield",
             description: "500ms invulnerability when dodging or rushing. 10s cooldown."
@@ -352,6 +370,40 @@ export const en = {
         ADRENALINE_PATCH: {
             title: "Adrenaline Patch",
             description: "3s invulnerability when health drops below 25%. 60s cooldown."
+        },
+
+        // Debuffs
+        BLEEDING: {
+            title: "Bleeding",
+            description: "Taking continuous damage and moving 10% slower."
+        },
+        BURNING: {
+            title: "Burning",
+            description: "Intense heat causing continuous damage and slight slowing."
+        },
+        STUNNED: {
+            title: "Stunned",
+            description: "Movement and actions are completely disabled."
+        },
+        DISORIENTED: {
+            title: "Disoriented",
+            description: "Vision is blurred and movement speed is reduced by 20%."
+        },
+        SLOWED: {
+            title: "Slowed",
+            description: "Movement speed is significantly reduced by 40%."
+        },
+        FREEZING: {
+            title: "Freezing",
+            description: "Taking damage and moving significantly slower due to extreme cold."
+        },
+        ELECTRIFIED: {
+            title: "Electrified",
+            description: "Taking damage and moving significantly slower due to electrical current."
+        },
+        DROWNING: {
+            title: "Drowning",
+            description: "Taking rapid damage while submerged in deep water."
         }
     },
     weapons: {
@@ -385,7 +437,7 @@ export const en = {
         "Auto-Reload is slower than manual Reload [R].",
         "Upgrading 'Vitality' helps you survive longer.",
         "Upgrading 'Adrenaline' helps you run for longer periods of time.",
-        "Upgrading 'Reflexes' helps you outrun the zombies."
+        "Upgrading 'Reflexes' helps you outrun the zombies.",
     ],
     sectors: {
         camp_name: "The Camp",

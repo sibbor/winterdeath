@@ -2,14 +2,16 @@ import * as THREE from 'three';
 import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { FXSystem } from './FXSystem';
-import { StatusEffectType, DamageType, PerkCategory } from '../entities/player/CombatTypes';
-import { PERKS } from '../content/perks';
+import { DamageType } from '../entities/player/CombatTypes';
+import { PERKS, StatusEffectType } from '../content/perks';
 import { applyCollisionResolution } from '../core/world/CollisionResolution';
 import { soundManager } from '../utils/audio/SoundManager';
 import { EnemyManager } from '../entities/enemies/EnemyManager';
 import { _buoyancyResult } from './WaterSystem';
 import { NOISE_RADIUS, NoiseType } from '../entities/enemies/EnemyTypes';
 import { GEOMETRY, MATERIALS } from '../utils/assets';
+import { MaterialType } from '../content/environment';
+import { FootprintSystem } from './FootprintSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -166,27 +168,33 @@ export class PlayerMovementSystem implements System {
         let isWading = false;
 
         if (session.engine.water) {
-            session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
+            session.engine.water.checkBuoyancy(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z, session.state.renderTime);
             inWater = _buoyancyResult.inWater && !state.vehicle.active;
 
             if (inWater) {
                 const flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
 
                 if (flatDepth > 1.25) {
-                    isSwimming = true; speed *= 0.35;
+                    isSwimming = true;
+                    speed *= 0.35;
                 } else if (flatDepth > 0.95 && isSwimming) {
-                    isSwimming = true; speed *= 0.35;
+                    isSwimming = true;
+                    speed *= 0.35;
                 } else if (flatDepth > 0.4) {
-                    isSwimming = false; isWading = true; speed *= 0.6;
+                    isSwimming = false;
+                    isWading = true;
+                    speed *= 0.6;
                 } else {
-                    isSwimming = false; speed *= 0.85;
+                    isSwimming = false;
+                    speed *= 0.85;
                 }
 
                 const swimY = _buoyancyResult.waterLevel - 0.35;
                 const targetY = isSwimming ? swimY : _buoyancyResult.groundY;
                 playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, targetY, 4 * simDelta);
             } else {
-                isSwimming = false; isWading = false;
+                isSwimming = false;
+                isWading = false;
                 if (playerGroup.position.y !== 0) {
                     playerGroup.position.y = THREE.MathUtils.lerp(playerGroup.position.y, 0, 15 * simDelta);
                     if (Math.abs(playerGroup.position.y) < 0.01) playerGroup.position.y = 0;
@@ -208,17 +216,24 @@ export class PlayerMovementSystem implements System {
         if (waterStaminaDrain > 0 && !state.vehicle.active) {
             state.lastStaminaUseTime = simTime;
             state.stamina = Math.max(0, state.stamina - waterStaminaDrain * simDelta);
-            if (isSwimming && state.stamina <= 0) {
-                speed *= 0.5; // Exhaustion penalty while swimming
+            
+                if (isSwimming && state.stamina < 0.1) {
+                    speed *= 0.5; // Exhaustion penalty while swimming
 
-                // Drowning Damage
-                if (simTime - state.lastDrownTick > 1000) {
-                    state.lastDrownTick = simTime;
+                    // State-Driven Debuff: Refresh every frame to keep it active without a long tail
                     if (state.callbacks && state.callbacks.onPlayerHit) {
-                        state.callbacks.onPlayerHit(15, null, DamageType.DROWNING, true, StatusEffectType.DROWNING, 2000, 15, DamageType.DROWNING);
+                        // Note: damage=0 here because this is just the status refresh
+                        state.callbacks.onPlayerHit(0, null, DamageType.DROWNING, true, StatusEffectType.DROWNING, 500, 0, DamageType.DROWNING);
+                    }
+
+                    // Drowning Damage (Lethal Tick every 1s)
+                    if (simTime - state.lastDrownTick > 1000) {
+                        state.lastDrownTick = simTime;
+                        if (state.callbacks && state.callbacks.onPlayerHit) {
+                            state.callbacks.onPlayerHit(15, null, DamageType.DROWNING, true, StatusEffectType.DROWNING, 500, 15, DamageType.DROWNING);
+                        }
                     }
                 }
-            }
         }
 
         if (state.isRushing) {
@@ -251,7 +266,7 @@ export class PlayerMovementSystem implements System {
             if (!state.rollSmokeSpawned && !inWater) {
                 state.rollSmokeSpawned = true;
                 this.checkReflexShield(session, simTime);
-                soundManager.playFootstep('step');
+                soundManager.playFootstep(MaterialType.CONCRETE);
                 session.makeNoise(playerGroup.position, NoiseType.PLAYER_ROLLING, NOISE_RADIUS.PLAYER_ROLLING);
                 FXSystem.spawnPart(
                     session.engine.scene, state.particles,
@@ -311,47 +326,70 @@ export class PlayerMovementSystem implements System {
                     state.strafeDirection = 0;
                 }
 
+                // --- VINTERDÖD: Motion-Based Triggering ---
+                const oldX = playerGroup.position.x;
+                const oldZ = playerGroup.position.z;
+                // VINTERDÖD FIX: Apply speed and delta to the movement vector!
+                // Without this, the player moves at 'unit' speed (1.0m per frame).
                 _v1.multiplyScalar(speed * simDelta);
 
                 this.performMove(playerGroup, _v1, state, session, simTime, simDelta);
 
-                const stepInterval = state.isSwimming ? 350 : (state.isRushing ? 250 : 400);
-                if (simTime - state.lastStepTime > stepInterval) {
-                    state.lastStepTime = simTime;
+                const dx = playerGroup.position.x - oldX;
+                const dz = playerGroup.position.z - oldZ;
+                const movedDist = Math.sqrt(dx * dx + dz * dz);
 
-                    let noiseType = NoiseType.PLAYER_WALK;
-                    let noiseRadius = NOISE_RADIUS.PLAYER_WALK;
+                // --- VINTERDÖD FIX: Stricter Motion-Based Triggering ---
+                // We compare current movement with intended speed to filter out wall-jitter.
+                const intendedDist = speed * simDelta;
+                const mobilityRatio = movedDist / Math.max(0.001, intendedDist);
 
-                    if (inWater) {
+                // Velocity Gate: Accumulate ONLY if moving decisively (at least 20% mobility)
+                if (mobilityRatio > 0.2 && movedDist > 0.001) {
+                    state.distanceSinceLastStep += movedDist;
+
+                    const distMult = state.isRushing ? 0.8 : 1.0;
+                    const reqDist = state.minStepDistance * distMult;
+
+                    if (state.distanceSinceLastStep >= reqDist) {
+                        state.distanceSinceLastStep = 0;
+                        state.lastStepRight = !state.lastStepRight;
+
+                        // Sound & Visuals (Land feedback)
+                        FootprintSystem.addFootprint(
+                            session,
+                            playerGroup.position,
+                            playerGroup.rotation.y,
+                            state.lastStepRight,
+                            state.isRushing,
+                            inWater,
+                            isSwimming
+                        );
+
+                        // Noise generation
+                        let noiseType = NoiseType.PLAYER_WALK;
+                        let noiseRadius = NOISE_RADIUS.PLAYER_WALK;
                         if (isSwimming) {
                             noiseType = NoiseType.PLAYER_SWIM;
                             noiseRadius = NOISE_RADIUS.PLAYER_SWIM;
-                            soundManager.playSwimming();
-                            FXSystem.spawnPart(session.engine.scene, state.particles, playerGroup.position.x, playerGroup.position.y + 1.0, playerGroup.position.z, 'splash', 3);
-                            session.engine.water?.spawnRipple(playerGroup.position.x, playerGroup.position.z, 4.0);
-                        } else {
-                            soundManager.playFootstep('water');
-                            session.engine.water?.spawnRipple(playerGroup.position.x, playerGroup.position.z, 1.5);
-                        }
-                    } else {
-                        soundManager.playFootstep('step');
-                        if (state.isRushing) {
+                        } else if (state.isRushing) {
                             noiseType = NoiseType.PLAYER_RUSH;
                             noiseRadius = NOISE_RADIUS.PLAYER_RUSH;
-                            FXSystem.spawnPart(
-                                session.engine.scene, state.particles,
-                                playerGroup.position.x, 0.2, playerGroup.position.z,
-                                'large_smoke', 1, undefined, undefined, 0xcccccc, 0.8
-                            );
                         }
-                    }
 
-                    session.makeNoise(playerGroup.position, noiseType, noiseRadius);
+                        session.makeNoise(playerGroup.position, noiseType, noiseRadius);
+                    }
+                } else {
+                    // We are pushing against a wall or stuck. 
+                    // Zero out the accumulator to prevent "ghost steps" from jitter.
+                    state.distanceSinceLastStep = 0;
                 }
             } else {
                 state.isBacking = false;
                 state.isStrafing = false;
                 state.strafeDirection = 0;
+                // Idle Reset: Absolute zero when keys are released.
+                state.distanceSinceLastStep = 0;
             }
         }
 

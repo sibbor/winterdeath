@@ -3,6 +3,7 @@ import { SoundBank } from './SoundBank';
 import { GamePlaySounds, UiSounds, WeaponSounds, VoiceSounds, EnemySounds, BossSounds, registerSoundGenerators, createMusicBuffer } from './SoundLib';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 import { PLAYER_CHARACTER } from '../../content/constants';
+import { MaterialType, MATERIAL_TYPE } from '../../content/environment';
 
 /**
  * SoundManager handles high-level sound requests and persistent ambient loops.
@@ -90,12 +91,13 @@ export class SoundManager {
   playMetalKnocking() { GamePlaySounds.playMetalKnocking(this.core); }
   playCollectibleChime() { UiSounds.playCollectibleChime(this.core); }
   playLevelUp() { UiSounds.playLevelUp(this.core); }
-  playFootstep(type: 'step' | 'snow' | 'metal' | 'wood' | 'water' = 'step') { GamePlaySounds.playFootstep(this.core, type); }
-  playImpact(type: 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood' = 'concrete') {
+  playFootstep(type: MATERIAL_TYPE, isRight: boolean = false) {
+    GamePlaySounds.playFootstep(this.core, type, isRight);
+  }
+  playImpact(type: MATERIAL_TYPE) {
     GamePlaySounds.playImpact(this.core, type);
   }
   playSwimming() { GamePlaySounds.playSwimming(this.core); }
-  playGlassShatter() { GamePlaySounds.playGlassShatter(this.core); }
   playDash() { SoundBank.play(this.core, 'dash', 0.25, 1.0 + Math.random() * 0.2); }
 
   // --- VOICE DELEGATES ---
@@ -489,7 +491,7 @@ export class SoundManager {
       case 'ui_confirm': this.playUiConfirm(); break;
       case 'ui_click': this.playUiClick(); break;
       case 'ui_chime': this.playCollectibleChime(); break;
-      
+
       // --- AMBIENT ---
       case 'ambient_rustle': GamePlaySounds.playAmbientRustle(this.core); break;
       case 'ambient_metal': GamePlaySounds.playAmbientMetal(this.core); break;
@@ -497,23 +499,12 @@ export class SoundManager {
       case 'bird_ambience': this.playBirdAmbience(); break;
 
       // --- MOVEMENT ---
-      case 'step': this.playFootstep('step'); break;
-      case 'step_snow': this.playFootstep('snow'); break;
-      case 'step_metal': this.playFootstep('metal'); break;
-      case 'step_wood': this.playFootstep('wood'); break;
-      case 'step_water': this.playFootstep('water'); break;
       case 'step_zombie': this.playZombieStep(); break;
       case 'dash': this.playDash(); break;
       case 'swimming': this.playSwimming(); break;
 
-      // --- COMBAT & IMPACTS ---
-      case 'impact_flesh':
-      case 'hit':
-          this.playImpact('flesh'); break;
-      case 'impact_metal': this.playImpact('metal'); break;
-      case 'impact_concrete': this.playImpact('concrete'); break;
-      case 'impact_stone': this.playImpact('stone'); break;
-      case 'impact_wood': this.playImpact('wood'); break;
+      // --- COMBAT ---
+      case 'hit': this.playImpact(MaterialType.FLESH); break;
       case 'explosion': this.playExplosion(); break;
       case 'heartbeat': this.playHeartbeat(); break;
 
@@ -523,27 +514,27 @@ export class SoundManager {
       case 'walker_attack': this.playWalkerAttack(); break;
       case 'walker_groan': this.playWalkerGroan(); break;
       case 'walker_death': this.playWalkerDeath(); break;
-      case 'runner_scream': 
+      case 'runner_scream':
       case 'screech':
-          this.playRunnerScream(); break;
+        this.playRunnerScream(); break;
       case 'runner_attack': this.playRunnerAttack(); break;
       case 'runner_death': this.playRunnerDeath(); break;
       case 'tank_roar': this.playTankRoar(); break;
       case 'tank_smash':
       case 'smash':
       case 'heavy_smash':
-          this.playTankSmash(); break;
+        this.playTankSmash(); break;
       case 'tank_death': this.playTankDeath(); break;
       case 'bomber_beep': this.playBomberBeep(); break;
       case 'bomber_explode': this.playBomberExplode(); break;
 
-      // --- ABILITIES & SPECIAL ---
+      // --- ENEMIES: ABILITIES & SPECIAL ---
       case 'jump_impact': SoundBank.play(this.core, 'jump_impact', 0.6); break;
       case 'electric_beam':
       case 'magnetic_chain':
       case 'electric_beam_start':
       case 'magnetic_chain_start':
-          this.playArcCannonZap(); break;
+        this.playArcCannonZap(); break;
 
       default:
         // Handle Boss-specific IDs dynamically (e.g., boss_attack_0)

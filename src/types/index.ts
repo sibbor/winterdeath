@@ -1,6 +1,7 @@
 import { GameSettings, EnvironmentOverride } from '../core/engine/EngineTypes';
 import { WeaponType } from '../content/weapons';
 import type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState } from '../components/ui/hud/HudTypes';
+import { WeatherType } from '../content/environment';
 
 export type { MapItem, MapItemType, HudVector2, HudBossInfo, HudState };
 
@@ -15,8 +16,6 @@ export enum GameScreen {
   DEATH = 'DEATH',
   PROLOGUE = 'PROLOGUE',
 }
-
-export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
 
 export interface PlayerStats {
   level: number;

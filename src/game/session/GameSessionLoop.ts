@@ -691,7 +691,7 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 const lastPos = refs.lastInteractionPosRef.current;
 
                 // VINTERDÖD FIX: More solid fast-check before writing object properties
-                const posChanged = Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 2.0;
+                const posChanged = !lastPos || Math.abs(lastPos.x - screenX) > 3.0 || Math.abs(lastPos.y - screenY) > 2.0;
                 const typeChanged = currentInter !== lastType;
                 const labelChanged = currentLabel !== (state as any).lastInteractionLabel;
 

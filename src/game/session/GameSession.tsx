@@ -587,7 +587,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
 
             if (newlyFound && refs.gameSessionRef.current) {
                 const statsSystem = refs.gameSessionRef.current.getSystem('player_stats_system') as PlayerStatsSystem;
-                if (statsSystem) statsSystem.updatePassives();
+                if (statsSystem) statsSystem.updatePassives(refs.gameSessionRef.current);
             }
         };
 
@@ -689,7 +689,10 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
         respawnPlayer: () => {
             const engine = WinterEngine.getInstance();
             const state = refs.stateRef.current;
-            GameSessionSetup.respawnPlayer(engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase as any }));
+            const session = refs.gameSessionRef.current;
+            if (session) {
+                GameSessionSetup.respawnPlayer(session, engine, state, refs, props, (phase) => updateUiState({ deathPhase: phase as any }));
+            }
         },
         restartSector: async () => {
             const currentSetupId = refs.setupIdRef.current;

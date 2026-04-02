@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WEAPONS, BOSSES } from '../content/constants';
 import { WeaponType } from '../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
-import { StatusEffectType } from '../entities/player/CombatTypes';
+import { StatusEffectType } from '../content/perks';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();

@@ -138,11 +138,11 @@ export function createWaterMaterial(
                     if (rip.z < -100.0) continue; 
                     
                     float d = distance(worldPosition.xz, rip.xy);
-                    float t = uTime - rip.z;
-                    if (t > 0.0 && t < 3.0) {
-                        float radius = t * 4.0; 
+                    float age = (uTime * 1000.0) - rip.z;
+                    if (age > 0.0 && age < 3000.0) {
+                        float radius = (age / 1000.0) * 4.0;
                         if (abs(d - radius) < 1.0) {
-                            float decay = max(0.0, 1.0 - (t / 3.0));
+                            float decay = max(0.0, 1.0 - (age / 3000.0));
                             float ringNoise = texture2D(uNoiseTexture, worldPosition.xz * 0.05 + uTime * 0.1).r;
                             // Clamp physics to avoid grenade explosions creating mountains of water
                             float safeStrength = clamp(rip.w, 0.0, 1.5); 

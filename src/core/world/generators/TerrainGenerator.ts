@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS } from '../../../utils/assets/materials';
+import { MaterialType } from '../../../content/environment';
 import { SectorContext } from '../../../game/session/SectorTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
@@ -40,7 +41,8 @@ export const TerrainGenerator = {
         }
 
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.name = `GROUND`;
+        mesh.name = `Ground_Surface`;
+        mesh.userData.materialId = type === 'SNOW' ? MaterialType.SNOW : (type === 'GRAVEL' ? MaterialType.GRAVEL : MaterialType.DIRT);
         mesh.rotation.x = -Math.PI / 2;
         mesh.position.y = -0.05;
         mesh.receiveShadow = true;
@@ -99,8 +101,10 @@ export const TerrainGenerator = {
         geo.computeVertexNormals();
 
         const mesh = new THREE.Mesh(geo, mat);
+        mesh.name = `Ground_LakeBed`; // VINTERDÖD
         mesh.rotation.x = -Math.PI / 2;
         mesh.receiveShadow = true;
+        mesh.userData.materialId = MaterialType.DIRT; // VINTERDÖD
 
         mesh.matrixAutoUpdate = false;
         mesh.updateMatrix();
@@ -268,8 +272,10 @@ export const TerrainGenerator = {
         mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const mountain = new THREE.Mesh(mountainGeo, MATERIALS.mountain);
+        mountain.name = `Ground_Mountain`; // VINTERDÖD
         mountain.castShadow = true;
         mountain.receiveShadow = true;
+        mountain.userData.materialId = MaterialType.STONE; // VINTERDÖD
         ctx.scene.add(mountain);
     },
 

@@ -203,6 +203,9 @@ export class GameSessionLogic {
             playerBloodSpawned: false,
             playerAshSpawned: false,
             lastDrownTick: 0,
+            lastStepRight: false,
+            distanceSinceLastStep: 1.5, // Prime the first step
+            minStepDistance: 1.7,
             deathVel: new THREE.Vector3(),
 
             // Zero-GC: Pre-allocated vectors with boolean flags instead of null

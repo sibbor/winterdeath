@@ -1,7 +1,6 @@
 import * as THREE from 'three';
+import { MATERIAL_TYPE } from '../../content/environment';
 
-// --- Collision System Types ---
-export type MaterialType = 'flesh' | 'metal' | 'concrete' | 'stone' | 'wood';
 export type ColliderType = 'sphere' | 'box';
 
 export interface ColliderData {
@@ -21,7 +20,7 @@ export interface Obstacle {
     collider?: ColliderData;
     id?: string;
     type?: string;
-    materialId?: MaterialType; // High-performance lookup for impact sounds/FX
+    materialId?: MATERIAL_TYPE; // High-performance lookup for impact sounds/FX
 }
 
 // --- PERFORMANCE SCRATCHPADS ---

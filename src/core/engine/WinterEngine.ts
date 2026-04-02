@@ -180,9 +180,9 @@ export class WinterEngine {
         this.renderer.shadowMap.type = this.settings.shadowMapType as THREE.ShadowMapType;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-        // The canvas never needs pointer events — InputManager binds to window.
-        // Without this, the canvas (absolute full-screen) eats all touch/click
-        // events on mobile, making the HUD action bar and pause button non-interactive.
+        // VINTERDÖD: The canvas never needs pointer events on any device.
+        // All interactions are captured by the GameSessionUI click-catcher overlay,
+        // ensuring the HUD and custom cursors remain reachable.
         this.renderer.domElement.style.pointerEvents = 'none';
     }
 

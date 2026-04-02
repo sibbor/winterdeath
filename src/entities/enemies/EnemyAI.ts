@@ -27,6 +27,7 @@ const TWO_PI = Math.PI * 2;
 const SEPARATION_RADIUS = 1.5;
 const SEPARATION_RADIUS_SQ = SEPARATION_RADIUS * SEPARATION_RADIUS;
 const INV_SEPARATION_RADIUS = 1.0 / SEPARATION_RADIUS;
+const KPH_TO_MS = 1.0 / 3.6; // Convert kph to meters per second for world-scale physics
 
 function logStateChange(now: number, e: Enemy, newState: AIState, reason?: string) {
     if (PerformanceMonitor.getInstance().aiLoggingEnabled && e.state !== newState) {
@@ -205,7 +206,7 @@ export const EnemyAI = {
 
                 if (water) {
                     // We just landed (y <= 0), so we KNOW we are below the 2.0 limit. Run the check!
-                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
                     checkedWaterThisFrame = true; // Mark that we already calculated this
                 }
 
@@ -244,7 +245,7 @@ export const EnemyAI = {
             if (!checkedWaterThisFrame) {
                 if (e.mesh.position.y < 2.0) {
                     // Zombie is on the ground/near the ground. Do the heavy math.
-                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z);
+                    water.checkBuoyancy(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, renderTime);
                 } else {
                     // Broadphase Early-Out: Zombie is flying high!
                     // MUST be reset manually otherwise we inherit another zombie's water status
@@ -256,11 +257,25 @@ export const EnemyAI = {
                 _waterCheckResult.flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
                 e.isInWater = true;
                 e.isWading = _waterCheckResult.flatDepth > 0.4 && _waterCheckResult.flatDepth <= 1.25;
-                e.isDrowning = _waterCheckResult.flatDepth > 1.25;
+                
+                // --- TIRING SWIM MECHANIC ---
+                const inDeepWater = _waterCheckResult.flatDepth > 1.25;
+                if (inDeepWater && !e.isDrowning) {
+                    // Accumulate distance swum (multiply length by simDelta for meters)
+                    e.swimDistance += e.velocity.length() * simDelta;
+                    if (e.swimDistance > e.maxSwimDistance) {
+                        e.isDrowning = true;
+                    }
+                } else if (!inDeepWater) {
+                    // Reset swim distance if they reach shallow water
+                    e.swimDistance = 0;
+                    e.isDrowning = false;
+                }
             } else {
                 e.isInWater = false;
                 e.isWading = false;
                 e.isDrowning = false;
+                e.swimDistance = 0;
                 if (e.mesh.position.y < 0) {
                     e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, 0, 8 * simDelta);
                     if (e.mesh.position.y > -0.01) e.mesh.position.y = 0;
@@ -273,7 +288,8 @@ export const EnemyAI = {
             e.drownTimer += simDelta;
 
             if (water) {
-                const targetY = _buoyancyResult.groundY;
+                // FLOAT ON SURFACE (Grit choice: Drowning enemies stay at water level)
+                const targetY = _buoyancyResult.waterLevel - 0.2;
                 e.mesh.position.y = THREE.MathUtils.lerp(e.mesh.position.y, targetY, 3 * simDelta);
             }
 
@@ -286,11 +302,13 @@ export const EnemyAI = {
             e.drownDmgTimer += simDelta;
             if (e.drownDmgTimer >= 0.15) {
                 e.drownDmgTimer = 0;
-                if (water) water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9);
-                callbacks.spawnPart(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 2);
+                // Use a larger, more visible ripple for the struggle
+                if (water) water.spawnRipple(e.mesh.position.x, e.mesh.position.z, 0.9, 1.2);
+                callbacks.spawnPart(e.mesh.position.x, _buoyancyResult.waterLevel, e.mesh.position.z, 'splash', 4);
 
-                const tickDmg = e.maxHp * 0.25 * 0.15;
+                const tickDmg = e.maxHp * 0.05; // 5% damage per struggle tick
                 e.hp -= tickDmg;
+                // VINTERDÖD: DamageType.DROWNING signals EnemyManager to skip blood
                 callbacks.applyDamage(e, tickDmg, DamageType.DROWNING);
 
                 if (e.hp <= 0 && e.deathState === EnemyDeathState.ALIVE) {
@@ -404,7 +422,7 @@ export const EnemyAI = {
 
                     const angle = Math.random() * TWO_PI;
                     _v1.set(e.spawnPos.x + Math.cos(angle) * 6, 0, e.spawnPos.z + Math.sin(angle) * 6);
-                    e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * 5);
+                    e.velocity.subVectors(_v1, e.mesh.position).normalize().multiplyScalar(e.speed * KPH_TO_MS * 5);
                     e.searchTimer = 2.0 + Math.random() * 3.0;
                 }
                 break;
@@ -415,7 +433,7 @@ export const EnemyAI = {
 
                 // Tier 4: Minimal updates, skip movement physics
                 if (!isTier4) {
-                    moveEntity(e, _v1, simDelta, e.speed * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                    moveEntity(e, _v1, simDelta, e.speed * KPH_TO_MS * 0.5, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                 }
 
                 if (seesPlayer) {
@@ -449,7 +467,7 @@ export const EnemyAI = {
                     e.idleTimer = 1.0 + Math.random() * 2.0;
                 } else if (e.mesh.position.distanceToSquared(e.lastKnownPosition) > 1.5) {
                     if (!isTier4) {
-                        moveEntity(e, e.lastKnownPosition, simDelta, e.speed * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
+                        moveEntity(e, e.lastKnownPosition, simDelta, e.speed * KPH_TO_MS * 0.8, collisionGrid, _v6, simTime, renderTime, false, isTier1, isTier2, frameOffset);
                     }
                 } else {
                     e.mesh.rotation.y += simDelta * 2.5; // Spin around looking
@@ -478,7 +496,7 @@ export const EnemyAI = {
                     }
 
                     const target = (seesPlayer) ? playerPos : e.lastKnownPosition;
-                    const chaseSpeed = e.isWading ? e.speed * 0.6 : e.speed;
+                    let chaseSpeed = (e.isWading ? e.speed * 0.6 : e.speed) * KPH_TO_MS;
 
                     if (!isTier4) {
                         moveEntity(e, target, simDelta, chaseSpeed, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
@@ -532,8 +550,10 @@ export const EnemyAI = {
                     e.attackTimer -= simDelta;
                     const att = e.attacks[e.currentAttackIndex!];
 
-                    _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
-                    e.mesh.lookAt(_v5);
+                    // Slowly follow/face player during charge
+                    if (!isTier4) {
+                        moveEntity(e, playerPos, simDelta, e.speed * KPH_TO_MS * 0.25, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                    }
 
                     if (e.attackTimer <= 0) {
                         logStateChange(simTime, e, AIState.ATTACKING);
@@ -549,8 +569,10 @@ export const EnemyAI = {
                     e.attackTimer -= simDelta;
                     const att = e.attacks[e.currentAttackIndex!];
 
-                    _v5.set(playerPos.x, e.mesh.position.y, playerPos.z);
-                    e.mesh.lookAt(_v5);
+                    // Limited movement during active attack frame
+                    if (!isTier4) {
+                        moveEntity(e, playerPos, simDelta, e.speed * KPH_TO_MS * 0.15, collisionGrid, _v6, simTime, renderTime, true, isTier1, isTier2, frameOffset);
+                    }
 
                     if (att && att.activeTime) {
                         EnemyAttackHandler.updateContinuousAttack(e, att, simDelta, playerPos, callbacks);
@@ -610,26 +632,16 @@ function moveEntity(e: Enemy, target: THREE.Vector3, simDelta: number, speed: nu
         e.mesh.position.z + _v3.z
     );
 
+    // Ground bounce applied directly here (Zero-GC)
     const baseScale = e.originalScale;
     const hitRadius = 0.5 * baseScale * e.widthScale;
 
-    // LoD: Throttled obstacle collision checks
-    let shouldCheckObstacles = isTier1;
-    if (isTier2) shouldCheckObstacles = (frameOffset % 3 === 0);
-    // Tier 3+ skips obstacle resolution to save significant CPU (they are far away)
-
-    if (shouldCheckObstacles) {
-        // ZERO-GC: Obstacles usually don't move. We pass a tighter radius
-        const nearby = collisionGrid.getNearbyObstacles(_v4, hitRadius + 1.0);
-        for (let i = 0; i < nearby.length; i++) {
-            applyCollisionResolution(_v4, hitRadius, nearby[i]);
-        }
-    }
-
-    // Ground bounce applied directly here (Zero-GC)
-    const groundY = 1.0 * baseScale;
-    const bounceOffset = Math.abs(Math.sin(renderTime * (isChasing ? 0.018 : 0.009))) * 0.12;
-    _v4.y = groundY + bounceOffset;
+    // --- PROCEDURAL ANIMATION SCALING (Zero-GC) ---
+    // Frequency should scale with current movement speed to match visual stride with physical displacement
+    const speedRatio = speed / (22.5 * KPH_TO_MS); // Normalized to standard Walker speed
+    const animFreq = isChasing ? 0.055 * speedRatio : 0.035 * speedRatio;
+    const bounceOffset = Math.abs(Math.sin(renderTime * animFreq)) * 0.12;
+    _v4.y = (1.0 * baseScale) + bounceOffset;
 
     e.mesh.position.copy(_v4);
 

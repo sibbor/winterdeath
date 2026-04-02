@@ -11,8 +11,7 @@ import CollectiblePreview from '../../core/CollectiblePreview';
 import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
 import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 import { soundManager } from '../../../../utils/audio/SoundManager';
-import { StatusEffectType, PerkCategory } from '../../../../entities/player/CombatTypes';
-import { PERKS } from '../../../../content/perks';
+import { PERKS, StatusEffectType, PerkCategory, PerkColor } from '../../../../content/perks';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -24,26 +23,21 @@ interface ScreenAdventureLogProps {
     initialItemId?: string | null;
 }
 
-type Tab = 'stats' | 'perks' | 'collectibles' | 'clues' | 'poi' | 'boss' | 'enemy';
+type Tab = 'stats' | 'perks' | 'collectibles' | 'clues' | 'poi' | 'enemy' | 'boss';
 
 // --- ZERO-GC STATIC ARRAYS & CONFIGS ---
 const EMPTY_ARRAY: any[] = [];
 const TABS: { id: Tab, label: string }[] = [
-    { id: 'stats', label: 'stations.stats' }, // t() applied in render
+    { id: 'stats', label: 'stations.stats' },
+    { id: 'perks', label: 'ui.log_perks' },
     { id: 'collectibles', label: 'ui.log_collectibles' },
     { id: 'clues', label: 'ui.log_clues' },
     { id: 'poi', label: 'ui.log_poi' },
     { id: 'enemy', label: 'ui.log_enemies' },
     { id: 'boss', label: 'ui.log_bosses' },
-    { id: 'perks', label: 'ui.log_perks' },
 ];
 const SECTORS = [1, 2, 3, 4];
 const THEME_COLOR = '#16a34a'; // green-600
-
-// Pre-compute object values to avoid GC allocation on every frame
-const COLLECTIBLES_ARRAY = Object.values(COLLECTIBLES);
-const CLUES_ARRAY = Object.values(CLUES);
-const POIS_ARRAY = Object.values(POIS);
 
 const darkenColor = (hex: string, percent: number) => {
     const num = parseInt(hex.replace('#', ''), 16);
@@ -52,26 +46,6 @@ const darkenColor = (hex: string, percent: number) => {
     const G = (num >> 8 & 0x00FF) - amt;
     const B = (num & 0x0000FF) - amt;
     return '#' + (0x1000000 + (R < 255 ? R < 0 ? 0 : R : 255) * 0x10000 + (G < 255 ? G < 0 ? 0 : G : 255) * 0x100 + (B < 255 ? B < 0 ? 0 : B : 255)).toString(16).slice(1);
-};
-
-const getEnemyDescription = (type: string) => {
-    const key = `enemies.${type}.description`;
-    const loc = t(key);
-    if (loc === key) {
-        switch (type) {
-            case EnemyType.WALKER: return "Standard reanimated combatant. Low threat individually, dangerous in swarms.";
-            case EnemyType.RUNNER: return "Hyper-aggressive mutation. Closing speed is extreme.";
-            case EnemyType.TANK: return "Heavily armored juggernaut. Absorbs significant small-arms fire.";
-            case EnemyType.BOMBER: return "Unstable biological payload. Explodes on proximity.";
-            default: return t('enemies.unknown');
-        }
-    }
-    return loc;
-};
-
-const getBossDescription = (bossNameKey: string) => {
-    const index = bossNameKey.split('.')[1];
-    return t(`bosses.${index}.lore`);
 };
 
 const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose, onMarkCollectiblesViewed, isMobileDevice, debugMode, initialTab, initialItemId }) => {
@@ -228,7 +202,7 @@ const ScreenAdventureLog: React.FC<ScreenAdventureLogProps> = ({ stats, onClose,
                 }
                 .animate-discovery-flash {
                     animation: discoveryFlash 1.25s ease-in-out 2 !important;
-                    transition: border-color 0.2s;
+                    transition: border-color 1.0s;
                 }
             `}</style>
         </ScreenModalLayout>
@@ -324,6 +298,11 @@ const StatsTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean }> = Rea
 });
 
 const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape }) => {
+
+    const getEnemyDescription = (type: string) => {
+        return t(`enemies.${type}.description`);
+    };
+
     return (
         <div className={`grid ${isMobileDevice ? 'grid-cols-1 gap-4' : 'grid-cols-2 gap-6'} pb-12`}>
             {Object.entries(ZOMBIE_TYPES).map(([key, data]) => {
@@ -415,6 +394,11 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 });
 
 const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
+
+    const getBossDescription = (bossNameKey: string) => {
+        return t(`bosses.${bossNameKey.split('.')[1]}.lore`);
+    };
+
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorIndex => {
@@ -528,6 +512,9 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
 const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, isMobileDevice, effectiveLandscape, isDebug }) => {
     const foundIds = stats.collectiblesDiscovered || EMPTY_ARRAY;
 
+    // Pre-compute object values to avoid GC allocation on every frame
+    const COLLECTIBLES_ARRAY = Object.values(COLLECTIBLES);
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
@@ -571,6 +558,9 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
 
 const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const cluesFound = stats.cluesFound || EMPTY_ARRAY;
+
+    // Pre-compute object values to avoid GC allocation on every frame
+    const CLUES_ARRAY = Object.values(CLUES);
 
     return (
         <div className="space-y-16 pb-12">
@@ -631,6 +621,9 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
 
 const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const visitedList = stats.discoveredPOIs || EMPTY_ARRAY;
+
+    // Pre-compute object values to avoid GC allocation on every frame
+    const POIS_ARRAY = Object.values(POIS);
 
     return (
         <div className="space-y-16 pb-12">
@@ -694,10 +687,11 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
 
 const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boolean, effectiveLandscape?: boolean, isDebug?: boolean }> = React.memo(({ stats, color, isMobileDevice, effectiveLandscape, isDebug }) => {
     const discoveredList = stats.discoveredPerks || EMPTY_ARRAY;
-    
+
     // Categorize perks
     const perksArray = Object.values(PERKS);
     const buffs = perksArray.filter(p => p.category === PerkCategory.BUFF);
+    const debuffs = perksArray.filter(p => p.category === PerkCategory.DEBUFF);
     const passives = perksArray.filter(p => p.category === PerkCategory.PASSIVE);
 
     const renderPerk = (perk: any) => {
@@ -708,13 +702,14 @@ const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                 <div className="flex flex-col gap-4">
                     <div className="flex justify-between items-start border-b border-zinc-800/50 pb-3">
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">{isFound ? (perk.category === PerkCategory.BUFF ? '🛡️' : '✨') : '❓'}</span>
+                            <span className="text-2xl">{isFound ? perk.icon : '?'}</span>
                             <h3 className={`text-2xl font-semibold uppercase tracking-tighter ${isFound ? 'text-white' : 'text-zinc-800'}`}>
                                 {isFound ? t(perk.displayName) : '???'}
                             </h3>
                         </div>
                         {isFound && (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest ${perk.category === PerkCategory.BUFF ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-widest"
+                                style={{ backgroundColor: PerkColor[perk.category as keyof typeof PerkColor] }}>
                                 {perk.category}
                             </span>
                         )}
@@ -733,19 +728,26 @@ const PerksTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
         <div className="space-y-12 pb-12">
             <div className="space-y-6">
                 <div className="border-b-2 border-zinc-800 pb-2">
-                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.tactical_buffs') || "Tactical Buffs"}</h3>
+                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passive_abilities')}</h3>
+                </div>
+                <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
+                    {passives.map(renderPerk)}
+                </div>
+            </div>
+            <div className="space-y-6">
+                <div className="border-b-2 border-zinc-800 pb-2">
+                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.buffs')}</h3>
                 </div>
                 <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
                     {buffs.map(renderPerk)}
                 </div>
             </div>
-
             <div className="space-y-6">
                 <div className="border-b-2 border-zinc-800 pb-2">
-                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.passive_abilities') || "Passive Abilities"}</h3>
+                    <h3 className="text-3xl font-light uppercase tracking-tighter text-white">{t('ui.debuffs')}</h3>
                 </div>
                 <div className={`grid ${effectiveLandscape ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-4'}`}>
-                    {passives.map(renderPerk)}
+                    {debuffs.map(renderPerk)}
                 </div>
             </div>
         </div>

@@ -4,6 +4,7 @@ import { MATERIALS } from '../../../utils/assets';
 import { ObjectGenerator } from './ObjectGenerator';
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
+import { MaterialType, MATERIAL_TYPE } from '../../../content/environment';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -79,7 +80,8 @@ export const PathGenerator = {
                 quaternion: _quat.clone(),
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, len) },
                 type: 'Boundary',
-                id: `${name}_${i}`
+                id: `${name}_${i}`,
+                materialId: MaterialType.CONCRETE
             });
         }
     },
@@ -94,7 +96,7 @@ export const PathGenerator = {
         const segments = Math.ceil(length / 0.5);
         const pointsList = curve.getSpacedPoints(segments);
 
-        const buildRibbon = (pts: THREE.Vector3[], w: number, y: number, mat: THREE.Material, name: string) => {
+        const buildRibbon = (pts: THREE.Vector3[], w: number, y: number, mat: THREE.Material, name: string, materialId: MATERIAL_TYPE) => {
             const v: number[] = [], uv: number[] = [], idx: number[] = [];
             for (let i = 0; i < pts.length; i++) {
                 const pt = pts[i];
@@ -122,8 +124,9 @@ export const PathGenerator = {
             geo.computeVertexNormals();
 
             const mesh = new THREE.Mesh(geo, mat);
-            mesh.name = name;
+            mesh.name = `Ground_${name}`; // VINTERDÖD: Mandatory naming
             mesh.receiveShadow = true;
+            mesh.userData.materialId = materialId; // VINTERDÖD: Unified tagging
 
             // VINTERDÖD: Freeze ribbon matrix
             mesh.matrixAutoUpdate = false;
@@ -132,8 +135,8 @@ export const PathGenerator = {
             ctx.scene.add(mesh);
         };
 
-        buildRibbon(pointsList, 4.5, 0.05, MATERIALS.gravel, 'RailGravel');
-        buildRibbon(pointsList, 5.5, 0.01, MATERIALS.frost, 'RailFrost');
+        buildRibbon(pointsList, 4.5, 0.05, MATERIALS.gravel, 'RailGravel', MaterialType.GRAVEL);
+        buildRibbon(pointsList, 5.5, 0.01, MATERIALS.frost, 'RailFrost', MaterialType.SNOW);
 
         // Sleepers
         const sleeperSpacing = 0.8;
@@ -162,8 +165,8 @@ export const PathGenerator = {
         // Rails
         const railMat = MATERIALS.blackMetal.clone();
         (railMat as any).metalness = 0.9;
-        buildRibbon(PathGenerator.getOffsetPoints(pointsList, -1.0), 0.2, 0.08, railMat, 'Rail_L');
-        buildRibbon(PathGenerator.getOffsetPoints(pointsList, 1.0), 0.2, 0.08, railMat, 'Rail_R');
+        buildRibbon(PathGenerator.getOffsetPoints(pointsList, -1.0), 0.2, 0.08, railMat, 'Rail_L', MaterialType.METAL);
+        buildRibbon(PathGenerator.getOffsetPoints(pointsList, 1.0), 0.2, 0.08, railMat, 'Rail_R', MaterialType.METAL);
 
         const railPts = curve.getSpacedPoints(20);
         for (let i = 0; i < railPts.length; i++) {
@@ -176,7 +179,7 @@ export const PathGenerator = {
     /**
      * Core path generation.
      */
-    createPointPath: (ctx: SectorContext, points: THREE.Vector3[], width: number, material: THREE.Material, type: string = 'ROAD', showBlood: boolean = false, showFootprints: boolean = false, strict: boolean = false) => {
+    createPointPath: (ctx: SectorContext, points: THREE.Vector3[], width: number, material: THREE.Material, materialId: MATERIAL_TYPE, type: string = 'ROAD', showBlood: boolean = false, showFootprints: boolean = false, strict: boolean = false) => {
         const curve = new THREE.CatmullRomCurve3(points);
         curve.curveType = strict ? 'centripetal' : 'catmullrom';
         const length = curve.getLength();
@@ -229,6 +232,8 @@ export const PathGenerator = {
         geo.computeVertexNormals();
 
         const mesh = new THREE.Mesh(geo, material);
+        mesh.name = `Ground_${type}_${Math.random().toString(36).substr(2, 4)}`; // VINTERDÖD
+        mesh.userData.materialId = materialId;
         mesh.renderOrder = 2;
         mesh.receiveShadow = true;
 
@@ -245,28 +250,28 @@ export const PathGenerator = {
         return curve;
     },
 
-    createRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, material?: THREE.Material, hasMarkings?: boolean, strict: boolean = false) => {
-        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, 'ROAD', false, false, strict);
+    createRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, material?: THREE.Material, materialId: MATERIAL_TYPE = MaterialType.ASPHALT, strict: boolean = false) => {
+        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, materialId, 'ROAD', false, false, strict);
     },
 
     createGravelRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, strict: boolean = false) => {
-        return PathGenerator.createRoad(ctx, points, width, MATERIALS.gravel, false, strict);
+        return PathGenerator.createRoad(ctx, points, width, MATERIALS.gravel, MaterialType.GRAVEL, strict);
     },
 
     createDirtRoad: (ctx: SectorContext, points: THREE.Vector3[], width: number = 10, strict: boolean = false) => {
-        return PathGenerator.createRoad(ctx, points, width, MATERIALS.dirt, false, strict);
+        return PathGenerator.createRoad(ctx, points, width, MATERIALS.dirt, MaterialType.DIRT, strict);
     },
 
-    createPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, material?: THREE.Material, showBlood?: boolean, showFootprints?: boolean, strict: boolean = false) => {
-        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.asphalt, 'PATH', showBlood, showFootprints, strict);
+    createPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, material?: THREE.Material, materialId: MATERIAL_TYPE = MaterialType.DIRT, showBlood?: boolean, showFootprints?: boolean, strict: boolean = false) => {
+        return PathGenerator.createPointPath(ctx, points, width, material || MATERIALS.dirt, materialId, 'PATH', showBlood, showFootprints, strict);
     },
 
     createGravelPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, blood?: boolean, steps?: boolean, strict?: boolean) => {
-        return PathGenerator.createPointPath(ctx, points, width, MATERIALS.gravel, 'PATH', blood, steps, strict);
+        return PathGenerator.createPath(ctx, points, width, MATERIALS.gravel, MaterialType.GRAVEL, blood, steps, strict);
     },
 
     createDirtPath: (ctx: SectorContext, points: THREE.Vector3[], width: number = 4, blood?: boolean, steps?: boolean, strict?: boolean) => {
-        return PathGenerator.createPointPath(ctx, points, width, MATERIALS.dirt, 'PATH', blood, steps, strict);
+        return PathGenerator.createPath(ctx, points, width, MATERIALS.dirt, MaterialType.DIRT, blood, steps, strict);
     },
 
     createDecalPath: (ctx: SectorContext, points: THREE.Vector3[], options: { spacing: number, size: number, material: THREE.Material, variance?: number, color?: number, randomRotation?: boolean, yOffset?: number }) => {
@@ -367,7 +372,8 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) }
+                collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) },
+                materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD
             });
         }
     },
@@ -407,7 +413,8 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) }
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) },
+                materialId: MaterialType.WOOD
             });
         }
     },
@@ -434,7 +441,8 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) }
+                collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) },
+                materialId: MaterialType.STONE
             });
         }
         im.instanceMatrix.needsUpdate = true;
@@ -471,7 +479,8 @@ export const PathGenerator = {
             SectorBuilder.addObstacle(ctx, {
                 position: mid.clone().setY(floating ? mid.y : mid.y / 2),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) }
+                collider: { type: 'box', size: new THREE.Vector3(0.2, floating ? 0.3 : mid.y + 0.2, dist) },
+                materialId: MaterialType.METAL
             });
         }
         postIM.instanceMatrix.needsUpdate = true;
@@ -530,7 +539,8 @@ export const PathGenerator = {
                 SectorBuilder.addObstacle(ctx, {
                     position: mid.clone().setY(height / 2),
                     quaternion: _quat_local.clone(),
-                    collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) }
+                    collider: { type: 'box', size: new THREE.Vector3(width + 4.0, height, dist) },
+                    materialId: MaterialType.STONE
                 });
             }
         }

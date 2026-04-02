@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { MATERIALS } from '../../utils/assets';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, EnemyType } from '../../entities/enemies/EnemyTypes';
-import { DamageType, StatusEffectType } from '../../entities/player/CombatTypes';
+import { DamageType } from '../../entities/player/CombatTypes';
+import { StatusEffectType } from '../../content/perks';
 import { EnemySpawner } from './EnemySpawner';
 import { EnemyAI } from './EnemyAI';
 import { soundManager } from '../../utils/audio/SoundManager';
@@ -213,9 +214,13 @@ export const EnemyManager = {
         e.burnTimer = 0;
         e.isBurning = false;
 
-        e.isInWater = false; e.isWading = false; e.isDrowning = false;
-        e.drownTimer = 0; e.drownDmgTimer = 0;
-        e.isAirborne = false; e.fallStartY = 0;
+        e.isInWater = false;
+        e.isWading = false;
+        e.isDrowning = false;
+        e.drownTimer = 0;
+        e.drownDmgTimer = 0;
+        e.isAirborne = false;
+        e.fallStartY = 0;
 
         e.mesh.userData.exploded = false;
         e.mesh.userData.gibbed = false;
@@ -332,7 +337,8 @@ export const EnemyManager = {
                 break;
 
             case EnemyDeathState.DROWNED:
-                e.deathState = EnemyDeathState.DEAD;
+                // No-op here; let cleanup handle the floater.
+                // Do NOT reset to DEAD or we lose the 'no blood' context.
                 break;
 
             case EnemyDeathState.BURNED:
@@ -807,9 +813,11 @@ export const EnemyManager = {
 
                 if (e.mesh.userData.exploded) {
                     EnemyManager.explodeEnemy(e, callbacks, _up);
+                    bloodType = 'none';
                 }
                 else if (e.mesh.userData.gibbed) {
                     if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
+                    bloodType = 'none';
                 }
                 else if (e.mesh.userData.ashSpawned) {
                     if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
@@ -817,6 +825,11 @@ export const EnemyManager = {
                 else if (e.mesh.userData.electrocuted) {
                     leaveCorpse = true;
                     bloodType = 'scorch';
+                }
+                else if (e.deathState === EnemyDeathState.DROWNED || e.lastDamageType === 'DROWNING') {
+                    // Clean death: Floater corpse, no blood
+                    leaveCorpse = true;
+                    bloodType = 'none';
                 }
                 else {
                     leaveCorpse = true;

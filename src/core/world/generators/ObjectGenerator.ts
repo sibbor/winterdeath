@@ -6,6 +6,7 @@ import { SectorBuilder } from '../SectorBuilder';
 import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { EffectManager } from '../../../systems/EffectManager';
+import { MaterialType } from '../../../content/environment';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -168,7 +169,7 @@ export const ObjectGenerator = {
         const r1 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r1.scale.z = length; r1.position.set(0, 0.4, 0); group.add(r1);
         const r2 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r2.scale.z = length; r2.position.set(0, 0.9, 0); group.add(r2);
 
-        group.userData.material = 'WOOD';
+        group.userData.material = MaterialType.WOOD;
         return freezeStatic(group);
     },
 
@@ -191,7 +192,7 @@ export const ObjectGenerator = {
         rail.position.set(0, height * 0.95, 0);
         group.add(rail);
 
-        group.userData.material = 'METAL';
+        group.userData.material = MaterialType.METAL;
         return freezeStatic(group);
     },
 
@@ -263,7 +264,7 @@ export const ObjectGenerator = {
         mesh.position.y = 0.75;
         mesh.castShadow = true;
         group.add(mesh);
-        group.userData.material = 'METAL';
+        group.userData.material = MaterialType.METAL;
         return freezeStatic(group);
     },
 
@@ -300,7 +301,7 @@ export const ObjectGenerator = {
         group.add(light);
         group.add(light.target);
 
-        group.userData.material = 'METAL';
+        group.userData.material = MaterialType.METAL;
         return freezeStatic(group);
     },
 
@@ -398,7 +399,7 @@ export const ObjectGenerator = {
 
         group.userData = {
             size: new THREE.Vector3(width, height + actualRoofHeight, depth),
-            material: 'CONCRETE'
+            material: MaterialType.CONCRETE
         };
 
         bodyGeo.dispose();
@@ -437,6 +438,7 @@ export const ObjectGenerator = {
         hat.position.y = 2.75;
         group.add(hat);
 
+        group.userData.material = MaterialType.PLANT;
         return freezeStatic(group);
     },
 
@@ -551,13 +553,15 @@ export const ObjectGenerator = {
         SectorBuilder.addObstacle(ctx, {
             position: worldPosL,
             quaternion: _quat.clone(),
-            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) }
+            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) },
+            materialId: MaterialType.CONCRETE
         });
 
         SectorBuilder.addObstacle(ctx, {
             position: worldPosR,
             quaternion: _quat.clone(),
-            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) }
+            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) },
+            materialId: MaterialType.CONCRETE
         });
 
         return group;
@@ -573,7 +577,7 @@ export const ObjectGenerator = {
         mesh.receiveShadow = true;
         group.add(mesh);
         group.scale.setScalar(scale);
-        group.userData.material = 'WOOD';
+        group.userData.material = MaterialType.PLANT;
         return freezeStatic(group);
     },
 
@@ -597,6 +601,7 @@ export const ObjectGenerator = {
         group.castShadow = true;
         group.receiveShadow = true;
         group.scale.setScalar(scale);
+        group.userData.material = MaterialType.WOOD;
         return freezeStatic(group);
     },
 
@@ -636,7 +641,7 @@ export const ObjectGenerator = {
         const corpse = ModelFactory.createCorpse(baseZomb);
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);
-        group.userData.material = 'FLESH';
+        group.userData.material = MaterialType.FLESH;
         return freezeStatic(group);
     },
 
@@ -664,7 +669,7 @@ export const ObjectGenerator = {
             group.add(snow);
         }
 
-        group.userData.material = 'METAL';
+        group.userData.material = MaterialType.METAL;
         return freezeStatic(group);
     },
 
@@ -687,7 +692,7 @@ export const ObjectGenerator = {
 
         EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
         group.scale.setScalar(scale);
-        group.userData.material = 'METAL';
+        group.userData.material = MaterialType.METAL;
         return freezeStatic(group);
     },
 
@@ -705,7 +710,7 @@ export const ObjectGenerator = {
         cage.position.y = -0.2;
         group.add(cage);
 
-        group.userData.material = 'METAL';
+        group.userData.material = MaterialType.METAL;
 
         group.userData.logicalLights = [{
             offset: new THREE.Vector3(0, -0.5, 0),
@@ -739,7 +744,7 @@ export const ObjectGenerator = {
             group.add(ins);
         }
 
-        group.userData.material = 'WOOD';
+        group.userData.material = MaterialType.WOOD;
         return freezeStatic(group);
     },
 
@@ -800,6 +805,7 @@ export const ObjectGenerator = {
         }
 
         EffectManager.attachEffect(group, 'flicker_light', { color: 0x88ccff, intensity: 10, distance: 15 });
+        group.userData.material = MaterialType.GLASS;
         return freezeStatic(group);
     },
 
@@ -821,6 +827,15 @@ export const ObjectGenerator = {
         lowerMesh.position.y = midPoint / 2;
         lowerMesh.castShadow = true; lowerMesh.receiveShadow = true;
         group.add(lowerMesh);
+
+        // VINTERDÖD: Add interior walkable floor
+        const floor = new THREE.Mesh(SHARED_GEO.plane, MATERIALS.concrete);
+        floor.scale.set(width - 0.2, depth - 0.2, 1);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0.02;
+        floor.name = `Ground_Floor`;
+        floor.userData.materialId = MaterialType.WOOD; // As per directive
+        group.add(floor);
 
         const upperHeight = height - midPoint;
 
@@ -956,7 +971,7 @@ export const ObjectGenerator = {
             }
         }
 
-        group.userData = { size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth), material: 'CONCRETE' };
+        group.userData = { size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth), material: MaterialType.GLASS };
         return freezeStatic(group);
     },
 
@@ -1029,6 +1044,7 @@ export const ObjectGenerator = {
         base.scale.set(1.2, 1.0, 0.8);
         base.position.y = 0.5;
         base.castShadow = true;
+        base.userData.materialId = MaterialType.METAL;
         group.add(base);
 
         const screenMat = MATERIALS.steel;

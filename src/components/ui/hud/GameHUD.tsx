@@ -5,7 +5,7 @@ import { t } from '../../../utils/i18n';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { useOrientation } from '../../../hooks/useOrientation';
 import { HudStore } from '../../../store/HudStore';
-import { StatusEffectType } from '../../../entities/player/CombatTypes';
+import { StatusEffectType, PERKS, PerkColor } from '../../../content/perks';
 import DamageVignette from './DamageVignette';
 import DiscoveryPopup from './DiscoveryPopup';
 
@@ -46,33 +46,19 @@ const getCachedArray = (length: number): number[] => {
 };
 
 const getStatusIcon = (type: StatusEffectType | string) => {
-    switch (type) {
-        case StatusEffectType.FREEZING: return '❄️';
-        case StatusEffectType.BURNING: return '🔥';
-        case StatusEffectType.BLEEDING: return '🩸';
-        case StatusEffectType.ELECTRIFIED: return '⚡';
-        case StatusEffectType.SLOWED: return '🐌';
-        case StatusEffectType.DISORIENTED: return '😵';
-        case StatusEffectType.DROWNING: return '🫧';
-        default: return '❓';
-    }
+    return PERKS[type]?.icon || '❓';
 };
 
 const getPassiveIcon = (name: string) => {
     const n = name.toUpperCase();
-    switch (n) {
-        case FamilyMember.LOKE: return '⚡';
-        case FamilyMember.JORDAN: return '🎯';
-        case FamilyMember.ESMERALDA: return '🔫';
-        case FamilyMember.NATHALIE: return '🛡️';
-        case FamilyMember.SOTIS:
-        case FamilyMember.PANTER: return '🐱';
-        default: return getStatusIcon(name as StatusEffectType);
-    }
-};
-
-const isFamilyMember = (name: string) => {
-    return Object.values(FamilyMember).includes(name.toUpperCase() as FamilyMember);
+    
+    // 1. Check direct registry lookup (e.g. 'TRICKSTERS_HASTE')
+    if (PERKS[n]) return PERKS[n].icon;
+    
+    // 2. Special cases (Pets)
+    if (n === 'SOTIS' || n === 'PANTER') return '🐱';
+    
+    return getStatusIcon(name as StatusEffectType);
 };
 
 // ============================================================================
@@ -95,16 +81,17 @@ const StatusEffectIcon = React.memo(({ type, isDebuff, isMobileDevice, isLandsca
         return unsubscribe;
     }, [type]);
 
-    const pulseClass = isDebuff ? 'hud-debuff-pulse border-red-500' : 'hud-buff-pulse border-purple-500';
-    const fillClass = isDebuff ? 'bg-red-500' : 'bg-purple-500';
+    const color = isDebuff ? PerkColor.DEBUFF : PerkColor.BUFF;
+    const pulseClass = isDebuff ? 'hud-debuff-pulse' : 'hud-buff-pulse';
 
     return (
         <div className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-sm ${pulseClass} relative cursor-help`}
+            style={{ borderColor: color }}
             data-tooltip={t(`attacks.${type}.title`)}
             onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
             <span>{getStatusIcon(type)}</span>
             <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-black/40">
-                <div ref={barRef} className={`w-full h-full ${fillClass} origin-left will-change-transform`} style={{ transform: 'scaleX(1)' }} />
+                <div ref={barRef} className="w-full h-full origin-left will-change-transform" style={{ backgroundColor: color, transform: 'scaleX(1)' }} />
             </div>
         </div>
     );
@@ -174,16 +161,23 @@ const StatusEffectsPanel = React.memo(({ isMobileDevice, isLandscapeMode, handle
 
     return (
         <div className={isMobileDevice && isLandscapeMode ? "absolute top-24 left-0 flex flex-col gap-2 pl-safe pointer-events-auto" : "flex flex-wrap gap-2 mt-1 ml-1 pointer-events-auto"}>
-            {activePassives.map((name, i) => (
-                <div key={`p-${i}`}
-                    className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-full border-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] transition-all cursor-help`}
-                    data-tooltip={isFamilyMember(name) ? t(`family.${name.toLowerCase()}`) : t(`attacks.${name}.title`)}
-                    onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
-                    onMouseLeave={!isMobileDevice ? handleActionLeave : undefined}
-                    onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
-                    <span>{getPassiveIcon(name)}</span>
-                </div>
-            ))}
+            {activePassives.map((name, i) => {
+                const perk = PERKS[name.toUpperCase()];
+                return (
+                    <div key={`p-${i}`}
+                        className={`${isMobileDevice && isLandscapeMode ? 'w-10 h-10 text-xl' : 'w-7 h-7 text-[11px]'} flex items-center justify-center bg-black/80 border-2 rounded-full transition-all cursor-help`}
+                        style={{ 
+                            borderColor: PerkColor.PASSIVE,
+                            boxShadow: `0 0 8px ${PerkColor.PASSIVE}66` // Add 40% opacity (66 in hex)
+                        }}
+                        data-tooltip={perk ? t(perk.displayName) : name}
+                        onMouseEnter={!isMobileDevice ? handleActionEnter : undefined}
+                        onMouseLeave={!isMobileDevice ? handleActionLeave : undefined}
+                        onTouchStart={isMobileDevice ? handleActionEnter : undefined}>
+                        <span>{getPassiveIcon(name)}</span>
+                    </div>
+                );
+            })}
             {activeBuffs.map((type, i) => (
                 <StatusEffectIcon
                     key={`b-${i}`}
@@ -630,8 +624,8 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
                         100% { opacity: 1; transform: translateY(0); filter: blur(0); }
                     }
                     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-                    @keyframes buffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(168,85,247,0.4); border-color: rgba(168,85,247,0.8); } 50% { box-shadow: 0 0 15px rgba(168,85,247,0.8); border-color: #a855f7; } }
-                    @keyframes debuffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(239,68,68,0.4); border-color: rgba(239,68,68,0.8); } 50% { box-shadow: 0 0 15px rgba(239,68,68,0.8); border-color: #ef4444; } }
+                    @keyframes buffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(34,197,94,0.4); border-color: rgba(34,197,94,0.8); } 50% { box-shadow: 0 0 15px rgba(34,197,94,0.8); border-color: #22c55e; } }
+                    @keyframes debuffPulse { 0%, 100% { box-shadow: 0 0 5px rgba(255,51,51,0.4); border-color: rgba(255,51,51,0.8); } 50% { box-shadow: 0 0 15px rgba(255,51,51,0.8); border-color: #ff3333; } }
                     
                     .hud-buff-pulse { animation: buffPulse 2s infinite ease-in-out; }
                     .hud-debuff-pulse { animation: debuffPulse 2s infinite ease-in-out; }

@@ -15,6 +15,7 @@ import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
 import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { FootprintSystem } from '../../systems/FootprintSystem';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
@@ -57,6 +58,11 @@ export const SectorBuilder = {
         if (!obstacle.radius && obstacle.collider?.type === 'box' && obstacle.collider.size) {
             const s = obstacle.collider.size;
             obstacle.radius = Math.sqrt(s.x * s.x + s.z * s.z) * 0.5;
+        }
+
+        // VINTERDÖD: Mandatory material identifier propagation from mesh to obstacle
+        if (!obstacle.materialId && obstacle.mesh?.userData?.materialId) {
+            obstacle.materialId = obstacle.mesh.userData.materialId;
         }
 
         if (obstacle.mesh) {
@@ -219,6 +225,9 @@ export const SectorBuilder = {
             const { DebugVisualizer } = await import('../../utils/DebugVisualizer');
             DebugVisualizer.visualizeSector(ctx, def);
         }
+
+        // VINTERDÖD: Final world discovery - find all Ground_* meshes for the footprint system
+        FootprintSystem.init(ctx.scene);
     },
 
     generateGround: async (ctx: SectorContext, type: 'SNOW' | 'GRAVEL' | 'DIRT', size: { width: number, depth: number }) => {

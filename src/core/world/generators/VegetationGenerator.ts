@@ -4,6 +4,7 @@ import { MATERIALS } from '../../../utils/assets/materials';
 import { SectorContext } from '../../../game/session/SectorTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { TREE_TYPE } from '../../../content/constants';
+import { MaterialType } from '../../../content/environment';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -370,7 +371,7 @@ export const VegetationGenerator = {
         }
 
         group.scale.setScalar(scale);
-        group.userData.material = 'PLANT';
+        group.userData.material = MaterialType.WOOD;
         group.userData.isBall = true;
         group.userData.mass = 0.5;
         group.userData.floatOffset = 0.06;
@@ -397,7 +398,7 @@ export const VegetationGenerator = {
             group.add(mesh);
         }
 
-        group.userData.material = 'LEAVES';
+        group.userData.material = MaterialType.WOOD;
         group.userData.size = new THREE.Vector3(width * 0.8, height * 1.5, width * 0.8);
         return group;
     },
@@ -606,7 +607,8 @@ export const VegetationGenerator = {
                 position: new THREE.Vector3(x, 0, z),
                 quaternion: new THREE.Quaternion(),
                 collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
-                id: `tree_${i}`
+                id: `tree_${i}`,
+                materialId: MaterialType.WOOD
             });
         }
 
@@ -662,7 +664,8 @@ export const VegetationGenerator = {
                     position: new THREE.Vector3(x, 0, z),
                     quaternion: new THREE.Quaternion(),
                     collider: { type: 'cylinder', radius: 0.5 * scale, height: 4 },
-                    id: `tree_poly_${i}`
+                    id: `tree_poly_${i}`,
+                    materialId: MaterialType.WOOD
                 });
             }
         }

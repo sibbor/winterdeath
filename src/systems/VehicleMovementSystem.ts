@@ -107,7 +107,7 @@ export class VehicleMovementSystem implements System {
         state: any,
         delta: number,
         session: GameSessionLogic,
-        now: number,
+        renderTime: number,
         def: VehicleDef
     ) {
         const dt = delta > 0.1 ? 0.1 : delta;
@@ -141,7 +141,7 @@ export class VehicleMovementSystem implements System {
 
             // Boat specific logic: Lose power if not in water
             if (def.category === 'BOAT' && session.engine.water) {
-                session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z);
+                session.engine.water.checkBuoyancy(vehicle.position.x, vehicle.position.y, vehicle.position.z, renderTime);
                 if (!_buoyancyResult.inWater || vehicle.position.y < _buoyancyResult.waterLevel - 2.0) {
                     if (throttle > 0.1 || throttle < -0.1) throttle = 0;
                 }
@@ -373,8 +373,8 @@ export class VehicleMovementSystem implements System {
             if (lights.siren) {
                 if (isEngineOn) {
                     const blinkSpeed = 0.015;
-                    lights.siren.materialBlue.emissiveIntensity = Math.sin(now * blinkSpeed) > 0 ? 20.0 : 0.0;
-                    lights.siren.materialRed.emissiveIntensity = Math.cos(now * blinkSpeed) > 0 ? 20.0 : 0.0;
+                    lights.siren.materialBlue.emissiveIntensity = Math.sin(renderTime * blinkSpeed) > 0 ? 20.0 : 0.0;
+                    lights.siren.materialRed.emissiveIntensity = Math.cos(renderTime * blinkSpeed) > 0 ? 20.0 : 0.0;
                 } else {
                     lights.siren.materialBlue.emissiveIntensity = 0.0;
                     lights.siren.materialRed.emissiveIntensity = 0.0;

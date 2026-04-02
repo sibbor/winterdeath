@@ -3,8 +3,9 @@ import { System } from './System';
 import { GameSessionLogic } from '../game/session/GameSessionLogic';
 import { soundManager } from '../utils/audio/SoundManager';
 import { FXSystem } from './FXSystem';
-import { StatusEffectType, PlayerDeathState, DamageType, EnemyAttackType, PerkCategory } from '../entities/player/CombatTypes';
-import { PERKS } from '../content/perks';
+import { PlayerDeathState, DamageType, EnemyAttackType } from '../entities/player/CombatTypes';
+import { PERKS, StatusEffectType, PerkCategory } from '../content/perks';
+import { MaterialType } from '../content/environment';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -22,12 +23,13 @@ export class PlayerStatsSystem implements System {
     ) { }
 
     init(session: GameSessionLogic) {
-        this.updatePassives();
+        this.updatePassives(session);
     }
 
     update(session: GameSessionLogic, dt: number, now: number) {
         if (session.state.isDead) return;
 
+        this.updatePassives(session);
         this.checkAdrenalinePatch(session, now);
         this.updateBuffsAndDebuffs(session, dt, now);
         this.applyStatusTicks(session, dt, now);
@@ -53,6 +55,7 @@ export class PlayerStatsSystem implements System {
                 };
 
                 soundManager.playEffect('adrenaline_boost');
+                console.log(`[BUFF] Gained: ${perk.id} (Adrenaline Patch) | Duration: ${perk.duration}ms`);
 
                 // Discovery
                 if (!state.discoveredPerks.includes(perk.id)) {
@@ -69,7 +72,7 @@ export class PlayerStatsSystem implements System {
     };
 
     // Updates passive buffs from family members
-    public updatePassives() {
+    public updatePassives(session: GameSessionLogic) {
         this.cachedFamilyMultipliers = { speed: 1.0, reloadTime: 1.0, fireRate: 1.0, damageResist: 1.0, range: 1.0 };
         const family = this.activeFamilyMembers.current;
 
@@ -79,22 +82,38 @@ export class PlayerStatsSystem implements System {
             if (!member.following) continue;
 
             const name = member.name.toLowerCase();
+            let passiveId: StatusEffectType | null = null;
 
             if (name === 'loke') {
-                this.cachedFamilyMultipliers.reloadTime *= (PERKS[StatusEffectType.LOKE_RELOAD]?.intensity || 0.8);
-                this.cachedPassives[pIdx++] = StatusEffectType.LOKE_RELOAD;
+                this.cachedFamilyMultipliers.reloadTime *= (PERKS[StatusEffectType.TRICKSTERS_HASTE]?.intensity || 0.8);
+                passiveId = StatusEffectType.TRICKSTERS_HASTE;
+            } else if (name === 'jordan') {
+                this.cachedFamilyMultipliers.range *= (PERKS[StatusEffectType.EAGLES_SIGHT]?.intensity || 1.15);
+                passiveId = StatusEffectType.EAGLES_SIGHT;
+            } else if (name === 'esmeralda') {
+                this.cachedFamilyMultipliers.fireRate *= (PERKS[StatusEffectType.LEAD_FEVER]?.intensity || 1.2);
+                passiveId = StatusEffectType.LEAD_FEVER;
+            } else if (name === 'nathalie') {
+                this.cachedFamilyMultipliers.damageResist *= (PERKS[StatusEffectType.WINTERS_BONE]?.intensity || 0.9);
+                passiveId = StatusEffectType.WINTERS_BONE;
             }
-            if (name === 'jordan') {
-                this.cachedFamilyMultipliers.range *= (PERKS[StatusEffectType.JORDAN_RANGE]?.intensity || 1.15);
-                this.cachedPassives[pIdx++] = StatusEffectType.JORDAN_RANGE;
-            }
-            if (name === 'esmeralda') {
-                this.cachedFamilyMultipliers.fireRate *= (PERKS[StatusEffectType.ESMERALDA_FIRE]?.intensity || 1.2);
-                this.cachedPassives[pIdx++] = StatusEffectType.ESMERALDA_FIRE;
-            }
-            if (name === 'nathalie') {
-                this.cachedFamilyMultipliers.damageResist *= (PERKS[StatusEffectType.NATHALIE_RESIST]?.intensity || 0.9);
-                this.cachedPassives[pIdx++] = StatusEffectType.NATHALIE_RESIST;
+
+            if (passiveId) {
+                const alreadyHas = this.cachedPassives.includes(passiveId);
+                this.cachedPassives[pIdx++] = passiveId;
+
+                // Discovery Trigger
+                const state = session.state;
+                const perk = PERKS[passiveId];
+
+                if (!alreadyHas) {
+                    console.log(`[PASSIVE] Sync: Gained ${passiveId} from family member`);
+                }
+
+                if (perk && !state.discoveredPerks.includes(passiveId)) {
+                    state.discoveredPerks.push(passiveId);
+                    session.triggerDiscovery('perk', passiveId, perk.displayName, perk.description);
+                }
             }
         }
 
@@ -118,6 +137,7 @@ export class PlayerStatsSystem implements System {
         state.activePassives.length = this.cachedPassives.length;
 
         state.isDisoriented = false;
+        let buffIdx = 0;
         let debuffIdx = 0;
 
         // 2. Apply only what changes often (Status Effects)
@@ -125,14 +145,23 @@ export class PlayerStatsSystem implements System {
         for (const key in effects) {
             const type = key as StatusEffectType;
             const effect = effects[type];
-            if (!effect || effect.duration <= 0) continue;
+            if (!effect) continue;
+
+            if (effect.duration <= 0) {
+                // Check if it was active last frame to log expiration
+                const wasActive = state.activeBuffs.includes(type) || state.activeDebuffs.includes(type);
+                if (wasActive) {
+                    console.log(`[STATUS] Expired: ${type}`);
+                }
+                continue;
+            }
 
             effect.duration -= dt * 1000;
 
             const perk = PERKS[type];
             if (perk) {
                 if (perk.category === PerkCategory.BUFF) {
-                    state.activeBuffs[debuffIdx++] = type;
+                    state.activeBuffs[buffIdx++] = type;
                 } else {
                     state.activeDebuffs[debuffIdx++] = type;
                 }
@@ -142,6 +171,7 @@ export class PlayerStatsSystem implements System {
                     state.multipliers.speed *= perk.intensity;
                 }
             } else {
+                console.warn(`[DEBUG] Unknown status effect type: ${type} - check PERKS registry`);
                 state.activeDebuffs[debuffIdx++] = type;
             }
 
@@ -151,6 +181,7 @@ export class PlayerStatsSystem implements System {
             }
         }
 
+        state.activeBuffs.length = buffIdx;
         state.activeDebuffs.length = debuffIdx;
     }
 
@@ -216,6 +247,14 @@ export class PlayerStatsSystem implements System {
 
         if (state.isDead || state.sectorState?.isInvincible) return;
 
+        // --- VEHICLE IMMUNITY ---
+        // If the player is inside a vehicle, they are shielded from direct enemy attacks
+        if (state.vehicle.active && attacker) {
+            soundManager.playImpact(MaterialType.METAL);
+            state.hurtShake = 0.4; // Subtle feedback even though no damage is taken
+            return;
+        }
+
         // --- NEW: TACTICAL IMMUNITY BUFFS ---
         const reflexShield = state.statusEffects[StatusEffectType.REFLEX_SHIELD];
         const adrenalinePatch = state.statusEffects[StatusEffectType.ADRENALINE_PATCH];
@@ -269,6 +308,8 @@ export class PlayerStatsSystem implements System {
             state.statusEffects[effectType]!.maxDuration = perk?.duration || effectDuration || 0;
             state.statusEffects[effectType]!.intensity = perk?.intensity !== undefined ? perk.intensity : (effectType === StatusEffectType.STUNNED ? 0 : 1);
             state.statusEffects[effectType]!.damage = perk?.damage || effectDamage || 0;
+
+            console.log(`[STATUS] Gained: ${effectType} | Duration: ${state.statusEffects[effectType]!.duration}ms | Dmg: ${state.statusEffects[effectType]!.damage}`);
 
             // Track source for DoT
             if (attacker) {

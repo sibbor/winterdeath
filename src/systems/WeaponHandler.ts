@@ -423,7 +423,7 @@ export const WeaponHandler = {
 
                         let groundY = 0.1;
                         if (water) {
-                            water.checkBuoyancy(tx, 0.5, tz);
+                            water.checkBuoyancy(tx, 0.5, tz, renderTime);
                             if (_buoyancyResult.inWater) {
                                 groundY = _buoyancyResult.waterLevel + 0.05;
                             }

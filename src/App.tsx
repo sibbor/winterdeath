@@ -140,6 +140,12 @@ const App: React.FC = () => {
         if (!transitionTaskRef.current && sceneReadyRef.current) {
             setIsLoadingCamp(false);
             setIsLoadingSector(false);
+
+            // VINTERDÖD FIX: Ensure the engine is unpaused once the transition completes
+            const engine = WinterEngine.getInstance();
+            engine.isRenderingPaused = false;
+            engine.isSimulationPaused = false;
+
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     setShowLoadingOverlay(false);

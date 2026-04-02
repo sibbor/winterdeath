@@ -1,3 +1,5 @@
+import { StatusEffectType } from "../../content/perks";
+
 export enum EnemyAttackType {
     HIT = 'HIT',
     BITE = 'BITE',
@@ -8,43 +10,6 @@ export enum EnemyAttackType {
     SCREECH = 'SCREECH',
     ELECTRIC_BEAM = 'ELECTRIC_BEAM',
     MAGNETIC_CHAIN = 'MAGNETIC_CHAIN'
-}
-
-export enum StatusEffectType {
-    BLEEDING = 'BLEEDING',
-    SLOWED = 'SLOWED',
-    STUNNED = 'STUNNED',
-    BURNING = 'BURNING',
-    DISORIENTED = 'DISORIENTED',
-    FREEZING = 'FREEZING',
-    ELECTRIFIED = 'ELECTRIFIED',
-    DROWNING = 'DROWNING',
-    // --- BUFFS ---
-    REFLEX_SHIELD = 'REFLEX_SHIELD',
-    ADRENALINE_PATCH = 'ADRENALINE_PATCH',
-
-    // --- PASSIVES (Family) ---
-    LOKE_RELOAD = 'LOKE_RELOAD',
-    JORDAN_RANGE = 'JORDAN_RANGE',
-    ESMERALDA_FIRE = 'ESMERALDA_FIRE',
-    NATHALIE_RESIST = 'NATHALIE_RESIST'
-}
-
-export enum PerkCategory {
-    BUFF = 'BUFF',
-    DEBUFF = 'DEBUFF',
-    PASSIVE = 'PASSIVE'
-}
-
-export interface PerkStats {
-    id: StatusEffectType;
-    displayName: string;
-    description: string;
-    category: PerkCategory;
-    duration?: number; // ms
-    cooldown?: number; // ms
-    intensity?: number; // Magnitude of effect (e.g. 0.25 for 25% boost)
-    damage?: number;    // Damage per tick (for DoT)
 }
 
 export enum PlayerDeathState {

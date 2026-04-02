@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MATERIALS } from '../../../utils/assets';
+import { MaterialType } from '../../../content/environment';
 
 /**
  * VehicleGenerator
@@ -523,7 +524,7 @@ export const VehicleGenerator = {
     },
 
     _finalize: (root: THREE.Group) => {
-        root.userData.material = 'METAL';
+        root.userData.material = MaterialType.METAL;
         return root;
     }
 };

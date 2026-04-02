@@ -237,18 +237,21 @@ export class InputManager {
         this.state.locked = !!document.pointerLockElement;
     };
 
+    /**
+     * Centralized Pointer Lock Request.
+     */
     public requestPointerLock(element: HTMLElement) {
-        if (this.state.locked || !element.requestPointerLock) return;
+        if (!element || this.state.locked || !element.requestPointerLock) return;
 
         try {
             const promise = element.requestPointerLock() as any;
             if (promise && promise.catch) {
-                promise.catch(() => {
-                    // Silently catch: Uncaught (in promise) NotAllowedError: A user gesture is required to request Pointer Lock.
+                promise.catch((e: Error) => {
+                    // Silently catch common browser-level rejection (e.g. user gesture missing)
                 });
             }
         } catch (err) {
-            // Fallback for older browsers that don't return a promise
+            // Fallback for older browsers
         }
     }
 

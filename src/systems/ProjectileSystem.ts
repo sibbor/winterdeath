@@ -5,12 +5,14 @@ import { GEOMETRY, MATERIALS } from '../utils/assets';
 import { soundManager } from '../utils/audio/SoundManager';
 import { haptic } from '../utils/HapticManager';
 import { WEAPONS, WeaponType } from '../content/weapons';
-import { StatusEffectType, DamageType } from '../entities/player/CombatTypes';
+import { DamageType } from '../entities/player/CombatTypes';
+import { StatusEffectType } from '../content/perks';
 import { SpatialGrid } from '../core/world/SpatialGrid';
 import { WinterEngine } from '../core/engine/WinterEngine';
 import { _buoyancyResult } from '../systems/WaterSystem';
 import { NoiseType, NOISE_RADIUS } from '../entities/enemies/EnemyTypes';
 import { WeaponFX } from './WeaponFX';
+import { MaterialType } from '../content/environment';
 
 // --- INTERFACES ---
 
@@ -714,8 +716,14 @@ function updateBullet(projectile: Projectile, index: number, simDelta: number, c
 
         if (_v6.distanceToSquared(_v5) < rad * rad) {
             destroyBullet = true;
-            // VINTERDÖD HIGH-PERFORMANCE: Use pre-resolved material (Flat loop, No branching)
-            soundManager.playImpact(obs.materialId);
+
+            // VINTERDÖD: Strict Impact Filter (Verticals only)
+            const isGround = obs.mesh?.name?.startsWith('Ground_');
+            if (!isGround) {
+                const material = obs.materialId || (obs.mesh as any)?.userData?.materialId || MaterialType.GENERIC;
+                soundManager.playImpact(material);
+            }
+
             ctx.makeNoise(_v6, NoiseType.BULLET_HIT, NOISE_RADIUS.BULLET_HIT);
             break;
         }
@@ -815,7 +823,7 @@ function updateThrowable(p: Projectile, index: number, simDelta: number, ctx: Ga
 
     // VINTERDÖD FIX: Broadphase Check! Räkna bara matte om vi faktiskt är nära vattnet.
     if (p.mesh.position.y < 2.0 && waterSystem) {
-        waterSystem.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+        waterSystem.checkBuoyancy(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z, ctx.session.state.renderTime);
         if (_buoyancyResult.inWater && p.mesh.position.y <= _buoyancyResult.waterLevel) {
             destroyed = true;
             hitWater = true;

@@ -56,16 +56,19 @@ export const GameSessionUI: React.FC<GameSessionUIProps> = memo(({ refs, uiState
     const handleContainerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         // Read directly from the mutable ref to avoid dependency re-renders
         const state = refs.stateRef.current;
+        const input = refs.engineRef.current?.input;
 
         if (state?.cinematicActive && (uiState.currentLine || state.dialogueLine)) {
             e.stopPropagation();
             callbacks.triggerCinematicNext();
             return;
         }
-        if (gameProps.isRunning && refs.containerRef.current && state && !state.isDead) {
+
+        // VINTERDÖD FIX: Standardized click-to-lock logic.
+        if (gameProps.isRunning && !gameProps.isMobileDevice && input && !input.state.locked && !state?.isDead) {
             callbacks.requestPointerLock();
         }
-    }, [gameProps.isRunning, callbacks, refs, uiState.currentLine]);
+    }, [gameProps.isRunning, gameProps.isMobileDevice, callbacks, refs, uiState.currentLine]);
 
     const handlePauseTouch = useCallback(() => {
         callbacks.onPauseToggle(true);
