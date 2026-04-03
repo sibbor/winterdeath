@@ -17,6 +17,9 @@ const TAB_MAP: Record<string, string> = {
   perk: 'perks'
 };
 
+// ZERO-GC: Statisk variabel utanför komponenten som överlever unmounts (t.ex. vid paus)
+let lastProcessedTimestamp = 0;
+
 const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdventureLog }) => {
   // ============================================================================
   // ZERO-GC PRIMITIVE SELECTORS
@@ -34,12 +37,13 @@ const DiscoveryPopup: React.FC<DiscoveryPopupProps> = React.memo(({ onOpenAdvent
   const [activeDiscovery, setActiveDiscovery] = useState<any>(null);
 
   useEffect(() => {
-    // Trigga bara när vi har en ny upptäckt baserat på timestamp
-    if (isActive && timestamp !== activeDiscovery?.timestamp) {
+    // Trigga bara när vi har en ny upptäckt (timestamp > senast visade)
+    if (isActive && timestamp > lastProcessedTimestamp) {
+      lastProcessedTimestamp = timestamp;
       setActiveDiscovery({ id, type, title, details, timestamp });
       setVisible(true);
     }
-  }, [isActive, timestamp, id, type, title, details, activeDiscovery?.timestamp]);
+  }, [isActive, timestamp, id, type, title, details]);
 
   // ZERO-GC: Stabil callback som undviker closures på 'visible'
   const handleInteraction = useCallback(() => {
