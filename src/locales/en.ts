@@ -195,6 +195,7 @@ export const en = {
         family_header: "FAMILY",
         deaths: "Deaths",
         kill_log: "Kill Log",
+        killed_by_short: "DIED TO",
         lvl: "LVL",
         pri: "PRI",
         sec: "SEC",

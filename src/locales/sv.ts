@@ -125,6 +125,7 @@ export const sv = {
         respawn: "ÅTERUPPLIVA",
         kia: "STUPAD I STRID",
         killed_by: "dödades av",
+        killed_by_short: "DÖDAD AV",
         died_from: "dog av",
         time_elapsed: "TID",
         distance_traveled: "STRÄCKA",

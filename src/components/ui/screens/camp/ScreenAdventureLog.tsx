@@ -5,7 +5,6 @@ import { COLLECTIBLES } from '../../../../content/collectibles';
 import { CLUES } from '../../../../content/clues';
 import { POIS } from '../../../../content/pois';
 import { useOrientation } from '../../../../hooks/useOrientation';
-import { EnemyType } from '../../../../entities/enemies/EnemyTypes';
 import ScreenModalLayout from '../../layout/ScreenModalLayout';
 import CollectiblePreview from '../../core/CollectiblePreview';
 import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
@@ -323,7 +322,7 @@ const EnemyTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
                                         <span className="text-xl font-semibold text-white">{stats.killsByType?.[key] || 0}</span>
                                     </div>
                                     <div className="flex flex-col items-end pl-4 border-l border-gray-800">
-                                        <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short') || 'DIED TO'}</span>
+                                        <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
                                         <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[key] || 0}</span>
                                     </div>
                                 </div>
@@ -431,7 +430,7 @@ const BossTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: bo
                                                 </h3>
                                             </div>
                                             <div className="flex flex-col items-end">
-                                                <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short') || 'DIED TO'}</span>
+                                                <span className="text-[10px] font-bold text-red-500/70 uppercase tracking-widest leading-tight text-right">{t('ui.killed_by_short')}</span>
                                                 <span className="text-xl font-semibold text-red-500">{stats.deathsByEnemyType?.[boss.name] || 0}</span>
                                             </div>
                                         </div>

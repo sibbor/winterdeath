@@ -13,6 +13,9 @@ interface ScreenCollectibleDiscoveredProps {
 const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose, isMobileDevice }) => {
     const def = getCollectibleById(collectibleId);
 
+    const collectibleTitle = t(`collectibles.${def.sector}.${def.index}.title`);
+    const collectibleDescription = t(`collectibles.${def.sector}.${def.index}.description`);
+
     if (!def) return null;
 
     return (
@@ -28,7 +31,7 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 <div className="mb-4 flex items-center justify-center gap-3">
                     <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                     <span className="text-xl font-black uppercase tracking-[0.5em] text-yellow-500/60 mb-2 block animate-pulse">
-                        {t(`collectibles.${def.sector - 1}.${def.index}.title`)}
+                        {collectibleTitle}
                     </span>
                     <div className="h-[1px] w-8 bg-yellow-500/30"></div>
                 </div>
@@ -42,8 +45,8 @@ const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = 
                 </div>
 
                 <div className="max-w-md px-4 mt-4">
-                    <p className="text-zinc-400 text-sm sm:text-base leading-relaxed font-medium italic">
-                        "{t(`collectibles.${def.sector - 1}.${def.index}.description`)}"
+                    <p className="text-zinc-400 text sm:text-base leading-relaxed font-medium italic">
+                        "{collectibleDescription}"
                     </p>
                 </div>
             </div>
