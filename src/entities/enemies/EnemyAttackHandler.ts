@@ -25,6 +25,10 @@ export const EnemyAttackHandler = {
             console.log(`[EnemyAttackHandler] ${e.type}_${e.id} attacking with ${att.type} (${att.damage} dmg)`);
         }
 
+        // --- STORE TARGET POSITION FOR ANIMATOR ---
+        if (!e.mesh.userData.targetPos) e.mesh.userData.targetPos = new THREE.Vector3();
+        e.mesh.userData.targetPos.copy(playerPos);
+
         // 1. Set cooldown immediately for this specific attack
         if (e.attackCooldowns) {
             e.attackCooldowns[att.type] = att.cooldown;

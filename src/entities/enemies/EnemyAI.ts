@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { Enemy, AIState, EnemyEffectType, EnemyDeathState, DEFAULT_ATTACK_RANGE, EnemyType, SEARCH_TIMERS } from '../../entities/enemies/EnemyTypes';
 import { DamageType, EnemyAttackType } from '../../entities/player/CombatTypes';
 import { EnemyAttackHandler } from './EnemyAttackHandler';
-import { applyCollisionResolution } from '../../core/world/CollisionResolution';
 import { SpatialGrid } from '../../core/world/SpatialGrid';
 import { WeaponType, WEAPONS } from '../../content/weapons';
 import { haptic } from '../../utils/HapticManager';
@@ -257,7 +256,7 @@ export const EnemyAI = {
                 _waterCheckResult.flatDepth = _buoyancyResult.baseWaterLevel - _buoyancyResult.groundY;
                 e.isInWater = true;
                 e.isWading = _waterCheckResult.flatDepth > 0.4 && _waterCheckResult.flatDepth <= 1.25;
-                
+
                 // --- TIRING SWIM MECHANIC ---
                 const inDeepWater = _waterCheckResult.flatDepth > 1.25;
                 if (inDeepWater && !e.isDrowning) {
