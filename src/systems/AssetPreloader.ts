@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WinterEngine } from '../core/engine/WinterEngine';
-import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures } from '../utils/assets';
+import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures, TREE_DEPTH_MATS } from '../utils/assets';
 import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../utils/assets/materials_water';
 import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
@@ -9,7 +9,7 @@ import { VEHICLES, VehicleType } from '../content/vehicles';
 import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../core/world/generators/VehicleGenerator';
 import { VegetationGenerator } from '../core/world/generators/VegetationGenerator';
-import { CampWorld, CAMP_SCENE, stationMaterials, CONST_GEO as CAMP_GEO, CONST_MAT as CAMP_MAT } from '../components/camp/CampWorld';
+import { CampWorld, CAMP_SCENE } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
 import { registerSoundGenerators } from '../utils/audio/SoundLib';
 import { soundManager } from '../utils/audio/SoundManager';
@@ -220,6 +220,23 @@ export const AssetPreloader = {
             // Camp
             if (isCamp) {
                 const textures = createProceduralTextures();
+
+                // Warm up camp specific materials
+                for (const key in MATERIALS) {
+                    if (key.startsWith('camp_') && key !== 'camp_star' && key !== 'camp_moonHalo') {
+                        const mat = (MATERIALS as any)[key];
+                        // Only warm up standard/basic/phong/lambert materials on a BoxGeometry
+                        if (mat.isMeshStandardMaterial || mat.isMeshBasicMaterial || mat.isMeshPhongMaterial || mat.isMeshLambertMaterial) {
+                            _dummyScene.add(new THREE.Mesh(GEOMETRY.box, mat));
+                            if (mat.map) engine.renderer.initTexture(mat.map);
+                        }
+                    }
+                }
+
+                // Camp specials (formerly in global pool)
+                _dummyScene.add(new THREE.Points(GEOMETRY.box, MATERIALS.camp_star));
+                _dummyScene.add(new THREE.Sprite(MATERIALS.camp_moonHalo));
+
                 await CampWorld.build(_dummyScene, textures as any, 'snow', true);
 
                 let lampsInScene = 0;
@@ -499,6 +516,7 @@ export const AssetPreloader = {
         }
 
         for (const key in MATERIALS) {
+            if (key.startsWith('camp_')) continue;
             const mat = (MATERIALS as any)[key];
             if (mat instanceof THREE.Material) {
                 add(new THREE.Mesh(GEOMETRY.box, mat), false);
@@ -576,13 +594,6 @@ export const AssetPreloader = {
         await VegetationGenerator.initNaturePrototypes(yieldToMain);
         for (let i = 0; i < TREE_TYPES.length; i++) add(VegetationGenerator.createTree(TREE_TYPES[i], 1.0, 0), true, true);
 
-        for (const key in stationMaterials) {
-            add(new THREE.Mesh(GEOMETRY.box, (stationMaterials as any)[key]), false);
-        }
-
-        for (const key in CAMP_MAT) {
-            add(new THREE.Mesh(GEOMETRY.box, (CAMP_MAT as any)[key]), false);
-        }
 
         const outlineGeo = new THREE.EdgesGeometry(GEOMETRY.box);
         const outlineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
@@ -595,6 +606,10 @@ export const AssetPreloader = {
         add(new THREE.Mesh(GEOMETRY.grenade, MATERIALS.grenade), false, true);
         add(new THREE.Mesh(GEOMETRY.molotov, MATERIALS.molotov), false, true);
         add(new THREE.Mesh(GEOMETRY.flashbang, MATERIALS.flashbang), false, true);
+        add(new THREE.Mesh(GEOMETRY.zombieRing, MATERIALS.zombieRingMaterial), false, false);
+
+        add(ObjectGenerator.createBuilding(10, 10, 10, 0x888888, true, true, 0.5), false, true);
+        add(ObjectGenerator.createBuilding(10, 10, 10, 0x888888, false, true, 0.5), false, true);
     },
 
     getLastSectorIndex: () => lastSectorIndex,

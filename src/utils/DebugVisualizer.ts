@@ -1,31 +1,11 @@
 import * as THREE from 'three';
 import { SectorContext } from '../game/session/SectorTypes';
 import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
+import { GEOMETRY, MATERIALS } from './assets';
 
 // --- CACHED DEBUG RESOURCES (Zero-GC approach) ---
-const DEBUG_MATS = {
-    red: new THREE.LineBasicMaterial({ color: 0xff0000 }),
-    green: new THREE.LineBasicMaterial({ color: 0x00ff00 }),
-    blue: new THREE.LineBasicMaterial({ color: 0x0000ff }),
-    yellow: new THREE.LineBasicMaterial({ color: 0xffff00 }),
-    beam: new THREE.MeshBasicMaterial({
-        color: 0x00ffff,
-        transparent: true,
-        opacity: 0.1,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending
-    }),
-    triggerRing: new THREE.MeshBasicMaterial({
-        color: 0xffff00,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide
-    })
-};
-
-const _markerGeometry = new THREE.CylinderGeometry(0.1, 0.1, 400, 8);
-_markerGeometry.translate(0, 200, 0);
+// Note: Materials are now located in src/utils/assets/materials.ts
+// Geometries are now located in src/utils/assets/geometry.ts
 
 export const DebugVisualizer = {
 
@@ -81,7 +61,11 @@ export const DebugVisualizer = {
         const closedPoints = [...points, points[0]];
         const geo = new THREE.BufferGeometry().setFromPoints(closedPoints);
 
-        const line = new THREE.Line(geo, DEBUG_MATS[color]);
+        const mat = color === 'red' ? MATERIALS.debugRed :
+            color === 'green' ? MATERIALS.debugGreen :
+                color === 'blue' ? MATERIALS.debugBlue : MATERIALS.debugYellow;
+
+        const line = new THREE.Line(geo, mat);
         line.position.y = yOffset;
 
         ctx.scene.add(line);
@@ -91,7 +75,11 @@ export const DebugVisualizer = {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geo, DEBUG_MATS[color]);
+        const mat = color === 'red' ? MATERIALS.debugRed :
+            color === 'green' ? MATERIALS.debugGreen :
+                color === 'blue' ? MATERIALS.debugBlue : MATERIALS.debugYellow;
+
+        const line = new THREE.Line(geo, mat);
         line.position.y = yOffset;
 
         ctx.scene.add(line);
@@ -100,7 +88,7 @@ export const DebugVisualizer = {
     spawnMarker: (ctx: SectorContext, x: number, z: number, height: number, label: string) => {
         if (!ctx.debugMode) return;
 
-        const beam = new THREE.Mesh(_markerGeometry, DEBUG_MATS.beam);
+        const beam = new THREE.Mesh(GEOMETRY.debugMarker, MATERIALS.debugBeam);
         beam.position.set(x, 0, z);
         ctx.scene.add(beam);
 
@@ -125,7 +113,7 @@ export const DebugVisualizer = {
             if (!drawRadius) drawRadius = 2.0;
 
             const ringGeo = new THREE.RingGeometry(drawRadius - 0.2, drawRadius, 32);
-            const ring = new THREE.Mesh(ringGeo, DEBUG_MATS.triggerRing);
+            const ring = new THREE.Mesh(ringGeo, MATERIALS.debugTriggerRing);
 
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(trig.position.x, 0.1, trig.position.z);

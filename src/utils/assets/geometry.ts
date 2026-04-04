@@ -170,6 +170,29 @@ const createImpactSplatGeo = () => {
     return geo;
 };
 
+const createTrajectoryLineGeo = () => {
+    const vertexCount = 42;
+    const positions = new Float32Array(vertexCount * 3);
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const indicesCount = 20 * 6;
+    const indices = new Uint16Array(indicesCount);
+    let idx = 0;
+    for (let i = 0; i < 20; i++) {
+        const base = i * 2;
+        indices[idx++] = base;
+        indices[idx++] = base + 1;
+        indices[idx++] = base + 2;
+
+        indices[idx++] = base + 1;
+        indices[idx++] = base + 3;
+        indices[idx++] = base + 2;
+    }
+    lineGeo.setIndex(new THREE.BufferAttribute(indices, 1));
+    return lineGeo;
+};
+
 export const GEOMETRY = {
     bullet: new THREE.SphereGeometry(0.15, 8, 8),
     grenade: new THREE.DodecahedronGeometry(0.3),
@@ -224,5 +247,27 @@ export const GEOMETRY = {
     showInPreloader: true, // Marker for preloader
     bloodSplat: createBloodSplatGeo(),
     impactSplat: createImpactSplatGeo(),
-    splash: createSplashGeo()
+    splash: createSplashGeo(),
+
+    // Zombie:
+    zombieRing: new THREE.RingGeometry(0.05, 1, 32),
+
+    // ---- SPECIAL EVENTS & DISCOVERY ----
+    fakeBrakeGlow: (() => {
+        const geo = new THREE.PlaneGeometry(8, 8);
+        geo.rotateX(-Math.PI / 2);
+        return geo;
+    })(),
+    busExplosionRing: new THREE.RingGeometry(6, 7, 32),
+    collectibleRing: new THREE.RingGeometry(0.6, 0.7, 32),
+    collectibleBeam: new THREE.CylinderGeometry(0.4, 0.4, 4, 16, 1, true),
+    collectibleInnerRing: new THREE.TorusGeometry(0.3, 0.02, 8, 24),
+    trajectoryLine: createTrajectoryLineGeo(),
+
+    // ---- DEBUGGING ----
+    debugMarker: (() => {
+        const geo = new THREE.CylinderGeometry(0.1, 0.1, 400, 8);
+        geo.translate(0, 200, 0);
+        return geo;
+    })(),
 };

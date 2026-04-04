@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
-import { MATERIALS } from '../../utils/assets';
+import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
@@ -9,6 +9,7 @@ import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
 import { CAMERA_HEIGHT } from '../constants';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { MaterialType } from '../../content/environment';
 
 const LOCATIONS = {
     SPAWN: {
@@ -164,7 +165,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(210, 0, 150),
             new THREE.Vector3(188, 0, 164),
             new THREE.Vector3(35, 0, 225)
-        ], 16, undefined, false, true);
+        ], 16, undefined, MaterialType.ASPHALT, true);
 
         // Road: Church -> Grocery Store
         PathGenerator.createRoad(ctx, [
@@ -1049,14 +1050,13 @@ export const Sector0: SectorDef = {
                 }
 
                 // Spawn red pulsating ring
-                const ringGeo = new THREE.RingGeometry(6, 7, 32);
-                const ringMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
-                const ring = new THREE.Mesh(ringGeo, ringMat);
-                ring.rotation.x = -Math.PI / 2;
-                ring.position.copy(busPos);
-                ring.position.y = 1.0;
-                if (events.scene) events.scene.add(ring);
-                sectorState.busRing = ring;
+                const busExplosionRing = new THREE.Mesh(GEOMETRY.busExplosionRing, MATERIALS.busExplosionRing);
+                busExplosionRing.rotation.x = -Math.PI / 2;
+                busExplosionRing.position.copy(busPos);
+                busExplosionRing.position.y = 1.0;
+
+                if (events.scene) events.scene.add(busExplosionRing);
+                sectorState.busRing = busExplosionRing;
             }
 
             if (events.playTone) events.playTone(880, 'sine', 0.1, 0.2);

@@ -11,7 +11,9 @@ type FXMaterial = THREE.Material & {
 };
 
 export interface ParticleState {
-    mesh: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+    pos: THREE.Vector3;
+    rot: THREE.Euler;
+    scaleVec: THREE.Vector3;
     vel: THREE.Vector3;
     rotVel: THREE.Vector3;
     life: number;
@@ -43,6 +45,10 @@ interface SpawnRequest {
 // --- PERFORMANCE SCRATCHPADS & CONSTANTS ---
 const _tempColor = new THREE.Color();
 const _v1 = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
+const _dummyMatrix = new THREE.Matrix4();
+const _dummyQuat = new THREE.Quaternion();
+const _dummyScale = new THREE.Vector3();
 const _lastSpawnX: Record<string, number> = {};
 const _lastSpawnZ: Record<string, number> = {};
 const REQUEST_POOL: SpawnRequest[] = [];
@@ -73,14 +79,9 @@ for (let i = 0; i < MAX_DECALS; i++) {
     });
 }
 
-// O(1) Lookup tables replacing arrays and Sets for faster V8 execution
-const UNIQUE_MATERIAL_TYPES: Record<string, boolean> = {
-    black_smoke: true, debris_trail: true, shockwave: true, flash: true,
-    splash: true, electric_beam: true, ground_impact: true, screech_wave: true
-};
-
+// TTL mapped object for faster V8 property access
 const PHYSICS_TYPES: Record<string, boolean> = {
-    debris: true, glass: true, blood: true, gore: true, splash: true
+    debris: true, glass: true, blood: true, gore: true, splash: true, black_smoke: true
 };
 
 const INSTANCED_TYPES: Record<string, boolean> = {
@@ -91,7 +92,8 @@ const INSTANCED_TYPES: Record<string, boolean> = {
     impact_splat: true, campfire_flame: true, campfire_spark: true,
     campfire_smoke: true, flamethrower_fire: true, ground_impact: true,
     shockwave: true, frost_nova: true, screech_wave: true, electric_beam: true,
-    magnetic_sparks: true, impact: true, blastRadius: true
+    magnetic_sparks: true, impact: true, blastRadius: true,
+    black_smoke: true, debris_trail: true
 };
 
 const PARTICLE_COLORS: Record<string, number> = {
@@ -99,12 +101,13 @@ const PARTICLE_COLORS: Record<string, number> = {
     enemy_effect_flame: 0xff7700, flamethrower_fire: 0xff7700,
     enemy_effect_stun: 0x00ffff, campfire_spark: 0x00ffff, enemy_effect_spark: 0x00ffff, magnetic_sparks: 0x00ffff,
     spark: 0xffcc00, impact: 0xffcc00,
-    smoke: 0x555555, large_smoke: 0x555555, campfire_smoke: 0x555555,
+    smoke: 0x555555, large_smoke: 0x555555, campfire_smoke: 0x555555, black_smoke: 0x000000,
     blood: 0x880000, gore: 0x880000, blood_splat: 0x880000,
     glass: 0xffffff, flash: 0xffffff, electric_flash: 0xffffff, shockwave: 0xffffff,
     frost_nova: 0xffffff, screech_wave: 0xffffff,
     splash: 0x77bbcc,
-    blastRadius: 0xff0000
+    blastRadius: 0xff0000,
+    debris_trail: 0x888888
 };
 
 const ESSENTIAL_TYPES: Record<string, boolean> = {
@@ -143,7 +146,6 @@ export const FXSystem = {
 
     MESH_POOL: [] as THREE.Mesh<THREE.BufferGeometry, THREE.Material>[],
     FREE_MESH_INDICES: [] as number[],
-    MATERIAL_POOL: {} as Record<string, THREE.Material[]>,
     PARTICLE_STATE_POOL: [] as ParticleState[],
     FREE_STATE_INDICES: [] as number[],
 
@@ -161,22 +163,17 @@ export const FXSystem = {
         isInstanced: boolean = false
     ): THREE.Mesh<THREE.BufferGeometry, THREE.Material> => {
         let m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
-        let finalMat = mat;
-
-        if (!isInstanced && UNIQUE_MATERIAL_TYPES[type]) {
-            finalMat = FXSystem._getUniqueMaterial(mat, type);
-        }
 
         if (FXSystem.FREE_MESH_INDICES.length > 0) {
             const idx = FXSystem.FREE_MESH_INDICES.pop()!;
             m = FXSystem.MESH_POOL[idx];
             m.geometry = geo;
-            m.material = finalMat;
+            m.material = mat;
             m.visible = true;
             m.scale.set(1, 1, 1);
             m.rotation.set(0, 0, 0);
         } else {
-            m = new THREE.Mesh(geo, finalMat);
+            m = new THREE.Mesh(geo, mat);
             m.userData.poolIdx = FXSystem.MESH_POOL.length;
             FXSystem.MESH_POOL.push(m);
         }
@@ -185,33 +182,9 @@ export const FXSystem = {
         return m;
     },
 
-    _getUniqueMaterial: (baseMat: THREE.Material, type: string): THREE.Material => {
-        if (!baseMat) {
-            console.error(`[FXSystem] _getUniqueMaterial called with undefined material for type: ${type}. Falling back to default.`);
-            return MATERIALS.blood || new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        }
-        const poolKey = type + '_' + (baseMat.uuid || 'unknown');
-        if (!FXSystem.MATERIAL_POOL[poolKey]) FXSystem.MATERIAL_POOL[poolKey] = [];
-        if (FXSystem.MATERIAL_POOL[poolKey].length > 0) {
-            const mat = FXSystem.MATERIAL_POOL[poolKey].pop()! as FXMaterial;
-            if (mat.transparent) mat.opacity = 1.0;
-            return mat;
-        }
-        const clone = baseMat.clone();
-        clone.transparent = true;
-        (clone as any)._baseType = poolKey;
-        clone.userData = { isSharedAsset: true };
-        return clone;
-    },
-
     recycleMesh: (m: THREE.Mesh<THREE.BufferGeometry, THREE.Material>, type: string) => {
         m.visible = false;
         m.position.set(0, -1000, 0);
-        if (UNIQUE_MATERIAL_TYPES[type]) {
-            const poolKey = (m.material as any)._baseType || type;
-            if (!FXSystem.MATERIAL_POOL[poolKey]) FXSystem.MATERIAL_POOL[poolKey] = [];
-            FXSystem.MATERIAL_POOL[poolKey].push(m.material);
-        }
         FXSystem.FREE_MESH_INDICES.push(m.userData.poolIdx);
     },
 
@@ -223,9 +196,20 @@ export const FXSystem = {
             return p;
         }
         const p: ParticleState = {
-            mesh: null as any, vel: new THREE.Vector3(), rotVel: new THREE.Vector3(),
-            life: 0, maxLife: 0, type: '', isPooled: false, isInstanced: false,
-            isPhysics: false, landed: false, inUse: true, _poolIdx: FXSystem.PARTICLE_STATE_POOL.length
+            pos: new THREE.Vector3(),
+            rot: new THREE.Euler(),
+            scaleVec: new THREE.Vector3(1, 1, 1),
+            vel: new THREE.Vector3(),
+            rotVel: new THREE.Vector3(),
+            life: 0,
+            maxLife: 0,
+            type: '',
+            isPooled: false,
+            isInstanced: false,
+            isPhysics: false,
+            landed: false,
+            inUse: true,
+            _poolIdx: FXSystem.PARTICLE_STATE_POOL.length
         };
         FXSystem.PARTICLE_STATE_POOL.push(p);
         return p;
@@ -284,99 +268,65 @@ export const FXSystem = {
         // Fast color resolution
         p.color = req.color ?? (isInstanced ? (PARTICLE_COLORS[t] ?? 0x888888) : undefined);
 
-        if (req.customMesh) {
-            p.mesh = req.customMesh;
-            if (p.mesh.parent !== req.scene) req.scene.add(p.mesh);
-        } else {
-            let geo: THREE.BufferGeometry = GEOMETRY.particle;
-            let mat: THREE.Material = MATERIALS.blood;
-
-            if (t === 'gore') geo = GEOMETRY.gore;
-            else if (t === 'black_smoke') mat = MATERIALS['_blackSmoke'] || MATERIALS.smoke; // [VINTERDÖD FIX] Fallback if preload was missed
-            else if (t === 'fire' || t === 'flame' || t === 'large_fire' || t === 'campfire_flame' || t === 'enemy_effect_flame' || t === 'flamethrower_fire') {
-                geo = GEOMETRY.flame;
-                mat = (t === 'enemy_effect_flame') ? MATERIALS.enemy_effect_flame : MATERIALS.fire;
-            }
-            else if (t === 'spark' || t === 'smoke' || t === 'campfire_spark' || t === 'campfire_smoke' || t === 'enemy_effect_spark') {
-                mat = (t === 'enemy_effect_spark') ? MATERIALS.enemy_effect_spark : MATERIALS.bullet;
-            }
-            else if (t === 'debris') mat = MATERIALS.stone;
-            else if (t === 'glass') { geo = GEOMETRY.shard; mat = MATERIALS.glassShard; }
-            else if (t === 'shockwave' || t === 'screech_wave' || t === 'frost_nova') { geo = GEOMETRY.shockwave; mat = MATERIALS.shockwave; }
-            else if (t === 'blastRadius') { geo = GEOMETRY.blastRadius; mat = MATERIALS.blastRadius; }
-            else if (t === 'flash' || t === 'electric_flash') {
-                geo = (t === 'flash') ? GEOMETRY.sphere : GEOMETRY.shard;
-                mat = MATERIALS.flashWhite;
-            }
-            else if (t === 'enemy_effect_stun') { geo = GEOMETRY.shard; mat = MATERIALS.enemy_effect_stun; }
-            else if (t === 'large_smoke') { geo = GEOMETRY.flame; mat = MATERIALS.smoke; }
-            else if (t === 'splash') { geo = GEOMETRY.splash; mat = MATERIALS.splash; }
-            else if (t === 'electric_beam') { geo = GEOMETRY.shard; mat = MATERIALS.flashWhite; }
-            else if (t === 'ground_impact' || t === 'impact') { geo = GEOMETRY.stone; mat = MATERIALS.stone; }
-            else if (t === 'magnetic_sparks') { geo = GEOMETRY.particle; mat = MATERIALS.bullet; }
-
-            // [VINTERDÖD FIX] Final safety check to prevent crash in getPooledMesh -> _getUniqueMaterial
-            if (!mat) {
-                console.warn(`[FXSystem] Material for type '${t}' is undefined. Falling back to blood.`);
-                mat = MATERIALS.blood;
-            }
-
-            p.mesh = FXSystem.getPooledMesh(req.scene, geo, mat, t, isInstanced);
-        }
-
-        p.mesh.position.set(req.x, req.y, req.z);
-        p.mesh.renderOrder = 60;
+        p.pos.set(req.x, req.y, req.z);
 
         // --- ROTATION & ORIENTATION ---
         if (t === 'electric_flash' && req.hasCustomVel) {
             _v1.set(req.x + req.customVel.x, req.y + req.customVel.y, req.z + req.customVel.z);
-            p.mesh.lookAt(_v1);
+            _dummyMatrix.lookAt(p.pos, _v1, _UP);
+            _dummyQuat.setFromRotationMatrix(_dummyMatrix);
+            p.rot.setFromQuaternion(_dummyQuat);
         } else if (t === 'shockwave') {
-            p.mesh.rotation.set(-Math.PI / 2, 0, 0);
+            p.rot.set(-Math.PI / 2, 0, 0);
         } else {
-            p.mesh.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
+            p.rot.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
         }
 
         // --- SCALING ---
         const s = req.scale || 1.0;
+        let fs = 1.0;
         if (t === 'flash') {
-            const fs = (1.5 + Math.random() * 1.0) * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = (1.5 + Math.random() * 1.0) * s;
+            p.scaleVec.set(fs, fs, fs);
         }
         else if (t === 'electric_flash' && req.hasCustomVel) {
             const dist = req.customVel.length();
             const thickness = (0.15 + Math.random() * 0.1) * s;
-            p.mesh.scale.set(thickness, thickness, dist);
+            p.scaleVec.set(thickness, thickness, dist);
         }
         else if (t === 'large_fire') {
-            const fs = 3.0 * Math.random() * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = 3.0 * Math.random() * s;
+            p.scaleVec.set(fs, fs, fs);
         }
         else if (t === 'large_smoke') {
-            const fs = 4.0 * Math.random() * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = 4.0 * Math.random() * s;
+            p.scaleVec.set(fs, fs, fs);
+        }
+        else if (t === 'black_smoke') {
+            fs = (2.0 + Math.random() * 2.0) * s;
+            p.scaleVec.set(fs, fs, fs);
         }
         else if (t === 'flame' || t === 'fire' || t === 'smoke' || t === 'enemy_effect_flame' || t === 'enemy_effect_spark' || t === 'flamethrower_fire') {
-            const fs = (1.0 + Math.random() * 0.8) * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = (1.0 + Math.random() * 0.8) * s;
+            p.scaleVec.set(fs, fs, fs);
         }
         else if (t === 'spark') {
-            const fs = (0.5 + Math.random() * 0.5) * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = (0.5 + Math.random() * 0.5) * s;
+            p.scaleVec.set(fs, fs, fs);
         }
         else if (t === 'splash') {
-            const fs = (0.5 + Math.random() * 0.7) * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = (0.5 + Math.random() * 0.7) * s;
+            p.scaleVec.set(fs, fs, fs);
         }
         else if (t === 'electric_beam') {
-            p.mesh.scale.set(0.2, 0.2, 5.0);
+            p.scaleVec.set(0.2, 0.2, 5.0);
         }
         else if (t === 'screech_wave' || t === 'shockwave' || t === 'frost_nova') {
-            p.mesh.scale.set(1, 1, 1);
+            p.scaleVec.set(1, 1, 1);
         }
         else {
-            const fs = (0.3 + Math.random() * 0.3) * s;
-            p.mesh.scale.set(fs, fs, fs);
+            fs = (0.3 + Math.random() * 0.3) * s;
+            p.scaleVec.set(fs, fs, fs);
         }
 
         // --- VELOCITY ---
@@ -580,7 +530,7 @@ export const FXSystem = {
 
             if (!p.landed) {
                 // Inlined position update
-                const pPos = p.mesh.position;
+                const pPos = p.pos;
                 pPos.x += p.vel.x * safeDelta;
                 pPos.y += p.vel.y * safeDelta;
                 pPos.z += p.vel.z * safeDelta;
@@ -589,8 +539,8 @@ export const FXSystem = {
                     p.vel.y -= 25 * safeDelta;
                     if (p.type !== 'blood' && p.type !== 'splash') {
                         // Inlined rotation update
-                        p.mesh.rotation.x += p.rotVel.x * 10 * safeDelta;
-                        p.mesh.rotation.z += p.rotVel.z * 10 * safeDelta;
+                        p.rot.x += p.rotVel.x * 10 * safeDelta;
+                        p.rot.z += p.rotVel.z * 10 * safeDelta;
                     }
                     if (pPos.y <= (p.type === 'splash' ? -5.0 : 0.05)) {
                         FXSystem._handleLanding(p, i, particlesList, callbacks);
@@ -602,7 +552,7 @@ export const FXSystem = {
                     p.vel.y *= safeAirFriction;
                     p.vel.z *= safeAirFriction;
 
-                    const pScale = p.mesh.scale;
+                    const pScale = p.scaleVec;
                     const pType = p.type;
 
                     if (pType === 'shockwave') {
@@ -631,6 +581,11 @@ export const FXSystem = {
                         pScale.x *= safeFireShrinkRate;
                         pScale.y *= safeFireShrinkRate;
                         pScale.z *= safeFireShrinkRate;
+                    } else if (pType === 'black_smoke') {
+                        const grow = 1.0 * safeDelta;
+                        pScale.x += grow;
+                        pScale.y += grow;
+                        pScale.z += grow;
                     } else if (pType === 'screech_wave') {
                         const grow = 60 * safeDelta;
                         pScale.x += grow;
@@ -648,19 +603,14 @@ export const FXSystem = {
                 }
             }
 
-            if (!p.isInstanced) {
-                const mat = p.mesh.material as FXMaterial;
-                if (mat.transparent) {
-                    const op = p.life / p.maxLife;
-                    mat.opacity = op < 0 ? 0 : op;
-                }
-            } else {
+            if (p.isInstanced) {
                 const pType = p.type;
                 const imesh = FXSystem._instancedMeshes[pType];
                 const idx = FXSystem._instancedCounts[pType];
                 if (imesh && idx < MAX_INSTANCES_PER_MESH) {
-                    p.mesh.updateMatrix();
-                    imesh.setMatrixAt(idx, p.mesh.matrix);
+                    _dummyQuat.setFromEuler(p.rot);
+                    _dummyMatrix.compose(p.pos, _dummyQuat, p.scaleVec);
+                    imesh.setMatrixAt(idx, _dummyMatrix);
                     const pColor = p.color;
                     if (pColor !== undefined) {
                         imesh.setColorAt(idx, _tempColor.setHex(pColor));
@@ -763,8 +713,6 @@ export const FXSystem = {
 
     _killParticle: (index: number, list: ParticleState[]) => {
         const p = list[index];
-        if (p.isPooled) FXSystem.recycleMesh(p.mesh, p.type);
-        else if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
 
         p.inUse = false;
         FXSystem.FREE_STATE_INDICES.push(p._poolIdx);
@@ -774,15 +722,15 @@ export const FXSystem = {
     },
 
     _handleLanding: (p: ParticleState, index: number, list: ParticleState[], callbacks: any) => {
-        p.mesh.position.y = 0.05;
+        p.pos.y = 0.05;
 
         if (p.type === 'blood') {
             p.landed = true;
-            if (Math.random() < 0.20) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.5 + Math.random() * 0.3, MATERIALS.bloodDecal);
+            if (Math.random() < 0.20) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.5 + Math.random() * 0.3, MATERIALS.bloodDecal);
             FXSystem._killParticle(index, list);
         } else if (p.type === 'gore') {
             p.landed = true;
-            if (Math.random() < 0.40) callbacks.spawnDecal(p.mesh.position.x, p.mesh.position.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
+            if (Math.random() < 0.40) callbacks.spawnDecal(p.pos.x, p.pos.z, 0.8 + Math.random() * 0.5, MATERIALS.bloodDecal);
             soundManager.playImpact('flesh');
             p.vel.set(0, 0, 0);
         } else if (p.type === 'debris') {

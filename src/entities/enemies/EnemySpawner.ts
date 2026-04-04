@@ -54,16 +54,7 @@ export const EnemySpawner = {
         e.widthScale = typeData.widthScale || 1.0;
 
         if (!e.indicatorRing && e.mesh) {
-            const ring = new THREE.Mesh(
-                GEOMETRY.blastRadius,
-                new THREE.MeshBasicMaterial({
-                    color: 0xffffff,
-                    transparent: true,
-                    opacity: 0.3,
-                    side: THREE.DoubleSide,
-                    depthWrite: false
-                })
-            );
+            const ring = new THREE.Mesh(GEOMETRY.zombieRing, MATERIALS.zombieRingMaterial);
             ring.rotation.x = -Math.PI / 2;
             ring.visible = false;
             e.mesh.add(ring);
@@ -219,20 +210,11 @@ export const EnemySpawner = {
         g.userData.ashPermanent = false;
         g.userData.isRagdolling = false;
 
-        const ring = new THREE.Mesh(
-            GEOMETRY.blastRadius,
-            new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                transparent: true,
-                opacity: 0.3,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            })
-        );
-        ring.rotation.x = -Math.PI / 2;
-        ring.visible = false;
-        g.add(ring);
-        enemy.indicatorRing = ring;
+        const enemyIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+        enemyIndicatorRing.rotation.x = -Math.PI / 2;
+        enemyIndicatorRing.visible = false;
+        g.add(enemyIndicatorRing);
+        enemy.indicatorRing = enemyIndicatorRing;
 
         if (PerformanceMonitor.getInstance().aiLoggingEnabled) {
             console.log(`[EnemySpawner] Spawns ${typeKey}_${enemy.id} at (${x.toFixed(1)}, ${z.toFixed(1)})`);
@@ -340,20 +322,11 @@ export const EnemySpawner = {
         boss.userData.entity = enemy;
 
         // Ensure boss has an indicator ring for its special attacks
-        const ring = new THREE.Mesh(
-            GEOMETRY.blastRadius,
-            new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                transparent: true,
-                opacity: 0.3,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            })
-        );
-        ring.rotation.x = -Math.PI / 2;
-        ring.visible = false;
-        boss.add(ring);
-        enemy.indicatorRing = ring;
+        const bossIndicatorRing = new THREE.Mesh(GEOMETRY.blastRadius, MATERIALS.blastRadius);
+        bossIndicatorRing.rotation.x = -Math.PI / 2;
+        bossIndicatorRing.visible = false;
+        boss.add(bossIndicatorRing);
+        enemy.indicatorRing = bossIndicatorRing;
 
         console.log(`[Spawner] Spawns BOSS at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
         return enemy;

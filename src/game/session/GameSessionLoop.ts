@@ -367,6 +367,12 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                 }
             }
 
+            // --- DISCOVERY AUTO-CLEAR (Zero-GC) ---
+            // Automatically clear the discovery state after 4 seconds to match UI animation
+            if (state.discovery.active && now - state.discovery.timestamp > 4000) {
+                state.discovery.active = false;
+            }
+
             const hudMesh = refs.playerMeshRef.current;
             monitor.begin('hud_sync');
             const hudData = HudSystem.getHudData(state, playerGroup.position, hudMesh, engine.input.state, now, propsRef.current, refs.distanceTraveledRef.current, engine.camera.threeCamera);

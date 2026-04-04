@@ -828,7 +828,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
                         const sectorData = (props as any).currentSectorData || SectorSystem.getSector(props.currentSector || 0);
                         const origin = (refs.playerGroupRef.current && refs.playerGroupRef.current.children.length > 0)
                             ? refs.playerGroupRef.current.position
-                            : new THREE.Vector3(sectorData?.playerSpawn?.x || 0, 0, sectorData?.playerSpawn?.z || 0);
+                            : new THREE.Vector3(sectorData.playerSpawn.x || 0, 0, sectorData?.playerSpawn?.z || 0);
                         refs.sectorContextRef.current?.spawnZombie(forcedType, forcedPos || origin);
                     },
                     concludeSector,

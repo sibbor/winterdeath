@@ -23,20 +23,9 @@ const SHARED_GEOMETRIES = {
     sphere: new THREE.SphereGeometry(1, 8, 8),
 };
 
-let boatMat: THREE.MeshStandardMaterial | null = null;
 let cachedBoatGeo: THREE.BufferGeometry | null = null;
 const vehicleBodyCache: Record<number, THREE.MeshStandardMaterial> = {};
 
-const VEHICLE_MATS = {
-    window: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 }),
-    tire: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }),
-    sirenBase: new THREE.MeshStandardMaterial({ color: 0x111111 }),
-    headlight: new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0xffffff, emissiveIntensity: 0 }),
-    sirenBlue: new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 0 }),
-    sirenRed: new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 0 }),
-    brakeLight: new THREE.MeshStandardMaterial({ color: 0xaa0000, emissive: 0xff0000, emissiveIntensity: 0 }),
-    ambulanceYellow: new THREE.MeshStandardMaterial({ color: 0xddff00, roughness: 0.5, metalness: 0.2 }),
-};
 
 export const createSignMesh = (text: string, width: number, height: number, textColor: string = '#ffaa00', bgColor: string = '#000000') => {
     const canvas = document.createElement('canvas');
@@ -64,7 +53,9 @@ export const createSignMesh = (text: string, width: number, height: number, text
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.MeshBasicMaterial({ map: tex });
+    // VINTERDÖD: Återanvänd basmaterialet för skyltar för att minimera shader-program
+    const mat = MATERIALS.vehicleSign.clone();
+    mat.map = tex;
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
     return mesh;
 };
@@ -72,13 +63,7 @@ export const createSignMesh = (text: string, width: number, height: number, text
 export const VehicleGenerator = {
 
     createBoat: (): THREE.Mesh => {
-        if (!boatMat) {
-            boatMat = (MATERIALS.wood as THREE.MeshStandardMaterial).clone();
-            boatMat.color.setHex(0x5a3d2b);
-            boatMat.roughness = 0.85;
-            boatMat.metalness = 0.0;
-            boatMat.flatShading = true;
-        }
+        const boatMat = MATERIALS.deadWood; // Återanvänd befintligt trämaterial
 
         if (!cachedBoatGeo) {
             const parts: THREE.BufferGeometry[] = [];
@@ -236,7 +221,7 @@ export const VehicleGenerator = {
         root.add(chassis);
         root.userData.chassis = chassis;
 
-        const mat = VEHICLE_MATS.ambulanceYellow;
+        const mat = MATERIALS.vehicleAmbulanceYellow;
 
         const cW = 2.2 * S; const cH = 1.0 * S; const cD = 5.2 * S;
         const groundClearance = 0.4 * S;
@@ -346,7 +331,7 @@ export const VehicleGenerator = {
 
         const addT = (isFront: boolean, tx: number, tz: number) => {
             const geo = isFront ? SHARED_GEOMETRIES.tire12 : SHARED_GEOMETRIES.tire16;
-            const m = new THREE.Mesh(geo, VEHICLE_MATS.tire);
+            const m = new THREE.Mesh(geo, MATERIALS.vehicleTire);
             m.rotation.z = Math.PI / 2;
             const r = (isFront ? 0.45 : 0.8) * S;
             const w = (isFront ? 0.45 : 0.7) * S;
@@ -433,7 +418,7 @@ export const VehicleGenerator = {
     },
 
     _addWindow: (group: THREE.Group, w: number, h: number, d: number, x: number, y: number, z: number) => {
-        const mesh = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.window);
+        const mesh = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleWindow);
         mesh.scale.set(w, h, d);
         mesh.position.set(x, y, z);
         group.add(mesh);
@@ -442,7 +427,7 @@ export const VehicleGenerator = {
 
     _addTires: (group: THREE.Group, count: number, radius: number, width: number, x: number, z: number, rearZ: number, midZ?: number) => {
         const addT = (tx: number, tz: number) => {
-            const m = new THREE.Mesh(SHARED_GEOMETRIES.tire16, VEHICLE_MATS.tire);
+            const m = new THREE.Mesh(SHARED_GEOMETRIES.tire16, MATERIALS.vehicleTire);
             m.rotation.z = Math.PI / 2;
             m.scale.set(radius, width, radius);
             m.position.set(tx, radius, tz);
@@ -462,7 +447,7 @@ export const VehicleGenerator = {
         const zPos = (cD / 2) + zOffset;
 
         const createL = (xPos: number) => {
-            const glow = new THREE.Mesh(SHARED_GEOMETRIES.sphere, VEHICLE_MATS.headlight);
+            const glow = new THREE.Mesh(SHARED_GEOMETRIES.sphere, MATERIALS.vehicleHeadlight);
             glow.scale.setScalar(0.15 * S);
             glow.position.set(xPos, yPos, zPos);
             chassis.add(glow);
@@ -473,7 +458,7 @@ export const VehicleGenerator = {
         const right = createL(xOffset);
 
         if (!root.userData.lights) root.userData.lights = {};
-        root.userData.lights.headlights = { material: VEHICLE_MATS.headlight, meshes: [left, right] };
+        root.userData.lights.headlights = { material: MATERIALS.vehicleHeadlight, meshes: [left, right] };
     },
 
     _addBrakeLights: (chassis: THREE.Group, root: THREE.Group, cW: number, cH: number, cD: number, yCenter: number) => {
@@ -482,7 +467,7 @@ export const VehicleGenerator = {
         const zPos = -(cD / 2 + 0.01);
 
         const createL = (xPos: number) => {
-            const glow = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.brakeLight);
+            const glow = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleBrakeLight);
             glow.scale.set(0.4 * S, 0.2 * S, 0.01);
             glow.position.set(xPos, yPos, zPos);
             chassis.add(glow);
@@ -493,18 +478,18 @@ export const VehicleGenerator = {
         const right = createL(xOffset);
 
         if (!root.userData.lights) root.userData.lights = {};
-        root.userData.lights.brake = { material: VEHICLE_MATS.brakeLight, meshes: [left, right] };
+        root.userData.lights.brake = { material: MATERIALS.vehicleBrakeLight, meshes: [left, right] };
     },
 
     _addSirens: (chassis: THREE.Group, root: THREE.Group, x: number, y: number, z: number, enableBlinking: boolean = false) => {
-        VehicleGenerator._addPart(chassis, 0.8 * S, 0.15 * S, 0.4 * S, x, y + 0.05 * S, z, VEHICLE_MATS.sirenBase);
+        VehicleGenerator._addPart(chassis, 0.8 * S, 0.15 * S, 0.4 * S, x, y + 0.05 * S, z, MATERIALS.vehicleSirenBase);
 
-        const blue = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.sirenBlue);
+        const blue = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleSirenBlue);
         blue.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
         blue.position.set(x + 0.2 * S, y + 0.15 * S, z);
         chassis.add(blue);
 
-        const red = new THREE.Mesh(SHARED_GEOMETRIES.box, VEHICLE_MATS.sirenRed);
+        const red = new THREE.Mesh(SHARED_GEOMETRIES.box, MATERIALS.vehicleSirenRed);
         red.scale.set(0.3 * S, 0.1 * S, 0.15 * S);
         red.position.set(x - 0.2 * S, y + 0.15 * S, z);
         chassis.add(red);
@@ -512,7 +497,7 @@ export const VehicleGenerator = {
         if (enableBlinking) {
             root.userData.sirenOn = false;
             if (!root.userData.lights) root.userData.lights = {};
-            root.userData.lights.siren = { materialBlue: VEHICLE_MATS.sirenBlue, materialRed: VEHICLE_MATS.sirenRed, blueMesh: blue, redMesh: red };
+            root.userData.lights.siren = { materialBlue: MATERIALS.vehicleSirenBlue, materialRed: MATERIALS.vehicleSirenRed, blueMesh: blue, redMesh: red };
         }
     },
 

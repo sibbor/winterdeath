@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MATERIALS } from '../../../utils/assets/materials';
+import { MATERIALS, getTreeDepthMaterial } from '../../../utils/assets/materials';
 import { SectorContext } from '../../../game/session/SectorTypes';
 import { SectorBuilder } from '../SectorBuilder';
 import { TREE_TYPE } from '../../../content/constants';
@@ -57,11 +57,6 @@ const SHARED_GEO = {
     seaweed: new THREE.PlaneGeometry(0.3, 3.0, 2, 4).translate(0, 1.5, 0)
 };
 
-const SHARED_MAT = {
-    sunflowerStem: new THREE.MeshStandardMaterial({ color: 0x228B22 }),
-    sunflowerHead: new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 }),
-    sunflowerCenter: new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 })
-};
 
 // --- HELPERS ---
 const safeMerge = (geos: THREE.BufferGeometry[]): THREE.BufferGeometry => {
@@ -478,11 +473,7 @@ export const VegetationGenerator = {
 
             const leaves = new THREE.Mesh(proto.leavesGeo, mat);
             leaves.castShadow = true; leaves.receiveShadow = true;
-            leaves.customDepthMaterial = new THREE.MeshDepthMaterial({
-                depthPacking: THREE.RGBADepthPacking,
-                map: (mat as any).map,
-                alphaTest: (mat as any).alphaTest
-            });
+            leaves.customDepthMaterial = getTreeDepthMaterial(mat);
             leaves.matrixAutoUpdate = false; leaves.updateMatrix();
             group.add(leaves);
         }
@@ -529,11 +520,7 @@ export const VegetationGenerator = {
             leavesMesh.matrixAutoUpdate = false; leavesMesh.updateMatrix();
 
             if (!materialOverride) {
-                leavesMesh.customDepthMaterial = new THREE.MeshDepthMaterial({
-                    depthPacking: THREE.RGBADepthPacking,
-                    map: (leavesMat as any).map,
-                    alphaTest: (leavesMat as any).alphaTest
-                });
+                leavesMesh.customDepthMaterial = getTreeDepthMaterial(leavesMat);
             }
         }
 
@@ -741,9 +728,9 @@ export const VegetationGenerator = {
         const mat = isSunflower ? undefined : MATERIALS.flower;
 
         const mainMesh = isSunflower ? undefined : new THREE.InstancedMesh(geo!, mat!, count);
-        const sStem = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerStem, SHARED_MAT.sunflowerStem, count) : undefined;
-        const sHead = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, SHARED_MAT.sunflowerHead, count) : undefined;
-        const sCent = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, SHARED_MAT.sunflowerCenter, count) : undefined;
+        const sStem = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerStem, MATERIALS.sunflowerStem, count) : undefined;
+        const sHead = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerHead, MATERIALS.sunflowerHead, count) : undefined;
+        const sCent = isSunflower ? new THREE.InstancedMesh(SHARED_GEO.sunflowerCenter, MATERIALS.sunflowerCenter, count) : undefined;
 
         if (isSunflower) {
             sStem!.userData.windAffected = true; sStem!.matrixAutoUpdate = false; sStem!.updateMatrix();

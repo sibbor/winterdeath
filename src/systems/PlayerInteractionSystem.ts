@@ -9,7 +9,6 @@ import type React from 'react';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _traverseStack: THREE.Object3D[] = [];
 

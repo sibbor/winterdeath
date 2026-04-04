@@ -4,6 +4,70 @@ import { createProceduralDiffuse } from './procedural'
 import { patchCutoutMaterial, patchWaterVegetationMaterial } from './materials_water';
 import { patchWindMaterial } from './materials_wind';
 
+// --- HELPERS ---
+const createSmokeTexture = () => {
+    if (typeof document === 'undefined') return new THREE.Texture();
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, 'rgba(255,255,255,0.6)');
+    grad.addColorStop(0.3, 'rgba(255,255,255,0.3)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
+};
+
+const setupSmokeMaterial = (mat: THREE.MeshBasicMaterial) => {
+    mat.map = createSmokeTexture();
+    mat.onBeforeCompile = (shader) => {
+        shader.vertexShader = `
+            attribute float instanceAlpha;
+            varying float vInstanceAlpha;
+            ${shader.vertexShader}
+        `.replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+             vInstanceAlpha = instanceAlpha;`
+        );
+        shader.fragmentShader = `
+            varying float vInstanceAlpha;
+            ${shader.fragmentShader}
+        `.replace(
+            '#include <output_fragment>',
+            'gl_FragColor.a *= vInstanceAlpha; #include <output_fragment>'
+        );
+    };
+};
+
+const createBrakeGlowTexture = () => {
+    if (typeof document === 'undefined') return new THREE.Texture();
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 512, 512);
+
+    const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 250);
+
+    gradient.addColorStop(0, 'rgba(255, 30, 0, 1.0)');   // White/orange/hot core
+    gradient.addColorStop(0.2, 'rgba(180, 0, 0, 0.5)');  // Intense red
+    gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.1)');   // Faint red glow
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');        // Exact black/transparent at the edge
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    return tex;
+};
+
 // Pre-define common colors
 const DIFFUSE = createProceduralDiffuse();
 
@@ -197,6 +261,15 @@ export const MATERIALS = {
     }),
     hay: new THREE.MeshStandardMaterial({ color: 0xedc05d, roughness: 1.0, bumpMap: DIFFUSE.gravel, bumpScale: 0.2 }),
     logEnd: new THREE.MeshStandardMaterial({ color: 0xbc8f8f, roughness: 0.8, bumpMap: DIFFUSE.stone, bumpScale: 0.1 }),
+    windowLit: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 5 }),
+    windowDark: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 }),
+    upWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 }),
+    caveLampBulb: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 20 }),
+    caveLampCage: new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true }),
+    scarecrowPost: new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 }),
+    scarecrowHead: new THREE.MeshStandardMaterial({ color: 0xeadbaf, roughness: 1.0 }),
+    scarecrowShirt: new THREE.MeshStandardMaterial({ color: 0x6b8e23, roughness: 0.8 }),
+    scarecrowHat: new THREE.MeshStandardMaterial({ color: 0x4a3c31, roughness: 1.0 }),
 
     // ---- WEAPONS & COMBAT ----
     bullet: new THREE.MeshBasicMaterial({ color: 0x000000 }),
@@ -211,12 +284,100 @@ export const MATERIALS = {
         roughness: 0.2
     }),
 
+    // ---- VEHICLES ----
+    vehicleWindow: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.7 }),
+    vehicleTire: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }),
+    vehicleSirenBase: new THREE.MeshStandardMaterial({ color: 0x111111 }),
+    vehicleHeadlight: new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0xffffff, emissiveIntensity: 0 }),
+    vehicleSirenBlue: new THREE.MeshStandardMaterial({ color: 0x0044ff, emissive: 0x0022ff, emissiveIntensity: 0 }),
+    vehicleSirenRed: new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xaa0000, emissiveIntensity: 0 }),
+    vehicleBrakeLight: new THREE.MeshStandardMaterial({ color: 0xaa0000, emissive: 0xff0000, emissiveIntensity: 0 }),
+    vehicleAmbulanceYellow: new THREE.MeshStandardMaterial({ color: 0xddff00, roughness: 0.5, metalness: 0.2 }),
+    vehicleSign: new THREE.MeshBasicMaterial({ transparent: true }),
+
+    // ---- VEGETATION ----
+    sunflowerStem: new THREE.MeshStandardMaterial({ color: 0x228B22 }),
+    sunflowerHead: new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.8 }),
+    sunflowerCenter: new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 1.0 }),
+
+    // ---- SPECIAL ----
+    textSprite: new THREE.SpriteMaterial({ transparent: true, depthWrite: false, depthTest: true }),
+    streetLampBulb: new THREE.MeshBasicMaterial({ color: 0xaaddff }),
+
+    // ---- CAMP ----
+    camp_flame: new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 1.0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        userData: { isSharedAsset: true }
+    }),
+    camp_spark: new THREE.MeshBasicMaterial({ color: 0xffffff, userData: { isSharedAsset: true } }),
+    camp_smoke: (() => {
+        const m = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 1.0,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            userData: { isSharedAsset: true }
+        });
+        setupSmokeMaterial(m);
+        return m;
+    })(),
+    camp_warmWood: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8, userData: { isSharedAsset: true } }),
+    camp_darkerWood: new THREE.MeshStandardMaterial({ color: 0x5A3210, roughness: 0.9, userData: { isSharedAsset: true } }),
+    camp_metal: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7, userData: { isSharedAsset: true } }),
+    camp_ammoGreen: new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6, userData: { isSharedAsset: true } }),
+    camp_medkitRed: new THREE.MeshStandardMaterial({ color: 0xcc0000, userData: { isSharedAsset: true } }),
+    camp_sky: new THREE.MeshBasicMaterial({ color: 0xffffeb, fog: false, userData: { isSharedAsset: true } }),
+    camp_star: new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: `
+            attribute float size; attribute float phase; attribute float twinkleSpeed; varying float vAlpha; uniform float uTime;
+            void main() {
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
+                float alpha = 0.8 + 0.2 * sin(phase);
+                if (twinkleSpeed > 0.0) alpha = 0.9 + 0.1 * sin(uTime * twinkleSpeed + phase);
+                vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
+            }
+        `,
+        fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
+        transparent: true, depthWrite: false,
+        userData: { isSharedAsset: true }
+    }),
+    camp_moonHalo: new THREE.SpriteMaterial({
+        color: 0xffffee, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false,
+        userData: { isSharedAsset: true }
+    }),
+    camp_ash: new THREE.MeshStandardMaterial({ color: 0x111111, userData: { isSharedAsset: true } }),
+    camp_stone: new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9, userData: { isSharedAsset: true } }),
+    camp_log: new THREE.MeshStandardMaterial({ color: 0x5e3723, userData: { isSharedAsset: true } }),
+    camp_paper: new THREE.MeshStandardMaterial({ color: 0xffffee, roughness: 0.9, userData: { isSharedAsset: true } }),
+    camp_bookCover: new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8, userData: { isSharedAsset: true } }),
+    camp_cross: new THREE.MeshBasicMaterial({ color: 0xffffff, userData: { isSharedAsset: true } }),
+    camp_interactable: new THREE.MeshStandardMaterial({ transparent: true, opacity: 0, userData: { isSharedAsset: true } }),
+
+    // Outlines
+    camp_outline_gold: new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 2, userData: { isSharedAsset: true } }),
+    camp_outline_green: new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2, userData: { isSharedAsset: true } }),
+    camp_outline_red: new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2, userData: { isSharedAsset: true } }),
+    camp_outline_purple: new THREE.LineBasicMaterial({ color: 0xaa00ff, linewidth: 2, userData: { isSharedAsset: true } }),
+
     // ---- FAMILY ----
     familyRingFill: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }),
     familyRingBorder: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
 
     // ---- ZOMBIES ----
     zombie: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }),
+    zombieRingMaterial: new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    }),
 
     // Chests
     chestStandard: new THREE.MeshStandardMaterial({ color: 0x5c4033 }),
@@ -483,6 +644,78 @@ export const MATERIALS = {
         bumpMap: TEXTURES.concrete_bump,
         bumpScale: 0.1
     }),
+
+    // ---- SPECIAL EVENTS & DISCOVERY ----
+    brakeGlow: new THREE.MeshBasicMaterial({
+        map: createBrakeGlowTexture(),
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        opacity: 0.8,
+        fog: false,
+        userData: { isSharedAsset: true }
+    }),
+    trajectoryLine: new THREE.MeshBasicMaterial({
+        color: 0x10b981,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+        depthTest: false,
+        side: THREE.DoubleSide,
+        userData: { isSharedAsset: true }
+    }),
+    busExplosionRing: new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide,
+        userData: { isSharedAsset: true }
+    }),
+    collectibleRing: new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.8,
+        userData: { isSharedAsset: true }
+    }),
+    collectibleBeam: new THREE.MeshBasicMaterial({
+        color: 0x0088ff,
+        transparent: true,
+        opacity: 0.1,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        userData: { isSharedAsset: true }
+    }),
+    collectibleInnerRing: new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.6,
+        userData: { isSharedAsset: true }
+    }),
+
+    // ---- DEBUGGING ----
+    debugRed: new THREE.LineBasicMaterial({ color: 0xff0000, userData: { isSharedAsset: true } }),
+    debugGreen: new THREE.LineBasicMaterial({ color: 0x00ff00, userData: { isSharedAsset: true } }),
+    debugBlue: new THREE.LineBasicMaterial({ color: 0x0000ff, userData: { isSharedAsset: true } }),
+    debugYellow: new THREE.LineBasicMaterial({ color: 0xffff00, userData: { isSharedAsset: true } }),
+    debugBeam: new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        userData: { isSharedAsset: true }
+    }),
+    debugTriggerRing: new THREE.MeshBasicMaterial({
+        color: 0xffff00,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+        userData: { isSharedAsset: true }
+    }),
+
     container: new THREE.MeshStandardMaterial({
         color: 0x888888,
         map: DIFFUSE.containerMetal,
@@ -510,5 +743,66 @@ export const MATERIALS = {
         side: THREE.DoubleSide,
         roughness: 0.3,
         metalness: 0.8
+    }),
+    vehicleBodyRed: new THREE.MeshStandardMaterial({
+        color: 0xcc2222,
+        roughness: 0.5,
+        metalness: 0.3
+    }),
+    vehicleBodyBlue: new THREE.MeshStandardMaterial({
+        color: 0x0055aa,
+        roughness: 0.5,
+        metalness: 0.3
+    }),
+    vehicleGlass: new THREE.MeshStandardMaterial({
+        color: 0x222222,
+        roughness: 0.1,
+        metalness: 0.9,
+        transparent: true,
+        opacity: 0.8
+    }),
+    treeLeaves: new THREE.MeshStandardMaterial({
+        color: 0x224422,
+        map: DIFFUSE.treeLeaves,
+        transparent: true,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+        roughness: 0.9
+    }),
+    treeBark: new THREE.MeshStandardMaterial({
+        color: 0x443322,
+        roughness: 1.0
     })
 };
+
+/**
+ * VINTERDÖD: Singleton-cache för trädskuggor (Alpha-tested Depth Materials).
+ * Förhindrar shader-recompiles vid shadow pass.
+ */
+export const TREE_DEPTH_MATS: Record<string, THREE.MeshDepthMaterial> = {};
+
+export const getTreeDepthMaterial = (baseMat: THREE.Material): THREE.MeshDepthMaterial => {
+    const map = (baseMat as any).map;
+    const key = map ? map.uuid : 'no_map';
+    if (!TREE_DEPTH_MATS[key]) {
+        TREE_DEPTH_MATS[key] = new THREE.MeshDepthMaterial({
+            depthPacking: THREE.RGBADepthPacking,
+            map: map,
+            alphaTest: (baseMat as any).alphaTest || 0.5
+        });
+    }
+    return TREE_DEPTH_MATS[key];
+};
+
+/**
+ * VINTERDÖD: Färgpalett för rekvisita i Camp (Böcker, Flaskor etc).
+ * Förhindrar "new Material()" anrop vid körning.
+ */
+export const CAMP_PROP_PALETTE = [
+    new THREE.MeshStandardMaterial({ color: 0x442211, roughness: 0.8, userData: { isSharedAsset: true } }), // Mörkbrun
+    new THREE.MeshStandardMaterial({ color: 0x553322, roughness: 0.8, userData: { isSharedAsset: true } }), // Mellanbrun
+    new THREE.MeshStandardMaterial({ color: 0x221100, roughness: 0.9, userData: { isSharedAsset: true } }), // Svartbrun
+    new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, userData: { isSharedAsset: true } }), // Grå
+    new THREE.MeshStandardMaterial({ color: 0x334433, roughness: 0.6, userData: { isSharedAsset: true } }), // Flaskgrön
+    new THREE.MeshStandardMaterial({ color: 0x662222, roughness: 0.8, transparent: true, opacity: 0.8, userData: { isSharedAsset: true } }), // Vinröd/Glas
+];

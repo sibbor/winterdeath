@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GEOMETRY, MATERIALS, ModelFactory } from '../../utils/assets';
+import { GEOMETRY, MATERIALS, ModelFactory, CAMP_PROP_PALETTE } from '../../utils/assets';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { WIND_SYSTEM, WEATHER_SYSTEM } from '../../content/constants';
@@ -122,81 +122,14 @@ export const CONST_GEO = {
     smoke: new THREE.PlaneGeometry(1, 1) // Using plane for soft sprite behavior
 };
 
-export const CONST_MAT = {
-    flame: new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 1.0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-    }),
-    spark: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-    smoke: new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 1.0,
-        depthWrite: false,
-        side: THREE.DoubleSide
-    })
-};
 
-// Tag materials as shared assets to prevent disposal during clearActiveScene
-for (const key in CONST_MAT) {
-    (CONST_MAT as any)[key].userData = { isSharedAsset: true };
-}
 
-// --- PROCEDURAL TEXTURES ---
-const createSmokeTexture = () => {
-    const size = 64;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    grad.addColorStop(0, 'rgba(255,255,255,0.6)');
-    grad.addColorStop(0.3, 'rgba(255,255,255,0.3)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-    return new THREE.CanvasTexture(canvas);
-};
-CONST_MAT.smoke.map = createSmokeTexture();
 
-// Inject custom instanceAlpha support into smoke material
-CONST_MAT.smoke.onBeforeCompile = (shader) => {
-    shader.vertexShader = `
-        attribute float instanceAlpha;
-        varying float vInstanceAlpha;
-        ${shader.vertexShader}
-    `.replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-         vInstanceAlpha = instanceAlpha;`
-    );
-    shader.fragmentShader = `
-        varying float vInstanceAlpha;
-        ${shader.fragmentShader}
-    `.replace(
-        '#include <output_fragment>',
-        'gl_FragColor.a *= vInstanceAlpha; #include <output_fragment>'
-    );
-};
 
 // --- PERSISTENT CACHE ---
 export const stationTextures: Record<string, THREE.CanvasTexture> = {};
 export const stationGeometries: Record<string, THREE.BufferGeometry> = {};
-export const stationMaterials: Record<string, THREE.MeshStandardMaterial> = {
-    warmWood: new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 }),
-    darkerWood: new THREE.MeshStandardMaterial({ color: 0x5A3210, roughness: 0.9 }),
-    metal: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 }),
-    ammoGreen: new THREE.MeshStandardMaterial({ color: 0x335533, roughness: 0.6 }),
-    medkitRed: new THREE.MeshStandardMaterial({ color: 0xcc0000 })
-};
 
-// Tag station materials as shared assets
-for (const key in stationMaterials) {
-    (stationMaterials as any)[key].userData = { isSharedAsset: true };
-}
 
 const CAMP_ENV_CACHE = {
     sky: null as any,
@@ -241,9 +174,9 @@ const getCachedCanvasTexture = (width: number, height: number, type: 'map' | 'no
     return tex;
 };
 
-const createOutline = (geo: THREE.BufferGeometry, color: number) => {
+const createOutline = (geo: THREE.BufferGeometry, mat: THREE.LineBasicMaterial) => {
     const edges = new THREE.EdgesGeometry(geo);
-    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color, linewidth: 2 }));
+    const line = new THREE.LineSegments(edges, mat);
     line.visible = false;
     return line;
 };
@@ -308,11 +241,9 @@ const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) =
     // 1. Generate or reuse cached heavy assets (Zero-GC approach)
     if (!CAMP_ENV_CACHE.sky) {
         const skyGeo = new THREE.SphereGeometry(15, 32, 32);
-        const skyMat = new THREE.MeshBasicMaterial({ color: CAMP_SCENE.colors.moon, fog: false });
-
-        const moonHaloMat = new THREE.SpriteMaterial({
-            map: textures.halo || textures.moon_halo || null, color: CAMP_SCENE.colors.moonHalo, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, fog: false, depthWrite: false
-        });
+        const skyMat = MATERIALS.camp_sky;
+        const moonHaloMat = MATERIALS.camp_moonHalo;
+        if (textures.halo || textures.moon_halo) moonHaloMat.map = textures.halo || textures.moon_halo;
 
         // Pre-calculate stars once
         const starCount = CAMP_SCENE.starCount;
@@ -339,20 +270,7 @@ const setupSky = (scene: THREE.Object3D, textures: Textures, isWarmup = false) =
         starGeo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
         starGeo.setAttribute('twinkleSpeed', new THREE.BufferAttribute(twinkleSpeeds, 1));
 
-        const starMat = new THREE.ShaderMaterial({
-            uniforms: { uTime: { value: 0 } },
-            vertexShader: `
-                attribute float size; attribute float phase; attribute float twinkleSpeed; varying float vAlpha; uniform float uTime;
-                void main() {
-                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
-                    float alpha = 0.8 + 0.2 * sin(phase);
-                    if (twinkleSpeed > 0.0) alpha = 0.9 + 0.1 * sin(uTime * twinkleSpeed + phase);
-                    vAlpha = alpha; gl_PointSize = size * (2500.0 / -mvPosition.z);
-                }
-            `,
-            fragmentShader: `varying float vAlpha; void main() { vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha); }`,
-            transparent: true, depthWrite: false,
-        });
+        const starMat = MATERIALS.camp_star;
 
         // Tag to prevent disposal sweeps if any global GC runs
         skyGeo.userData = { isSharedAsset: true };
@@ -407,11 +325,11 @@ const setupCampfire = (scene: THREE.Scene, textures: Textures, isWarmup = false)
     if (!CAMP_ENV_CACHE.fire) {
         CAMP_ENV_CACHE.fire = {
             ashGeo: new THREE.CircleGeometry(1.8, 16),
-            ashMat: new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireAsh }),
+            ashMat: MATERIALS.camp_ash,
             stoneGeo: new THREE.DodecahedronGeometry(0.4),
-            stoneMat: new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireStone, roughness: 0.9 }),
+            stoneMat: MATERIALS.camp_stone,
             logGeo: new THREE.CylinderGeometry(0.15, 0.15, 2.2),
-            logMat: new THREE.MeshStandardMaterial({ color: CAMP_SCENE.colors.campfireLog })
+            logMat: MATERIALS.camp_log
         };
     }
 
@@ -593,7 +511,7 @@ export const CampWorld = {
     setupStations: (scene: THREE.Scene, textures: Textures, stationsPos: { id: string, pos: THREE.Vector3 }[]) => {
         const interactables: THREE.Mesh[] = [];
         const outlines: Record<string, THREE.LineSegments> = {};
-        const { warmWood: warmWoodMat, darkerWood: darkerWoodMat, metal: metalMat, ammoGreen: ammoGreenMat } = stationMaterials;
+        const { camp_warmWood: warmWoodMat, camp_darkerWood: darkerWoodMat, camp_metal: metalMat, camp_ammoGreen: ammoGreenMat } = MATERIALS;
 
         const rackGroup = new THREE.Group();
         const p1 = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); p1.scale.set(0.2, 4.0, 0.2); p1.position.set(-1.8, 2, -0.4); rackGroup.add(p1);
@@ -637,20 +555,16 @@ export const CampWorld = {
             deskGroup.add(l);
         }
         for (let i = 0; i < 3; i++) {
-            const b = new THREE.Mesh(GEOMETRY.box, new THREE.MeshStandardMaterial({ color: 0x442211 + i * 0x111111 }));
+            // VINTERDÖD: Återanvänd färgpalett för att undvika "new Material()"
+            const b = new THREE.Mesh(GEOMETRY.box, CAMP_PROP_PALETTE[i % CAMP_PROP_PALETTE.length]);
             b.scale.set(0.7, 0.12, 0.9);
             b.position.set(-0.6, dH + 0.06 + (i * 0.13), -0.1);
             b.rotation.y = (Math.random() - 0.5) * 0.4;
             deskGroup.add(b);
         }
         const openBook = new THREE.Group();
-        const paperMat = new THREE.MeshStandardMaterial({ color: 0xffffee, roughness: 0.9 });
-        const coverMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8 });
-        const cover = new THREE.Mesh(GEOMETRY.box, coverMat);
-        cover.scale.set(0.9, 0.04, 0.7);
-        openBook.add(cover);
-        const pageL = new THREE.Mesh(GEOMETRY.box, paperMat); pageL.scale.set(0.42, 0.03, 0.65); pageL.position.set(-0.2, 0.15, 0); pageL.rotation.z = 0.15; openBook.add(pageL);
-        const pageR = new THREE.Mesh(GEOMETRY.box, paperMat); pageR.scale.set(0.42, 0.03, 0.65); pageR.position.set(0.2, 0.15, 0); pageR.rotation.z = -0.15; openBook.add(pageR);
+        const pageL = new THREE.Mesh(GEOMETRY.box, MATERIALS.camp_paper); pageL.scale.set(0.42, 0.03, 0.65); pageL.position.set(-0.2, 0.15, 0); pageL.rotation.z = 0.15; openBook.add(pageL);
+        const pageR = new THREE.Mesh(GEOMETRY.box, MATERIALS.camp_paper); pageR.scale.set(0.42, 0.03, 0.65); pageR.position.set(0.2, 0.15, 0); pageR.rotation.z = -0.15; openBook.add(pageR);
         openBook.position.set(0.6, dH + 0.02, 0.3); openBook.rotation.y = -0.3; deskGroup.add(openBook);
 
         const mapGroup = new THREE.Group();
@@ -660,13 +574,17 @@ export const CampWorld = {
         const board = new THREE.Mesh(GEOMETRY.box, warmWoodMat); board.scale.set(bW, bH, 0.1); board.position.y = 2.8; mapGroup.add(board);
         const mapGeo = stationGeometries.map_plane || new THREE.PlaneGeometry(2.0, 1.4);
         stationGeometries.map_plane = mapGeo;
-        const map = new THREE.Mesh(mapGeo, new THREE.MeshStandardMaterial({ map: getCachedCanvasTexture(256, 256, 'map') }));
+        const map = new THREE.Mesh(mapGeo, MATERIALS.camp_paper.clone());
+        (map.material as THREE.MeshStandardMaterial).map = getCachedCanvasTexture(256, 256, 'map');
         map.position.set(0, 2.8, 0.06); mapGroup.add(map);
         const noteTex = getCachedCanvasTexture(128, 128, 'note');
         const noteGeo = stationGeometries.note_plane || new THREE.PlaneGeometry(0.4, 0.5);
         stationGeometries.note_plane = noteGeo;
         for (let i = 0; i < 3; i++) {
-            const note = new THREE.Mesh(noteGeo, new THREE.MeshStandardMaterial({ map: noteTex, transparent: true }));
+            const noteMat = MATERIALS.camp_paper.clone();
+            noteMat.map = noteTex;
+            noteMat.transparent = true;
+            const note = new THREE.Mesh(noteGeo, noteMat);
             const angle = (i / 4) * Math.PI * 2;
             note.position.set(Math.cos(angle) * 1.2, 2.8 + Math.sin(angle) * 0.7, 0.8);
             note.rotation.z = (Math.random() - 0.5) * 1.2;
@@ -686,7 +604,8 @@ export const CampWorld = {
             const shelf = new THREE.Mesh(GEOMETRY.box, darkerWoodMat); shelf.scale.set(cW - th * 2, th / 2, cD - th); shelf.position.set(0, yBase, 0); medGroup.add(shelf);
             for (let f = 0; f < 3; f++) {
                 const isRound = Math.random() > 0.5;
-                const bMat = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff, transparent: true, opacity: 0.8 });
+                // VINTERDÖD: Återanvänd färgpalett för flaskor
+                const bMat = CAMP_PROP_PALETTE[(f + h) % CAMP_PROP_PALETTE.length];
                 const b = new THREE.Mesh(isRound ? new THREE.SphereGeometry(0.12, 8, 8) : new THREE.BoxGeometry(0.15, 0.4, 0.15), bMat);
                 b.position.set(-0.7 + f * 0.28, yBase + 0.25, 0);
                 medGroup.add(b);
@@ -697,8 +616,8 @@ export const CampWorld = {
             }
         }
         const medkit = new THREE.Group();
-        const box = new THREE.Mesh(GEOMETRY.box, new THREE.MeshStandardMaterial({ color: 0xcc0000 })); box.scale.set(0.7, 0.4, 0.4); medkit.add(box);
-        const crossMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const box = new THREE.Mesh(GEOMETRY.box, MATERIALS.camp_medkitRed); box.scale.set(0.7, 0.4, 0.4); medkit.add(box);
+        const crossMat = MATERIALS.camp_cross;
         const crossV = new THREE.Mesh(GEOMETRY.box, crossMat); crossV.scale.set(0.15, 0.35, 0.42); crossV.position.set(0, 0, 0.01); medkit.add(crossV);
         const crossH = new THREE.Mesh(GEOMETRY.box, crossMat); crossH.scale.set(0.35, 0.15, 0.42); crossH.position.set(0, 0, 0.01); medkit.add(crossH);
         medkit.position.set(0.5, cH * 0.4 + 0.25, 0); medGroup.add(medkit);
@@ -709,21 +628,21 @@ export const CampWorld = {
         mapGroup.position.set(rad * 0.3, 0, -rad * 0.95); mapGroup.lookAt(0, 0, 0); scene.add(mapGroup);
         medGroup.position.set(rad * 0.8, 0, -rad * 0.5); medGroup.lookAt(0, 0, 0); scene.add(medGroup);
 
-        const rackInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
+        const rackInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), MATERIALS.camp_interactable);
         rackInteract.position.y = 2; rackInteract.userData = { id: 'armory', name: 'armory' }; rackGroup.add(rackInteract); interactables.push(rackInteract);
-        const rackOutline = createOutline(new THREE.BoxGeometry(4, 4, 2), CAMP_SCENE.colors.gold); rackOutline.position.y = 2; rackGroup.add(rackOutline); outlines['armory'] = rackOutline;
+        const rackOutline = createOutline(new THREE.BoxGeometry(4, 4, 2), MATERIALS.camp_outline_gold); rackOutline.position.y = 2; rackGroup.add(rackOutline); outlines['armory'] = rackOutline;
 
-        const logInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.5, 1.5), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
+        const logInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.5, 1.5), MATERIALS.camp_interactable);
         logInteract.position.y = 0.75; logInteract.userData = { id: 'adventure_log', name: 'adventure_log' }; deskGroup.add(logInteract); interactables.push(logInteract);
-        const logOutline = createOutline(new THREE.BoxGeometry(2.5, 1.5, 1.5), CAMP_SCENE.colors.green); logOutline.position.y = 0.75; deskGroup.add(logOutline); outlines['adventure_log'] = logOutline;
+        const logOutline = createOutline(new THREE.BoxGeometry(2.5, 1.5, 1.5), MATERIALS.camp_outline_green); logOutline.position.y = 0.75; deskGroup.add(logOutline); outlines['adventure_log'] = logOutline;
 
-        const mapInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 1), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
+        const mapInteract = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 1), MATERIALS.camp_interactable);
         mapInteract.position.y = 2; mapInteract.userData = { id: 'sectors', name: 'sectors' }; mapGroup.add(mapInteract); interactables.push(mapInteract);
-        const mapOutline = createOutline(new THREE.BoxGeometry(4, 4, 1), CAMP_SCENE.colors.red); mapOutline.position.y = 2; mapGroup.add(mapOutline); outlines['sectors'] = mapOutline;
+        const mapOutline = createOutline(new THREE.BoxGeometry(4, 4, 1), MATERIALS.camp_outline_red); mapOutline.position.y = 2; mapGroup.add(mapOutline); outlines['sectors'] = mapOutline;
 
-        const skillInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
+        const skillInteract = new THREE.Mesh(new THREE.BoxGeometry(2.5, 5, 2), MATERIALS.camp_interactable);
         skillInteract.position.y = 2.5; skillInteract.userData = { id: 'skills', name: 'skills' }; medGroup.add(skillInteract); interactables.push(skillInteract);
-        const skillOutline = createOutline(new THREE.BoxGeometry(2.5, 5, 2), CAMP_SCENE.colors.purple); skillOutline.position.y = 2.5; medGroup.add(skillOutline); outlines['skills'] = skillOutline;
+        const skillOutline = createOutline(new THREE.BoxGeometry(2.5, 5, 2), MATERIALS.camp_outline_purple); skillOutline.position.y = 2.5; medGroup.add(skillOutline); outlines['skills'] = skillOutline;
 
         const stationGroups = [rackGroup, deskGroup, mapGroup, medGroup];
         for (let i = 0; i < stationGroups.length; i++) {
@@ -761,21 +680,21 @@ export const CampWorld = {
         const fireData = setupCampfire(scene, textures, isWarmup);
 
         const flameCount = 40;
-        const flames = new THREE.InstancedMesh(CONST_GEO.flame, CONST_MAT.flame, flameCount);
+        const flames = new THREE.InstancedMesh(CONST_GEO.flame, MATERIALS.camp_flame, flameCount);
         flames.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         flames.userData.isEngineStatic = true;
         scene.add(flames);
         const flameData = new Float32Array(flameCount * FLAME_VARS);
 
         const sparkleCount = 60;
-        const sparkles = new THREE.InstancedMesh(CONST_GEO.spark, CONST_MAT.spark, sparkleCount);
+        const sparkles = new THREE.InstancedMesh(CONST_GEO.spark, MATERIALS.camp_spark, sparkleCount);
         sparkles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         sparkles.userData.isEngineStatic = true;
         scene.add(sparkles);
         const sparkleData = new Float32Array(sparkleCount * SPARKLE_VARS);
 
         const smokeCount = 30;
-        const smokes = new THREE.InstancedMesh(CONST_GEO.smoke, CONST_MAT.smoke, smokeCount);
+        const smokes = new THREE.InstancedMesh(CONST_GEO.smoke, MATERIALS.camp_smoke, smokeCount);
         smokes.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         smokes.userData.isEngineStatic = true;
 

@@ -39,36 +39,7 @@ export class PlayerCombatSystem implements System {
         this.aimCross = crossGroup;
 
         // --- Create Trajectory Line ---
-        const vertexCount = 42;
-        const positions = new Float32Array(vertexCount * 3);
-        const lineGeo = new THREE.BufferGeometry();
-        lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-        const indicesCount = 20 * 6;
-        const indices = new Uint16Array(indicesCount);
-        let idx = 0;
-        for (let i = 0; i < 20; i++) {
-            const base = i * 2;
-            indices[idx++] = base;
-            indices[idx++] = base + 1;
-            indices[idx++] = base + 2;
-
-            indices[idx++] = base + 1;
-            indices[idx++] = base + 3;
-            indices[idx++] = base + 2;
-        }
-        lineGeo.setIndex(new THREE.BufferAttribute(indices, 1));
-
-        const lineMat = new THREE.MeshBasicMaterial({
-            color: 0x10b981,
-            transparent: true,
-            opacity: 0.8,
-            depthWrite: false,
-            depthTest: false,
-            side: THREE.DoubleSide
-        });
-
-        this.trajectoryLine = new THREE.Mesh(lineGeo, lineMat);
+        this.trajectoryLine = new THREE.Mesh(GEOMETRY.trajectoryLine, MATERIALS.trajectoryLine);
         this.trajectoryLine.visible = false;
         this.trajectoryLine.frustumCulled = false;
         this.trajectoryLine.renderOrder = 999;
@@ -161,8 +132,6 @@ export class PlayerCombatSystem implements System {
 
         if (this.trajectoryLine) {
             scene.remove(this.trajectoryLine);
-            if (this.trajectoryLine.geometry) this.trajectoryLine.geometry.dispose();
-            if (this.trajectoryLine.material) (this.trajectoryLine.material as THREE.Material).dispose();
         }
 
         this.initialized = false;

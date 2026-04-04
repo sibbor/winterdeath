@@ -150,11 +150,11 @@ class FootprintSystemClass {
 
         // Dynamic Tinting (Zero-GC)
         if (ground.material === MaterialType.SNOW) {
-            _tempColor.set(0xffffff); // Pure white
+            _tempColor.set(0xcccccc);
         } else if (ground.material === MaterialType.DIRT || ground.material === MaterialType.GRAVEL) {
-            _tempColor.set(0x443322); // Dark brown/muddy
+            _tempColor.set(0x443322);
         } else {
-            _tempColor.set(0x222222); // Generic dark footprint
+            _tempColor.set(0x222222);
         }
         mat.color.copy(_tempColor);
 

@@ -12,6 +12,7 @@ import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
 import { SectorTrigger, TriggerType, TriggerAction } from '../../systems/TriggerTypes';
 import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
+import { GEOMETRY } from '../../utils/assets';
 import { WinterEngine } from '../engine/WinterEngine';
 import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
@@ -343,31 +344,22 @@ export const SectorBuilder = {
         const colorPrimary = 0x00ffff;
         const colorSecondary = 0x0088ff;
 
-        const ringGeo = new THREE.RingGeometry(0.6, 0.7, 32);
-        const ringMat = new THREE.MeshBasicMaterial({ color: colorPrimary, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.name = 'collectibleRing';
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.05;
-        group.add(ring);
+        const collectibleRing = new THREE.Mesh(GEOMETRY.collectibleRing, MATERIALS.collectibleRing);
+        collectibleRing.name = 'collectibleRing';
+        collectibleRing.rotation.x = -Math.PI / 2;
+        collectibleRing.position.y = 0.05;
+        group.add(collectibleRing);
 
-        const beamGeo = new THREE.CylinderGeometry(0.4, 0.4, 4, 16, 1, true);
-        const beamMat = new THREE.MeshBasicMaterial({
-            color: colorSecondary, transparent: true, opacity: 0.1,
-            side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
-        });
-        const beam = new THREE.Mesh(beamGeo, beamMat);
-        beam.name = 'collectibleBeam';
-        beam.position.y = 2;
-        group.add(beam);
+        const collectibleBeam = new THREE.Mesh(GEOMETRY.collectibleBeam, MATERIALS.collectibleBeam);
+        collectibleBeam.name = 'collectibleBeam';
+        collectibleBeam.position.y = 2;
+        group.add(collectibleBeam);
 
-        const innerRingGeo = new THREE.TorusGeometry(0.3, 0.02, 8, 24);
-        const innerRingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
-        const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
-        innerRing.name = 'collectibleInnerRing';
-        innerRing.rotation.x = Math.PI / 2;
-        innerRing.position.y = 1.0;
-        group.add(innerRing);
+        const collectibleInnerRing = new THREE.Mesh(GEOMETRY.collectibleInnerRing, MATERIALS.collectibleInnerRing);
+        collectibleInnerRing.name = 'collectibleInnerRing';
+        collectibleInnerRing.rotation.x = Math.PI / 2;
+        collectibleInnerRing.position.y = 1.0;
+        group.add(collectibleInnerRing);
 
         // Logical light - handled by LightSystem
         const lightWorldPos = new THREE.Vector3(x, 1.7, z);

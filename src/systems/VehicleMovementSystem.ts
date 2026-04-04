@@ -6,51 +6,12 @@ import { soundManager } from '../utils/audio/SoundManager';
 import { VehicleDef } from '../content/vehicles';
 import { VehicleManager } from './VehicleManager';
 import { _buoyancyResult } from './WaterSystem';
+import { GEOMETRY, MATERIALS } from '../utils/assets';
 
 // --- PERFORMANCE SCRATCHPADS ---
 const _v1 = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
-
-// --- FAKE BRAKE GLOW (Zero-GC / Procedural Texture) ---
-// Generates a soft, glowing gradient texture dynamically on load
-function createBrakeGlowTexture() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d')!;
-
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, 512, 512);
-
-    const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 250);
-
-    gradient.addColorStop(0, 'rgba(255, 30, 0, 1.0)');   // White/orange/hot core
-    gradient.addColorStop(0.2, 'rgba(180, 0, 0, 0.5)');  // Intense red
-    gradient.addColorStop(0.5, 'rgba(50, 0, 0, 0.1)');   // Faint red glow
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');        // Exact black/transparent at the edge
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 512, 512);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearFilter;
-    return tex;
-}
-
-// Plane geometry for the brake light cast on the snow
-const _fakeBrakeGlowGeo = new THREE.PlaneGeometry(8, 8);
-_fakeBrakeGlowGeo.rotateX(-Math.PI / 2); // Lay flat on the ground
-
-const _fakeBrakeGlowMat = new THREE.MeshBasicMaterial({
-    map: createBrakeGlowTexture(),
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    opacity: 0.8,
-    fog: false
-});
 
 // Constants
 const KMH_TO_MS = 1.0 / 3.6;
@@ -355,7 +316,7 @@ export class VehicleMovementSystem implements System {
                         rearZ = lights.brake.meshes[0].position.z;
                     }
 
-                    const glowMesh = new THREE.Mesh(_fakeBrakeGlowGeo, _fakeBrakeGlowMat);
+                    const glowMesh = new THREE.Mesh(GEOMETRY.fakeBrakeGlow, MATERIALS.brakeGlow);
 
                     // Place the decal on the ground (y=0.1), exactly 0.2 units behind the bumper
                     glowMesh.position.set(0, 0.1, rearZ - 0.2);

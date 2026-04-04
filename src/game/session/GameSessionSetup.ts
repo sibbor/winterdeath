@@ -727,6 +727,8 @@ export class GameSessionSetup {
         state.bossDefeatedTime = 0;
         state.lastDrownTick = 0;
 
+        state.discovery.active = false;
+
         const statsSystem = engine.getSystem('player_stats_system') as any;
         if (statsSystem && statsSystem.updatePassives) {
             statsSystem.updatePassives(session);

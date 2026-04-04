@@ -58,17 +58,6 @@ let _sharedNeonHeartGeo: THREE.ShapeGeometry | null = null;
 
 let fenceMat: THREE.MeshStandardMaterial | null = null;
 
-const LOCAL_MATS = {
-    litWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 5 }),
-    darkWindow: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.1 }),
-    upWindow: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0.5 }),
-    caveLampBulb: new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 20 }),
-    caveLampCage: new THREE.MeshStandardMaterial({ color: 0x333333, wireframe: true }),
-    scarecrowPost: new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 }),
-    scarecrowHead: new THREE.MeshStandardMaterial({ color: 0xeadbaf, roughness: 1.0 }),
-    scarecrowShirt: new THREE.MeshStandardMaterial({ color: 0x6b8e23, roughness: 0.8 }),
-    scarecrowHat: new THREE.MeshStandardMaterial({ color: 0x4a3c31, roughness: 1.0 })
-};
 
 const neonHeartCache: Record<number, THREE.MeshBasicMaterial> = {};
 const terminalMaterialCache: Record<string, THREE.MeshBasicMaterial> = {};
@@ -86,12 +75,8 @@ export const ObjectGenerator = {
 
     createTextSprite: (text: string) => {
         if (spriteTextureCache[text]) {
-            const mat = new THREE.SpriteMaterial({
-                map: spriteTextureCache[text],
-                transparent: true,
-                depthWrite: false,
-                depthTest: true
-            });
+            const mat = MATERIALS.textSprite.clone();
+            mat.map = spriteTextureCache[text];
             const sprite = new THREE.Sprite(mat);
             sprite.scale.set(4, 1, 1);
             return sprite;
@@ -110,12 +95,8 @@ export const ObjectGenerator = {
         const tex = new THREE.CanvasTexture(canvas);
         spriteTextureCache[text] = tex;
 
-        const mat = new THREE.SpriteMaterial({
-            map: tex,
-            transparent: true,
-            depthWrite: false,
-            depthTest: true
-        });
+        const mat = MATERIALS.textSprite.clone();
+        mat.map = tex;
         const sprite = new THREE.Sprite(mat);
         sprite.scale.set(4, 1, 1);
         return sprite;
@@ -289,8 +270,7 @@ export const ObjectGenerator = {
         head.castShadow = true;
         group.add(head);
 
-        const bulbMat = new THREE.MeshBasicMaterial({ color: 0xaaddff });
-        const bulb = new THREE.Mesh(SHARED_GEO.box, bulbMat);
+        const bulb = new THREE.Mesh(SHARED_GEO.box, MATERIALS.streetLampBulb);
         bulb.scale.set(0.4, 0.1, 0.6);
         bulb.position.set(0, 7.4, 1.5);
         group.add(bulb);
@@ -314,13 +294,17 @@ export const ObjectGenerator = {
         }
         const material = brickCache[color];
 
-        let bodyGeo = new THREE.BoxGeometry(width, height, depth);
+        // 1. Skapa huskroppen som en separat mesh
+        const bodyGeo = new THREE.BoxGeometry(width, height, depth);
         bodyGeo.translate(0, height / 2, 0);
-        const nonIndexedBody = bodyGeo.index ? bodyGeo.toNonIndexed() : bodyGeo.clone();
+        const bodyMesh = new THREE.Mesh(bodyGeo, material);
+        bodyMesh.castShadow = true;
+        bodyMesh.receiveShadow = true;
+        group.add(bodyMesh);
 
-        let mergedGeometry: THREE.BufferGeometry | null = null;
         let actualRoofHeight = 0;
 
+        // 2. Skapa taket som en separat mesh (Undviker BufferGeometryUtils)
         if (createRoof) {
             actualRoofHeight = height * 0.5;
             const shape = new THREE.Shape();
@@ -329,28 +313,16 @@ export const ObjectGenerator = {
             shape.lineTo(0, actualRoofHeight);
             shape.closePath();
 
-            let roofGeo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
+            const roofGeo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
             roofGeo.translate(0, height, -depth / 2);
-            const nonIndexedRoof = roofGeo.index ? roofGeo.toNonIndexed() : roofGeo.clone();
 
-            mergedGeometry = BufferGeometryUtils.mergeGeometries([nonIndexedBody, nonIndexedRoof]);
-
-            roofGeo.dispose();
-            nonIndexedRoof.dispose();
-        } else {
-            mergedGeometry = nonIndexedBody.clone();
+            const roofMesh = new THREE.Mesh(roofGeo, material);
+            roofMesh.castShadow = true;
+            roofMesh.receiveShadow = true;
+            group.add(roofMesh);
         }
 
-        if (mergedGeometry) {
-            mergedGeometry = BufferGeometryUtils.mergeVertices(mergedGeometry);
-            mergedGeometry.computeVertexNormals();
-        }
-
-        const building = new THREE.Mesh(mergedGeometry || nonIndexedBody, material);
-        building.castShadow = true;
-        building.receiveShadow = true;
-        group.add(building);
-
+        // 3. Fönster (InstancedMesh bibehålls för GPU-prestanda)
         if (withLights) {
             let litCount = 0;
             let darkCount = 0;
@@ -366,8 +338,8 @@ export const ObjectGenerator = {
             }
 
             if (litCount > 0 || darkCount > 0) {
-                const litWindows = litCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.litWindow, litCount) : null;
-                const darkWindows = darkCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.darkWindow, darkCount) : null;
+                const litWindows = litCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.windowLit, litCount) : null;
+                const darkWindows = darkCount > 0 ? new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.windowDark, darkCount) : null;
 
                 let idx = 0, litIdx = 0, darkIdx = 0;
 
@@ -402,9 +374,6 @@ export const ObjectGenerator = {
             material: MaterialType.CONCRETE
         };
 
-        bodyGeo.dispose();
-        nonIndexedBody.dispose();
-
         return freezeStatic(group);
     },
 
@@ -412,29 +381,29 @@ export const ObjectGenerator = {
         const group = new THREE.Group();
         group.position.set(x, 0, z);
 
-        const post = new THREE.Mesh(SHARED_GEO.cylinder, LOCAL_MATS.scarecrowPost);
+        const post = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.scarecrowPost);
         post.scale.set(0.1, 2.5, 0.1);
         post.position.y = 1.25;
         group.add(post);
 
-        const arms = new THREE.Mesh(SHARED_GEO.cylinder, LOCAL_MATS.scarecrowPost);
+        const arms = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.scarecrowPost);
         arms.scale.set(0.08, 1.8, 0.08);
         arms.rotation.z = Math.PI / 2;
         arms.position.y = 1.8;
         group.add(arms);
 
         if (!_scarecrowHeadGeo) _scarecrowHeadGeo = new THREE.SphereGeometry(0.3);
-        const head = new THREE.Mesh(_scarecrowHeadGeo, LOCAL_MATS.scarecrowHead);
+        const head = new THREE.Mesh(_scarecrowHeadGeo, MATERIALS.scarecrowHead);
         head.position.y = 2.4;
         group.add(head);
 
         if (!_scarecrowShirtGeo) _scarecrowShirtGeo = new THREE.CylinderGeometry(0.3, 0.4, 1.0);
-        const shirt = new THREE.Mesh(_scarecrowShirtGeo, LOCAL_MATS.scarecrowShirt);
+        const shirt = new THREE.Mesh(_scarecrowShirtGeo, MATERIALS.scarecrowShirt);
         shirt.position.y = 1.6;
         group.add(shirt);
 
         if (!_scarecrowHatGeo) _scarecrowHatGeo = new THREE.ConeGeometry(0.4, 0.5);
-        const hat = new THREE.Mesh(_scarecrowHatGeo, LOCAL_MATS.scarecrowHat);
+        const hat = new THREE.Mesh(_scarecrowHatGeo, MATERIALS.scarecrowHat);
         hat.position.y = 2.75;
         group.add(hat);
 
@@ -702,11 +671,11 @@ export const ObjectGenerator = {
         base.scale.set(0.3, 0.2, 0.3);
         group.add(base);
 
-        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), LOCAL_MATS.caveLampBulb);
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), MATERIALS.caveLampBulb);
         bulb.position.y = -0.15;
         group.add(bulb);
 
-        const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.5, 6, 1, true), LOCAL_MATS.caveLampCage);
+        const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.5, 6, 1, true), MATERIALS.caveLampCage);
         cage.position.y = -0.2;
         group.add(cage);
 
@@ -939,7 +908,7 @@ export const ObjectGenerator = {
             }
 
             if (totalUpWinCount > 0) {
-                const instancedUpWindows = new THREE.InstancedMesh(SHARED_GEO.plane, LOCAL_MATS.upWindow, totalUpWinCount);
+                const instancedUpWindows = new THREE.InstancedMesh(SHARED_GEO.plane, MATERIALS.upWindow, totalUpWinCount);
                 let idx = 0;
 
                 for (let s = 0; s < sides; s++) {
