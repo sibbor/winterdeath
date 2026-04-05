@@ -3,13 +3,15 @@ import { NoiseType } from '../../entities/enemies/EnemyTypes';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS, GEOMETRY } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { InteractionType } from '../../systems/InteractionTypes';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../../core/world/generators/VehicleGenerator';
+import { GeneratorUtils } from '../../core/world/generators/GeneratorUtils';
 import { CAMERA_HEIGHT } from '../constants';
-import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
-import { MaterialType } from '../../content/environment';
+import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
+import { POI_TYPE } from '../../content/pois';
 
 const LOCATIONS = {
     SPAWN: {
@@ -249,15 +251,7 @@ export const Sector0: SectorDef = {
         }
 
         // SMU
-        const smu = new THREE.Mesh(new THREE.BoxGeometry(50, 10, 50), MATERIALS.brownBrick);
-        smu.position.set(LOCATIONS.POIS.SMU.x, 5, LOCATIONS.POIS.SMU.z);
-        smu.castShadow = true;
-        scene.add(smu);
-        SectorBuilder.addObstacle(ctx, {
-            mesh: smu,
-            collider: { type: 'box', size: new THREE.Vector3(50, 20, 50) }
-        });
-        SectorBuilder.setOnFire(ctx, smu, { smoke: true, intensity: 120, distance: 35, onRoof: true });
+        const smu = SectorBuilder.spawnPoi(ctx, POI_TYPE.SMU, LOCATIONS.POIS.SMU.x, LOCATIONS.POIS.SMU.z, 0);
 
         // SMU - Containers
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.SMU.x - 35, LOCATIONS.POIS.SMU.z - 5, 0, 0x0044cc);
@@ -286,133 +280,21 @@ export const Sector0: SectorDef = {
         SectorBuilder.createHedge(ctx, [new THREE.Vector3(139, 0, 195), new THREE.Vector3(136, 0, 231)]);
 
         // Church
-        const churchGroup = new THREE.Group();
-        churchGroup.position.set(LOCATIONS.POIS.CHURCH.x, 0, LOCATIONS.POIS.CHURCH.z);
-
-        const churchBodyGeo = new THREE.BoxGeometry(15, 12, 15);
-        churchBodyGeo.translate(0, 6, 0);
-        const churchBody = new THREE.Mesh(churchBodyGeo, MATERIALS.brownBrick);
-        churchGroup.add(churchBody);
-
-        const crossVGeo = new THREE.BoxGeometry(0.5, 4, 0.2);
-        crossVGeo.translate(0, 8, 7.6);
-        const crossHGeo = new THREE.BoxGeometry(2.5, 0.5, 0.2);
-        crossHGeo.translate(0, 8.5, 7.6);
-        const mergedCrossGeo = BufferGeometryUtils.mergeGeometries([crossVGeo, crossHGeo]);
-        const cross = new THREE.Mesh(mergedCrossGeo, MATERIALS.crossEmissive);
-        churchGroup.add(cross);
-
-        const towerGeo = new THREE.BoxGeometry(4, 12, 4);
-        towerGeo.translate(-10, 6, -15);
-        const towerTopGeo = new THREE.ConeGeometry(6, 2, 6);
-        towerTopGeo.translate(-10, 12, -15);
-        const mergedTowerGeo = BufferGeometryUtils.mergeGeometries([towerGeo, towerTopGeo]);
-        const tower = new THREE.Mesh(mergedTowerGeo, MATERIALS.blackMetal);
-        churchGroup.add(tower);
-
-        scene.add(churchGroup);
-        SectorBuilder.addObstacle(ctx, {
-            mesh: churchGroup,
-            collider: { type: 'box', size: new THREE.Vector3(15, 20, 25) }
-        });
-        SectorBuilder.addObstacle(ctx, {
-            position: new THREE.Vector3(LOCATIONS.POIS.CHURCH.x - 10, 0, LOCATIONS.POIS.CHURCH.z - 15),
-            collider: { type: 'box', size: new THREE.Vector3(6, 20, 6) }
-        });
-
-        // Dark green metal doors
-        const doorMat = MATERIALS.blackMetal.clone();
-        doorMat.color.setHex(0x004422); // Dark green
-        const doorGeo = new THREE.PlaneGeometry(6, 6);
-        const doors = new THREE.Mesh(doorGeo, doorMat);
-        doors.position.set(0, 3, 7.6);
-        churchGroup.add(doors);
-
-        SectorBuilder.setOnFire(ctx, churchGroup, { smoke: true, intensity: 25, distance: 15, onRoof: true });
-        SectorBuilder.setOnFire(ctx, tower, { smoke: true, intensity: 60, distance: 25, onRoof: true });
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.CHURCH, LOCATIONS.POIS.CHURCH.x, LOCATIONS.POIS.CHURCH.z, 0);
 
         // Cafe
-        const cafeGroup = new THREE.Group();
-        cafeGroup.position.set(LOCATIONS.POIS.CAFE.x, 6, LOCATIONS.POIS.CAFE.z);
-
-        const cafeLeftGeo = new THREE.BoxGeometry(5, 12, 12);
-        cafeLeftGeo.translate(-6, 0, 0);
-        const cafeRightGeo = new THREE.BoxGeometry(5, 12, 12);
-        cafeRightGeo.translate(6, 0, 0);
-        const cafeCenterGeo = new THREE.BoxGeometry(12, 12, 5);
-        cafeCenterGeo.translate(0, 0, -3);
-
-        const mergedCafeGeo = BufferGeometryUtils.mergeGeometries([cafeLeftGeo, cafeRightGeo, cafeCenterGeo]);
-        const cafeBody = new THREE.Mesh(mergedCafeGeo, MATERIALS.yellowBrick);
-        cafeGroup.add(cafeBody);
-        cafeGroup.castShadow = true;
-
-        const obstacle_cafe = { mesh: cafeGroup, collider: { type: 'box' as const, size: new THREE.Vector3(18, 20, 12) } };
-        SectorBuilder.addObstacle(ctx, obstacle_cafe);
-
-        scene.add(cafeGroup);
-
-        SectorBuilder.spawnNeonSign(ctx, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z - 6, 0, "CAFÉ", 0xffaa00);
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.CAFE, LOCATIONS.POIS.CAFE.x, LOCATIONS.POIS.CAFE.z, 0);
 
         // Grocery store
-        const grocery = SectorBuilder.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 15, 10, 30, 0, {
-            lowerMat: MATERIALS.whiteBrick,
-            upperMat: MATERIALS.wooden_fasade,
-            shopWindows: false,
-            upperWindows: true,
-            withRoof: false
-        });
-
-        const grocWinMat = MATERIALS.glass;
-        const grocWinGeo = new THREE.PlaneGeometry(3.5, 3.5);
-        for (let z = -10; z <= 10; z += 5) {
-            const win = new THREE.Mesh(grocWinGeo, grocWinMat);
-            win.position.set(LOCATIONS.POIS.GROCERY.x - 7.6, 2.5, LOCATIONS.POIS.GROCERY.z + z);
-            win.rotation.y = -Math.PI / 2;
-            scene.add(win);
-        }
-
-        const grocEntrance = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), MATERIALS.glass);
-        grocEntrance.position.set(LOCATIONS.POIS.GROCERY.x, 3, LOCATIONS.POIS.GROCERY.z - 15.1);
-        scene.add(grocEntrance);
-
-        const heartX = LOCATIONS.POIS.GROCERY.x - 7.7;
-        const heartZ = LOCATIONS.POIS.GROCERY.z + 6;
-        SectorBuilder.spawnNeonHeart(ctx, heartX, 7.5, heartZ, -Math.PI / 2, 0xff0000, 2.0);
-        SectorBuilder.spawnNeonSign(ctx, heartX, LOCATIONS.POIS.GROCERY.z - 2, -Math.PI / 2, "Ica Hjärtat", 0xffffff, true, 1.5);
-
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.GROCERY_STORE, LOCATIONS.POIS.GROCERY.x, LOCATIONS.POIS.GROCERY.z, 0);
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x - 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
         SectorBuilder.spawnContainer(ctx, LOCATIONS.POIS.GROCERY.x + 5, LOCATIONS.POIS.GROCERY.z + 20, Math.PI / 2.5, 0x111111);
 
         // Gym
-        const gymMat = MATERIALS.sheet_metal.clone();
-        gymMat.color.setHex(0xeae7d6); // Lighter cream/beige tint
-        const gym = SectorBuilder.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 40, 12, 20, 0, {
-            lowerMat: gymMat,
-            upperMat: gymMat,
-            shopWindows: true,
-            upperWindows: true,
-            withRoof: false,
-            mapRepeat: { x: 40, y: 1 }
-        });
-        const glassStaircase = SectorBuilder.spawnGlassStaircase(ctx, LOCATIONS.POIS.GYM.x - 23, LOCATIONS.POIS.GYM.z, 6, 12, 8, 0);
-        gym.add(glassStaircase);
-
-        const gymSign = SectorBuilder.spawnNeonSign(ctx, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z - 6, 0, "Gånghester Gym", 0xffaa00);
-        gymSign.position.set(-10, 4.5, 10.1);
-        gym.add(gymSign);
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.GYM, LOCATIONS.POIS.GYM.x, LOCATIONS.POIS.GYM.z, 0);
 
         // Pizzeria
-        const pizzeria = SectorBuilder.spawnStorefrontBuilding(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 20, 8, 15, 0, {
-            lowerMat: MATERIALS.plaster,
-            upperMat: MATERIALS.plaster,
-            shopWindows: true,
-            upperWindows: true,
-            withRoof: true
-        });
-        const pizSign = SectorBuilder.spawnNeonSign(ctx, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z + 7.6, Math.PI, "Gånghester Pizzera", 0xffffff, true, 1.0, 0x000000);
-        pizSign.position.y = 4.0;
-        pizzeria.add(pizSign);
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.PIZZERIA, LOCATIONS.POIS.PIZZERIA.x, LOCATIONS.POIS.PIZZERIA.z, 0);
 
         // Embankment
         const embankmentWest = [
@@ -489,13 +371,26 @@ export const Sector0: SectorDef = {
 
         // Tunnel
         const tunnelPos = new THREE.Vector3(LOCATIONS.TRIGGERS.TUNNEL.x, 0, LOCATIONS.TRIGGERS.TUNNEL.z);
-        ObjectGenerator.createTunnel(ctx, tunnelPos, 9, 3.5, 21, 0, 2.5, 0.5);
+        const tunnel = ObjectGenerator.createStandardTunnel(6, 6, 25, 1, 1);
+        tunnel.position.copy(tunnelPos);
+        ctx.scene.add(tunnel);
+
+        for (let i = 0; i < tunnel.userData.colliders.length; i++) {
+            const c = tunnel.userData.colliders[i];
+            const wPos = tunnelPos.clone();
+            if (c.offset) wPos.add(c.offset);
+            SectorBuilder.addObstacle(ctx, {
+                position: wPos,
+                collider: { type: c.type, size: c.size, radius: c.radius },
+                materialId: MaterialType.CONCRETE
+            });
+        }
 
         // Bus (tunnel blocker)
         const bus = VehicleGenerator.createBus(0x009ddb, false);
         bus.position.set(LOCATIONS.TRIGGERS.BUS.x, LOCATIONS.TRIGGERS.BUS.y, LOCATIONS.TRIGGERS.BUS.z);
         bus.rotation.set(Math.PI / 2, Math.PI / 2, 0);
-        bus.updateMatrixWorld();
+        GeneratorUtils.freezeStatic(bus);
 
         const busBox = new THREE.Box3().setFromObject(bus);
         const busSize = new THREE.Vector3();
@@ -506,7 +401,7 @@ export const Sector0: SectorDef = {
         const colMesh = new THREE.Mesh(new THREE.BoxGeometry(busSize.x, busSize.y, busSize.z));
         colMesh.position.copy(busCenter);
         colMesh.visible = false;
-        colMesh.updateMatrixWorld();
+        GeneratorUtils.freezeStatic(colMesh);
         scene.add(colMesh);
 
         const busIdx = obstacles.length;
@@ -519,7 +414,7 @@ export const Sector0: SectorDef = {
         SectorBuilder.addInteractable(ctx, bus, {
             id: 'tunnel_bus_explode',
             label: 'ui.interact_blow_up_bus',
-            type: 'sector_specific',
+            type: InteractionType.SECTOR_SPECIFIC,
             radius: 15.0
         });
         // Non-interactble from start
@@ -582,7 +477,6 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(ty.x + 60, 0, ty.z + 40)
         ], 'mesh', fenceHeight, true);
 
-
         // Train yard - Ground
         const stationGround = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), MATERIALS.asphalt);
         stationGround.rotation.x = -Math.PI / 2;
@@ -600,30 +494,21 @@ export const Sector0: SectorDef = {
         ]);
 
         // Train yard - Train
-        const train = new THREE.Group();
-        train.position.set(LOCATIONS.POIS.TRAIN_YARD.x, 0, LOCATIONS.POIS.TRAIN_YARD.z);
-        train.rotation.y = -0.05;
-        const matBody = MATERIALS.train; const matBlack = MATERIALS.blackMetal;
-
-        const chassis = new THREE.Mesh(new THREE.BoxGeometry(16, 1.5, 4), matBlack);
-        chassis.position.y = 1.5;
-        train.add(chassis);
-
-        const boilerGeo = new THREE.CylinderGeometry(1.8, 1.8, 10, 16);
-        boilerGeo.rotateZ(Math.PI / 2);
-        boilerGeo.translate(2, 4.0, 0);
-
-        const cabinBodyGeo = new THREE.BoxGeometry(5, 2, 4.2);
-        cabinBodyGeo.translate(-5, 2.3, 0);
-
-        const mergedTrainGeo = BufferGeometryUtils.mergeGeometries([boilerGeo, cabinBodyGeo]);
-        const trainBody = new THREE.Mesh(mergedTrainGeo, matBody);
-        train.add(trainBody);
-        scene.add(train);
-        SectorBuilder.addObstacle(ctx, {
-            mesh: train,
-            collider: { type: 'box', size: new THREE.Vector3(18, 12, 6) }
-        });
+        const locomotive = ObjectGenerator.createLocomotive();
+        locomotive.position.set(LOCATIONS.POIS.TRAIN_YARD.x, -0.05, LOCATIONS.POIS.TRAIN_YARD.z);
+        locomotive.rotation.y = -0.05;
+        ctx.scene.add(locomotive);
+        if (locomotive.userData.colliders) {
+            for (const col of locomotive.userData.colliders) {
+                SectorBuilder.addObstacle(ctx, {
+                    mesh: locomotive,
+                    position: locomotive.position.clone().add(col.offset || new THREE.Vector3()),
+                    quaternion: locomotive.quaternion,
+                    collider: col,
+                    type: 'PoiCollider'
+                });
+            }
+        }
 
         // Train yard - Containers
         const cColors = [0x1a4a2a, 0x4a2a1a, 0x1a2a4a, 0x8b0000];
@@ -657,9 +542,8 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(99, 0, 67),
             new THREE.Vector3(76, 0, 43),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 8, 'spruce');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
 
-        // Forest: Home -> SMU
         forestPolygon = [
             new THREE.Vector3(-27, 0, 45),
             new THREE.Vector3(-27, 0, 80),
@@ -676,7 +560,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(32, 0, 55),
             new THREE.Vector3(24, 0, 37),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 8, 'spruce');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
 
         // Forest
         forestPolygon = [
@@ -687,7 +571,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(129, 0, 163),
             new THREE.Vector3(142, 0, 173),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 12, 'pine');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPolygon, 12);
 
         // Forest - Cafe
         forestPolygon = [
@@ -701,7 +585,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(122, 0, 253),
             new THREE.Vector3(138, 0, 253),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 12, 'birch');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 12);
 
         // Forsest - Gym
         forestPolygon = [
@@ -713,7 +597,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(28, 0, 350),
 
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 10, 'birch');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 10);
 
         // Forest - Town center
         forestPolygon = [
@@ -736,7 +620,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(227, 0, 187),
             new THREE.Vector3(203, 0, 172),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 8, 'birch');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, forestPolygon, 8);
 
         // Forest: Trainyard - North-West
         forestPolygon = [
@@ -746,16 +630,15 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(33, 0, 409),
             new THREE.Vector3(31, 0, 375),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 8, 'spruce');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
 
-        // Forst
         forestPolygon = [
             new THREE.Vector3(212, 0, 359),
             new THREE.Vector3(250, 0, 359),
             new THREE.Vector3(250, 0, 408),
             new THREE.Vector3(212, 0, 403),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 8, 'spruce');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
 
         forestPolygon = [
             new THREE.Vector3(88, 0, 403),
@@ -768,7 +651,7 @@ export const Sector0: SectorDef = {
             new THREE.Vector3(36, 0, 418),
             new THREE.Vector3(54, 0, 409),
         ];
-        SectorBuilder.createForest(ctx, forestPolygon, 8, 'spruce');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SPRUCE, forestPolygon, 8);
 
         SectorBuilder.spawnDeadBody(ctx, 37, 44, EnemyType.WALKER, 0, true);
         SectorBuilder.spawnChest(ctx, 45, 45, 'standard');

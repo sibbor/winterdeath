@@ -1,11 +1,12 @@
-
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
 import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
+import { InteractionType } from '../../systems/InteractionTypes';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
-import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { VEGETATION_TYPE } from '../../content/environment';
+import { POI_TYPE } from '../../content/pois';
 import { generateCaveSystem } from './Sector1_Cave';
 import { soundManager } from '../../utils/audio/SoundManager';
 import { CAMERA_HEIGHT } from '../constants';
@@ -47,7 +48,7 @@ const LOCATIONS = {
 } as const;
 
 async function addProps(ctx: SectorContext) {
-    ctx.scene.add(ObjectGenerator.createCampfire(ctx, -1, 13, 0, 1.0));
+    SectorBuilder.spawnPoi(ctx, POI_TYPE.CAMPFIRE, LOCATIONS.POIS.CAMPFIRE.x, LOCATIONS.POIS.CAMPFIRE.z, 0, { scale: 1.0, y: 0 });
 
     SectorBuilder.spawnBarrel(ctx, 106, -65);
     SectorBuilder.spawnBarrel(ctx, 108, -67);
@@ -231,8 +232,8 @@ export const Sector1: SectorDef = {
         for (let i = 0; i < forestLeft.length; i++) forestLeft[i].y = 0;
         for (let i = 0; i < forestRight.length; i++) forestRight[i].y = 0;
 
-        SectorBuilder.createForest(ctx, forestLeft, 12, ['pine', 'spruce']);
-        SectorBuilder.createForest(ctx, forestRight, 12, ['pine', 'spruce']);
+        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestLeft, 12);
+        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE], forestRight, 12);
 
         // --- BOUNDARIES ---
         createBoundries(ctx, railTrackCurve);
@@ -257,14 +258,11 @@ export const Sector1: SectorDef = {
         );
 
         // Train Tunnel
-        const trainTunnel = ObjectGenerator.createTrainTunnel([
-            new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z),
-            new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
-        ]);
-        scene.add(trainTunnel);
-        SectorBuilder.addObstacle(ctx, {
-            mesh: trainTunnel,
-            collider: { type: 'box', size: new THREE.Vector3(12, 6, 10) }
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.TRAIN_TUNNEL, LOCATIONS.POIS.TUNNEL.x, LOCATIONS.POIS.TUNNEL.z, 0, {
+            points: [
+                new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x, 0, LOCATIONS.POIS.TUNNEL.z),
+                new THREE.Vector3(LOCATIONS.POIS.TUNNEL.x + 10, 0, LOCATIONS.POIS.TUNNEL.z)
+            ]
         });
 
         // --- PROPS ---
@@ -313,7 +311,7 @@ export const Sector1: SectorDef = {
         if (doorFrame) {
             SectorBuilder.addInteractable(ctx, doorFrame, {
                 id: 'cave_door',
-                type: 'sector_specific',
+                type: InteractionType.SECTOR_SPECIFIC,
                 label: 'ui.interact_knock_on_port',
                 radius: 12.0
             });
@@ -369,7 +367,7 @@ export const Sector1: SectorDef = {
                     isSpeaking: familyObj.isSpeaking || false,
                     isThinking: familyObj.isThinking || false,
                     isIdleLong: false, isSwimming: false, isWading: false,
-                    seed: familyObj.seed
+                    seed: familyObj.seed, renderTime: now
                 }, now, delta);
             }
         }
@@ -462,7 +460,7 @@ export const Sector1: SectorDef = {
                             isMoving: true, isRushing: false, isRolling: false, rollStartTime: 0,
                             staminaRatio: 1.0, isSpeaking: gameState.speakingUntil > now,
                             isThinking: false, isIdleLong: false, isSwimming: false, isWading: false,
-                            seed: jordan.userData.seed || 0
+                            seed: jordan.userData.seed || 0, renderTime: now
                         }, now, delta);
                     }
 
@@ -477,8 +475,8 @@ export const Sector1: SectorDef = {
             }
             else if (jcState === 6) { // DOORS_CLOSING
                 const closeProgress = Math.max(0, Math.min(1, elapsed / 800));
-                if (doorL) { doorL.position.x = -15 + (closeProgress * 10); doorL.matrixAutoUpdate = true; }
-                if (doorR) { doorR.position.x = 15 - (closeProgress * 10); doorR.matrixAutoUpdate = true; }
+                if (doorL) { doorL.position.x = -15 + (closeProgress * 10); doorL.position.x = -15 + (closeProgress * 10); doorL.matrixAutoUpdate = true; }
+                if (doorR) { doorR.position.x = 15 - (closeProgress * 10); doorR.position.x = 15 - (closeProgress * 10); doorR.matrixAutoUpdate = true; }
 
                 if (elapsed >= 800 && !sectorState.doorCloseSoundPlayed) {
                     soundManager.playMetalDoorShut();

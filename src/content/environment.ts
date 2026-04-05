@@ -48,3 +48,32 @@ export const IMPACT_MAP: Partial<Record<MATERIAL_TYPE, string>> = {
 // WeatherType
 // Used by the weather system (and sectors definition)
 export type WeatherType = 'none' | 'snow' | 'rain' | 'ash' | 'ember';
+
+/**
+ * Standardized vegetation types for environment generation
+ */
+export enum VEGETATION_TYPE {
+    PINE = 'PINE',
+    SPRUCE = 'SPRUCE',
+    OAK = 'OAK',
+    BIRCH = 'BIRCH',
+    DEAD = 'DEAD',
+    GRASS = 'GRASS',
+    BUSH = 'BUSH',
+    SUNFLOWER = 'SUNFLOWER',
+    FLOWER = 'FLOWER',
+    WHEAT = 'WHEAT'
+}
+
+/**
+ * Standardized prop types for environment generation
+ */
+export enum PROP_TYPE {
+    ROCK = 'ROCK',
+    DEBRIS = 'DEBRIS',
+    HEDGE = 'HEDGE',
+    FENCE_WOOD = 'FENCE_WOOD',
+    STONE_WALL = 'STONE_WALL',
+    MESH_FENCE = 'MESH_FENCE'
+}
+

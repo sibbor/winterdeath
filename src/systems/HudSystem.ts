@@ -3,6 +3,7 @@ import { WEAPONS, BOSSES } from '../content/constants';
 import { WeaponType } from '../content/weapons';
 import { PerformanceMonitor } from './PerformanceMonitor';
 import { StatusEffectType } from '../content/perks';
+import { InteractionType } from './InteractionTypes';
 
 // Performance Scratchpads (Zero-GC)
 const _v1 = new THREE.Vector3();
@@ -95,7 +96,7 @@ const createHudBuffer = () => ({
     systems: [] as any[],
     currentLine: { active: false, speaker: '', text: '' },
     cinematicActive: false,
-    interactionPrompt: { active: false, type: '', label: '', targetId: '', x: 0, y: 0 },
+    interactionPrompt: { active: false, type: InteractionType.NONE, label: '', targetId: '', x: 0, y: 0 },
     hudVisible: true,
 
     sectorName: '',
@@ -405,7 +406,7 @@ export const HudSystem = {
             _current.debugInfo.performance.memory.heapUsed = Math.round(perfMem.usedJSHeapSize / 1048576);
         }
 
-        _current.debugInfo.modes = state.interaction.active ? state.interaction.type : 'Standard';
+        _current.debugInfo.modes = state.interaction.active ? state.interaction.type : InteractionType.NONE;
 
         _current.debugInfo.enemies = enemies.length;
         _current.debugInfo.objects = state.obstacles?.length || 0;

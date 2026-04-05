@@ -7,6 +7,7 @@ import { ZOMBIE_TYPES } from '../../../content/enemies/zombies';
 import { EnemyType } from '../../../entities/enemies/EnemyTypes';
 import { EffectManager } from '../../../systems/EffectManager';
 import { MaterialType } from '../../../content/environment';
+import { GeneratorUtils } from './GeneratorUtils';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -21,17 +22,6 @@ const _FIRE_LIGHT_OFFSET = new THREE.Vector3(0, 1.5, 0);
 const _FIRE_FLAME_OFFSET = new THREE.Vector3(0, 0.5, 0);
 const _FIRE_SPARK_OFFSET = new THREE.Vector3(0, 1.0, 0);
 const _FIRE_SMOKE_OFFSET = new THREE.Vector3(0, 1.8, 0);
-
-// --- VINTERDÖD HELPER: Brutal Matrix Freezing ---
-// Recursively freezes all matrices in a hierarchy to completely eliminate CPU overhead.
-const freezeStatic = <T extends THREE.Object3D>(obj: T, excludeNames: string[] = []): T => {
-    obj.traverse((child) => {
-        if (excludeNames.length > 0 && excludeNames.indexOf(child.name) !== -1) return;
-        child.matrixAutoUpdate = false;
-        child.updateMatrix();
-    });
-    return obj;
-};
 
 // --- CACHED ASSETS (ZERO-GC VRAM) ---
 const SHARED_GEO = {
@@ -74,32 +64,7 @@ const spriteTextureCache: Record<string, THREE.CanvasTexture> = {};
 export const ObjectGenerator = {
 
     createTextSprite: (text: string) => {
-        if (spriteTextureCache[text]) {
-            const mat = MATERIALS.textSprite.clone();
-            mat.map = spriteTextureCache[text];
-            const sprite = new THREE.Sprite(mat);
-            sprite.scale.set(4, 1, 1);
-            return sprite;
-        }
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        canvas.width = 256;
-        canvas.height = 64;
-        ctx.font = 'bold 20px Arial';
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-
-        const tex = new THREE.CanvasTexture(canvas);
-        spriteTextureCache[text] = tex;
-
-        const mat = MATERIALS.textSprite.clone();
-        mat.map = tex;
-        const sprite = new THREE.Sprite(mat);
-        sprite.scale.set(4, 1, 1);
-        return sprite;
+        return GeneratorUtils.createTextSprite(text, spriteTextureCache, MATERIALS.textSprite);
     },
 
     createChest: (type: 'standard' | 'big' = 'standard') => {
@@ -130,7 +95,55 @@ export const ObjectGenerator = {
         chest.add(chestGlow);
 
         // Exclude the lid so it can be animated
-        return freezeStatic(chest, ['chestLid']);
+        return GeneratorUtils.freezeStatic(chest, ['chestLid']);
+    },
+
+    createLocomotive: () => {
+        const group = new THREE.Group();
+        const chassis = new THREE.Mesh(new THREE.BoxGeometry(16, 1.5, 4), MATERIALS.blackMetal);
+        chassis.position.y = 1.5;
+        group.add(chassis);
+
+        const boilerGeo = new THREE.CylinderGeometry(1.8, 1.8, 10, 16);
+        boilerGeo.rotateZ(Math.PI / 2);
+        boilerGeo.translate(2, 4.0, 0);
+
+        const cabinBodyGeo = new THREE.BoxGeometry(5, 2, 4.2);
+        cabinBodyGeo.translate(-5, 2.3, 0);
+
+        const mergedTrainGeo = BufferGeometryUtils.mergeGeometries([boilerGeo, cabinBodyGeo]);
+        const trainBody = new THREE.Mesh(mergedTrainGeo, MATERIALS.train);
+        group.add(trainBody);
+
+        group.userData.colliders = [{ type: 'box', size: new THREE.Vector3(18, 12, 6) }];
+        
+        return GeneratorUtils.freezeStatic(group);
+    },
+
+    createStandardTunnel: (width: number = 6, height: number = 5, length: number = 10, wallThick: number = 0.5, roofThick: number = 0.5) => {
+        const group = new THREE.Group();
+
+        const sideL = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MATERIALS.concrete);
+        sideL.scale.set(wallThick, height, length);
+        sideL.position.set(-width / 2 - wallThick / 2, height / 2, 0);
+        group.add(sideL);
+
+        const sideR = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MATERIALS.concrete);
+        sideR.scale.set(wallThick, height, length);
+        sideR.position.set(width / 2 + wallThick / 2, height / 2, 0);
+        group.add(sideR);
+
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MATERIALS.concrete);
+        roof.scale.set(width + wallThick * 2, roofThick, length);
+        roof.position.set(0, height + roofThick / 2, 0);
+        group.add(roof);
+
+        group.userData.colliders = [
+            { type: 'box', size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(-width / 2 - wallThick / 2, 0, 0) },
+            { type: 'box', size: new THREE.Vector3(wallThick, height, length), offset: new THREE.Vector3(width / 2 + wallThick / 2, 0, 0) }
+        ];
+
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createFence: (length: number = 3.0) => {
@@ -151,7 +164,7 @@ export const ObjectGenerator = {
         const r2 = new THREE.Mesh(SHARED_GEO.fenceRail, fenceMat); r2.scale.z = length; r2.position.set(0, 0.9, 0); group.add(r2);
 
         group.userData.material = MaterialType.WOOD;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createMeshFence: (length: number = 3.0, height: number = 2.5) => {
@@ -174,69 +187,10 @@ export const ObjectGenerator = {
         group.add(rail);
 
         group.userData.material = MaterialType.METAL;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
-    createTrainTunnel: (points: THREE.Vector3[]) => {
-        if (!points || points.length < 2) return new THREE.Group();
 
-        const tunnelWidthOuter = 16;
-        const tunnelHeightWalls = 7;
-        const tunnelArchRise = 5;
-        const tunnelThickness = 2;
-        const tunnelDepth = 30;
-
-        const start = points[0];
-        const end = points[points.length - 1];
-        const mid = _v1_og.copy(start).add(end).multiplyScalar(0.5);
-
-        const tunnelGroup = new THREE.Group();
-        tunnelGroup.position.copy(mid);
-        tunnelGroup.lookAt(end);
-
-        const halfWidthO = tunnelWidthOuter / 2;
-        const controlPointY_O = tunnelHeightWalls + (tunnelArchRise * 2);
-
-        const archShape = new THREE.Shape();
-        archShape.moveTo(-halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, tunnelHeightWalls);
-        archShape.quadraticCurveTo(0, controlPointY_O, halfWidthO, tunnelHeightWalls);
-        archShape.lineTo(halfWidthO, 0);
-        archShape.lineTo(-halfWidthO, 0);
-
-        const halfWidthI = halfWidthO - tunnelThickness;
-        const wallHeightI = tunnelHeightWalls;
-        const controlPointY_I = controlPointY_O - tunnelThickness;
-
-        const holePath = new THREE.Path();
-        holePath.moveTo(halfWidthI, 0);
-        holePath.lineTo(halfWidthI, wallHeightI);
-        holePath.quadraticCurveTo(0, controlPointY_I, -halfWidthI, wallHeightI);
-        holePath.lineTo(-halfWidthI, 0);
-        holePath.lineTo(halfWidthI, 0);
-
-        archShape.holes.push(holePath);
-
-        const archGeo = new THREE.ExtrudeGeometry(archShape, { depth: tunnelDepth, steps: 1, bevelEnabled: false });
-        archGeo.translate(0, 0, -tunnelDepth / 2);
-
-        if (!concreteCache['doubleside']) {
-            concreteCache['doubleside'] = MATERIALS.concrete.clone();
-            concreteCache['doubleside'].side = THREE.DoubleSide;
-        }
-        const tunnelMat = concreteCache['doubleside'];
-
-        const mesh = new THREE.Mesh(archGeo, tunnelMat);
-        tunnelGroup.add(mesh);
-
-        const floor = new THREE.Mesh(SHARED_GEO.plane, MATERIALS.gravel);
-        floor.scale.set(halfWidthI * 2, tunnelDepth, 1);
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = 0.02;
-        tunnelGroup.add(floor);
-
-        return freezeStatic(tunnelGroup);
-    },
 
     createBarrel: (explosive: boolean = false) => {
         const group = new THREE.Group();
@@ -246,7 +200,7 @@ export const ObjectGenerator = {
         mesh.castShadow = true;
         group.add(mesh);
         group.userData.material = MaterialType.METAL;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createStreetLamp: () => {
@@ -282,7 +236,7 @@ export const ObjectGenerator = {
         group.add(light.target);
 
         group.userData.material = MaterialType.METAL;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createBuilding: (width: number, height: number, depth: number, color: number, createRoof: boolean = true, withLights: boolean = false, lightProbability: number = 0.5) => {
@@ -374,7 +328,7 @@ export const ObjectGenerator = {
             material: MaterialType.CONCRETE
         };
 
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createScarecrow(x: number, z: number) {
@@ -408,7 +362,7 @@ export const ObjectGenerator = {
         group.add(hat);
 
         group.userData.material = MaterialType.PLANT;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createFire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
@@ -424,117 +378,12 @@ export const ObjectGenerator = {
             { type: 'emitter', particle: 'smoke', interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
         ];
 
-        ctx.scene.add(freezeStatic(group));
+        ctx.scene.add(GeneratorUtils.freezeStatic(group));
         if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
     },
 
-    createCampfire: (ctx: SectorContext, x: number, z: number, y: number = 0, scale: number = 1.0) => {
-        const group = new THREE.Group();
-        group.position.set(x, y, z);
-        group.scale.setScalar(scale);
 
-        const ash = new THREE.Mesh(new THREE.CircleGeometry(0.8, 8), MATERIALS.ash);
-        ash.rotation.x = -Math.PI / 2;
-        ash.position.y = 0.05;
-        ash.receiveShadow = true;
-        group.add(ash);
 
-        for (let i = 0; i < 10; i++) {
-            const s = new THREE.Mesh(SHARED_GEO.rock, MATERIALS.stone);
-            const angle = (i / 10) * Math.PI * 2;
-            const r = 0.9 + (Math.random() - 0.5) * 0.1;
-            s.scale.setScalar(0.25);
-            s.position.set(Math.cos(angle) * r, 0.15, Math.sin(angle) * r);
-            s.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-            s.castShadow = true;
-            s.receiveShadow = true;
-            group.add(s);
-        }
-
-        for (let i = 0; i < 4; i++) {
-            const log = new THREE.Mesh(SHARED_GEO.cylinder, MATERIALS.treeTrunk);
-            log.scale.set(0.12, 1.4, 0.12);
-            log.rotation.set((Math.random() - 0.5) * 0.2, (i / 4) * Math.PI * 2 + (Math.random() * 0.2), Math.PI / 2);
-            log.position.y = 0.25;
-            log.castShadow = true;
-            log.receiveShadow = true;
-            group.add(log);
-        }
-
-        group.userData.isFire = true;
-        group.userData.effects = [
-            { type: 'light', color: 0xff7722, intensity: 30 * scale, distance: 40 * scale, offset: _FIRE_LIGHT_OFFSET, flicker: true },
-            { type: 'emitter', particle: 'campfire_flame', interval: 60, count: 1, offset: _FIRE_FLAME_OFFSET, spread: 0.5, color: 0xffaa00 },
-            { type: 'emitter', particle: 'campfire_spark', interval: 100, count: 1, offset: _FIRE_SPARK_OFFSET, spread: 0.8, color: 0xffdd00 },
-            { type: 'emitter', particle: 'campfire_smoke', interval: 200, count: 1, offset: _FIRE_SMOKE_OFFSET, spread: 0.4 }
-        ];
-
-        ctx.scene.add(freezeStatic(group));
-        if (ctx.obstacles) ctx.obstacles.push({ mesh: group, radius: 0.8 * scale });
-        return group;
-    },
-
-    createTunnel: (ctx: SectorContext, pos: THREE.Vector3, width: number = 6, height: number = 5, length: number = 10, rotation: number = 0, wallThick: number = 0.5, roofThick: number = 0.5) => {
-        const group = new THREE.Group();
-        group.position.copy(pos);
-        group.rotation.y = rotation;
-
-        const mat = MATERIALS.concrete;
-
-        const sideL = new THREE.Mesh(SHARED_GEO.box, mat);
-        sideL.scale.set(wallThick, height, length);
-        sideL.position.set(-width / 2 - wallThick / 2, height / 2, 0);
-        group.add(sideL);
-
-        const sideR = new THREE.Mesh(SHARED_GEO.box, mat);
-        sideR.scale.set(wallThick, height, length);
-        sideR.position.set(width / 2 + wallThick / 2, height / 2, 0);
-        group.add(sideR);
-
-        const roof = new THREE.Mesh(SHARED_GEO.box, mat);
-        roof.scale.set(width + wallThick * 2, roofThick, length);
-        roof.position.set(0, height + roofThick / 2, 0);
-        group.add(roof);
-
-        ctx.scene.add(freezeStatic(group));
-
-        const halfWidth = width / 2;
-        const halfWall = wallThick / 2;
-        const offsetDist = halfWidth + halfWall;
-
-        const cosRot = Math.cos(rotation);
-        const sinRot = Math.sin(rotation);
-
-        const worldPosL = new THREE.Vector3(
-            pos.x + (-offsetDist * cosRot),
-            pos.y + height / 2,
-            pos.z + (-offsetDist * -sinRot)
-        );
-
-        const worldPosR = new THREE.Vector3(
-            pos.x + (offsetDist * cosRot),
-            pos.y + height / 2,
-            pos.z + (offsetDist * -sinRot)
-        );
-
-        _quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
-
-        SectorBuilder.addObstacle(ctx, {
-            position: worldPosL,
-            quaternion: _quat.clone(),
-            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) },
-            materialId: MaterialType.CONCRETE
-        });
-
-        SectorBuilder.addObstacle(ctx, {
-            position: worldPosR,
-            quaternion: _quat.clone(),
-            collider: { type: 'box', size: new THREE.Vector3(wallThick, height, length) },
-            materialId: MaterialType.CONCRETE
-        });
-
-        return group;
-    },
 
     createHaybale: (scale: number = 1.0) => {
         const group = new THREE.Group();
@@ -547,7 +396,7 @@ export const ObjectGenerator = {
         group.add(mesh);
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.PLANT;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createTimberPile: (scale: number = 1.0) => {
@@ -571,7 +420,7 @@ export const ObjectGenerator = {
         group.receiveShadow = true;
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.WOOD;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createWheatStalk: (scale: number = 1.0) => {
@@ -590,7 +439,7 @@ export const ObjectGenerator = {
         group.add(p2);
 
         group.scale.setScalar(scale);
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createDeadBody: (type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood?: boolean) => {
@@ -611,7 +460,7 @@ export const ObjectGenerator = {
         corpse.position.set(0, 0.1, 0);
         group.add(corpse);
         group.userData.material = MaterialType.FLESH;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createContainer: (colorOverride?: number, addSnow: boolean = true) => {
@@ -639,7 +488,7 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = MaterialType.METAL;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createNeonSign: (text: string, color: number = 0x00ffff, withBacking: boolean = true, scale: number = 1.0, backgroundColor: number = 0x050505) => {
@@ -662,7 +511,7 @@ export const ObjectGenerator = {
         EffectManager.attachEffect(group, 'neon_sign', { color, intensity: 15, distance: 20 });
         group.scale.setScalar(scale);
         group.userData.material = MaterialType.METAL;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createCaveLamp: () => {
@@ -689,7 +538,7 @@ export const ObjectGenerator = {
             flickerRate: 0.1
         }];
 
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createElectricPole: (withWires: boolean = false) => {
@@ -714,48 +563,10 @@ export const ObjectGenerator = {
         }
 
         group.userData.material = MaterialType.WOOD;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
-    createMast: () => {
-        const mastGroup = new THREE.Group();
 
-        const mastBase = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 10), MATERIALS.concrete);
-        mastBase.position.y = 1;
-        mastBase.castShadow = true;
-        mastGroup.add(mastBase);
-
-        const mastMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 6, 60, 4), MATERIALS.mast);
-        mastMesh.position.y = 30;
-        mastMesh.castShadow = true;
-        mastGroup.add(mastMesh);
-
-        const lightHub = new THREE.Group();
-        lightHub.name = "mastWarningLights";
-        lightHub.position.y = 60;
-
-        const lightXs = [2, -2];
-        for (let i = 0; i < lightXs.length; i++) {
-            const posX = lightXs[i];
-            const lamp = new THREE.Mesh(
-                new THREE.SphereGeometry(0.4),
-                new THREE.MeshBasicMaterial({ color: 0xff0000 })
-            );
-            lamp.position.x = posX;
-
-            lamp.userData.needsLogicalLight = true;
-            lamp.userData.lightColor = 0xff0000;
-            lamp.userData.lightIntensity = 150.0;
-            lamp.userData.lightDistance = 100.0;
-
-            lightHub.add(lamp);
-        }
-
-        mastGroup.add(lightHub);
-
-        // Exclude the warning lights hub so the engine can rotate it later!
-        return freezeStatic(mastGroup, ["mastWarningLights"]);
-    },
 
     createGlassStaircase: (width: number, height: number, depth: number) => {
         const group = new THREE.Group();
@@ -775,7 +586,7 @@ export const ObjectGenerator = {
 
         EffectManager.attachEffect(group, 'flicker_light', { color: 0x88ccff, intensity: 10, distance: 15 });
         group.userData.material = MaterialType.GLASS;
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createStorefrontBuilding: (width: number, height: number, depth: number, opts: {
@@ -941,7 +752,7 @@ export const ObjectGenerator = {
         }
 
         group.userData = { size: new THREE.Vector3(width, height + (withRoof ? 3 : 0), depth), material: MaterialType.GLASS };
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     createNeonHeart: (color: number = 0xff0000, scale: number = 1.0) => {
@@ -978,7 +789,7 @@ export const ObjectGenerator = {
         }];
 
         group.scale.setScalar(scale);
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 
     // Note: Grass should be fully handled by VegetationGenerator, but keeping this optimized just in case.
@@ -986,7 +797,7 @@ export const ObjectGenerator = {
         const mesh = new THREE.InstancedMesh(SHARED_GEO.cone, MATERIALS.grass, count);
         mesh.castShadow = false;
         mesh.receiveShadow = true;
-        mesh.matrixAutoUpdate = false;
+        GeneratorUtils.freezeStatic(mesh);
 
         for (let i = 0; i < count; i++) {
             _position.set(x + (Math.random() - 0.5) * width, 0, z + (Math.random() - 0.5) * depth);
@@ -1000,7 +811,6 @@ export const ObjectGenerator = {
         }
 
         mesh.instanceMatrix.needsUpdate = true;
-        mesh.updateMatrix();
         ctx.scene.add(mesh);
     },
 
@@ -1041,6 +851,6 @@ export const ObjectGenerator = {
         screen.rotation.x = -Math.PI / 6;
         group.add(screen);
 
-        return freezeStatic(group);
+        return GeneratorUtils.freezeStatic(group);
     },
 };

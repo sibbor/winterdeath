@@ -5,6 +5,7 @@ import { ObjectGenerator } from './ObjectGenerator';
 import { SectorBuilder } from '../SectorBuilder';
 import { VegetationGenerator } from './VegetationGenerator';
 import { MaterialType, MATERIAL_TYPE } from '../../../content/environment';
+import { GeneratorUtils } from './GeneratorUtils';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1 = new THREE.Vector3();
@@ -129,8 +130,7 @@ export const PathGenerator = {
             mesh.userData.materialId = materialId; // VINTERDÖD: Unified tagging
 
             // VINTERDÖD: Freeze ribbon matrix
-            mesh.matrixAutoUpdate = false;
-            mesh.updateMatrix();
+            GeneratorUtils.freezeStatic(mesh);
 
             ctx.scene.add(mesh);
         };
@@ -144,8 +144,7 @@ export const PathGenerator = {
         const sleeperPoints = curve.getSpacedPoints(sleeperCount);
 
         const sleeperIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.brownBrick, sleeperCount + 1);
-        sleeperIM.matrixAutoUpdate = false;
-        sleeperIM.updateMatrix();
+        GeneratorUtils.freezeStatic(sleeperIM);
 
         for (let i = 0; i < sleeperPoints.length; i++) {
             const pt = sleeperPoints[i];
@@ -218,8 +217,7 @@ export const PathGenerator = {
                 decal.scale.setScalar(0.5 + Math.random() * 0.5);
 
                 // VINTERDÖD: Freeze decal matrices
-                decal.matrixAutoUpdate = false;
-                decal.updateMatrix();
+                GeneratorUtils.freezeStatic(decal);
 
                 ctx.scene.add(decal);
             }
@@ -238,8 +236,7 @@ export const PathGenerator = {
         mesh.receiveShadow = true;
 
         // VINTERDÖD: Freeze path matrix
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
+        GeneratorUtils.freezeStatic(mesh);
 
         ctx.scene.add(mesh);
 
@@ -288,8 +285,7 @@ export const PathGenerator = {
         im.renderOrder = 5;
 
         // VINTERDÖD: Freeze InstancedMesh
-        im.matrixAutoUpdate = false;
-        im.updateMatrix();
+        GeneratorUtils.freezeStatic(im);
 
         for (let i = 0; i < pts.length; i++) {
             const pt = pts[i];
@@ -332,108 +328,95 @@ export const PathGenerator = {
         if (strict) curve.curveType = 'centripetal';
         const length = curve.getLength();
         const steps = Math.ceil(length / 2.0);
-        const pts = curve.getSpacedPoints(steps);
-        const segCount = pts.length - 1;
 
         const proto = color === 'mesh' ? ObjectGenerator.createMeshFence(length / steps, height) : ObjectGenerator.createFence(length / steps);
-        const parts: any[] = [];
+        const parts: { mesh: any, mat: THREE.Matrix4 }[] = [];
         proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
 
+        const instanceData: { im: THREE.InstancedMesh, part: { mesh: any, mat: THREE.Matrix4 } }[] = [];
         for (let k = 0; k < parts.length; k++) {
             const p = parts[k];
-            const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, segCount);
-
-            // VINTERDÖD: Freeze InstancedMesh
-            im.matrixAutoUpdate = false;
-            im.updateMatrix();
+            const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, steps);
+            GeneratorUtils.freezeStatic(im);
 
             if (color !== 'wood' && color !== 'mesh') {
                 const m = p.mesh.material.clone();
                 m.color.setHex(color === 'white' ? 0xffffff : 0x222222);
                 im.material = m;
             }
-
-            for (let i = 0; i < segCount; i++) {
-                const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-                _matrix.lookAt(mid, pts[i + 1], _up);
-                _quat.setFromRotationMatrix(_matrix);
-                _matrix.compose(mid, _quat, _v3.set(1, height / 1.2, 1));
-                _matrix.multiply(p.mat);
-                im.setMatrixAt(i, _matrix);
-            }
-            im.instanceMatrix.needsUpdate = true;
+            instanceData.push({ im, part: p });
             ctx.scene.add(im);
         }
 
-        for (let i = 0; i < segCount; i++) {
-            const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-            _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
+        let i = 0;
+        GeneratorUtils.distributeAlongPath(points, 2.0, strict, (mid, angle, dist) => {
+            for (let k = 0; k < instanceData.length; k++) {
+                const { im, part } = instanceData[k];
+                _quat.setFromAxisAngle(_up, angle);
+                _matrix.compose(mid, _quat, _v3.set(1, height / 1.2, 1));
+                _matrix.multiply(part.mat);
+                im.setMatrixAt(i, _matrix);
+                im.instanceMatrix.needsUpdate = true;
+            }
 
             SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
                 quaternion: _quat.clone(),
-                collider: { type: 'box', size: new THREE.Vector3(0.2, height, pts[i].distanceTo(pts[i + 1])) },
+                collider: { type: 'box', size: new THREE.Vector3(0.2, height, dist) },
                 materialId: color === 'mesh' ? MaterialType.METAL : MaterialType.WOOD
             });
-        }
+            i++;
+        });
     },
 
     createHedge: (ctx: SectorContext, points: THREE.Vector3[], height: number = 4, thickness: number = 1.5) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const steps = Math.ceil(curve.getLength() / 2.0);
-        const pts = curve.getSpacedPoints(steps);
         const proto = VegetationGenerator.createHedge(2.2, height, thickness);
-        const parts: any[] = [];
+        const parts: { mesh: any, mat: THREE.Matrix4 }[] = [];
         proto.traverse((c: any) => { if (c.isMesh) { c.updateMatrix(); parts.push({ mesh: c, mat: c.matrix.clone() }); } });
 
+        const instanceData: { im: THREE.InstancedMesh, part: { mesh: any, mat: THREE.Matrix4 } }[] = [];
         for (let k = 0; k < parts.length; k++) {
             const p = parts[k];
-            const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, pts.length - 1);
-
-            // VINTERDÖD: Freeze InstancedMesh
-            im.matrixAutoUpdate = false;
-            im.updateMatrix();
-
-            for (let i = 0; i < pts.length - 1; i++) {
-                const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-                _matrix.lookAt(mid, pts[i + 1], _up);
-                _quat.setFromRotationMatrix(_matrix);
-                _matrix.compose(mid, _quat, _v3.set(1, 1, 1));
-                _matrix.multiply(p.mat);
-                im.setMatrixAt(i, _matrix);
-            }
-            im.instanceMatrix.needsUpdate = true;
+            const im = new THREE.InstancedMesh(p.mesh.geometry, p.mesh.material, steps);
+            GeneratorUtils.freezeStatic(im);
+            instanceData.push({ im, part: p });
             ctx.scene.add(im);
         }
 
-        for (let i = 0; i < pts.length - 1; i++) {
-            const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-            _quat.setFromAxisAngle(_up, Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z));
+        let i = 0;
+        GeneratorUtils.distributeAlongPath(points, 2.0, false, (mid, angle, dist) => {
+            for (let k = 0; k < instanceData.length; k++) {
+                const { im, part } = instanceData[k];
+                _quat.setFromAxisAngle(_up, angle);
+                _matrix.compose(mid, _quat, _v3.set(1, 1, 1));
+                _matrix.multiply(part.mat);
+                im.setMatrixAt(i, _matrix);
+                im.instanceMatrix.needsUpdate = true;
+            }
 
             SectorBuilder.addObstacle(ctx, {
                 position: mid.clone(),
-                quaternion: _quat.clone(),
+                quaternion: _quat.clone(), // already set above
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, 2.2) },
                 materialId: MaterialType.WOOD
             });
-        }
+            i++;
+        });
     },
 
     createStoneWall: (ctx: SectorContext, points: THREE.Vector3[], height: number = 1.5, thickness: number = 0.8) => {
         const curve = new THREE.CatmullRomCurve3(points);
         const dist = 1.5;
         const steps = Math.ceil(curve.getLength() / dist);
-        const pts = curve.getSpacedPoints(steps);
 
-        const im = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.stone, pts.length - 1);
-        im.matrixAutoUpdate = false;
-        im.updateMatrix();
+        const im = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.stone, steps);
+        GeneratorUtils.freezeStatic(im);
 
-        for (let i = 0; i < pts.length - 1; i++) {
-            const mid = _v1.addVectors(pts[i], pts[i + 1]).multiplyScalar(0.5);
-            _matrix.lookAt(mid, pts[i + 1], _up);
-            _quat.setFromRotationMatrix(_matrix);
-
+        let i = 0;
+        GeneratorUtils.distributeAlongPath(points, dist, false, (mid, angle, segDist) => {
+            _quat.setFromAxisAngle(_up, angle);
             mid.y += height / 2;
             _matrix.compose(mid, _quat, _v3.set(thickness, height, dist));
             im.setMatrixAt(i, _matrix);
@@ -444,7 +427,9 @@ export const PathGenerator = {
                 collider: { type: 'box', size: new THREE.Vector3(thickness, height, dist) },
                 materialId: MaterialType.STONE
             });
-        }
+            i++;
+        });
+
         im.instanceMatrix.needsUpdate = true;
         ctx.scene.add(im);
     },
@@ -453,11 +438,10 @@ export const PathGenerator = {
         const curve = new THREE.CatmullRomCurve3(points);
         const pts = curve.getSpacedPoints(Math.ceil(curve.getLength() / 2.0));
 
-        const postIM = new THREE.InstancedMesh(SHARED_GEO.cylinder, MATERIALS.blackMetal, pts.length);
-        postIM.matrixAutoUpdate = false; postIM.updateMatrix();
+        const group = new THREE.Group();
 
+        const postIM = new THREE.InstancedMesh(SHARED_GEO.cylinder, MATERIALS.blackMetal, pts.length);
         const railIM = new THREE.InstancedMesh(SHARED_GEO.box, MATERIALS.blackMetal, pts.length - 1);
-        railIM.matrixAutoUpdate = false; railIM.updateMatrix();
 
         for (let i = 0; i < pts.length; i++) {
             _matrix.makeTranslation(pts[i].x, pts[i].y + 0.5, pts[i].z);
@@ -485,8 +469,14 @@ export const PathGenerator = {
         }
         postIM.instanceMatrix.needsUpdate = true;
         railIM.instanceMatrix.needsUpdate = true;
-        ctx.scene.add(postIM);
-        ctx.scene.add(railIM);
+        
+        group.add(postIM);
+        group.add(railIM);
+
+        // Optimized single-shot freeze on root group
+        GeneratorUtils.freezeStatic(group);
+
+        ctx.scene.add(group);
     },
 
     createEmbankment: (ctx: SectorContext, points: THREE.Vector3[], width: number = 20, height: number = 5, material: THREE.Material = MATERIALS.dirt) => {
@@ -558,8 +548,7 @@ export const PathGenerator = {
         mesh.receiveShadow = true;
 
         // VINTERDÖD: Freeze matrix
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
+        GeneratorUtils.freezeStatic(mesh);
 
         ctx.scene.add(mesh);
     },

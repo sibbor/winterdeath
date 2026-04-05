@@ -1,5 +1,6 @@
 import { HudState } from '../components/ui/hud/HudTypes';
 import { WeaponType } from '../content/weapons';
+import { InteractionType } from '../systems/InteractionTypes';
 
 // ============================================================================
 // INITIAL STATE
@@ -54,7 +55,7 @@ const INITIAL_HUD_STATE: HudState = {
     systems: [],
     currentLine: { active: false, speaker: '', text: '' },
     cinematicActive: false,
-    interactionPrompt: { active: false, type: '', label: '', x: 0, y: 0, targetId: '' },
+    interactionPrompt: { active: false, type: InteractionType.NONE, label: '', x: 0, y: 0, targetId: '' },
     hudVisible: false,
     sectorName: '',
     discovery: { active: false, id: '', type: 'clue', title: '', details: '', timestamp: 0 },

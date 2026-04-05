@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { SectorDef, SectorContext } from '../../game/session/SectorTypes';
-import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { VEGETATION_TYPE } from '../../content/environment';
+import { POI_TYPE } from '../../content/pois';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
 
@@ -109,16 +110,7 @@ export const Sector3: SectorDef = {
         }
 
         // The Dealership Building
-        const shedGroup = new THREE.Group();
-        shedGroup.position.set(-40, 0, -150);
-        const shed = new THREE.Mesh(new THREE.BoxGeometry(20, 8, 20), MATERIALS.metalPanel);
-        shed.position.y = 4;
-        shedGroup.add(shed);
-        scene.add(shedGroup);
-        SectorBuilder.addObstacle(ctx, {
-            mesh: shedGroup,
-            collider: { type: 'sphere', radius: 12 }
-        });
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.DEALERSHIP, -40, -150, 0);
 
         // ===== INDUSTRIAL DECAY =====
 
@@ -129,7 +121,7 @@ export const Sector3: SectorDef = {
             new THREE.Vector3(20, 0, 20),
             new THREE.Vector3(-20, 0, 20)
         ];
-        await VegetationGenerator.fillAreaWithGrass(ctx, industrialWeeds, 0.4);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.GRASS, industrialWeeds, 0.4);
 
         // Dead/dying trees (only standing, industrial feel)
         for (let i = 0; i < 15; i++) {

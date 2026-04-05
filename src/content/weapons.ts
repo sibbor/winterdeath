@@ -41,8 +41,8 @@ export enum WeaponType {
   FLAMETHROWER = 'Flamethrower',
   ARC_CANNON = 'Arc-Cannon',
   RADIO = 'Radio',
-  RUSH = 'RUSH',
-  VEHICLE = 'VEHICLE',
+  RUSH = 'Rush',
+  VEHICLE = 'Vehicle',
   NONE = 'None'
 }
 

@@ -5,6 +5,7 @@ import { SectorContext } from '../../game/session/SectorTypes';
 import { WinterEngine } from '../../core/engine/WinterEngine';
 import { GameSessionLogic } from './GameSessionLogic';
 import { CinematicBubbleHandle } from '../../components/ui/hud/CinematicBubble';
+import { InteractionType } from '../../systems/InteractionTypes';
 
 export interface UIState {
     isSectorLoading: boolean;
@@ -15,7 +16,7 @@ export interface UIState {
     bossIntroActive: boolean;
     bossName: string;
     foundMemberName: string;
-    interactionType: 'collectible' | 'chest' | 'vehicle' | 'sector_specific' | null;
+    interactionType: InteractionType;
     activeModal: 'armory' | 'spawner' | 'environment' | 'skills' | null;
     interactionScreenPos: { x: number, y: number } | null;
     forceHideHUD: boolean;
@@ -44,7 +45,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
     const activeModalRef = useRef<'armory' | 'spawner' | 'environment' | 'skills' | null>(null);
     const isBuildingSectorRef = useRef(true);
     const deathPhaseRef = useRef<DeathPhase>('NONE');
-    const interactionTypeRef = useRef<string | null>('NONE');
+    const interactionTypeRef = useRef<InteractionType>(InteractionType.NONE);
     const lastInteractionPosRef = useRef<{ x: number, y: number } | null>(null);
 
     // Gameplay Logic Refs
@@ -113,7 +114,7 @@ export const useGameSessionState = (props: GameCanvasProps) => {
         bossIntroActive: false,
         bossName: '',
         foundMemberName: '',
-        interactionType: null,
+        interactionType: InteractionType.NONE,
         activeModal: null,
         interactionScreenPos: null,
         forceHideHUD: false,

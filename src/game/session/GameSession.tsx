@@ -373,7 +373,7 @@ const GameSession = React.forwardRef<GameSessionHandle, GameCanvasProps>((props,
     const handleDiscovery = useCallback((type: string, id: string, titleKey: string, detailsKey: string, payload?: any) => {
         const state = refs.stateRef.current;
         const currentProps = latestStateRef.current.props;
-        if (!state || !state.sessionStats) return;
+        if (!state || !state.sessionStats || !state.discoverySets) return;
 
         const stats = state.sessionStats;
         const sets = state.discoverySets;

@@ -16,6 +16,20 @@ export const DebugVisualizer = {
     visualizeSector: (ctx: SectorContext, sectorDef?: any) => {
         if (!ctx.debugMode) return;
 
+        // VINTERDÖD FIX: Clear old debug objects to prevent geometry leaks and FPS drops
+        const existing = ctx.scene.getObjectByName('DEBUG_GROUP');
+        if (existing) {
+            ctx.scene.remove(existing);
+            // Dispose of geometries to free VRAM
+            existing.traverse((child: any) => {
+                if (child.geometry) child.geometry.dispose();
+            });
+        }
+
+        const debugGroup = new THREE.Group();
+        debugGroup.name = 'DEBUG_GROUP';
+        ctx.scene.add(debugGroup);
+
         // 1. Visualize Sector Bounds
         if (sectorDef?.bounds) {
             const w = sectorDef.bounds.width;
@@ -26,36 +40,34 @@ export const DebugVisualizer = {
                 new THREE.Vector3(w / 2, 0.5, d / 2),
                 new THREE.Vector3(-w / 2, 0.5, d / 2)
             ];
-            DebugVisualizer.drawPolygon(ctx, pts, 'red');
+            DebugVisualizer.drawPolygon(ctx, pts, 'red', 1, debugGroup);
         }
 
         // 2. Visualize Triggers
-        DebugVisualizer.visualizeTriggers(ctx);
+        DebugVisualizer.visualizeTriggers(ctx, debugGroup);
 
         // 3. Visualize Areas from MapItems (Forests, Lakes, Mountains, Wheat)
         if (ctx.mapItems) {
             for (let i = 0; i < ctx.mapItems.length; i++) {
                 const item = ctx.mapItems[i];
                 if (item.points && item.points.length > 0) {
-                    // Convert basic x/z points back to Vector3 for drawing
                     const vectors = new Array(item.points.length);
                     for (let j = 0; j < item.points.length; j++) {
                         vectors[j] = new THREE.Vector3(item.points[j].x, 1, item.points[j].z);
                     }
 
-                    // Auto-assign colors based on type
                     let color: 'red' | 'green' | 'blue' | 'yellow' = 'yellow';
                     if (item.type === 'FOREST') color = 'green';
                     else if (item.type === 'LAKE') color = 'blue';
                     else if (item.type === 'MOUNTAIN') color = 'red';
 
-                    DebugVisualizer.drawPolygon(ctx, vectors, color);
+                    DebugVisualizer.drawPolygon(ctx, vectors, color, 1, debugGroup);
                 }
             }
         }
     },
 
-    drawPolygon: (ctx: SectorContext, points: THREE.Vector3[], color: 'red' | 'green' | 'blue' | 'yellow' = 'green', yOffset: number = 1) => {
+    drawPolygon: (ctx: SectorContext, points: THREE.Vector3[], color: 'red' | 'green' | 'blue' | 'yellow' = 'green', yOffset: number = 1, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         const closedPoints = [...points, points[0]];
@@ -68,10 +80,11 @@ export const DebugVisualizer = {
         const line = new THREE.Line(geo, mat);
         line.position.y = yOffset;
 
-        ctx.scene.add(line);
+        if (parent) parent.add(line);
+        else ctx.scene.add(line);
     },
 
-    drawPath: (ctx: SectorContext, points: THREE.Vector3[], color: 'red' | 'green' | 'blue' | 'yellow' = 'blue', yOffset: number = 0) => {
+    drawPath: (ctx: SectorContext, points: THREE.Vector3[], color: 'red' | 'green' | 'blue' | 'yellow' = 'blue', yOffset: number = 0, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !points || points.length === 0) return;
 
         const geo = new THREE.BufferGeometry().setFromPoints(points);
@@ -82,29 +95,34 @@ export const DebugVisualizer = {
         const line = new THREE.Line(geo, mat);
         line.position.y = yOffset;
 
-        ctx.scene.add(line);
+        if (parent) parent.add(line);
+        else ctx.scene.add(line);
     },
 
-    spawnMarker: (ctx: SectorContext, x: number, z: number, height: number, label: string) => {
+    spawnMarker: (ctx: SectorContext, x: number, z: number, height: number, label: string, parent?: THREE.Object3D) => {
         if (!ctx.debugMode) return;
 
         const beam = new THREE.Mesh(GEOMETRY.debugMarker, MATERIALS.debugBeam);
         beam.position.set(x, 0, z);
-        ctx.scene.add(beam);
+        
+        if (parent) parent.add(beam);
+        else ctx.scene.add(beam);
 
         const sprite = ObjectGenerator.createTextSprite(label);
         sprite.scale.set(12, 3, 1);
         sprite.position.set(x, height + 4, z);
-        ctx.scene.add(sprite);
+        
+        if (parent) parent.add(sprite);
+        else ctx.scene.add(sprite);
     },
 
-    visualizeTriggers: (ctx: SectorContext) => {
+    visualizeTriggers: (ctx: SectorContext, parent?: THREE.Object3D) => {
         if (!ctx.debugMode || !ctx.triggers) return;
 
         for (let i = 0; i < ctx.triggers.length; i++) {
             const trig = ctx.triggers[i];
 
-            DebugVisualizer.spawnMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase());
+            DebugVisualizer.spawnMarker(ctx, trig.position.x, trig.position.z, 2, trig.id.toUpperCase(), parent);
 
             let drawRadius = trig.radius;
             if (!drawRadius && trig.size) {
@@ -118,7 +136,8 @@ export const DebugVisualizer = {
             ring.rotation.x = -Math.PI / 2;
             ring.position.set(trig.position.x, 0.1, trig.position.z);
 
-            ctx.scene.add(ring);
+            if (parent) parent.add(ring);
+            else ctx.scene.add(ring);
         }
     }
-};
+};

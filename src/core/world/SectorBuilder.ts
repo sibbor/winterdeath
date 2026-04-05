@@ -7,6 +7,7 @@ import { TerrainGenerator } from './generators/TerrainGenerator';
 import { VegetationGenerator } from './generators/VegetationGenerator';
 import { NaturePropGenerator } from './generators/NaturePropGenerator';
 import { PathGenerator } from './generators/PathGenerator';
+import { GeneratorUtils } from './generators/GeneratorUtils';
 import { EffectManager } from '../../systems/EffectManager';
 import { getCollectibleById } from '../../content/collectibles';
 import { VEHICLES, VehicleType } from '../../content/vehicles';
@@ -14,12 +15,18 @@ import { SectorTrigger, TriggerType, TriggerAction } from '../../systems/Trigger
 import { WaterBodyType, WaterBody } from '../../systems/WaterSystem';
 import { GEOMETRY } from '../../utils/assets';
 import { WinterEngine } from '../engine/WinterEngine';
-import { TREE_TYPE, LIGHT_SYSTEM } from '../../content/constants';
+import { LIGHT_SYSTEM } from '../../content/constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { MaterialType, VEGETATION_TYPE } from '../../content/environment';
+import { POI_TYPE } from '../../content/pois';
 import { FootprintSystem } from '../../systems/FootprintSystem';
+import { PoiGenerator } from './generators/PoiGenerator';
+import { InteractionType } from '../../systems/InteractionTypes';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _v1_sg = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 const _q1_sg = new THREE.Quaternion();
 const _box_sg = new THREE.Box3();
 const _axisY = new THREE.Vector3(0, 1, 0);
@@ -35,7 +42,7 @@ export interface InteractionCollider {
 export interface InteractableParams {
     id?: string;
     label?: string;
-    type?: string;
+    type?: InteractionType;
     collider?: InteractionCollider;
 
     // Legacy support (Converted to collider automatically)
@@ -87,7 +94,7 @@ export const SectorBuilder = {
         object.userData.isInteractable = true;
         if (params?.id) object.userData.interactionId = params.id;
         if (params?.label) object.userData.interactionLabel = params.label;
-        if (params?.type) object.userData.interactionType = params.type;
+        if (params?.type !== undefined) object.userData.interactionType = params.type;
 
         // Data-Driven Interaction Shapes
         if (params?.collider) {
@@ -99,6 +106,11 @@ export const SectorBuilder = {
             }
             if (params.collider.margin !== undefined) {
                 object.userData.interactionMargin = params.collider.margin;
+
+                // VINTERDÖD FIX: Propagate to nested structure for consistency
+                if (!object.userData.interactable) object.userData.interactable = {};
+                if (!object.userData.interactable.collider) object.userData.interactable.collider = {};
+                object.userData.interactable.collider.margin = params.collider.margin;
             }
         }
         // Legacy fallback
@@ -189,6 +201,7 @@ export const SectorBuilder = {
 
         // Idempotency check: Clear state arrays to prevent duplication on re-renders
         if (ctx.obstacles) ctx.obstacles.length = 0;
+        if (ctx.chests) ctx.chests.length = 0;
         if (ctx.interactables) ctx.interactables.length = 0;
         if (ctx.triggers) ctx.triggers.length = 0;
         if (ctx.mapItems) ctx.mapItems.length = 0;
@@ -278,6 +291,10 @@ export const SectorBuilder = {
         chest.position.set(x, 0, z);
         chest.rotation.y = rot;
         chest.updateMatrixWorld();
+        // VINTERDÖD FIX: Manual sync for frozen objects
+        chest.updateMatrix();
+        chest.updateMatrixWorld();
+
         ctx.scene.add(chest);
 
         const isBig = type === 'big';
@@ -301,14 +318,15 @@ export const SectorBuilder = {
         SectorBuilder.addObstacle(ctx, obs);
         chest.userData.chestData = obs;
 
-        // VINTERDÖD FIX: Chests explicitly use Box Interaction Shape
+        // VINTERDÖD FIX: Chests explicitly use InteractionType enum
         SectorBuilder.addInteractable(ctx, chest, {
-            type: 'chest',
+            id: `chest_${x}_${z}`,
+            type: InteractionType.CHEST,
             label: isBig ? 'ui.open_large_chest' : 'ui.open_chest',
             collider: {
                 type: 'box',
                 size: boxSize.clone(),
-                margin: 2.0
+                margin: 3.5
             }
         });
 
@@ -334,7 +352,7 @@ export const SectorBuilder = {
 
         const group = new THREE.Group();
         group.position.set(x, 0.5, z);
-        group.userData = { id, type: 'collectible', collectibleId: id, isCollectible: true };
+        group.userData = { id, type: InteractionType.COLLECTIBLE, collectibleId: id, isCollectible: true };
         group.name = `collectible_${id}`;
 
         const mesh = ModelFactory.createCollectible(type);
@@ -389,7 +407,8 @@ export const SectorBuilder = {
         });
 
         SectorBuilder.addInteractable(ctx, group, {
-            type: 'collectible',
+            id: id,
+            type: InteractionType.COLLECTIBLE,
             label: 'ui.interact_pickup_collectible',
             collider: { type: 'sphere', radius: 4.0 }
         });
@@ -469,6 +488,7 @@ export const SectorBuilder = {
     spawnDeadBody: (ctx: SectorContext, x: number, z: number, type: EnemyType | 'PLAYER' | 'HUMAN', rot: number = 0, blood: boolean = true) => {
         const body = ObjectGenerator.createDeadBody(type, rot, blood);
         body.position.set(x, 0, z);
+        GeneratorUtils.freezeStatic(body);
         ctx.scene.add(body);
         return body;
     },
@@ -477,8 +497,7 @@ export const SectorBuilder = {
         const bale = ObjectGenerator.createHaybale(scale);
         bale.position.set(x, 0, z);
         bale.rotation.y = rotation;
-        bale.matrixAutoUpdate = false;
-        bale.updateMatrix();
+        GeneratorUtils.freezeStatic(bale);
         ctx.scene.add(bale);
 
         SectorBuilder.addObstacle(ctx, { mesh: bale, collider: { type: 'sphere' as const, radius: 1.2 * scale } });
@@ -488,8 +507,7 @@ export const SectorBuilder = {
         const timber = ObjectGenerator.createTimberPile(scale);
         timber.position.set(x, 0, z);
         timber.rotation.y = rotation;
-        timber.matrixAutoUpdate = false;
-        timber.updateMatrix();
+        GeneratorUtils.freezeStatic(timber);
         ctx.scene.add(timber);
 
         const baseSize = new THREE.Vector3(2.5, 1.5, 6.0);
@@ -509,10 +527,13 @@ export const SectorBuilder = {
 
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
-        building.updateMatrixWorld();
-        building.matrixAutoUpdate = false;
         building.castShadow = true;
         building.receiveShadow = true;
+        GeneratorUtils.freezeStatic(building);
+        
+        // VINTERDÖD FIX: Manual sync for frozen objects
+        building.updateMatrix();
+        building.updateMatrixWorld();
 
         ctx.scene.add(building);
 
@@ -559,6 +580,8 @@ export const SectorBuilder = {
 
         vehicle.position.set(x, 0, z);
         vehicle.rotation.y = rotation;
+        GeneratorUtils.freezeStatic(vehicle);
+
         ctx.scene.add(vehicle);
 
         SectorBuilder.addObstacle(ctx, {
@@ -626,15 +649,15 @@ export const SectorBuilder = {
         vehicleRoot.userData.obstacleRef = obs;
         ctx.scene.add(vehicleRoot);
 
-        // Driveable vehicles explicitly use Box Interaction Shape based on their definition
+        // Driveable vehicles explicitly use InteractionType enum
         SectorBuilder.addInteractable(ctx, vehicleRoot, {
             id: `vehicle_${vehicleType}_${x}_${z}`,
-            type: 'vehicle',
+            type: InteractionType.VEHICLE,
             label: 'ui.enter_vehicle',
             collider: {
                 type: 'box',
                 size: boxSize.clone(),
-                margin: 2.0
+                margin: 3.0
             }
         });
 
@@ -690,8 +713,7 @@ export const SectorBuilder = {
             if (rand < 0.3) {
                 const rock = NaturePropGenerator.createRock(1.5 + Math.random() * 2, 1 + Math.random() * 1.5);
                 rock.position.set(pX, -currentDepth + 0.2, pZ);
-                rock.matrixAutoUpdate = false;
-                rock.updateMatrix();
+                GeneratorUtils.freezeStatic(rock);
                 ctx.scene.add(rock);
             } else if (rand < 0.7) {
                 floraInstances.push({
@@ -723,8 +745,7 @@ export const SectorBuilder = {
         const container = ObjectGenerator.createContainer(colorOverride, addSnow);
         container.position.set(x, 0, z);
         container.rotation.y = rotation;
-        container.matrixAutoUpdate = false;
-        container.updateMatrix();
+        GeneratorUtils.freezeStatic(container);
         ctx.scene.add(container);
 
         SectorBuilder.addObstacle(ctx, {
@@ -746,9 +767,7 @@ export const SectorBuilder = {
 
         sign.position.set(x, 5.5, z);
         sign.rotation.y = rotation;
-        sign.matrixAutoUpdate = false;
-        sign.updateMatrix();
-
+        GeneratorUtils.freezeStatic(sign);
         ctx.scene.add(sign);
 
         return sign;
@@ -758,9 +777,7 @@ export const SectorBuilder = {
         const lightGroup = ObjectGenerator.createStreetLamp();
         lightGroup.position.set(x, 0, z);
         lightGroup.rotation.y = rotation;
-        lightGroup.matrixAutoUpdate = false;
-        lightGroup.updateMatrix();
-
+        GeneratorUtils.freezeStatic(lightGroup);
         ctx.scene.add(lightGroup);
 
         SectorBuilder.addObstacle(ctx, {
@@ -776,9 +793,7 @@ export const SectorBuilder = {
     spawnCaveLamp: (ctx: SectorContext, x: number, y: number, z: number) => {
         const lamp = ObjectGenerator.createCaveLamp();
         lamp.position.set(x, y, z);
-        lamp.matrixAutoUpdate = false;
-        lamp.updateMatrix();
-
+        GeneratorUtils.freezeStatic(lamp);
         ctx.scene.add(lamp);
 
         if (lamp.userData.logicalLights && ctx.dynamicLights) {
@@ -807,8 +822,7 @@ export const SectorBuilder = {
         const building = ObjectGenerator.createStorefrontBuilding(width, height, depth, opts);
         building.position.set(x, 0, z);
         building.rotation.y = rotation;
-        building.matrixAutoUpdate = false;
-        building.updateMatrix();
+        GeneratorUtils.freezeStatic(building);
         ctx.scene.add(building);
 
         const size = building.userData.size;
@@ -832,7 +846,7 @@ export const SectorBuilder = {
                     color: lData.color,
                     baseIntensity: lData.baseIntensity,
                     distance: lData.distance,
-                    flickerRate: lData.flickerRate || 0
+                    flickerRate: lData.flickerRate || 0.0
                 } as any);
             }
             building.userData.logicalLights = null;
@@ -845,6 +859,7 @@ export const SectorBuilder = {
         const heart = ObjectGenerator.createNeonHeart(color, scale);
         heart.position.set(x, y, z);
         heart.rotation.y = rotation;
+        GeneratorUtils.freezeStatic(heart);
         ctx.scene.add(heart);
         return heart;
     },
@@ -854,6 +869,7 @@ export const SectorBuilder = {
 
         stairs.position.set(x, 0, z);
         stairs.rotation.y = rotation;
+        GeneratorUtils.freezeStatic(stairs);
         ctx.scene.add(stairs);
 
         SectorBuilder.addObstacle(ctx, {
@@ -870,9 +886,7 @@ export const SectorBuilder = {
         const pole = ObjectGenerator.createElectricPole();
         pole.position.set(x, 0, z);
         pole.rotation.y = rotation;
-        pole.matrixAutoUpdate = false;
-        pole.updateMatrix();
-
+        GeneratorUtils.freezeStatic(pole);
         ctx.scene.add(pole);
 
         SectorBuilder.addObstacle(ctx, { mesh: pole, collider: { type: 'sphere', radius: 1 } });
@@ -891,6 +905,8 @@ export const SectorBuilder = {
             container.position.y = i * 2.6;
             group.add(container);
         }
+
+        GeneratorUtils.freezeStatic(group);
 
         SectorBuilder.addObstacle(ctx, {
             mesh: group,
@@ -932,6 +948,7 @@ export const SectorBuilder = {
             currentY += vehicleHeight;
         }
 
+        GeneratorUtils.freezeStatic(vehicleStack);
         ctx.scene.add(vehicleStack);
 
         _box_sg.setFromObject(vehicleStack);
@@ -945,15 +962,14 @@ export const SectorBuilder = {
     },
 
     spawnTree: (ctx: SectorContext, type: 'spruce' | 'pine' | 'birch', x: number, z: number, scaleMultiplier: number = 1.0) => {
-        let genType: TREE_TYPE = TREE_TYPE.PINE;
-        if (type === 'birch') genType = TREE_TYPE.BIRCH;
-        if (type === 'spruce') genType = TREE_TYPE.SPRUCE;
+        let genType: VEGETATION_TYPE = VEGETATION_TYPE.PINE;
+        if (type === 'birch') genType = VEGETATION_TYPE.BIRCH;
+        if (type === 'spruce') genType = VEGETATION_TYPE.SPRUCE;
 
         const tree = VegetationGenerator.createTree(genType, scaleMultiplier);
         tree.position.set(x, 0, z);
         tree.rotation.y = Math.random() * Math.PI * 2;
-        tree.matrixAutoUpdate = false;
-        tree.updateMatrix();
+        GeneratorUtils.freezeStatic(tree);
         ctx.scene.add(tree);
 
         SectorBuilder.addObstacle(ctx, {
@@ -973,6 +989,7 @@ export const SectorBuilder = {
     spawnBarrel: (ctx: SectorContext, x: number, z: number, explosive: boolean = false) => {
         const barrel = ObjectGenerator.createBarrel(explosive);
         barrel.position.set(x, 0, z);
+        GeneratorUtils.freezeStatic(barrel);
         ctx.scene.add(barrel);
         SectorBuilder.addObstacle(ctx, { mesh: barrel, position: barrel.position, collider: { type: 'sphere', radius: 0.6 } });
     },
@@ -988,22 +1005,30 @@ export const SectorBuilder = {
         await NaturePropGenerator.fillArea(ctx, center, size, count, type, avoidCenterRadius);
     },
 
-    fillWheatField: async (ctx: SectorContext, polygon: THREE.Vector3[], density: number = 0.5) => {
-        const pts = new Array(polygon.length);
-        for (let i = 0; i < polygon.length; i++) pts[i] = { x: polygon[i].x, z: polygon[i].z };
+    fillVegetation: (ctx: SectorContext, type: VEGETATION_TYPE | VEGETATION_TYPE[], region: THREE.Vector3[] | { x: number, z: number, w: number, d: number }, density: number = 1.0) => {
+        // Register polygon-based regions on the minimap
+        if (Array.isArray(region) && region.length >= 3) {
+            const isTree = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD]
+                .includes(Array.isArray(type) ? type[0] : type);
+            const isWheat = (Array.isArray(type) ? type[0] : type) === VEGETATION_TYPE.WHEAT;
 
-        ctx.mapItems.push({
-            id: `wheat_${polygon[0].x}_${polygon[0].z}`,
-            x: polygon[0].x, z: polygon[0].z,
-            type: 'WHEAT', label: 'ui.field', icon: null, color: '#eab308', radius: null, points: pts
-        });
-
-        await VegetationGenerator.fillWheatField(ctx, polygon, density);
+            if (isTree || isWheat) {
+                const pts = new Array(region.length);
+                for (let i = 0; i < region.length; i++) pts[i] = { x: (region as THREE.Vector3[])[i].x, z: (region as THREE.Vector3[])[i].z };
+                ctx.mapItems.push({
+                    id: `veg_${(region as THREE.Vector3[])[0].x}_${(region as THREE.Vector3[])[0].z}`,
+                    x: (region as THREE.Vector3[])[0].x, z: (region as THREE.Vector3[])[0].z,
+                    type: isWheat ? 'WHEAT' : 'FOREST',
+                    label: isWheat ? 'ui.field' : 'ui.forest',
+                    icon: null,
+                    color: isWheat ? '#eab308' : '#16a34a',
+                    radius: null, points: pts
+                });
+            }
+        }
+        VegetationGenerator.fillArea(ctx, type, region, density);
     },
 
-    fillAreaWithFlowers: async (ctx: SectorContext, region: { x: number, z: number, w: number, d: number } | THREE.Vector3[], density: number = 2.0, type: 'flower' | 'sunflower' = 'flower') => {
-        await VegetationGenerator.fillAreaWithFlowers(ctx, region, density, type);
-    },
 
     createBoundry: (ctx: SectorContext, polygon: THREE.Vector3[], name: string) => {
         PathGenerator.createBoundry(ctx, polygon, name);
@@ -1069,19 +1094,81 @@ export const SectorBuilder = {
         return PathGenerator.createGuardrail(ctx, points, floating);
     },
 
-    spawnMast: (ctx: SectorContext, x: number, z: number) => {
-        const mast = ObjectGenerator.createMast();
-        mast.position.set(x, 0, z);
-        ctx.scene.add(mast);
+    spawnPoi: (ctx: SectorContext, type: POI_TYPE, x: number, z: number, rotation: number = 0, opts?: any): THREE.Group => {
+        let poi: THREE.Group | null = null;
+        switch (type) {
+            case POI_TYPE.CHURCH: poi = PoiGenerator.createChurch(); break;
+            case POI_TYPE.CAFE: poi = PoiGenerator.createCafe(); break;
+            case POI_TYPE.GROCERY_STORE: poi = PoiGenerator.createGroceryStore(); break;
+            case POI_TYPE.GYM: poi = PoiGenerator.createGym(); break;
+            case POI_TYPE.PIZZERIA: poi = PoiGenerator.createPizzeria(); break;
+            case POI_TYPE.FARM: poi = PoiGenerator.createFarm(); break;
+            case POI_TYPE.FARMHOUSE: poi = PoiGenerator.createFarmhouse(); break;
+            case POI_TYPE.BARN: poi = PoiGenerator.createBarn(); break;
+            case POI_TYPE.DEALERSHIP: poi = PoiGenerator.createDealership(); break;
+            case POI_TYPE.MAST: poi = PoiGenerator.createMast(); break;
+            case POI_TYPE.SMU: poi = PoiGenerator.createSmu(); break;
+            case POI_TYPE.CAMPFIRE:
+                poi = PoiGenerator.createCampfire(opts?.scale ?? 1.0);
+                if (opts?.y !== undefined) poi.position.y = opts.y;
+                break;
+            case POI_TYPE.TRAIN_TUNNEL:
+                if (opts?.points) poi = PoiGenerator.createTrainTunnel(opts.points);
+                break;
+        }
 
-        SectorBuilder.addObstacle(ctx, {
-            mesh: mast,
-            position: mast.position,
-            collider: { type: 'sphere', radius: 8 }
-        });
+        if (!poi) return new THREE.Group();
 
+        poi.position.set(x, 0, z);
+        poi.rotation.y = rotation;
+        poi.updateMatrixWorld(true);
+
+        const ud = poi.userData;
+
+        // VINTERDÖD FIX: Manual sync for frozen objects
+        poi.updateMatrix();
+        poi.updateMatrixWorld();
+
+        ctx.scene.add(poi);
+
+        // Auto-register Colliders
+        if (ud.colliders && Array.isArray(ud.colliders)) {
+            for (let i = 0; i < ud.colliders.length; i++) {
+                const c = ud.colliders[i];
+                const wPos = new THREE.Vector3(x, 0, z);
+                if (c.offset) {
+                    _v3.copy(c.offset).applyAxisAngle(_up, rotation);
+                    wPos.add(_v3);
+                }
+
+                SectorBuilder.addObstacle(ctx, {
+                    position: wPos,
+                    quaternion: new THREE.Quaternion().setFromAxisAngle(_up, rotation),
+                    collider: { type: c.type, size: c.size, radius: c.radius }
+                });
+            }
+        } else if (ud.size) {
+            SectorBuilder.addObstacle(ctx, {
+                position: new THREE.Vector3(x, 0, z),
+                quaternion: new THREE.Quaternion().setFromAxisAngle(_up, rotation),
+                collider: { type: 'box', size: ud.size }
+            });
+        }
+
+        // Auto-register FX
+        if (ud.effects && Array.isArray(ud.effects)) {
+            for (let i = 0; i < ud.effects.length; i++) {
+                const fx = ud.effects[i];
+                if (fx.type === 'fire') {
+                    const target = fx.target ? poi.getObjectByName(fx.target) || poi : poi;
+                    SectorBuilder.setOnFire(ctx, target, { smoke: fx.smoke, intensity: fx.intensity, distance: fx.distance, onRoof: fx.onRoof });
+                }
+            }
+        }
+
+        // Auto-register Lights
         if (ctx.dynamicLights) {
-            mast.traverse((child) => {
+            poi.traverse((child) => {
                 if (child.userData.needsLogicalLight) {
                     ctx.dynamicLights.push({
                         isLogicalLight: true,
@@ -1089,13 +1176,53 @@ export const SectorBuilder = {
                         color: child.userData.lightColor,
                         baseIntensity: child.userData.lightIntensity,
                         distance: child.userData.lightDistance,
-                        flickerRate: 0.0
+                        flickerRate: child.userData.flickerRate || 0.0
                     } as any);
                 }
             });
         }
 
-        return mast;
+        // Neon Signs & Hearts
+        if (ud.neonSign) {
+            const rot = (ud.neonSign.rot || 0) + rotation;
+            const wPos = new THREE.Vector3(x, 0, z);
+            if (ud.neonSign.offset) {
+                _v3.copy(ud.neonSign.offset).applyAxisAngle(_up, rotation);
+                wPos.add(_v3);
+            }
+            const backing = ud.neonSign.backingColor !== undefined;
+            const bg = ud.neonSign.backingColor || 0x050505;
+            const sign = ObjectGenerator.createNeonSign(ud.neonSign.text, ud.neonSign.color, backing, 1.0, bg);
+            sign.position.copy(wPos);
+            sign.rotation.y = rot;
+            ctx.scene.add(sign);
+        }
+
+        if (ud.neonHeart) {
+            const rot = (ud.neonHeart.rot || 0) + rotation;
+            const wPos = new THREE.Vector3(x, 0, z);
+            if (ud.neonHeart.offset) {
+                _v3.copy(ud.neonHeart.offset).applyAxisAngle(_up, rotation);
+                wPos.add(_v3);
+            }
+            // Spawn neon heart via ObjectGenerator.createNeonHeart ? wait there's one in SectorBuilder.
+            SectorBuilder.spawnNeonHeart(ctx, wPos.x, wPos.y, wPos.z, rot, 0xff0000, 2.0);
+        }
+
+        // Add staircase flicker
+        if (ud.staircase) {
+            const stairPos = new THREE.Vector3(x, 0, z);
+            if (ud.staircase.offset) {
+                _v3.copy(ud.staircase.offset).applyAxisAngle(_up, rotation);
+                stairPos.add(_v3);
+            }
+            const stairs = ObjectGenerator.createGlassStaircase(ud.staircase.width, ud.staircase.height, ud.staircase.depth);
+            stairs.position.copy(stairPos);
+            stairs.rotation.y = rotation;
+            poi.add(stairs); // adding directly to poi instead to keep it encapsulated
+        }
+
+        return poi;
     },
 
     addTriggers: (ctx: SectorContext, triggers: any[]) => {
@@ -1184,7 +1311,7 @@ export const SectorBuilder = {
 
         SectorBuilder.addInteractable(ctx, terminal, {
             id: type,
-            type: 'sector_specific',
+            type: InteractionType.SECTOR_SPECIFIC,
             label: 'ui.interact',
             collider: {
                 type: 'box',

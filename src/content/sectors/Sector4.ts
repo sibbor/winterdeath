@@ -7,6 +7,7 @@ import { ObjectGenerator } from '../../core/world/generators/ObjectGenerator';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
+import { VEGETATION_TYPE } from '../../content/environment';
 import { CAMERA_HEIGHT } from '../constants';
 
 const _v1 = new THREE.Vector3();
@@ -159,7 +160,13 @@ export const Sector4: SectorDef = {
 
         // 1. FOREST
         const p0 = SECTOR6_ZONES[0];
-        VegetationGenerator.createForest(ctx, { x: p0.x, z: p0.z, w: 180, d: 180 }, 120, 'PINE');
+        const forestPoly = [
+            new THREE.Vector3(p0.x - 90, 0, p0.z - 90),
+            new THREE.Vector3(p0.x + 90, 0, p0.z - 90),
+            new THREE.Vector3(p0.x + 90, 0, p0.z + 90),
+            new THREE.Vector3(p0.x - 90, 0, p0.z + 90),
+        ];
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.PINE, forestPoly, 8);
         for (let j = 0; j < 30; j++) {
             const rX = p0.x + (Math.random() - 0.5) * 160;
             const rZ = p0.z + (Math.random() - 0.5) * 160;
@@ -178,7 +185,7 @@ export const Sector4: SectorDef = {
             new THREE.Vector3(p1.x + 90, 0, p1.z + 90),
             new THREE.Vector3(p1.x - 90, 0, p1.z + 90),
         ];
-        VegetationGenerator.fillWheatField(ctx, farmRect, 0.4);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, farmRect, 0.4);
 
         // --- Tractor (Driveable) ---
         SectorBuilder.spawnDriveableVehicle(ctx, p1.x, p1.z, Math.random() * Math.PI, 'tractor');

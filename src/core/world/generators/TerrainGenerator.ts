@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUti
 import { MATERIALS } from '../../../utils/assets/materials';
 import { MaterialType } from '../../../content/environment';
 import { SectorContext } from '../../../game/session/SectorTypes';
+import { GeneratorUtils } from './GeneratorUtils';
 
 // --- PERFORMANCE SCRATCHPADS (Zero-GC) ---
 const _matrix = new THREE.Matrix4();
@@ -48,8 +49,7 @@ export const TerrainGenerator = {
         mesh.receiveShadow = true;
 
         // Zero-GC: Static plane
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
+        GeneratorUtils.freezeStatic(mesh);
 
         return mesh;
     },
@@ -106,8 +106,7 @@ export const TerrainGenerator = {
         mesh.receiveShadow = true;
         mesh.userData.materialId = MaterialType.DIRT; // VINTERDÖD
 
-        mesh.matrixAutoUpdate = false;
-        mesh.updateMatrix();
+        GeneratorUtils.freezeStatic(mesh);
 
         const repeatX = width / 8;
         const repeatY = depth / 8;
@@ -159,7 +158,7 @@ export const TerrainGenerator = {
                 _v1.copy(openingPos);
                 _v2.copy(openingDir).multiplyScalar(depth * 0.4);
                 _v1.add(_v2); // tunnelCenter
-                
+
                 const distSq = pos.distanceToSquared(_v1);
                 const maxRadius = Math.max(scale.x, scale.z);
                 const safeDist = (depth * 0.4) + maxRadius + 5;
@@ -210,7 +209,7 @@ export const TerrainGenerator = {
                 addRockBlock(_pos, _scale, _euler, layer === 0 ? 'icosa' : 'dodeca');
             }
         }
-        
+
         // Final cleanup of base geometries after loop
         dodecaBase.dispose();
         icosaBase.dispose();
@@ -255,7 +254,9 @@ export const TerrainGenerator = {
             const snowThreshold = height * 0.6;
 
             if ((upwardness > 0.65 && hAvg > snowThreshold / 2) || hAvg > snowThreshold) {
-                r = COLORS.SNOW.r; g = COLORS.SNOW.g; b = COLORS.SNOW.b;
+                r = COLORS.SNOW.r;
+                g = COLORS.SNOW.g;
+                b = COLORS.SNOW.b;
             } else {
                 const isLight = (_normal.x * 0.5 + _normal.z * 0.8) > 0;
                 r = isLight ? COLORS.ROCK_LIGHT.r : COLORS.ROCK_DARK.r;
@@ -272,10 +273,10 @@ export const TerrainGenerator = {
         mountainGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const mountain = new THREE.Mesh(mountainGeo, MATERIALS.mountain);
-        mountain.name = `Ground_Mountain`; // VINTERDÖD
+        mountain.name = `Mountain`;
         mountain.castShadow = true;
         mountain.receiveShadow = true;
-        mountain.userData.materialId = MaterialType.STONE; // VINTERDÖD
+        mountain.userData.materialId = MaterialType.STONE;
         ctx.scene.add(mountain);
     },
 

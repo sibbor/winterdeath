@@ -408,10 +408,15 @@ export class PerformanceMonitor {
             let str = '';
             for (let i = 0; i < msg.length; i++) {
                 const a = msg[i];
-                if (a instanceof Error) str += a.message + ' ';
-                else if (typeof a === 'object') {
-                    try { str += JSON.stringify(a) + ' '; }
-                    catch (e) { str += '[Circular] '; }
+                if (a instanceof Error) {
+                    str += a.message + ' ';
+                } else if (a !== null && typeof a === 'object') {
+                    // VINTERDÖD FIX: Avoid JSON.stringify in hot paths
+                    if (a.constructor && a.constructor.name) {
+                        str += `[${a.constructor.name}] `;
+                    } else {
+                        str += '[Object] ';
+                    }
                 } else {
                     str += String(a) + ' ';
                 }
@@ -426,15 +431,15 @@ export class PerformanceMonitor {
         };
 
         console.log = (...args) => {
-            this._originalConsole.log(...args);
+            if (this._originalConsole) this._originalConsole.log(...args);
             pushLog(args, '#ffffff');
         };
         console.warn = (...args) => {
-            this._originalConsole.warn(...args);
+            if (this._originalConsole) this._originalConsole.warn(...args);
             pushLog(args, '#ffcc00');
         };
         console.error = (...args) => {
-            this._originalConsole.error(...args);
+            if (this._originalConsole) this._originalConsole.error(...args);
             pushLog(args, '#ff5555');
         };
         console.info = (...args) => {

@@ -149,6 +149,12 @@ export const MATERIALS = {
         flatShading: true,
         side: THREE.DoubleSide
     })),
+    grassTuft: patchWindMaterial(new THREE.MeshStandardMaterial({
+        color: 0x3a7d3a,
+        roughness: 1.0,
+        flatShading: true,
+        side: THREE.DoubleSide
+    })),
     hedge: patchWindMaterial(new THREE.MeshStandardMaterial({
         color: 0x2d4c1e,
         roughness: 0.9,

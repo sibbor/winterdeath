@@ -1,8 +1,9 @@
 import React, { useCallback } from 'react';
 import { t } from '../../../utils/i18n';
+import { InteractionType } from '../../../systems/InteractionTypes';
 
 interface InteractionPromptProps {
-    type: 'collectible' | 'chest' | 'sector_specific' | 'vehicle' | null;
+    type: InteractionType;
     label?: string | null;
     screenPos?: { x: number, y: number } | null; // Kept for backwards compatibility
     isMobileDevice?: boolean;
@@ -10,17 +11,21 @@ interface InteractionPromptProps {
 }
 
 // ============================================================================
-// PERFORMANCE: Static Configuration Dictionary
-// Moved outside the component to prevent recreation on render. Lookups are O(1).
+// PERFORMANCE: Static Configuration Array (O(1) SMI Lookup)
+// Replaced the Record/Map with a contiguous array for optimized memory access.
+// VINTERDÖD: Ensures Zero-GC and prevents hidden-class deoptimization.
 // ============================================================================
-const TYPE_CONFIG: Record<string, { key: string, color: string }> = {
-    collectible: { key: 'ui.interact_pickup_collectible', color: 'border-green-400 text-green-100' },
-    chest: { key: 'ui.interact_open_chest', color: 'border-yellow-500 text-yellow-100' },
-    vehicle: { key: 'ui.enter_vehicle', color: 'border-blue-400 text-blue-100' },
-    sector_specific: { key: 'ui.interact', color: 'border-gray-400 text-white' }
-};
+const TYPE_CONFIG = [
+    { key: 'ui.interact', color: 'border-gray-400 text-white' }, // NONE (0)
+    { key: 'ui.interact_pickup_collectible', color: 'border-green-400 text-green-100' }, // COLLECTIBLE (1)
+    { key: 'ui.interact_open_chest', color: 'border-yellow-500 text-yellow-100' }, // CHEST (2)
+    { key: 'ui.enter_vehicle', color: 'border-blue-400 text-blue-100' }, // VEHICLE (3)
+    { key: 'ui.interact', color: 'border-gray-400 text-white' }, // SECTOR_SPECIFIC (4)
+    { key: 'ui.interact', color: 'border-orange-400 text-white' }, // PLANT_EXPLOSIVE (5)
+    { key: 'ui.interact', color: 'border-gray-400 text-white' }  // KNOCK_ON_PORT (6)
+];
 
-const DEFAULT_CONFIG = { key: 'ui.interact', color: 'border-gray-400 text-white' };
+const DEFAULT_CONFIG = TYPE_CONFIG[0];
 
 const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
     type,
@@ -28,7 +33,7 @@ const InteractionPrompt: React.FC<InteractionPromptProps> = React.memo(({
     isMobileDevice,
     onInteract
 }) => {
-    if (!type) return null;
+    if (type === InteractionType.NONE) return null;
 
     const inputKey = isMobileDevice ? "TAP" : "E";
 

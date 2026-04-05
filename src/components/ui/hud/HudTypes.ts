@@ -1,5 +1,6 @@
 import { WeaponType } from '../../../content/weapons';
 import { SectorState, GameScreen } from '../../../game/session/SessionTypes';
+import { InteractionType } from '../../../systems/InteractionTypes';
 
 // ============================================================================
 // HUD & ZERO-GC TYPES
@@ -62,7 +63,7 @@ export interface DebugInfoData {
 
 export interface InteractionPromptData {
   active: boolean;
-  type: string;
+  type: InteractionType;
   label: string;
   targetId: string;
   x: number;

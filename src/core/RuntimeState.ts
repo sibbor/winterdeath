@@ -10,6 +10,7 @@ import { Enemy } from '../entities/enemies/EnemyManager';
 import { ScrapItem } from '../systems/WorldLootSystem';
 import { SpatialGrid } from './world/SpatialGrid';
 import { ParticleState } from '../systems/FXSystem';
+import { InteractionType } from '../systems/InteractionTypes';
 
 export interface PreallocatedInitialAim {
     active: boolean;
@@ -34,7 +35,7 @@ export interface PreallocatedCinematicState {
 
 export interface PreallocatedInteractionRequest {
     active: boolean;
-    type: string;
+    type: InteractionType;
     label: string;
     targetId: string;
 }
@@ -209,7 +210,7 @@ export interface RuntimeState {
     // --- INTERACTION & DISCOVERY ---
     interaction: {
         active: boolean;
-        type: string;
+        type: InteractionType;
         label: string;
         targetId: string;
     };
@@ -217,7 +218,7 @@ export interface RuntimeState {
     // Zero-GC struct för interaktionsförfrågningar
     interactionRequest: {
         active: boolean;
-        type: string;
+        type: InteractionType;
         id: string;
         object: any; // Eller THREE.Object3D | null om du vill vara strikt
     };

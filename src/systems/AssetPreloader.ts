@@ -3,12 +3,14 @@ import { WinterEngine } from '../core/engine/WinterEngine';
 import { GEOMETRY, MATERIALS, ModelFactory, createProceduralDiffuse, createProceduralTextures, TREE_DEPTH_MATS } from '../utils/assets';
 import { TEXTURES } from '../utils/assets/AssetLoader';
 import { createWaterMaterial } from '../utils/assets/materials_water';
-import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, TREE_TYPE, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
+import { FAMILY_MEMBERS, ZOMBIE_TYPES, BOSSES, WATER_SYSTEM, LIGHT_SETTINGS, FLASHLIGHT } from '../content/constants';
+import { VEGETATION_TYPE } from '../content/environment';
 import { EnemyType } from '../entities/enemies/EnemyTypes';
 import { VEHICLES, VehicleType } from '../content/vehicles';
 import { ObjectGenerator } from '../core/world/generators/ObjectGenerator';
 import { VehicleGenerator } from '../core/world/generators/VehicleGenerator';
 import { VegetationGenerator } from '../core/world/generators/VegetationGenerator';
+import { PoiGenerator } from '../core/world/generators/PoiGenerator';
 import { CampWorld, CAMP_SCENE } from '../components/camp/CampWorld';
 import { SectorSystem } from './SectorSystem';
 import { registerSoundGenerators } from '../utils/audio/SoundLib';
@@ -46,7 +48,7 @@ const FX_GAS = [
 ];
 const ALL_FX = [...FX_SOLID, ...FX_GAS];
 const DEAD_BODY_TYPES = [EnemyType.WALKER, EnemyType.RUNNER, EnemyType.TANK, EnemyType.BOMBER];
-const TREE_TYPES = [TREE_TYPE.PINE, TREE_TYPE.SPRUCE, TREE_TYPE.OAK, TREE_TYPE.BIRCH, TREE_TYPE.DEAD];
+const TREE_TYPES = [VEGETATION_TYPE.PINE, VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.OAK, VEGETATION_TYPE.BIRCH, VEGETATION_TYPE.DEAD];
 const WEATHER_MATS = [MATERIALS.particle_snow, MATERIALS.particle_rain, MATERIALS.particle_ash, MATERIALS.particle_ember];
 
 // Reusable dummy scene for compilation
@@ -568,6 +570,23 @@ export const AssetPreloader = {
         add(ObjectGenerator.createFence(), true, true);
         add(ObjectGenerator.createContainer(), true, true);
         add(ObjectGenerator.createTerminal('ARMORY'), true, true);
+        add(ObjectGenerator.createLocomotive(), false, true);
+        add(ObjectGenerator.createStandardTunnel(), false, true);
+
+        // POIs
+        add(PoiGenerator.createChurch(), true, true);
+        add(PoiGenerator.createCafe(), true, true);
+        add(PoiGenerator.createGroceryStore(), true, true);
+        add(PoiGenerator.createGym(), true, true);
+        add(PoiGenerator.createPizzeria(), true, true);
+        add(PoiGenerator.createDealership(), true, true);
+        add(PoiGenerator.createMast(), true, true);
+        add(PoiGenerator.createSmu(), true, true);
+        add(PoiGenerator.createFarm(), true, true);
+        add(PoiGenerator.createFarmhouse(), true, true);
+        add(PoiGenerator.createBarn(), true, true);
+        add(PoiGenerator.createTrainTunnel([]), false, true);
+        add(PoiGenerator.createCampfire(), true, true);
 
         // Zombies corpse
         for (let i = 0; i < DEAD_BODY_TYPES.length; i++) add(ObjectGenerator.createDeadBody(DEAD_BODY_TYPES[i]), true, true);

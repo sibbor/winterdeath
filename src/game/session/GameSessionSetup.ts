@@ -381,9 +381,11 @@ export class GameSessionSetup {
             onDiscovery: (type: 'clue' | 'poi' | 'collectible' | 'enemy' | 'boss', id: string, titleKey: string, detailsKey: string, payload?: any) => {
                 // O(1) Optimization: Avoid React overhead if already found in this session or prior
                 const sets = state.discoverySets;
-                const stats = state.sessionStats;
+                if (!sets) return;
 
+                const stats = state.sessionStats;
                 let alreadyFound = false;
+
                 if (type === 'clue') {
                     alreadyFound = sets.clues.has(id);
                     if (!alreadyFound) {

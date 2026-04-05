@@ -4,9 +4,11 @@ import { MATERIALS } from '../../utils/assets';
 import { SectorBuilder } from '../../core/world/SectorBuilder';
 import { PathGenerator } from '../../core/world/generators/PathGenerator';
 import { VegetationGenerator } from '../../core/world/generators/VegetationGenerator';
+import { VEGETATION_TYPE } from '../../content/environment';
 import { NaturePropGenerator } from '../../core/world/generators/NaturePropGenerator';
 import { CAMERA_HEIGHT } from '../constants';
 import { EnemyType } from '../../entities/enemies/EnemyTypes';
+import { POI_TYPE } from '../../content/pois';
 
 const LOCATIONS = {
     SPAWN: {
@@ -143,8 +145,7 @@ export const Sector2: SectorDef = {
         SectorBuilder.spawnChest(ctx, LOCATIONS.SPAWN.BOSS.x, LOCATIONS.SPAWN.BOSS.z, 'big');
 
         // --- 2. BUILDINGS & PROPS ---
-        const farm = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e);
-        SectorBuilder.setOnFire(ctx, farm, { smoke: true, intensity: 20, distance: 40, onRoof: true });
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.FARM, LOCATIONS.POIS.FARM.x, LOCATIONS.POIS.FARM.z, (3 * Math.PI) / 4);
 
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x + 5, LOCATIONS.POIS.FARM.z + 5, EnemyType.WALKER, Math.random() * Math.PI);
         SectorBuilder.spawnDeadBody(ctx, LOCATIONS.POIS.FARM.x - 5, LOCATIONS.POIS.FARM.z + 10, EnemyType.RUNNER, Math.random() * Math.PI);
@@ -161,11 +162,8 @@ export const Sector2: SectorDef = {
         SectorBuilder.spawnTimberPile(ctx, 122, -92, 0, 2.0);
         SectorBuilder.spawnDriveableVehicle(ctx, 136, -92, -Math.PI / 3, 'timber_truck', 0x334433);
 
-        const farmHouse = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorBuilder.setOnFire(ctx, farmHouse, { smoke: true, intensity: 150, distance: 40, onRoof: true });
-
-        const barn = SectorBuilder.spawnBuilding(ctx, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, 25, 8, 20, (3 * Math.PI) / 4, 0x7c2e2e, true, true);
-        SectorBuilder.setOnFire(ctx, barn, { smoke: true, intensity: 150, distance: 40, onRoof: true });
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.FARMHOUSE, LOCATIONS.POIS.FARMHOUSE.x, LOCATIONS.POIS.FARMHOUSE.z, (3 * Math.PI) / 4);
+        SectorBuilder.spawnPoi(ctx, POI_TYPE.BARN, LOCATIONS.POIS.BARN.x, LOCATIONS.POIS.BARN.z, (3 * Math.PI) / 4);
 
         // Abandoned House 1: North of Farmhouse (Birch Forest)
         const house1Coords = { x: 285, z: -250 };
@@ -201,8 +199,8 @@ export const Sector2: SectorDef = {
         sprucePolyNorth.forEach(p => p.y = 0);
         sprucePolySouth.forEach(p => p.y = 0);
 
-        await SectorBuilder.createForest(ctx, sprucePolyNorth, 12, ['spruce', 'pine']);
-        await SectorBuilder.createForest(ctx, sprucePolySouth, 12, ['spruce', 'pine']);
+        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.PINE], sprucePolyNorth, 12);
+        SectorBuilder.fillVegetation(ctx, [VEGETATION_TYPE.SPRUCE, VEGETATION_TYPE.PINE], sprucePolySouth, 12);
 
         // 4.6 Wheat Fields (Strictly SOUTH of Haglaredsvägen using offset spline)
         const wheatOffset = 7;
@@ -214,7 +212,7 @@ export const Sector2: SectorDef = {
             ...filterWheat1(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
         ];
         wheatPoly1.forEach(p => p.y = 0);
-        await SectorBuilder.fillWheatField(ctx, wheatPoly1, 0.4);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, wheatPoly1, 0.4);
         SectorBuilder.createScarecrow(ctx, 125, -95);
 
         const filterWheat2 = (points: THREE.Vector3[]) => points.filter(p => p.x > 170 && p.x < 240);
@@ -223,7 +221,7 @@ export const Sector2: SectorDef = {
             ...filterWheat2(PathGenerator.getOffsetPoints(hagPts, wheatOffset + wheatDepth)).reverse()
         ];
         wheatPoly2.forEach(p => p.y = 0);
-        await SectorBuilder.fillWheatField(ctx, wheatPoly2, 0.4);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.WHEAT, wheatPoly2, 0.4);
         SectorBuilder.createScarecrow(ctx, 205, -135);
 
         // 4.7 Flowers (Nested dynamically between Farm Path and Haglaredsvägen)
@@ -235,7 +233,7 @@ export const Sector2: SectorDef = {
             ...filterFlowersHag(PathGenerator.getOffsetPoints(hagPts, -4)).reverse()   // Inner north boundary of Haglaredsvägen
         ];
         flowerPoly.forEach(p => p.y = 0);
-        await SectorBuilder.fillAreaWithFlowers(ctx, flowerPoly, 0.9, 'flower');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.FLOWER, flowerPoly, 0.9);
 
         // 4.8 Sunflowers (Strictly SOUTH of Haglaredsvägen, East of Mast Road)
         const sunflowerPoly1 = [
@@ -244,7 +242,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(360, 0, -80),
             new THREE.Vector3(310, 0, -80)
         ];
-        await SectorBuilder.fillAreaWithFlowers(ctx, sunflowerPoly1, 0.4, 'sunflower');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SUNFLOWER, sunflowerPoly1, 0.4);
 
         const sunflowerPoly2 = [
             new THREE.Vector3(310, 0, -70),
@@ -252,7 +250,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(360, 0, -40),
             new THREE.Vector3(310, 0, -40)
         ];
-        await SectorBuilder.fillAreaWithFlowers(ctx, sunflowerPoly2, 0.4, 'sunflower');
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.SUNFLOWER, sunflowerPoly2, 0.4);
 
         // 4.4 Birch Forest (Wrapping North and East of House 1)
         const birchPolyL = [
@@ -263,7 +261,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(300, 0, -240),
             new THREE.Vector3(260, 0, -240)
         ];
-        await SectorBuilder.createForest(ctx, birchPolyL, 15, ['birch']);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.BIRCH, birchPolyL, 15);
 
         // 4.5 Dead Trees (Wrapping House 2)
         const deadForestPoly = [
@@ -272,7 +270,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(340, 0, 110),
             new THREE.Vector3(270, 0, 110)
         ];
-        await SectorBuilder.createForest(ctx, deadForestPoly, 18, ['dead_tree']);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.DEAD, deadForestPoly, 18);
 
         // --- 4. LAKE & GRASS ---
         const lakeCoords = { x: 255, z: -117 };
@@ -304,7 +302,7 @@ export const Sector2: SectorDef = {
             new THREE.Vector3(180, 0, -10),
             new THREE.Vector3(120, 0, 10)
         ];
-        await VegetationGenerator.fillAreaWithGrass(ctx, sparseGrassPoly, 0.4);
+        SectorBuilder.fillVegetation(ctx, VEGETATION_TYPE.GRASS, sparseGrassPoly, 0.4);
 
         // --- 5. MOUNTAIN BOUNDARY ---
         SectorBuilder.createMountain(ctx, [
@@ -342,7 +340,7 @@ export const Sector2: SectorDef = {
         const mastGroup = new THREE.Group();
         mastGroup.position.set(mastPos.x, 5, mastPos.z);
 
-        const mast = SectorBuilder.spawnMast(ctx, mastPos.x, mastPos.z);
+        const mast = SectorBuilder.spawnPoi(ctx, POI_TYPE.MAST, mastPos.x, mastPos.z, 0);
         mastLightHubRef = mast.getObjectByName("mastWarningLights") || null;
     },
 

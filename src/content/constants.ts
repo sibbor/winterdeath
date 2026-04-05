@@ -154,14 +154,3 @@ export const FAMILY_MEMBERS = [
     { id: 4, name: 'Sotis', race: 'animal', gender: 'female', title: 'family.cat', color: 0xcccccc, scale: 0.6 },
     { id: 5, name: 'Panter', race: 'animal', gender: 'male', title: 'family.cat', color: 0x222222, scale: 0.6 }
 ];
-
-/**
- * Standardized tree types for environment generation
- */
-export enum TREE_TYPE {
-    PINE = 'PINE',
-    SPRUCE = 'SPRUCE',
-    OAK = 'OAK',
-    DEAD = 'DEAD',
-    BIRCH = 'BIRCH'
-}

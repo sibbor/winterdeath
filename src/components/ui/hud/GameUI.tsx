@@ -3,10 +3,11 @@ import InteractionPrompt from './InteractionPrompt';
 import ChatBubblesUI from './ChatBubblesUI';
 import { useHudStore } from '../../../hooks/useHudStore';
 import { HudStore } from '../../../store/HudStore';
+import { InteractionType } from '../../../systems/InteractionTypes';
 
 interface GameUIProps {
     onCloseClue: () => void;
-    interactionType?: 'collectible' | 'chest' | 'vehicle' | 'sector_specific' | null;
+    interactionType?: InteractionType;
     interactionLabel?: string;
     interactionScreenPos?: { x: number, y: number } | null; // Kept for backwards compatibility
     isMobileDevice?: boolean;
@@ -30,7 +31,7 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
     const storeLabel = useHudStore(s => s.interactionPrompt.label);
 
     // Fallback to props if interaction is not driven by HudStore yet in edge cases
-    const currentType = isActive ? storeType : (interactionType || null);
+    const currentType = isActive ? storeType : (interactionType ?? InteractionType.NONE);
     const currentLabel = isActive ? storeLabel : interactionLabel;
 
     // ============================================================================
@@ -39,7 +40,7 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (!currentType) return; // Only subscribe to the 60FPS loop if prompt is visible
+        if (currentType === InteractionType.NONE) return; // Only subscribe to the 60FPS loop if prompt is visible
 
         let lastX = -1;
         let lastY = -1;
@@ -69,7 +70,7 @@ const GameUI: React.FC<GameUIProps> = React.memo(({
         <>
             <ChatBubblesUI />
 
-            {currentType && (
+            {currentType !== InteractionType.NONE && (
                 <div
                     ref={wrapperRef}
                     className="absolute top-0 left-0 w-0 h-0 pointer-events-none z-50"

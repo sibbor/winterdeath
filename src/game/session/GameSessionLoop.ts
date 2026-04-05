@@ -18,8 +18,8 @@ import { EnemyDeathState } from '../../entities/enemies/EnemyTypes';
 import { DamageType } from '../../entities/player/CombatTypes';
 import { HudStore } from '../../store/HudStore';
 import { NoiseType } from '../../entities/enemies/EnemyTypes';
-import { PLAYER_CHARACTER } from '../../content/constants';
 import { VehicleManager } from '../../systems/VehicleManager';
+import { InteractionType } from '../../systems/InteractionTypes';
 
 interface LoopContext {
     engine: WinterEngine;
@@ -364,6 +364,22 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     soundManager.stopRadioStatic();
                     lastTime = now;
                     return;
+                }
+            }
+
+            // --- DISCOVERY QUEUE PROCESSOR (Zero-GC) ---
+            // Bridge events from handleDiscovery() into the HudStore-driven Popup.
+            // Only pops a new item if the current popup has finished or enough time passed.
+            const queue = (refs as any).discoveryQueueRef.current;
+            if (queue && queue.length > 0 && !state.discovery.active) {
+                const next = queue.shift();
+                if (next) {
+                    state.discovery.active = true;
+                    state.discovery.id = next.id;
+                    state.discovery.type = next.type;
+                    state.discovery.title = next.title;
+                    state.discovery.details = next.details;
+                    state.discovery.timestamp = next.timestamp;
                 }
             }
 
@@ -721,16 +737,16 @@ export function createGameLoop(ctx: LoopContext): (dt: number) => void {
                     HudStore.update(hData);
                 }
             } else {
-                if (refs.interactionTypeRef.current !== '') {
-                    refs.interactionTypeRef.current = '';
+                if (refs.interactionTypeRef.current !== InteractionType.NONE) {
+                    refs.interactionTypeRef.current = InteractionType.NONE;
                     const hData = HudStore.getState();
                     hData.interactionPrompt.active = false;
                     HudStore.update(hData);
                 }
             }
         } else {
-            if (refs.interactionTypeRef.current !== '') {
-                refs.interactionTypeRef.current = '';
+            if (refs.interactionTypeRef.current !== InteractionType.NONE) {
+                refs.interactionTypeRef.current = InteractionType.NONE;
                 refs.lastInteractionPosRef.current = null;
                 (state as any).lastInteractionLabel = null;
 
