@@ -13,10 +13,10 @@ interface ScreenCollectibleDiscoveredProps {
 const ScreenCollectibleDiscovered: React.FC<ScreenCollectibleDiscoveredProps> = ({ collectibleId, onClose, isMobileDevice }) => {
     const def = getCollectibleById(collectibleId);
 
+    if (!def) return null;
+
     const collectibleTitle = t(`collectibles.${def.sector}.${def.index}.title`);
     const collectibleDescription = t(`collectibles.${def.sector}.${def.index}.description`);
-
-    if (!def) return null;
 
     return (
         <ScreenModalLayout

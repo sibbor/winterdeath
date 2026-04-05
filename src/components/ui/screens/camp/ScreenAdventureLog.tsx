@@ -10,7 +10,7 @@ import CollectiblePreview from '../../core/CollectiblePreview';
 import { ZOMBIE_TYPES, BOSSES } from '../../../../content/constants';
 import { SECTOR_THEMES } from '../../../../content/sectors/sector_themes';
 import { soundManager } from '../../../../utils/audio/SoundManager';
-import { PERKS, StatusEffectType, PerkCategory, PerkColor } from '../../../../content/perks';
+import { PERKS, PerkCategory, PerkColor } from '../../../../content/perks';
 
 interface ScreenAdventureLogProps {
     stats: PlayerStats;
@@ -35,7 +35,7 @@ const TABS: { id: Tab, label: string }[] = [
     { id: 'enemy', label: 'ui.log_enemies' },
     { id: 'boss', label: 'ui.log_bosses' },
 ];
-const SECTORS = [1, 2, 3, 4];
+const SECTORS = [0, 1, 2, 3, 4];
 const THEME_COLOR = '#16a34a'; // green-600
 
 const darkenColor = (hex: string, percent: number) => {
@@ -518,8 +518,8 @@ const CollectiblesTab: React.FC<{ stats: PlayerStats, isMobileDevice?: boolean, 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-16 pb-12">
             {SECTORS.map(sectorId => {
                 const sectorCollectibles = COLLECTIBLES_ARRAY.filter(c => c.sector === sectorId);
-                const theme = SECTOR_THEMES[sectorId - 1];
-                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
+                const theme = SECTOR_THEMES[sectorId];
+                const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
                 let foundInSector = 0;
@@ -564,9 +564,9 @@ const CluesTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: b
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const theme = SECTOR_THEMES[sectorId - 1];
+                const theme = SECTOR_THEMES[sectorId];
                 const sectorClues = CLUES_ARRAY.filter(clue => clue.sector === sectorId);
-                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
+                const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
                 let foundInSector = 0;
@@ -627,9 +627,9 @@ const PoiTab: React.FC<{ stats: PlayerStats, color: string, isMobileDevice?: boo
     return (
         <div className="space-y-16 pb-12">
             {SECTORS.map(sectorId => {
-                const theme = SECTOR_THEMES[sectorId - 1];
+                const theme = SECTOR_THEMES[sectorId];
                 const sectorPOIs = POIS_ARRAY.filter(poi => poi.sector === sectorId);
-                const isSectorUnlocked = isDebug || stats.sectorsCompleted >= (sectorId - 1);
+                const isSectorUnlocked = isDebug || sectorId === 0 || stats.sectorsCompleted >= sectorId;
                 const sectorName = isSectorUnlocked ? (theme ? t(theme.name) : `Sector ${sectorId}`) : '???';
 
                 let foundInSector = 0;
@@ -774,10 +774,10 @@ const DescriptionExpansion: React.FC<{ item: any, isFound: boolean, isMobileDevi
 
             <div className={`${isMobileDevice ? 'p-2' : 'p-4'} flex-1 flex flex-col`}>
                 <h4 className={`${isMobileDevice ? 'text-xs' : 'text-lg'} font-semibold uppercase tracking-tighter mb-1 truncate ${isFound ? 'text-yellow-500' : 'text-zinc-700'}`}>
-                    {isFound ? t(`collectibles.${item.sector - 1}.${item.index}.title`) : '???'}
+                    {isFound ? t(`collectibles.${item.sector}.${item.index}.title`) : '???'}
                 </h4>
                 <p className={`text-xs font-mono leading-relaxed ${isExpanded ? '' : 'line-clamp-3'} ${isFound ? 'text-zinc-400 italic' : 'text-zinc-800'}`}>
-                    {isFound ? t(`collectibles.${item.sector - 1}.${item.index}.description`) : ''}
+                    {isFound ? t(`collectibles.${item.sector}.${item.index}.description`) : ''}
                 </p>
                 {isFound && !isExpanded && !isMobileDevice && (
                     <span className="text-[10px] text-zinc-600 mt-2 uppercase font-bold tracking-widest">[ Click to expand ]</span>
