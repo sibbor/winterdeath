@@ -174,33 +174,35 @@ export class EnemyDetectionSystem implements System {
                 }
             }
 
-            // 3. AUDIO CHECK 
-            for (let j = 0; j < this.noiseEvents.length; j++) {
-                const evt = this.noiseEvents[j];
+            // 3. AUDIO CHECK - Skip if already in an aggressive state
+            const isAggressive = e.state === AIState.CHASE || e.state === AIState.ATTACK_CHARGE || e.state === AIState.ATTACKING;
+            
+            if (!isAggressive) {
+                for (let j = 0; j < this.noiseEvents.length; j++) {
+                    const evt = this.noiseEvents[j];
 
-                const dx = evt.pos.x - e.mesh.position.x;
-                const dz = evt.pos.z - e.mesh.position.z;
-                const distSq = dx * dx + dz * dz;
+                    const dx = evt.pos.x - e.mesh.position.x;
+                    const dz = evt.pos.z - e.mesh.position.z;
+                    const distSq = dx * dx + dz * dz;
 
-                const hearingThreshold = e.hearingThreshold || 1.0;
-                const effectiveRadius = evt.radius * hearingThreshold;
+                    const hearingThreshold = e.hearingThreshold || 1.0;
+                    const effectiveRadius = evt.radius * hearingThreshold;
 
-                if (distSq <= effectiveRadius * effectiveRadius) {
-                    // VINTERDÖD FIX: Removed null check for pre-allocated vector
-                    e.lastKnownPosition.copy(evt.pos);
-                    e.lastHeardNoiseType = evt.type;
+                    if (distSq <= effectiveRadius * effectiveRadius) {
+                        e.lastKnownPosition.copy(evt.pos);
+                        e.lastHeardNoiseType = evt.type;
+                        e.awareness = 1.0;
 
-                    e.awareness = 1.0;
+                        if (e.state === AIState.IDLE || e.state === AIState.WANDER) {
+                            e.state = AIState.SEARCH;
+                            e.searchTimer = ENEMY_DETECTION.SEARCH_DURATION;
 
-                    if (e.state === AIState.IDLE || e.state === AIState.WANDER) {
-                        e.state = AIState.SEARCH;
-                        e.searchTimer = ENEMY_DETECTION.SEARCH_DURATION;
+                            const angle = Math.atan2(dx, dz);
+                            e.mesh.rotation.y = angle;
+                            e.mesh.quaternion.setFromEuler(e.mesh.rotation);
 
-                        const angle = Math.atan2(dx, dz);
-                        e.mesh.rotation.y = angle;
-                        e.mesh.quaternion.setFromEuler(e.mesh.rotation);
-
-                        break;
+                            break;
+                        }
                     }
                 }
             }
